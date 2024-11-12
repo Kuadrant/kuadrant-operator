@@ -40,9 +40,9 @@ var (
 )
 
 func GetLimitadorFromTopology(topology *machinery.Topology) (*limitadorv1alpha1.Limitador, error) {
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		return nil, err
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil, nil
 	}
 
 	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {

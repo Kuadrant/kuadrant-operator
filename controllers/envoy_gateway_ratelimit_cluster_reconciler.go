@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -53,13 +52,9 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	logger.V(1).Info("building envoy gateway rate limit clusters")
 	defer logger.V(1).Info("finished building envoy gateway rate limit clusters")
 
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) {
-			logger.V(1).Info(err.Error())
-			return nil
-		}
-		return err
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
 	}
 
 	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {

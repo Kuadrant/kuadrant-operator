@@ -49,9 +49,8 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 	logger.Info("reconciling kuadrant status", "status", "started")
 	defer logger.Info("reconciling kuadrant status", "status", "completed")
 
-	kObj, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		logger.V(1).Error(err, "error getting kuadrant from topology", "status", "error")
+	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil {
 		return nil
 	}
 

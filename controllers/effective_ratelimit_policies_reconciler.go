@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -35,14 +34,12 @@ func (r *EffectiveRateLimitPolicyReconciler) Subscription() controller.Subscript
 
 func (r *EffectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler")
+	logger.V(1).Info("generating effective rate limit policy", "status", "started")
+	defer logger.V(1).Info("generating effective rate limit policy", "status", "completed")
 
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) {
-			logger.V(1).Info(err.Error())
-			return nil
-		}
-		return err
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
 	}
 
 	effectivePolicies := r.calculateEffectivePolicies(ctx, topology, kuadrant, state)

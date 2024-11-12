@@ -35,9 +35,9 @@ var (
 )
 
 func GetAuthorinoFromTopology(topology *machinery.Topology) (*authorinooperatorv1beta1.Authorino, error) {
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		return nil, err
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil, ErrMissingKuadrant
 	}
 
 	authorinoObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {

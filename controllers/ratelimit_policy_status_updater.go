@@ -113,6 +113,10 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 }
 
 func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("kuadrant"), false)
+	}
 	policyKind := kuadrantv1.RateLimitPolicyGroupKind.Kind
 
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)

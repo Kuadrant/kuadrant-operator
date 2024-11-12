@@ -238,3 +238,23 @@ func (e ErrDependencyNotInstalled) Error() string {
 func (e ErrDependencyNotInstalled) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonMissingDependency
 }
+
+func NewErrSystemResource(resourceName string) ErrSystemResource {
+	return ErrSystemResource{
+		resourceName: resourceName,
+	}
+}
+
+var _ PolicyError = ErrSystemResource{}
+
+type ErrSystemResource struct {
+	resourceName string
+}
+
+func (e ErrSystemResource) Error() string {
+	return fmt.Sprintf("%s is not installed, please create resource", e.resourceName)
+}
+
+func (e ErrSystemResource) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonMissingResource
+}

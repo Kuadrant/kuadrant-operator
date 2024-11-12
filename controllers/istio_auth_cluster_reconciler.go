@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -53,13 +52,9 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	logger.V(1).Info("building istio auth clusters")
 	defer logger.V(1).Info("finished building istio auth clusters")
 
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) {
-			logger.V(1).Info(err.Error())
-			return nil
-		}
-		return err
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
 	}
 
 	authorinoObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {

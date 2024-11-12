@@ -54,7 +54,7 @@ sail-operator   1/1     1            1           81m
 To setup the DNS and TLS integration (TLS also uses DNS for verification) follow these steps:
 
 1) Depending on your choice of cloud provider:
-    - setup the needed `CLOUD_PROVIDER-credentals.env` in the cloud provider directory. E.G create `aws-credentials.env` in the `install/configure/aws` directory
+    - setup the needed `$CLOUD_PROVIDER-credentals.env` in the cloud provider directory. E.G create `aws-credentials.env` in the `install/configure/aws` directory
 
 3) execute the configure for that cloud provider
 

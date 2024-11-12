@@ -6,3 +6,5 @@ resources:
 - gateway-class.yaml
 - gateway.yaml
 - envoyproxy.yaml
+- envoyproxy-cluster-ip.yaml
+- gateway-class-cluster-ip.yaml

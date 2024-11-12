@@ -14,8 +14,6 @@ import (
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -33,6 +31,8 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 const (
@@ -79,7 +79,6 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1.GatewaySpec{
-			GatewayClassName: gatewayapiv1.ObjectName(GatewayClassName),
 			Listeners: []gatewayapiv1.Listener{
 				{
 					Name:     "default",
@@ -89,6 +88,17 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 			},
 		},
 	}
+
+	// Use Gateway class and customization to use ClusterIP service type rather than default LoadBalancer service type for tests
+	if GatewayClassName == "istio" {
+		gateway.ObjectMeta.Annotations = map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)}
+		gateway.Spec.GatewayClassName = gatewayapiv1.ObjectName(GatewayClassName)
+	}
+
+	if GatewayClassName == "envoygateway" {
+		gateway.Spec.GatewayClassName = "envoygateway-cluster-ip"
+	}
+
 	for _, mutateFn := range mutateFns {
 		mutateFn(gateway)
 	}

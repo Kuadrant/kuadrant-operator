@@ -16,5 +16,5 @@ package version
 
 var (
 	// This variable is dependent on what the current release is e.g. if it is v0.10.0 then this variable, outside of releases, will be v0.10.1-dev .
-	Version = "v0.12.0-dev"
+	Version = "1.0.0-rc2"
 )

@@ -192,7 +192,7 @@ spec:
             ["__meta_kubernetes_pod_annotationpresent_prometheus_io_scrape"]
         - action: replace
           regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
-          replacement: "[$2]:$1"
+          replacement: "[\$2]:\$1"
           sourceLabels:
             [
               "__meta_kubernetes_pod_annotation_prometheus_io_port",
@@ -201,7 +201,7 @@ spec:
           targetLabel: "__address__"
         - action: replace
           regex: (\d+);((([0-9]+?)(\.|$)){4})
-          replacement: "$2:$1"
+          replacement: "\$2:\$1"
           sourceLabels:
             [
               "__meta_kubernetes_pod_annotation_prometheus_io_port",

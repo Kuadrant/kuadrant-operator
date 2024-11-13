@@ -19,24 +19,17 @@
 
 > Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/deploy/install/standard/kustomization.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
 
-> Note: We are using the Kubectl `--context` flag. This is useful when installing on more than one cluster otherwise it is not needed.
+> Note: for multiple clusters, it would make sense to do the installation via a tool like [argocd](https://argo-cd.readthedocs.io/en/stable/). For other methods of addressing multiple clusters take a look at the [kubectl docs](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
+
 
 ```
-# Typical single cluster context
-export KUBECTL_CONTEXT=kind-kuadrant-local
-
-# Example context for additional 'multi cluster' clusters
-# export KUBECTL_CONTEXT=kind-kuadrant-local-1
-```
-
-```
-kubectl apply -k config/install/standard --context=$ctx
+kubectl apply -k config/install/standard
 ``` 
 
 3) verify kuadrant and sail operators are installed. Note this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
 
 ```
-kubectl get deployments -n kuadrant-system --context=$ctx
+kubectl get deployments -n kuadrant-system
 ```
 
 ```
@@ -53,7 +46,7 @@ limitador-operator-controller-manager   1/1     1            1           83m
 
 
 ```
-kubectl get deployments -n gateway-system --context=$ctx
+kubectl get deployments -n gateway-system
 ```
 
 ```
@@ -75,7 +68,7 @@ sail-operator   1/1     1            1           81m
 3) execute the configure for that cloud provider
 
 ```
-kubectl apply -k config/install/configure/aws --context=$ctx
+kubectl apply -k config/install/configure/aws
 
 ```
 
@@ -86,7 +79,7 @@ This will configure Kuadrant and Sail installing their components as well as set
 Validate Kuadrant is ready via the kuadrant resource status condition
 
 ```
-kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml --context=$ctx
+kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
 
 ```
 
@@ -97,7 +90,7 @@ At this point Kuadrant is ready to use. Below are some additional configuration 
 create a `redis-credential.env` in the `config/install/configure/redis-storage` dir
 
 ```
-kubectl apply -k config/install/configure/redis-storage --context=$ctx
+kubectl apply -k config/install/configure/redis-storage
 
 ```
 
@@ -108,7 +101,7 @@ This will setup limitador to use provided redis connection URL as a backend stor
 Validate Kuadrant is in a ready state as before:
 
 ```
-kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml --context=$ctx
+kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
 
 ```
 

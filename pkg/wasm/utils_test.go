@@ -262,7 +262,7 @@ func TestPredicatesFromHTTPRouteMatch(t *testing.T) {
 	headerMatch := gatewayapiv1.HeaderMatchExact
 	header := gatewayapiv1.HTTPHeaderMatch{
 		Type:  &headerMatch,
-		Name:  "x-auth",
+		Name:  "X-Auth",
 		Value: "kuadrant",
 	}
 
@@ -282,8 +282,8 @@ func TestPredicatesFromHTTPRouteMatch(t *testing.T) {
 
 	assert.Equal(t, predicates[0], "request.method == 'TRACE'")
 	assert.Equal(t, predicates[1], "request.url_path.startsWith('/admin')")
-	assert.Equal(t, predicates[2], "request.headers['x-auth'] == 'kuadrant'")
-	assert.Equal(t, predicates[3], "queryMap(request.query)['foo'] == 'bar'")
-	assert.Equal(t, predicates[4], "queryMap(request.query)['kua'] == 'drant'")
+	assert.Equal(t, predicates[2], "request.headers.exists(h, h.lowerAscii() == 'x-auth' && request.headers[h] == 'kuadrant')")
+	assert.Equal(t, predicates[3], "'foo' in queryMap(request.query) ? queryMap(request.query)['foo'] == 'bar' : false")
+	assert.Equal(t, predicates[4], "'kua' in queryMap(request.query) ? queryMap(request.query)['kua'] == 'drant' : false")
 	assert.Equal(t, len(predicates), 5)
 }

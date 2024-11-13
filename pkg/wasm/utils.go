@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -179,9 +180,11 @@ func predicateFromMethod(method gatewayapiv1.HTTPMethod) string {
 func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) string {
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
-	return fmt.Sprintf("request.headers['%s'] == '%s'", headerMatch.Name, headerMatch.Value)
+	return fmt.Sprintf("request.headers.exists(h, h.lowerAscii() == '%s' && request.headers[h] == '%s')",
+		strings.ToLower(string(headerMatch.Name)), headerMatch.Value)
 }
 
 func predicateFromQueryParam(queryParam gatewayapiv1.HTTPQueryParamMatch) string {
-	return fmt.Sprintf("queryMap(request.query)['%s'] == '%s'", queryParam.Name, queryParam.Value)
+	return fmt.Sprintf("'%s' in queryMap(request.query) ? queryMap(request.query)['%s'] == '%s' : false",
+		queryParam.Name, queryParam.Name, queryParam.Value)
 }

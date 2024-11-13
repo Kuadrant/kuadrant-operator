@@ -67,7 +67,11 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	modifiedAuthConfigs := []string{}
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
-		_, _, _, httpRoute, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		_, _, _, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		if err != nil {
+			logger.Error(err, "failed to reconcile authconfig objects", "path", effectivePolicy.Path)
+			continue
+		}
 		httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
 		httpRouteRuleKey := httpRouteRule.Name
 

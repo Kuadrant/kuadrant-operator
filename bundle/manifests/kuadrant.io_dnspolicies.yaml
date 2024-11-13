@@ -38,6 +38,12 @@ spec:
       name: TargetRefName
       priority: 2
       type: string
+    - description: 'Name of the Listener section within the Gateway to which the policy
+        applies '
+      jsonPath: .spec.targetRef.sectionName
+      name: TargetSection
+      priority: 2
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

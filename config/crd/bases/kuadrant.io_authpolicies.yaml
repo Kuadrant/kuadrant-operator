@@ -492,7 +492,6 @@ spec:
                         description: |-
                           Authentication configs.
                           At least one config MUST evaluate to a valid identity object for the auth request to be successful.
-                        maxProperties: 10
                         type: object
                       authorization:
                         additionalProperties:
@@ -1116,7 +1115,6 @@ spec:
                         description: |-
                           Authorization policies.
                           All policies MUST evaluate to "allowed = true" for the auth request be successful.
-                        maxProperties: 10
                         type: object
                       callbacks:
                         additionalProperties:
@@ -1414,7 +1412,6 @@ spec:
                         description: |-
                           Callback functions.
                           Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
-                        maxProperties: 10
                         type: object
                       metadata:
                         additionalProperties:
@@ -1752,7 +1749,6 @@ spec:
                         description: |-
                           Metadata sources.
                           Authorino fetches auth metadata as JSON from sources specified in this config.
-                        maxProperties: 10
                         type: object
                       response:
                         description: |-
@@ -2759,7 +2755,6 @@ spec:
                         description: |-
                           Authentication configs.
                           At least one config MUST evaluate to a valid identity object for the auth request to be successful.
-                        maxProperties: 10
                         type: object
                       authorization:
                         additionalProperties:
@@ -3383,7 +3378,6 @@ spec:
                         description: |-
                           Authorization policies.
                           All policies MUST evaluate to "allowed = true" for the auth request be successful.
-                        maxProperties: 10
                         type: object
                       callbacks:
                         additionalProperties:
@@ -3681,7 +3675,6 @@ spec:
                         description: |-
                           Callback functions.
                           Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
-                        maxProperties: 10
                         type: object
                       metadata:
                         additionalProperties:
@@ -4019,7 +4012,6 @@ spec:
                         description: |-
                           Metadata sources.
                           Authorino fetches auth metadata as JSON from sources specified in this config.
-                        maxProperties: 10
                         type: object
                       response:
                         description: |-
@@ -5017,7 +5009,6 @@ spec:
                     description: |-
                       Authentication configs.
                       At least one config MUST evaluate to a valid identity object for the auth request to be successful.
-                    maxProperties: 10
                     type: object
                   authorization:
                     additionalProperties:
@@ -5637,7 +5628,6 @@ spec:
                     description: |-
                       Authorization policies.
                       All policies MUST evaluate to "allowed = true" for the auth request be successful.
-                    maxProperties: 10
                     type: object
                   callbacks:
                     additionalProperties:
@@ -5932,7 +5922,6 @@ spec:
                     description: |-
                       Callback functions.
                       Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
-                    maxProperties: 10
                     type: object
                   metadata:
                     additionalProperties:
@@ -6266,7 +6255,6 @@ spec:
                     description: |-
                       Metadata sources.
                       Authorino fetches auth metadata as JSON from sources specified in this config.
-                    maxProperties: 10
                     type: object
                   response:
                     description: |-

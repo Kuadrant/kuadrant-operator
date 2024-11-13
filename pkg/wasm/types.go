@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -142,6 +143,26 @@ type Action struct {
 	// Data to be sent to the service
 	// +optional
 	Data []DataType `json:"data,omitempty"`
+}
+
+func (a *Action) HasAuthAccess() bool {
+	for _, predicate := range a.Predicates {
+		if strings.Contains(predicate, "auth.") {
+			return true
+		}
+	}
+	for _, data := range a.Data {
+		switch val := data.Value.(type) {
+		case *Static:
+
+			continue
+		case *Expression:
+			if strings.Contains(val.ExpressionItem.Value, "auth.") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (a *Action) EqualTo(other Action) bool {

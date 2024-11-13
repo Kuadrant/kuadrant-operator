@@ -236,3 +236,93 @@ data:
 		})
 	}
 }
+
+func TestAuthAccesses(t *testing.T) {
+	action := Action{
+		ServiceName: "ratelimit-service",
+		Scope:       "default/other",
+		Predicates: []string{
+			"source.address != '127.0.0.1'",
+		},
+		Data: []DataType{
+			{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+		},
+	}
+
+	if action.HasAuthAccess() {
+		t.Fatal("must not have auth access")
+	}
+
+	action = Action{
+		ServiceName: "ratelimit-service",
+		Scope:       "default/other",
+		Predicates: []string{
+			"auth.something != '127.0.0.1'",
+		},
+		Data: []DataType{
+			{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+		},
+	}
+
+	if !action.HasAuthAccess() {
+		t.Fatal("must have auth access")
+	}
+
+	action = Action{
+		ServiceName: "ratelimit-service",
+		Scope:       "default/other",
+		Predicates: []string{
+			"source.address != '127.0.0.1'",
+		},
+		Data: []DataType{
+			{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.anonymous",
+					},
+				},
+			},
+		},
+	}
+
+	if !action.HasAuthAccess() {
+		t.Fatal("must have auth access")
+	}
+
+	action = Action{
+		ServiceName: "ratelimit-service",
+		Scope:       "default/other",
+		Predicates: []string{
+			"source.address != '127.0.0.1'",
+		},
+		Data: []DataType{
+			{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "auth.global__f63bec56",
+						Value: "auth",
+					},
+				},
+			},
+		},
+	}
+
+	if action.HasAuthAccess() {
+		t.Fatal("must not have auth access")
+	}
+}

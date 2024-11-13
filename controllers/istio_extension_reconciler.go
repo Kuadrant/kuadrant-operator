@@ -188,7 +188,13 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			actions = append(actions, buildWasmActionsForRateLimit(effectivePolicy, state)...)
+			rlAction := buildWasmActionsForRateLimit(effectivePolicy, state)
+			if hasAuthAccess(rlAction) {
+				actions = append(actions, rlAction...)
+			} else {
+				// pre auth rate limiting
+				actions = append(rlAction, actions...)
+			}
 		}
 
 		if len(actions) == 0 {
@@ -210,6 +216,15 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	})
 
 	return wasmConfigs, nil
+}
+
+func hasAuthAccess(actionSet []wasm.Action) bool {
+	for _, action := range actionSet {
+		if action.HasAuthAccess() {
+			return true
+		}
+	}
+	return false
 }
 
 // buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config

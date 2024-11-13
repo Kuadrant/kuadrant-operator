@@ -185,7 +185,13 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			actions = append(actions, buildWasmActionsForRateLimit(effectivePolicy, state)...)
+			rlAction := buildWasmActionsForRateLimit(effectivePolicy, state)
+			if hasAuthAccess(rlAction) {
+				actions = append(actions, rlAction...)
+			} else {
+				// pre auth rate limiting
+				actions = append(rlAction, actions...)
+			}
 		}
 
 		if len(actions) == 0 {

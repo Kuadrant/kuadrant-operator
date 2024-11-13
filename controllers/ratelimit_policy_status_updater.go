@@ -177,9 +177,9 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 	if limitadorLimitsModified, stateLimitadorLimitsModifiedPresent := state.Load(StateLimitadorLimitsModified); stateLimitadorLimitsModifiedPresent && limitadorLimitsModified.(bool) {
 		componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)
 	} else {
-		limitador, err := GetLimitadorFromTopology(topology)
-		if err != nil {
-			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, err), false)
+		limitador := GetLimitadorFromTopology(topology)
+		if limitador == nil {
+			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("limitador"), false)
 		}
 		if !meta.IsStatusConditionTrue(limitador.Status.Conditions, limitadorv1alpha1.StatusConditionReady) {
 			componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)

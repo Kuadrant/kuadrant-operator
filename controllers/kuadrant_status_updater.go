@@ -142,10 +142,10 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 }
 
 func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *string {
-	limitadorObj, err := GetLimitadorFromTopology(topology)
-	if err != nil {
-		logger.V(1).Error(err, "failed getting Limitador resource from topology", "status", "error")
-		return ptr.To(err.Error())
+	limitadorObj := GetLimitadorFromTopology(topology)
+	if limitadorObj == nil {
+		logger.V(1).Info("failed getting Limitador resource from topology", "status", "error")
+		return ptr.To("limitador resoure not in topology")
 	}
 
 	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, "Ready")
@@ -160,10 +160,10 @@ func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *stri
 }
 
 func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *string {
-	authorinoObj, err := GetAuthorinoFromTopology(topology)
-	if err != nil {
-		logger.V(1).Error(err, "failed getting Authorino resource from topology", "status", "error")
-		return ptr.To(err.Error())
+	authorinoObj := GetAuthorinoFromTopology(topology)
+	if authorinoObj == nil {
+		logger.V(1).Info("failed getting Authorino resource from topology", "status", "error")
+		return ptr.To("authorino resoure not in topology")
 	}
 
 	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")

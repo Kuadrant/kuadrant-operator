@@ -16,7 +16,7 @@ In some cases, the application and API endpoints are exposed in a host external 
 
 ### Pre Requisites
 
-- [Kuadrant and Gateway API installed (with Istio as the gateway provider)](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) 
+- Kuadrant and Gateway API installed (with Istio as the gateway provider)
 - Existing API on separate cluster accessible via HTTP from the Gateway cluster
 
 

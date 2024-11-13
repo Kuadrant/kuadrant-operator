@@ -193,6 +193,7 @@ metadata:
   name: api-key-regular-user
   labels:
     authorino.kuadrant.io/managed-by: authorino
+    app: toystore
 stringData:
   api_key: iamaregularuser
 type: Opaque
@@ -203,6 +204,7 @@ metadata:
   name: api-key-admin-user
   labels:
     authorino.kuadrant.io/managed-by: authorino
+    app: toystore
   annotations:
     kuadrant.io/groups: admins
 stringData:

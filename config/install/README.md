@@ -19,7 +19,7 @@
 
 > Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/deploy/install/standard/kustomization.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
 
-> Note: We are using the `--context` flag here this is useful if installing on more than one cluster otherwise it is not needed
+> Note: We are using the Kubectl `--context` flag. This is useful when installing on more than one cluster otherwise it is not needed.
 
 ```
 export ctx=replace-with-your-context
@@ -64,7 +64,6 @@ sail-operator   1/1     1            1           81m
 
 ### TLS and DNS integration
 
-To setup the DNS and TLS integration (TLS also uses DNS for verification) follow these steps:
 
 1) Depending on your choice of cloud provider:
     - setup the needed `$CLOUD_PROVIDER-credentials.env` in the cloud provider directory. E.G create `aws-credentials.env` in the `config/install/configure/aws` directory

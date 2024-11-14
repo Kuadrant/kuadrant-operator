@@ -21,16 +21,20 @@
 
 > Note: for multiple clusters, it would make sense to do the installation via a tool like [argocd](https://argo-cd.readthedocs.io/en/stable/). For other methods of addressing multiple clusters take a look at the [kubectl docs](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
 
+## Setup the environment
 
 ```
 kubectl apply -k config/install/standard
 ``` 
 
-3) verify kuadrant and sail operators are installed. Note this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
+3) Verify both Kuadrant and sail operators are installed. Note, that this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
 
 ```
 kubectl get deployments -n kuadrant-system
 ```
+
+Sample Output:
+
 
 ```
 
@@ -49,6 +53,8 @@ limitador-operator-controller-manager   1/1     1            1           83m
 kubectl get deployments -n gateway-system
 ```
 
+Sample Output:
+
 ```
 
 NAME            READY   UP-TO-DATE   AVAILABLE   AGE
@@ -62,17 +68,14 @@ sail-operator   1/1     1            1           81m
 ### TLS and DNS integration
 
 
-1) Depending on your choice of cloud provider:
-    - setup the needed `$CLOUD_PROVIDER-credentials.env` in the cloud provider directory. E.G create `aws-credentials.env` in the `config/install/configure/aws` directory
-
-3) execute the configure for that cloud provider
+Create the `$CLOUD_PROVIDER-credentials.env file` in the cloud provider directory `config/install/configure/$CLOUD_PROVIDER.` e.g. `aws-credentials.env` in the `config/install/configure/aws` directory. Apply the configuration for the desired cloud provider. Example AWS
 
 ```
 kubectl apply -k config/install/configure/aws
 
 ```
 
-This will configure Kuadrant and Sail installing their components as well as setup the the credentials needed for access DNS zones in the cloud provider and create a lets-encrypt cluster issuer configured to use DNS based validation.
+This will configure Kuadrant and Sail to install their components, set the credentials needed to access DNS zones in the cloud provider, and create a Let's Encrypt cluster issuer configured to use DNS-based validation.
 
 ### Validate
 
@@ -110,20 +113,20 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
 Verify that user workload monitoring is enabled in your Openshift cluster.
 If it not enabled, check the [Openshift documentation](https://docs.openshift.com/container-platform/4.17/observability/monitoring/enabling-monitoring-for-user-defined-projects.html) for how to do this.
 
+
 ```bash
 kubectl get configmap cluster-monitoring-config -n openshift-monitoring -o jsonpath='{.data.config\.yaml}'|grep enableUserWorkload
-
-(expected output)
-enableUserWorkload: true
+# (expected output)
+# enableUserWorkload: true
 ```
 
-Install the gateway & kuadrant metrics components and configuration, including Grafana.
+Install the gateway & Kuadrant metrics components and configuration, including Grafana.
 
 ```bash
 kubectl apply -k config/install/configure/observability
 ```
 
-Configure the openshift thanos-query instance as a data source in Grafana.
+Configure the Openshift thanos-query instance as a data source in Grafana.
 
 ```bash
 TOKEN="Bearer $(oc whoami -t)"

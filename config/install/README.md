@@ -17,7 +17,7 @@
 
 
 
-> Note: By default this will install the "latest" or "main" of kuadrant. To change that, pick a release from the releases page in the kuadrant operator and change the image in the `config/deploy/install/standard/kustomization.yaml`.
+> Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/deploy/install/standard/kustomization.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
 
 > Note: We are using the `--context` flag here this is useful if installing on more than one cluster otherwise it is not needed
 

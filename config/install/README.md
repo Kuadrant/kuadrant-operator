@@ -1,4 +1,4 @@
-# Install Kaudrant and Sail via OLM
+# Install Kuadrant and Sail via OLM
 
 ## Prerequisites  
 - Clone the[ Kuadrant-operator](https://github.com/Kuadrant/kuadrant-operator) repo

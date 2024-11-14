@@ -66,54 +66,43 @@ func TestGetKuadrant(t *testing.T) {
 		return topology
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    *kuadrantv1beta1.Kuadrant
-		wantErr bool
+		name string
+		args args
+		want *kuadrantv1beta1.Kuadrant
 	}{
 		{
-			name:    "oldest is first",
-			args:    args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{expected, unexpected})},
-			want:    expected,
-			wantErr: false,
+			name: "oldest is first",
+			args: args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{expected, unexpected})},
+			want: expected,
 		}, {
-			name:    "oldest is second",
-			args:    args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{unexpected, expected})},
-			want:    expected,
-			wantErr: false,
+			name: "oldest is second",
+			args: args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{unexpected, expected})},
+			want: expected,
 		},
 		{
-			name:    "Empty list is passed",
-			args:    args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{})},
-			want:    nil,
-			wantErr: true,
+			name: "Empty list is passed",
+			args: args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{})},
+			want: nil,
 		},
 		{
-			name:    "only item is marked for deletion",
-			args:    args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{deleted})},
-			want:    nil,
-			wantErr: true,
+			name: "only item is marked for deletion",
+			args: args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{deleted})},
+			want: nil,
 		},
 		{
-			name:    "first item is marked for deletion",
-			args:    args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{deleted, expected})},
-			want:    expected,
-			wantErr: false,
+			name: "first item is marked for deletion",
+			args: args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{deleted, expected})},
+			want: expected,
 		},
 		{
-			name:    "all items is marked for deletion",
-			args:    args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{deleted, deleted})},
-			want:    nil,
-			wantErr: true,
+			name: "all items is marked for deletion",
+			args: args{topology: newTopology([]*kuadrantv1beta1.Kuadrant{deleted, deleted})},
+			want: nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetKuadrantFromTopology(tt.args.topology)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetKuadrantFromTopology() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			got := GetKuadrantFromTopology(tt.args.topology)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetKuadrantFromTopology() got = %v, want %v", got, tt.want)
 			}

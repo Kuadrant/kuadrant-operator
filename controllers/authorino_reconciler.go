@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	v1beta2 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -42,14 +41,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	logger.Info("reconciling authorino resource", "status", "started")
 	defer logger.Info("reconciling authorino resource", "status", "completed")
 
-	kobj, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) {
-			logger.Info("kuadrant resource not found, ignoring", "status", "skipping")
-			return err
-		}
-		logger.Error(err, "cannot find Kuadrant resource", "status", "error")
-		return err
+	kobj := GetKuadrantFromTopology(topology)
+	if kobj == nil {
+		return nil
 	}
 
 	aobjs := lo.FilterMap(topology.Objects().Objects().Children(kobj), func(item machinery.Object, _ int) (machinery.Object, bool) {

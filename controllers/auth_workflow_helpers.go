@@ -34,21 +34,21 @@ var (
 	ErrMissingStateEffectiveAuthPolicies = fmt.Errorf("missing auth effective policies stored in the reconciliation state")
 )
 
-func GetAuthorinoFromTopology(topology *machinery.Topology) (*authorinooperatorv1beta1.Authorino, error) {
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		return nil, err
+func GetAuthorinoFromTopology(topology *machinery.Topology) *authorinooperatorv1beta1.Authorino {
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
 	}
 
 	authorinoObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
 		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthorinoGroupKind
 	})
 	if !found {
-		return nil, ErrMissingAuthorino
+		return nil
 	}
 
 	authorino := authorinoObj.(*controller.RuntimeObject).Object.(*authorinooperatorv1beta1.Authorino)
-	return authorino, nil
+	return authorino
 }
 
 func AuthObjectLabels() labels.Set {

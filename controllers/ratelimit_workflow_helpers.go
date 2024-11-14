@@ -39,21 +39,21 @@ var (
 	ErrMissingStateEffectiveRateLimitPolicies = fmt.Errorf("missing rate limit effective policies stored in the reconciliation state")
 )
 
-func GetLimitadorFromTopology(topology *machinery.Topology) (*limitadorv1alpha1.Limitador, error) {
-	kuadrant, err := GetKuadrantFromTopology(topology)
-	if err != nil {
-		return nil, err
+func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.Limitador {
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
 	}
 
 	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
 		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
 	})
 	if !found {
-		return nil, ErrMissingLimitador
+		return nil
 	}
 
 	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
-	return limitador, nil
+	return limitador
 }
 
 func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {

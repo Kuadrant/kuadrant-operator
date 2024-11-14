@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -43,13 +42,10 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler")
 
-	limitador, err := GetLimitadorFromTopology(topology)
-	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) || errors.Is(err, ErrMissingLimitador) {
-			logger.V(1).Info(err.Error())
-			return nil
-		}
-		return err
+	limitador := GetLimitadorFromTopology(topology)
+	if limitador == nil {
+		logger.V(1).Info("not limitador resources found in topology")
+		return nil
 	}
 
 	desiredLimits, err := r.buildLimitadorLimits(ctx, state)

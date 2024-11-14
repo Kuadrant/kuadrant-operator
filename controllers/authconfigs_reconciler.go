@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -47,13 +46,10 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler")
 
-	authorino, err := GetAuthorinoFromTopology(topology)
-	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) || errors.Is(err, ErrMissingAuthorino) {
-			logger.V(1).Info(err.Error())
-			return nil
-		}
-		return err
+	authorino := GetAuthorinoFromTopology(topology)
+	if authorino == nil {
+		logger.V(1).Info("authorino resource not found in the topology")
+		return nil
 	}
 	authConfigsNamespace := authorino.GetNamespace()
 

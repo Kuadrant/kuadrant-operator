@@ -455,17 +455,17 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoy
 
 var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
 
-func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuadrant {
 	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
 		o, isSortable := root.(controller.Object)
 		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
 	})
 	if len(kuadrants) == 0 {
-		return nil, ErrMissingKuadrant
+		return nil
 	}
 	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
 	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
-	return kuadrant, nil
+	return kuadrant
 }
 
 func KuadrantManagedObjectLabels() labels.Set {

@@ -22,7 +22,11 @@
 > Note: We are using the Kubectl `--context` flag. This is useful when installing on more than one cluster otherwise it is not needed.
 
 ```
-export ctx=replace-with-your-context
+# Typical single cluster context
+export KUBECTL_CONTEXT=kind-kuadrant-local
+
+# Example context for additional 'multi cluster' clusters
+# export KUBECTL_CONTEXT=kind-kuadrant-local-1
 ```
 
 ```

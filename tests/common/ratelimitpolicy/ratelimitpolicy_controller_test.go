@@ -920,7 +920,13 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 
 	Context("Spec TargetRef Validations", func() {
 		It("Valid policy targeting HTTPRoute", func(ctx SpecContext) {
-			policy := policyFactory()
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
+					"implicit": {
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
+					},
+				}
+			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(BeNil())
 		}, testTimeOut)
@@ -928,6 +934,11 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		It("Valid policy targeting Gateway", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
+					"implicit": {
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
+					},
+				}
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(BeNil())

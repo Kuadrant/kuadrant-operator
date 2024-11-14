@@ -527,6 +527,48 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 	})
 
+	Context("Invalid paths are ignored", func() {
+		It("Should only create auth configs for valid paths", func(ctx SpecContext) {
+			host1 := randomHostFromGWHost()
+			host2 := randomHostFromGWHost()
+
+			// Update GW with 2 listeners with direct hostnames
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Spec.Listeners = []gatewayapiv1.Listener{
+					{
+						Name:     "l1",
+						Port:     gatewayapiv1.PortNumber(80),
+						Protocol: "HTTP",
+						Hostname: ptr.To(gatewayapiv1.Hostname(host1)),
+					},
+					{
+						Name:     "l2",
+						Port:     gatewayapiv1.PortNumber(80),
+						Protocol: "HTTP",
+						Hostname: ptr.To(gatewayapiv1.Hostname(host2)),
+					},
+				}
+				g.Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			// Link HTTPRoute to gateway with only 1 hostname
+			httpRoute := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{host1})
+			httpRoute.Spec.Hostnames = []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host1)}
+			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
+
+			// Create policy targeting gateway
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = TestGatewayName
+			})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+
+			// check policy status
+			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+
 	Context("AuthPolicy accepted condition reasons", func() {
 		assertAcceptedCondFalseAndEnforcedCondNil := func(ctx context.Context, policy *kuadrantv1.AuthPolicy, reason, message string) func() bool {
 			return func() bool {

@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/go-logr/logr"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -86,7 +88,7 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 		if !accepted {
 			meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		} else {
-			enforcedCond := r.enforcedCondition(policy, topology, state)
+			enforcedCond := r.enforcedCondition(policy, topology, state, logger)
 			meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
 		}
 
@@ -114,7 +116,7 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 	return nil
 }
 
-func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolicy, topology *machinery.Topology, state *sync.Map, logger logr.Logger) *metav1.Condition {
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("kuadrant"), false)
@@ -147,7 +149,15 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
-		gatewayClass, gateway, listener, httpRoute, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		if err != nil {
+			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
+				logger.V(1).Info("skipping effectivePolicy for invalid path", "path", effectivePolicy.Path)
+			} else {
+				logger.Error(err, "unable to process effectivePolicy", "path", effectivePolicy.Path)
+			}
+			continue
+		}
 		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.GatewayClass.Spec.ControllerName) {
 			continue
 		}

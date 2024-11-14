@@ -9,13 +9,6 @@
 - AWS, Azure or GCP with DNS capabilities. (Optional)
 - Accessible Redis instance, for persistent storage for your rate limit counters. (Optional)
 
-- (optional dependencies)
-  - If you want to use `TLSPolicy` you should install the cert-manager operator. 
-  - AWS/Azure or GCP with DNS capabilities if you want to make use of `DNSPolicy`.
-  - Accessible Redis instance, if you want persistent storage for your rate limit counters.
-
-
-
 
 > Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/deploy/install/standard/kustomization.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
 
@@ -31,36 +24,25 @@ kubectl apply -k config/install/standard
 
 ```
 kubectl get deployments -n kuadrant-system
-```
-
-Sample Output:
 
 
-```
-
-NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
-authorino-operator                      1/1     1            1           83m
-dns-operator-controller-manager         1/1     1            1           83m
-kuadrant-console-plugin                 1/1     1            1           83m
-kuadrant-operator-controller-manager    1/1     1            1           83m
-limitador-operator-controller-manager   1/1     1            1           83m
-
+# NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
+# authorino-operator                      1/1     1            1           83m
+# dns-operator-controller-manager         1/1     1            1           83m
+# kuadrant-console-plugin                 1/1     1            1           83m
+# kuadrant-operator-controller-manager    1/1     1            1           83m
+# limitador-operator-controller-manager   1/1     1            1           83m
 ```
 
 
 
 ```
 kubectl get deployments -n gateway-system
-```
 
-Sample Output:
 
-```
-
-NAME            READY   UP-TO-DATE   AVAILABLE   AGE
-istiod          1/1     1            1           61s
-sail-operator   1/1     1            1           81m
-
+# NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+# istiod          1/1     1            1           61s
+# sail-operator   1/1     1            1           81m
 ```
 
 ## Configure the installation
@@ -72,7 +54,6 @@ Create the `$CLOUD_PROVIDER-credentials.env file` in the cloud provider director
 
 ```
 kubectl apply -k config/install/configure/aws
-
 ```
 
 This will configure Kuadrant and Sail to install their components, set the credentials needed to access DNS zones in the cloud provider, and create a Let's Encrypt cluster issuer configured to use DNS-based validation.
@@ -83,7 +64,6 @@ Validate Kuadrant is ready via the kuadrant resource status condition
 
 ```
 kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
-
 ```
 
 At this point Kuadrant is ready to use. Below are some additional configuration that can be applied.
@@ -94,7 +74,6 @@ create a `redis-credential.env` in the `config/install/configure/redis-storage` 
 
 ```
 kubectl apply -k config/install/configure/redis-storage
-
 ```
 
 This will setup limitador to use provided redis connection URL as a backend store for ratelimit counters. Limitador will becomes temporarily unavailable as it restarts.
@@ -105,7 +84,6 @@ Validate Kuadrant is in a ready state as before:
 
 ```
 kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
-
 ```
 
 ## Set up observability

@@ -355,19 +355,16 @@ type AuthSchemeSpec struct {
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Authentication map[string]MergeableAuthenticationSpec `json:"authentication,omitempty"`
 
 	// Metadata sources.
 	// Authorino fetches auth metadata as JSON from sources specified in this config.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Metadata map[string]MergeableMetadataSpec `json:"metadata,omitempty"`
 
 	// Authorization policies.
 	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Authorization map[string]MergeableAuthorizationSpec `json:"authorization,omitempty"`
 
 	// Response items.
@@ -378,7 +375,6 @@ type AuthSchemeSpec struct {
 	// Callback functions.
 	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Callbacks map[string]MergeableCallbackSpec `json:"callbacks,omitempty"`
 }
 

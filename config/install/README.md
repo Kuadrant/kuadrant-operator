@@ -15,7 +15,6 @@
   - Accessible Redis instance, if you want persistent storage for your rate limit counters.
 
 
-Install the Sail and Kuadrant Operators via OLM:
 
 
 > Note: By default this will install the "latest" or "main" of kuadrant. To change that, pick a release from the releases page in the kuadrant operator and change the image in the `config/deploy/install/standard/kustomization.yaml`.

@@ -4,8 +4,8 @@
 - Clone the[ Kuadrant-operator](https://github.com/Kuadrant/kuadrant-operator) repo
 - OLM (operator lifecycle manager)
 - cert-manager 
-- - [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
-- - [installing cert-manager via OperatorHub](https://cert-manager.io/docs/installation/operator-lifecycle-manager/)
+  - [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
+  - [installing cert-manager via OperatorHub](https://cert-manager.io/docs/installation/operator-lifecycle-manager/)
 - AWS, Azure or GCP with DNS capabilities. (Optional)
 - Accessible Redis instance, for persistent storage for your rate limit counters. (Optional)
 

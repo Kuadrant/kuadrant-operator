@@ -20,7 +20,7 @@
 kubectl apply -k config/install/standard
 ``` 
 
-3) Verify both Kuadrant and sail operators are installed. Note, that this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
+Verify both Kuadrant and sail operators are installed. Note, that this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
 
 ```
 kubectl get deployments -n kuadrant-system

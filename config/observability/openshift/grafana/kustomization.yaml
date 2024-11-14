@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+resources:
+  - grafana.yaml
+  - datasource.yaml
+  - dashboards.yaml
+
+# Generate a ConfigMap from the .env file
+configMapGenerator:
+  - name: datasource-env-config
+    envs:
+      - datasource.env
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: datasource-env-config
+      fieldPath: data.TOKEN
+    targets:
+      - select:
+          kind: GrafanaDatasource
+          name: thanos-query-ds
+        fieldPaths:
+          - spec.datasource.secureJsonData.httpHeaderValue1
+  - source:
+      kind: ConfigMap
+      name: datasource-env-config
+      fieldPath: data.HOST
+    targets:
+      - select:
+          kind: GrafanaDatasource
+          name: thanos-query-ds
+        fieldPaths:
+          - spec.datasource.url
+

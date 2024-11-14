@@ -23,6 +23,7 @@ testbin/*
 .vscode
 *.swp
 *.swo
+*.env
 *~
 /kuadrant-operator
 tmp

@@ -1,0 +1,13 @@
+apiVersion: sailoperator.io/v1alpha1
+kind: Istio
+metadata:
+  name: default
+spec:
+  namespace: gateway-system
+  updateStrategy:
+    type: InPlace
+    inactiveRevisionDeletionGracePeriodSeconds: 30
+  version: v1.23.0
+  values:
+    pilot:
+      autoscaleEnabled: false

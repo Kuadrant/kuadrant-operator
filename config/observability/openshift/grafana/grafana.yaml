@@ -1,0 +1,19 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  labels:
+    dashboards: grafana
+  name: grafana
+spec:
+  config:
+    auth:
+      disable_login_form: 'false'
+    log:
+      mode: console
+    security:
+      admin_password: secret
+      admin_user: root
+  route:
+    metadata: {}
+    spec: {}
+  version: 10.4.3

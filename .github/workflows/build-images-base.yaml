@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Set IMG_TAG to lower case
         id: lower-img-tag
         run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
@@ -128,6 +128,7 @@ jobs:
             QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
             GIT_SHA=${{ github.sha }}
             DIRTY=false
+            VERSION=${{ inputs.operatorVersion }}
       - name: Print Image URL
         run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}"
 

@@ -12,19 +12,19 @@ on:
         type: string
       authorinoOperatorVersion:
         description: Authorino Operator bundle version
-        default: latest
+        default: 0.0.0
         type: string
       limitadorOperatorVersion:
         description: Limitador Operator bundle version
-        default: latest
+        default: 0.0.0
         type: string
       dnsOperatorVersion:
         description: DNS Operator bundle version
-        default: latest
+        default: 0.0.0
         type: string
       wasmShimVersion:
         description: WASM Shim version
-        default: latest
+        default: 0.0.0
         type: string
       consolePluginImageURL:
         description: ConsolePlugin image URL
@@ -38,7 +38,7 @@ on:
 jobs:
   build:
     name: Release operator
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Install gettext-base
         run: |
@@ -50,28 +50,33 @@ jobs:
           go-version: 1.21.x
         id: go
       - name: Checkout code at git ref
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ inputs.gitRef }}
+          token: ${{ secrets.KUADRANT_DEV_PAT }}
       - name: Create release branch
         if: ${{ !startsWith(inputs.gitRef, 'release-v') }}
         run: |
           git checkout -b release-v${{ inputs.kuadrantOperatorVersion }}
       - name: Prepare release
         run: |
+          make prepare-release \
           VERSION=${{ inputs.kuadrantOperatorVersion }} \
           AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
           LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
           DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
           WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-          RELATED_IMAGE_CONSOLEPLUGIN=${{ inputs.consolePluginImageURL }} \
-          make prepare-release
+          RELATED_IMAGE_CONSOLEPLUGIN=${{ inputs.consolePluginImageURL }}
       - name: Commit and push
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A && git commit -s -m "Prepared release v${{ inputs.kuadrantOperatorVersion }}"
-          git push origin release-v${{ inputs.kuadrantOperatorVersion }}
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Prepared release v${{ inputs.kuadrantOperatorVersion }}"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          branch: release-v${{ inputs.kuadrantOperatorVersion }}
+          create_branch: true
+          tagging_message: v${{ inputs.kuadrantOperatorVersion }}
+          commit_options: '--signoff'
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:

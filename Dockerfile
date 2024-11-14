@@ -14,7 +14,6 @@ COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
-COPY version/ version/
 
 # Set environment variables for cross-compilation
 ARG TARGETARCH
@@ -23,10 +22,13 @@ ARG TARGETARCH
 
 ARG GIT_SHA
 ARG DIRTY
+ARG VERSION
 
 ENV GIT_SHA=${GIT_SHA:-unknown}
 ENV DIRTY=${DIRTY:-unknown}
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o manager main.go
+ENV VERSION=${VERSION:-unknown}
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.version=${VERSION} -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

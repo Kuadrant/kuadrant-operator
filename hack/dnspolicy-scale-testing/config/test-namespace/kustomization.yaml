@@ -1,0 +1,9 @@
+resources:
+  - echo-app
+  - gateway_prod-web-istio.yaml
+  - httproute_prod_web-istio.yaml
+
+labels:
+  - pairs:
+      kuadrant.io/test-suite: manual
+    includeTemplates: true

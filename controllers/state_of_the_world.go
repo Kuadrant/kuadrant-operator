@@ -354,13 +354,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() []controller.Controll
 func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
 	var err error
-	b.isAuthorinoOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.AuthorinoGroupKind.Group, kuadrantv1beta1.AuthorinoGroupKind.Kind, authorinooperatorv1beta1.GroupVersion.Version)
-	if err != nil || !b.isAuthorinoOperatorInstalled {
-		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
-	}
-
-	b.isAuthorinoOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), authorino.AuthConfigGroupKind.Group, authorino.AuthConfigGroupKind.Kind, authorinov1beta3.GroupVersion.Version)
+	b.isAuthorinoOperatorInstalled, err = authorino.IsAuthorinoOperatorInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil || !b.isAuthorinoOperatorInstalled {
 		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers", "err", err)
 		return opts
@@ -503,8 +497,6 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled, is
 
 	return workflow
 }
-
-var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
 
 func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuadrant {
 	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {

@@ -1,0 +1,8 @@
+resources:
+  - dnspolicy_prod-web-istio-simple.yaml
+
+labels:
+  - pairs:
+      kuadrant.io/test-suite: manual
+      kuadrant.io/test: dnspolicy_prod-web-istio-simple
+    includeTemplates: true

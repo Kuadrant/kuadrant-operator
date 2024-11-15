@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: le-route53-production
+spec:
+  acme:
+    preferredChain: ""
+    privateKeySecretRef:
+      name: le-production
+    server: https://acme-v02.api.letsencrypt.org/directory
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-1
+            accessKeyIDSecretRef:
+              key: AWS_ACCESS_KEY_ID
+              name: dns-provider-credentials-aws
+            secretAccessKeySecretRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: dns-provider-credentials-aws

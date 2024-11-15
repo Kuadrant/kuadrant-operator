@@ -1,0 +1,71 @@
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web-inmemory
+  labels:
+    kuadrant.io/test-dns-provider: inmemory
+spec:
+  targetRef:
+    name: prod-web-istio-inmemory
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: dns-provider-credentials-inmemory
+  loadBalancing:
+    defaultGeo: true
+    geo: US
+    weight: 100
+---
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web-aws
+  labels:
+    kuadrant.io/test-dns-provider: aws
+spec:
+  targetRef:
+    name: prod-web-istio-aws
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: dns-provider-credentials-aws
+  loadBalancing:
+    defaultGeo: true
+    geo: US
+    weight: 100
+---
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web-gcp
+  labels:
+    kuadrant.io/test-dns-provider: gcp
+spec:
+  targetRef:
+    name: prod-web-istio-gcp
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: dns-provider-credentials-gcp
+  loadBalancing:
+    defaultGeo: true
+    geo: us-east1
+    weight: 100
+---
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web-azure
+  labels:
+    kuadrant.io/test-dns-provider: azure
+spec:
+  targetRef:
+    name: prod-web-istio-azure
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: dns-provider-credentials-azure
+  loadBalancing:
+    defaultGeo: true
+    geo: GEO-NA
+    weight: 100

@@ -1,0 +1,151 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: prod-web-istio-inmemory
+  labels:
+    kuadrant.io/test-dns-provider: inmemory
+spec:
+  gatewayClassName: istio
+  listeners:
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api
+      hostname: "myapp.kuadrant.local"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2
+      hostname: "myapp2.kuadrant.local"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api-secure
+      hostname: "myapp.kuadrant.local"
+      port: 443
+      protocol: HTTPS
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2-secure
+      hostname: "myapp2.kuadrant.local"
+      port: 443
+      protocol: HTTPS
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: prod-web-istio-aws
+  labels:
+    kuadrant.io/test-dns-provider: aws
+spec:
+  gatewayClassName: istio
+  listeners:
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api
+      hostname: "myapp.mn.hcpapps.net"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2
+      hostname: "myapp2.mn.hcpapps.net"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api-secure
+      hostname: "myapp.mn.hcpapps.net"
+      port: 443
+      protocol: HTTPS
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2-secure
+      hostname: "myapp2.mn.hcpapps.net"
+      port: 443
+      protocol: HTTPS
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: prod-web-istio-gcp
+  labels:
+    kuadrant.io/test-dns-provider: gcp
+spec:
+  gatewayClassName: istio
+  listeners:
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api
+      hostname: "myapp.mn.google.hcpapps.net"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2
+      hostname: "myapp2.mn.google.hcpapps.net"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api-secure
+      hostname: "myapp.mn.google.hcpapps.net"
+      port: 443
+      protocol: HTTPS
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2-secure
+      hostname: "myapp2.mn.google.hcpapps.net"
+      port: 443
+      protocol: HTTPS
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: prod-web-istio-azure
+  labels:
+    kuadrant.io/test-dns-provider: azure
+spec:
+  gatewayClassName: istio
+  listeners:
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api
+      hostname: "myapp.mn.azure.hcpapps.net"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2
+      hostname: "myapp2.mn.azure.hcpapps.net"
+      port: 80
+      protocol: HTTP
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api-secure
+      hostname: "myapp.mn.azure.hcpapps.net"
+      port: 443
+      protocol: HTTPS
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api2-secure
+      hostname: "myapp2.mn.azure.hcpapps.net"
+      port: 443
+      protocol: HTTPS

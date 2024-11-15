@@ -1,0 +1,8 @@
+resources:
+  - dnspolicy_prod-web-istio-loadbalanced.yaml
+
+labels:
+  - pairs:
+      kuadrant.io/test-suite: manual
+      kuadrant.io/test: dnspolicy_prod-web-istio-loadbalanced
+    includeTemplates: true

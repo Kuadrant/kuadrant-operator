@@ -1,0 +1,7 @@
+resources:
+  - echo-app.yaml
+
+labels:
+  - pairs:
+      kuadrant.io/test-suite: manual
+    includeTemplates: true

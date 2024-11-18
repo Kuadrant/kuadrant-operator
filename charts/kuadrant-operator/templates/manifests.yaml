@@ -7994,13 +7994,13 @@ spec:
               rule: '!(has(self.defaults) && has(self.overrides))'
             - message: Overrides and implicit defaults are mutually exclusive
               rule: '!(has(self.overrides) && has(self.limits))'
-            - message: At least one spec.limits most be defined
+            - message: At least one spec.limits must be defined
               rule: '!(has(self.overrides) || has(self.defaults)) ? has(self.limits)
                 && size(self.limits) > 0 : true'
-            - message: At least one spec.overrides.limits most be defined
+            - message: At least one spec.overrides.limits must be defined
               rule: 'has(self.overrides) ? has(self.overrides.limits) && size(self.overrides.limits)
                 > 0 : true'
-            - message: At least one spec.defaults.limits most be defined
+            - message: At least one spec.defaults.limits must be defined
               rule: 'has(self.defaults) ? has(self.defaults.limits) && size(self.defaults.limits)
                 > 0 : true'
           status:

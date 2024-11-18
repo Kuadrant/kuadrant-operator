@@ -970,7 +970,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "At least one spec.limits most be defined")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "At least one spec.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 
 		It("Empty limits object created", func(ctx SpecContext) {
@@ -980,7 +980,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "At least one spec.limits most be defined")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "At least one spec.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 
 		It("Missing defaults.limits object", func(ctx SpecContext) {
@@ -994,7 +994,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "At least one spec.defaults.limits most be defined")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "At least one spec.defaults.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 
 		It("Empty defaults.limits object created", func(ctx SpecContext) {
@@ -1009,7 +1009,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "At least one spec.defaults.limits most be defined")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "At least one spec.defaults.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 
 		It("Missing overrides.limits object", func(ctx SpecContext) {
@@ -1023,7 +1023,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "At least one spec.overrides.limits most be defined")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "At least one spec.overrides.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 
 		It("Empty overrides.limits object created", func(ctx SpecContext) {
@@ -1038,7 +1038,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "At least one spec.overrides.limits most be defined")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "At least one spec.overrides.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 	})
 

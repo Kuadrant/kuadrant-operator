@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -30,8 +31,31 @@ func AuthServiceTimeout() string {
 	return env.GetString("AUTH_SERVICE_TIMEOUT", "200ms")
 }
 
+func AuthServiceFailureMode() FailureModeType {
+	return parseFailureModeValue("AUTH_SERVICE_FAILURE_MODE", FailureModeAllow)
+}
+
 func RatelimitServiceTimeout() string {
 	return env.GetString("RATELIMIT_SERVICE_TIMEOUT", "100ms")
+}
+
+func RatelimitServiceFailureMode() FailureModeType {
+	return parseFailureModeValue("RATELIMIT_SERVICE_FAILURE_MODE", FailureModeDeny)
+}
+
+func parseFailureModeValue(envVarName string, defaultValue FailureModeType) FailureModeType {
+	value := os.Getenv(envVarName)
+	if value == "" {
+		return defaultValue
+	}
+
+	switch value {
+	case string(FailureModeAllow), string(FailureModeDeny):
+		return FailureModeType(value)
+	default:
+		fmt.Printf("Warning: Invalid value '%s' for %s. Using default value '%s'.\n", value, envVarName, defaultValue)
+		return defaultValue
+	}
 }
 
 func ExtensionName(gatewayName string) string {
@@ -44,13 +68,13 @@ func BuildConfigForActionSet(actionSets []ActionSet) Config {
 			AuthServiceName: {
 				Type:        AuthServiceType,
 				Endpoint:    kuadrant.KuadrantAuthClusterName,
-				FailureMode: FailureModeDeny,
+				FailureMode: AuthServiceFailureMode(),
 				Timeout:     ptr.To(AuthServiceTimeout()),
 			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-				FailureMode: FailureModeAllow,
+				FailureMode: RatelimitServiceFailureMode(),
 				Timeout:     ptr.To(RatelimitServiceTimeout()),
 			},
 		},

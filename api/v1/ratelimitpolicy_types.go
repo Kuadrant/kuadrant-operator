@@ -153,6 +153,9 @@ func (p *RateLimitPolicy) Kind() string {
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.overrides))",message="Overrides and explicit defaults are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.limits))",message="Overrides and implicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) || has(self.defaults)) ? has(self.limits) && size(self.limits) > 0 : true",message="At least one spec.limits must be defined"
+// +kubebuilder:validation:XValidation:rule="has(self.overrides) ? has(self.overrides.limits) && size(self.overrides.limits) > 0 : true",message="At least one spec.overrides.limits must be defined"
+// +kubebuilder:validation:XValidation:rule="has(self.defaults) ? has(self.defaults.limits) && size(self.defaults.limits) > 0 : true",message="At least one spec.defaults.limits must be defined"
 type RateLimitPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"

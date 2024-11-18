@@ -920,7 +920,13 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 
 	Context("Spec TargetRef Validations", func() {
 		It("Valid policy targeting HTTPRoute", func(ctx SpecContext) {
-			policy := policyFactory()
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
+					"implicit": {
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
+					},
+				}
+			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(BeNil())
 		}, testTimeOut)
@@ -928,6 +934,11 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		It("Valid policy targeting Gateway", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
+					"implicit": {
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
+					},
+				}
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(BeNil())
@@ -949,6 +960,85 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
+		}, testTimeOut)
+	})
+
+	Context("Limits missing from configuration", func() {
+		It("Missing limits object", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = nil
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.limits must be defined")).To(BeTrue())
+		}, testTimeOut)
+
+		It("Empty limits object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{}
+
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.limits must be defined")).To(BeTrue())
+		}, testTimeOut)
+
+		It("Missing defaults.limits object", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = nil
+				policy.Spec.Defaults = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: nil,
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.defaults.limits must be defined")).To(BeTrue())
+		}, testTimeOut)
+
+		It("Empty defaults.limits object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = nil
+				policy.Spec.Defaults = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{},
+					},
+				}
+
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.defaults.limits must be defined")).To(BeTrue())
+		}, testTimeOut)
+
+		It("Missing overrides.limits object", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = nil
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: nil,
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.overrides.limits must be defined")).To(BeTrue())
+		}, testTimeOut)
+
+		It("Empty overrides.limits object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = nil
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{},
+					},
+				}
+
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.overrides.limits must be defined")).To(BeTrue())
 		}, testTimeOut)
 	})
 

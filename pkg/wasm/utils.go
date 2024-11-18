@@ -32,7 +32,7 @@ func AuthServiceTimeout() string {
 }
 
 func AuthServiceFailureMode() FailureModeType {
-	return parseFailureModeValue("AUTH_SERVICE_FAILURE_MODE", FailureModeAllow)
+	return parseFailureModeValue("AUTH_SERVICE_FAILURE_MODE", FailureModeDeny)
 }
 
 func RatelimitServiceTimeout() string {
@@ -40,7 +40,7 @@ func RatelimitServiceTimeout() string {
 }
 
 func RatelimitServiceFailureMode() FailureModeType {
-	return parseFailureModeValue("RATELIMIT_SERVICE_FAILURE_MODE", FailureModeDeny)
+	return parseFailureModeValue("RATELIMIT_SERVICE_FAILURE_MODE", FailureModeAllow)
 }
 
 func parseFailureModeValue(envVarName string, defaultValue FailureModeType) FailureModeType {

@@ -12,6 +12,8 @@ import (
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/utils/env"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
@@ -24,6 +26,14 @@ const (
 	AuthServiceName      = "auth-service"
 )
 
+func AuthServiceTimeout() string {
+	return env.GetString("AUTH_SERVICE_TIMEOUT", "200ms")
+}
+
+func RatelimitServiceTimeout() string {
+	return env.GetString("RATELIMIT_SERVICE_TIMEOUT", "100ms")
+}
+
 func ExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
 }
@@ -35,11 +45,13 @@ func BuildConfigForActionSet(actionSets []ActionSet) Config {
 				Type:        AuthServiceType,
 				Endpoint:    kuadrant.KuadrantAuthClusterName,
 				FailureMode: FailureModeDeny,
+				Timeout:     ptr.To(AuthServiceTimeout()),
 			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
+				Timeout:     ptr.To(RatelimitServiceTimeout()),
 			},
 		},
 		ActionSets: actionSets,

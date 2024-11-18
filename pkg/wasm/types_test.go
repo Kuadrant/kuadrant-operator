@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 )
 
@@ -55,6 +56,7 @@ func TestConfigEqual(t *testing.T) {
 						Type:        "ratelimit",
 						Endpoint:    "kuadrant-ratelimit-service",
 						FailureMode: "allow",
+						Timeout:     ptr.To("100ms"),
 					},
 				},
 				ActionSets: []ActionSet{
@@ -88,7 +90,7 @@ func TestConfigEqual(t *testing.T) {
 					},
 				},
 			},
-			config2: &Config{ // same config as config1 with fields orted alphabetically
+			config2: &Config{ // same config as config1 with fields sorted alphabetically
 				ActionSets: []ActionSet{
 					{
 						Actions: []Action{
@@ -124,6 +126,7 @@ func TestConfigEqual(t *testing.T) {
 						Type:        "ratelimit",
 						Endpoint:    "kuadrant-ratelimit-service",
 						FailureMode: "allow",
+						Timeout:     ptr.To("100ms"),
 					},
 				},
 			},
@@ -139,7 +142,8 @@ func TestConfigEqual(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
 			if tc.config1.EqualTo(tc.config2) != tc.expected {
-				subT.Fatalf("unexpected config equality result")
+				diff := cmp.Diff(tc.config1, tc.config2)
+				subT.Fatalf("unexpected config equality result (-want +got):\n%s", diff)
 			}
 		})
 	}

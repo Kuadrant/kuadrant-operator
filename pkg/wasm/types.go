@@ -43,7 +43,7 @@ func (c *Config) EqualTo(other *Config) bool {
 	}
 
 	for key, service := range c.Services {
-		if otherService, ok := other.Services[key]; !ok || service != otherService {
+		if otherService, ok := other.Services[key]; !ok || !service.EqualTo(otherService) {
 			return false
 		}
 	}
@@ -62,6 +62,17 @@ type Service struct {
 	Type        ServiceType     `json:"type"`
 	FailureMode FailureModeType `json:"failureMode"`
 	Timeout     *string         `json:"timeout,omitempty"`
+}
+
+func (s Service) EqualTo(other Service) bool {
+	if s.Endpoint != other.Endpoint ||
+		s.Type != other.Type ||
+		s.FailureMode != other.FailureMode ||
+		((s.Timeout == nil) != (other.Timeout == nil)) ||
+		(s.Timeout != nil && other.Timeout != nil && *s.Timeout != *other.Timeout) {
+		return false
+	}
+	return true
 }
 
 // +kubebuilder:validation:Enum:=ratelimit;auth

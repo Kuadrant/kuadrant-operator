@@ -6888,6 +6888,36 @@ spec:
                 || has(self.rules)))'
             - message: Explicit overrides and explicit defaults are mutually exclusive
               rule: '!(has(self.overrides) && has(self.defaults))'
+            - message: At least one spec.rules must be defined
+              rule: '!(has(self.overrides) || has(self.defaults)) ? has(self.rules)
+                && ((has(self.rules.authentication) && size(self.rules.authentication)
+                > 0) || (has(self.rules.metadata) && size(self.rules.metadata) > 0)
+                || (has(self.rules.authorization) && size(self.rules.authorization)
+                > 0) || (has(self.rules.response) && (has(self.rules.response.unauthenticated)
+                || has(self.rules.response.unauthorized) || (has(self.rules.response.success)
+                && (size(self.rules.response.success.headers) > 0 ||  size(self.rules.response.success.filters)
+                > 0)))) || (has(self.rules.callbacks) && size(self.rules.callbacks)
+                > 0)) : true'
+            - message: At least one spec.defaults.rules must be defined
+              rule: 'has(self.defaults) ? has(self.defaults.rules) && ((has(self.defaults.rules.authentication)
+                && size(self.defaults.rules.authentication) > 0) || (has(self.defaults.rules.metadata)
+                && size(self.defaults.rules.metadata) > 0) || (has(self.defaults.rules.authorization)
+                && size(self.defaults.rules.authorization) > 0) || (has(self.defaults.rules.response)
+                && (has(self.defaults.rules.response.unauthenticated) || has(self.defaults.rules.response.unauthorized)
+                || (has(self.defaults.rules.response.success) && (size(self.defaults.rules.response.success.headers)
+                > 0 ||  size(self.defaults.rules.response.success.filters) > 0))))
+                || (has(self.defaults.rules.callbacks) && size(self.defaults.rules.callbacks)
+                > 0)) : true'
+            - message: At least one spec.overrides.rules must be defined
+              rule: 'has(self.overrides) ? has(self.overrides.rules) && ((has(self.overrides.rules.authentication)
+                && size(self.overrides.rules.authentication) > 0) || (has(self.overrides.rules.metadata)
+                && size(self.overrides.rules.metadata) > 0) || (has(self.overrides.rules.authorization)
+                && size(self.overrides.rules.authorization) > 0) || (has(self.overrides.rules.response)
+                && (has(self.overrides.rules.response.unauthenticated) || has(self.overrides.rules.response.unauthorized)
+                || (has(self.overrides.rules.response.success) && (size(self.overrides.rules.response.success.headers)
+                > 0 ||  size(self.overrides.rules.response.success.filters) > 0))))
+                || (has(self.overrides.rules.callbacks) && size(self.overrides.rules.callbacks)
+                > 0)) : true'
           status:
             properties:
               conditions:

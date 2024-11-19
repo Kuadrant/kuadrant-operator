@@ -212,7 +212,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
 		return wasm.BuildConfigForActionSet(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
 			return c.Config.(wasm.ActionSet)
-		}))
+		}), &logger)
 	})
 
 	return wasmConfigs, nil

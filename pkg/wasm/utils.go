@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-logr/logr"
+
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -31,19 +33,19 @@ func AuthServiceTimeout() string {
 	return env.GetString("AUTH_SERVICE_TIMEOUT", "200ms")
 }
 
-func AuthServiceFailureMode() FailureModeType {
-	return parseFailureModeValue("AUTH_SERVICE_FAILURE_MODE", FailureModeDeny)
+func AuthServiceFailureMode(logger *logr.Logger) FailureModeType {
+	return parseFailureModeValue("AUTH_SERVICE_FAILURE_MODE", FailureModeDeny, logger)
 }
 
 func RatelimitServiceTimeout() string {
 	return env.GetString("RATELIMIT_SERVICE_TIMEOUT", "100ms")
 }
 
-func RatelimitServiceFailureMode() FailureModeType {
-	return parseFailureModeValue("RATELIMIT_SERVICE_FAILURE_MODE", FailureModeAllow)
+func RatelimitServiceFailureMode(logger *logr.Logger) FailureModeType {
+	return parseFailureModeValue("RATELIMIT_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
 }
 
-func parseFailureModeValue(envVarName string, defaultValue FailureModeType) FailureModeType {
+func parseFailureModeValue(envVarName string, defaultValue FailureModeType, logger *logr.Logger) FailureModeType {
 	value := os.Getenv(envVarName)
 	if value == "" {
 		return defaultValue
@@ -53,7 +55,7 @@ func parseFailureModeValue(envVarName string, defaultValue FailureModeType) Fail
 	case string(FailureModeAllow), string(FailureModeDeny):
 		return FailureModeType(value)
 	default:
-		fmt.Printf("Warning: Invalid value '%s' for %s. Using default value '%s'.\n", value, envVarName, defaultValue)
+		logger.Info("Warning: Invalid FailureMode value '%s' for %s. Using default value '%s'.\n", value, envVarName, defaultValue)
 		return defaultValue
 	}
 }
@@ -62,19 +64,19 @@ func ExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
 }
 
-func BuildConfigForActionSet(actionSets []ActionSet) Config {
+func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config {
 	return Config{
 		Services: map[string]Service{
 			AuthServiceName: {
 				Type:        AuthServiceType,
 				Endpoint:    kuadrant.KuadrantAuthClusterName,
-				FailureMode: AuthServiceFailureMode(),
+				FailureMode: AuthServiceFailureMode(logger),
 				Timeout:     ptr.To(AuthServiceTimeout()),
 			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-				FailureMode: RatelimitServiceFailureMode(),
+				FailureMode: RatelimitServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitServiceTimeout()),
 			},
 		},

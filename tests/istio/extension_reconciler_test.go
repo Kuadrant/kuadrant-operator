@@ -7,7 +7,10 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -64,6 +67,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlpName      = "toystore-rlp"
 			gatewayClass *gatewayapiv1.GatewayClass
 			gateway      *gatewayapiv1.Gateway
+			logger       logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -73,6 +77,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -148,13 +153,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
-						FailureMode: wasm.AuthServiceFailureMode(),
+						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-						FailureMode: wasm.RatelimitServiceFailureMode(),
+						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
 				},
@@ -287,7 +292,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig.Services).To(HaveKeyWithValue(wasm.RateLimitServiceName, wasm.Service{
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-				FailureMode: wasm.RatelimitServiceFailureMode(),
+				FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 				Type:        wasm.RateLimitServiceType,
 				Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 			}))
@@ -716,13 +721,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
-						FailureMode: wasm.AuthServiceFailureMode(),
+						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-						FailureMode: wasm.RatelimitServiceFailureMode(),
+						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
 				},
@@ -829,6 +834,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 			gwBName         = "gw-b"
+			logger          logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -838,6 +844,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -939,13 +946,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1151,13 +1158,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1281,13 +1288,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1337,6 +1344,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			TestGatewayName = "toystore-gw"
 			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
+			logger          logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -1346,6 +1354,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -1483,13 +1492,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1576,13 +1585,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1632,6 +1641,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			TestGatewayName = "toystore-gw"
 			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
+			logger          logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -1641,6 +1651,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -1753,13 +1764,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1864,13 +1875,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -1920,6 +1931,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			TestGatewayName = "toystore-gw"
 			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
+			logger          logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -1929,6 +1941,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -2077,13 +2090,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -2185,13 +2198,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						wasm.AuthServiceName: {
 							Type:        wasm.AuthServiceType,
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
-							FailureMode: wasm.AuthServiceFailureMode(),
+							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-							FailureMode: wasm.RatelimitServiceFailureMode(),
+							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 						},
 					},
@@ -2271,6 +2284,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 			gwHostname      = "*.gw.example.com"
+			logger          logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -2281,6 +2295,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname(gwHostname))
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -2352,13 +2367,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
-						FailureMode: wasm.AuthServiceFailureMode(),
+						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-						FailureMode: wasm.RatelimitServiceFailureMode(),
+						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
 				},
@@ -2402,6 +2417,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			TestGatewayName = "toystore-gw"
 			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
+			logger          logr.Logger
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
@@ -2411,6 +2427,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
+			logger = controller.LoggerFromContext(ctx).WithName("IstioExtensionReconcilerTest")
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
@@ -2430,13 +2447,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
-						FailureMode: wasm.AuthServiceFailureMode(),
+						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-						FailureMode: wasm.RatelimitServiceFailureMode(),
+						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
 				},

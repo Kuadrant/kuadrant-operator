@@ -7,7 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -37,6 +40,7 @@ var _ = Describe("wasm controller", func() {
 		gwHost        = fmt.Sprintf("*.toystore-%s.com", rand.String(4))
 		gatewayClass  *gatewayapiv1.GatewayClass
 		gateway       *gatewayapiv1.Gateway
+		logger        logr.Logger
 	)
 
 	BeforeEach(func(ctx SpecContext) {
@@ -49,6 +53,7 @@ var _ = Describe("wasm controller", func() {
 			Gateway
 		err = testClient().Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
+		logger = controller.LoggerFromContext(ctx).WithName("EnvoyExtensionReconcilerTest")
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 	})
@@ -171,13 +176,13 @@ var _ = Describe("wasm controller", func() {
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
-						FailureMode: wasm.AuthServiceFailureMode(),
+						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-						FailureMode: wasm.RatelimitServiceFailureMode(),
+						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
 				},
@@ -337,13 +342,13 @@ var _ = Describe("wasm controller", func() {
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
-						FailureMode: wasm.AuthServiceFailureMode(),
+						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-						FailureMode: wasm.RatelimitServiceFailureMode(),
+						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
 				},

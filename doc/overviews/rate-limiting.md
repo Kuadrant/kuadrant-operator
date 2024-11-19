@@ -213,7 +213,6 @@ Check out the following user guides for examples of rate limiting services with 
 ### Known limitations
 
 - RateLimitPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the RateLimitPolicy.
-- 2+ RateLimitPolicies cannot target network resources that define/inherit the same exact hostname.
 
 ## Implementation details
 

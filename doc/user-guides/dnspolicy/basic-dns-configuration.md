@@ -72,7 +72,7 @@ kubectl create secret generic aws-credentials \
 With this in place we can now define our DNSPolicy resource:
 
 ```yaml
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: basic-dnspolicy

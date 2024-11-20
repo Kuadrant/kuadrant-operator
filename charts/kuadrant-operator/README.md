@@ -6,10 +6,11 @@ This is the Helm Chart to install the official Kuadrant Kubernetes Operator
 
 ### Prerequisites
 - [Gateway API](https://gateway-api.sigs.k8s.io/)
+- [cert-manager](https://cert-manager.io/)
 - A Gateway Provider (I.E: [Istio](https://istio.io/latest/docs/ambient/install/helm/),
-[Envoy](https://www.envoyproxy.io/docs/envoy/latest/start/start))
+  [Envoy](https://www.envoyproxy.io/docs/envoy/latest/start/start))
 
-### Install Gateway API and Gateway Provider
+### Install dependencies
 
 1. Install Kubernetes Gateway API:
 
@@ -17,7 +18,19 @@ This is the Helm Chart to install the official Kuadrant Kubernetes Operator
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
 ```
 
-2. Install a Gateway Controller, i.e: Istio:
+2. Install cert-manager
+
+```sh
+helm repo add jetstack https://charts.jetstack.io --force-update
+helm install \
+  cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --version v1.15.3 \
+  --set crds.enabled=true
+```
+
+3. Install a Gateway Controller, i.e: Istio:
 
 ```sh
 helm install sail-operator \
@@ -55,7 +68,7 @@ helm install \
 
 ### Parameters
 
-At the moment, there's no configuration parameters exposed.
+**Coming soon!** At the moment, there's no configuration parameters exposed.
 
 ## Usage
 

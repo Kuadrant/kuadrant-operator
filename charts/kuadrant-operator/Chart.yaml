@@ -21,6 +21,7 @@ kubeVersion: ">=1.19.0-0"
 type: application
 # The chart version and dependencies will be properly set when the chart is released matching the operator version
 version: "0.0.0"
+appVersion: "0.0.0"
 dependencies:
   - name: authorino-operator
     version: 0.0.0

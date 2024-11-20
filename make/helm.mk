@@ -14,6 +14,7 @@ helm-build: $(YQ) kustomize manifests ## Build the helm chart from kustomize man
 	$(KUSTOMIZE) build config/helm > charts/kuadrant-operator/templates/manifests.yaml
 	# Set the helm chart version and dependencies versions
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.version = strenv(V)' charts/kuadrant-operator/Chart.yaml
+	V="$(BUNDLE_VERSION)" $(YQ) -i e '.appVersion = strenv(V)' charts/kuadrant-operator/Chart.yaml
 	V="$(AUTHORINO_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' charts/kuadrant-operator/Chart.yaml
 	V="$(LIMITADOR_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' charts/kuadrant-operator/Chart.yaml
 	V="$(DNS_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' charts/kuadrant-operator/Chart.yaml

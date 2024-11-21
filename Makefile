@@ -474,6 +474,7 @@ VERSION=$(VERSION)" > $(RELEASE_FILE)
 		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
 		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
 		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN)
+	$(MAKE) update-catalogsource CATALOG_IMG=$(CATALOG_IMG)		
 
 .PHONY: bundle-operator-image-url
 bundle-operator-image-url: $(YQ) ## Read operator image reference URL from the manifest bundle.
@@ -485,6 +486,10 @@ read-release-version: ## Reads release version
 
 print-bundle-image: ## Pring bundle images.
 	@echo $(BUNDLE_IMG)
+
+.PHONY: update-catalogsource
+update-catalogsource:
+	@$(YQ) e -i '.spec.image = "${CATALOG_IMG}"' config/deploy/olm/catalogsource.yaml	
 
 ##@ Code Style
 

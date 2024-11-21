@@ -11,9 +11,3 @@ patches:
       kind: Subscription
       name: sailoperator
     path: catalog-patch.yaml
-  - target:
-      group: operators.coreos.com
-      version: v1alpha1
-      kind: CatalogSource
-      name: kuadrant-operator-catalog
-    path: kuadrant-version.yaml

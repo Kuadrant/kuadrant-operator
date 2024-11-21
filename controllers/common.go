@@ -41,7 +41,7 @@ func PolicyAffectedCondition(policyKind string, policies []machinery.Policy) met
 		Type:   PolicyAffectedConditionType(policyKind),
 		Status: metav1.ConditionTrue,
 		Reason: string(gatewayapiv1alpha2.PolicyReasonAccepted),
-		Message: fmt.Sprintf("Object affected by %s %s", policyKind, lo.Map(policies, func(item machinery.Policy, index int) client.ObjectKey {
+		Message: fmt.Sprintf("Object affected by %s %s", policyKind, lo.Map(policies, func(item machinery.Policy, _ int) client.ObjectKey {
 			return client.ObjectKey{Name: item.GetName(), Namespace: item.GetNamespace()}
 		})),
 	}

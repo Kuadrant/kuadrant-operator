@@ -55,7 +55,7 @@ func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("RateLimitPolicyStatusUpdater")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1.RateLimitPolicy, bool) {
+	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, _ int) (*kuadrantv1.RateLimitPolicy, bool) {
 		p, ok := item.(*kuadrantv1.RateLimitPolicy)
 		return p, ok
 	})
@@ -192,13 +192,13 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 		case istioGatewayControllerName:
 			// EnvoyFilter
 			istioRateLimitClustersModifiedGateways, _ := state.Load(StateIstioRateLimitClustersModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioRateLimitClustersModifiedGateways, topology, func(obj machinery.Object) bool {
+			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioRateLimitClustersModifiedGateways, topology, func(_ machinery.Object) bool {
 				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
 			// WasmPlugin
 			istioExtensionsModifiedGateways, _ := state.Load(StateIstioExtensionsModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.WasmPluginGroupKind, istioExtensionsModifiedGateways, topology, func(obj machinery.Object) bool {
+			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.WasmPluginGroupKind, istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {
 				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of WasmPlugin resources, so we cannot expect to find a given a condition there
 			})...)

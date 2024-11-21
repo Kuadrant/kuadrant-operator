@@ -69,7 +69,7 @@ func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 				return nil
 			}
 
-			linkedListeners := lo.Filter(listeners, func(l *machinery.Listener, index int) bool {
+			linkedListeners := lo.Filter(listeners, func(l *machinery.Listener, _ int) bool {
 				if l.TLS != nil && l.TLS.CertificateRefs != nil {
 					for _, certRef := range l.TLS.CertificateRefs {
 						certRefNS := ""
@@ -87,7 +87,7 @@ func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 				return false
 			})
 
-			return lo.Map(linkedListeners, func(l *machinery.Listener, index int) machinery.Object {
+			return lo.Map(linkedListeners, func(l *machinery.Listener, _ int) machinery.Object {
 				return l
 			})
 		},
@@ -106,7 +106,7 @@ func LinkTLSPolicyToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 			// Policies linked to Issuer
 			// Issuer must be in the same namespace as the policy
-			linkedPolicies := lo.FilterMap(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) (machinery.Object, bool) {
+			linkedPolicies := lo.FilterMap(tlsPolicies, func(p *kuadrantv1.TLSPolicy, _ int) (machinery.Object, bool) {
 				return p, p.Spec.IssuerRef.Name == issuer.GetName() && p.GetNamespace() == issuer.GetNamespace() && p.Spec.IssuerRef.Kind == certmanagerv1.IssuerKind
 			})
 
@@ -126,7 +126,7 @@ func LinkTLSPolicyToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc 
 			clusterIssuer := o.Object.(*certmanagerv1.ClusterIssuer)
 
 			// Policies linked to ClusterIssuer
-			linkedPolicies := lo.FilterMap(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) (machinery.Object, bool) {
+			linkedPolicies := lo.FilterMap(tlsPolicies, func(p *kuadrantv1.TLSPolicy, _ int) (machinery.Object, bool) {
 				return p, p.Spec.IssuerRef.Name == clusterIssuer.GetName() && p.Spec.IssuerRef.Kind == certmanagerv1.ClusterIssuerKind
 			})
 

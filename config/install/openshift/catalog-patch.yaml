@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: sailoperator
+  namespace: gateway-system
+spec:
+  channel: candidates
+  installPlanApproval: Automatic
+  name: sailoperator
+  source: community-operators
+  sourceNamespace: openshift-marketplace

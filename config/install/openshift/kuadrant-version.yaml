@@ -1,0 +1,6 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: kuadrant-operator-catalog
+spec:
+  image: quay.io/kuadrant/kuadrant-operator-catalog:v1.0.0-rc4 #change this to the version you want to install

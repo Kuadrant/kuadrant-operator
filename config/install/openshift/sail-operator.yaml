@@ -23,4 +23,4 @@ spec:
   installPlanApproval: Automatic
   name: sailoperator
   source: operatorhubio-catalog
-  sourceNamespace: olm
+  sourceNamespace: openshift-marketplace

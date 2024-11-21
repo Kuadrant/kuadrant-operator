@@ -14,11 +14,20 @@
 
 > Note: for multiple clusters, it would make sense to do the installation via a tool like [argocd](https://argo-cd.readthedocs.io/en/stable/). For other methods of addressing multiple clusters take a look at the [kubectl docs](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
 
-## Setup the environment
+## Setup the environment 
+
+> Note this uses the community operatorhub catalog. If you are installing on OpenShift and want to use the redhat provided catalog use the second command.
+
 
 ```
+# community catalog
 kubectl apply -k config/install/standard
 ``` 
+
+```
+# redhat catalog
+kubectl apply -k config/install/openshift
+```
 
 Verify both Kuadrant and sail operators are installed. Note, that this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
 

@@ -7,10 +7,16 @@ resources:
   - ../../deploy/olm
 
 patches:
-  - patch: |-
-      apiVersion: operators.coreos.com/v1alpha1
+  - target:
+      group: operators.coreos.com
+      version: v1alpha1
       kind: CatalogSource
-      metadata:
-        name: kuadrant-operator-catalog
-      spec:
-        image: quay.io/kuadrant/kuadrant-operator-catalog:v1.0.0-rc4  #change this to the version you want to install
+      name: kuadrant-operator-catalog
+    path: kuadrant-version.yaml
+  # - patch: |-
+  #     apiVersion: operators.coreos.com/v1alpha1
+  #     kind: CatalogSource
+  #     metadata:
+  #       name: kuadrant-operator-catalog
+  #     spec:
+  #       image: quay.io/kuadrant/kuadrant-operator-catalog:v1.0.0-rc4  #change this to the version you want to install

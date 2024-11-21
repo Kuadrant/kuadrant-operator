@@ -1,22 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# note by default this will install the version of kuadrant you checkout from v1 onwards
+# if you want to install a different version you can use the patch option below
 resources:
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
   - sail-operator.yaml
   - ../../deploy/olm
-
-patches:
-  - target:
-      group: operators.coreos.com
-      version: v1alpha1
-      kind: CatalogSource
-      name: kuadrant-operator-catalog
-    path: kuadrant-version.yaml
-  # - patch: |-
-  #     apiVersion: operators.coreos.com/v1alpha1
-  #     kind: CatalogSource
-  #     metadata:
-  #       name: kuadrant-operator-catalog
-  #     spec:
-  #       image: quay.io/kuadrant/kuadrant-operator-catalog:v1.0.0-rc4  #change this to the version you want to install
+# patches:
+#   - target:
+#       group: operators.coreos.com
+#       version: v1alpha1
+#       kind: CatalogSource
+#       name: kuadrant-operator-catalog
+#     path: kuadrant-version.yaml

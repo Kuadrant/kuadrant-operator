@@ -98,15 +98,19 @@ spec:
                     - name
                     type: object
                   failureThreshold:
-                    description: FailureThreshold is a limit of consecutive failures
-                      that must occur for a host to be considered unhealthy
+                    default: 5
+                    description: |-
+                      FailureThreshold is a limit of consecutive failures that must occur for a host to be considered unhealthy
+                      Defaults to 5
                     type: integer
                     x-kubernetes-validations:
                     - message: Failure threshold must be greater than 0
                       rule: self > 0
                   interval:
-                    description: Interval defines how frequently this probe should
-                      execute
+                    default: 5m
+                    description: |-
+                      Interval defines how frequently this probe should execute
+                      Defaults to 5 minutes
                     type: string
                   path:
                     description: |-
@@ -115,15 +119,19 @@ spec:
                     pattern: ^(?:\?|\/)[\w\-.~:\/?#\[\]@!$&'()*+,;=]+(?:[a-zA-Z0-9]|\/){1}$
                     type: string
                   port:
-                    description: Port to connect to the host on. Must be either 80,
-                      443 or 1024-49151
+                    default: 443
+                    description: |-
+                      Port to connect to the host on. Must be either 80, 443 or 1024-49151
+                      Defaults to port 443
                     type: integer
                     x-kubernetes-validations:
                     - message: Only ports 80, 443, 1024-49151 are allowed
                       rule: self in [80, 443] || (self >= 1024 && self <= 49151)
                   protocol:
-                    description: Protocol to use when connecting to the host, valid
-                      values are "HTTP" or "HTTPS"
+                    default: HTTPS
+                    description: |-
+                      Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"
+                      Defaults to HTTPS
                     type: string
                     x-kubernetes-validations:
                     - message: Only HTTP or HTTPS protocols are allowed

@@ -43,27 +43,33 @@ spec:
    - name: my-aws-credentials
  
   # (optional) loadbalancing specification
-  # use it for providing the specification of how dns will be configured in order to provide balancing of load across multiple clusters
+  # use it for providing the specification of how dns will be configured in order to provide balancing of requests across multiple clusters. If not configured, a simple A or CNAME record will be created. If you have a policy with no loadbalancing defined and want to move to a loadbalanced configuration, you will need to delete and re-create the policy.
   loadBalancing:
-    # default geo to be applied to records
+    # is this the default geo to be applied to records. It is important that you set the default geo flag to true **Only** for the GEO value you wish to act as the catchall GEO, you should not set multiple GEO values as default for a given targeted listener. Example: policy 1 targets listener 1 with a geo of US and sets default to true. Policy 2 targets a listener on another cluster and set the geo to EU and default to false. It is fine for policies in the same default GEO to set the value to true. The main thing is to have only one unique GEO set as the default for any shared listener hostname.
     defaultGeo: true
-    # weighted specification
+    # weighted specification. This will apply the given weight to the records created based on the targeted gateway listeners. If you have multiple gateways that share a listener host, you can set different weight values to influence how much traffic will be brought to a given gateway.
     weight: 100
-    # 
+    # This is the actual GEO location to set for records created by this policy. This can and should be different if you have multiple gateways across multiple geographic areas. 
+    
+    # AWS: To see all regions supported by AWS Route 53, please see the official (documentation)[https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html]. With Route 53 when setting a continent code use a "GEO-" prefix otherwise it will be considered a country code. 
+    
+    # GCP: To see all regions supported by GCP Cloud DNS, please see the official (documentation)[https://cloud.google.com/compute/docs/regions-zones]
+    
+    #To see the different values you can use for the geo based DNS with Azure take a look at the following (documentation)[https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions]
     geo: IE
 
   # (optional) health check specification
-  # health check probes with the following specification will be created for each DNS target
+  # health check probes with the following specification will be created for each DNS target, these probes constantly check that the endpoint can be reached. They will flag an unhealthy endpoint in the status. If no DNSRecord has yet been published and the endpoint is unhealthy, the record will not be published until the health check passes.
   healthCheck:
-    allowInsecureCertificates: true
-    endpoint: /
-    expectedResponses:
-      - 200
-      - 201
-      - 301
-    failureThreshold: 5
-    port: 443
-    protocol: https
+    # the path on the listener host(s) that you want to check. 
+    path: /health
+    # how many times does the health check need to fail before unhealthy.
+    failureThreshold: 3
+    # how often should it be checked.
+    interval: 5min
+    # additionalHeadersRef is reference to a local secret with a set of key value pairs to be used as headers when sending the health check request.
+    additionalHeadersRef:
+      name: headers
 ```
 
 Check out the [API reference](reference/dnspolicy.md) for a full specification of the DNSPolicy CRD.
@@ -174,6 +180,25 @@ spec:
     kind: Gateway
     name: <Gateway Name>
 ```
+
+### Targeting a specific Listener of a gateway
+
+A DNSPolicy can target a specific listener in a gateway using the `sectionName` property of the targetRef configuration. When you set the `sectionName`, the DNSPolicy will only affect that listener and no others. If you also have another DNSPolicy targeting the entire gateway, the more specific policy targeting the listerner will be the policy that is applied.
+
+```yaml
+apiVersion: kuadrant.io/v1beta2
+kind: DNSPolicy
+metadata:
+  name: <DNSPolicy name>
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: <Gateway Name>
+    sectionName: <myListenerName>
+```
+
+
 
 ### DNSRecord Resource
 
@@ -293,5 +318,5 @@ dig echo.apps.hcpapps.net +short
 
 ### Known limitations
 
-* One Gateway can only be targeted by one DNSPolicy.
+* One Gateway can only be targeted by one DNSPolicy unless subsequent DNSPolicies choose to specific a sectionName in their targetRef.
 * DNSPolicies can only target Gateways defined within the same namespace of the DNSPolicy.

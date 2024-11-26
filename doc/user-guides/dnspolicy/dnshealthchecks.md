@@ -25,7 +25,7 @@ kind: DNSPolicy
 metadata:
   name: gateway-dns
 spec:
-  health check:
+  healthCheck:
     failureThreshold: 3
     interval: 5m
     path: /health
@@ -45,7 +45,7 @@ kind: DNSPolicy
 metadata:
   name: my-listener-dns
 spec:
-  health check:
+  healthCheck:
     failureThreshold: 3
     interval: 5m
     path: /ok #different path for this listener
@@ -79,7 +79,7 @@ kind: DNSPolicy
 metadata:
   name: my-listener-dns
 spec:
-  health check:
+  healthCheck:
     additionalHeadersRef: #add the following
       name: healthheaders
     failureThreshold: 3

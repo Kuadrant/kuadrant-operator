@@ -384,6 +384,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: bob-key
+  namespace: kuadrant-system
   labels:
     authorino.kuadrant.io/managed-by: authorino
     app: toystore
@@ -397,6 +398,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: alice-key
+  namespace: kuadrant-system
   labels:
     authorino.kuadrant.io/managed-by: authorino
     app: toystore

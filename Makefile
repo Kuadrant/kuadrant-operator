@@ -10,6 +10,9 @@ OS = $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH := $(shell uname -m | tr '[:upper:]' '[:lower:]')
 # Container Engine to be used for building image and with kind
 CONTAINER_ENGINE ?= docker
+ifeq (podman,$(CONTAINER_ENGINE))
+	CONTAINER_ENGINE_EXTRA_FLAGS ?= --load
+endif
 
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
@@ -353,7 +356,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
-		--load \
+		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 
 docker-push: ## Push docker image with the manager.

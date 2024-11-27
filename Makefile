@@ -300,10 +300,13 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
 dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
+dependencies-manifests: export IMAGE_TAG := $(IMAGE_TAG)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
 	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
 	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
+	$(call patch-config,config/install/namespaced-dns-operator/dns-operator/kustomization.template.yaml,config/install/namespaced-dns-operator/dns-operator/kustomization.yaml)
+	$(call patch-config,config/install/standard/kuadrant-version.template.yaml,config/install/standard/kuadrant-version.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

@@ -116,11 +116,13 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 	return nil
 }
 func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	// TODO: Managed field cannot be set when applying
+	kObj.ManagedFields = nil
 	obj, err := controller.Destruct(kObj)
 	if err != nil {
 		return err
 	}
-	_, err = r.Client.Resource(kuadrantv1beta1.KuadrantsResource).Namespace(kObj.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	_, err = r.Client.Resource(kuadrantv1beta1.KuadrantsResource).Namespace(kObj.GetNamespace()).ApplyStatus(ctx, kObj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName})
 	return err
 }
 

@@ -69,11 +69,12 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 }
 
 func (r *GatewayPolicyDiscoverabilityReconciler) updateGatewayStatus(ctx context.Context, gw *machinery.Gateway) error {
+	gw.Gateway.ManagedFields = nil
 	obj, err := controller.Destruct(gw.Gateway)
 	if err != nil {
 		return err
 	}
-	_, err = r.Client.Resource(controller.GatewaysResource).Namespace(gw.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	_, err = r.Client.Resource(controller.GatewaysResource).Namespace(gw.GetNamespace()).ApplyStatus(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName})
 	return err
 }
 

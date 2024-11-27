@@ -146,3 +146,36 @@ status:
   reason: 'Status code: 503'
   status: 503
 ```
+
+## Manually removing unhealthy records
+
+If you have a failing health check for one of your gateway listeners and you would like to remove it from the DNS provider, you can do this by deleting the associated DNSRecord resource.
+
+**Finding the correct record**
+
+DNSRecord resources are kept in the same namespace as the DNSPolicy that configured and created them.
+
+```bash
+kubectl get dnsrecords.kuadrant.io -n <dns-policy-namespace>
+```
+
+As shown above, when a health check is failing, the DNSPolicy will show a status for that listener host to surface that failure:
+
+```yaml
+recordConditions:
+    t1a.cb.hcpapps.net:
+    - lastTransitionTime: "2024-11-27T14:00:52Z"
+      message: 'Not healthy addresses: [ae4d131ee5d7b4fb098f4afabf4aba4c-513237325.us-east-1.elb.amazonaws.com]'
+      observedGeneration: 1
+      reason: HealthChecksFailed
+      status: "False"
+      type: Healthy
+```   
+
+The DNSRecord resource is named after the gateway and the listener name. So if you have a gateway called `ingress` and a listener called `example` you will have a `DNSRecord` resource named `ingress-example` in the same namespace as your DNSPolicy. So from this status you can get the hostname and find the associated listener on your gateway. You can then delete the associated DNSRecord resource. 
+
+```bash
+kubectl delete dnsrecord.kuadrant.io <gateway-name>-<listener-name> -n <dns policy namespace>
+```
+
+Removing this resource will remove all of the associated DNS records in the DNS provider and while the health check is failing, the dns operator will not re-publish these records. 

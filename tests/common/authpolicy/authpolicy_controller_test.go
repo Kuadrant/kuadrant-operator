@@ -481,18 +481,6 @@ var _ = Describe("AuthPolicy controller", func() {
 			authConfigSpecAsJSON, _ := json.Marshal(authConfig.Spec)
 			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{}}}}}`, authConfig.GetName())))
 		}, testTimeOut)
-
-		It("Succeeds when AuthScheme is not defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
-				policy.Spec.Proper().AuthScheme = nil
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
 	})
 
 	Context("Complex HTTPRoute with multiple rules and hostnames", func() {
@@ -935,6 +923,19 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 						Name:  "my-target",
 					},
 				},
+				AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+					AuthScheme: &kuadrantv1.AuthSchemeSpec{
+						Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+							"anonymous": {
+								AuthenticationSpec: authorinov1beta3.AuthenticationSpec{
+									AuthenticationMethodSpec: authorinov1beta3.AuthenticationMethodSpec{
+										AnonymousAccess: &authorinov1beta3.AnonymousAccessSpec{},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		}
 
@@ -979,6 +980,99 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 	})
 
+	Context("Rules missing from configuration", func() {
+		It("Missing rules object", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = nil
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.rules must be defined")).To(BeTrue())
+		})
+
+		It("Empty rules object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = &kuadrantv1.AuthSchemeSpec{}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.rules must be defined")).To(BeTrue())
+		})
+
+		It("Empty rules.authentication object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = &kuadrantv1.AuthSchemeSpec{
+					Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.rules must be defined")).To(BeTrue())
+		})
+
+		It("Missing defaults.rules.authentication object", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = nil
+				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: nil,
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.defaults.rules must be defined")).To(BeTrue())
+		})
+
+		It("Empty defaults.rules.authentication object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = nil
+				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{},
+						},
+					},
+				}
+
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.defaults.rules must be defined")).To(BeTrue())
+		})
+
+		It("Missing overrides.rules.authentication object", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = nil
+				policy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: nil,
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.overrides.rules must be defined")).To(BeTrue())
+		})
+
+		It("Empty overrides.rules.authentication object created", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = nil
+				policy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{},
+						},
+					},
+				}
+
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "At least one spec.overrides.rules must be defined")).To(BeTrue())
+		})
+	})
+
 	Context("Defaults mutual exclusivity validation", func() {
 		It("Valid when only implicit defaults are used", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
@@ -989,6 +1083,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Valid when only explicit defaults are used", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.AuthScheme = nil
 				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{
 					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
 						AuthScheme: tests.BuildBasicAuthScheme(),

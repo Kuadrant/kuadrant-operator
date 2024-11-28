@@ -22,17 +22,17 @@
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: grafana-controller-resources
+    name: grafana-controller-resources-metrics
     configMap:
       defaultMode: 420
-      name: grafana-controller-resources
+      name: grafana-controller-resources-metrics
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: grafana-controller-runtime
+    name: grafana-controller-runtime-metrics
     configMap:
       defaultMode: 420
-      name: grafana-controller-runtime
+      name: grafana-controller-runtime-metrics
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
@@ -51,10 +51,10 @@
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
-    name: grafana-controller-runtime
-    mountPath: /grafana-dashboard-definitions/0/grafana-controller-runtime
+    name: grafana-controller-runtime-metrics
+    mountPath: /grafana-dashboard-definitions/0/grafana-controller-runtime-metrics
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
-    name: grafana-controller-resources
-    mountPath: /grafana-dashboard-definitions/0/grafana-controller-resources
+    name: grafana-controller-resources-metrics
+    mountPath: /grafana-dashboard-definitions/0/grafana-controller-resources-metrics

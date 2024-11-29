@@ -331,7 +331,7 @@ metadata:
 spec:
   loadBalancing:
     defaultGeo: true
-    geo: US
+    geo: GEO-US
     weight: 120
   targetRef:
     name: ${gatewayName}

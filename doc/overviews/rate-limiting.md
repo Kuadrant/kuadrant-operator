@@ -12,9 +12,10 @@ A Kuadrant RateLimitPolicy custom resource, often abbreviated "RateLimitPolicy":
 ### Envoy's Rate Limit Service Protocol
 
 Kuadrant's Rate Limit implementation relies on the Envoy's [Rate Limit Service (RLS)](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto) protocol. The workflow per request goes:
+
 1. On incoming request, the gateway checks the matching rules for enforcing rate limits, as stated in the RateLimitPolicy custom resources and targeted Gateway API networking objects
 2. If the request matches, the gateway sends one [RateLimitRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto#service-ratelimit-v3-ratelimitrequest) to the external rate limiting service ("Limitador").
-1. The external rate limiting service responds with a [RateLimitResponse](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto#service-ratelimit-v3-ratelimitresponse) back to the gateway with either an `OK` or `OVER_LIMIT` response code.
+3. The external rate limiting service responds with a [RateLimitResponse](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto#service-ratelimit-v3-ratelimitresponse) back to the gateway with either an `OK` or `OVER_LIMIT` response code.
 
 A RateLimitPolicy and its targeted Gateway API networking resource contain all the statements to configure both the ingress gateway and the external rate limiting service.
 
@@ -24,13 +25,14 @@ A RateLimitPolicy and its targeted Gateway API networking resource contain all t
 
 The `RateLimitPolicy` spec includes, basically, two parts:
 
-* A reference to an existing Gateway API resource (`spec.targetRef`)
-* Limit definitions (`spec.limits`)
+- A reference to an existing Gateway API resource (`spec.targetRef`)
+- Limit definitions (`spec.limits`)
 
 Each limit definition includes:
-* A set of rate limits (`spec.limits.<limit-name>.rates[]`)
-* (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
-* (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
+
+- A set of rate limits (`spec.limits.<limit-name>.rates[]`)
+- (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
+- (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
 
 The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
 
@@ -81,13 +83,13 @@ spec:
     # routes that lack a more specific policy attached to.
     # Mutually exclusive with `overrides` and with declaring `limits` at the top-level of the spec.
     defaults:
-      limits: {…}
+      limits: { … }
 
     # Overrides. Used in policies that target a Gateway object to be enforced on all routes linked to the gateway,
     # thus also overriding any more specific policy occasionally attached to any of those routes.
     # Mutually exclusive with `defaults` and with declaring `limits` at the top-level of the spec.
     overrides:
-      limits: {…}
+      limits: { … }
 ```
 
 ## Using the RateLimitPolicy
@@ -108,7 +110,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: <HTTPRoute Name>
-  limits: {…}
+  limits: { … }
 ```
 
 ![Rate limit policy targeting a HTTPRoute resource](https://i.imgur.com/ObfOp9u.png)
@@ -144,7 +146,7 @@ spec:
     kind: Gateway
     name: <Gateway Name>
   defaults: # alternatively: `overrides`
-    limits: {…}
+    limits: { … }
 ```
 
 ![rate limit policy targeting a Gateway resource](https://i.imgur.com/UkivAqA.png)
@@ -156,12 +158,14 @@ Two possible semantics are to be considered here – gateway policy _defaults_ v
 Gateway RateLimitPolicies that declare _defaults_ (or alternatively neither defaults nor overrides) protect all traffic routed through the gateway except where a more specific HTTPRoute RateLimitPolicy exists, in which case the HTTPRoute RateLimitPolicy prevails.
 
 Example with 4 RateLimitPolicies, 3 HTTPRoutes and 1 Gateway _default_ (plus 2 HTTPRoute and 2 Gateways without RateLimitPolicies attached):
+
 - RateLimitPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
 - RateLimitPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
 - RateLimitPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
 - RateLimitPolicy G (defaults) → Gateway G (`*.com`)
 
 Expected behavior:
+
 - Request to `a.toystore.com` → RateLimitPolicy A will be enforced
 - Request to `b.toystore.com` → RateLimitPolicy B will be enforced
 - Request to `other.toystore.com` → RateLimitPolicy W will be enforced
@@ -171,12 +175,14 @@ Expected behavior:
 Gateway RateLimitPolicies that declare _overrides_ protect all traffic routed through the gateway, regardless of existence of any more specific HTTPRoute RateLimitPolicy.
 
 Example with 4 RateLimitPolicies, 3 HTTPRoutes and 1 Gateway _override_ (plus 2 HTTPRoute and 2 Gateways without RateLimitPolicies attached):
+
 - RateLimitPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
 - RateLimitPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
 - RateLimitPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
 - RateLimitPolicy G (overrides) → Gateway G (`*.com`)
 
 Expected behavior:
+
 - Request to `a.toystore.com` → RateLimitPolicy G will be enforced
 - Request to `b.toystore.com` → RateLimitPolicy G will be enforced
 - Request to `other.toystore.com` → RateLimitPolicy G will be enforced
@@ -186,9 +192,11 @@ Expected behavior:
 ### Limit definition
 
 A limit will be activated whenever a request comes in and the request matches:
+
 - all of the `when` conditions specified in the limit.
 
 A limit can define:
+
 - counters that are qualified based on dynamic values fetched from the request, or
 - global counters (implicitly, when no qualified counter is specified)
 
@@ -201,31 +209,31 @@ spec:
   limits:
     "toystore-all":
       rates:
-      - limit: 5000
-        window: 1s
+        - limit: 5000
+          window: 1s
 
     "toystore-api-per-username":
       rates:
-      - limit: 100
-        window: 1s
-      - limit: 1000
-        window: 1m
+        - limit: 100
+          window: 1s
+        - limit: 1000
+          window: 1m
       counters:
-      - expression: auth.identity.username
+        - expression: auth.identity.username
       when:
-      - predicate: request.host == 'api.toystore.com'
+        - predicate: request.host == 'api.toystore.com'
 
     "toystore-admin-unverified-users":
       rates:
-      - limit: 250
-        window: 1s
+        - limit: 250
+          window: 1s
       when:
-      - predicate: request.host == 'admin.toystore.com'
-      - predicate: !auth.identity.email_verified
+        - predicate: request.host == 'admin.toystore.com'
+        - predicate: !auth.identity.email_verified
 ```
 
 | Request to           | Rate limits enforced                                         |
-|----------------------|--------------------------------------------------------------|
+| -------------------- | ------------------------------------------------------------ |
 | `api.toystore.com`   | 100rps/username or 1000rpm/username (whatever happens first) |
 | `admin.toystore.com` | 250rps                                                       |
 | `other.toystore.com` | 5000rps                                                      |
@@ -241,26 +249,28 @@ The selectors within the `when` conditions of a RateLimitPolicy are a subset of 
 ### Examples
 
 Check out the following user guides for examples of rate limiting services with Kuadrant:
-* [Simple Rate Limiting for Application Developers](user-guides/simple-rl-for-app-developers.md)
-* [Authenticated Rate Limiting for Application Developers](user-guides/authenticated-rl-for-app-developers.md)
-* [Gateway Rate Limiting for Cluster Operators](user-guides/gateway-rl-for-cluster-operators.md)
-* [Authenticated Rate Limiting with JWTs and Kubernetes RBAC](user-guides/authenticated-rl-with-jwt-and-k8s-authnz.md)
+
+- [Simple Rate Limiting for Applications](../user-guides/ratelimiting/simple-rl-for-app-developers.md)
+- [Authenticated Rate Limiting for Application](../user-guides/ratelimiting/authenticated-rl-for-app-developers.md)
+- [Gateway Rate Limiting for Cluster Operators](../user-guides/ratelimiting/gateway-rl-for-cluster-operators.md)
+- [Authenticated Rate Limiting with JWTs and Kubernetes RBAC](../user-guides/ratelimiting/authenticated-rl-with-jwt-and-k8s-authnz.md)
 
 ### Known limitations
 
-* RateLimitPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the RateLimitPolicy.
-* 2+ RateLimitPolicies cannot target network resources that define/inherit the same exact hostname.
+- RateLimitPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the RateLimitPolicy.
+- 2+ RateLimitPolicies cannot target network resources that define/inherit the same exact hostname.
 
 ## Implementation details
 
 Driven by limitations related to how Istio injects configuration in the filter chains of the ingress gateways, Kuadrant relies on Envoy's [Wasm Network](https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/wasm_filter) filter in the data plane, to manage the integration with rate limiting service ("Limitador"), instead of the [Rate Limit](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/rate_limit_filter) filter.
 
-**Motivation:** _Multiple rate limit domains_<br/>
+**Motivation:** _Multiple rate limit domains_
+
 The first limitation comes from having only one filter chain per listener. This often leads to one single global rate limiting filter configuration per gateway, and therefore to a shared rate limit [domain](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/ratelimit/v3/rate_limit.proto#envoy-v3-api-msg-extensions-filters-http-ratelimit-v3-ratelimit) across applications and policies. Even though, in a rate limit filter, the triggering of rate limit calls, via [actions to build so-called "descriptors"](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/rate_limit_filter#composing-actions), can be defined at the level of the virtual host and/or specific route rule, the overall rate limit configuration is only one, i.e., always the same rate limit domain for all calls to Limitador.
 
 On the other hand, the possibility to configure and invoke the rate limit service for multiple domains depending on the context allows to isolate groups of policy rules, as well as to optimize performance in the rate limit service, which can rely on the domain for indexation.
 
-**Motivation:** _Fine-grained matching rules_<br/>
+**Motivation:** _Fine-grained matching rules_
 A second limitation of configuring the rate limit filter via Istio, particularly from [Gateway API](https://gateway-api.sigs.k8s.io) resources, is that [rate limit descriptors](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/rate_limit_filter#composing-actions) at the level of a specific HTTP route rule require "named routes" – defined only in an Istio [VirtualService](https://istio.io/latest/docs/reference/config/networking/virtual-service/#HTTPRoute) resource and referred in an [EnvoyFilter](https://istio.io/latest/docs/reference/config/networking/envoy-filter/#EnvoyFilter-RouteConfigurationMatch-RouteMatch) one. Because Gateway API HTTPRoute rules lack a "name" property[^1], as well as the Istio VirtualService resources are only ephemeral data structures handled by Istio in-memory in its implementation of gateway configuration for Gateway API, where the names of individual route rules are auto-generated and not referable by users in a policy[^2][^3], rate limiting by attributes of the HTTP request (e.g., path, method, headers, etc) would be very limited while depending only on Envoy's [Rate Limit](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/rate_limit_filter) filter.
 
 [^1]: https://github.com/kubernetes-sigs/gateway-api/pull/996
@@ -272,6 +282,7 @@ Motivated by the desire to support multiple rate limit domains per ingress gatew
 The wasm module integrates with the gateway in the data plane via [Wasm Network](https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/wasm_filter) filter, and parses a configuration composed out of user-defined RateLimitPolicy resources by the Kuadrant control plane. Whereas the rate limiting service ("Limitador") remains an implementation of Envoy's RLS protocol, capable of being integrated directly via [Rate Limit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/network/ratelimit/v3/rate_limit.proto#extension-envoy-filters-network-ratelimit) extension or by Kuadrant, via wasm module for the [Istio Gateway API implementation](https://gateway-api.sigs.k8s.io/implementations/#istio).
 
 As a consequence of this design:
+
 - Users can define fine-grained rate limit rules that match their Gateway and HTTPRoute definitions including for subsections of these.
 - Rate limit definitions are insulated, not leaking across unrelated policies or applications.
 - Conditions to activate limits are evaluated in the context of the gateway process, reducing the gRPC calls to the external rate limiting service only to the cases where rate limit counters are known in advance to have to be checked/incremented.
@@ -289,12 +300,12 @@ metadata:
   name: kuadrant-kuadrant-ingressgateway
   namespace: gateway-system
   ownerReferences:
-  - apiVersion: gateway.networking.k8s.io/v1
-    blockOwnerDeletion: true
-    controller: true
-    kind: Gateway
-    name: kuadrant-ingressgateway
-    uid: 0298355b-fb30-4442-af2b-88d0c05bd2bd
+    - apiVersion: gateway.networking.k8s.io/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Gateway
+      name: kuadrant-ingressgateway
+      uid: 0298355b-fb30-4442-af2b-88d0c05bd2bd
   resourceVersion: "11253"
   uid: 36ef1fb7-9eca-46c7-af63-fe783f40148c
 spec:
@@ -308,37 +319,37 @@ spec:
     actionSets:
       - name: some_name_0
         routeRuleConditions:
-          hostnames: 
-          - '*.toystore.website'
-          - '*.toystore.io'
+          hostnames:
+            - "*.toystore.website"
+            - "*.toystore.io"
           predicates:
-          - request.url_path.startsWith("/assets")
+            - request.url_path.startsWith("/assets")
         actions:
-        - service: ratelimit-service
-          scope: gateway-system/app-rlp
-          predicates:
-          - request.host.endsWith('.toystore.website')
-          data:
-          - expression:
-              key: limit.toystore_assets_all_domains__b61ee8e6
-              value: "1"
+          - service: ratelimit-service
+            scope: gateway-system/app-rlp
+            predicates:
+              - request.host.endsWith('.toystore.website')
+            data:
+              - expression:
+                  key: limit.toystore_assets_all_domains__b61ee8e6
+                  value: "1"
       - name: some_name_1
         routeRuleConditions:
-          hostnames: 
-          - '*.toystore.website'
-          - '*.toystore.io'
+          hostnames:
+            - "*.toystore.website"
+            - "*.toystore.io"
           predicates:
-          - request.url_path.startsWith("/v1")
+            - request.url_path.startsWith("/v1")
         actions:
-        - service: ratelimit-service
-          scope: gateway-system/app-rlp
-          predicates:
-          - request.host.endsWith('.toystore.website')
-          - auth.identity.username == ""
-          data:
-          - expression:
-              key: limit.toystore_v1_website_unauthenticated__377837ee
-              value: "1"
+          - service: ratelimit-service
+            scope: gateway-system/app-rlp
+            predicates:
+              - request.host.endsWith('.toystore.website')
+              - auth.identity.username == ""
+            data:
+              - expression:
+                  key: limit.toystore_v1_website_unauthenticated__377837ee
+                  value: "1"
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway

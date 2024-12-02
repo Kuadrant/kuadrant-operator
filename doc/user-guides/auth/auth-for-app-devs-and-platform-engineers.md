@@ -5,7 +5,7 @@ This guide walks you through the process of setting up a local Kubernetes cluste
 Three AuthPolicies will be declared:
 
 | Use case                       | AuthPolicies                                                                                                                                                                                                                                                                  |
-|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **App developer**              | 2 AuthPolicies targeting a HTTPRoute that routes traffic to a sample "Toy Store" application → enforce API key authentication to all requests in this route; require API key owners to be mapped to `groups:admins` metadata to access a specific HTTPRouteRule of the route. |
 | **Platform engineer use-case** | 1 AuthPolicy targeting the `kuadrant-ingressgateway` Gateway → enforces a trivial "deny-all" policy that locks down any other HTTPRoute attached to the Gateway.                                                                                                              |
 
@@ -35,39 +35,12 @@ Topology:
             └─────────────────┘
 ```
 
-## Requisites
+## Setup the environment
 
-- [Docker](https://docker.io)
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
 
-## Run the guide ① → ④
 
-### ①  Setup (Persona: _Cluster admin_)
-
-Clone the repo:
-
-```sh
-git clone git@github.com:Kuadrant/kuadrant-operator.git && cd kuadrant-operator
-```
-
-Run the following command to create a local Kubernetes cluster with [Kind](https://kind.sigs.k8s.io/), install & deploy Kuadrant:
-
-```sh
-make local-setup
-```
-
-Request an instance of Kuadrant in the `kuadrant-system` namespace:
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-spec: {}
-EOF
-```
-
-### ② Deploy the Toy Store sample application (Persona: _App developer_)
+### Deploy the Toy Store sample application (Persona: _App developer_)
 
 ```sh
 kubectl apply -f examples/toystore/toystore.yaml
@@ -131,9 +104,10 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/admin -i
 # HTTP/1.1 200 OK
 ```
 
-### ③ Protect the Toy Store application (Persona: _App developer_)
+### Protect the Toy Store application (Persona: _App developer_)
 
 Create AuthPolicies to enforce the following auth rules:
+
 - **Authentication:**
   - All users must present a valid API key
 - **Authorization:**
@@ -238,7 +212,7 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://$G
 # HTTP/1.1 200 OK
 ```
 
-### ④ Create a default "deny-all" policy at the level of the gateway (Persona: _Platform engineer_)
+### Create a default "deny-all" policy at the level of the gateway (Persona: _Platform engineer_)
 
 Create the policy:
 

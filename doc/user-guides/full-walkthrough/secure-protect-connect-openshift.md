@@ -29,10 +29,10 @@ While this document uses `kubectl` commands for simplicity, working with multipl
 
 This guide expects that you have successfully installed Kuadrant on at least one OpenShift cluster:
 
-- You have completed the steps in [Install Kuadrant on an OpenShift cluster](../install/install-openshift.md) for one or more clusters.
+- You have completed the steps in [Install Kuadrant on an OpenShift cluster](../../install/install-openshift.md) for one or more clusters.
 - For multicluster scenarios, you have installed Kuadrant on at least two different OpenShift clusters, and have a shared accessible Redis store.
 - You have the `kubectl` command line installed.
-- Optional: User workload monitoring is configured to remote write to a central storage system such as Thanos, as described in [Install Kuadrant on an OpenShift cluster](../install/install-openshift.md).
+- Optional: User workload monitoring is configured to remote write to a central storage system such as Thanos, as described in [Install Kuadrant on an OpenShift cluster](../../install/install-openshift.md).
 
 ## Platform engineer workflow
 
@@ -443,9 +443,9 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/ma
 
 Copy at least one of the following example OAS to a local location:
 
-- [Sample OAS for rate limiting with API key](../../examples/oas-apikey.yaml)
+- [Sample OAS for rate limiting with API key](../../../examples/oas-apikey.yaml)
 
-- [Sample OAS for rate limiting with OIDC](../../examples/oas-oidc.yaml)
+- [Sample OAS for rate limiting with OIDC](../../../examples/oas-oidc.yaml)
 
 Set up some new environment variables as follows:
 
@@ -570,7 +570,7 @@ The example OAS uses Kuadrant-based extensions. These extensions enable you to d
 
 - You have installed and configured an OpenID Connect provider, such as <https://www.keycloak.org/>. 
 - You have a realm, client, and users set up. This example assumes a realm in a Keycloak instance called `toystore`.
-- Copy the OAS from [sample OAS for rate-limiting and OIDC](../../examples/oas-oidc.yaml) to a local location.
+- Copy the OAS from [sample OAS for rate-limiting and OIDC](../../../examples/oas-oidc.yaml) to a local location.
 
 #### Set up an OpenID AuthPolicy
 
@@ -634,7 +634,7 @@ You should see a `200` response code.
 
 ### Step 7 - Set up rate limiting
 
-Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based on your OAS file. Rate limiting is simplified for this walkthrough and is based on either the bearer token or the API key value. There are more advanced examples in the How-to guides on the Kuadrant documentation site, for example: [Authenticated rate limiting with JWTs and Kubernetes RBAC](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/).
+Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based on your OAS file. Rate limiting is simplified for this walkthrough and is based on either the bearer token or the API key value. There are more advanced examples in the How-to guides on the Kuadrant documentation site, for example: [Authenticated rate limiting with JWTs and Kubernetes RBAC](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/ratelimiting/authenticated-rl-with-jwt-and-k8s-authnz/).
 
  You can continue to use this sample OAS document, which includes both authentication and a rate limit:
 

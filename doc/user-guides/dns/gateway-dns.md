@@ -1,47 +1,33 @@
-# Gateway DNS for Cluster Operators
+# Gateway DNS configuration for routes attached to a ingress gateway
 
 This user guide walks you through an example of how to configure DNS for all routes attached to an ingress gateway.
-
-<br/>
 
 ## Requisites
 
 - [Docker](https://docker.io)
 - [Rout53 Hosted Zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingHostedZone.html)
 
-### Setup
+### Setup the environment
 
-This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-where it installs Istio, Kubernetes Gateway API and Kuadrant itself.
-
-Clone the project:
-
-```shell
-git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
-```
-
-Setup the environment:
-
-```shell
-make local-setup
-```
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
 
 Create a namespace:
+
 ```shell
 kubectl create namespace my-gateways
 ```
 
 Export a root domain and hosted zone id:
+
 ```shell
 export ROOT_DOMAIN=<ROOT_DOMAIN>
 ```
 
-> **Note:** ROOT_DOMAIN should be set to your AWS hosted zone *name*.
+> **Note:** ROOT_DOMAIN should be set to your AWS hosted zone _name_.
 
 ### Create a dns provider secret
 
-Create AWS provider secret. You should limit the permissions of this credential to only the zones you want us to access. 
-
+Create AWS provider secret. You should limit the permissions of this credential to only the zones you want us to access.
 
 ```shell
 export AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
@@ -55,6 +41,7 @@ kubectl -n my-gateways create secret generic aws-credentials \
 ### Create an ingress gateway
 
 Create a gateway using your ROOT_DOMAIN as part of a listener hostname:
+
 ```sh
 kubectl -n my-gateways apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -75,10 +62,13 @@ EOF
 ```
 
 Check gateway status:
+
 ```shell
 kubectl get gateway prod-web -n my-gateways
 ```
+
 Response:
+
 ```shell
 NAME       CLASS   ADDRESS        PROGRAMMED   AGE
 prod-web   istio   172.18.200.1   True         25s
@@ -87,6 +77,7 @@ prod-web   istio   172.18.200.1   True         25s
 ### Enable DNS on the gateway
 
 Create a Kuadrant `DNSPolicy` to configure DNS:
+
 ```shell
 kubectl -n my-gateways apply -f - <<EOF
 apiVersion: kuadrant.io/v1
@@ -102,10 +93,13 @@ EOF
 ```
 
 Check policy status:
+
 ```shell
 kubectl get dnspolicy -o wide -n my-gateways
 ```
+
 Response:
+
 ```shell
 NAME       STATUS     TARGETREFKIND   TARGETREFNAME   AGE
 prod-web   Accepted   Gateway         prod-web        26s
@@ -114,12 +108,14 @@ prod-web   Accepted   Gateway         prod-web        26s
 ### Deploy a sample API to test DNS
 
 Deploy the sample API:
+
 ```shell
 kubectl -n my-gateways apply -f examples/toystore/toystore.yaml
 kubectl -n my-gateways wait --for=condition=Available deployments toystore --timeout=60s
 ```
 
 Route traffic to the API from our gateway:
+
 ```shell
 kubectl -n my-gateways apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -140,6 +136,7 @@ EOF
 ```
 
 Verify a DNSRecord resource is created:
+
 ```shell
 kubectl get dnsrecords -n my-gateways
 NAME           READY
@@ -149,10 +146,13 @@ prod-web-api   True
 ### Verify DNS works by sending requests
 
 Verify DNS using dig:
+
 ```shell
 dig foo.$ROOT_DOMAIN +short
 ```
+
 Response:
+
 ```shell
 172.18.200.1
 ```
@@ -162,7 +162,9 @@ Verify DNS using curl:
 ```shell
 curl http://api.$ROOT_DOMAIN
 ```
+
 Response:
+
 ```shell
 {
   "method": "GET",

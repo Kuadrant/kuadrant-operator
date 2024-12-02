@@ -82,11 +82,11 @@ EOF
 
 2) Optional: Use TLSPolicy to configure TLS certificates for your listeners
 
-[TLSPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/gateway-tls/)
+[TLSPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/tls/gateway-tls/)
 
 3) Optional: Use DNSPolicy to bring external traffic to the external hostname
 
-[DNSPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/gateway-dns/#create-a-dns-provider-secret)
+[DNSPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/dns/gateway-dns/#create-a-dns-provider-secret)
 
 4) Ensure the Gateway has the status of `Programmed` set to `True` meaning it is ready. 
 
@@ -170,7 +170,7 @@ We should now be able to send requests to our external host and have the Gateway
 
 As we are using Gateway API to define the Gateway and HTTPRoutes, we can now also apply RateLimiting and Auth to protect our public endpoints
 
-[AuthPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/auth-for-app-devs-and-platform-engineers/)
+[AuthPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/auth/auth-for-app-devs-and-platform-engineers/)
 
-[RateLimiting Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/gateway-rl-for-cluster-operators/)
+[RateLimiting Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/ratelimting/multi-rlp-multi-listener/)
 

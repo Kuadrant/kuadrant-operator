@@ -10,7 +10,7 @@
 - Accessible Redis instance, for persistent storage for your rate limit counters. (Optional)
 
 
-> Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/deploy/install/standard/kustomization.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
+> Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/install/standard/kuadrant-version.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
 
 > Note: for multiple clusters, it would make sense to do the installation via a tool like [argocd](https://argo-cd.readthedocs.io/en/stable/). For other methods of addressing multiple clusters take a look at the [kubectl docs](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
 
@@ -19,19 +19,19 @@
 > Note this uses the community operatorhub catalog. If you are installing on OpenShift and want to use the redhat provided catalog use the second command.
 
 
-```
+```bash
 # community catalog
 kubectl apply -k config/install/standard
 ``` 
 
-```
+```bash
 # redhat catalog
 kubectl apply -k config/install/openshift
 ```
 
 Verify both Kuadrant and sail operators are installed. Note, that this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
 
-```
+```bash
 kubectl get deployments -n kuadrant-system
 
 
@@ -45,7 +45,7 @@ kubectl get deployments -n kuadrant-system
 
 
 
-```
+```bash
 kubectl get deployments -n gateway-system
 
 
@@ -71,7 +71,7 @@ This will configure Kuadrant and Sail to install their components, set the crede
 
 Validate Kuadrant is ready via the kuadrant resource status condition
 
-```
+```bash
 kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
 ```
 
@@ -81,7 +81,7 @@ At this point Kuadrant is ready to use. Below are some additional configuration 
 
 create a `redis-credential.env` in the `config/install/configure/redis-storage` dir
 
-```
+```bash
 kubectl apply -k config/install/configure/redis-storage
 ```
 
@@ -91,7 +91,7 @@ This will setup limitador to use provided redis connection URL as a backend stor
 
 Validate Kuadrant is in a ready state as before:
 
-```
+```bash
 kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
 ```
 

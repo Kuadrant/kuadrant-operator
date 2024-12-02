@@ -16,64 +16,21 @@ Any authenticated user/service account can send requests to the Toy Store API, b
 Privileges to execute the requested operation (read, create or delete) will be granted according to the following RBAC rules, stored in the Kubernetes authorization system:
 
 | Operation | Endpoint            | Required role     |
-|-----------|---------------------|-------------------|
+| --------- | ------------------- | ----------------- |
 | Read      | `GET /toy*`         | `toystore-reader` |
 | Create    | `POST /admin/toy`   | `toystore-write`  |
 | Delete    | `DELETE /admin/toy` | `toystore-write`  |
 
 Each user will be entitled to a maximum of 5rp10s (5 requests every 10 seconds).
 
-## Requirements
+### Setup the environment
 
-- [Docker](https://www.docker.com/)
-- [kubectl](https://kubernetes.io/docs/reference/kubectl/) command-line tool
-- [jq](https://stedolan.github.io/jq/)
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
 
-## Run the guide ① → ⑥
-
-### ① Setup a cluster with Kuadrant
-
-This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-where it installs Istio, Kubernetes Gateway API and Kuadrant itself.
-
-> **Note:** In production environment, these steps are usually performed by a cluster operator with administrator privileges over the Kubernetes cluster.
-
-Clone the project:
-
-```sh
-git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
-```
-
-Setup the environment:
-
-```sh
-make local-setup
-```
-
-Request an instance of Kuadrant:
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-spec: {}
-EOF
-```
-
-### ② Deploy the Toy Store API
-
-Deploy the application in the `default` namespace:
+### Deploy the Toystore example API:
 
 ```sh
 kubectl apply -f examples/toystore/toystore.yaml
-```
-
-Route traffic to the application:
-
-```sh
-kubectl apply -f examples/toystore/httproute.yaml
 ```
 
 #### API lifecycle
@@ -103,12 +60,13 @@ It should return `200 OK`.
 > kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
 > export GATEWAY_URL=localhost:9080
 > ```
+>
 > ```sh
 > curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 > # HTTP/1.1 200 OK
 > ```
 
-### ③ Deploy Keycloak
+### Deploy Keycloak
 
 Create the namesapce:
 
@@ -124,7 +82,7 @@ kubectl apply -n keycloak -f https://raw.githubusercontent.com/Kuadrant/authorin
 
 > **Note:** The Keycloak server may take a couple of minutes to be ready.
 
-### ④ Enforce authentication and authorization for the Toy Store API
+### Enforce authentication and authorization for the Toy Store API
 
 Create a Kuadrant `AuthPolicy` to configure authentication and authorization:
 
@@ -216,7 +174,7 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GA
 # HTTP/1.1 403 Forbidden
 ```
 
-### ⑤ Grant access to the Toy Store API for user and service account
+### Grant access to the Toy Store API for user and service account
 
 Create the `toystore-reader` and `toystore-writer` roles:
 
@@ -243,7 +201,7 @@ EOF
 Add permissions to the user and service account:
 
 | User         | Kind                        | Roles                                |
-|--------------|-----------------------------|--------------------------------------|
+| ------------ | --------------------------- | ------------------------------------ |
 | john         | User registered in Keycloak | `toystore-reader`, `toystore-writer` |
 | client-app-1 | Kuberentes Service Account  | `toystore-reader`                    |
 
@@ -281,12 +239,13 @@ EOF
 <details markdown="1">
   <summary><i>Q:</i> Can I use <code>Roles</code> and <code>RoleBindings</code> instead of <code>ClusterRoles</code> and <code>ClusterRoleBindings</code>?</summary>
 
-  Yes, you can.
+Yes, you can.
 
-  The example above is for non-resource URL Kubernetes roles. For using `Roles` and `RoleBindings` instead of
-  `ClusterRoles` and `ClusterRoleBindings`, thus more flexible resource-based permissions to protect the API,
-  see the spec for [Kubernetes SubjectAccessReview authorization](https://docs.kuadrant.io/latest/authorino/docs/features/#kubernetes-subjectaccessreview-authorizationkubernetessubjectaccessreview)
-  in the Authorino docs.
+The example above is for non-resource URL Kubernetes roles. For using `Roles` and `RoleBindings` instead of
+`ClusterRoles` and `ClusterRoleBindings`, thus more flexible resource-based permissions to protect the API,
+see the spec for [Kubernetes SubjectAccessReview authorization](https://docs.kuadrant.io/latest/authorino/docs/features/#kubernetes-subjectaccessreview-authorizationkubernetessubjectaccessreview)
+in the Authorino docs.
+
 </details>
 
 #### Try the API with permission
@@ -315,7 +274,7 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST ht
 # HTTP/1.1 403 Forbidden
 ```
 
-### ⑥ Enforce rate limiting on requests to the Toy Store API
+###  Enforce rate limiting on requests to the Toy Store API
 
 Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 

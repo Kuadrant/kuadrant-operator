@@ -4,10 +4,9 @@
 
 - You have completed the [Single-cluster Quick Start](https://docs.kuadrant.io/latest/getting-started-single-cluster/) or [Multi-cluster Quick Start](https://docs.kuadrant.io/latest/getting-started-multi-cluster/).
 
-
 ### Local Cluster (metallb)
 
->**Note:** If you are running on a local kind cluster, it is also recommended you use [metallb](https://metallb.universe.tf/) to setup an IP address pool to use with loadbalancer services for your gateways. An example script for configuring metallb based on the docker network once installed can be found [here](https://github.com/Kuadrant/kuadrant-operator/blob/main/utils/docker-network-ipaddresspool.sh).
+> **Note:** If you are running on a local kind cluster, it is also recommended you use [metallb](https://metallb.universe.tf/) to setup an IP address pool to use with loadbalancer services for your gateways. An example script for configuring metallb based on the docker network once installed can be found [here](https://github.com/Kuadrant/kuadrant-operator/blob/main/utils/docker-network-ipaddresspool.sh).
 
 ```
 ./utils/docker-network-ipaddresspool.sh kind yq 1 | kubectl apply -n metallb-system -f -
@@ -19,29 +18,21 @@ In this guide, we will cover the different policies from Kuadrant and how you ca
 
 Here are the steps we will go through:
 
-1) [Deploy a sample application](#deploy-the-example-app-we-will-serve-via-our-gateway)
+1. [Deploy a sample application](#deploy-the-example-app-we-will-serve-via-our-gateway)
 
+2. [Define a new Gateway](#define-a-new-istio-managed-gateway)
 
-2) [Define a new Gateway](#define-a-new-istio-managed-gateway)
+3. [Ensure TLS-based secure connectivity to the gateway with a TLSPolicy](#define-the-tlspolicy)
 
+4. [Define a default RateLimitPolicy to set some infrastructure limits on your gateway](#define-infrastructure-rate-limiting)
 
-3) [Ensure TLS-based secure connectivity to the gateway with a TLSPolicy](#define-the-tlspolicy)
+5. [Define a default AuthPolicy to deny all access to the gateway](#define-the-gateway-authpolicy)
 
+6. [Define a DNSPolicy to bring traffic to the gateway](#define-the-dnspolicy)
 
-4) [Define a default RateLimitPolicy to set some infrastructure limits on your gateway](#define-infrastructure-rate-limiting)
+7. [Override the Gateway's deny-all AuthPolicy with an endpoint-specific policy](#override-the-gateways-deny-all-authpolicy)
 
-
-5) [Define a default AuthPolicy to deny all access to the gateway](#define-the-gateway-authpolicy)
-
-
-6) [Define a DNSPolicy to bring traffic to the gateway](#define-the-dnspolicy)
-
-
-7) [Override the Gateway's deny-all AuthPolicy with an endpoint-specific policy](#override-the-gateways-deny-all-authpolicy)
-
-
-8) [Override the Gateway rate limits with an endpoint-specific policy](#override-the-gateways-ratelimitpolicy)
-
+8. [Override the Gateway rate limits with an endpoint-specific policy](#override-the-gateways-ratelimitpolicy)
 
 You will need to set the `KUBECTL_CONTEXT` environment variable for the kubectl context of the cluster you are targeting.
 
@@ -65,13 +56,13 @@ To help with this walk through, you should also set a `KUADRANT_ZONE_ROOT_DOMAIN
 export KUADRANT_ZONE_ROOT_DOMAIN=my.domain.iown
 ```
 
-### ❶ Deploy the example app we will serve via our gateway
+### Deploy the example app we will serve via our gateway
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml
 ```
 
-### ❷ Define a new Istio-managed gateway
+### Define a new Istio-managed gateway
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
@@ -106,7 +97,7 @@ message: invalid certificate reference /Secret/apps-hcpapps-tls. secret kuadrant
 
 This is because currently there is not a TLS secret in place. Let's fix that by creating a TLSPolicy.
 
-### ❸ Define the TLSPolicy
+### Define the TLSPolicy
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
@@ -199,7 +190,7 @@ export INGRESS_HOST=$(kubectl --context $KUBECTL_CONTEXT get gtw api-gateway -o 
 curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
 ```
 
-### ❹ Define Infrastructure Rate Limiting
+### Define Infrastructure Rate Limiting
 
 We have a secure communication in place. However, there is nothing limiting users from overloading our infrastructure and service components that will sit behind this gateway. Let's add a rate limiting layer to protect our services and infrastructure.
 
@@ -236,7 +227,7 @@ for i in {1..10}; do curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${IN
 
 We should see `409 Too Many Requests`s start returning after the 5th request.
 
-### ❺ Define the Gateway AuthPolicy
+### Define the Gateway AuthPolicy
 
 Communication is secured and we have some protection for our infrastructure, but we do not trust any client to access our endpoints. By default, we want to allow only authenticated access. To protect our gateway, we will add a _deny-all_ AuthPolicy. Later, we will override this with a more specific AuthPolicy for the API.
 
@@ -277,7 +268,7 @@ Let's test it again. This time we expect a `403 Forbidden`.
 curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
 ```
 
-### ❻ Define the DNSPolicy
+### Define the DNSPolicy
 
 (Skip this step if you did not configure a DNS provider during the setup.)
 
@@ -295,9 +286,9 @@ kubectl -n kuadrant-system create secret generic aws-credentials \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ```
 
-Next, create the DNSPolicy. There are two options here. 
+Next, create the DNSPolicy. There are two options here.
 
-1. **Single gateway with no shared hostnames:**
+ **Single gateway with no shared hostnames:**
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
@@ -315,7 +306,7 @@ spec:
   - name: aws-credentials
 EOF
 ```
-2. **multiple gateways with shared hostnames:**
+**Multiple gateways with shared hostnames:**
 
 If you want to use a gateway with a shared listener host (IE the same hostname on more than one gateway instance). Then you should use the following configuration:
 
@@ -340,13 +331,13 @@ spec:
     geo: EU
     defaultGeo: true
 EOF
-```    
+```
 
 The loadbalancing section here has the following attributes:
 
 - **Weight:** This will be the weighting used for records created for hosts defined by this gateway. It will decide how often the records for this gateway are returned. If you have 2 gateways and each DNSPolicy specifies the same weight, then you will get an even distribution. If you define one weight as larger than the other, the gateway with the larger weight will receive more traffic (record weight / sum of all records).
-- **geo:** This will be the geo used to decide whether to return records defined for this gateway based on the requesting client's location. This should be set even if you have one gateway in a single geo. 
-- **defaultGeo:** For Azure and AWS, this will decide, if there should be a default geo. A default geo acts as a "catch-all" (GCP always sets a catch-all) for clients outside of the defined geo locations. There can only be one default value and so it is important you set `defaultGeo` as true for **one** and **only one** geo code for each of the gateways in that geo. 
+- **geo:** This will be the geo used to decide whether to return records defined for this gateway based on the requesting client's location. This should be set even if you have one gateway in a single geo.
+- **defaultGeo:** For Azure and AWS, this will decide, if there should be a default geo. A default geo acts as a "catch-all" (GCP always sets a catch-all) for clients outside of the defined geo locations. There can only be one default value and so it is important you set `defaultGeo` as true for **one** and **only one** geo code for each of the gateways in that geo.
 
 Wait for the DNSPolicy to marked as accepted and enforced:
 
@@ -363,7 +354,6 @@ If you want to see the actual DNSRecord created by the this policy, execute the 
 kubectl --context $KUBECTL_CONTEXT get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
 ```
 
-
 With DNS in place, let's test it again. This time we expect a `403` still as the _deny-all_ policy is still in effect. Notice we no longer need to set the Host header directly.
 
 > **Note:** If you have followed through this guide on more than 1 cluster, the DNS record for the HTTPRoute hostname will have multiple IP addresses. This means that requests will be made in a round robin pattern across clusters as your DNS provider sends different responses to lookups. You may need to send multiple requests before one hits the cluster you are currently configuring.
@@ -372,7 +362,7 @@ With DNS in place, let's test it again. This time we expect a `403` still as the
 curl -k "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
 ```
 
-### ❼ Override the Gateway's deny-all AuthPolicy
+### Override the Gateway's deny-all AuthPolicy
 
 Next, we are going to allow authenticated access to our Toystore API. To do this, we will define an AuthPolicy that targets the HTTPRoute. Note that any new HTTPRoutes will still be affected by the gateway-level policy, but as we want users to now access this API, we need to override that policy. For simplicity, we will use API keys to authenticate the requests, though many other options are available.
 
@@ -450,7 +440,7 @@ Ensure the new policy is enforced:
 kubectl --context $KUBECTL_CONTEXT wait authpolicy toystore --for=condition=enforced
 ```
 
-### ❽ Override the Gateway's RateLimitPolicy
+### Override the Gateway's RateLimitPolicy
 
 The gateway limits are a good set of limits for the general case, but as the developers of this API we know that we only want to allow a certain number of requests to specific users, and a general limit for all other users.
 

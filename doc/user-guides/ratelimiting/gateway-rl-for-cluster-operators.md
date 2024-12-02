@@ -1,43 +1,21 @@
 # Gateway Rate Limiting for Cluster Operators
 
-This user guide walks you through an example of how to configure rate limiting for all routes attached to an ingress gateway.
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
 
-<br/>
+This user guide walks you through an example of how to configure rate limiting for all routes attached to a specific ingress gateway.
 
-## Run the steps ① → ⑤
 
-### ① Setup
+### Setup the environment
 
-This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-where it installs Istio, Kubernetes Gateway API and Kuadrant itself.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
 
-> **Note:** In production environment, these steps are usually performed by a cluster operator with administrator privileges over the Kubernetes cluster.
-
-Clone the project:
+### Deploy the Toystore example API:
 
 ```sh
-git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
+kubectl apply -f examples/toystore/toystore.yaml
+
 ```
-
-Setup the environment:
-
-```sh
-make local-setup
-```
-
-Request an instance of Kuadrant:
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-spec: {}
-EOF
-```
-
-### ② Create the ingress gateways
+### Create the ingress gateways
 
 ```sh
 kubectl -n gateway-system apply -f - <<EOF
@@ -79,7 +57,7 @@ spec:
 EOF
 ```
 
-### ③ Enforce rate limiting on requests incoming through the `external` gateway
+### Enforce rate limiting on requests incoming through the `external` gateway
 
 ```
     ┌───────────┐      ┌───────────┐
@@ -119,7 +97,7 @@ EOF
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
 
-### ④ Deploy a sample API to test rate limiting enforced at the level of the gateway
+### Deploy a sample API to test rate limiting enforced at the level of the gateway
 
 ```
                            ┌───────────┐      ┌───────────┐
@@ -145,13 +123,7 @@ EOF
                                    └──────────────┘
 ```
 
-Deploy the sample API:
-
-```sh
-kubectl apply -f examples/toystore/toystore.yaml
-```
-
-Route traffic to the API from both gateways:
+### Route traffic to the API from both gateways:
 
 ```sh
 kubectl apply -f - <<EOF
@@ -175,7 +147,7 @@ spec:
 EOF
 ```
 
-### ⑤ Verify the rate limiting works by sending requests in a loop
+### Verify the rate limiting works by sending requests in a loop
 
 Expose the gateways, respectively at the port numbers `9081` and `9082` of the local host:
 

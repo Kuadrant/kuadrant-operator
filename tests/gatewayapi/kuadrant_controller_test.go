@@ -5,6 +5,7 @@ package gatewayapi_test
 import (
 	"time"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -74,6 +75,18 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 							Name:  "test",
 						},
 					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"test": {
+								Rates: []kuadrantv1.Rate{
+									{
+										Limit:  10,
+										Window: "10s",
+									},
+								},
+							},
+						},
+					},
 				},
 			}
 
@@ -105,6 +118,19 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 							Kind:  "Gateway",
 							Group: gatewayapiv1.GroupName,
 							Name:  "test",
+						},
+					},
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+								"anyonmous": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+										},
+									},
+								},
+							},
 						},
 					},
 				},

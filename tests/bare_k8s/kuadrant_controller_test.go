@@ -5,6 +5,7 @@ package bare_k8s_test
 import (
 	"time"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,7 +21,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller is disabled", func() {
+var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 	var (
 		testNamespace    string
 		testTimeOut      = SpecTimeout(15 * time.Second)
@@ -117,6 +118,18 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 							Name:  "test",
 						},
 					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"test": {
+								Rates: []kuadrantv1.Rate{
+									{
+										Limit:  10,
+										Window: "10s",
+									},
+								},
+							},
+						},
+					},
 				},
 			}
 
@@ -148,6 +161,19 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 							Kind:  "Gateway",
 							Group: gatewayapiv1.GroupName,
 							Name:  "test",
+						},
+					},
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+								"anyonmous": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+										},
+									},
+								},
+							},
 						},
 					},
 				},

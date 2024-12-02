@@ -9,7 +9,6 @@ This document will show you how to setup a load balanced DNS configuration using
 
 It is most useful to use the load balancing options when targeting multiple gateways that share a listener host E.G (api.example.com). It is also perfectly valid to use it when you only have a single gateway; this provides the benefit of allowing you to easily expand beyond this single gateway for a given shared hostname. It is worth knowing that the load balanced DNSpolicy comes with a relatively small additional cost of some added records and lookups during DNS resolution vs a "simple" DNSPolicy with no load balancing specified as the latter only sets up a simple A or CNAME record. So in summary if you expect to need multiple gateways for a given listener host then you should take advantage of the load balanced option.
 
-
 ### Important Considerations
 
 - When using a DNSPolicy with a load balanced configuration, all DNSPolicies effecting a listener with the same hostname should have load balanced options set. Without the load balanced configuration, Kuadrant's dns controller will try to set up only a simple A or CNAME record.
@@ -80,3 +79,109 @@ To see all regions supported by GCP Cloud DNS, please see the official (document
 
 To see the different values you can use for the geo based DNS with Azure take a look at the following (documentation)[https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions]
 
+### Moving from non load balanced to load balanced or vice versa
+
+It is possible to update a DNSPolicy that has no load balancing options set to one that has these options set and vice versa. Underneath, the DNS Operator will remove the existing records and replace them with the correct set of records based on your configuration. It is important however that when using DNSPolicy across multiple Gateways that share a hostname, the DNSPolicies targeting a listener with a shared hostname all use a load balancing configuration (or absence thereof). It is invalid to have two DNSPolcies targeting a listener with a shared hostname that use different dns `strategies`. Doing so will cause one of the DNSPolicies to fail to be enforced and report an error caused by an inability to bring the DNS records into a consistent state.
+
+**Example:**
+
+If you have `gateway1` with listener `example` with a hostname of `example.com` and you have a separate gateway `gateway2` with the same listener definition as `gateway1` (perhaps on a different cluster in a different region), you should ensure that the DNSPolcies targeting these listeners are both using a `loadbalanced` configuration. Below is an example of valid and invalid configuration. 
+
+**Valid Config**
+
+Given a gateway deployed on two different cluster in two different locations:
+
+```yaml
+# example gateway
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: api-gateway
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: example
+      port: 80
+      hostname: 'api.example.com'
+      protocol: HTTP
+```
+
+```yaml
+# gateway 1
+
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-gateway1
+spec:
+  loadBalancing:
+    weight: 130
+    geo: GEO-EU
+    defaultGeo: true
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: api-gateway
+    sectionName: example
+  providerRefs:
+    - name: aws-provider-credentials
+
+# gateway 2
+
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-gateway2
+spec:
+  loadBalancing:
+    weight: 130
+    geo: GEO-US
+    defaultGeo: false
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: api-gateway
+    sectionName: example
+  providerRefs:
+    - name: aws-provider-credentials
+
+```
+
+**Invalid Config**
+
+```yaml
+# gateway 1
+
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-gateway1
+spec:
+  loadBalancing:
+    weight: 130
+    geo: GEO-EU
+    defaultGeo: true
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: api-gateway
+    sectionName: example
+  providerRefs:
+    - name: aws-provider-credentials
+
+# gateway 2
+
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-gateway2
+spec: #notice no loadbalancing defined
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: api-gateway
+    sectionName: example
+  providerRefs:
+    - name: aws-provider-credentials
+
+```

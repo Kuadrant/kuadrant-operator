@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +19,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 const (
@@ -25,12 +27,21 @@ const (
 )
 
 type KuadrantStatusUpdater struct {
-	Client     *dynamic.DynamicClient
-	HasGateway bool
+	Client                       *dynamic.DynamicClient
+	isGatwayAPIInstalled         bool
+	isGatewayProviderInstalled   bool
+	isLimitadorOperatorInstalled bool
+	isAuthorinoOperatorInstalled bool
 }
 
-func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *KuadrantStatusUpdater {
-	return &KuadrantStatusUpdater{Client: client, HasGateway: isIstioInstalled || isEnvoyGatewayInstalled}
+func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isGatewayAPIInstalled, isGatewayProviderInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *KuadrantStatusUpdater {
+	return &KuadrantStatusUpdater{
+		Client:                       client,
+		isGatwayAPIInstalled:         isGatewayAPIInstalled,
+		isGatewayProviderInstalled:   isGatewayProviderInstalled,
+		isLimitadorOperatorInstalled: isLimitadorOperatorInstalled,
+		isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled,
+	}
 }
 
 func (r *KuadrantStatusUpdater) Subscription() *controller.Subscription {
@@ -117,10 +128,35 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 		Message: "Kuadrant is ready",
 	}
 
-	if !r.HasGateway {
+	if !r.isGatwayAPIInstalled {
+		err := kuadrant.MissingGatewayAPIError()
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "GatewayAPIProviderNotFound"
-		cond.Message = "GatewayAPI provider not found"
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
+		return cond
+	}
+
+	if !r.isGatewayProviderInstalled {
+		err := kuadrant.MissingGatewayProviderError()
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
+		return cond
+	}
+
+	if !r.isLimitadorOperatorInstalled {
+		err := kuadrant.MissingLimitadorOperatorError()
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
+		return cond
+	}
+
+	if !r.isAuthorinoOperatorInstalled {
+		err := kuadrant.MissingAuthorinoOperatorError()
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
 		return cond
 	}
 
@@ -148,7 +184,7 @@ func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *stri
 		return ptr.To("limitador resoure not in topology")
 	}
 
-	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, "Ready")
+	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, limitadorv1alpha1.StatusConditionReady)
 	if statusConditionReady == nil {
 		return ptr.To("Ready condition not found")
 	}

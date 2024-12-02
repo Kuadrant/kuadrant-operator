@@ -18,11 +18,17 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-func NewDNSPoliciesValidator() *DNSPoliciesValidator {
-	return &DNSPoliciesValidator{}
+func NewDNSPoliciesValidator(isGatewayAPIInstalled, isDNSOperatorInstalled bool) *DNSPoliciesValidator {
+	return &DNSPoliciesValidator{
+		isGatewayAPIInstalled:  isGatewayAPIInstalled,
+		isDNSOperatorInstalled: isDNSOperatorInstalled,
+	}
 }
 
-type DNSPoliciesValidator struct{}
+type DNSPoliciesValidator struct {
+	isGatewayAPIInstalled  bool
+	isDNSOperatorInstalled bool
+}
 
 func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 	return controller.Subscription{
@@ -45,6 +51,14 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
 	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
+		if !r.isGatewayAPIInstalled {
+			return p.GetLocator(), kuadrant.MissingGatewayAPIError()
+		}
+
+		if !r.isDNSOperatorInstalled {
+			return p.GetLocator(), kuadrant.MissingDNSOperatorError()
+		}
+
 		policy := p.(*kuadrantv1.DNSPolicy)
 
 		if err := isTargetRefsFound(topology, policy); err != nil {

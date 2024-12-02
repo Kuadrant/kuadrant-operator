@@ -12,10 +12,14 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-type RateLimitPolicyValidator struct{}
+type RateLimitPolicyValidator struct {
+	isLimitadorOperatorInstalled bool
+	isGatewayAPIInstalled        bool
+	isGatewayProviderInstalled   bool
+}
 
 // RateLimitPolicyValidator subscribes to events with potential to flip the validity of rate limit policies
 func (r *RateLimitPolicyValidator) Subscription() controller.Subscription {
@@ -41,6 +45,18 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 	defer logger.V(1).Info("finished validating rate limit policies")
 
 	state.Store(StateRateLimitPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if !r.isGatewayAPIInstalled {
+			return policy.GetLocator(), kuadrant.MissingGatewayAPIError()
+		}
+
+		if !r.isGatewayProviderInstalled {
+			return policy.GetLocator(), kuadrant.MissingGatewayProviderError()
+		}
+
+		if !r.isLimitadorOperatorInstalled {
+			return policy.GetLocator(), kuadrant.MissingLimitadorOperatorError()
+		}
+
 		var err error
 		if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
 			ref := policy.GetTargetRefs()[0]

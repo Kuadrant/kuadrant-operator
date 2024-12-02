@@ -172,7 +172,7 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 	}
 
 	// Get all listeners where the gateway or listener contains this policy
-	listeners := lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, index int) (*machinery.Listener, bool) {
+	listeners := lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
 		l, ok := t.(*machinery.Listener)
 		return l, ok && (lo.Contains(l.Policies(), p) || lo.Contains(l.Gateway.Policies(), p))
 	})

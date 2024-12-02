@@ -3,6 +3,7 @@ package controllers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -17,7 +18,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
@@ -166,7 +167,7 @@ func authPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error
 	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
 		accepted = condition.Status == metav1.ConditionTrue
 		if !accepted {
-			err = fmt.Errorf(condition.Message)
+			err = errors.New(condition.Message)
 		}
 		return
 	}

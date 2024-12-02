@@ -162,7 +162,7 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 }
 
 func getCertificatesFromTopology(topology *machinery.Topology) []*certmanagerv1.Certificate {
-	return lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanagerv1.Certificate, bool) {
+	return lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (*certmanagerv1.Certificate, bool) {
 		r, ok := item.(*controller.RuntimeObject)
 		if !ok {
 			return nil, false
@@ -173,7 +173,7 @@ func getCertificatesFromTopology(topology *machinery.Topology) []*certmanagerv1.
 }
 
 func getListenersFromTopology(topology *machinery.Topology) []*machinery.Listener {
-	return lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Listener, bool) {
+	return lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, _ int) (*machinery.Listener, bool) {
 		l, ok := item.(*machinery.Listener)
 		return l, ok
 	})

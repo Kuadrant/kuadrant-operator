@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -102,7 +103,12 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 
 			propagateRecordConditions(policyRecords, newStatus)
 
-			newStatus.TotalRecords = int32(len(policyRecords))
+			if len(policyRecords) > math.MaxInt32 {
+				pLogger.Error(fmt.Errorf("too many records: %d exceeds int32 limits", len(policyRecords)), "error setting total dns total records")
+				newStatus.TotalRecords = math.MaxInt32
+			} else {
+				newStatus.TotalRecords = int32(len(policyRecords)) // #nosec G115 - false positive - operation is safe now with the check
+			}
 		}
 
 		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)

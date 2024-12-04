@@ -2,43 +2,24 @@
 
 This guide explains how to configure permission requests for a Google Zanzibar-based [Authzed/SpiceDB](https://authzed.com) instance using gRPC.
 
-## Requisites
+## Prerequisites
 
-- [Docker](https://docker.io)
+You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster.
 
-## Run the guide ① → ⑥
+## Run the guide ① → ⑦
 
-### ①  Setup
+### ① Deploy Toy Store application
 
-Clone the repo:
+Deploy a simple HTTP application service that echoes back the request data: 
 
 ```sh
-git clone git@github.com:Kuadrant/kuadrant-operator.git && cd kuadrant-operator
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/toystore/toystore.yaml
 ```
 
-Run the following command to create a local Kubernetes cluster with [Kind](https://kind.sigs.k8s.io/), install & deploy Kuadrant:
+### ② Expose the Application
+Create an `HTTPRoute` to expose a `/posts` path for `GET` and `POST` requests to the application:
 
 ```sh
-make local-setup
-```
-
-Request an instance of Kuadrant in the `kuadrant-system` namespace:
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-spec: {}
-EOF
-```
-
-### ② Deploy the Talker API
-
-```sh
-kubectl apply -f examples/toystore/toystore.yaml
-
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -66,7 +47,7 @@ spec:
 EOF
 ```
 
-Export the gateway hostname and port:
+Export the gateway hostname and port for testing:
 
 ```sh
 export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
@@ -74,6 +55,7 @@ export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system 
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 ```
 
+### ③ Test the Unprotected Application
 Test requests to the unprotected application:
 
 ```sh
@@ -81,7 +63,7 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/posts -i
 # HTTP/1.1 200 OK
 ```
 
-### ③ Create the permission database
+### ④ Create the permission database
 
 Create the namespace for SpiceDB:
 
@@ -206,7 +188,7 @@ curl -X POST http://localhost:8443/v1/relationships/write \
 EOF
 ```
 
-### ④ Create an `AuthPolicy`
+### ⑤ Create an `AuthPolicy`
 
 Store the shared token for Authorino authentication with the SpiceDB instance (must be created in the same namespace as the Kuadrant CR):
 
@@ -272,7 +254,7 @@ spec:
 EOF
 ```
 
-### ⑤ Create the API keys
+### ⑥ Create the API keys
 
 For Emilia (writer):
 
@@ -310,9 +292,9 @@ stringData:
 EOF
 ```
 
-### ⑥ Consume the API
+### ⑦ Consume the API
 
-As Emilia, send a GET request:
+As Emilia, send a `GET` request:
 
 ```sh
 curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMEMILIA' \
@@ -321,7 +303,7 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMEMILIA' \
 # HTTP/1.1 200 OK
 ```
 
-As Emilia, send a POST request:
+As Emilia, send a `POST` request:
 
 ```sh
 curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMEMILIA' \
@@ -330,7 +312,7 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMEMILIA' \
 # HTTP/1.1 200 OK
 ```
 
-As Beatrice, send a GET request:
+As Beatrice, send a `GET` request:
 
 ```sh
 curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMBEATRICE' \
@@ -339,7 +321,7 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMBEATRICE' \
 # HTTP/1.1 200 OK
 ```
 
-As Beatrice, send a POST request:
+As Beatrice, send a `POST` request:
 
 ```sh
 curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMBEATRICE' \
@@ -351,16 +333,8 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY IAMBEATRICE' \
 
 ## Cleanup
 
-If you have started a Kubernetes cluster locally with Kind to try this user guide, delete it by running:
-
 ```sh
-make local-cleanup
-```
-
-Otherwise, delete the resources created in each step:
-
-```sh
-kubectl delete -f examples/toystore/toystore.yaml
+kubectl delete -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/toystore/toystore.yaml
 kubectl delete httproute toystore
 kubectl delete authpolicy route-auth
 kubectl delete kuadrant kuadrant -n kuadrant-system

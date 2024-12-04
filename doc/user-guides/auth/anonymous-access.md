@@ -6,8 +6,7 @@ Learn how to allow anonymous access to certain endpoints using Kuadrant's `AuthP
 
 You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster.
 
-## Run the guide ① → ⑦
-### ① Deploy Toy Store application
+### Deploy Toy Store application
 
 Deploy a simple HTTP application service that echoes back the request data:
 
@@ -15,7 +14,7 @@ Deploy a simple HTTP application service that echoes back the request data:
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/toystore/toystore.yaml
 ```
 
-### ② Expose the Application
+### Expose the Application
 
 Create an `HTTPRoute` to expose an `/cars` and `/public` path to the application:
 
@@ -59,7 +58,7 @@ export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system 
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 ```
 
-### ③ Test the Unprotected Application
+### Test the Unprotected Application
 Test requests to the unprotected application:
 
 ```sh
@@ -72,7 +71,7 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/public -i
 # HTTP/1.1 200 OK
 ```
 
-### ④ Deny All Traffic with AuthPolicy
+### Deny All Traffic with AuthPolicy
 
 Apply an `AuthPolicy` to deny all traffic to the `HTTPRoute`:
 
@@ -97,7 +96,7 @@ spec:
 EOF
 ```
 
-### ⑤ Test the Protected Application
+### Test the Protected Application
 
 ```sh
 curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/cars -i
@@ -109,7 +108,7 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/public -i
 # HTTP/1.1 403 Forbidden
 ```
 
-### ⑥ Allow Anonymous Access to /public
+### Allow Anonymous Access to /public
 Create an `AuthPolicy` to allow anonymous access to the `/public` endpoint:
 
 ```sh
@@ -134,7 +133,7 @@ EOF
 
 The example above enables anonymous access (i.e. removes authentication) to the `/public` rule of the `HTTPRoute`.
 
-### ⑦ Test the Application with Anonymous Access
+### Test the Application with Anonymous Access
 
 Test requests to the application protected by Kuadrant:
 

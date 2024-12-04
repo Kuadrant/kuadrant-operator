@@ -320,3 +320,88 @@ dig echo.apps.hcpapps.net +short
 
 * One Gateway can only be targeted by one DNSPolicy unless subsequent DNSPolicies choose to specific a sectionName in their targetRef.
 * DNSPolicies can only target Gateways defined within the same namespace of the DNSPolicy.
+
+## Troubleshooting 
+### Understanding status
+The `Status.Conditions` on DNSPolicy mostly serves as an aggregation of the DNSRecords conditions. 
+The DNSPolicy conditions: 
+- `Accepted` indicates that policy was validated and is accepted by the controller for the reconciliation. 
+- `Enforced` indicates that the controller acted upon the policy. If DNSRecords were created as the result this condition will reflect the `Ready` condition on the record. This condition is removed if `Accepted` is false. If partially enforced, the condition will be set to `True`
+- `SubResourcesHealthy` reflects `Healthy` conditions of sub-resources. This condition is removed if `Accepted` is false. If partially healthy, the condition will be set to `False` 
+
+The `Status.Conditions` on the DNSRecord are as follows: 
+- `Ready` indicates that the record was successfully published to the provider. 
+- `Healthy` indicates that dnshealthcheckprobes are healthy. If not all probes are healthy, the condition will be set to `False`
+
+
+
+### Logs 
+To increase the log level of the `kuadran-operator` refer to [this](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/overviews/logging.md) logging doc.
+
+To increase the log level of the `dns-operator-controller-manager` and for the examples on log queries refer to the [logging](https://github.com/Kuadrant/dns-operator/blob/main/README.md#logging) section in the DNS Operator readme 
+
+### Debugging
+This section will provide the typical sequence of actions during the troubleshooting. 
+It is meant to be a reference to identifying the problem rather than SOP. 
+#### List policies to identify the failing one 
+```shell
+# if you no healtchecks inviolved
+kubectl get dnspolicy -A -o wide
+
+# for all "status.conditions"
+kubectl get dnspolicy -A -o=jsonpath="{range .items[*]}  Name: {.metadata.name}{'\t'} Namespace: {.metadata.namespace}{'\t'} {range .status.conditions[*]}{.type}{':'}{.status}{'\t'}{end}" 
+```
+#### Inspect the failing policy 
+```shell
+kubectl get dnspolicy <dnspolicy-name> -n <dnspolicy-namespace> -o yaml | yq '.status.conditions'
+```
+The output will show which DNSRecords and for what reasons are failing. For example: 
+```
+- lastTransitionTime: "2024-12-04T09:46:22Z"
+  message: DNSPolicy has been accepted
+  reason: Accepted
+  status: "True"
+  type: Accepted
+- lastTransitionTime: "2024-12-04T09:46:29Z"
+  message: 'DNSPolicy has been partially enforced. Not ready DNSRecords are: test-api '
+  reason: Enforced
+  status: "True"
+  type: Enforced
+- lastTransitionTime: "2024-12-04T09:46:27Z"
+  message: 'DNSPolicy has encountered some issues: not all sub-resources of policy are passing the policy defined health check. Not healthy DNSRecords are: test-api '
+  reason: Unknown
+  status: "False"
+  type: SubResourcesHealthy
+```
+This example indicates that the policy was accepted and one of the DNSRecords - `test-api` DNSRecord - is not ready and not healthy 
+
+#### Locate sub-records to confirm conditions
+This ensures that the Kuadrand operator propagated status correctly. The names of the DNSRecords are composed of the Gateway name followed by a listener name and are created in the DNSPolicy namespace.
+```shell
+kubectl get dnsrecord -n <dnspolicy-namespace> 
+```
+
+#### Inspect the record to get more detailed information on the failure
+```shell
+kubectl get dnsrecord <dnsrecord-name> -n <dnspolicy-namespace> -o yaml | yq '.status'
+```
+Most of the time the `conditions` will hold all necessary information. 
+However, it is advised to pay attention to the `queuedAt` and `validFor` field 
+to understand when the record was processed and when controller expects it to be reconciled again. 
+
+#### Inspect health check probes 
+We create a probe per address per dns record. The name of the probe is DNSRecord name followed by an address. 
+```shell
+# list probes 
+kubectl get dnshealthcheckprobe -n <dnspolicy-namespace>
+# inspect the probe 
+kubectl get dnshealthcheckprobe <probe-name> -n <dnspolicy-namespace> -o yaml | yq '.status'
+```
+#### Identify what in logs to look for 
+There are two operators to look into and a number of controllers.
+The commands above should provide an understanding of what component/process is failing. 
+Use the following to identify the correct controller:
+- If the problem in the status propagation from the DNSRecord to the DNSPolicy or in the creation of the DNSRecord: `kuadrant-operator` logs under `kuadrant-operator.EffectiveDNSPoliciesReconciler` reconciler
+- If the problem is in publishing DNSRecord or reacting to the healtcheckprobe CR: `dns-operator-controller-manager` logs under `dnsrecord_controller` reconciler
+- If the problem in creation of the probes: `dns-operator-controller-manager` logs under `dnsrecord_controller.healthchecks` reconciler
+- If the problem is in the execution of the healthchecks: `dns-operator-controller-manager` logs under `dnsprobe_controller` reconciler

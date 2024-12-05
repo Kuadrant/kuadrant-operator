@@ -361,6 +361,8 @@ kind: HTTPRoute
 metadata:
   name: test
   namespace: ${gatewayNS}
+  labels:
+    service: toystore
 spec:
   parentRefs:
   - name: ${gatewayName}

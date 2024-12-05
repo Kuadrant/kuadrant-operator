@@ -24,7 +24,7 @@ export KUADRANT_AWS_SECRET_ACCESS_KEY=xxxx # AWS Secret Access Key with access t
 export KUADRANT_AWS_REGION=us-east-1 # Region to create the DNS resources in AWS
 export KUADRANT_AWS_DNS_PUBLIC_ZONE_ID=xxxx # AWS Route 53 Zone ID for the Gateway
 export KUADRANT_ZONE_ROOT_DOMAIN=example.com # Root domain associated with the Zone ID above
-export KUADRANT_CLUSTER_ISSUER_NAME=lets-encrypt # Name for the ClusterIssuer
+export KUADRANT_CLUSTER_ISSUER_NAME=self-signed # Name for the ClusterIssuer
 export KUADRANT_EMAIL=foo@example.com # Email address to associate with the example LetsEncrypt issuer
 ```
 
@@ -71,42 +71,7 @@ Deploy the Toystore app to the developer namespace:
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
 ```
 
-### Setup Toystore application HTTPRoute
 
-```bash
-
-kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: toystore
-  namespace: ${KUADRANT_DEVELOPER_NS}
-  labels:
-    deployment: toystore
-    service: toystore
-spec:
-  parentRefs:
-  rules:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    name: ${KUADRANT_GATEWAY_NAME}
-    namespace: ${KUADRANT_GATEWAY_NAMESPACE}
-  hostnames:
-  - "api.${KUADRANT_ZONE_ROOT_DOMAIN}"
-  rules:
-  - matches:
-    - method: GET
-      path:
-        type: PathPrefix
-        value: "/cars"
-EOF
-```
-The status of the HTTPRoute will not be accepted or enforced, it will be unknown as the Gateway hasn't been created yet:
-
-```bash
-kubectl get httproute toystore -n ${KUADRANT_DEVELOPER_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
-
-```
 ### Add a TLS issuer
 
 To secure communication to the Gateways, define a TLS issuer for TLS certificates.
@@ -121,22 +86,7 @@ kind: ClusterIssuer
 metadata:
   name: ${KUADRANT_CLUSTER_ISSUER_NAME}
 spec:
-  acme:
-    email: ${KUADRANT_EMAIL}
-    privateKeySecretRef:
-      name: le-secret
-    server: https://acme-staging-v02.api.letsencrypt.org/directory
-    solvers:
-      - dns01:
-          route53:
-            hostedZoneID: ${KUADRANT_AWS_DNS_PUBLIC_ZONE_ID}
-            region: ${KUADRANT_AWS_REGION}
-            accessKeyIDSecretRef:
-              key: AWS_ACCESS_KEY_ID
-              name: aws-credentials
-            secretAccessKeySecretRef:
-              key: AWS_SECRET_ACCESS_KEY
-              name: aws-credentials
+  selfSigned: {}
 EOF
 ```
 
@@ -163,7 +113,7 @@ spec:
     - allowedRoutes:
         namespaces:
           from: All 
-      hostname: "*.${KUADRANT_ZONE_ROOT_DOMAIN}"
+      hostname: "api.${KUADRANT_ZONE_ROOT_DOMAIN}"
       name: api
       port: 443
       protocol: HTTPS
@@ -176,7 +126,6 @@ spec:
 EOF
 ```
 
-
 Check the status of the `Gateway` ensuring the gateway is Accepted and Programmed:
 
 ```bash
@@ -188,6 +137,8 @@ Check the status of the listener, you will see that it is not yet programmed or 
 ```bash
 kubectl get gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
 ```
+
+## Secure and protect the Gateway with Auth, Rate Limit, and DNS policies.
 
 ### Deploy the gateway TLS policy
 
@@ -210,13 +161,43 @@ spec:
 EOF
 ```
 
-Check that the `TLSpolicy` has an Accepted and Enforced status:
+Check that the `TLSpolicy` has an Accepted and Enforced status (This may take a few minutes for certain provider e.g Lets Encrypt):
+
 
 ```bash
 kubectl get tlspolicy ${KUADRANT_GATEWAY_NAME}-tls -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
-### Secure and protect the Gateway with Auth, Rate Limit, and DNS policies.
+### Setup Toystore application HTTPRoute
+
+```bash
+
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
+  labels:
+    deployment: toystore
+    service: toystore
+spec:
+  parentRefs:
+  - name: ${KUADRANT_GATEWAY_NAME}
+    namespace: ${KUADRANT_GATEWAY_NS}
+  hostnames:
+  - "api.${KUADRANT_ZONE_ROOT_DOMAIN}"
+  rules:
+  - matches:
+    - method: GET
+      path:
+        type: PathPrefix
+        value: "/cars"
+    backendRefs:
+    - name: toystore
+      port: 80  
+EOF
+```
 
 While the `Gateway` is now deployed, it currently has exposed endpoints. The next steps will be defining an `AuthPolicy` to set up a default `403` response for any unprotected endpoints, as well as a `RateLimitPolicy` to set up a default unrealistic low global limit to further protect any exposed endpoints.
 
@@ -289,7 +270,6 @@ Check that the `RateLimitPolicy` has Accepted and Enforced status:
 ```bash
 kubectl get ratelimitpolicy ${KUADRANT_GATEWAY_NAME}-rlp -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
 ```
-
 ### Create the Gateway DNSPolicy
 
 ```bash
@@ -313,19 +293,19 @@ spec:
 EOF
 ```
 
-Check that the `DNSPolicy` has been Accepted and Enforced:
+Check that the `DNSPolicy` has been Accepted and Enforced (This mat take a few minutes):
 
 ```bash
 kubectl get dnspolicy ${KUADRANT_GATEWAY_NAME}-dnspolicy -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
-### Test the `low-limit` and deny all policies
+### Test the `low-limit` and `deny all` policies
 
 ```bash
 while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
-### (Optional) Configure metrics to be scraped from the Gateway instance
+### (Optional) Configure metrics to be scraped from the Gateway instance
 
 If Prometheus is installed on the cluster, set up a `PodMonitor` to configure it to scrape metrics directly from the Gateway pod.
 This must be done in the namespace where the Gateway is running. For a list of the metrics you'll get see the Kuadrant [docs](https://docs.kuadrant.io/0.11.0/kuadrant-operator/doc/observability/metrics/)
@@ -389,17 +369,33 @@ EOF
 Set up an example API key for the new users:
 
 ```bash
-kubectl apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-  name: toystore-api-key
-  namespace: ${KUADRANT_DEVELOPER_NS}
+  name: bob-key
+  namespace: kuadrant-system
   labels:
     authorino.kuadrant.io/managed-by: authorino
-    kuadrant.io/apikeys-by: api_key
+    app: toystore
+  annotations:
+    secret.kuadrant.io/user-id: bob
 stringData:
-  api_key: secret
+  api_key: IAMBOB
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alice-key
+  namespace: kuadrant-system
+  labels:
+    authorino.kuadrant.io/managed-by: authorino
+    app: toystore
+  annotations:
+    secret.kuadrant.io/user-id: alice
+stringData:
+  api_key: IAMALICE
 type: Opaque
 EOF
 ```
@@ -458,8 +454,8 @@ spec:
   limits:
     "general-user":
       rates:
-      - limit: 1
-        window: 3s
+      - limit: 5
+        window: 10s
       counters:
       - expression: auth.identity.userid
       when:
@@ -467,7 +463,7 @@ spec:
     "bob-limit":
       rates:
       - limit: 2
-        window: 3s
+        window: 10s
       when:
       - predicate: "auth.identity.userid == 'bob'"
 EOF
@@ -476,7 +472,8 @@ EOF
 The `RateLimitPolicy` should be Accepted and Enforced:
 
 ```bash
-kubectl get ratelimitpolicy -n ${KUADRANT_DEVELOPER_NS} toystore-rlp -o=jsonpath='{.status.conditions}'
+kubectl get ratelimitpolicy -n ${KUADRANT_DEVELOPER_NS} toystore-rlp -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
+
 ```
 
 Check the status of the `HTTPRoute`, is now affected by the `RateLimitPolicy` in the same namespace:
@@ -489,11 +486,15 @@ kubectl get httproute toystore -n ${KUADRANT_DEVELOPER_NS} -o=jsonpath='{.status
 
 #### Send requests as Alice:
 
+You should see status `200` every second for 5 second followed by stats `429` every second for 5 seconds
+
 ```bash
 while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMALICE' "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 #### Send requests as Bob:
+You should see status `200` every second for 2 seconds followed by stats `429` every second for 8 seconds
+
 
 ```bash
 while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done

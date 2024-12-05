@@ -4,7 +4,29 @@ Learn how to allow anonymous access to certain endpoints using Kuadrant's `AuthP
 
 ## Prerequisites
 
-You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster.
+You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster with a Gateway provider.
+
+### Create Gateway
+Create a `Gateway` resource for this guide:
+
+```sh
+kubectl apply -f -<<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kuadrant-ingressgateway
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+EOF
+```
+The `Gateway` resource created above uses Istio as the gateway provider. For Envoy Gateway, use the Envoy Gateway `GatewayClass` as the `gatewayClassName`.
 
 ### Deploy Toy Store application
 
@@ -27,7 +49,7 @@ metadata:
 spec:
   parentRefs:
   - name: kuadrant-ingressgateway
-    namespace: gateway-system
+    namespace: default
   hostnames:
   - api.toystore.com
   rules:
@@ -53,8 +75,8 @@ EOF
 Export the gateway hostname and port for testing:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n default -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n default -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 ```
 
@@ -154,5 +176,5 @@ kubectl delete -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/r
 kubectl delete httproute toystore
 kubectl delete authpolicy route-auth
 kubectl delete authpolicy rule-2-auth
-kubectl delete kuadrant kuadrant -n kuadrant-system
+kubectl delete gateway kuadrant-ingressgateway
 ```

@@ -21,11 +21,9 @@ export KUADRANT_GATEWAY_NAME=external # Name for the example Gateway
 export KUADRANT_DEVELOPER_NS=toystore # Namespace for an example toystore app
 export KUADRANT_AWS_ACCESS_KEY_ID=xxxx # AWS Key ID with access to manage the DNS Zone ID below
 export KUADRANT_AWS_SECRET_ACCESS_KEY=xxxx # AWS Secret Access Key with access to manage the DNS Zone ID below
-export KUADRANT_AWS_REGION=us-east-1 # Region to create the DNS resources in AWS
 export KUADRANT_AWS_DNS_PUBLIC_ZONE_ID=xxxx # AWS Route 53 Zone ID for the Gateway
 export KUADRANT_ZONE_ROOT_DOMAIN=example.com # Root domain associated with the Zone ID above
 export KUADRANT_CLUSTER_ISSUER_NAME=self-signed # Name for the ClusterIssuer
-export KUADRANT_EMAIL=foo@example.com # Email address to associate with the example LetsEncrypt issuer
 ```
 
 ### Set up a DNS Provider
@@ -193,6 +191,10 @@ spec:
       path:
         type: PathPrefix
         value: "/cars"
+    - method: GET
+      path:
+        type: PathPrefix
+        value: "/health"    
     backendRefs:
     - name: toystore
       port: 80  
@@ -216,6 +218,8 @@ spec:
     kind: Gateway
     name: ${KUADRANT_GATEWAY_NAME}
   defaults:
+   when:
+     - predicate: "request.path != '/health'"
    rules:
     authorization:
       deny-all:
@@ -280,6 +284,10 @@ metadata:
   name: ${KUADRANT_GATEWAY_NAME}-dnspolicy
   namespace: ${KUADRANT_GATEWAY_NS}
 spec:
+  healthCheck:
+    failureThreshold: 3
+    interval: 1m
+    path: /health
   loadBalancing:
     defaultGeo: true
     geo: GEO-NA
@@ -299,68 +307,19 @@ Check that the `DNSPolicy` has been Accepted and Enforced (This mat take a few m
 kubectl get dnspolicy ${KUADRANT_GATEWAY_NAME}-dnspolicy -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
+#### DNS Health checks
+DNS Health checks has been enabled on the DNSPolicy. These health checks will flag a published endpoint as healthy or unhealthy based on the defined configuration. When unhealthy an endpoint will not be published if it has not already been published to the DNS provider, will only be unpublished if it is part of a multi-value A record and in all cases can be observable via the DNSPolicy status. For more information see [DNS Health checks documentation](../dns/dnshealthchecks.md)
+
+Check the status of the health checks as follow:
+
+```bash
+kubectl get dnspolicy ${KUADRANT_GATEWAY_NAME}-dnspolicy -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="SubResourcesHealthy")].message}'
+```
 ### Test the `low-limit` and `deny all` policies
 
 ```bash
 while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
-
-### (Optional) Configure metrics to be scraped from the Gateway instance
-
-If Prometheus is installed on the cluster, set up a `PodMonitor` to configure it to scrape metrics directly from the Gateway pod.
-This must be done in the namespace where the Gateway is running. For a list of the metrics you'll get see the Kuadrant [docs](https://docs.kuadrant.io/0.11.0/kuadrant-operator/doc/observability/metrics/)
-
-```bash
-kubectl apply -f - <<EOF
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
-metadata:
-  name: istio-proxies-monitor
-  namespace: ${KUADRANT_GATEWAY_NS}
-spec:
-  selector:
-    matchExpressions:
-      - key: istio-prometheus-ignore
-        operator: DoesNotExist
-  podMetricsEndpoints:
-    - path: /stats/prometheus
-      interval: 30s
-      relabelings:
-        - action: keep
-          sourceLabels: ["__meta_kubernetes_pod_container_name"]
-          regex: "istio-proxy"
-        - action: keep
-          sourceLabels:
-            ["__meta_kubernetes_pod_annotationpresent_prometheus_io_scrape"]
-        - action: replace
-          regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
-          replacement: "[\$2]:\$1"
-          sourceLabels:
-            [
-              "__meta_kubernetes_pod_annotation_prometheus_io_port",
-              "__meta_kubernetes_pod_ip",
-            ]
-          targetLabel: "__address__"
-        - action: replace
-          regex: (\d+);((([0-9]+?)(\.|$)){4})
-          replacement: "\$2:\$1"
-          sourceLabels:
-            [
-              "__meta_kubernetes_pod_annotation_prometheus_io_port",
-              "__meta_kubernetes_pod_ip",
-            ]
-          targetLabel: "__address__"
-        - action: labeldrop
-          regex: "__meta_kubernetes_pod_label_(.+)"
-        - sourceLabels: ["__meta_kubernetes_namespace"]
-          action: replace
-          targetLabel: namespace
-        - sourceLabels: ["__meta_kubernetes_pod_name"]
-          action: replace
-          targetLabel: pod_name
-EOF
-```
-
 
 ### Override the Gateway's deny-all AuthPolicy 
 
@@ -369,12 +328,16 @@ EOF
 Set up an example API key for the new users:
 
 ```bash
-kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
+export KUADRANT_SYSTEM_NS=$(kubectl get kuadrant -A -o jsonpath="{.items[0].metadata.namespace}")
+```
+
+```bash
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
   name: bob-key
-  namespace: kuadrant-system
+  namespace: ${KUADRANT_SYSTEM_NS}
   labels:
     authorino.kuadrant.io/managed-by: authorino
     app: toystore
@@ -388,7 +351,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: alice-key
-  namespace: kuadrant-system
+  namespace: ${KUADRANT_SYSTEM_NS}
   labels:
     authorino.kuadrant.io/managed-by: authorino
     app: toystore
@@ -402,6 +365,8 @@ EOF
 
 Create a new AuthPolicy in a different namespace that overrides the `Deny all` created earlier:
 
+
+
 ```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1
@@ -414,7 +379,10 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  rules:
+  defaults:
+   when:
+     - predicate: "request.path != '/health'"  
+   rules:
     authentication:
       "api-key-users":
         apiKey:
@@ -504,3 +472,61 @@ while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H 
 
 - [mTLS Configuration](../../install/mtls-configuration.md)
 To learn more about Kuadrant and see more how to guides, visit Kuadrant [documentation](https://docs.kuadrant.io)
+
+
+### Optional
+
+If you have prometheus in your cluster, set up a PodMonitor to configure it to scrape metrics directly from the Gateway pod.
+This must be done in the namespace where the Gateway is running.
+This configuration is required for metrics such as `istio_requests_total`.
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: istio-proxies-monitor
+  namespace: ${KUADRANT_GATEWAY_NS}
+spec:
+  selector:
+    matchExpressions:
+      - key: istio-prometheus-ignore
+        operator: DoesNotExist
+  podMetricsEndpoints:
+    - path: /stats/prometheus
+      interval: 30s
+      relabelings:
+        - action: keep
+          sourceLabels: ["__meta_kubernetes_pod_container_name"]
+          regex: "istio-proxy"
+        - action: keep
+          sourceLabels:
+            ["__meta_kubernetes_pod_annotationpresent_prometheus_io_scrape"]
+        - action: replace
+          regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
+          replacement: "[\$2]:\$1"
+          sourceLabels:
+            [
+              "__meta_kubernetes_pod_annotation_prometheus_io_port",
+              "__meta_kubernetes_pod_ip",
+            ]
+          targetLabel: "__address__"
+        - action: replace
+          regex: (\d+);((([0-9]+?)(\.|$)){4})
+          replacement: "\$2:\$1"
+          sourceLabels:
+            [
+              "__meta_kubernetes_pod_annotation_prometheus_io_port",
+              "__meta_kubernetes_pod_ip",
+            ]
+          targetLabel: "__address__"
+        - action: labeldrop
+          regex: "__meta_kubernetes_pod_label_(.+)"
+        - sourceLabels: ["__meta_kubernetes_namespace"]
+          action: replace
+          targetLabel: namespace
+        - sourceLabels: ["__meta_kubernetes_pod_name"]
+          action: replace
+          targetLabel: pod_name
+EOF
+```

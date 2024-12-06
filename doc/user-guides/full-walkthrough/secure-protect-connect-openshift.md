@@ -691,6 +691,6 @@ curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Auth
 done
 ```
 
-## Conclusion
+## Next Steps
 
-You have completed the secure, protect, and connect walkthrough. To learn more about Kuadrant, visit <https://docs.kuadrant.io>.
+- [mTLS Configuration](../../install/mtls-configuration.md)

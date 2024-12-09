@@ -346,7 +346,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile,
 			NewLimitadorReconciler(b.client).Subscription().Reconcile,
 			NewDNSWorkflow(b.client, b.manager.GetScheme()).Run,
-			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
+			NewTLSWorkflow(b.client, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Subscription().Reconcile,
 		},

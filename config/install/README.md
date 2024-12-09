@@ -1,16 +1,38 @@
 # Install Kuadrant and Sail via OLM
 
 ## Prerequisites  
-- Clone the[ Kuadrant-operator](https://github.com/Kuadrant/kuadrant-operator) repo
-- OLM (operator lifecycle manager)
-- cert-manager 
+- OLM is installed [operator lifecycle manager releases](https://github.com/operator-framework/operator-lifecycle-manager/releases)
+- (optional) cert-manager is installed
   - [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
   - [installing cert-manager via OperatorHub](https://cert-manager.io/docs/installation/operator-lifecycle-manager/)
-- AWS, Azure or GCP with DNS capabilities. (Optional)
-- Accessible Redis instance, for persistent storage for your rate limit counters. (Optional)
+- (Optional) Access to AWS, Azure or GCP with DNS capabilities. 
+- (Optional) Accessible Redis instance, for persistent storage for your rate limit counters.
 
 
-> Note: By default the following guide will install the "latest" or "main" version of Kuadrant. To pick a specific version, change the image in the `config/install/standard/kuadrant-version.yaml`. All versions available can be found on the Kuadrant operator [release page](https://github.com/Kuadrant/kuadrant-operator/releases)
+## Installation
+
+To simply install Kuadrant at a given released version (post v1.x) with no credentials configured (This is the most basic setup and means TLSPolicy and DNSPolicy will not be able to be used). 
+
+Create the following `kustomization.yaml` locally
+
+```
+
+```
+
+
+```bash
+
+
+```
+
+
+## Set up DNS credentials and a certificate issuer
+
+In order for cert-manager and the Kuadrant DNS operator to be able to access and manage DNS records and setup TLS certificates, you need to setup a credential for these components. To do this, we will use a kubernetes secret. You can find example overlays for these under the  [configure directory](https://github.com/Kuadrant/kuadrant-operator/tree/main/config/install/configure).
+
+Each cloud provider has an example cluster-issuer and `credentials.env.sample` in the correct format alongside a kustomize overlay to trigger the installation and configuration. To use this locally we recommend copying the contentes of the cloud provider directory into your own directory, setting up the needed `.env` file locally and defining a cluster issuer (feel free to use the issuer provider as this is for lets-encrypt).
+
+
 
 > Note: for multiple clusters, it would make sense to do the installation via a tool like [argocd](https://argo-cd.readthedocs.io/en/stable/). For other methods of addressing multiple clusters take a look at the [kubectl docs](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
 

@@ -7024,6 +7024,11 @@ spec:
       name: Enforced
       priority: 2
       type: string
+    - description: DNSPolicy SubResourcesHealthy
+      jsonPath: .status.conditions[?(@.type=="SubResourcesHealthy")].status
+      name: SubResourcesHealthy
+      priority: 2
+      type: string
     - description: Type of the referenced Gateway API resource
       jsonPath: .spec.targetRef.kind
       name: TargetRefKind

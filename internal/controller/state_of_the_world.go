@@ -572,8 +572,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		Precondition: initWorkflow(b.client).Run,
 		Tasks: []controller.ReconcileFunc{
 			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run,
-			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
-			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
+			NewTLSWorkflow(b.client, b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run, NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
 		},

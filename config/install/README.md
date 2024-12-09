@@ -31,6 +31,8 @@ This document will walk you through setting up the required configuration to ins
 
 > Note: for multiple clusters, it would make sense to do the installation via a tool like [argocd](https://argo-cd.readthedocs.io/en/stable/). For other methods of addressing multiple clusters take a look at the [kubectl docs](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
 
+> Note: this document focuses on AWS integration for DNS. If you want to use a different provider, there are examples under the [configure directory](https://github.com/Kuadrant/kuadrant-operator/tree/main/config/install/configure) 
+
 ## Basic Installation
 
 This first step will install just Kuadrant at a given released version (post v1.x) in the `kuadrant-system` namespace and the Sail Operator. There will be no credentials/dns providers configured (This is the most basic setup but means TLSPolicy and DNSPolicy will not be able to be used). 
@@ -149,7 +151,7 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=wide
 
 ```
 
-You should see the condition with type `Ready`. 
+You should see the condition with type `Ready` with a message of `kuadrant is ready`. 
 
 
 ### Verify Istio is configured and ready:
@@ -167,7 +169,7 @@ kubectl get istio -n gateway-system
 At this point Kuadrant is installed and ready to be used as is Istio as the gateway provider. This means AuthPolicy and RateLimitPolicy can now be configured and used to protect any Gateways you create. 
 
 
-## (Optional) Configure DNS and TLS integration
+## Configure DNS and TLS integration
 
 In this section will build on the previous steps and expand the `kustomization.yaml` we created in `$KUADRANT_DIR/configure`. 
 
@@ -211,7 +213,7 @@ generatorOptions:
 
 secretGenerator:
   - name: aws-provider-credentials
-    namespace: cert-manager # change this to the namespace where cert-manager is running.
+    namespace: cert-manager # assumes cert-manager namespace exists.
     envs:
       - aws-credentials.env # notice this matches the .env file above. You will need to setup this file locally
     type: 'kuadrant.io/aws'

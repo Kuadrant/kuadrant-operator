@@ -50,7 +50,7 @@ When a TLSPolicy targets a Gateway, the policy will be enforced on all gateway l
 Target a Gateway by setting the `spec.targetRef` field of the TLSPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1
 kind: TLSPolicy
 metadata:
   name: <TLSPolicy name>

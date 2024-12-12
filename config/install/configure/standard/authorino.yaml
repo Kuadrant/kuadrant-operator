@@ -2,6 +2,7 @@ apiVersion: operator.authorino.kuadrant.io/v1beta1
 kind: Authorino
 metadata:
   name: authorino
+  namespace: kuadrant-system
 spec:
   clusterWide: true
   listener:

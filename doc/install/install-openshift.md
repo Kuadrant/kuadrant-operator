@@ -191,7 +191,7 @@ To scrape these additional metrics, you can install a `kube-state-metrics` insta
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/kube-state-metrics.yaml
-kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.6.0
+kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.7.0
 ```
 
 To enable request metrics in Istio and scrape them, create the following resource:

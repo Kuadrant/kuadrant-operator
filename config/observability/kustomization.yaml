@@ -3,7 +3,7 @@ kind: Kustomization
 
 resources:
   - github.com/prometheus-operator/kube-prometheus?ref=release-0.13
-  - github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.6.0
+  - github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.7.0
 # We're using the additionalScrapeConfigs field of the Prometheus CR
 # here to read existing prometheus scrape annotations on pods.
 # Ideally this would be done via another PodMonitor or ServicMonitor,

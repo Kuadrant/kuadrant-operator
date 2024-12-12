@@ -2,10 +2,25 @@
 
 This document will walk you through setting up the required configuration to install kaudrant using kustomize or a tool that leverages kustomize such as kubectl along with OLM. It will walk you step by step through installation and building up your needed configuration. The full example is available to view and use here [Full AWS Example](https://github.com/Kuadrant/kuadrant-operator/tree/main/config/install/full-example-aws)
 
+
+steps:
+
+1. [Basic Install](#basic-installation)
+
+2. [Configure DNS and TLS integration](#configure-dns-and-tls-integration)
+
+3. [Use External Redis](#use-an-external-redis)
+
+4. [Setup Observability (OpenShift Specific)](#set-up-observability-openshift-only)
+
+5. [Set resource requests and limits](#set-resource-limits)
+
+6. [Configure Data Plane Resilience](#resilient-deployment-of-data-plane-components)
+
 ## Prerequisites  
 - OCP or K8s cluster and CLI available.
 - OLM is installed [operator lifecycle manager releases](https://github.com/operator-framework/operator-lifecycle-manager/releases)
-- Gateway Provider Installed: By default this guide will install the [Sail Operator](https://github.com/istio-ecosystem/sail-operator) that will configure and install an Istio installation. Kuadrant is intended to work with [Istio](https://istio.io) or [Envoy Gateway](https://gateway.envoyproxy.io/) as a gateway provider before you can make use of Kuadrant one of these providers should be installed.  
+- (Optional) Gateway Provider Installed: By default this guide will install the [Sail Operator](https://github.com/istio-ecosystem/sail-operator) that will configure and install an Istio installation. Kuadrant is intended to work with [Istio](https://istio.io) or [Envoy Gateway](https://gateway.envoyproxy.io/) as a gateway provider before you can make use of Kuadrant one of these providers should be installed.  
 - (Optional) cert-manager:
   - [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
   - [installing cert-manager via OperatorHub](https://cert-manager.io/docs/installation/operator-lifecycle-manager/)
@@ -55,6 +70,12 @@ kubectl apply -k <kuadrant/install>
 
 #### Verify the operators are installed:
 
+OLM should begin installing the dependencies for Kuadrant. To wait for them to be ready, run:
+
+```bash
+kubectl -n kuadrant-system wait --timeout=160s --for=condition=Available deployments --all
+```
+
 Once OLM has finished installing the operators (this can take several minutes). You should see the following in the kuadrant-system namespace:
 
 ```bash
@@ -81,7 +102,15 @@ kubectl get subscription -n kuadrant-system -o=yaml
 
 Kuadrant has 2 additional operand components that it manages (Authorino that provides data plane auth and Limitador that provides data plane rate limiting). To set these up lets add a new `kustomization.yaml` in a new sub directory. We will re-use this later for further configuration. We do this as a separate step as we want to have the operators installed and in place first.
 
-Add the following to your local directory.  For the purpose of this doc, we will use: `kuadrant/configure/`.
+Add the following to your local directory.  For the purpose of this doc, we will use: `kuadrant/configure/kustomization.yaml`.
+
+```bash
+touch configure/kustomization.yaml
+
+```
+
+Add the following to the new kustomization.yaml:
+
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -127,7 +156,7 @@ kubectl get istio -n gateway-system
 At this point Kuadrant is installed and ready to be used as is Istio as the gateway provider. This means AuthPolicy and RateLimitPolicy can now be configured and used to protect any Gateways you create. 
 
 
-## Configure a DNS provider credentials and a Certificate Issuer
+## Configure DNS and TLS integration
 
 In this section will build on the previous steps and expand the `kustomization.yaml` we created in the previous step. 
 
@@ -235,7 +264,7 @@ kubectl get clusterissuer -o=wide
 We create two credentials. One for use with DNSPolicy in the gateway-system namespace and one for use by cert-manager in the `cert-manager` namespace. With these credentials in place and the cluster issuer configured. You are now ready to start using DNSPolicy and TLSPolicy to secure and connect your Gateways.
 
 
-## Using External Redis
+## Use an External Redis
 
 To connect `Limitador` the component responsible for rate limiting to redis so that its counters are stored and shared with other limitador instances follow these steps:
 
@@ -263,44 +292,28 @@ Next we need to add a new secret generator to our existing configure file at `ku
     type: 'kuadrant.io/redis'
 ```
 
-We also need to replace the existing limitador resource. Add the following to the `kuadrant/configure` directory.
+We also need to patch the existing `Limitador` resource. Add the following to the `kuadrant/configure/kustomization.yaml`
 
-```bash
-touch kuadrant/configure/limitador.yaml
-```
-
-Add the following to the `limitador.yaml` file:
 
 ```yaml
 
-apiVersion: limitador.kuadrant.io/v1alpha1
-kind: Limitador
-metadata:
-  name: limitador
-  namespace: kuadrant-system
-spec:
-  storage:
-    redis:
-      configSecretRef:
-        name: redis-credentials
-
-```
-
-Add the new resource to your `kuadrant/configure/kustomization.yaml` file under the resources section:
-
-```yaml
-kind: Kustomization
-resources:
-  - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=v1.0.1 #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
-  - cluster-issuer.yaml #(comment if you dont want to use it. The issuer yaml is defined below).
-  - limitador.yaml # NEW 
+patches: # remove the subscription patch if you are installing a development version. It will then use the "preview" channel
+  - patch: |-
+      apiVersion: limitador.kuadrant.io/v1alpha1
+      kind: Limitador
+      metadata:
+        name: limitador
+        namespace: kuadrant-system
+      spec:
+        storage:
+          redis:
+            configSecretRef:
+              name: redis-credentials
 
 ```
 
 
 Re-Apply the configuration to setup the new secret and limitador configuration:
-
->Note you will see a warning here about last applied configuration. This is because we are replacing the resource setup by the kuadrant-operator however this warning wont cause any issues for the installation.
 
 ```bash
 kubectl apply -k kuadrant/configure/
@@ -319,6 +332,30 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=wide
 # kuadrant   Ready    61m
 
 ```
+
+
+
+
+
+## Resilient Deployment of data plane components
+
+### Set Resource Limits
+
+**Limitador**
+
+Add the following your local `limitador` resource spec:
+
+```yaml
+resourceRequirements:
+    requests:
+      cpu: 10m
+      memory: 10Mi
+```
+### Setup Topology Constraints
+
+## Setup PodDisruptionBudgets
+
+
 
 ## Set up observability (OpenShift Only)
 

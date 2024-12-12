@@ -3,3 +3,5 @@ kind: Kustomization
 resources:
   - sail.yaml
   - kuadrant.yaml
+  - limitador.yaml
+  - authorino.yaml

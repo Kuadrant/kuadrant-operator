@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=v1.0.1 #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
+  - cluster-issuer.yaml #(comment if you dont want to use it. The issuer yaml is defined below).
+  - limitador.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/managed-by: kustomize
+
+secretGenerator:
+  - name: aws-provider-credentials
+    namespace: cert-manager # assumes cert-manager namespace exists.
+    envs:
+      - aws-credentials.env # notice this matches the .env file above. You will need to setup this file locally
+    type: 'kuadrant.io/aws'
+  - name: aws-provider-credentials
+    namespace: gateway-system # this is the namespace where your gateway will be provisioned
+    envs:
+      - aws-credentials.env #notice this matches the .env file above. you need to set up this file locally first.
+    type: 'kuadrant.io/aws'
+  - name: redis-credentials
+    namespace: kuadrant-system
+    envs:
+      - redis-credentials.env
+    type: 'kuadrant.io/redis'

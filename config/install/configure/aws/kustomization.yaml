@@ -5,7 +5,8 @@ kind: Kustomization
 # You can start by copying `aws-credentials.env.sample` and customising it as needed.
 
 resources:
-  - ../standard
+  - https://github.com/Kuadrant/kuadrant-operator//config/install/standard
+  # - https://github.com/Kuadrant/kuadrant-operator//config/install/openshift # use this one if installing on OCP
   - cluster-issuer.yaml
 
 generatorOptions:
@@ -18,7 +19,7 @@ secretGenerator:
   - name: aws-provider-credentials
     namespace: cert-manager
     envs:
-      - aws-credentials.env
+      - aws-credentials.env # you will need to setup this file locally
     type: 'kuadrant.io/aws'
   - name: aws-provider-credentials
     namespace: gateway-system

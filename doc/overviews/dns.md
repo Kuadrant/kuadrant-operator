@@ -170,7 +170,7 @@ When a DNSPolicy targets a Gateway, the policy will be enforced on all gateway l
 Target a Gateway by setting the `spec.targetRef` field of the DNSPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: <DNSPolicy name>
@@ -186,7 +186,7 @@ spec:
 A DNSPolicy can target a specific listener in a gateway using the `sectionName` property of the targetRef configuration. When you set the `sectionName`, the DNSPolicy will only affect that listener and no others. If you also have another DNSPolicy targeting the entire gateway, the more specific policy targeting the listerner will be the policy that is applied.
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: <DNSPolicy name>

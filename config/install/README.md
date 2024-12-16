@@ -182,7 +182,7 @@ KUADRANT_AWS_REGION=eu-west-1
 
 ```
 
-With this setup, lets update our configure kustomization and also define a TLS clusterissuer::
+With this setup, lets update our configure kustomization and also define a TLS clusterissuer. The full file should look like:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -312,6 +312,54 @@ patches: # remove the subscription patch if you are installing a development ver
 
 ```
 
+Your full kustomize will now be:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=olm-installation #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
+  - cluster-issuer.yaml #(comment if you dont want to use it. The issuer yaml is defined below). Ensure you name the file correctly.
+
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/managed-by: kustomize
+
+secretGenerator:
+  - name: aws-provider-credentials
+    namespace: cert-manager # assumes cert-manager namespace exists.
+    envs:
+      - aws-credentials.env # notice this matches the .env file above. You will need to setup this file locally
+    type: 'kuadrant.io/aws'
+  - name: aws-provider-credentials
+    namespace: gateway-system # this is the namespace where your gateway will be provisioned
+    envs:
+      - aws-credentials.env #notice this matches the .env file above. you need to set up this file locally first.
+    type: 'kuadrant.io/aws'
+  - name: redis-credentials
+    namespace: kuadrant-system
+    envs:
+      - redis-credentials.env
+    type: 'kuadrant.io/redis'
+
+patches: # remove the subscription patch if you are installing a development version. It will then use the "preview" channel
+  - patch: |-
+      apiVersion: limitador.kuadrant.io/v1alpha1
+      kind: Limitador
+      metadata:
+        name: limitador
+        namespace: kuadrant-system
+      spec:
+        storage:
+          redis:
+            configSecretRef:
+              name: redis-credentials
+
+```
+
 
 Re-Apply the configuration to setup the new secret and limitador configuration:
 
@@ -334,23 +382,32 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=wide
 ```
 
 
-
-
-
 ## Resilient Deployment of data plane components
 
 ### Set Resource Limits
 
 **Limitador**
 
-Add the following your local `limitador` resource spec:
+Add the following your local `limitador` patch in your `kuadrant/configure/kustomize.yaml` spec:
 
 ```yaml
 resourceRequirements:
     requests:
       cpu: 10m
-      memory: 10Mi
+      memory: 10Mi # set these based on your own needs.
 ```
+
+re-apply the configuration:
+
+```bash
+kubectl apply -k kuadrant/configure/
+
+```
+
+
+**Authorino**
+
+
 ### Setup Topology Constraints
 
 ## Setup PodDisruptionBudgets

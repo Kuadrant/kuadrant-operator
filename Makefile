@@ -226,7 +226,7 @@ $(YQ):
 yq: $(YQ) ## Download yq locally if necessary.
 
 OPM = $(PROJECT_PATH)/bin/opm
-OPM_VERSION = v1.26.2
+OPM_VERSION = v1.48.0
 $(OPM):
 	@{ \
 	set -e ;\

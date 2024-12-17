@@ -288,6 +288,19 @@ spec:
   upgradeStrategy: Default
 EOF
 ```
+**Authenticated Registry**
+
+!!! note
+
+    If you need to use a wasm image from a protected registry (such as the redhat registry), you will need to configure an image pull secret to use. This secret must exist in each namespace where there is a Gateway resource defined that you intend to target with `AuthPolicy` or `RatelimitPolicy` and it must be named `wasm-plugin-pull-secret`.
+
+Example Creating Pull Secret:
+
+```bash
+kubectl create secret docker-registry wasm-plugin-pull-secret -n ${GATEWAY_NAMESPACE} \ --docker-server=my.registry.io \ --docker-username=your-registry-service-account-username \ --docker-password=your-registry-service-account-password
+```
+
+The configuration for the gateway will expect this secret to exist if the registry name begins with `registry.redhat.com` by default. This can be changed via the env var `PROTECTED_REGISTRY` set in the kuadrant-operator.
 
 Wait for the Kuadrant Operators to be installed as follows:
 

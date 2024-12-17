@@ -146,6 +146,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(existingWasmPlugin.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(existingWasmPlugin.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
 			Expect(existingWasmPlugin.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
+			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
@@ -192,6 +193,71 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 				},
 			}))
+		}, testTimeOut)
+
+		It("wasmplugin imagePullSecret should be reconciled", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			err := testClient().Create(ctx, httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create ratelimitpolicy
+			rlp := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace, Annotations: map[string]string{"test": "1"}},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"l1": {
+								Rates: []kuadrantv1.Rate{
+									{
+										Limit: 1, Window: kuadrantv1.Duration("3m"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = testClient().Create(ctx, rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			// Check wasm plugin
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			// ensure imagePullsecret is empty as expected
+			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
+			// update the WASMPlugin imagePullSecret directly, it should get reconciled back to empty when RLP is reconciled next
+			existingWasmPlugin.Spec.ImagePullSecret = "shouldntbehere"
+			err = testClient().Update(ctx, existingWasmPlugin)
+			Expect(err).ToNot(HaveOccurred())
+			// update the RLP to trigger reconcile
+			err = testClient().Get(ctx, rlpKey, rlp)
+			Expect(err).ToNot(HaveOccurred())
+			rlp.Annotations["test"] = "2"
+			err = testClient().Update(ctx, rlp)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
+			}, "10s", "1s").Should(Succeed())
 		}, testTimeOut)
 
 		It("Full featured RLP targeting HTTPRoute creates wasmplugin", func(ctx SpecContext) {

@@ -206,4 +206,4 @@ If you are using a local kind cluster, we recommend using [metallb](https://meta
 
 ## Next Steps
 
-- [Secure, protect, and connect APIs with Kuadrant on Kubernetes](../user-guides/full-walkthrough/secure-protect-connect-k8s.md)
+- [Secure, protect, and connect APIs with Kuadrant on Kubernetes](../user-guides/full-walkthrough/secure-protect-connect.md)

@@ -221,7 +221,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/re
 
     There is 1 more metrics configuration that needs to be applied so that all relevant metrics are being scraped.
     That configuration depends on where you deploy your Gateway later.
-    The steps to configure that are detailed in the follow on [Secure, protect, and connect](../user-guides/full-walkthrough/secure-protect-connect-openshift.md) guide.
+    The steps to configure that are detailed in the follow on [Secure, protect, and connect](../user-guides/full-walkthrough/secure-protect-connect.md) guide.
 
 The [example Grafana dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources.
 
@@ -412,4 +412,4 @@ Once the plugin is loaded, refresh the console. You should see a new **Kuadrant*
 
 ## Next steps
 
-- [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/full-walkthrough/secure-protect-connect-openshift.md)
+- [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/full-walkthrough/secure-protect-connect.md)

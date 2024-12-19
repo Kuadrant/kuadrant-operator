@@ -14,4 +14,4 @@ secretGenerator:
     namespace: kuadrant-system
     envs:
       - redis-credentials.env
-    type: 'kuadrant.io/aws'
+    type: 'kuadrant.io/redis'

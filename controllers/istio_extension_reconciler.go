@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -53,7 +54,7 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler")
 
-	logger.V(1).Info("building istio extension")
+	logger.V(1).Info("building istio extension ", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building istio extension")
 
 	// build wasm plugin configs for each gateway
@@ -78,7 +79,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfigs[gateway.GetLocator()])
+		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfigs[gateway.GetLocator()], ProtectedRegistry, WASMFilterImageURL)
 
 		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
 
@@ -114,7 +115,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			}
 			continue
 		}
-
+		logger.V(1).Info("wasmplugin object ", "desired", desiredWasmPlugin)
 		if equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
 			logger.V(1).Info("wasmplugin object is up to date, nothing to do")
 			continue
@@ -125,6 +126,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
 		existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
 		existingWasmPlugin.Spec.PluginConfig = desiredWasmPlugin.Spec.PluginConfig
+		existingWasmPlugin.Spec.ImagePullSecret = desiredWasmPlugin.Spec.ImagePullSecret
 
 		existingWasmPluginUnstructured, err := controller.Destruct(existingWasmPlugin)
 		if err != nil {
@@ -228,7 +230,7 @@ func hasAuthAccess(actionSet []wasm.Action) bool {
 }
 
 // buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config
-func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config) *istioclientgoextensionv1alpha1.WasmPlugin {
+func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *istioclientgoextensionv1alpha1.WasmPlugin {
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.WasmPluginGroupKind.Kind,
@@ -257,10 +259,16 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 					Name:  gateway.GetName(),
 				},
 			},
-			Url:          WASMFilterImageURL,
+			Url:          imageURL,
 			PluginConfig: nil,
 			Phase:        istioextensionsv1alpha1.PluginPhase_STATS, // insert the plugin before Istio stats filters and after Istio authorization filters.
 		},
+	}
+	// reset to empty to allow fo the image having moved to a public registry
+	wasmPlugin.Spec.ImagePullSecret = ""
+	// only set to pull secret if we are in a protected registry
+	if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
+		wasmPlugin.Spec.ImagePullSecret = RegistryPullSecretName
 	}
 
 	if len(wasmConfig.ActionSets) == 0 {
@@ -277,7 +285,7 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 }
 
 func equalWasmPlugins(a, b *istioclientgoextensionv1alpha1.WasmPlugin) bool {
-	if a.Spec.Url != b.Spec.Url || a.Spec.Phase != b.Spec.Phase || !kuadrantistio.EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
+	if a.Spec.ImagePullSecret != b.Spec.ImagePullSecret || a.Spec.Url != b.Spec.Url || a.Spec.Phase != b.Spec.Phase || !kuadrantistio.EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
 		return false
 	}
 

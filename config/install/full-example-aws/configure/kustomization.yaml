@@ -27,3 +27,27 @@ secretGenerator:
     envs:
       - redis-credentials.env
     type: 'kuadrant.io/redis'
+
+patches:
+  - patch: |-
+      apiVersion: limitador.kuadrant.io/v1alpha1
+      kind: Limitador
+      metadata:
+        name: limitador
+        namespace: kuadrant-system
+      spec:
+        storage:
+          redis:
+            configSecretRef:
+              name: redis-credentials
+        resourceRequirements:
+          requests:
+            cpu: 10m
+            memory: 10Mi # set these based on your own needs.
+  - patch: |-
+      apiVersion: operator.authorino.kuadrant.io/v1beta1
+      kind: Authorino
+      metadata:
+        name: authorino
+      spec:
+      replicas: 2

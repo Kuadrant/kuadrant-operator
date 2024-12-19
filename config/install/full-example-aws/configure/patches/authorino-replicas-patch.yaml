@@ -1,0 +1,6 @@
+apiVersion: operator.authorino.kuadrant.io/v1beta1
+kind: Authorino
+metadata:
+  name: authorino
+spec:
+  replicas: 2

@@ -1,25 +1,25 @@
-# Install and Configure Kuadrant and Sail via OLM and the CLI
+# Install and Configure Kuadrant and Sail via OLM using the kubectl CLI
 
-This document will walk you through setting up the required configuration to install kaudrant using kustomize or a tool that leverages kustomize such as kubectl along with OLM. It will walk you step by step through installation and building up your needed configuration. The full example is available to view and use here [Full AWS Example](https://github.com/Kuadrant/kuadrant-operator/tree/main/config/install/full-example-aws)
+This document will walk you through setting up the required configuration to install kaudrant using [kustomize](https://kustomize.io/) or a tool that leverages kustomize such as kubectl along with OLM. It will also go through more advanced configuration options to enable building up a resilient configuration. You can view the full configuration built here: [Full AWS Example](https://github.com/Kuadrant/kuadrant-operator/tree/main/config/install/full-example-aws).
 
 
-steps:
 
 1. [Basic Install](#basic-installation)
 
 2. [Configure DNS and TLS integration](#configure-dns-and-tls-integration)
 
-3. [Use External Redis](#use-an-external-redis)
+3. [External Redis for Rate Limit Counters](#use-an-external-redis)
 
-4. [Setup Observability (OpenShift Specific)](#set-up-observability-openshift-only)
+4. [Limitador Resilient Configuration](#limitador-topologyconstraints-poddisruptionbudget-and-resource-limits)
 
-5. [Set resource requests and limits](#set-resource-limits)
+5. [Authorino Resilient Configuration](#authorino-topologyconstraints-poddisruptionbudget-and-resource-limits)
 
-6. [Configure Data Plane Resilience](#resilient-deployment-of-data-plane-components)
+4. [[OpenShift Specific] Setup Observability ](#set-up-observability-openshift-only)
+
 
 ## Prerequisites  
 - OCP or K8s cluster and CLI available.
-- OLM is installed [operator lifecycle manager releases](https://github.com/operator-framework/operator-lifecycle-manager/releases)
+- OLM installed [operator lifecycle manager releases](https://github.com/operator-framework/operator-lifecycle-manager/releases)
 - (Optional) Gateway Provider Installed: By default this guide will install the [Sail Operator](https://github.com/istio-ecosystem/sail-operator) that will configure and install an Istio installation. Kuadrant is intended to work with [Istio](https://istio.io) or [Envoy Gateway](https://gateway.envoyproxy.io/) as a gateway provider before you can make use of Kuadrant one of these providers should be installed.  
 - (Optional) cert-manager:
   - [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
@@ -33,20 +33,28 @@ steps:
 
 ## Basic Installation
 
-This first step will install just Kuadrant at a given released version (post v1.x) in the `kuadrant-system` namespace. There will be no credentials/dns providers configured (This is the most basic setup but means TLSPolicy and DNSPolicy will not be able to be used). This basic install will also setup a gateway provider via Istio and the Sail Operator. 
+This first step will install just Kuadrant at a given released version (post v1.x) in the `kuadrant-system` namespace and the Sail Operator. There will be no credentials/dns providers configured (This is the most basic setup but means TLSPolicy and DNSPolicy will not be able to be used). 
 
-Create the following `kustomization.yaml` in a directory locally. For the purpose of this doc, we will use: `kuadrant/install` (but if can be anything you would prefer).
+Start by creating the following `kustomization.yaml` in a directory locally. For the purpose of this doc, we will use: `~/kuadrant/` directory.
 
-> Setting the version to install: You can set the version of kuadrant to install by adding / changing the `?ref=v1.0.1`.
+```bash
+export KUADRANT_DIR=~/kuadrant
+mkdir -p $KUADRANT_DIR/install
+touch $KUADRANT_DIR/install/kustomization.yaml
+
+```
+
+> Setting the version to install: You can set the version of kuadrant to install by adding / changing the `?ref=v1.0.1` in the resource links.
 
 ```yaml
+# add this to the kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - https://github.com/Kuadrant/kuadrant-operator//config/install/standard?ref=v1.0.1 #set the versio by adding ?ref=v1.0.1 change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
   #- https://github.com/Kuadrant/kuadrant-operator//config/install/openshift?ref=v1.0.1 #use if targeting an OCP cluster. Change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases).
 
-patches: # remove the subscription patch if you are installing a development version. It will then use the "preview" channel
+patches: # remove this subscription patch if you are installing a development version. It will then use the "preview" channel
   - patch: |-
       apiVersion: operators.coreos.com/v1alpha1
       kind: Subscription
@@ -64,7 +72,7 @@ And execute the following to apply it to a cluster:
 
 ```bash
 # change the location depending on where you created the kustomization.yaml
-kubectl apply -k <kuadrant/install>
+kubectl apply -k $KUADRANT_DIR/install
 
 ```
 
@@ -75,6 +83,8 @@ OLM should begin installing the dependencies for Kuadrant. To wait for them to b
 ```bash
 kubectl -n kuadrant-system wait --timeout=160s --for=condition=Available deployments --all
 ```
+
+> Note: you may see ` no matching resources found ` if the deployments are not yet present.
 
 Once OLM has finished installing the operators (this can take several minutes). You should see the following in the kuadrant-system namespace:
 
@@ -91,7 +101,7 @@ kubectl get deployments -n kuadrant-system
 
 ```
 
-You can also view the subscription for information:
+You can also view the subscription for information about the install:
 
 ```bash
 kubectl get subscription -n kuadrant-system -o=yaml
@@ -100,12 +110,13 @@ kubectl get subscription -n kuadrant-system -o=yaml
 
 ### Install the operand components
 
-Kuadrant has 2 additional operand components that it manages (Authorino that provides data plane auth and Limitador that provides data plane rate limiting). To set these up lets add a new `kustomization.yaml` in a new sub directory. We will re-use this later for further configuration. We do this as a separate step as we want to have the operators installed and in place first.
+Kuadrant has 2 additional operand components that it manages: `Authorino` that provides data plane auth integration and `Limitador` that provides data plane rate limiting. To set these up lets add a new `kustomization.yaml` in a new sub directory. We will re-use this later for further configuration. We do this as a separate step as we want to have the operators installed first.
 
-Add the following to your local directory.  For the purpose of this doc, we will use: `kuadrant/configure/kustomization.yaml`.
+Add the following to your local directory.  For the purpose of this doc, we will use: `$KUADRANT_DIR/configure/kustomization.yaml`.
 
 ```bash
-touch configure/kustomization.yaml
+mkdir -p $KUADRANT_DIR/configure
+touch $KUADRANT_DIR/configure/kustomization.yaml
 
 ```
 
@@ -124,7 +135,7 @@ Lets apply this to your cluster:
 
 ```bash
 
-kubectl apply -k <kuadrant/configure>
+kubectl apply -k $KUADRANT_DIR/configure
 
 ```
 
@@ -170,7 +181,7 @@ Lets modify our existing local kustomize overlay to setup these secrets and the 
 First you will need to setup the required `.env` file specified in the kuztomization.yaml file in the same directory as your existing configure kustomization. Below is an example for AWS:
 
 ```bash
-touch kudarant/configure/aws-credentials.env
+touch ~/kudarant/configure/aws-credentials.env
 
 ```
 Add the following to your new file
@@ -182,7 +193,7 @@ KUADRANT_AWS_REGION=eu-west-1
 
 ```
 
-With this setup, lets update our configure kustomization and also define a TLS clusterissuer. The full file should look like:
+With this setup, lets update our configure kustomization and also define a TLS ClusterIssuer. The full file should look like:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -272,7 +283,7 @@ Again we will build on the configure kustomization we started. In the same way w
 
 
 ```bash
-touch kudarant/configure/redis-credentials.env
+touch ~/kudarant/configure/redis-credentials.env
 
 ```
 
@@ -297,7 +308,7 @@ We also need to patch the existing `Limitador` resource. Add the following to th
 
 ```yaml
 
-patches: # remove the subscription patch if you are installing a development version. It will then use the "preview" channel
+patches:
   - patch: |-
       apiVersion: limitador.kuadrant.io/v1alpha1
       kind: Limitador
@@ -312,7 +323,7 @@ patches: # remove the subscription patch if you are installing a development ver
 
 ```
 
-Your full kustomize will now be:
+Your full `kustomize.yaml` will now be:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -345,7 +356,7 @@ secretGenerator:
       - redis-credentials.env
     type: 'kuadrant.io/redis'
 
-patches: # remove the subscription patch if you are installing a development version. It will then use the "preview" channel
+patches:
   - patch: |-
       apiVersion: limitador.kuadrant.io/v1alpha1
       kind: Limitador
@@ -364,7 +375,7 @@ patches: # remove the subscription patch if you are installing a development ver
 Re-Apply the configuration to setup the new secret and limitador configuration:
 
 ```bash
-kubectl apply -k kuadrant/configure/
+kubectl apply -k $KUADRANT_DIR/configure/
 ```
 
 Limitador is now configured to use the provided redis connection URL as a backend store for rate limit counters. Limitador will becomes temporarily unavailable as it restarts.
@@ -384,33 +395,112 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=wide
 
 ## Resilient Deployment of data plane components
 
-### Set Resource Limits
+### Limitador: TopologyConstraints, PodDisruptionBudget and Resource Limits
 
-**Limitador**
-
-Add the following your local `limitador` patch in your `kuadrant/configure/kustomize.yaml` spec:
+To set limits, replicas and a `PodDisruptionBudget` for limitador you can add the following to the existing patch in your local `limitador` in the `$KUADRANT_DIR/configure/kustomize.yaml` spec:
 
 ```yaml
+pdb:
+  maxUnavailable: 1
+replicas: 2
 resourceRequirements:
     requests:
       cpu: 10m
       memory: 10Mi # set these based on your own needs.
 ```
 
-re-apply the configuration:
+re-apply the configuration. This will result in two instances of limitador being available and podDisruptionBudget being setup:
 
 ```bash
-kubectl apply -k kuadrant/configure/
+kubectl apply -k $KUADRANT_DIR/configure/
 
 ```
 
+For topology constraints, you will need to patch the limitador deployment directly:
 
-**Authorino**
+add the below `yaml` to a `limitador-topoloy-patch.yaml` under the `$KUADRANT_DIR/configure/patches` directory
 
+```yaml
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              limitador-resource: limitador
+        - maxSkew: 1
+          topologyKey: kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              limitador-resource: limitador
 
-### Setup Topology Constraints
+```
 
-## Setup PodDisruptionBudgets
+Apply this to the existing limitador deployment
+
+```bash
+kubectl patch deployment limitador-limitador -n kuadrant-system --patch-file $KUADRANT_DIR/configure/patches/limitador-topoloy-patch.yaml
+```
+
+### Authorino: TopologyConstraints, PodDisruptionBudget and Resource Limits
+
+To increase the number of replicas for Authorino add a new patch to the `$KUADRANT_DIR/configure/kustomization.yaml`
+
+```yaml
+  - patch: |-
+      apiVersion: operator.authorino.kuadrant.io/v1beta1
+      kind: Authorino
+      metadata:
+        name: authorino
+      spec:
+      replicas: 2
+
+```
+
+and re-apply the configuration:
+
+```bash
+kubectl apply -k $KUADRANT_DIR/configure/
+```
+
+To add resource limits and or topology constraints to Authorino. You will need to patch the Authorino deployment directly:
+Add the below `yaml` to a `authorino-topoloy-patch.yaml` under the `$KUADRANT_DIR/configure/patches` directory
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: authorino
+          resources:
+            requests:
+              cpu: 10m # set your own needed limits here
+              memory: 10Mi # set your own needed limits here
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              authorino-resource: authorino
+        - maxSkew: 1
+          topologyKey: kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              authorino-resource: authorino
+
+```
+
+Apply the patch:
+
+```bash
+kubectl patch deployment authorino -n kuadrant-system --patch-file $KUADRANT_DIR/configure/patches/authorino-topoloy-patch.yaml
+```
 
 
 

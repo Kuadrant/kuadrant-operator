@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=v1.0.1 #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
   - cluster-issuer.yaml #(comment if you dont want to use it. The issuer yaml is defined below).
-  - limitador.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -36,18 +35,22 @@ patches:
         name: limitador
         namespace: kuadrant-system
       spec:
-        storage:
-          redis:
-            configSecretRef:
-              name: redis-credentials
+        pdb:
+          maxUnavailable: 1
+        replicas: 2
         resourceRequirements:
           requests:
             cpu: 10m
             memory: 10Mi # set these based on your own needs.
+        storage:
+          redis:
+            configSecretRef:
+              name: redis-credentials
   - patch: |-
       apiVersion: operator.authorino.kuadrant.io/v1beta1
       kind: Authorino
       metadata:
         name: authorino
+        namespace: kuadrant-system
       spec:
-      replicas: 2
+        replicas: 2

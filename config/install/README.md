@@ -169,7 +169,7 @@ At this point Kuadrant is installed and ready to be used as is Istio as the gate
 
 ## Configure DNS and TLS integration
 
-In this section will build on the previous steps and expand the `kustomization.yaml` we created in the previous step. 
+In this section will build on the previous steps and expand the `kustomization.yaml` we created in `$KUADRANT_DIR/configure`. 
 
 In order for cert-manager and the Kuadrant DNS operator to be able to access and manage DNS records and setup TLS certificates and provide external connectivity for your endpoints, you need to setup a credential for these components. To do this, we will use a Kubernetes secret via a kustomize secret generator. You can find other example overlays for each supported cloud provider under the  [configure directory](https://github.com/Kuadrant/kuadrant-operator/tree/main/config/install/configure).
 
@@ -181,19 +181,19 @@ Lets modify our existing local kustomize overlay to setup these secrets and the 
 First you will need to setup the required `.env` file specified in the kuztomization.yaml file in the same directory as your existing configure kustomization. Below is an example for AWS:
 
 ```bash
-touch ~/kudarant/configure/aws-credentials.env
+touch $KUADRANT_DIR/configure/aws-credentials.env
 
 ```
 Add the following to your new file
 
 ```
-KUADRANT_AWS_ACCESS_KEY_ID=xxx
-KUADRANT_AWS_SECRET_ACCESS_KEY=xxx
-KUADRANT_AWS_REGION=eu-west-1
+AWS_ACCESS_KEY_ID=xxx
+AWS_SECRET_ACCESS_KEY=xxx
+AWS_REGION=eu-west-1
 
 ```
 
-With this setup, lets update our configure kustomization and also define a TLS ClusterIssuer. The full file should look like:
+With this setup, lets update our configure kustomization to generate the needed secrets. We will also define a TLS ClusterIssuer (see below). The full `kustomization.yaml` file should look like:
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -224,10 +224,10 @@ secretGenerator:
 
 ```
 
-Example Lets-Encrypt Cluster Issuer that uses the aws credential. Create this in the same directory as the configure kustomization.yaml:
+Below is an example Lets-Encrypt Cluster Issuer that uses the aws credential we setup above. Create this in the same directory as the configure kustomization.yaml:
 
 ```bash
-touch kuadrant/configure/cluster-issuer.yaml
+touch $KUADRANT_DIR/configure/cluster-issuer.yaml
 ```
 
 Add the following to this new file:
@@ -256,10 +256,10 @@ spec:
 
 ```
 
-To configure our installation, re-apply the configure kustomization on the cluster (note this doesn't need to be done in different steps, but is done so here to illustrate how you can build up your configuration of Kuadrant). 
+To apply our changes (note this doesn't need to be done in different steps, but is done so here to illustrate how you can build up your configuration of Kuadrant) execute:
 
 ```bash
-kubectl apply -k kuadrant/configure
+kubectl apply -k $KUADRANT_DIR/configure
 ```
 
 The cluster issuer should become ready:
@@ -272,18 +272,18 @@ kubectl get clusterissuer -o=wide
 
 ```
 
-We create two credentials. One for use with DNSPolicy in the gateway-system namespace and one for use by cert-manager in the `cert-manager` namespace. With these credentials in place and the cluster issuer configured. You are now ready to start using DNSPolicy and TLSPolicy to secure and connect your Gateways.
+We create two credentials. One for use with `DNSPolicy` in the gateway-system namespace and one for use by cert-manager in the `cert-manager` namespace. With these credentials in place and the cluster issuer configured. You are now ready to start using DNSPolicy and TLSPolicy to secure and connect your Gateways.
 
 
 ## Use an External Redis
 
-To connect `Limitador` the component responsible for rate limiting to redis so that its counters are stored and shared with other limitador instances follow these steps:
+To connect `Limitador` (the component responsible for rate limiting requests) to redis so that its counters are stored and can be shared with other limitador instances follow these steps:
 
-Again we will build on the configure kustomization we started. In the same way we did for the cloud provider credentials, we need to setup a `redis-credential.env` file in the same directory as the kustomization.
+Again we will build on the kustomization we started. In the same way we did for the cloud provider credentials, we need to setup a `redis-credential.env` file in the same directory as the kustomization.
 
 
 ```bash
-touch ~/kudarant/configure/redis-credentials.env
+touch $KUADRANT_DIR/configure/redis-credentials.env
 
 ```
 
@@ -293,7 +293,7 @@ Add the redis connection string to this file in the following format:
 URL=redis://xxxx
 ```
 
-Next we need to add a new secret generator to our existing configure file at `kuadrant/configure/kustomization.yaml` add it below the other `secretGenerators`
+Next we need to add a new secret generator to our existing configure file at `$KUADRANT_DIR/configure/kustomization.yaml` add it below the other `secretGenerators`
 
 ```yaml
   - name: redis-credentials
@@ -303,7 +303,7 @@ Next we need to add a new secret generator to our existing configure file at `ku
     type: 'kuadrant.io/redis'
 ```
 
-We also need to patch the existing `Limitador` resource. Add the following to the `kuadrant/configure/kustomization.yaml`
+We also need to patch the existing `Limitador` resource. Add the following to the `$KUADRANT_DIR/configure/kustomization.yaml`
 
 
 ```yaml
@@ -329,7 +329,7 @@ Your full `kustomize.yaml` will now be:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=olm-installation #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
+  - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=v1.0.1 #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
   - cluster-issuer.yaml #(comment if you dont want to use it. The issuer yaml is defined below). Ensure you name the file correctly.
 
 
@@ -372,13 +372,13 @@ patches:
 ```
 
 
-Re-Apply the configuration to setup the new secret and limitador configuration:
+Re-Apply the configuration to setup the new secret and configuration:
 
 ```bash
 kubectl apply -k $KUADRANT_DIR/configure/
 ```
 
-Limitador is now configured to use the provided redis connection URL as a backend store for rate limit counters. Limitador will becomes temporarily unavailable as it restarts.
+Limitador is now configured to use the provided redis connection URL as a data store for rate limit counters. Limitador will become temporarily unavailable as it restarts.
 
 ### Validate
 
@@ -397,7 +397,7 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=wide
 
 ### Limitador: TopologyConstraints, PodDisruptionBudget and Resource Limits
 
-To set limits, replicas and a `PodDisruptionBudget` for limitador you can add the following to the existing patch in your local `limitador` in the `$KUADRANT_DIR/configure/kustomize.yaml` spec:
+To set limits, replicas and a `PodDisruptionBudget` for limitador you can add the following to the existing limitador patch in your local `limitador` in the `$KUADRANT_DIR/configure/kustomize.yaml` spec:
 
 ```yaml
 pdb:
@@ -409,7 +409,7 @@ resourceRequirements:
       memory: 10Mi # set these based on your own needs.
 ```
 
-re-apply the configuration. This will result in two instances of limitador being available and podDisruptionBudget being setup:
+re-apply the configuration. This will result in two instances of limitador becoming available and a `podDisruptionBudget` being setup:
 
 ```bash
 kubectl apply -k $KUADRANT_DIR/configure/
@@ -418,7 +418,12 @@ kubectl apply -k $KUADRANT_DIR/configure/
 
 For topology constraints, you will need to patch the limitador deployment directly:
 
-add the below `yaml` to a `limitador-topoloy-patch.yaml` under the `$KUADRANT_DIR/configure/patches` directory
+add the below `yaml` to a `limitador-topoloy-patch.yaml` file under a `$KUADRANT_DIR/configure/patches` directory:
+
+```bash
+mkdir -p $KUADRANT_DIR/configure/patches
+touch $KUADRANT_DIR/configure/patches/limitador-topoloy-patch.yaml
+```
 
 ```yaml
 spec:
@@ -456,8 +461,9 @@ To increase the number of replicas for Authorino add a new patch to the `$KUADRA
       kind: Authorino
       metadata:
         name: authorino
+        namespace: kuadrant-system
       spec:
-      replicas: 2
+        replicas: 2
 
 ```
 
@@ -468,7 +474,11 @@ kubectl apply -k $KUADRANT_DIR/configure/
 ```
 
 To add resource limits and or topology constraints to Authorino. You will need to patch the Authorino deployment directly:
-Add the below `yaml` to a `authorino-topoloy-patch.yaml` under the `$KUADRANT_DIR/configure/patches` directory
+Add the below `yaml` to a `authorino-topoloy-patch.yaml` under the `$KUADRANT_DIR/configure/patches` directory:
+
+```bash
+touch $KUADRANT_DIR/configure/patches/authorino-topoloy-patch.yaml
+```
 
 ```yaml
 spec:
@@ -502,7 +512,78 @@ Apply the patch:
 kubectl patch deployment authorino -n kuadrant-system --patch-file $KUADRANT_DIR/configure/patches/authorino-topoloy-patch.yaml
 ```
 
+Kuadrant is now installed and ready to use and the data plane components are configured to be distributed and resilient.
 
+For reference the full configure kustomization should look like:
+```yaml
+kind: Kustomization
+resources:
+  - https://github.com/Kuadrant/kuadrant-operator//config/install/configure/standard?ref=v1.0.1 #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
+  - cluster-issuer.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/managed-by: kustomize
+
+secretGenerator:
+  - name: aws-provider-credentials
+    namespace: cert-manager # assumes cert-manager namespace exists.
+    envs:
+      - aws-credentials.env # notice this matches the .env file above. You will need to setup this file locally
+    type: 'kuadrant.io/aws'
+  - name: aws-provider-credentials
+    namespace: gateway-system # this is the namespace where your gateway will be provisioned
+    envs:
+      - aws-credentials.env #notice this matches the .env file above. you need to set up this file locally first.
+    type: 'kuadrant.io/aws'
+  - name: redis-credentials
+    namespace: kuadrant-system
+    envs:
+      - redis-credentials.env
+    type: 'kuadrant.io/redis'
+
+patches:
+  - patch: |-
+      apiVersion: limitador.kuadrant.io/v1alpha1
+      kind: Limitador
+      metadata:
+        name: limitador
+        namespace: kuadrant-system
+      spec:
+        pdb:
+          maxUnavailable: 1
+        replicas: 2
+        resourceRequirements:
+          requests:
+            cpu: 10m
+            memory: 10Mi # set these based on your own needs.
+        storage:
+          redis:
+            configSecretRef:
+              name: redis-credentials
+  - patch: |-
+      apiVersion: operator.authorino.kuadrant.io/v1beta1
+      kind: Authorino
+      metadata:
+        name: authorino
+        namespace: kuadrant-system
+      spec:
+        replicas: 2
+
+```
+The configure directory should contain the following:
+
+```
+configure/
+├── aws-credentials.env
+├── cluster-issuer.yaml
+├── kustomization.yaml
+├── patches
+│   ├── authorino-topoloy-patch.yaml
+│   └── limitador-topoloy-patch.yaml
+└── redis-credentials.env
+```
 
 ## Set up observability (OpenShift Only)
 

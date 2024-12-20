@@ -6,8 +6,7 @@ This guide walks you through using Kuadrant to secure, protect, and connect an A
 
 ## Prerequisites
 
-- Have a cluster with Kuadrant operator installed. 
-  - Either [Kubernetes installation guide](../../install/install-kubernetes.md) or [Openshift installation guide](../../install/install-openshift.md)
+- Kubernetes cluster with Kuadrant operator installed. 
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 - AWS/Azure or GCP with DNS capabilities.
 

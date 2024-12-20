@@ -19,7 +19,7 @@ We will define 2 users of the API, which can send requests to the API at differe
 
 ### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the Toy Store API
 
@@ -55,7 +55,7 @@ spec:
       method: GET
     backendRefs:
     - name: toystore
-      port: 80     
+      port: 80
 EOF
 ```
 
@@ -168,9 +168,10 @@ EOF
 
 ### Enforce authenticated rate limiting on requests to the Toy Store API
 
-Create  Kuadrant `RateLimitPolicy's` to configure rate limiting for Bob and Alice:
+Create Kuadrant `RateLimitPolicy's` to configure rate limiting for Bob and Alice:
 
 ### Bob
+
 ```sh
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta3

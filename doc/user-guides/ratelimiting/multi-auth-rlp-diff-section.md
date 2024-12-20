@@ -4,7 +4,7 @@ This user guide walks you through an example of how to configure multiple rate l
 
 ### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the sample API:
 
@@ -80,7 +80,7 @@ spec:
     name: environment
     sectionName: external
   defaults:
-    strategy: merge  
+    strategy: merge
     limits:
       "external":
         rates:
@@ -104,7 +104,7 @@ spec:
     name: environment
     sectionName: local
   defaults:
-    strategy: merge    
+    strategy: merge
     limits:
       "local":
         rates:
@@ -114,8 +114,6 @@ EOF
 ```
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
-
-
 
 ### Verify the rate limiting works by sending requests in a loop
 

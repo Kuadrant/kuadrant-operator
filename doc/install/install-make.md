@@ -3,9 +3,6 @@
 ## Overview
 The following doc will show you how to install the Kuadrant Operator using make targets in the Kuadrant operator repo. What will be installed is Istio, Kubernetes Gateway API and Kuadrant itself.
 
-For other methods of installation see
-- [k8s](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-kubernetes.md)
-- [Openshift](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-openshift.md)
 
 > **Note:** In production environment, these steps are usually performed by a cluster operator with administrator privileges over the Kubernetes cluster.
 

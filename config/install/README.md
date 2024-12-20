@@ -211,7 +211,7 @@ generatorOptions:
 
 secretGenerator:
   - name: aws-provider-credentials
-    namespace: cert-manager # assumes cert-manager namespace exists.
+    namespace: cert-manager # change this to the namespace where cert-manager is running.
     envs:
       - aws-credentials.env # notice this matches the .env file above. You will need to setup this file locally
     type: 'kuadrant.io/aws'

@@ -91,7 +91,7 @@ Once OLM has finished installing the operators (this can take several minutes). 
 ```bash
 kubectl get deployments -n kuadrant-system
 
-## Output
+## Output (kuadrant-console-plugin deployment only installed on OpenShift)
 # NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
 # authorino-operator                      1/1     1            1           83m
 # dns-operator-controller-manager         1/1     1            1           83m

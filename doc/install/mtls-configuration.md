@@ -12,8 +12,8 @@ At the time of writing there is [an RFC](https://github.com/Kuadrant/architectur
 
 ## Prerequisites
 
-You have installed Kuadrant in a [Kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster.
-Additionally, you have at least 1 AuthPolicy or RateLimitPolicy attached to your Gateway or HTTPRoute.
+- You have installed Kuadrant in a Kubernetes cluster.
+- Additionally, you have at least 1 AuthPolicy or RateLimitPolicy attached to your Gateway or HTTPRoute.
 
 ## Enabling mTLS
 

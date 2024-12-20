@@ -73,7 +73,6 @@ export TMP_DIR=$SCRIPT_DIR/tmp/mgc
 export CONTAINER_RUNTIME_BIN=$(containerRuntime)
 export KIND_BIN=kind
 export HELM_BIN=helm
-export KUSTOMIZE_BIN=$(dockerBinCmd "kustomize")
 export SUBNET_OFFSET=1
 export HUB=1
 
@@ -84,6 +83,7 @@ KUADRANT_REPO_RAW="https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-op
 KUADRANT_DEPLOY_KUSTOMIZATION="${KUADRANT_REPO}/config/deploy?ref=${KUADRANT_REF}"
 KUADRANT_GATEWAY_API_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/gateway-api?ref=${KUADRANT_REF}"
 KUADRANT_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/istio/sail?ref=${KUADRANT_REF}"
+KUADRANT_ISTIO_GATEWAY_EXAMPLE="${KUADRANT_REPO}/config/dependencies/istio/gateway?ref=${KUADRANT_REF}"
 KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-manager?ref=${KUADRANT_REF}"
 KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb?ref=${KUADRANT_REF}"
 KUADARNT_THANOS_KUSTOMIZATION="${KUADRANT_REPO}/config/thanos?ref=${KUADRANT_REF}"
@@ -462,7 +462,7 @@ success "Kuadrant sample configuration deployed."
 
 # Deploy gateway
 info "Deploying example gateway ..."
-kustomize build config/dependencies/istio/gateway | kubectl apply -f -
+kubectl apply -k ${KUADRANT_ISTIO_GATEWAY_EXAMPLE}
 success "Kuadrant sample gateway deployed."
 
 # Install thanos on hub cluster

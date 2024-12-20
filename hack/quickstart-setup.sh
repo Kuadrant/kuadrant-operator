@@ -462,7 +462,7 @@ success "Kuadrant sample configuration deployed."
 
 # Deploy gateway
 info "Deploying example gateway ..."
-kustomize build config/dependencies/istio/gateway | kubectl apply -f -
+kustomize build ${KUADRANT_REPO_RAW}/config/dependencies/istio/gateway | kubectl apply -f -
 success "Kuadrant sample gateway deployed."
 
 # Install thanos on hub cluster

@@ -37,8 +37,7 @@ Topology:
 
 ## Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
-
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the Toy Store sample application (Persona: _App developer_)
 

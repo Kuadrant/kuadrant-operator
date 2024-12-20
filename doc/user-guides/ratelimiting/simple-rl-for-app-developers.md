@@ -1,7 +1,6 @@
 # Simple Rate Limiting for Application developers
 
-For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
-
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
 
 This user guide walks you through an example of how to configure rate limiting for an endpoint of an application using Kuadrant.
 
@@ -11,7 +10,7 @@ We will rate limit the `POST /toys` endpoint to a maximum of 5rp10s ("5 requests
 
 ### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the Toy Store API
 

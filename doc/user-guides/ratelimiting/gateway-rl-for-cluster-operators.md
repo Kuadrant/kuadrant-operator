@@ -1,13 +1,12 @@
 # Gateway Rate Limiting for Cluster Operators
 
-For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
 
 This user guide walks you through an example of how to configure rate limiting for all routes attached to a specific ingress gateway.
 
-
 ### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the Toystore example API:
 
@@ -15,6 +14,7 @@ Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/
 kubectl apply -f examples/toystore/toystore.yaml
 
 ```
+
 ### Create the ingress gateways
 
 ```sh

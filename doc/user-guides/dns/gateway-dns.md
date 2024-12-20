@@ -9,7 +9,7 @@ This user guide walks you through an example of how to configure DNS for all rou
 
 ### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 Create a namespace:
 

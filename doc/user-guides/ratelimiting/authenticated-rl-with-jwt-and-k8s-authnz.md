@@ -25,7 +25,7 @@ Each user will be entitled to a maximum of 5rp10s (5 requests every 10 seconds).
 
 ### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the Toystore example API:
 
@@ -274,7 +274,7 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST ht
 # HTTP/1.1 403 Forbidden
 ```
 
-###  Enforce rate limiting on requests to the Toy Store API
+### Enforce rate limiting on requests to the Toy Store API
 
 Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 

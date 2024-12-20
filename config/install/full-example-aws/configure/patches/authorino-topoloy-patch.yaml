@@ -1,0 +1,22 @@
+spec:
+  template:
+    spec:
+      containers:
+        - name: authorino
+          resources:
+            requests:
+              cpu: 10m # set your own needed limits here
+              memory: 10Mi # set your own needed limits here
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              authorino-resource: authorino
+        - maxSkew: 1
+          topologyKey: kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              authorino-resource: authorino

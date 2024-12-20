@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/Kuadrant/kuadrant-operator//config/install/standard?ref=v1.0.1 #change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases)
+  #- https://github.com/Kuadrant/kuadrant-operator//config/install/openshift?ref=v1.0.1 #use if targeting an OCP cluster. Change this version as needed (see https://github.com/Kuadrant/kuadrant-operator/releases).
+
+patches: # remove the subscription patch if you are installing a development version. It will then use the "preview" channel
+  - patch: |-
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: Subscription
+      metadata:
+        name: kuadrant
+      spec:
+        source: kuadrant-operator-catalog
+        sourceNamespace: kuadrant-system
+        name: kuadrant-operator
+        channel: 'stable' #set to preview if not using a release (for example if using main)

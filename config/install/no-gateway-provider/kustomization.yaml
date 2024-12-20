@@ -6,5 +6,4 @@ kind: Kustomization
 # If you want to install the latest development tag, remove the subscription patch
 resources:
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
-  - sail-operator.yaml
   - ../../deploy/olm

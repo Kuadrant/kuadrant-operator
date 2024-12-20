@@ -155,6 +155,7 @@ var _ kuadrant.Policy = &DNSPolicy{}
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
 // +kubebuilder:printcolumn:name="Accepted",type=string,JSONPath=`.status.conditions[?(@.type=="Accepted")].status`,description="DNSPolicy Accepted",priority=2
 // +kubebuilder:printcolumn:name="Enforced",type=string,JSONPath=`.status.conditions[?(@.type=="Enforced")].status`,description="DNSPolicy Enforced",priority=2
+// +kubebuilder:printcolumn:name="SubResourcesHealthy",type=string,JSONPath=`.status.conditions[?(@.type=="SubResourcesHealthy")].status`,description="DNSPolicy SubResourcesHealthy",priority=2
 // +kubebuilder:printcolumn:name="TargetRefKind",type="string",JSONPath=".spec.targetRef.kind",description="Type of the referenced Gateway API resource",priority=2
 // +kubebuilder:printcolumn:name="TargetRefName",type="string",JSONPath=".spec.targetRef.name",description="Name of the referenced Gateway API resource",priority=2
 // +kubebuilder:printcolumn:name="TargetSection",type="string",JSONPath=".spec.targetRef.sectionName",description="Name of the Listener section within the Gateway to which the policy applies ",priority=2

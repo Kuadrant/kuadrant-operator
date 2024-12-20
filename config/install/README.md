@@ -167,7 +167,7 @@ kubectl get istio -n gateway-system
 At this point Kuadrant is installed and ready to be used as is Istio as the gateway provider. This means AuthPolicy and RateLimitPolicy can now be configured and used to protect any Gateways you create. 
 
 
-## Configure DNS and TLS integration
+## (Optional) Configure DNS and TLS integration
 
 In this section will build on the previous steps and expand the `kustomization.yaml` we created in `$KUADRANT_DIR/configure`. 
 

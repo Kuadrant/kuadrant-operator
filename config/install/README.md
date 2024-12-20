@@ -149,7 +149,7 @@ kubectl get kuadrant kuadrant -n kuadrant-system -o=wide
 
 ```
 
-You should see the condition with type `Ready` with a message of `kuadrant is ready`. 
+You should see the condition with type `Ready`. 
 
 
 ### Verify Istio is configured and ready:

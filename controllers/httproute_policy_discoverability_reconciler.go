@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -78,6 +79,10 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 		if !equality.Semantic.DeepEqual(routeStatusParents, route.Status.Parents) {
 			route.Status.Parents = routeStatusParents
 			if err := r.updateRouteStatus(ctx, route, logger); err != nil {
+				if strings.Contains(err.Error(), "StorageError: invalid object") {
+					logger.Info("possible error updating resource", "err", err, "possible_cause", "resource has being removed from the cluster already")
+					continue
+				}
 				logger.Error(err, "unable to update route status", "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
 			}
 		}

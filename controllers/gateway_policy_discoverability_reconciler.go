@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -53,6 +54,10 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 		if !equality.Semantic.DeepEqual(updatedStatus, gw.Status) {
 			gw.Status = *updatedStatus
 			if err := r.updateGatewayStatus(ctx, gw); err != nil {
+				if strings.Contains(err.Error(), "StorageError: invalid object") {
+					logger.Info("possible error updating resource", "err", err, "possible_cause", "resource has being removed from the cluster already")
+					continue
+				}
 				logger.Error(err, "failed to update gateway status", "gateway", gw.GetName())
 			}
 		}

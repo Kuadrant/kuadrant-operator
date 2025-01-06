@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -108,6 +109,10 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 
 		_, err = r.client.Resource(kuadrantv1.AuthPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
+			if strings.Contains(err.Error(), "StorageError: invalid object") {
+				logger.Info("possible error updating resource", "err", err, "possible_cause", "resource has being removed from the cluster already")
+				continue
+			}
 			logger.Error(err, "unable to update status for authpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
 			// TODO: handle error
 		}

@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -126,8 +127,63 @@ func (l LimitadorRateLimits) EqualTo(other LimitadorRateLimits) bool {
 		sort.Strings(bCopy[idx].Variables)
 	}
 
-	sort.Sort(aCopy)
-	sort.Sort(bCopy)
+	slices.SortFunc(aCopy, l.sort)
+	slices.SortFunc(bCopy, l.sort)
 
 	return reflect.DeepEqual(aCopy, bCopy)
+}
+
+func (l LimitadorRateLimits) sort(a, b limitadorv1alpha1.RateLimit) int {
+	if a.Name < b.Name {
+		return -1
+	} else if a.Name > b.Name {
+		return 1
+	}
+
+	if a.Namespace < b.Namespace {
+		return -1
+	} else if a.Namespace > b.Namespace {
+		return 1
+	}
+
+	if a.MaxValue < b.MaxValue {
+		return -1
+	} else if a.MaxValue > b.MaxValue {
+		return 1
+	}
+
+	if a.Seconds < b.Seconds {
+		return -1
+	} else if a.Seconds > b.Seconds {
+		return 1
+	}
+
+	if len(a.Conditions) < len(b.Conditions) {
+		return -1
+	} else if len(a.Conditions) > len(b.Conditions) {
+		return 1
+	} else if result := compareLists(a.Conditions, b.Conditions); result != 0 {
+		return result
+	}
+
+	if len(a.Variables) < len(b.Variables) {
+		return -1
+	} else if len(a.Variables) > len(b.Variables) {
+		return 1
+	} else if result := compareLists(a.Variables, b.Variables); result != 0 {
+		return result
+	}
+
+	return 0
+}
+
+func compareLists(a, b []string) int {
+	for idx := range a {
+		if a[idx] < b[idx] {
+			return -1
+		} else if a[idx] > b[idx] {
+			return 1
+		}
+	}
+	return 0
 }

@@ -41,6 +41,8 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 
 func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler")
+	logger.Info("Limitador limits reconciler", "status", "started")
+	defer logger.Info("Limitador limits reconciler", "status", "completed")
 
 	limitador := GetLimitadorFromTopology(topology)
 	if limitador == nil {
@@ -50,12 +52,12 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	desiredLimits, err := r.buildLimitadorLimits(ctx, state)
 	if err != nil {
-		logger.Error(err, "failed to build limitador limits")
+		logger.Error(err, "failed to build limitador limits", "status", "error")
 		return nil
 	}
 
 	if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
-		logger.V(1).Info("limitador object is up to date, nothing to do")
+		logger.Info("limitador object is up to date, nothing to do", "status", "skipping")
 		return nil
 	}
 
@@ -69,6 +71,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	}
 
 	logger.V(1).Info("updating limitador object", "limitador", obj.Object)
+	logger.Info("updating limitador object", "status", "processing")
 
 	if _, err := r.client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(limitador.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
 		logger.Error(err, "failed to update limitador object")

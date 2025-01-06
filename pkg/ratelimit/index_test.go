@@ -137,3 +137,142 @@ func TestIndexToRateLimits(t *testing.T) {
 		}
 	})
 }
+
+func TestEqualsTo(t *testing.T) {
+	global_l0 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l0",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	global_l1 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l1",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	global_l2 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l2",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	global_l3 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l3",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	global_l4 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l4",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	global_l5 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l5",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	global_l6 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l6",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+
+	httproute_l0 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._httproute_level__ac417cac == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l0",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	httproute_l1 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._httproute_level__e4abd750 == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l1",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+	httproute_l5 := limitadorv1alpha1.RateLimit{
+		Conditions: []string{"limit._httproute_level__e1d71177 == \"1\""},
+		MaxValue:   3,
+		Namespace:  "default/test-3-gw0-l5",
+		Seconds:    10,
+		Variables:  []string{},
+	}
+
+	t.Run("basic compare are the same", func(subT *testing.T) {
+		limit1 := LimitadorRateLimits{
+			httproute_l5,
+		}
+
+		limit2 := LimitadorRateLimits{
+			httproute_l5,
+		}
+
+		if !limit1.EqualTo(limit2) {
+			subT.Fatal("limit one is not equal to limit one")
+		}
+	})
+
+	t.Run("global vs two routes", func(subT *testing.T) {
+		existing := LimitadorRateLimits{
+			global_l5,
+			global_l1,
+			global_l6,
+			global_l3,
+			global_l0,
+			global_l4,
+			global_l2,
+		}
+
+		desired := LimitadorRateLimits{
+			httproute_l1,
+			httproute_l0,
+			global_l5,
+			global_l4,
+			global_l3,
+			global_l6,
+		}
+
+		if existing.EqualTo(desired) {
+			subT.Fatal("existing limit should not be the same as desired limit")
+		}
+	})
+
+	t.Run("5 global & 2 routes vs 5 global & 2 routes, order differ", func(subT *testing.T) {
+		existing := LimitadorRateLimits{
+			httproute_l1,
+			httproute_l0,
+			global_l2,
+			global_l5,
+			global_l4,
+			global_l3,
+			global_l6,
+		}
+
+		desired := LimitadorRateLimits{
+			global_l6,
+			global_l5,
+			global_l2,
+			httproute_l1,
+			global_l3,
+			httproute_l0,
+			global_l4,
+		}
+
+		if !existing.EqualTo(desired) {
+			subT.Fatal("existing limit should be the same desired limit, list are only in different orders")
+		}
+	})
+}

@@ -147,6 +147,8 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
 func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
+	logger.Info("build Wasm configuration", "status", "started")
+	logger.Info("build Wasm configuration", "status", "completed")
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
@@ -205,7 +207,11 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 
 		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, path, actions)
 		if err != nil {
-			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
+			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
+				logger.V(1).Info("ingoring invalid paths", "error", err.Error(), "status", "skipping", "pathID", pathID)
+				continue
+			}
+			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID, "status", "error")
 			continue
 		}
 		wasmActionSets.Add(gateway.GetLocator(), wasmActionSetsForPath...)

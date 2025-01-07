@@ -58,7 +58,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	var certTargets []CertTarget
 	for _, l := range listeners {
 		if err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate(); err != nil {
-			logger.Info("Skipped a listener block: " + err.Error())
+			logger.V(1).Info("Skipped a listener block: " + err.Error())
 			continue
 		}
 

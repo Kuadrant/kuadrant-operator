@@ -25,7 +25,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -364,29 +363,12 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 }
 
 func certManagerControllerOpts() []controller.ControllerOption {
-	isCertificateOwnedByTLSPolicy := func(c *certmanagerv1.Certificate) bool {
-		return isObjectOwnedByGroupKind(c, kuadrantv1.TLSPolicyGroupKind)
-	}
-
 	return []controller.ControllerOption{
 		controller.WithRunnable("certificate watcher", controller.Watch(
 			&certmanagerv1.Certificate{},
 			CertManagerCertificatesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Certificate]{
-				CreateFunc: func(e event.TypedCreateEvent[*certmanagerv1.Certificate]) bool {
-					return isCertificateOwnedByTLSPolicy(e.Object)
-				},
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Certificate]) bool {
-					return isCertificateOwnedByTLSPolicy(e.ObjectNew)
-				},
-				DeleteFunc: func(e event.TypedDeleteEvent[*certmanagerv1.Certificate]) bool {
-					return isCertificateOwnedByTLSPolicy(e.Object)
-				},
-				GenericFunc: func(e event.TypedGenericEvent[*certmanagerv1.Certificate]) bool {
-					return isCertificateOwnedByTLSPolicy(e.Object)
-				},
-			})),
+			controller.FilterResourcesByLabel[*certmanagerv1.Certificate](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue))),
 		),
 		controller.WithRunnable("issuers watcher", controller.Watch(
 			&certmanagerv1.Issuer{},
@@ -472,19 +454,4 @@ func KuadrantManagedObjectLabels() labels.Set {
 	return labels.Set(map[string]string{
 		kuadrantManagedLabelKey: "true",
 	})
-}
-
-func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {
-	for _, o := range o.GetOwnerReferences() {
-		oGV, err := schema.ParseGroupVersion(o.APIVersion)
-		if err != nil {
-			return false
-		}
-
-		if oGV.Group == groupKind.Group && o.Kind == groupKind.Kind {
-			return true
-		}
-	}
-
-	return false
 }

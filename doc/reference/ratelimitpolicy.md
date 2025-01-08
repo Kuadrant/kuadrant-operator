@@ -93,3 +93,51 @@
 | `reason`             | String    | Condition state reason       |
 | `message`            | String    | Condition state description  |
 | `lastTransitionTime` | Timestamp | Last transition timestamp    |
+
+#### High-level example
+
+```yaml
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: my-rate-limit-policy
+spec:
+  # Reference to an existing networking resource to attach the policy to. REQUIRED.
+  # It can be a Gateway API HTTPRoute or Gateway resource.
+  # It can only refer to objects in the same namespace as the RateLimitPolicy.
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute / Gateway
+    name: myroute / mygateway
+
+  # The limits definitions to apply to the network traffic routed through the targeted resource.
+  # Equivalent to if otherwise declared within `defaults`.
+  limits:
+    "my_limit":
+      # The rate limits associated with this limit definition. REQUIRED.
+      # E.g., to specify a 50rps rate limit, add `{ limit: 50, duration: 1, unit: secod }`
+      rates: […]
+
+      # Counter qualifiers.
+      # Each dynamic value in the data plane starts a separate counter, combined with each rate limit.
+      # E.g., to define a separate rate limit for each user name detected by the auth layer, add `metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username`.
+      # Check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field.
+      counters: […]
+
+      # Additional dynamic conditions to trigger the limit.
+      # Use it for filtering attributes not supported by HTTPRouteRule or with RateLimitPolicies that target a Gateway.
+      # Check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field.
+      when: […]
+
+    # Explicit defaults. Used in policies that target a Gateway object to express default rules to be enforced on
+    # routes that lack a more specific policy attached to.
+    # Mutually exclusive with `overrides` and with declaring `limits` at the top-level of the spec.
+    defaults:
+      limits: { … }
+
+    # Overrides. Used in policies that target a Gateway object to be enforced on all routes linked to the gateway,
+    # thus also overriding any more specific policy occasionally attached to any of those routes.
+    # Mutually exclusive with `defaults` and with declaring `limits` at the top-level of the spec.
+    overrides:
+      limits: { … }
+```

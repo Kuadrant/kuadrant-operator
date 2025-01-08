@@ -8,6 +8,7 @@
 | `status`  | [KuadrantStatus](#kuadrantstatus) |      No      | The status for the custom resources. |
 
 ## KuadrantSpec
+
 Currently blank specification.
 
 ## KuadrantStatus

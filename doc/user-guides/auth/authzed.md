@@ -6,6 +6,28 @@ This guide explains how to configure permission requests for a Google Zanzibar-b
 
 You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster.
 
+### Create Gateway
+Create a `Gateway` resource for this guide:
+
+```sh
+kubectl apply -f -<<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kuadrant-ingressgateway
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+EOF
+```
+The `Gateway` resource created above uses Istio as the gateway provider. For Envoy Gateway, use the Envoy Gateway `GatewayClass` as the `gatewayClassName`.
+
 ### Deploy Toy Store application
 
 Deploy a simple HTTP application service that echoes back the request data: 

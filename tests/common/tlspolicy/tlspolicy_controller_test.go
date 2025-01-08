@@ -1054,7 +1054,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 		})
 
-		It("Should not affect unmanaged cert", func(ctx context.Context) {
+		It("Should not delete unmanaged cert", func(ctx context.Context) {
 			certList := &certmanv1.CertificateList{}
 			Expect(k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})).To(Succeed())
 			Expect(len(certList.Items)).To(Equal(1))

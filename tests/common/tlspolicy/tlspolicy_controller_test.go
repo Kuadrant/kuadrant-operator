@@ -1050,8 +1050,8 @@ var _ = Describe("TLSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, cert)).To(Succeed())
 
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener("test-listener", "test.example.com").Gateway
-			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 		})
 
 		It("Should not delete unmanaged cert", func(ctx context.Context) {
@@ -1063,7 +1063,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
-			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
+			Expect(k8sClient.Create(ctx, tlsPolicy)).To(Succeed())
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})).To(Succeed())
@@ -1072,8 +1072,7 @@ var _ = Describe("TLSPolicy controller", func() {
 					HaveField("Name", "unmanaged-cert"),
 					HaveField("Name", "test-gateway-test1.example.com"),
 				))
-			})
-
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 })

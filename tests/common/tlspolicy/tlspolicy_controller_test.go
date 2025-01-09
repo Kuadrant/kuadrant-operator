@@ -1033,4 +1033,46 @@ var _ = Describe("TLSPolicy controller", func() {
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
+
+	Context("with un-managed certificates", func() {
+		BeforeEach(func(ctx SpecContext) {
+			cert := &certmanv1.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unmanaged-cert",
+					Namespace: testNamespace,
+				},
+				Spec: certmanv1.CertificateSpec{
+					SecretName: "unmanaged-cert",
+					IssuerRef:  *issuerRef,
+					DNSNames:   []string{"unmanaged-cert.example.com"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, cert)).To(Succeed())
+
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+		})
+
+		It("Should not delete unmanaged cert", func(ctx context.Context) {
+			certList := &certmanv1.CertificateList{}
+			Expect(k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})).To(Succeed())
+			Expect(len(certList.Items)).To(Equal(1))
+
+			By("creating tls policy")
+			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})).To(Succeed())
+				g.Expect(len(certList.Items)).To(Equal(2))
+				g.Expect(certList.Items).To(ContainElements(
+					HaveField("Name", "unmanaged-cert"),
+					HaveField("Name", "test-gateway-test1.example.com"),
+				))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
 })

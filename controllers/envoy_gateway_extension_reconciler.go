@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -15,7 +16,9 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gwapiv1b1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -52,7 +55,7 @@ func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription
 func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler")
 
-	logger.V(1).Info("building envoy gateway extension")
+	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
 	// build wasm plugin configs for each gateway
@@ -76,8 +79,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
-
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfigs[gateway.GetLocator()])
+		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfigs[gateway.GetLocator()], ProtectedRegistry, WASMFilterImageURL)
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
@@ -216,7 +218,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 }
 
 // buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -256,7 +258,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 					Code: envoygatewayv1alpha1.WasmCodeSource{
 						Type: envoygatewayv1alpha1.ImageWasmCodeSourceType,
 						Image: &envoygatewayv1alpha1.ImageWasmCodeSource{
-							URL: WASMFilterImageURL,
+							URL: imageURL,
 						},
 					},
 					Config: nil,
@@ -267,6 +269,16 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 				},
 			},
 		},
+	}
+	for _, wasm := range envoyPolicy.Spec.Wasm {
+		if wasm.Code.Image.PullSecretRef != nil {
+			//reset it to empty this will remove it if the image is now public registry
+			wasm.Code.Image.PullSecretRef = nil
+		}
+		// if we are in a protected registry set the object
+		if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
+			wasm.Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
+		}
 	}
 
 	if len(wasmConfig.ActionSets) == 0 {
@@ -292,7 +304,7 @@ func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy
 
 	return len(aWasms) == len(bWasms) && lo.EveryBy(aWasms, func(aWasm envoygatewayv1alpha1.Wasm) bool {
 		return lo.SomeBy(bWasms, func(bWasm envoygatewayv1alpha1.Wasm) bool {
-			if ptr.Deref(aWasm.Name, "") != ptr.Deref(bWasm.Name, "") || ptr.Deref(aWasm.RootID, "") != ptr.Deref(bWasm.RootID, "") || ptr.Deref(aWasm.FailOpen, false) != ptr.Deref(bWasm.FailOpen, false) || aWasm.Code.Type != bWasm.Code.Type || aWasm.Code.Image.URL != bWasm.Code.Image.URL {
+			if ptr.Deref(aWasm.Name, "") != ptr.Deref(bWasm.Name, "") || ptr.Deref(aWasm.RootID, "") != ptr.Deref(bWasm.RootID, "") || ptr.Deref(aWasm.FailOpen, false) != ptr.Deref(bWasm.FailOpen, false) || aWasm.Code.Type != bWasm.Code.Type || aWasm.Code.Image.URL != bWasm.Code.Image.URL || ptr.Deref(aWasm.Code.Image.PullSecretRef, gwapiv1b1.SecretObjectReference{}) != ptr.Deref(bWasm.Code.Image.PullSecretRef, gwapiv1b1.SecretObjectReference{}) {
 				return false
 			}
 			aConfig, err := wasm.ConfigFromJSON(aWasm.Config)

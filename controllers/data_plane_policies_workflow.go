@@ -25,6 +25,11 @@ const (
 
 var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
+	// protectedRegistry this defines a default protected registry. If this is in the wasm image URL we add a pull secret name to the WASMPLugin resource
+	ProtectedRegistry = env.GetString("PROTECTED_REGISTRY", "registry.redhat.io")
+
+	// registryPullSecretName this is the pull secret name we will add to the WASMPlugin if the URL for he image is from the defined PROTECTED_REGISTRY
+	RegistryPullSecretName = "wasm-plugin-pull-secret"
 
 	StateIstioExtensionsModified        = "IstioExtensionsModified"
 	StateEnvoyGatewayExtensionsModified = "EnvoyGatewayExtensionsModified"

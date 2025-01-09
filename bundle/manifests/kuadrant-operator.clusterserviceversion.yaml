@@ -109,7 +109,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:v1.0.1
-    createdAt: "2024-12-05T13:08:35Z"
+    createdAt: "2025-01-09T13:14:59Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -437,7 +437,7 @@ spec:
                 - name: RELATED_IMAGE_WASMSHIM
                   value: oci://quay.io/kuadrant/wasm-shim:v0.8.1
                 - name: RELATED_IMAGE_CONSOLEPLUGIN
-                  value: quay.io/kuadrant/console-plugin:v0.0.14
+                  value: quay.io/kuadrant/console-plugin:v0.0.18
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -546,6 +546,6 @@ spec:
   relatedImages:
   - image: oci://quay.io/kuadrant/wasm-shim:v0.8.1
     name: wasmshim
-  - image: quay.io/kuadrant/console-plugin:v0.0.14
+  - image: quay.io/kuadrant/console-plugin:v0.0.18
     name: consoleplugin
   version: 1.0.1

@@ -7,11 +7,11 @@ DNS_OPERATOR_VERSION=0.12.0
 DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:v0.12.0
 WASM_SHIM_VERSION=0.8.1
 RELATED_IMAGE_WASMSHIM=oci://quay.io/kuadrant/wasm-shim:v0.8.1
-RELATED_IMAGE_CONSOLEPLUGIN=quay.io/kuadrant/console-plugin:v0.0.14
+RELATED_IMAGE_CONSOLEPLUGIN=quay.io/kuadrant/console-plugin:v0.0.18
 IMG=quay.io/kuadrant/kuadrant-operator:v1.0.1
 BUNDLE_VERSION=1.0.1
 BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:v1.0.1
 CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:v1.0.1
 CHANNELS=alpha
 BUNDLE_CHANNELS=--channels=alpha
-VERSION=1.0.1
+VERSION=1.0.2-rc2

@@ -14,4 +14,4 @@ BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:v1.0.1
 CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:v1.0.1
 CHANNELS=alpha
 BUNDLE_CHANNELS=--channels=alpha
-VERSION=1.0.1
+VERSION=1.0.2-dev1

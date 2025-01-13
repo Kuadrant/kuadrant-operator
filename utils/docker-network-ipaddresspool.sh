@@ -11,8 +11,8 @@ set -euo pipefail
 networkName=$1
 YQ="${2:-yq}"
 offset=${3:-0}
-cidr=28
-numIPs=16
+cidr=${4:-28}
+numIPs=${5:-16}
 
 ## Parse kind network subnet
 ## Take only IPv4 subnets, exclude IPv6

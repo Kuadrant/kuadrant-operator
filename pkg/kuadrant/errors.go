@@ -232,7 +232,7 @@ type ErrDependencyNotInstalled struct {
 }
 
 func (e ErrDependencyNotInstalled) Error() string {
-	return fmt.Sprintf("%s is not installed, please restart pod once dependency has been installed", e.dependencyName)
+	return fmt.Sprintf("%s is not installed, please restart Kuadrant Operator pod once dependency has been installed", e.dependencyName)
 }
 
 func (e ErrDependencyNotInstalled) Reason() gatewayapiv1alpha2.PolicyConditionReason {

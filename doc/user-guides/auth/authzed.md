@@ -4,7 +4,7 @@ This guide explains how to configure permission requests for a Google Zanzibar-b
 
 ## Prerequisites
 
-You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster.
+Kubernetes cluster with Kuadrant installed.
 
 ### Create Gateway
 Create a `Gateway` resource for this guide:

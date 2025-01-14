@@ -45,16 +45,8 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 	defer logger.V(1).Info("finished validating rate limit policies")
 
 	state.Store(StateRateLimitPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
-		if !r.isGatewayAPIInstalled {
-			return policy.GetLocator(), kuadrant.MissingGatewayAPIError()
-		}
-
-		if !r.isGatewayProviderInstalled {
-			return policy.GetLocator(), kuadrant.MissingGatewayProviderError()
-		}
-
-		if !r.isLimitadorOperatorInstalled {
-			return policy.GetLocator(), kuadrant.MissingLimitadorOperatorError()
+		if err := r.isMissingDependency(); err != nil {
+			return policy.GetLocator(), err
 		}
 
 		var err error
@@ -71,6 +63,30 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 		}
 		return policy.GetLocator(), err
 	}))
+
+	return nil
+}
+
+func (r *RateLimitPolicyValidator) isMissingDependency() error {
+	isMissingDependency := false
+	var missingDependencies []string
+
+	if !r.isGatewayAPIInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API")
+	}
+	if !r.isGatewayProviderInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API provider (istio / envoy gateway)")
+	}
+	if !r.isLimitadorOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Limitador Operator")
+	}
+
+	if isMissingDependency {
+		return kuadrant.NewErrDependencyNotInstalled(missingDependencies...)
+	}
 
 	return nil
 }

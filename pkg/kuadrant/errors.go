@@ -3,6 +3,7 @@ package kuadrant
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -219,7 +220,7 @@ func reasonForError(err error) gatewayapiv1alpha2.PolicyConditionReason {
 	return ""
 }
 
-func NewErrDependencyNotInstalled(dependencyName string) ErrDependencyNotInstalled {
+func NewErrDependencyNotInstalled(dependencyName ...string) ErrDependencyNotInstalled {
 	return ErrDependencyNotInstalled{
 		dependencyName: dependencyName,
 	}
@@ -228,11 +229,11 @@ func NewErrDependencyNotInstalled(dependencyName string) ErrDependencyNotInstall
 var _ PolicyError = ErrDependencyNotInstalled{}
 
 type ErrDependencyNotInstalled struct {
-	dependencyName string
+	dependencyName []string
 }
 
 func (e ErrDependencyNotInstalled) Error() string {
-	return fmt.Sprintf("%s is not installed, please restart Kuadrant Operator pod once dependency has been installed", e.dependencyName)
+	return fmt.Sprintf("[%s] is not installed, please restart Kuadrant Operator pod once dependency has been installed", strings.Join(e.dependencyName, ", "))
 }
 
 func (e ErrDependencyNotInstalled) Reason() gatewayapiv1alpha2.PolicyConditionReason {
@@ -257,30 +258,4 @@ func (e ErrSystemResource) Error() string {
 
 func (e ErrSystemResource) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonMissingResource
-}
-
-// Common ErrDependencyNotInstalled errors
-
-func MissingGatewayAPIError() PolicyError {
-	return NewErrDependencyNotInstalled("Gateway API")
-}
-
-func MissingGatewayProviderError() PolicyError {
-	return NewErrDependencyNotInstalled("Gateway API provider (istio / envoy gateway)")
-}
-
-func MissingAuthorinoOperatorError() PolicyError {
-	return NewErrDependencyNotInstalled("Authorino Operator")
-}
-
-func MissingLimitadorOperatorError() PolicyError {
-	return NewErrDependencyNotInstalled("Limitador Operator")
-}
-
-func MissingDNSOperatorError() PolicyError {
-	return NewErrDependencyNotInstalled("DNS Operator")
-}
-
-func MissingCertManagerError() PolicyError {
-	return NewErrDependencyNotInstalled("Cert Manager")
 }

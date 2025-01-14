@@ -28,7 +28,7 @@ const (
 
 type KuadrantStatusUpdater struct {
 	Client                       *dynamic.DynamicClient
-	isGatwayAPIInstalled         bool
+	isGatewayAPIInstalled        bool
 	isGatewayProviderInstalled   bool
 	isLimitadorOperatorInstalled bool
 	isAuthorinoOperatorInstalled bool
@@ -37,7 +37,7 @@ type KuadrantStatusUpdater struct {
 func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isGatewayAPIInstalled, isGatewayProviderInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *KuadrantStatusUpdater {
 	return &KuadrantStatusUpdater{
 		Client:                       client,
-		isGatwayAPIInstalled:         isGatewayAPIInstalled,
+		isGatewayAPIInstalled:        isGatewayAPIInstalled,
 		isGatewayProviderInstalled:   isGatewayProviderInstalled,
 		isLimitadorOperatorInstalled: isLimitadorOperatorInstalled,
 		isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled,
@@ -128,32 +128,7 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 		Message: "Kuadrant is ready",
 	}
 
-	if !r.isGatwayAPIInstalled {
-		err := kuadrant.MissingGatewayAPIError()
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = string(err.Reason())
-		cond.Message = err.Error()
-		return cond
-	}
-
-	if !r.isGatewayProviderInstalled {
-		err := kuadrant.MissingGatewayProviderError()
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = string(err.Reason())
-		cond.Message = err.Error()
-		return cond
-	}
-
-	if !r.isLimitadorOperatorInstalled {
-		err := kuadrant.MissingLimitadorOperatorError()
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = string(err.Reason())
-		cond.Message = err.Error()
-		return cond
-	}
-
-	if !r.isAuthorinoOperatorInstalled {
-		err := kuadrant.MissingAuthorinoOperatorError()
+	if err := r.isMissingDependency(); err != nil {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = string(err.Reason())
 		cond.Message = err.Error()
@@ -175,6 +150,34 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 	}
 
 	return cond
+}
+
+func (r *KuadrantStatusUpdater) isMissingDependency() kuadrant.PolicyError {
+	isMissingDependency := false
+	var missingDependencies []string
+
+	if !r.isGatewayAPIInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API")
+	}
+	if !r.isGatewayProviderInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API provider (istio / envoy gateway)")
+	}
+	if !r.isAuthorinoOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Authorino Operator")
+	}
+	if !r.isLimitadorOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Limitador Operator")
+	}
+
+	if isMissingDependency {
+		return kuadrant.NewErrDependencyNotInstalled(missingDependencies...)
+	}
+
+	return nil
 }
 
 func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *string {

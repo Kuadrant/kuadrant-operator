@@ -45,16 +45,8 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 	defer logger.V(1).Info("finished validating auth policies")
 
 	state.Store(StateAuthPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
-		if !r.isGatewayAPIInstalled {
-			return policy.GetLocator(), kuadrant.MissingGatewayAPIError()
-		}
-
-		if !r.isGatewayProviderInstalled {
-			return policy.GetLocator(), kuadrant.MissingGatewayProviderError()
-		}
-
-		if !r.isAuthorinoOperatorInstalled {
-			return policy.GetLocator(), kuadrant.MissingAuthorinoOperatorError()
+		if err := r.isMissingDependency(); err != nil {
+			return policy.GetLocator(), err
 		}
 
 		var err error
@@ -71,6 +63,30 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 		}
 		return policy.GetLocator(), err
 	}))
+
+	return nil
+}
+
+func (r *AuthPolicyValidator) isMissingDependency() error {
+	isMissingDependency := false
+	var missingDependencies []string
+
+	if !r.isGatewayAPIInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API")
+	}
+	if !r.isGatewayProviderInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API provider (istio / envoy gateway)")
+	}
+	if !r.isAuthorinoOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Authorino Operator")
+	}
+
+	if isMissingDependency {
+		return kuadrant.NewErrDependencyNotInstalled(missingDependencies...)
+	}
 
 	return nil
 }

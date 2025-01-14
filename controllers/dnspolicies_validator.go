@@ -51,12 +51,8 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
 	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
-		if !r.isGatewayAPIInstalled {
-			return p.GetLocator(), kuadrant.MissingGatewayAPIError()
-		}
-
-		if !r.isDNSOperatorInstalled {
-			return p.GetLocator(), kuadrant.MissingDNSOperatorError()
+		if err := r.isMissingDependency(); err != nil {
+			return p.GetLocator(), err
 		}
 
 		policy := p.(*kuadrantv1.DNSPolicy)
@@ -73,6 +69,26 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 	}))
 
 	logger.V(1).Info("finished validating dns policies")
+
+	return nil
+}
+
+func (r *DNSPoliciesValidator) isMissingDependency() error {
+	isMissingDependency := false
+	var missingDependencies []string
+
+	if !r.isGatewayAPIInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API")
+	}
+	if !r.isDNSOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "DNS Operator")
+	}
+
+	if isMissingDependency {
+		return kuadrant.NewErrDependencyNotInstalled(missingDependencies...)
+	}
 
 	return nil
 }

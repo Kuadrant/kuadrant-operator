@@ -4,7 +4,7 @@ Learn how to allow anonymous access to certain endpoints using Kuadrant's `AuthP
 
 ## Prerequisites
 
-You have installed Kuadrant in a [kubernetes](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-kubernetes/) or [OpenShift](https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/install-openshift/) cluster with a Gateway provider.
+Kubernetes cluster with Kuadrant installed.
 
 ### Create Gateway
 Create a `Gateway` resource for this guide:

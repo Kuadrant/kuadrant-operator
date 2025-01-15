@@ -2,10 +2,6 @@
 
 ## Deploying the observabilty stack
 
-If you run the `quickstart-setup.sh` script, the observability stack should already be set up.
-In that case, you can skip the below commands.
-If however you have run `make local-setup` and would like to install the observability stack, these commands will install the stack and example dashboards & alerts.
-
 ```bash
 ./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
 ./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -

@@ -12,10 +12,14 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-type AuthPolicyValidator struct{}
+type AuthPolicyValidator struct {
+	isGatewayAPIInstalled        bool
+	isGatewayProviderInstalled   bool
+	isAuthorinoOperatorInstalled bool
+}
 
 // AuthPolicyValidator subscribes to events with potential to flip the validity of auth policies
 func (r *AuthPolicyValidator) Subscription() controller.Subscription {
@@ -41,6 +45,10 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 	defer logger.V(1).Info("finished validating auth policies")
 
 	state.Store(StateAuthPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if err := r.isMissingDependency(); err != nil {
+			return policy.GetLocator(), err
+		}
+
 		var err error
 		if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
 			ref := policy.GetTargetRefs()[0]
@@ -55,6 +63,30 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 		}
 		return policy.GetLocator(), err
 	}))
+
+	return nil
+}
+
+func (r *AuthPolicyValidator) isMissingDependency() error {
+	isMissingDependency := false
+	var missingDependencies []string
+
+	if !r.isGatewayAPIInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API")
+	}
+	if !r.isGatewayProviderInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API provider (istio / envoy gateway)")
+	}
+	if !r.isAuthorinoOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Authorino Operator")
+	}
+
+	if isMissingDependency {
+		return kuadrant.NewErrDependencyNotInstalled(missingDependencies...)
+	}
 
 	return nil
 }

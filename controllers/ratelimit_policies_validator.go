@@ -12,10 +12,14 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-type RateLimitPolicyValidator struct{}
+type RateLimitPolicyValidator struct {
+	isLimitadorOperatorInstalled bool
+	isGatewayAPIInstalled        bool
+	isGatewayProviderInstalled   bool
+}
 
 // RateLimitPolicyValidator subscribes to events with potential to flip the validity of rate limit policies
 func (r *RateLimitPolicyValidator) Subscription() controller.Subscription {
@@ -41,6 +45,10 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 	defer logger.V(1).Info("finished validating rate limit policies")
 
 	state.Store(StateRateLimitPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if err := r.isMissingDependency(); err != nil {
+			return policy.GetLocator(), err
+		}
+
 		var err error
 		if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
 			ref := policy.GetTargetRefs()[0]
@@ -55,6 +63,30 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 		}
 		return policy.GetLocator(), err
 	}))
+
+	return nil
+}
+
+func (r *RateLimitPolicyValidator) isMissingDependency() error {
+	isMissingDependency := false
+	var missingDependencies []string
+
+	if !r.isGatewayAPIInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API")
+	}
+	if !r.isGatewayProviderInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Gateway API provider (istio / envoy gateway)")
+	}
+	if !r.isLimitadorOperatorInstalled {
+		isMissingDependency = true
+		missingDependencies = append(missingDependencies, "Limitador Operator")
+	}
+
+	if isMissingDependency {
+		return kuadrant.NewErrDependencyNotInstalled(missingDependencies...)
+	}
 
 	return nil
 }

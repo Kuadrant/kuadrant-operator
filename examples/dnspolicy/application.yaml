@@ -43,7 +43,7 @@ spec:
     spec:
       containers:
         - name: echo
-          image: docker.io/jmalloc/echo-server
+          image: mirror.gcr.io/jmalloc/echo-server
           ports:
             - name: http-port
               containerPort: 8080

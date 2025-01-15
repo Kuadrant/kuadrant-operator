@@ -180,25 +180,26 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() []controller.ControllerOptio
 	b.isGatewayAPIInstalled, err = kuadrantgatewayapi.IsGatewayAPIInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isGatewayAPIInstalled {
 		b.logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts,
-			controller.WithRunnable("gatewayclass watcher", controller.Watch(
-				&gwapiv1.GatewayClass{},
-				controller.GatewayClassesResource,
-				metav1.NamespaceAll,
-			)),
-			controller.WithRunnable("gateway watcher", controller.Watch(
-				&gwapiv1.Gateway{},
-				controller.GatewaysResource,
-				metav1.NamespaceAll,
-			)),
-			controller.WithRunnable("httproute watcher", controller.Watch(
-				&gwapiv1.HTTPRoute{},
-				controller.HTTPRoutesResource,
-				metav1.NamespaceAll,
-			)),
-		)
+		return opts
 	}
+
+	opts = append(opts,
+		controller.WithRunnable("gatewayclass watcher", controller.Watch(
+			&gwapiv1.GatewayClass{},
+			controller.GatewayClassesResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithRunnable("gateway watcher", controller.Watch(
+			&gwapiv1.Gateway{},
+			controller.GatewaysResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithRunnable("httproute watcher", controller.Watch(
+			&gwapiv1.HTTPRoute{},
+			controller.HTTPRoutesResource,
+			metav1.NamespaceAll,
+		)),
+	)
 
 	return opts
 }
@@ -209,30 +210,31 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 	b.isEnvoyGatewayInstalled, err = envoygateway.IsEnvoyGatewayInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isEnvoyGatewayInstalled {
 		b.logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts,
-			controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
-				&egv1alpha1.EnvoyPatchPolicy{},
-				envoygateway.EnvoyPatchPoliciesResource,
-				metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-			)),
-			controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
-				&egv1alpha1.EnvoyExtensionPolicy{},
-				envoygateway.EnvoyExtensionPoliciesResource,
-				metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyExtensionPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-			)),
-			controller.WithObjectKinds(
-				envoygateway.EnvoyPatchPolicyGroupKind,
-				envoygateway.EnvoyExtensionPolicyGroupKind,
-			),
-			controller.WithObjectLinks(
-				envoygateway.LinkGatewayToEnvoyPatchPolicy,
-				envoygateway.LinkGatewayToEnvoyExtensionPolicy,
-			),
-		)
+		return opts
 	}
+
+	opts = append(opts,
+		controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
+			&egv1alpha1.EnvoyPatchPolicy{},
+			envoygateway.EnvoyPatchPoliciesResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+		)),
+		controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
+			&egv1alpha1.EnvoyExtensionPolicy{},
+			envoygateway.EnvoyExtensionPoliciesResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*egv1alpha1.EnvoyExtensionPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+		)),
+		controller.WithObjectKinds(
+			envoygateway.EnvoyPatchPolicyGroupKind,
+			envoygateway.EnvoyExtensionPolicyGroupKind,
+		),
+		controller.WithObjectLinks(
+			envoygateway.LinkGatewayToEnvoyPatchPolicy,
+			envoygateway.LinkGatewayToEnvoyExtensionPolicy,
+		),
+	)
 
 	return opts
 }
@@ -243,30 +245,31 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isIstioInstalled {
 		b.logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts,
-			controller.WithRunnable("envoyfilter watcher", controller.Watch(
-				&istioclientnetworkingv1alpha3.EnvoyFilter{},
-				istio.EnvoyFiltersResource,
-				metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-			)),
-			controller.WithRunnable("wasmplugin watcher", controller.Watch(
-				&istioclientgoextensionv1alpha1.WasmPlugin{},
-				istio.WasmPluginsResource,
-				metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-			)),
-			controller.WithObjectKinds(
-				istio.EnvoyFilterGroupKind,
-				istio.WasmPluginGroupKind,
-			),
-			controller.WithObjectLinks(
-				istio.LinkGatewayToEnvoyFilter,
-				istio.LinkGatewayToWasmPlugin,
-			),
-		)
+		return opts
 	}
+
+	opts = append(opts,
+		controller.WithRunnable("envoyfilter watcher", controller.Watch(
+			&istioclientnetworkingv1alpha3.EnvoyFilter{},
+			istio.EnvoyFiltersResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+		)),
+		controller.WithRunnable("wasmplugin watcher", controller.Watch(
+			&istioclientgoextensionv1alpha1.WasmPlugin{},
+			istio.WasmPluginsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+		)),
+		controller.WithObjectKinds(
+			istio.EnvoyFilterGroupKind,
+			istio.WasmPluginGroupKind,
+		),
+		controller.WithObjectLinks(
+			istio.LinkGatewayToEnvoyFilter,
+			istio.LinkGatewayToWasmPlugin,
+		),
+	)
 
 	return opts
 }
@@ -277,9 +280,10 @@ func (b *BootOptionsBuilder) getCertManagerOptions() []controller.ControllerOpti
 	b.isCertManagerInstalled, err = kuadrantgatewayapi.IsCertManagerInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil || !b.isCertManagerInstalled {
 		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts, certManagerControllerOpts()...)
+		return opts
 	}
+
+	opts = append(opts, certManagerControllerOpts()...)
 
 	return opts
 }
@@ -290,14 +294,15 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOp
 	b.isConsolePluginInstalled, err = openshift.IsConsolePluginInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isConsolePluginInstalled {
 		b.logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts,
-			controller.WithRunnable("consoleplugin watcher", controller.Watch(
-				&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
-			controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
-		)
+		return opts
 	}
+
+	opts = append(opts,
+		controller.WithRunnable("consoleplugin watcher", controller.Watch(
+			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
+		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+	)
 
 	return opts
 }
@@ -308,20 +313,21 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOpti
 	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), DNSRecordGroupKind.Group, DNSRecordGroupKind.Kind, kuadrantdnsv1alpha1.GroupVersion.Version)
 	if err != nil || !b.isDNSOperatorInstalled {
 		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts,
-			controller.WithRunnable("dnsrecord watcher", controller.Watch(
-				&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)))),
-			controller.WithObjectKinds(
-				DNSRecordGroupKind,
-			),
-			controller.WithObjectLinks(
-				LinkListenerToDNSRecord,
-				LinkDNSPolicyToDNSRecord,
-			),
-		)
+		return opts
 	}
+
+	opts = append(opts,
+		controller.WithRunnable("dnsrecord watcher", controller.Watch(
+			&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)))),
+		controller.WithObjectKinds(
+			DNSRecordGroupKind,
+		),
+		controller.WithObjectLinks(
+			LinkListenerToDNSRecord,
+			LinkDNSPolicyToDNSRecord,
+		),
+	)
 
 	return opts
 }
@@ -332,21 +338,22 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() []controller.Controll
 	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
 	if err != nil || !b.isLimitadorOperatorInstalled {
 		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers", "err", err)
-	} else {
-		opts = append(opts,
-			controller.WithRunnable("limitador watcher", controller.Watch(
-				&limitadorv1alpha1.Limitador{},
-				kuadrantv1beta1.LimitadorsResource,
-				metav1.NamespaceAll,
-			)),
-			controller.WithObjectKinds(
-				kuadrantv1beta1.LimitadorGroupKind,
-			),
-			controller.WithObjectLinks(
-				kuadrantv1beta1.LinkKuadrantToLimitador,
-			),
-		)
+		return opts
 	}
+
+	opts = append(opts,
+		controller.WithRunnable("limitador watcher", controller.Watch(
+			&limitadorv1alpha1.Limitador{},
+			kuadrantv1beta1.LimitadorsResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithObjectKinds(
+			kuadrantv1beta1.LimitadorGroupKind,
+		),
+		controller.WithObjectLinks(
+			kuadrantv1beta1.LinkKuadrantToLimitador,
+		),
+	)
 
 	return opts
 }

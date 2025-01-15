@@ -19,7 +19,10 @@ configMapGenerator:
   - ./controller-runtime-metrics.json
 - name: grafana-controller-resources-metrics
   files:
-  - ./controller-resources-metrics.json    
+  - ./controller-resources-metrics.json
+- name: grafana-dns-operator
+  files:
+    - ./dns-operator.json
 
 generatorOptions:
   disableNameSuffixHash: true

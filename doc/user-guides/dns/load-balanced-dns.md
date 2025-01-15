@@ -135,7 +135,7 @@ metadata:
 spec:
   loadBalancing:
     weight: 130
-    geo: GEO-US
+    geo: US
     defaultGeo: false
   targetRef:
     group: gateway.networking.k8s.io

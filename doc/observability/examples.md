@@ -9,6 +9,7 @@ There are some example dashboards uploaded to [Grafana.com](https://grafana.com/
 | [App Developer Dashboard](https://grafana.com/grafana/dashboards/21538)      | `21538`       |
 | [Business User Dashboard](https://grafana.com/grafana/dashboards/20981)   | `20981`        |
 | [Platform Engineer Dashboard](https://grafana.com/grafana/dashboards/20982) | `20982` |
+| [DNS Operator Dashboard](https://grafana.com/grafana/dashboards/22695) | `22695` |
 
 ## Dashboards
 

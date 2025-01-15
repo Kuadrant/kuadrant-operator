@@ -34,6 +34,13 @@
       defaultMode: 420
       name: grafana-controller-runtime-metrics
 - op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: grafana-dns-operator
+    configMap:
+      defaultMode: 420
+      name: grafana-dns-operator
+- op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
     name: grafana-app-developer
@@ -58,3 +65,8 @@
   value:
     name: grafana-controller-resources-metrics
     mountPath: /grafana-dashboard-definitions/0/grafana-controller-resources-metrics
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: grafana-dns-operator
+    mountPath: /grafana-dashboard-definitions/0/grafana-dns-operator

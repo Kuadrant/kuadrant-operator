@@ -49,6 +49,7 @@ func (r *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 
 	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 	logger.V(1).Info("validating tls policies", "policies", len(policies))
+	defer logger.V(1).Info("finished validating tls policies")
 
 	state.Store(TLSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
 		if err := r.isMissingDependency(); err != nil {
@@ -78,8 +79,6 @@ func (r *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 
 		return p.GetLocator(), nil
 	}))
-
-	logger.V(1).Info("finished validating tls policies")
 
 	return nil
 }

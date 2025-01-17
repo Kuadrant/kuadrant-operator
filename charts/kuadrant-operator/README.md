@@ -4,57 +4,58 @@ This is the Helm Chart to install the official Kuadrant Kubernetes Operator
 
 ## Installation
 
-### Prerequisites
+### Install Dependencies
+
+Follow the steps below to install the following dependencies for Kuadrant Operator:
 - [Gateway API](https://gateway-api.sigs.k8s.io/)
 - [cert-manager](https://cert-manager.io/)
-- A Gateway Provider (I.E: [Istio](https://istio.io/latest/docs/ambient/install/helm/),
-  [Envoy](https://www.envoyproxy.io/docs/envoy/latest/start/start))
+- A Gateway Provider [Istio](https://istio.io/latest/docs/ambient/install/helm/)
 
-### Install dependencies
+[Envoy Gateway](https://gateway.envoyproxy.io/) is also an option as a gateway provider, **Steps Coming soon!**
 
-1. Install Kubernetes Gateway API:
+#### Install Kubernetes Gateway API:
 
-```sh
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
-```
+ ```sh
+ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
+ ```
 
-2. Install cert-manager
+#### Install cert-manager
 
-```sh
-helm repo add jetstack https://charts.jetstack.io --force-update
-helm install \
-  cert-manager jetstack/cert-manager \
-  --namespace cert-manager \
-  --create-namespace \
-  --version v1.15.3 \
-  --set crds.enabled=true
-```
+ ```sh
+ helm repo add jetstack https://charts.jetstack.io --force-update
+ helm install \
+   cert-manager jetstack/cert-manager \
+   --namespace cert-manager \
+   --create-namespace \
+   --version v1.15.3 \
+   --set crds.enabled=true
+ ```
 
-3. Install a Gateway Controller, i.e: Istio:
+#### Install Istio (A Gateway Provider):
 
-```sh
-helm install sail-operator \
-		--create-namespace \
-		--namespace istio-system \
-		--wait \
-		--timeout=300s \
-		https://github.com/istio-ecosystem/sail-operator/releases/download/0.1.0/sail-operator-0.1.0.tgz
+ ```sh
+ helm install sail-operator \
+         --create-namespace \
+         --namespace istio-system \
+         --wait \
+         --timeout=300s \
+         https://github.com/istio-ecosystem/sail-operator/releases/download/0.1.0/sail-operator-0.1.0.tgz
 
-kubectl apply -f -<<EOF
-apiVersion: sailoperator.io/v1alpha1
-kind: Istio
-metadata:
-  name: default
-spec:
-  # Supported values for sail-operator v0.1.0 are [v1.22.4,v1.23.0]
-  version: v1.23.0
-  namespace: istio-system
-  # Disable autoscaling to reduce dev resources
-  values:
-    pilot:
-      autoscaleEnabled: false
-EOF
-```
+ kubectl apply -f -<<EOF
+ apiVersion: sailoperator.io/v1alpha1
+ kind: Istio
+ metadata:
+   name: default
+ spec:
+   # Supported values for sail-operator v0.1.0 are [v1.22.4,v1.23.0]
+   version: v1.23.0
+   namespace: istio-system
+   # Disable autoscaling to reduce dev resources
+   values:
+     pilot:
+       autoscaleEnabled: false
+ EOF
+ ```
 
 ### Install Kuadrant
 

@@ -2,7 +2,7 @@
 
 For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
 
-This user guide walks you through an example of how to configure authenticated rate limiting for an application using Kuadrant.
+This tutorial guide walks you through an example of how to configure authenticated rate limiting for an application using Kuadrant.
 
 Authenticated rate limiting rate limits the traffic directed to an application based on attributes of the client user, who is authenticated by some authentication method. A few examples of authenticated rate limiting use cases are:
 
@@ -10,7 +10,7 @@ Authenticated rate limiting rate limits the traffic directed to an application b
 - Each user can send up to 20rpm ("request per minute").
 - Admin users (members of the 'admin' group) can send up to 100rps, while regular users (non-admins) can send up to 20rpm and no more than 5rps.
 
-In this guide, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API exposes an endpoint at `GET http://api.toystore.com/toy`, to mimic an operation of reading toy records.
+In this tutorial, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API exposes an endpoint at `GET http://api.toystore.com/toy`, to mimic an operation of reading toy records.
 
 We will define 2 users of the API, which can send requests to the API at different rates, based on their user IDs. The authentication method used is **API key**.
 
@@ -19,16 +19,70 @@ We will define 2 users of the API, which can send requests to the API at differe
 | alice   | 5rp10s ("5 requests every 10 seconds") |
 | bob     | 2rp10s ("2 requests every 10 seconds") |
 
-### Setup the environment
+## Prerequisites
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+### Setup environment variables
+
+Set the following environment variables used for convenience in this guide:
+
+```bash
+export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
+export KUADRANT_GATEWAY_NAME=external # Name for the example Gateway
+export KUADRANT_DEVELOPER_NS=toystore # Namespace for an example toystore app
+
+```
+
+### Create an Ingress Gateway
+
+Create the namespace the Gateway will be deployed in:
+
+```bash
+kubectl create ns ${KUADRANT_GATEWAY_NS}
+```
+
+Create a gateway using toystore as the listener hostname:
+
+```sh
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ${KUADRANT_GATEWAY_NAME}
+  namespace: ${KUADRANT_GATEWAY_NS}
+  labels:
+    kuadrant.io/gateway: "true"
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+EOF
+```
+
+Check the status of the `Gateway` ensuring the gateway is Accepted and Programmed:
+
+```bash
+kubectl get gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Programmed")].message}{"\n"}'
+```
 
 ### Deploy the Toy Store API
 
-Create the deployment:
+Create the namespace for the Toystore application:
 
-```sh
-kubectl apply -f examples/toystore/toystore.yaml
+```bash
+
+kubectl create ns ${KUADRANT_DEVELOPER_NS}
+```
+
+Deploy the Toystore app to the developer namespace:
+
+```bash
+kubectl apply -f examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
 ```
 
 Create a HTTPRoute to route traffic to the service via Istio Ingress Gateway:
@@ -41,10 +95,11 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   parentRefs:
-  - name: kuadrant-ingressgateway
-    namespace: gateway-system
+  - name: ${KUADRANT_GATEWAY_NAME}
+    namespace: ${KUADRANT_GATEWAY_NS}
   hostnames:
   - api.toystore.com
   rules:
@@ -62,27 +117,27 @@ EOF
 Export the gateway hostname and port:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
-export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+export KUADRANT_INGRESS_HOST=$(kubectl get gtw ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o jsonpath='{.status.addresses[0].value}')
+export KUADRANT_INGRESS_PORT=$(kubectl get gtw ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export KUADRANT_GATEWAY_URL=${KUADRANT_INGRESS_HOST}:${KUADRANT_INGRESS_PORT}
 ```
 
 Verify the route works:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
-> export GATEWAY_URL=localhost:9080
+> kubectl port-forward -n ${KUADRANT_GATEWAY_NS} service/kuadrant-${KUADRANT_GATEWAY_NAME}-istio 9080:80 >/dev/null 2>&1 &
+> export KUADRANT_GATEWAY_URL=localhost:9080
 > ```
 >
 > ```sh
-> curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+> curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 > # HTTP/1.1 200 OK
 > ```
 
@@ -96,6 +151,7 @@ apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -126,7 +182,7 @@ EOF
 Verify the authentication works by sending a request to the Toy Store API without API key:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 401 Unauthorized
 # www-authenticate: APIKEY realm="api-key-users"
 # x-ext-auth-reason: "credential not found"
@@ -178,6 +234,7 @@ apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -206,17 +263,17 @@ Verify the rate limiting works by sending requests as Alice and Bob.
 Up to 5 successful (`200 OK`) requests every 10 seconds allowed for Alice, then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Up to 2 successful (`200 OK`) requests every 10 seconds allowed for Bob, then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup
 
 ```sh
-make local-cleanup
+kind delete cluster
 ```

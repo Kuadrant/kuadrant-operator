@@ -2,76 +2,74 @@
 
 This user guide walks you through an example of how to configure DNS for all routes attached to an ingress gateway.
 
-## Requisites
+## Prerequisites
 
-- [Docker](https://docker.io)
-- [Rout53 Hosted Zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingHostedZone.html)
+- kubectl command line tool.
+- AWS/Azure or GCP with DNS capabilities.
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
-### Setup the environment
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
-Create a namespace:
+### Setup environment variables
 
-```shell
-kubectl create namespace my-gateways
+Set the following environment variables used for convenience in this guide:
+
+```bash
+export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
+export KUADRANT_GATEWAY_NAME=external # Name for the example Gateway
+export KUADRANT_DEVELOPER_NS=toystore # Namespace for an example toystore app
+export KUADRANT_AWS_ACCESS_KEY_ID=xxxx # AWS Key ID with access to manage the DNS Zone ID below
+export KUADRANT_AWS_SECRET_ACCESS_KEY=xxxx # AWS Secret Access Key with access to manage the DNS Zone ID below
+export KUADRANT_AWS_DNS_PUBLIC_ZONE_ID=xxxx # AWS Route 53 Zone ID for the Gateway
+export KUADRANT_ZONE_ROOT_DOMAIN=example.com # Root domain associated with the Zone ID above
 ```
 
-Export a root domain and hosted zone id:
+Create the namespace the Gateway will be deployed in:
 
-```shell
-export ROOT_DOMAIN=<ROOT_DOMAIN>
-```
+```bash
+kubectl create ns ${KUADRANT_GATEWAY_NS}
 
-> **Note:** ROOT_DOMAIN should be set to your AWS hosted zone _name_.
 
-### Create a dns provider secret
-
+### Create a DNS provider secret 
 Create AWS provider secret. You should limit the permissions of this credential to only the zones you want us to access.
 
-```shell
-export AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
-
-kubectl -n my-gateways create secret generic aws-credentials \
+```bash
+kubectl -n ${KUADRANT_GATEWAY_NS} create secret generic aws-credentials \
   --type=kuadrant.io/aws \
-  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+  --from-literal=AWS_ACCESS_KEY_ID=$KUADRANT_AWS_ACCESS_KEY_ID \
+  --from-literal=AWS_SECRET_ACCESS_KEY=$KUADRANT_AWS_SECRET_ACCESS_KEY
 ```
 
-### Create an ingress gateway
+### Create an Ingress Gateway
 
-Create a gateway using your ROOT_DOMAIN as part of a listener hostname:
+Create a gateway using your KUADRANT_ZONE_ROOT_DOMAIN as part of a listener hostname:
 
 ```sh
-kubectl -n my-gateways apply -f - <<EOF
+kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: prod-web
+  name: ${KUADRANT_GATEWAY_NAME}
+  namespace: ${KUADRANT_GATEWAY_NS}
+  labels:
+    kuadrant.io/gateway: "true"
 spec:
   gatewayClassName: istio
   listeners:
-    - allowedRoutes:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
         namespaces:
           from: All
-      name: api
-      hostname: "*.$ROOT_DOMAIN"
-      port: 80
-      protocol: HTTP
+      hostname: "api.${KUADRANT_ZONE_ROOT_DOMAIN}"    
 EOF
 ```
 
-Check gateway status:
+Check the status of the `Gateway` ensuring the gateway is Accepted and Programmed:
 
-```shell
-kubectl get gateway prod-web -n my-gateways
-```
-
-Response:
-
-```shell
-NAME       CLASS   ADDRESS        PROGRAMMED   AGE
-prod-web   istio   172.18.200.1   True         25s
+```bash
+kubectl get gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Programmed")].message}{"\n"}'
 ```
 
 ### Enable DNS on the gateway
@@ -79,121 +77,91 @@ prod-web   istio   172.18.200.1   True         25s
 Create a Kuadrant `DNSPolicy` to configure DNS:
 
 ```shell
-kubectl -n my-gateways apply -f - <<EOF
+kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
-  name: prod-web
+  name: ${KUADRANT_GATEWAY_NAME}-dns
+  namespace: ${KUADRANT_GATEWAY_NS}
 spec:
   targetRef:
-    name: prod-web
+    name: ${KUADRANT_GATEWAY_NAME}
     group: gateway.networking.k8s.io
     kind: Gateway
+  providerRefs:  
+    - name: aws-credentials
 EOF
 ```
 
-Check policy status:
+Check that the `DNSPolicy` has been Accepted and Enforced (This mat take a few minutes):
 
-```shell
-kubectl get dnspolicy -o wide -n my-gateways
+```bash
+kubectl get dnspolicy ${KUADRANT_GATEWAY_NAME}-dns -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
-Response:
+### Deploy the Toystore app
 
-```shell
-NAME       STATUS     TARGETREFKIND   TARGETREFNAME   AGE
-prod-web   Accepted   Gateway         prod-web        26s
+Create the namespace for the Toystore application:
+
+```bash
+
+kubectl create ns ${KUADRANT_DEVELOPER_NS}
 ```
 
-### Deploy a sample API to test DNS
+Deploy the Toystore app to the developer namespace:
 
-Deploy the sample API:
-
-```shell
-kubectl -n my-gateways apply -f examples/toystore/toystore.yaml
-kubectl -n my-gateways wait --for=condition=Available deployments toystore --timeout=60s
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
 ```
 
-Route traffic to the API from our gateway:
+### Setup Toystore application HTTPRoute
 
-```shell
-kubectl -n my-gateways apply -f - <<EOF
+```bash
+
+kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
+  labels:
+    deployment: toystore
+    service: toystore
 spec:
   parentRefs:
-  - name: prod-web
-    namespace: my-gateways
+  - name: ${KUADRANT_GATEWAY_NAME}
+    namespace: ${KUADRANT_GATEWAY_NS}
   hostnames:
-  - "*.$ROOT_DOMAIN"
+  - "api.${KUADRANT_ZONE_ROOT_DOMAIN}"
   rules:
-  - backendRefs:
+  - matches:
+    - method: GET
+      path:
+        type: PathPrefix
+        value: "/cars"
+    backendRefs:
     - name: toystore
-      port: 80
+      port: 80  
 EOF
 ```
 
-Verify a DNSRecord resource is created:
-
-```shell
-kubectl get dnsrecords -n my-gateways
-NAME           READY
-prod-web-api   True
-```
 
 ### Verify DNS works by sending requests
 
-Verify DNS using dig:
+Verify DNS using dig you should see your IP address:
 
 ```shell
-dig foo.$ROOT_DOMAIN +short
+dig api.${KUADRANT_ZONE_ROOT_DOMAIN} +short
 ```
 
-Response:
+Verify DNS using curl you should get a status 200:
 
 ```shell
-172.18.200.1
-```
-
-Verify DNS using curl:
-
-```shell
-curl http://api.$ROOT_DOMAIN
-```
-
-Response:
-
-```shell
-{
-  "method": "GET",
-  "path": "/",
-  "query_string": null,
-  "body": "",
-  "headers": {
-    "HTTP_HOST": "api.$ROOT_DOMAIN",
-    "HTTP_USER_AGENT": "curl/7.85.0",
-    "HTTP_ACCEPT": "*/*",
-    "HTTP_X_FORWARDED_FOR": "10.244.0.1",
-    "HTTP_X_FORWARDED_PROTO": "http",
-    "HTTP_X_ENVOY_INTERNAL": "true",
-    "HTTP_X_REQUEST_ID": "9353dd3d-0fe5-4404-86f4-a9732a9c119c",
-    "HTTP_X_ENVOY_DECORATOR_OPERATION": "toystore.my-gateways.svc.cluster.local:80/*",
-    "HTTP_X_ENVOY_PEER_METADATA": "ChQKDkFQUF9DT05UQUlORVJTEgIaAAoaCgpDTFVTVEVSX0lEEgwaCkt1YmVybmV0ZXMKHQoMSU5TVEFOQ0VfSVBTEg0aCzEwLjI0NC4wLjIyChkKDUlTVElPX1ZFUlNJT04SCBoGMS4xNy4yCtcBCgZMQUJFTFMSzAEqyQEKIwoVaXN0aW8uaW8vZ2F0ZXdheS1uYW1lEgoaCHByb2Qtd2ViChkKDGlzdGlvLmlvL3JldhIJGgdkZWZhdWx0CjMKH3NlcnZpY2UuaXN0aW8uaW8vY2Fub25pY2FsLW5hbWUSEBoOcHJvZC13ZWItaXN0aW8KLwojc2VydmljZS5pc3Rpby5pby9jYW5vbmljYWwtcmV2aXNpb24SCBoGbGF0ZXN0CiEKF3NpZGVjYXIuaXN0aW8uaW8vaW5qZWN0EgYaBHRydWUKGgoHTUVTSF9JRBIPGg1jbHVzdGVyLmxvY2FsCigKBE5BTUUSIBoecHJvZC13ZWItaXN0aW8tYzU0NWQ4ZjY4LTdjcjg2ChoKCU5BTUVTUEFDRRINGgtteS1nYXRld2F5cwpWCgVPV05FUhJNGktrdWJlcm5ldGVzOi8vYXBpcy9hcHBzL3YxL25hbWVzcGFjZXMvbXktZ2F0ZXdheXMvZGVwbG95bWVudHMvcHJvZC13ZWItaXN0aW8KFwoRUExBVEZPUk1fTUVUQURBVEESAioACiEKDVdPUktMT0FEX05BTUUSEBoOcHJvZC13ZWItaXN0aW8=",
-    "HTTP_X_ENVOY_PEER_METADATA_ID": "router~10.244.0.22~prod-web-istio-c545d8f68-7cr86.my-gateways~my-gateways.svc.cluster.local",
-    "HTTP_X_ENVOY_ATTEMPT_COUNT": "1",
-    "HTTP_X_B3_TRACEID": "d65f580db9c6a50c471cdb534771c61a",
-    "HTTP_X_B3_SPANID": "471cdb534771c61a",
-    "HTTP_X_B3_SAMPLED": "0",
-    "HTTP_VERSION": "HTTP/1.1"
-  },
-  "uuid": "0ecb9f84-db30-4289-a3b8-e22d4021122f"
-}
+curl http://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars -i
 ```
 
 ## Cleanup
 
 ```shell
-make local-cleanup
+kind delete cluster
 ```

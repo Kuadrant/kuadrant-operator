@@ -2,11 +2,10 @@
 
 For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
 
-This user guide walks you through an example of how to configure rate limiting for all routes attached to a specific ingress gateway.
+This tutorial walks you through an example of how to configure rate limiting for all routes attached to a specific ingress gateway.
 
-### Setup the environment
-
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+## Prerequisites
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
 ### Deploy the Toystore example API:
 
@@ -171,5 +170,5 @@ while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Ho
 ## Cleanup
 
 ```sh
-make local-cleanup
+kind delete cluster
 ```

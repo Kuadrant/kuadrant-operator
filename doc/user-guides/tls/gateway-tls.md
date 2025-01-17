@@ -1,6 +1,6 @@
 # Gateway TLS for Cluster Operators
 
-This user guide walks you through an example of how to configure TLS for all routes attached to an ingress gateway.
+This tutorial walks you through an example of how to configure TLS for all routes attached to an ingress gateway.
 
 ## Requisites
 

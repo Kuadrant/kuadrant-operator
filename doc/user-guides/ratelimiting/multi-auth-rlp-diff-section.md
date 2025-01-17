@@ -1,10 +1,10 @@
 # Gateway Rate Limiting
 
-This user guide walks you through an example of how to configure multiple rate limit polices for different listeners in an ingress gateway.
+This tutorial walks you through an example of how to configure multiple rate limit polices for different listeners in an ingress gateway.
 
-### Setup the environment
+## Prerequisites
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
 
 ### Deploy the sample API:
 
@@ -138,5 +138,5 @@ while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Ho
 ## Cleanup
 
 ```sh
-make local-cleanup
+kind delete cluster
 ```

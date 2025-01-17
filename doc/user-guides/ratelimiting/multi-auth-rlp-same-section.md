@@ -1,6 +1,6 @@
 # Multi authenticated Rate Limiting for an Application
 
-This user guide walks you through an example of how to configure multiple authenticated rate limiting for an application using Kuadrant.
+This tutorial walks you through an example of how to configure multiple authenticated rate limiting for an application using Kuadrant.
 
 Authenticated rate limiting, rate limits the traffic directed to an application based on attributes of the client user, who is authenticated by some authentication method. A few examples of authenticated rate limiting use cases are:
 
@@ -17,9 +17,8 @@ We will define 2 users of the API, which can send requests to the API at differe
 | alice   | 5rp10s ("5 requests every 10 seconds") |
 | bob     | 2rp10s ("2 requests every 10 seconds") |
 
-### Setup the environment
-
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+## Prerequisites
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
 ### Deploy the Toy Store API
 
@@ -241,5 +240,5 @@ while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Au
 ## Cleanup
 
 ```sh
-make local-cleanup
+kind delete cluster
 ```

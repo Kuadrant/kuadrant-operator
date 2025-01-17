@@ -1,6 +1,6 @@
 # Authenticated Rate Limiting with JWTs and Kubernetes RBAC
 
-This user guide walks you through an example of how to use Kuadrant to protect an application with policies to enforce:
+This tutorial walks you through an example of how to use Kuadrant to protect an application with policies to enforce:
 
 - authentication based OpenId Connect (OIDC) ID tokens (signed JWTs), issued by a Keycloak server;
 - alternative authentication method by Kubernetes Service Account tokens;
@@ -23,16 +23,95 @@ Privileges to execute the requested operation (read, create or delete) will be g
 
 Each user will be entitled to a maximum of 5rp10s (5 requests every 10 seconds).
 
-### Setup the environment
+## Prerequisites
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+### Setup environment variables
 
-### Deploy the Toystore example API:
+Set the following environment variables used for convenience in this guide:
 
-```sh
-kubectl apply -f examples/toystore/toystore.yaml
+```bash
+export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
+export KUADRANT_GATEWAY_NAME=external # Name for the example Gateway
+export KUADRANT_DEVELOPER_NS=toystore # Namespace for an example toystore app
 ```
 
+### Create an Ingress Gateway
+
+Create the namespace the Gateway will be deployed in:
+
+```bash
+kubectl create ns ${KUADRANT_GATEWAY_NS}
+```
+
+Create a gateway using toystore as the listener hostname:
+
+```sh
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ${KUADRANT_GATEWAY_NAME}
+  namespace: ${KUADRANT_GATEWAY_NS}
+  labels:
+    kuadrant.io/gateway: "true"
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+EOF
+```
+
+Check the status of the `Gateway` ensuring the gateway is Accepted and Programmed:
+
+```bash
+kubectl get gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Programmed")].message}{"\n"}'
+```
+### Deploy the Toy Store API
+
+Create the namespace for the Toystore application:
+
+```bash
+
+kubectl create ns ${KUADRANT_DEVELOPER_NS}
+```
+
+Deploy the Toystore app to the developer namespace:
+
+```bash
+kubectl apply -f examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
+```
+Create a HTTPRoute to route traffic to the service via Istio Ingress Gateway:
+
+```sh
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
+spec:
+  parentRefs:
+  - name: ${KUADRANT_GATEWAY_NAME}
+    namespace: ${KUADRANT_GATEWAY_NS}
+  hostnames:
+  - api.toystore.com
+  rules:
+  - matches:
+    - path:
+        type: Exact
+        value: "/toy"
+      method: GET
+    backendRefs:
+    - name: toystore
+      port: 80
+EOF
+```
 #### API lifecycle
 
 ![Lifecycle](http://www.plantuml.com/plantuml/png/hP7DIWD1383l-nHXJ_PGtFuSIsaH1F5WGRtjPJgJjg6pcPB9WFNf7LrXV_Ickp0Gyf5yIJPHZMXgV17Fn1SZfW671vEylk2RRZqTkK5MiFb1wL4I4hkx88m2iwee1AqQFdg4ShLVprQt-tNDszq3K8J45mcQ0NGrj_yqVpNFgmgU7aim0sPKQzxMUaQRXFGAqPwmGJW40JqXv1urHpMA3eZ1C9JbDkbf5ppPQrdMV9CY2XmC-GWQmEGaif8rYfFEPLdDu9K_aq7e7TstLPyUcot-RERnI0fVVjxOSuGBIaCnKk21sWBkW-p9EUJMgnCTIot_Prs3kJFceEiu-VM2uLmKlIl2TFrZVQCu8yD9kg1Dvf8RP9SQ_m40)
@@ -42,13 +121,13 @@ kubectl apply -f examples/toystore/toystore.yaml
 Export the gateway hostname and port:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
-export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+export KUADRANT_INGRESS_HOST=$(kubectl get gtw ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o jsonpath='{.status.addresses[0].value}')
+export KUADRANT_INGRESS_PORT=$(kubectl get gtw ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export KUADRANT_GATEWAY_URL=${KUADRANT_INGRESS_HOST}:${KUADRANT_INGRESS_PORT}
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
@@ -57,18 +136,18 @@ It should return `200 OK`.
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
-> export GATEWAY_URL=localhost:9080
+> kubectl port-forward -n ${KUADRANT_GATEWAY_NS} service/${KUADRANT_GATEWAY_NS}-istio 9080:80 >/dev/null 2>&1 &
+> export KUADRANT_GATEWAY_URL=localhost:9080
 > ```
 >
 > ```sh
-> curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+> curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 > # HTTP/1.1 200 OK
 > ```
 
 ### Deploy Keycloak
 
-Create the namesapce:
+Create the  for Keycloak:
 
 ```sh
 kubectl create namespace keycloak
@@ -92,6 +171,7 @@ apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore-protection
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -128,7 +208,7 @@ EOF
 #### Try the API missing authentication
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 401 Unauthorized
 # www-authenticate: Bearer realm="keycloak-users"
 # www-authenticate: Bearer realm="k8s-service-accounts"
@@ -140,13 +220,13 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 Obtain an access token with the Keycloak server:
 
 ```sh
-ACCESS_TOKEN=$(kubectl run token --attach --rm --restart=Never -q --image=curlimages/curl -- http://keycloak.keycloak.svc.cluster.local:8080/realms/kuadrant/protocol/openid-connect/token -s -d 'grant_type=password' -d 'client_id=demo' -d 'username=john' -d 'password=p' -d 'scope=openid' | jq -r .access_token)
+KUADRANT_ACCESS_TOKEN=$(kubectl run token --attach --rm --restart=Never -q --image=curlimages/curl -- http://keycloak.keycloak.svc.cluster.local:8080/realms/kuadrant/protocol/openid-connect/token -s -d 'grant_type=password' -d 'client_id=demo' -d 'username=john' -d 'password=p' -d 'scope=openid' | jq -r .KUADRANT_ACCESS_TOKEN)
 ```
 
 Send a request to the API as the Keycloak-authenticated user while still missing permissions:
 
 ```sh
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H "Authorization: Bearer $KUADRANT_ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
@@ -164,13 +244,13 @@ EOF
 Obtain an access token for the `client-app-1` service account:
 
 ```sh
-SA_TOKEN=$(kubectl create token client-app-1)
+KUADRANT_SA_TOKEN=$(kubectl create token client-app-1)
 ```
 
 Send a request to the API as the service account while still missing permissions:
 
 ```sh
-curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H "Authorization: Bearer $KUADRANT_SA_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
@@ -217,7 +297,7 @@ roleRef:
   name: toystore-reader
 subjects:
 - kind: User
-  name: $(jq -R -r 'split(".") | .[1] | @base64d | fromjson | .sub' <<< "$ACCESS_TOKEN")
+  name: $(jq -R -r 'split(".") | .[1] | @base64d | fromjson | .sub' <<< "$KUADRANT_ACCESS_TOKEN")
 - kind: ServiceAccount
   name: client-app-1
   namespace: default
@@ -232,7 +312,7 @@ roleRef:
   name: toystore-writer
 subjects:
 - kind: User
-  name: $(jq -R -r 'split(".") | .[1] | @base64d | fromjson | .sub' <<< "$ACCESS_TOKEN")
+  name: $(jq -R -r 'split(".") | .[1] | @base64d | fromjson | .sub' <<< "$KUADRANT_ACCESS_TOKEN")
 EOF
 ```
 
@@ -253,24 +333,24 @@ in the Authorino docs.
 Send requests to the API as the Keycloak-authenticated user:
 
 ```sh
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H "Authorization: Bearer $KUADRANT_ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' -X POST http://$GATEWAY_URL/admin/toy -i
+curl -H "Authorization: Bearer $KUADRANT_ACCESS_TOKEN" -H 'Host: api.toystore.com' -X POST http://$KUADRANT_GATEWAY_URL/admin/toy -i
 # HTTP/1.1 200 OK
 ```
 
 Send requests to the API as the Kubernetes service account:
 
 ```sh
-curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+curl -H "Authorization: Bearer $KUADRANT_SA_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST http://$GATEWAY_URL/admin/toy -i
+curl -H "Authorization: Bearer $KUADRANT_SA_TOKEN" -H 'Host: api.toystore.com' -X POST http://$KUADRANT_GATEWAY_URL/admin/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
@@ -310,17 +390,17 @@ Each user should be entitled to a maximum of 5 requests every 10 seconds.
 Send requests as the Keycloak-authenticated user:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $KUADRANT_ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Send requests as the Kubernetes service account:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $KUADRANT_SA_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup
 
 ```sh
-make local-cleanup
+kind delete cluster
 ```

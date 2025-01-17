@@ -8,9 +8,8 @@ In this guide, we will rate limit a sample REST API called **Toy Store**. In rea
 
 We will rate limit the `POST /toys` endpoint to a maximum of 5rp10s ("5 requests every 10 seconds").
 
-### Setup the environment
-
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+## Prerequisites
+- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
 
 ### Deploy the Toy Store API
 
@@ -130,5 +129,5 @@ while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Ho
 ## Cleanup
 
 ```sh
-make local-cleanup
+kind delete cluster
 ```

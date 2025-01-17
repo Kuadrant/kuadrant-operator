@@ -346,8 +346,3 @@ curl -H 'Host: foo.other-apps.com' http://$KUADRANT_GATEWAY_URL/ -i
 # }
 ```
 
-## Cleanup
-
-```sh
-kind delete cluster
-```

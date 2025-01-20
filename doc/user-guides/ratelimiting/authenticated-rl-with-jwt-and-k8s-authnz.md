@@ -1,6 +1,6 @@
 # Authenticated Rate Limiting with JWTs and Kubernetes RBAC
 
-This tutorial walks you through an example of how to use Kuadrant to protect an application with policies to enforce:
+This tutorial walks you through an example of how to use Kuadrant to protect an application with policies to enforce: 
 
 - authentication based OpenId Connect (OIDC) ID tokens (signed JWTs), issued by a Keycloak server;
 - alternative authentication method by Kubernetes Service Account tokens;
@@ -24,11 +24,13 @@ Privileges to execute the requested operation (read, create or delete) will be g
 Each user will be entitled to a maximum of 5rp10s (5 requests every 10 seconds).
 
 ## Prerequisites
-- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
+
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Setup environment variables
 
-Set the following environment variables used for convenience in this guide:
+Set the following environment variables used for convenience in this tutorial:
 
 ```bash
 export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
@@ -397,10 +399,4 @@ Send requests as the Kubernetes service account:
 
 ```sh
 while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $KUADRANT_SA_TOKEN" -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
-```
-
-## Cleanup
-
-```sh
-kind delete cluster
 ```

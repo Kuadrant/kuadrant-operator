@@ -1,8 +1,8 @@
 # Authenticated Rate Limiting for Application developers
 
-For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
 
-This tutorial guide walks you through an example of how to configure authenticated rate limiting for an application using Kuadrant.
+This tutorial walks you through an example of how to configure authenticated rate limiting for an application using Kuadrant.
 
 Authenticated rate limiting rate limits the traffic directed to an application based on attributes of the client user, who is authenticated by some authentication method. A few examples of authenticated rate limiting use cases are:
 
@@ -20,11 +20,13 @@ We will define 2 users of the API, which can send requests to the API at differe
 | bob     | 2rp10s ("2 requests every 10 seconds") |
 
 ## Prerequisites
-- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
+
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Setup environment variables
 
-Set the following environment variables used for convenience in this guide:
+Set the following environment variables used for convenience in this tutorial:
 
 ```bash
 export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
@@ -270,10 +272,4 @@ Up to 2 successful (`200 OK`) requests every 10 seconds allowed for Bob, then `4
 
 ```sh
 while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
-```
-
-## Cleanup
-
-```sh
-kind delete cluster
 ```

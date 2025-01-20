@@ -2,18 +2,17 @@
 
 ## Overview
 
-This tutorial walks you through using Kuadrant to secure, protect, and connect an API exposed by a Gateway (Kubernetes Gateway API) from the personas platform engineer and application developer. For more information on the different personas please see the [Gateway API documentation](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
+This tutorial walks you through using Kuadrant to secure, protect, and connect an API exposed by a Gateway (Kubernetes Gateway API) from the personas platform engineer and application developer. For more information on the different personas please see the [Gateway API documentation](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
 
 ## Prerequisites
 
-- Kubernetes cluster with Kuadrant operator installed. 
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 - AWS/Azure or GCP with DNS capabilities.
 
-
 ### Set the environment variables
 
-Set the following environment variables used for convenience in this guide:
+Set the following environment variables used for convenience in this tutorial:
 
 ```bash
 export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
@@ -471,8 +470,6 @@ while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H 
 ## Next Steps
 
 - [mTLS Configuration](../../install/mtls-configuration.md)
-To learn more about Kuadrant and see more how to guides, visit Kuadrant [documentation](https://docs.kuadrant.io)
-
 
 ### Optional
 

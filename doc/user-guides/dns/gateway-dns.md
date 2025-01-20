@@ -1,18 +1,16 @@
 # Gateway DNS configuration for routes attached to a ingress gateway
 
-This user guide walks you through an example of how to configure DNS for all routes attached to an ingress gateway.
+This tutorial walks you through an example of how to configure DNS for all routes attached to an ingress gateway. 
 
 ## Prerequisites
 
-- kubectl command line tool.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 - AWS/Azure or GCP with DNS capabilities.
-- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
-
-
 
 ### Setup environment variables
 
-Set the following environment variables used for convenience in this guide:
+Set the following environment variables used for convenience in this tutorial:
 
 ```bash
 export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
@@ -158,10 +156,4 @@ Verify DNS using curl you should get a status 200:
 
 ```shell
 curl http://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars -i
-```
-
-## Cleanup
-
-```shell
-kind delete cluster
 ```

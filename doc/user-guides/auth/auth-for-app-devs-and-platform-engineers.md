@@ -36,11 +36,13 @@ Topology:
 ```
 
 ## Prerequisites
-- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
+
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Setup environment variables
 
-Set the following environment variables used for convenience in this guide:
+Set the following environment variables used for convenience in this tutorial:
 
 ```bash
 export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
@@ -345,4 +347,3 @@ curl -H 'Host: foo.other-apps.com' http://$KUADRANT_GATEWAY_URL/ -i
 #   "message": "Access denied by default by the gateway operator. If you are the administrator of the service, create a specific auth policy for the route."
 # }
 ```
-

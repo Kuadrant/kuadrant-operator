@@ -1,15 +1,17 @@
 # Simple Rate Limiting for Application developers
 
-For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
 
-This user guide walks you through an example of how to configure rate limiting for an endpoint of an application using Kuadrant.
+This tutorial walks you through an example of how to configure rate limiting for an endpoint of an application using Kuadrant.
 
-In this guide, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API listens to requests at the hostname `api.toystore.com`, where it exposes the endpoints `GET /toys*` and `POST /toys`, respectively, to mimic operations of reading and writing toy records.
+In this tutorial, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API listens to requests at the hostname `api.toystore.com`, where it exposes the endpoints `GET /toys*` and `POST /toys`, respectively, to mimic operations of reading and writing toy records.
 
 We will rate limit the `POST /toys` endpoint to a maximum of 5rp10s ("5 requests every 10 seconds").
 
 ## Prerequisites
-- Kubernetes cluster with Kuadrant operator installed. See our [getting started](getting-started.md) guide for more information.
+
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Deploy the Toy Store API
 
@@ -124,10 +126,4 @@ Unlimited successful (`200 OK`) to `GET /toys`:
 
 ```sh
 while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys | grep -E --color "\b(429)\b|$"; sleep 1; done
-```
-
-## Cleanup
-
-```sh
-kind delete cluster
 ```

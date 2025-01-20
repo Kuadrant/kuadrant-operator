@@ -136,7 +136,7 @@ toystore-local-tls   kubernetes.io/tls   3      7m42s
 Deploy the sample API:
 
 ```shell
-kubectl -n my-gateways apply -f examples/toystore/toystore.yaml
+kubectl -n my-gateways apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml
 kubectl -n my-gateways wait --for=condition=Available deployments toystore --timeout=60s
 ```
 

@@ -61,7 +61,7 @@ kubectl create ns ${KUADRANT_GATEWAY_NS}
 
 Create a gateway using toystore as the listener hostname:
 
-```sh
+```bash
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -98,7 +98,7 @@ kubectl create ns ${KUADRANT_DEVELOPER_NS}
 ```
 Deploy the Toy store 
 ```sh
-kubectl apply -f examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
 ```
 
 Create the Toy Store HTTPRoute

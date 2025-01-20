@@ -11,7 +11,7 @@ This tutorial walks you through an example of how to configure multiple rate lim
 ### Deploy the sample API:
 
 ```sh
-kubectl apply -f examples/toystore/toystore.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml
 ```
 
 ### Create the ingress gateways

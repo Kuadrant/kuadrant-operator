@@ -65,7 +65,7 @@ kubectl get gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o=jsonpa
 Create the deployment:
 
 ```sh
-kubectl apply -f examples/toystore/toystore.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml
 ```
 
 Create a HTTPRoute to route traffic to the service via Istio Ingress Gateway:
@@ -122,7 +122,7 @@ curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toys -i
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n ${KUADRANT_GATEWAY_NS} service/-${KUADRANT_GATEWAY_NAME}-istio 9080:80 >/dev/null 2>&1 &
+> kubectl port-forward -n ${KUADRANT_GATEWAY_NS} service/${KUADRANT_GATEWAY_NAME}-istio 9080:80 >/dev/null 2>&1 &
 > export KUADRANT_GATEWAY_URL=localhost:9080
 > ```
 >

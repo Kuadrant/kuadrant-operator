@@ -84,7 +84,7 @@ kubectl create ns ${KUADRANT_DEVELOPER_NS}
 Deploy the Toystore app to the developer namespace:
 
 ```bash
-kubectl apply -f examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
 ```
 
 Create a HTTPRoute to route traffic to the service via Istio Ingress Gateway:

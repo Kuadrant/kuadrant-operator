@@ -12,7 +12,7 @@ This tutorial walks you through an example of how to configure rate limiting for
 ### Deploy the Toystore example API:
 
 ```sh
-kubectl apply -f examples/toystore/toystore.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml
 
 ```
 

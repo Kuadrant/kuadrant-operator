@@ -85,7 +85,8 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches:
+  - name: rule-1
+    matches:
     - method: GET
       path:
         type: PathPrefix
@@ -93,7 +94,8 @@ spec:
     backendRefs:
     - name: toystore
       port: 80
-  - matches: # it has to be a separate HTTPRouteRule so we do not rate limit other endpoints
+  - name: rule-2
+    matches: # it has to be a separate HTTPRouteRule so we do not rate limit other endpoints
     - method: POST
       path:
         type: Exact
@@ -122,7 +124,7 @@ curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/toys -i
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n ${KUADRANT_GATEWAY_NS} service/-${KUADRANT_GATEWAY_NAME}-istio 9080:80 >/dev/null 2>&1 &
+> kubectl port-forward -n ${KUADRANT_GATEWAY_NS} service/${KUADRANT_GATEWAY_NAME}-istio 9080:80 >/dev/null 2>&1 &
 > export KUADRANT_GATEWAY_URL=localhost:9080
 > ```
 >

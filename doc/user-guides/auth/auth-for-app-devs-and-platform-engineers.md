@@ -119,7 +119,8 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches: # rule-1
+  - name: rule-1
+    matches:
     - method: GET
       path:
         type: PathPrefix
@@ -131,7 +132,8 @@ spec:
     backendRefs:
     - name: toystore
       port: 80
-  - matches: # rule-2
+  - name: rule-2
+    matches:
     - path:
         type: PathPrefix
         value: "/admin"

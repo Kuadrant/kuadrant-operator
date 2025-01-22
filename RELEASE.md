@@ -4,21 +4,26 @@
 
 To release a version _“v0.W.Z”_ of Kuadrant Operator in GitHub and Quay.io, follow these steps:
 
-1. Kuadrant dependencies need to be released first:
+1. Verify correct versions for the Kuadrant release and its dependencies are listed in the `release.toml` file.
+   The verification should be done as part of the community call prior to cutting the release.[^1]
+   Update versions if required, release of dependency may be required, see step 2.
+   This file is located in the root of the kuadrant operator.
+
+   [^1]: This is the general guide, for hot fixes the discretion for releaser can be used.
+
+2. (Optional) Release Kuadrant dependencies:
    * [Authorino Operator](https://github.com/Kuadrant/authorino-operator/blob/main/RELEASE.md).
    * [Limitador Operator](https://github.com/Kuadrant/limitador-operator/blob/main/RELEASE.md).
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md).
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/).
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin).
 
-2. Run the GHA [Release operator](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/release.yaml); make
-   sure to fill all the fields:
+   Once dependencies have being released jump to step 1.
 
+3. Run the GHA [Release operator](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/release.yaml); make
+   sure to fill all the fields:
     * Branch containing the release workflow file – default: `main`
     * Commit SHA or branch name of the operator to release – usually: `main`
-    * Operator version to release (without prefix) – i.e. `0.W.Z`
-    * Kuadrant dependencies (WASM Shim, Console Plugin, Authorino, Limitador and DNS operators) versions (without prefix) – i.e. `0.X.Y`
-    * If the release is a prerelease
 
 3. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
 
@@ -83,3 +88,33 @@ The usual steps are:
     * Copy the bundle files from `github.com/kuadrant/kuadrant-operator/tree/v0.W.Z/bundle`
     * Copy `github.com/kuadrant/kuadrant-operator/tree/v0.W.Z/bundle.Dockerfile` with the proper fix to the COPY commands
       (i.e. remove /bundle from the paths)
+
+--- 
+
+## Release file format.
+
+This example of the `release.toml` file uses tag `v1.0.1` as reference.
+
+```toml
+# FILE: ./release.toml
+[kuadrant]
+channel = "alpha"
+channels = ["alpha",]
+release = "1.0.1"
+
+[dependencies]
+Authorino_bundle = "0.16.0"
+Console_plugin = "0.0.14"
+DNS_bundle = "0.12.0"
+Limitador_bundle = "0.12.1"
+Wasm_shim = "0.8.1"
+
+```
+
+## Automated Verification Processes.
+
+* Check that dependencies release images exist for stated version
+* Check that the git tag does not already exist for the stated release.
+* Automated test, install via OLM and ensure the correct images are on cluster.
+This should handle most of [Verify OLM Deployment](#verify-olm-deployment), except the checking of the logs.
+* Ensure all required fields are stated in the `release.toml`.

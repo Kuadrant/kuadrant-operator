@@ -3,15 +3,15 @@ openapi: "3.1.0"
 info:
   title: "Pet Store API"
   version: "1.0.0"
-  x-kuadrant:
-    route:
-      name: "toystore"
-      namespace: $devNS
-      hostnames:
-        - toystore.$rootDomain
-      parentRefs:
-        - name: $gatewayName
-          namespace: $gatewayNS
+x-kuadrant:
+  route:
+    name: "toystore"
+    namespace: $devNS
+    hostnames:
+      - toystore.$rootDomain
+    parentRefs:
+      - name: $gatewayName
+        namespace: $gatewayNS
 servers:
   - url: https://toystore.$rootDomain/v1
 paths:

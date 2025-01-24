@@ -9,11 +9,27 @@ on:
   pull_request:
     branches:
       - main
-    paths:  
-      - 'examples/alerts/**'
+  merge_group:
+    types: [ checks_requested ]
+  workflow_dispatch:
+
 jobs:
+  pre-job:
+    runs-on: ubuntu-latest
+    name: Pre job checks
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.1
+        with:
+          cancel_others: false
+          paths: '["examples/alerts/**"]'
   promql-tests:
     name: Promql Unit tests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,3 +45,14 @@ jobs:
       - name: Run Promql tests
         run: |
             make test-alerts
+  required-checks:
+    name: Alerts Promql tests Required Checks
+    # This check adds a list of checks to one job to simplify adding settings to the repo.
+    # If a new check is added in this file, and it should be retested on entry to the merge queue,
+    # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
+    needs: [ promql-tests ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'

@@ -2,19 +2,22 @@
 
 A Kuadrant AuthPolicy custom resource:
 
-1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to enforce auth.
-2. Supports targeting subsets (sections) of a network resource to apply the auth rules to.
+1. Targets Gateway API networking resources [HTTPRoute](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) and [Gateway](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway), using these to obtain the auth context, i.e., on which traffic workload (HTTP attributes, hostnames, user attributes, etc) to enforce auth.
+2. Supports targeting subsets (sections) of a network resource to apply the auth rules to, i.e. specific listeners of a Gateway or HTTP route rules of an HTTPRoute.
 3. Abstracts the details of the underlying external authorization protocol and configuration resources, that have a much broader remit and surface area.
-4. Enables cluster operators to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.
+4. Enables platform engineers to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.
+5. Enables platform engineers to set overrides over policies and/or individual policy rules specified at the lower levels of the network.
 
 ## How it works
 
-### Envoy's External Authorization Protocol
+### Integration
 
-Kuadrant's Auth implementation relies on the Envoy's [External Authorization](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter) protocol. The workflow per request goes:
+Kuadrant integrates an [External Authorization](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter) service ("Authorino") that is triggered on matching HTTP contexts.
+
+The workflow per request goes:
 
 1. On incoming request, the gateway checks the matching rules for enforcing the auth rules, as stated in the AuthPolicy custom resources and targeted Gateway API networking objects
-2. If the request matches, the gateway sends one [CheckRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/auth/v3/external_auth.proto#envoy-v3-api-msg-service-auth-v3-checkrequest) to the external auth service ("Authorino").
+2. If the request matches, the gateway sends a [CheckRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/auth/v3/external_auth.proto#envoy-v3-api-msg-service-auth-v3-checkrequest) to Authorino.
 3. The external auth service responds with a [CheckResponse](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/auth/v3/external_auth.proto#service-auth-v3-checkresponse) back to the gateway with either an `OK` or `DENIED` response code.
 
 An AuthPolicy and its targeted Gateway API networking resource contain all the statements to configure both the ingress gateway and the external auth service.
@@ -48,11 +51,49 @@ Check out the [API reference](../reference/authpolicy.md) for a full specificati
 
 ### Targeting a HTTPRoute networking resource
 
-When an AuthPolicy targets a HTTPRoute, the policy is enforced to all traffic routed according to the rules and hostnames specified in the HTTPRoute, across all Gateways referenced in the `spec.parentRefs` field of the HTTPRoute.
+When targeting a HTTPRoute, an AuthPolicy can be enforced on:
+- all traffic routed by any rule specified in the HTTPRoute; or
+- only traffic routed by a specific set of rules as stated in a selected HTTPRouteRule of the HTTPRoute, by specifying the `sectionName` field in the target reference (`spec.targetRef`) of the policy.
 
-The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets.
+Either way, the policy applies across all hostnames (`spec.hostnames`) and Gateways (`spec.parentRefs`) referenced in the HTTPRoute, provided the route is properly attached to the corresponding Gateway listeners.
 
-Target a HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
+Additional filters for applying the policy can be set by specifying top-level conditions in the policy (`spec.rules.when`).
+
+**Example 1** - Targeting an entire HTTPRoute
+
+```yaml
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: my-auth
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: my-route
+  rules: { … }
+```
+
+```
+┌─────────────────────┐            ┌─────────────────────┐
+│ (Gateway namespace) │            │   (App namespace)   │
+│                     │            │                     │
+│    ┌─────────┐      │ parentRefs │  ┌────────────┐     │
+│    │ Gateway │◄─────┼────────────┼──┤ HTTPRoute  │     │
+│    └─────────┘      │            │  | (my-route) │     |
+│                     │            │  └────────────┘     │
+│                     │            │        ▲            │
+│                     │            │        │            │
+│                     │            │        │ targetRef  │
+│                     │            │        │            │
+│                     │            │  ┌─────┴──────┐     │
+│                     │            │  │ AuthPolicy │     │
+│                     │            │  │ (my-auth)  │     │
+│                     │            │  └────────────┘     │
+└─────────────────────┘            └─────────────────────┘
+```
+
+**Example 2** - Targeting a specific set of rules of a HTTPRoute
 
 ```yaml
 apiVersion: kuadrant.io/v1
@@ -63,56 +104,36 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: <HTTPRoute Name>
+    name: my-route
+    sectionName: rule-2
   rules: { … }
 ```
 
 ```
-┌───────────────────┐             ┌────────────────────┐
-│ (Infra namespace) │             │   (App namespace)  │
-│                   │             │                    │
-│  ┌─────────┐      │  parentRefs │  ┌───────────┐     │
-│  │ Gateway │◄─────┼─────────────┼──┤ HTTPRoute │     │
-│  └─────────┘      │             │  └───────────┘     │
-│                   │             │        ▲           │
-│                   │             │        │           │
-│                   │             │        │           │
-│                   │             │        │ targetRef │
-│                   │             │        │           │
-│                   │             │  ┌─────┴──────┐    │
-│                   │             │  │ AuthPolicy │    │
-│                   │             │  └────────────┘    │
-│                   │             │                    │
-└───────────────────┘             └────────────────────┘
+┌─────────────────────┐            ┌──────────────────────┐
+│ (Gateway namespace) │            │    (App namespace)   │
+│                     │            │                      │
+│    ┌─────────┐      │ parentRefs │  ┌────────────┐      │
+│    │ Gateway │◄─────┼────────────┼──┤ HTTPRoute  │      │
+│    └─────────┘      │            │  | (my-route) │      |
+│                     │            │  |------------│      |
+│                     │            │  | - rule-1   │      |
+│                     │            │  | - rule-2   │      |
+│                     │            │  └────────────┘      │
+│                     │            │        ▲             │
+│                     │            │        │             │
+│                     │            │        │ targetRef   │
+│                     │            │        │             │
+│                     │            │  ┌─────┴───────────┐ │
+│                     │            │  │   AuthPolicy    │ │
+│                     │            │  │ (my-route-auth) │ │
+│                     │            │  └─────────────────┘ │
+└─────────────────────┘            └──────────────────────┘
 ```
-
-#### Hostnames and wildcards
-
-If an AuthPolicy targets a route defined for `*.com` and another AuthPolicy targets another route for `api.com`, the Kuadrant control plane will not merge these two AuthPolicies. Rather, it will mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and auth rules.
-
-E.g., a request coming for `api.com` will be protected according to the rules from the AuthPolicy that targets the route for `api.com`; while a request for `other.com` will be protected with the rules from the AuthPolicy targeting the route for `*.com`.
-
-Example with 3 AuthPolicies and 3 HTTPRoutes:
-
-- AuthPolicy A → HTTPRoute A (`a.toystore.com`)
-- AuthPolicy B → HTTPRoute B (`b.toystore.com`)
-- AuthPolicy W → HTTPRoute W (`*.toystore.com`)
-
-Expected behavior:
-
-- Request to `a.toystore.com` → AuthPolicy A will be enforced
-- Request to `b.toystore.com` → AuthPolicy B will be enforced
-- Request to `other.toystore.com` → AuthPolicy W will be enforced
 
 ### Targeting a Gateway networking resource
 
-An AuthPolicy that targets a Gateway can declare a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). As a standard, gateway policies that do not specify neither defaults nor overrides, act as defaults.
-
-When declaring _defaults_, an AuthPolicy which targets a Gateway will be enforced to all HTTP traffic hitting the gateway, unless a more specific AuthPolicy targeting a matching HTTPRoute exists. Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the default AuthPolicy, as well as changes in the existing HTTPRoutes.
-
-_Defaults_ provide cluster operators with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive "deny-all" policies on hostnames and hostname wildcards.
-
-Inversely, a gateway policy that specify _overrides_ declares a set of rules to be enforced on _all routes attached to the gateway_, thus atomically replacing any more specific policy occasionally attached to any of those routes.
+An AuthPolicy that targets a Gateway, without overrides, will be enforced to all HTTP traffic hitting the gateway, unless a more specific AuthPolicy targeting a matching HTTPRoute exists. Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the gateway-targeting AuthPolicy, as well as changes in the existing HTTPRoutes.
 
 Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
@@ -125,69 +146,69 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: <Gateway Name>
+    name: my-gw
   defaults: # alternatively: `overrides`
     rules: { … }
 ```
 
 ```
-┌───────────────────┐             ┌────────────────────┐
-│ (Infra namespace) │             │   (App namespace)  │
-│                   │             │                    │
-│  ┌─────────┐      │  parentRefs │  ┌───────────┐     │
-│  │ Gateway │◄─────┼─────────────┼──┤ HTTPRoute │     │
-│  └─────────┘      │             │  └───────────┘     │
-│       ▲           │             │        ▲           │
-│       │           │             │        │           │
-│       │           │             │        │           │
-│       │ targetRef │             │        │ targetRef │
-│       │           │             │        │           │
-│ ┌─────┴──────┐    │             │  ┌─────┴──────┐    │
-│ │ AuthPolicy │    │             │  │ AuthPolicy │    │
-│ └────────────┘    │             │  └────────────┘    │
-│                   │             │                    │
-└───────────────────┘             └────────────────────┘
+┌───────────────────┐             ┌──────────────────────┐
+│ (Infra namespace) │             │    (App namespace)   │
+│                   │             │                      │
+│  ┌─────────┐      │  parentRefs │  ┌───────────┐       │
+│  │ Gateway │◄─────┼─────────────┼──┤ HTTPRoute │       │
+│  | (my-gw) |      │             │  └───────────┘       │
+│  └─────────┘      │             │        ▲             │
+│       ▲           │             │        |             │
+│       │           │             │        │             │
+│       │ targetRef │             │        │ targetRef   │
+│       │           │             │        │             │
+│ ┌─────┴────────┐  │             │  ┌─────┴───────────┐ │
+│ │  AuthPolicy  │  │             │  │   AuthPolicy    │ │
+│ | (my-gw-auth) |  │             │  │ (my-route-auth) │ │
+│ └──────────────┘  │             │  └─────────────────┘ │
+└───────────────────┘             └──────────────────────┘
 ```
 
-#### Overlapping Gateway and HTTPRoute AuthPolicies
+### Defaults and Overrides
 
-Two possible semantics are to be considered here – gateway policy _defaults_ vs gateway policy _overrides_.
+Kuadrant AuthPolicies support Defaults & Overrides essentially as specified in Gateway API [GEP-2649](https://gateway-api.sigs.k8s.io/geps/gep-2649/).
 
-Gateway AuthPolicies that declare _defaults_ (or alternatively neither defaults nor overrides) protect all traffic routed through the gateway except where a more specific HTTPRoute AuthPolicy exists, in which case the HTTPRoute AuthPolicy prevails.
+An AuthPolicy can declare a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). By default, policies that do not specify neither `defaults` nor `overrides`, act implicitly as if specifying `defaults`. A default set of policy rules are enforced until a more specific set supersedes them. In contrast, a set of overrides wins over any more specific set of rules.
 
-Example with 4 AuthPolicies, 3 HTTPRoutes and 1 Gateway _default_ (plus 2 HTTPRoute and 2 Gateways without AuthPolicies attached):
+Setting _default_ AuthPolicies provide, e.g., platform engineers with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive "deny-all" policies at the level of the gateways that block access on all routes attached to the gateway. Later on, application developers can define more specific auth rules at the level of the HTTPRoutes, opening access to individual routes.
 
-- AuthPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy G (defaults) → Gateway G (`*.com`)
+Inversely, a gateway policy that specify _overrides_ declares a set of rules that is enforced on all routes attached to the gateway, thus atomically replacing any more specific policy occasionally attached to any of those routes.
+
+Although typical examples involve specifying `defaults` and `overrides` at the level of the Gateway object which interact with sets of policy rules defined at the more specific context (HTTPRoute), Defaults & Overrides are actually transversal to object kinds. One can define AuthPolicies with `defaults` or `overrides` at any level of the following hierarchy and including multiple policies at the same level:
+1. Gateway
+2. Gateway listener (by targeting a Gateway with `sectionName`)
+3. HTTPRoute
+4. HTTPRouteRule (by targeting a HTTPRoute with `sectionName`)
+
+The final set of policy rules to enforce for a given request, known as "effective policy", is computed based on the basic principles stated in the [Hierarchy](https://gateway-api.sigs.k8s.io/geps/gep-2649/#hierarchy) section of GEP-2649 and [Conflict Resolution](https://gateway-api.sigs.k8s.io/geps/gep-2649/#conflict-resolution) of its predecessor [GEP-713](https://gateway-api.sigs.k8s.io/geps/gep-713/#conflict-resolution), for the hierarchical levels above.
+
+Kuadrant AuthPolicies extend Gateway API's Defaults & Overrides with additional merge strategies for allowing users to specify sets of policy rules under `defaults` and/or `overrides` blocks that can be either _atomically_ applied or _merged_ into a composition of policy rules from the multiple AuthPolicies affecting a hierarchy of newtworking objects. The name of the policy rule is used for detecting conflicts.
+
+For details of the behavior of Defaults & Overrides for the AuthPolicies covering all supported merge strategies, see [RFC-0009](https://github.com/Kuadrant/architecture/blob/main/rfcs/0009-defaults-and-overrides.md).
+
+### Hostnames and wildcards
+
+If an AuthPolicy targets a route defined for a hostname wildcard `*.com` and a second AuthPolicy targets another route for a hostname `api.com`, without any overrides nor merges in place, the policies will be enforced according to the principle of "the more specific wins". E.g., a request coming for `api.com` will be protected according to the rules from the AuthPolicy that targets the route for `api.com`, while a request for `other.com` will be protected with the rules from the AuthPolicy targeting the route for `*.com`. One should not expect both set of policy rules to be enforced on requests to `api.com` simply because both hostname and wildcard match.
+
+Example with 3 AuthPolicies and 3 HTTPRoutes, without merges nor overrides in place:
+
+- AuthPolicy A → HTTPRoute A (`a.toystore.com`)
+- AuthPolicy B → HTTPRoute B (`b.toystore.com`)
+- AuthPolicy W → HTTPRoute W (`*.toystore.com`)
 
 Expected behavior:
 
 - Request to `a.toystore.com` → AuthPolicy A will be enforced
 - Request to `b.toystore.com` → AuthPolicy B will be enforced
 - Request to `other.toystore.com` → AuthPolicy W will be enforced
-- Request to `other.com` (suppose a route exists) → AuthPolicy G will be enforced
-- Request to `yet-another.net` (suppose a route and gateway exist) → No AuthPolicy will be enforced
 
-Gateway AuthPolicies that declare _overrides_ protect all traffic routed through the gateway, regardless of existence of any more specific HTTPRoute AuthPolicy.
-
-Example with 4 AuthPolicies, 3 HTTPRoutes and 1 Gateway _override_ (plus 2 HTTPRoute and 2 Gateways without AuthPolicies attached):
-
-- AuthPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy G (overrides) → Gateway G (`*.com`)
-
-Expected behavior:
-
-- Request to `a.toystore.com` → AuthPolicy G will be enforced
-- Request to `b.toystore.com` → AuthPolicy G will be enforced
-- Request to `other.toystore.com` → AuthPolicy G will be enforced
-- Request to `other.com` (suppose a route exists) → AuthPolicy G will be enforced
-- Request to `yet-another.net` (suppose a route and gateway exist) → No AuthPolicy will be enforced
-
-#### `when` conditions
+### `when` conditions
 
 `when` conditions can be used to scope an AuthPolicy or auth rule within an AuthPolicy (i.e. to filter the traffic to which a policy or policy rule applies) without any coupling to the underlying network topology.
 
@@ -199,7 +220,7 @@ The selectors within the `when` conditions of an AuthPolicy are a subset of Kuad
 
 Authorino [JSON path string modifiers](https://docs.kuadrant.io/latest/authorino/docs/features/#string-modifiers) can also be applied to the selectors within the `when` conditions of an AuthPolicy.
 
-### Examples
+## Examples
 
 Check out the following user guides for examples of protecting services with Kuadrant:
 
@@ -207,110 +228,7 @@ Check out the following user guides for examples of protecting services with Kua
 - [Authenticated Rate Limiting for Application Developers](../user-guides/ratelimiting/authenticated-rl-for-app-developers.md)
 - [Authenticated Rate Limiting with JWTs and Kubernetes RBAC](../user-guides/ratelimiting/authenticated-rl-with-jwt-and-k8s-authnz.md)
 
-### Known limitations
+## Known limitations
 
-- One HTTPRoute can only be targeted by one AuthPolicy.
-- One Gateway can only be targeted by one AuthPolicy.
 - AuthPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the AuthPolicy.
-- 2+ AuthPolicies cannot target network resources that define/inherit the same exact hostname.
-
-#### Limitation: Multiple network resources with identical hostnames
-
-Kuadrant currently does not support multiple AuthPolicies simultaneously targeting network resources that declare identical hostnames. This includes multiple HTTPRoutes that specify the same hostnames in the `spec.hostnames` field, as well as HTTPRoutes that specify a hostname that is identical to a hostname specified in a listener of one of the route's parent gateways or HTTPRoutes that don't specify any hostname at all thus inheriting the hostnames from the parent gateways. In any of these cases, **a maximum of one AuthPolicy targeting any of those resources that specify identical hostnames is allowed**.
-
-Moreover, having **multiple resources that declare identical hostnames** may lead to unexpected behavior and therefore **should be avoided**.
-
-This limitation is rooted at the underlying components configured by Kuadrant for the implementation of its policies and the lack of information in the data plane regarding the exact route that is honored by the API gateway at each specific request, in cases of conflicting hostnames.
-
-To exemplify one way this limitation can impact deployments, consider the following topology:
-
-```
-                 ┌──────────────┐
-                 │   Gateway    │
-                 ├──────────────┤
-          ┌─────►│ listeners:   │◄──────┐
-          │      │ - host: *.io │       │
-          │      └──────────────┘       │
-          │                             │
-          │                             │
-┌─────────┴─────────┐        ┌──────────┴────────┐
-│     HTTPRoute     │        │     HTTPRoute     │
-│     (route-a)     │        │     (route-b)     │
-├───────────────────┤        ├───────────────────┤
-│ hostnames:        │        │ hostnames:        │
-│ - app.io          │        │ - app.io          │
-│ rules:            │        │ rules:            │
-│ - matches:        │        │ - matches:        │
-│   - path:         │        │   - path:         │
-│       value: /foo │        │       value: /bar │
-└───────────────────┘        └───────────────────┘
-          ▲                            ▲
-          │                            │
-    ┌─────┴──────┐               ┌─────┴──────┐
-    │ AuthPolicy │               │ AuthPolicy │
-    │ (policy-1) │               │ (policy-2) │
-    └────────────┘               └────────────┘
-```
-
-In the example above, with the `policy-1` resource created before `policy-2`, `policy-1` will be enforced on all requests to `app.io/foo` while `policy-2` will be rejected. I.e. `app.io/bar` will not be secured. In fact, the status conditions of `policy-2` shall reflect `Enforced=false` with message _"AuthPolicy has encountered some issues: AuthScheme is not ready yet"_.
-
-Notice the enforcement of `policy-1` and no enforcement of `policy-2` is the opposite behavior as the [analogous problem with the Kuadrant RateLimitPolicy](rate-limiting.md#limitation-multiple-network-resources-with-identical-hostnames).
-
-A slightly different way the limitation applies is when two or more routes of a gateway declare the exact same hostname and a gateway policy is defined with expectation to set default rules for the cases not covered by more specific policies. E.g.:
-
-```
-                                    ┌────────────┐
-                         ┌──────────┤ AuthPolicy │
-                         │          │ (policy-2) │
-                         ▼          └────────────┘
-                 ┌──────────────┐
-                 │   Gateway    │
-                 ├──────────────┤
-          ┌─────►│ listeners:   │◄──────┐
-          │      │ - host: *.io │       │
-          │      └──────────────┘       │
-          │                             │
-          │                             │
-┌─────────┴─────────┐        ┌──────────┴────────┐
-│     HTTPRoute     │        │     HTTPRoute     │
-│     (route-a)     │        │     (route-b)     │
-├───────────────────┤        ├───────────────────┤
-│ hostnames:        │        │ hostnames:        │
-│ - app.io          │        │ - app.io          │
-│ rules:            │        │ rules:            │
-│ - matches:        │        │ - matches:        │
-│   - path:         │        │   - path:         │
-│       value: /foo │        │       value: /bar │
-└───────────────────┘        └───────────────────┘
-          ▲
-          │
-    ┌─────┴──────┐
-    │ AuthPolicy │
-    │ (policy-1) │
-    └────────────┘
-```
-
-Once again, requests to `app.io/foo` will be protected under AuthPolicy `policy-1`, while requests to `app.io/bar` will **not** be protected under any policy at all, unlike expected gateway policy `policy-2` enforced as default. Both policies will report status condition as `Enforced` nonetheless.
-
-To avoid these problems, use different hostnames in each route.
-
-## Implementation details
-
-Under the hood, for each AuthPolicy, Kuadrant creates an Istio [`AuthorizationPolicy`](https://istio.io/latest/docs/reference/config/security/authorization-policy) and an Authorino [`AuthConfig`](https://docs.kuadrant.io/latest/authorino/docs/architecture/#the-authorino-authconfig-custom-resource-definition-crd) custom resources.
-
-Only requests that matches the rules in the Istio `AuthorizationPolicy` cause an authorization request to be sent to the external authorization service ("Authorino"), i.e., only requests directed to the HTTPRouteRules targeted by the AuthPolicy (directly or indirectly), according to the declared top-level route selectors (if present), or all requests for which a matching HTTPRouteRule exists (otherwise).
-
-Authorino looks up for the auth scheme (`AuthConfig` custom resource) to enforce using the provided hostname of the original request as key. It then checks again if the request matches at least one of the selected HTTPRouteRules, in which case it enforces the auth scheme.
-
-<details>
-  <summary>Exception to the rule</summary>
-
-Due to limitations imposed by the Istio `AuthorizationPolicy`, there are a few patterns of HTTPRouteRules that cannot be translated to filters for the external authorization request. Therefore, the following patterns used in HTTPRouteMatches of top-level route selectors of an AuthPolicy will not be included in the Istio AuthorizationPolicy rules that trigger the check request with Authorino: `PathMatchRegularExpression`, `HeaderMatchRegularExpression`, and `HTTPQueryParamMatch`.
-
-As a consequence to the above, requests that do not match these rules and otherwise would not be checked with Authorino will result in a request to the external authorization service. Authorino nonetheless will still verify those patterns and ensure the auth scheme is enforced only when it matches a selected HTTPRouteRule. Users of Kuadrant may observe an unnecessary call to the authorization service in those cases where the request is out of the scope of the AuthPolicy and therefore always authorized.
-
-</details>
-
-### Internal custom resources and namespaces
-
-While the Istio `AuthorizationPolicy` needs to be created in the same namespace as the gateway workload, the Authorino `AuthConfig` is created in the namespace of the `AuthPolicy` itself. This allows to simplify references such as to Kubernetes Secrets referred in the AuthPolicy, as well as the RBAC to support the architecture.
+- AuthPolicies that reference other Kubernetes objects (typically `Secret`s) require those objects to the created in the same namespace as the `Kuadrant` custom resource managing the deployment. This is the case of AuthPolicies that define API key authentication with `allNamespaces` option set to `false` (default), where the API key Secrets must be created in the Kuadrant CR namespace and not in the AuthPolicy namespace.

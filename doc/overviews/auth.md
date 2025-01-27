@@ -12,7 +12,7 @@ A Kuadrant AuthPolicy custom resource:
 
 ### Integration
 
-Kuadrant's integrates an [External Authorization](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter) service ("Authorino") that is triggered on matching HTTP contexts.
+Kuadrant integrates an [External Authorization](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter) service ("Authorino") that is triggered on matching HTTP contexts.
 
 The workflow per request goes:
 
@@ -52,7 +52,7 @@ Check out the [API reference](../reference/authpolicy.md) for a full specificati
 ### Targeting a HTTPRoute networking resource
 
 When targeting a HTTPRoute, an AuthPolicy can be enforced on:
-- all traffic routed by the any rules specified in the HTTPRoute; or
+- all traffic routed by any rule specified in the HTTPRoute; or
 - only traffic routed by a specific set of rules as stated in a selected HTTPRouteRule of the HTTPRoute, by specifying the `sectionName` field in the target reference (`spec.targetRef`) of the policy.
 
 Either way, the policy applies across all hostnames (`spec.hostnames`) and Gateways (`spec.parentRefs`) referenced in the HTTPRoute, provided the route is properly attached to the corresponding Gateway listeners.
@@ -176,7 +176,7 @@ Kuadrant AuthPolicies support Defaults & Overrides essentially as specified in G
 
 An AuthPolicy can declare a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). By default, policies that do not specify neither `defaults` nor `overrides`, act implicitly as if specifying `defaults`. A default set of policy rules are enforced until a more specific set supersedes them. In contrast, a set of overrides wins over any more specific set of rules.
 
-Setting _default_ AuthPolicies provide, e.g., platform engineers with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive "deny-all" policies at the level of the gateways that block access on all routes attached o the gateway. Later on, application developers can define more specific auth rules at the level of the HTTPRoutes, opening access to individual routes.
+Setting _default_ AuthPolicies provide, e.g., platform engineers with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive "deny-all" policies at the level of the gateways that block access on all routes attached to the gateway. Later on, application developers can define more specific auth rules at the level of the HTTPRoutes, opening access to individual routes.
 
 Inversely, a gateway policy that specify _overrides_ declares a set of rules that is enforced on all routes attached to the gateway, thus atomically replacing any more specific policy occasionally attached to any of those routes.
 

@@ -1,17 +1,18 @@
 # Gateway Rate Limiting for Cluster Operators
 
-For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas)
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
 
-This user guide walks you through an example of how to configure rate limiting for all routes attached to a specific ingress gateway.
+This tutorial walks you through an example of how to configure rate limiting for all routes attached to a specific ingress gateway.
 
-### Setup the environment
+## Prerequisites
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Deploy the Toystore example API:
 
 ```sh
-kubectl apply -f examples/toystore/toystore.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml
 
 ```
 
@@ -166,10 +167,4 @@ Unlimited successful (`200 OK`) through the `internal` ingress gateway (`*.local
 
 ```sh
 while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.local' http://localhost:9082 | grep -E --color "\b(429)\b|$"; sleep 1; done
-```
-
-## Cleanup
-
-```sh
-make local-cleanup
 ```

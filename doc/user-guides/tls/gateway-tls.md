@@ -1,29 +1,13 @@
 # Gateway TLS for Cluster Operators
 
-This user guide walks you through an example of how to configure TLS for all routes attached to an ingress gateway.
+This tutorial walks you through an example of how to configure TLS for all routes attached to an ingress gateway. 
 
-## Requisites
+## Prerequisites
 
-- [Docker](https://docker.io)
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Setup
-
-This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-where it installs Istio, Kubernetes Gateway API, CertManager and Kuadrant itself.
-
-Clone the project:
-
-```shell
-git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
-```
-
-Setup the environment:
-
-```shell
-make local-setup
-```
-
-Create a namespace:
 
 ```shell
 kubectl create namespace my-gateways
@@ -152,7 +136,7 @@ toystore-local-tls   kubernetes.io/tls   3      7m42s
 Deploy the sample API:
 
 ```shell
-kubectl -n my-gateways apply -f examples/toystore/toystore.yaml
+kubectl -n my-gateways apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml
 kubectl -n my-gateways wait --for=condition=Available deployments toystore --timeout=60s
 ```
 
@@ -268,10 +252,4 @@ x-envoy-upstream-service-time: 1
 
 <
 * Connection #0 to host api.toystore.local left intact
-```
-
-## Cleanup
-
-```shell
-make local-cleanup
 ```

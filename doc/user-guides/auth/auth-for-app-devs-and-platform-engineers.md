@@ -1,6 +1,6 @@
 # Enforcing authentication & authorization with Kuadrant AuthPolicy
 
-This guide walks you through the process of setting up a local Kubernetes cluster with Kuadrant where you will protect [Gateway API](https://gateway-api.sigs.k8s.io/) endpoints by declaring Kuadrant AuthPolicy custom resources.
+This tutorial walks you through the process of setting up a local Kubernetes cluster with Kuadrant where you will protect [Gateway API](https://gateway-api.sigs.k8s.io/) endpoints by declaring Kuadrant AuthPolicy custom resources.
 
 Three AuthPolicies will be declared:
 
@@ -14,7 +14,7 @@ Topology:
 ```
                             ┌─────────────────────────┐
                             │        (Gateway)        │   ┌───────────────┐
-                            │ kuadrant-ingressgateway │◄──│ (AuthPolicy)  │
+                            │         external        │◄──│ (AuthPolicy)  │
                             │                         │   │    gw-auth    │
                             │            *            │   └───────────────┘
                             └─────────────────────────┘
@@ -35,24 +35,87 @@ Topology:
             └─────────────────┘
 ```
 
-## Setup the environment
+## Prerequisites
 
-Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make.md) to set up your environment before continuing with this doc.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
+
+### Setup environment variables
+
+Set the following environment variables used for convenience in this tutorial:
+
+```bash
+export KUADRANT_GATEWAY_NS=api-gateway # Namespace for the example Gateway
+export KUADRANT_GATEWAY_NAME=external # Name for the example Gateway
+export KUADRANT_DEVELOPER_NS=toystore # Namespace for an example toystore app
+
+```
+
+### Create an Ingress Gateway
+
+Create the namespace the Gateway will be deployed in:
+
+```bash
+kubectl create ns ${KUADRANT_GATEWAY_NS}
+```
+
+Create a gateway using toystore as the listener hostname:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ${KUADRANT_GATEWAY_NAME}
+  namespace: ${KUADRANT_GATEWAY_NS}
+  labels:
+    kuadrant.io/gateway: "true"
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+EOF
+```
+
+Check the status of the `Gateway` ensuring the gateway is Accepted and Programmed:
+
+```bash
+kubectl get gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}{"\n"}{.status.conditions[?(@.type=="Programmed")].message}{"\n"}'
+```
 
 ### Deploy the Toy Store sample application (Persona: _App developer_)
 
+
+Create the namespace for the toystore API:
+
+```bash
+kubectl create ns ${KUADRANT_DEVELOPER_NS}
+```
+Deploy the Toy store 
 ```sh
-kubectl apply -f examples/toystore/toystore.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
+```
+
+Create the Toy Store HTTPRoute
+```bash
 
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: toystore
+  namespace: ${KUADRANT_DEVELOPER_NS}
+  labels:
+     app: toystore
 spec:
   parentRefs:
-  - name: kuadrant-ingressgateway
-    namespace: gateway-system
+  - name: ${KUADRANT_GATEWAY_NAME}
+    namespace: ${KUADRANT_GATEWAY_NS}
   hostnames:
   - api.toystore.com
   rules:
@@ -81,25 +144,25 @@ EOF
 Export the gateway hostname and port:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
-export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+export KUADRANT_INGRESS_HOST=$(kubectl get gtw ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o jsonpath='{.status.addresses[0].value}')
+export KUADRANT_INGRESS_PORT=$(kubectl get gtw ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS} -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export KUADRANT_GATEWAY_URL=${KUADRANT_INGRESS_HOST}:${KUADRANT_INGRESS_PORT}
 ```
 
 Send requests to the application unprotected:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/cars -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/cars -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/dolls -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/dolls -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/admin -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/admin -i
 # HTTP/1.1 200 OK
 ```
 
@@ -118,6 +181,7 @@ apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore-authn
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -140,6 +204,7 @@ apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore-admins
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -189,25 +254,25 @@ EOF
 Send requests to the application protected by Kuadrant:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/cars -i
+curl -H 'Host: api.toystore.com' http://$KUADRANT_GATEWAY_URL/cars -i
 # HTTP/1.1 401 Unauthorized
 # www-authenticate: APIKEY realm="api-key-authn"
 # x-ext-auth-reason: credential not found
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$GATEWAY_URL/cars -i
+curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$KUADRANT_GATEWAY_URL/cars -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$GATEWAY_URL/admin -i
+curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$KUADRANT_GATEWAY_URL/admin -i
 # HTTP/1.1 403 Forbidden
 # x-ext-auth-reason: Unauthorized
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://$GATEWAY_URL/admin -i
+curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://$KUADRANT_GATEWAY_URL/admin -i
 # HTTP/1.1 200 OK
 ```
 
@@ -216,16 +281,17 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://$G
 Create the policy:
 
 ```sh
-kubectl -n gateway-system apply -f - <<EOF
+kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: gw-auth
+  namespace: ${KUADRANT_GATEWAY_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: kuadrant-ingressgateway
+    name: ${KUADRANT_GATEWAY_NAME}
   defaults:
     strategy: atomic
     rules:
@@ -257,10 +323,11 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: other
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   parentRefs:
-  - name: kuadrant-ingressgateway
-    namespace: gateway-system
+  - name: ${KUADRANT_GATEWAY_NAME}
+    namespace: ${KUADRANT_GATEWAY_NS}
   hostnames:
   - "*.other-apps.com"
 EOF
@@ -269,7 +336,7 @@ EOF
 Send requests to the route protected by the default policy set at the level of the gateway:
 
 ```sh
-curl -H 'Host: foo.other-apps.com' http://$GATEWAY_URL/ -i
+curl -H 'Host: foo.other-apps.com' http://$KUADRANT_GATEWAY_URL/ -i
 # HTTP/1.1 403 Forbidden
 # content-type: application/json
 # x-ext-auth-reason: Unauthorized
@@ -279,10 +346,4 @@ curl -H 'Host: foo.other-apps.com' http://$GATEWAY_URL/ -i
 #   "error": "Forbidden",
 #   "message": "Access denied by default by the gateway operator. If you are the administrator of the service, create a specific auth policy for the route."
 # }
-```
-
-## Cleanup
-
-```sh
-make local-cleanup
 ```

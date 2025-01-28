@@ -18,6 +18,9 @@ func ConsolePlugin(ns string) *consolev1.ConsolePlugin {
 		},
 		Spec: consolev1.ConsolePluginSpec{
 			DisplayName: "Kuadrant Console Plugin",
+			I18n: consolev1.ConsolePluginI18n{
+				LoadType: consolev1.Preload,
+			},
 			Backend: consolev1.ConsolePluginBackend{
 				Type: consolev1.Service,
 				Service: &consolev1.ConsolePluginService{

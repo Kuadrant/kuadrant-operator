@@ -9,11 +9,13 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 .PHONY: install-metallb
 install-metallb: SUBNET_OFFSET=1
+install-metallb: CIDR=28
+install-metallb: NUM_IPS=16
 install-metallb: kustomize yq ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
 	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
-	./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} | kubectl apply -n metallb-system -f -
+	./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} ${CIDR} ${NUM_IPS} | kubectl apply -n metallb-system -f -
 
 .PHONY: uninstall-metallb
 uninstall-metallb: $(KUSTOMIZE)

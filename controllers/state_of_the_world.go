@@ -39,6 +39,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 )
 
 var (
@@ -68,7 +69,7 @@ var (
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
-func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, mc monclient.Interface) *controller.Controller {
 	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
@@ -127,7 +128,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 	}
 
 	// Boot options and reconciler based on detected dependencies
-	bootOptions := NewBootOptionsBuilder(manager, client, logger)
+	bootOptions := NewBootOptionsBuilder(manager, client, logger, mc)
 	controllerOpts = append(controllerOpts, bootOptions.getOptions()...)
 	controllerOpts = append(controllerOpts, controller.WithReconcile(bootOptions.Reconciler()))
 
@@ -136,18 +137,20 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 // NewBootOptionsBuilder is used to return a list of controller.ControllerOption and a controller.ReconcileFunc that depend
 // on if external dependent CRDs are installed at boot time
-func NewBootOptionsBuilder(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *BootOptionsBuilder {
+func NewBootOptionsBuilder(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, mc monclient.Interface) *BootOptionsBuilder {
 	return &BootOptionsBuilder{
-		manager: manager,
-		client:  client,
-		logger:  logger,
+		manager:   manager,
+		client:    client,
+		logger:    logger,
+		monClient: mc,
 	}
 }
 
 type BootOptionsBuilder struct {
-	logger  logr.Logger
-	manager ctrlruntime.Manager
-	client  *dynamic.DynamicClient
+	logger    logr.Logger
+	manager   ctrlruntime.Manager
+	client    *dynamic.DynamicClient
+	monClient monclient.Interface
 
 	// Internal configurations
 	isGatewayAPIInstalled        bool
@@ -404,6 +407,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
+			NewObservabilityReconciler(b.client, b.manager.GetRESTMapper(), b.monClient).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}

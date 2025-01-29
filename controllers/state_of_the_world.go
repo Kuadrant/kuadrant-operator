@@ -15,6 +15,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	consolev1 "github.com/openshift/api/console/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -150,14 +151,15 @@ type BootOptionsBuilder struct {
 	client  *dynamic.DynamicClient
 
 	// Internal configurations
-	isGatewayAPIInstalled        bool
-	isEnvoyGatewayInstalled      bool
-	isIstioInstalled             bool
-	isCertManagerInstalled       bool
-	isConsolePluginInstalled     bool
-	isDNSOperatorInstalled       bool
-	isLimitadorOperatorInstalled bool
-	isAuthorinoOperatorInstalled bool
+	isGatewayAPIInstalled         bool
+	isEnvoyGatewayInstalled       bool
+	isIstioInstalled              bool
+	isCertManagerInstalled        bool
+	isConsolePluginInstalled      bool
+	isDNSOperatorInstalled        bool
+	isLimitadorOperatorInstalled  bool
+	isAuthorinoOperatorInstalled  bool
+	isPrometheusOperatorInstalled bool
 }
 
 func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
@@ -170,6 +172,7 @@ func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
 	opts = append(opts, b.getDNSOperatorOptions()...)
 	opts = append(opts, b.getLimitadorOperatorOptions()...)
 	opts = append(opts, b.getAuthorinoOperatorOptions()...)
+	opts = append(opts, b.getObservabilityOptions()...)
 
 	return opts
 }
@@ -392,6 +395,46 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() []controller.Controll
 	return opts
 }
 
+func (b *BootOptionsBuilder) getObservabilityOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+
+	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.ServiceMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
+	if err != nil || !b.isPrometheusOperatorInstalled {
+		b.logger.Info("prometheus operator is not installed (ServiceMonitor CRD not found), skipping related watches and reconcilers", "err", err)
+		return opts
+	}
+	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.PodMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
+	if err != nil || !b.isPrometheusOperatorInstalled {
+		b.logger.Info("prometheus operator is not installed (PodMonitor CRD not found), skipping related watches and reconcilers", "err", err)
+		return opts
+	}
+	opts = append(opts,
+		controller.WithRunnable("servicemonitor watcher", controller.Watch(
+			&monitoringv1.ServiceMonitor{},
+			monitoringv1.SchemeGroupVersion.WithResource("servicemonitors"),
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*monitoringv1.ServiceMonitor]("kuadrant-observability=true"),
+		)),
+		controller.WithRunnable("podmonitor watcher", controller.Watch(
+			&monitoringv1.PodMonitor{},
+			monitoringv1.SchemeGroupVersion.WithResource("podmonitors"),
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*monitoringv1.PodMonitor]("kuadrant-observability=true"),
+		)),
+		controller.WithObjectKinds(
+			schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
+			schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
+		),
+		controller.WithObjectLinks(
+			kuadrantv1beta1.LinkKuadrantToServiceMonitor,
+			kuadrantv1beta1.LinkKuadrantToPodMonitor,
+		),
+	)
+
+	return opts
+}
+
 func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {
 	return b.isIstioInstalled || b.isEnvoyGatewayInstalled
 }
@@ -404,6 +447,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
+			NewObservabilityReconciler(b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}

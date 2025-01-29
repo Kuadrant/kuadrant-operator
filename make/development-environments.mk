@@ -17,6 +17,10 @@ install-metallb: kustomize yq ## Installs the metallb load balancer allowing use
 	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
 	./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} ${CIDR} ${NUM_IPS} | kubectl apply -n metallb-system -f -
 
+.PHONY: install-observability-crds
+install-observability-crds: $(KUSTOMIZE)
+	$(KUSTOMIZE) build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+
 .PHONY: uninstall-metallb
 uninstall-metallb: $(KUSTOMIZE)
 	$(KUSTOMIZE) build config/metallb | kubectl delete -f -
@@ -78,6 +82,7 @@ local-cleanup: ## Delete local cluster
 .PHONY: k8s-env-setup
 k8s-env-setup: ## Install Kuadrant CRDs and dependencies.
 	$(MAKE) deploy-metrics-server
+	$(MAKE) install-observability-crds
 	$(MAKE) install-metallb
 	$(MAKE) install-cert-manager
 	$(MAKE) deploy-dependencies

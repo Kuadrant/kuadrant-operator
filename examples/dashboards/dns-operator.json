@@ -469,7 +469,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by(le, client) (rate(http_client_request_latency_seconds_bucket{client=~\"aws|gcp|azure\",code=\"200\"}[15m])))",
+          "expr": "histogram_quantile(0.99, sum by(le, client) (rate(http_client_request_latency_seconds_bucket{client=~\"aws|google|azure\",code=\"200\"}[15m])))",
           "legendFormat": "{{client}}:99%ile",
           "range": true,
           "refId": "A"
@@ -480,7 +480,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(le, client) (rate(http_client_request_latency_seconds_bucket{client=~\"aws|gcp|azure\",code=\"200\"}[15m])))",
+          "expr": "histogram_quantile(0.95, sum by(le, client) (rate(http_client_request_latency_seconds_bucket{client=~\"aws|google|azure\",code=\"200\"}[15m])))",
           "hide": false,
           "legendFormat": "{{client}}:95%ile",
           "range": true,
@@ -571,7 +571,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (client, code) (rate(http_client_requests_total{client=~\"aws|gcp|azure\"}[15m]))",
+          "expr": "sum by (client, code) (rate(http_client_requests_total{client=~\"aws|google|azure\"}[15m]))",
           "hide": false,
           "legendFormat": "{{client}}:{{code}}",
           "range": true,

@@ -54,6 +54,11 @@ func (p *Kuadrant) GetLocator() string {
 
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
+	Observability Observability `json:"observability,omitempty"`
+}
+
+type Observability struct {
+	Enable bool `json:"enable,omitempty"`
 }
 
 // KuadrantStatus defines the observed state of Kuadrant

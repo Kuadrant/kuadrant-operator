@@ -48,6 +48,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
@@ -102,6 +103,7 @@ func BootstrapScheme() *runtime.Scheme {
 		certmanv1.AddToScheme,
 		egv1alpha1.AddToScheme,
 		consolev1.AddToScheme,
+		monitoringv1.AddToScheme,
 	)
 
 	err := sb.AddToScheme(s)

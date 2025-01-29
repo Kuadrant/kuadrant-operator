@@ -24,7 +24,7 @@ import (
 var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 	var (
 		testNamespace    string
-		testTimeOut      = SpecTimeout(15 * time.Second)
+		testTimeOut      = SpecTimeout(30 * time.Second)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 

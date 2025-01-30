@@ -2,24 +2,32 @@ name: Test
 
 on:
   push:
-    branches: ['main']
-
+    branches: [ 'main', 'release-*' ]
   pull_request:
     branches: ['*']
-    paths-ignore:
-      - '**.adoc'
-      - '**.md'
-      - 'examples/**'
-      - 'LICENSE'
-
+  merge_group:
+    types: [ checks_requested ]
   schedule:
     - cron: "15 1 * * *"
-
   workflow_dispatch:
 
 jobs:
+  pre-job:
+    runs-on: ubuntu-latest
+    name: Pre job checks
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.1
+        with:
+          cancel_others: false
+          paths_ignore: '["**.adoc", "**.md", "examples/**", "LICENSE"]'
   unit-tests:
     name: Unit Tests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     strategy:
       matrix:
         go-version: [1.22.x]
@@ -53,6 +61,8 @@ jobs:
 
   controllers-integration-tests:
     name: Integration Tests for kuadrant-operator/controllers
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     strategy:
       matrix:
         include:
@@ -111,6 +121,8 @@ jobs:
 
   bare-k8s-integration-tests:
     name: Integration Tests for kuadrant-operator/tests/bare_k8s
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -156,6 +168,8 @@ jobs:
 
   gatewayapi-integration-tests:
     name: Integration Tests for kuadrant-operator/tests/gatewayapi
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -201,6 +215,8 @@ jobs:
 
   gatewayapi-provider-integration-tests:
     name: Integration Tests for kuadrant-operator/tests/[gatewayapi-provider]
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     strategy:
       matrix:
         include:
@@ -259,6 +275,8 @@ jobs:
 
   verify-manifests:
     name: Verify manifests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x
@@ -274,6 +292,8 @@ jobs:
 
   verify-bundle:
     name: Verify bundle
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x
@@ -289,6 +309,8 @@ jobs:
 
   verify-fmt:
     name: Verify fmt
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x
@@ -304,6 +326,8 @@ jobs:
 
   test-scripts:
     name: Test Scripts
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     strategy:
       matrix:
         go-version: [1.22.x]
@@ -326,6 +350,8 @@ jobs:
 
   verify-generate:
     name: Verify generate
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x
@@ -341,6 +367,8 @@ jobs:
 
   verify-go-mod:
     name: Verify go.mod
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x
@@ -356,6 +384,8 @@ jobs:
 
   verify-helm-charts:
     name: Verify helm charts
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x
@@ -368,3 +398,14 @@ jobs:
       - name: Run make verify-helm-charts
         run: |
           make verify-helm-charts
+  required-checks:
+    name: Test Required Checks
+    # This check adds a list of checks to one job to simplify adding settings to the repo.
+    # If a new check is added in this file, and it should be retested on entry to the merge queue,
+    # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
+    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-manifests, verify-bundle, verify-fmt, test-scripts, verify-generate, verify-go-mod, verify-helm-charts ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'

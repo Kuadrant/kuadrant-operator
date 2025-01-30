@@ -124,7 +124,7 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 					Namespace:  limitsNamespace,
 					MaxValue:   maxValue,
 					Seconds:    seconds,
-					Conditions: []string{fmt.Sprintf("%s == \"1\"", limitIdentifier)},
+					Conditions: []string{fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", limitIdentifier)},
 					Variables:  utils.GetEmptySliceIfNil(limit.CountersAsStringList()),
 				}
 			})

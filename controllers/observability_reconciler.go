@@ -5,28 +5,32 @@ import (
 	"sync"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
+var serviceMonitorGVR = schema.GroupVersionResource{
+	Group:    "monitoring.coreos.com",
+	Version:  "v1",
+	Resource: "servicemonitors",
+}
+
 type ObservabilityReconciler struct {
 	Client     *dynamic.DynamicClient
 	restMapper meta.RESTMapper
-	MonClient  monclient.Interface
 }
 
-func NewObservabilityReconciler(client *dynamic.DynamicClient, rm meta.RESTMapper, mc monclient.Interface) *ObservabilityReconciler {
+func NewObservabilityReconciler(client *dynamic.DynamicClient, rm meta.RESTMapper) *ObservabilityReconciler {
 	return &ObservabilityReconciler{
 		Client:     client,
 		restMapper: rm,
-		MonClient:  mc,
 	}
 }
 
@@ -42,39 +46,77 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 	logger.Info("reconciling observability", "status", "started")
 	defer logger.Info("reconciling observability", "status", "completed")
 
+	// TODO: deletion and finalizer handling
+	// TODO: review log levels of all log statements
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
 		return nil
 	}
 
-	// Check if observability is enabled
-	if !kObj.Spec.Observability.Enable {
-		logger.Info("observability enable is false")
-		// TODO: Remove monitors if they exist
-		return nil
-	}
-	logger.Info("observability enable is true")
+	obsEnabled := kObj.Spec.Observability.Enable
 
-	// Check if monitoring CRDs exist
-	if ok, err := utils.IsCRDInstalled(r.restMapper, monitoringv1.SchemeGroupVersion.Group, monitoringv1.ServiceMonitorsKind, monitoringv1.SchemeGroupVersion.Version); !ok || err != nil {
-		logger.Info("ServiceMonitor CRD not installed")
+	// Kuadrant Operator monitors
+	smObjs := lo.FilterMap(topology.Objects().Objects().Children(kObj), func(item machinery.Object, _ int) (machinery.Object, bool) {
+		if item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == "kuadrant-operator-monitor" {
+			return item, true
+		}
+		return nil, false
+	})
+	smExists := len(smObjs) > 0
+	if obsEnabled && smExists {
+		logger.Info("observability enable is true, kuadrant operator monitor exists (no action)")
 		return nil
-	}
-	logger.Info("ServiceMonitor CRD is installed")
-
-	if ok, err := utils.IsCRDInstalled(r.restMapper, monitoringv1.SchemeGroupVersion.Group, monitoringv1.PodMonitorsKind, monitoringv1.SchemeGroupVersion.Version); !ok || err != nil {
-		logger.Info("PodMonitor CRD not installed")
+	} else if !obsEnabled && !smExists {
+		logger.Info("observability enable is false. kuadrant operator monitor doesn't exist (no action)")
 		return nil
+	} else if obsEnabled && !smExists {
+		logger.Info("observability enable is true. kuadrant operator monitor doesn't exist (to be created)")
+		err := createServiceMonitor(ctx, r.Client, kObj)
+		if err != nil {
+			logger.Error(err, "failed to create servicemonitor", "status", "error")
+			return err
+		}
+		logger.Info("kuadrant operator monitor created")
+	} else {
+		logger.Info("observability enable is false, kuadrant operator monitor exists (to be deleted)")
+		// TODO: assume 1, or only care about 1?
+		err := deleteServiceMonitor(ctx, r.Client, smObjs[0])
+		if err != nil {
+			logger.Error(err, "failed to delete servicemonitor", "status", "error")
+			return err
+		}
+		logger.Info("kuadrant operator monitor deleted")
 	}
-	logger.Info("PodMonitor CRD is installed")
 
-	// TODO: Create monitors for kuadrant operator
+	// TODO: pointer vs non pointer?
+	// 	if kObj.Spec.Observability == nil {
+	//     // Observability section isn’t set at all
+	// } else if kObj.Spec.Observability.Enable {
+	//     // Observability is set and enabled
+	// }
+
+	// TODO: Create monitors for dns operator
+
+	// TODO: Create monitors for Authorino, if installed
+
+	// TODO: Create monitors for Limitador, if installed
+
+	// TODO: Create monitors for gateway provider
+
+	return nil
+}
+
+func createServiceMonitor(ctx context.Context, client *dynamic.DynamicClient, kObj *kuadrantv1beta1.Kuadrant) error {
 	sm := &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       monitoringv1.ServiceMonitorsKind,
+			APIVersion: monitoringv1.SchemeGroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kuadrant-operator-metrics",
-			Namespace: "kuadrant-system",
+			// TODO: constants for labels & name
+			Name: "kuadrant-operator-monitor",
 			Labels: map[string]string{
-				"control-plane": "controller-manager",
+				"kuadrant-observability": "true",
 			},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
@@ -91,21 +133,16 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 			},
 		},
 	}
-
-	// TODO: namespace
-	_, err := r.MonClient.MonitoringV1().ServiceMonitors("kuadrant-system").Create(ctx, sm, metav1.CreateOptions{})
+	obj, err := controller.Destruct(sm)
 	if err != nil {
-		logger.Error(err, "failed to create ServiceMonitor")
-		return nil
+		return err
 	}
 
-	// TODO: Create monitors for dns operator
+	_, err = client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(kObj.Namespace).Create(ctx, obj, metav1.CreateOptions{})
+	return err
+}
 
-	// TODO: Create monitors for Authorino, if installed
-
-	// TODO: Create monitors for Limitador, if installed
-
-	// TODO: Create monitors for gateway provider
-
-	return nil
+func deleteServiceMonitor(ctx context.Context, client *dynamic.DynamicClient, sm machinery.Object) error {
+	err := client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(sm.GetNamespace()).Delete(ctx, sm.GetName(), metav1.DeleteOptions{})
+	return err
 }

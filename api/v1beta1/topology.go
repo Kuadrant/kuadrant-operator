@@ -5,6 +5,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -57,6 +58,34 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
 				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
+			})
+		},
+	}
+}
+
+func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantGroupKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: KuadrantGroupKind,
+		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				return kuadrant.GetNamespace() == child.GetNamespace()
+			})
+		},
+	}
+}
+
+func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantGroupKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: KuadrantGroupKind,
+		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				return kuadrant.GetNamespace() == child.GetNamespace()
 			})
 		},
 	}

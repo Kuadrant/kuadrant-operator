@@ -37,7 +37,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
 	"k8s.io/utils/env"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -49,7 +48,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	monclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -78,6 +77,7 @@ func init() {
 	utilruntime.Must(certmanv1.AddToScheme(scheme))
 	utilruntime.Must(egv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(consolev1.AddToScheme(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	logger := log.NewLogger(
@@ -95,15 +95,6 @@ func printControllerMetaInfo() {
 	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	setupLog.Info("base logger", "log level", logLevel, "log mode", logMode)
 	setupLog.Info("build information", "version", version, "commit", gitSHA, "dirty", dirty)
-}
-
-func buildMonitoringClient(cfg *rest.Config) (monclient.Interface, error) {
-	// Create the typed client
-	mc, err := monclient.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create prometheus-operator monitoring client: %w", err)
-	}
-	return mc, nil
 }
 
 func main() {
@@ -160,13 +151,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mc, err := buildMonitoringClient(mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "unable to create monitoring client")
-		os.Exit(1)
-	}
-
-	stateOfTheWorld := controllers.NewPolicyMachineryController(mgr, client, log.Log, mc)
+	stateOfTheWorld := controllers.NewPolicyMachineryController(mgr, client, log.Log)
 	if err = stateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "unable to start stateOfTheWorld controller")
 		os.Exit(1)

@@ -25,11 +25,18 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
+      - name: Configure GPG Key
+        run: |
+          echo -n "$GPG_SIGNING_KEY" | base64 -d | gpg --import
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.HELM_CHARTS_SIGNING_KEY }}
+
       - name: Package Helm Chart
         run: |
           make helm-add-kuadrant-repo
           make helm-dependency-build
-          make helm-package
+          GPG_KEY_UID="Kuadrant Development Team" \
+          make helm-package-sign
 
       - name: Parse Tag
         run: |

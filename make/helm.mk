@@ -44,6 +44,14 @@ helm-package: $(HELM) ## Package the helm chart
 	# Package the helm chart
 	$(HELM) package $(CHART_DIRECTORY)
 
+# GPG_KEY_UID: substring of the desired key's uid, the name or email
+GPG_KEY_UID ?= 'Kuadrant Development Team'
+# The keyring should've been imported before running this target
+.PHONY: helm-package-sign
+helm-package-sign: $(HELM) ## Package the helm chart and GPG sign it
+	# Package the helm chart and sign it
+	$(HELM) package --sign --key $(GPG_KEY_UID) $(CHART_DIRECTORY)
+
 .PHONY: helm-dependency-build
 helm-dependency-build: $(HELM) ## Build the chart dependencies
 	# Fetch and builds dependencies in Chart.yaml, updates the Chart.lock and downloads the charts .tgz

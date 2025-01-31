@@ -54,6 +54,16 @@ jobs:
           tag: ${{ env.OPERATOR_TAG }}
           overwrite: true
 
+      - name: Upload provenance file to GitHub Release
+        uses: svenstaro/upload-release-action@v2
+        id: upload-prov-file
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: kuadrant-operator-${{ env.OPERATOR_VERSION }}.tgz.prov
+          asset_name: chart-kuadrant-operator-${{ env.OPERATOR_VERSION }}.tgz.prov
+          tag: ${{ env.OPERATOR_TAG }}
+          overwrite: true
+
       - name: Sync Helm Chart with repository
         run: |
           make helm-sync-package-created \

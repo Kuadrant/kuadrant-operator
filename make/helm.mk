@@ -89,3 +89,10 @@ helm-sync-package-deleted: ## Sync the deleted helm chart package to the helm-ch
 	  -H "X-GitHub-Api-Version: 2022-11-28" \
 	  https://api.github.com/repos/$(ORG)/$(HELM_REPO_NAME)/dispatches \
 	  -d '{"event_type":"chart-deleted","client_payload":{"chart":"$(CHART_NAME)","version":"$(CHART_VERSION)"}}'
+
+.PHONY: helm-print-chart-version
+helm-print-chart-version: $(HELM) ## Reads chart version
+	@$(HELM) show chart charts/$(REPO) | grep -E "^version:" | awk '{print $$2}'
+
+helm-print-installed-chart-version: $(YQ) $(HELM) ## Reads chart version
+	@$(HELM) list --all-namespaces -o yaml | $(YQ) '(.[] | select(.name == "kuadrant") | .app_version)'

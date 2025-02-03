@@ -143,3 +143,6 @@ annotations:
       url: https://github.com/Kuadrant/kuadrant-operator
   artifacthub.io/operator: "true"
   artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/signKey: |
+    fingerprint: 8A2150B44E1994E1E91ED9E5E19171BE516B79C7
+    url: https://kuadrant.io/helm-charts/kuadrant-public-key.asc

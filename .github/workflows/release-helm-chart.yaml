@@ -27,7 +27,7 @@ jobs:
 
       - name: Configure GPG Key
         run: |
-          echo -n "$GPG_SIGNING_KEY" | base64 -d | gpg --import
+          echo -n "$GPG_SIGNING_KEY" | base64 -d > ~/.gnupg/pubring.gpg
         env:
           GPG_SIGNING_KEY: ${{ secrets.HELM_CHARTS_SIGNING_KEY }}
 

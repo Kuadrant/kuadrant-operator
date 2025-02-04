@@ -50,7 +50,7 @@ GPG_KEY_UID ?= 'Kuadrant Development Team'
 .PHONY: helm-package-sign
 helm-package-sign: $(HELM) ## Package the helm chart and GPG sign it
 	# Package the helm chart and sign it
-	$(HELM) package --sign --key $(GPG_KEY_UID) $(CHART_DIRECTORY)
+	$(HELM) package --sign --key "$(GPG_KEY_UID)" $(CHART_DIRECTORY)
 
 .PHONY: helm-dependency-build
 helm-dependency-build: $(HELM) ## Build the chart dependencies

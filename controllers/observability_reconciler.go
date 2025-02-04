@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
+	"github.com/go-logr/logr"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -11,15 +13,124 @@ import (
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 )
 
-var serviceMonitorGVR = schema.GroupVersionResource{
-	Group:    "monitoring.coreos.com",
-	Version:  "v1",
-	Resource: "servicemonitors",
+const kuadrantObservabilityLabel = "kuadrant-observability"
+const kOpMonitorName = "kuadrant-operator-monitor"
+const dnsOpMonitorName = "dns-operator-monitor"
+const authOpMonitorName = "authorino-operator-monitor"
+const limitOpMonitorName = "limitador-operator-monitor"
+
+var kOpMonitorSpec = &monitoringv1.ServiceMonitor{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       monitoringv1.ServiceMonitorsKind,
+		APIVersion: monitoringv1.SchemeGroupVersion.String(),
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name: kOpMonitorName,
+		Labels: map[string]string{
+			"control-plane":            "controller-manager",
+			kuadrantObservabilityLabel: "true",
+		},
+	},
+	Spec: monitoringv1.ServiceMonitorSpec{
+		Endpoints: []monitoringv1.Endpoint{{
+			Port:   "metrics",
+			Path:   "/metrics",
+			Scheme: "http",
+		}},
+		Selector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"control-plane": "controller-manager",
+				"app":           "kuadrant",
+			},
+		},
+	},
+}
+
+var dnsOpMonitorSpec = &monitoringv1.ServiceMonitor{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       monitoringv1.ServiceMonitorsKind,
+		APIVersion: monitoringv1.SchemeGroupVersion.String(),
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name: dnsOpMonitorName,
+		Labels: map[string]string{
+			kuadrantObservabilityLabel:     "true",
+			"control-plane":                "controller-manager",
+			"app.kubernetes.io/name":       "servicemonitor",
+			"app.kubernetes.io/instance":   "controller-manager-metrics-monitor",
+			"app.kubernetes.io/component":  "metrics",
+			"app.kubernetes.io/created-by": "dns-operator",
+			"app.kubernetes.io/part-of":    "dns-operator",
+			"app.kubernetes.io/managed-by": "kustomize",
+		},
+	},
+	Spec: monitoringv1.ServiceMonitorSpec{
+		Endpoints: []monitoringv1.Endpoint{{
+			Path:   "/metrics",
+			Port:   "metrics",
+			Scheme: "http",
+		}},
+		Selector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"control-plane": "dns-operator-controller-manager",
+			},
+		},
+	},
+}
+
+var authOpMonitorSpec = &monitoringv1.ServiceMonitor{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       monitoringv1.ServiceMonitorsKind,
+		APIVersion: monitoringv1.SchemeGroupVersion.String(),
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name: authOpMonitorName,
+		Labels: map[string]string{
+			"control-plane":            "controller-manager",
+			kuadrantObservabilityLabel: "true",
+		},
+	},
+	Spec: monitoringv1.ServiceMonitorSpec{
+		Endpoints: []monitoringv1.Endpoint{{
+			Port:   "metrics",
+			Path:   "/metrics",
+			Scheme: "http",
+		}},
+		Selector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"control-plane": "authorino-operator",
+			},
+		},
+	},
+}
+var limitOpMonitorSpec = &monitoringv1.ServiceMonitor{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       monitoringv1.ServiceMonitorsKind,
+		APIVersion: monitoringv1.SchemeGroupVersion.String(),
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name: limitOpMonitorName,
+		Labels: map[string]string{
+			"control-plane":            "controller-manager",
+			kuadrantObservabilityLabel: "true",
+		},
+	},
+	Spec: monitoringv1.ServiceMonitorSpec{
+		Endpoints: []monitoringv1.Endpoint{{
+			Port:   "metrics",
+			Path:   "/metrics",
+			Scheme: "http",
+		}},
+		Selector: metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"control-plane": "controller-manager",
+			},
+		},
+	},
 }
 
 type ObservabilityReconciler struct {
@@ -43,49 +154,24 @@ func (r *ObservabilityReconciler) Subscription() *controller.Subscription {
 
 func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("ObservabilityReconciler")
-	logger.Info("reconciling observability", "status", "started")
-	defer logger.Info("reconciling observability", "status", "completed")
+	logger.V(1).Info("reconciling observability", "status", "started")
+	defer logger.V(1).Info("reconciling observability", "status", "completed")
 
-	// TODO: deletion and finalizer handling
-	// TODO: review log levels of all log statements
-	kObj := GetKuadrantFromTopology(topology)
-	if kObj == nil {
-		return nil
-	}
-
-	obsEnabled := kObj.Spec.Observability.Enable
-
-	// Kuadrant Operator monitors
-	smObjs := lo.FilterMap(topology.Objects().Objects().Children(kObj), func(item machinery.Object, _ int) (machinery.Object, bool) {
-		if item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == "kuadrant-operator-monitor" {
+	// Get all monitors first, if any exist
+	monitorObjs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
+		if item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind || item.GroupVersionKind().Kind == monitoringv1.PodMonitorsKind {
 			return item, true
 		}
 		return nil, false
 	})
-	smExists := len(smObjs) > 0
-	if obsEnabled && smExists {
-		logger.Info("observability enable is true, kuadrant operator monitor exists (no action)")
+
+	// Check that a kuadrant resource exists, and observability enabled,
+	// otherwise delete all monitors
+	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil || !kObj.Spec.Observability.Enable {
+		logger.V(1).Info("deleting any existing monitors", "kuadrant", kObj != nil)
+		r.deleteAllMonitors(ctx, monitorObjs, logger)
 		return nil
-	} else if !obsEnabled && !smExists {
-		logger.Info("observability enable is false. kuadrant operator monitor doesn't exist (no action)")
-		return nil
-	} else if obsEnabled && !smExists {
-		logger.Info("observability enable is true. kuadrant operator monitor doesn't exist (to be created)")
-		err := createServiceMonitor(ctx, r.Client, kObj)
-		if err != nil {
-			logger.Error(err, "failed to create servicemonitor", "status", "error")
-			return err
-		}
-		logger.Info("kuadrant operator monitor created")
-	} else {
-		logger.Info("observability enable is false, kuadrant operator monitor exists (to be deleted)")
-		// TODO: assume 1, or only care about 1?
-		err := deleteServiceMonitor(ctx, r.Client, smObjs[0])
-		if err != nil {
-			logger.Error(err, "failed to delete servicemonitor", "status", "error")
-			return err
-		}
-		logger.Info("kuadrant operator monitor deleted")
 	}
 
 	// TODO: pointer vs non pointer?
@@ -95,54 +181,101 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 	//     // Observability is set and enabled
 	// }
 
-	// TODO: Create monitors for dns operator
+	// Create all monitors
+	logger.V(1).Info("observability enabled, creating monitors")
 
-	// TODO: Create monitors for Authorino, if installed
+	// Kuadrant Operator monitor
+	_, kOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
+		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == kOpMonitorName
+	})
+	if kOpMonitor {
+		logger.V(1).Info("kuadrant operator monitor already exists, skipping create")
+	} else {
+		logger.V(1).Info("creating kuadrant operator monitor")
+		err := r.createServiceMonitor(ctx, kOpMonitorSpec, kObj)
+		if err != nil {
+			logger.Error(err, "failed to create kuadrant operator monitor", "status", "error")
+			return err
+		}
+		logger.V(1).Info("kuadrant operator monitor created")
+	}
 
-	// TODO: Create monitors for Limitador, if installed
+	// DNS Operator monitor
+	_, dnsOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
+		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == dnsOpMonitorName
+	})
+	if dnsOpMonitor {
+		logger.V(1).Info("dns operator monitor already exists, skipping create")
+	} else {
+		logger.V(1).Info("creating dns operator monitor")
+		err := r.createServiceMonitor(ctx, dnsOpMonitorSpec, kObj)
+		if err != nil {
+			logger.Error(err, "failed to create dns operator monitor", "status", "error")
+			return err
+		}
+		logger.V(1).Info("dns operator monitor created")
+	}
+
+	// Authorino operator monitor
+	_, authOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
+		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == authOpMonitorName
+	})
+	if authOpMonitor {
+		logger.V(1).Info("authorino operator monitor already exists, skipping create")
+	} else {
+		logger.V(1).Info("creating authorino operator monitor")
+		err := r.createServiceMonitor(ctx, authOpMonitorSpec, kObj)
+		if err != nil {
+			logger.Error(err, "failed to create authorino operator monitor", "status", "error")
+			return err
+		}
+		logger.V(1).Info("authorino operator monitor created")
+	}
+
+	// Limitador operator monitor
+	_, limitOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
+		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == limitOpMonitorName
+	})
+	if limitOpMonitor {
+		logger.V(1).Info("limitador operator monitor already exists, skipping create")
+	} else {
+		logger.V(1).Info("creating limitador operator monitor")
+		err := r.createServiceMonitor(ctx, limitOpMonitorSpec, kObj)
+		if err != nil {
+			logger.Error(err, "failed to create limitador operator monitor", "status", "error")
+			return err
+		}
+		logger.V(1).Info("limitador operator monitor created")
+	}
 
 	// TODO: Create monitors for gateway provider
 
 	return nil
 }
 
-func createServiceMonitor(ctx context.Context, client *dynamic.DynamicClient, kObj *kuadrantv1beta1.Kuadrant) error {
-	sm := &monitoringv1.ServiceMonitor{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       monitoringv1.ServiceMonitorsKind,
-			APIVersion: monitoringv1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			// TODO: constants for labels & name
-			Name: "kuadrant-operator-monitor",
-			Labels: map[string]string{
-				"kuadrant-observability": "true",
-			},
-		},
-		Spec: monitoringv1.ServiceMonitorSpec{
-			Endpoints: []monitoringv1.Endpoint{{
-				Port:   "metrics",
-				Path:   "/metrics",
-				Scheme: "http",
-			}},
-			Selector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"control-plane": "controller-manager",
-					"app":           "kuadrant",
-				},
-			},
-		},
-	}
+func (r *ObservabilityReconciler) createServiceMonitor(ctx context.Context, sm *monitoringv1.ServiceMonitor, kObj *kuadrantv1beta1.Kuadrant) error {
 	obj, err := controller.Destruct(sm)
 	if err != nil {
 		return err
 	}
 
-	_, err = client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(kObj.Namespace).Create(ctx, obj, metav1.CreateOptions{})
+	_, err = r.Client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(kObj.Namespace).Create(ctx, obj, metav1.CreateOptions{})
 	return err
 }
 
-func deleteServiceMonitor(ctx context.Context, client *dynamic.DynamicClient, sm machinery.Object) error {
-	err := client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(sm.GetNamespace()).Delete(ctx, sm.GetName(), metav1.DeleteOptions{})
-	return err
+func (r *ObservabilityReconciler) deleteAllMonitors(ctx context.Context, monitorObjs []machinery.Object, logger logr.Logger) {
+	lo.ForEach(monitorObjs, func(monitor machinery.Object, index int) {
+		logger.V(1).Info(fmt.Sprintf("deleting monitor %s %s/%s", monitor.GroupVersionKind().Kind, monitor.GetNamespace(), monitor.GetName()))
+		mapping, err := r.restMapper.RESTMapping(monitor.GroupVersionKind().GroupKind())
+		if err != nil {
+			logger.Error(err, "failed to get monitor restmapping", "status", "error")
+			return
+		}
+		err = r.Client.Resource(mapping.Resource).Namespace(monitor.GetNamespace()).Delete(ctx, monitor.GetName(), metav1.DeleteOptions{})
+		if err != nil {
+			logger.Error(err, "failed to delete monitor", "status", "error")
+		}
+		logger.V(1).Info(fmt.Sprintf("deleted monitor %s %s/%s", monitor.GroupVersionKind().Kind, monitor.GetNamespace(), monitor.GetName()))
+	})
+
 }

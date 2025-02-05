@@ -4,8 +4,8 @@ default_channel = "alpha"
 release = "1.0.1"
 
 [dependencies]
-Authorino_bundle = "0.16.0"
+Authorino = "0.16.0"
 Console_plugin = "0.0.14"
-DNS_bundle = "0.12.0"
-Limitador_bundle = "0.12.1"
+DNS = "0.12.0"
+Limitador = "0.12.1"
 Wasm_shim = "0.8.1"

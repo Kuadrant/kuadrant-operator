@@ -174,93 +174,63 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 		return nil
 	}
 
-	// TODO: pointer vs non pointer?
-	// 	if kObj.Spec.Observability == nil {
-	//     // Observability section isn’t set at all
-	// } else if kObj.Spec.Observability.Enable {
-	//     // Observability is set and enabled
-	// }
-
 	// Create all monitors
 	logger.V(1).Info("observability enabled, creating monitors")
 
 	// Kuadrant Operator monitor
-	_, kOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
-		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == kOpMonitorName
-	})
-	if kOpMonitor {
-		logger.V(1).Info("kuadrant operator monitor already exists, skipping create")
-	} else {
-		logger.V(1).Info("creating kuadrant operator monitor")
-		err := r.createServiceMonitor(ctx, kOpMonitorSpec, kObj)
-		if err != nil {
-			logger.Error(err, "failed to create kuadrant operator monitor", "status", "error")
-			return err
-		}
-		logger.V(1).Info("kuadrant operator monitor created")
+	err := r.createServiceMonitor(ctx, monitorObjs, kOpMonitorName, kOpMonitorSpec, kObj, logger)
+	if err != nil {
+		logger.Error(err, "failed to create kuadrant operator monitor", "status", "error")
+		return err
 	}
+	logger.V(1).Info("kuadrant operator monitor created")
 
 	// DNS Operator monitor
-	_, dnsOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
-		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == dnsOpMonitorName
-	})
-	if dnsOpMonitor {
-		logger.V(1).Info("dns operator monitor already exists, skipping create")
-	} else {
-		logger.V(1).Info("creating dns operator monitor")
-		err := r.createServiceMonitor(ctx, dnsOpMonitorSpec, kObj)
-		if err != nil {
-			logger.Error(err, "failed to create dns operator monitor", "status", "error")
-			return err
-		}
-		logger.V(1).Info("dns operator monitor created")
+	err = r.createServiceMonitor(ctx, monitorObjs, dnsOpMonitorName, dnsOpMonitorSpec, kObj, logger)
+	if err != nil {
+		logger.Error(err, "failed to create dns operator monitor", "status", "error")
+		return err
 	}
+	logger.V(1).Info("dns operator monitor created")
 
 	// Authorino operator monitor
-	_, authOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
-		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == authOpMonitorName
-	})
-	if authOpMonitor {
-		logger.V(1).Info("authorino operator monitor already exists, skipping create")
-	} else {
-		logger.V(1).Info("creating authorino operator monitor")
-		err := r.createServiceMonitor(ctx, authOpMonitorSpec, kObj)
-		if err != nil {
-			logger.Error(err, "failed to create authorino operator monitor", "status", "error")
-			return err
-		}
-		logger.V(1).Info("authorino operator monitor created")
+	err = r.createServiceMonitor(ctx, monitorObjs, authOpMonitorName, authOpMonitorSpec, kObj, logger)
+	if err != nil {
+		logger.Error(err, "failed to create authorino operator monitor", "status", "error")
+		return err
 	}
+	logger.V(1).Info("authorino operator monitor created")
 
 	// Limitador operator monitor
-	_, limitOpMonitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
-		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == limitOpMonitorName
-	})
-	if limitOpMonitor {
-		logger.V(1).Info("limitador operator monitor already exists, skipping create")
-	} else {
-		logger.V(1).Info("creating limitador operator monitor")
-		err := r.createServiceMonitor(ctx, limitOpMonitorSpec, kObj)
-		if err != nil {
-			logger.Error(err, "failed to create limitador operator monitor", "status", "error")
-			return err
-		}
-		logger.V(1).Info("limitador operator monitor created")
+	err = r.createServiceMonitor(ctx, monitorObjs, limitOpMonitorName, limitOpMonitorSpec, kObj, logger)
+	if err != nil {
+		logger.Error(err, "failed to create limitador operator monitor", "status", "error")
+		return err
 	}
+	logger.V(1).Info("limitador operator monitor created")
 
 	// TODO: Create monitors for gateway provider
 
 	return nil
 }
 
-func (r *ObservabilityReconciler) createServiceMonitor(ctx context.Context, sm *monitoringv1.ServiceMonitor, kObj *kuadrantv1beta1.Kuadrant) error {
-	obj, err := controller.Destruct(sm)
-	if err != nil {
+func (r *ObservabilityReconciler) createServiceMonitor(ctx context.Context, monitorObjs []machinery.Object, smName string, sm *monitoringv1.ServiceMonitor, kObj *kuadrantv1beta1.Kuadrant, logger logr.Logger) error {
+	_, monitor := lo.Find(monitorObjs, func(item machinery.Object) bool {
+		return item.GroupVersionKind().Kind == monitoringv1.ServiceMonitorsKind && item.GetName() == smName
+	})
+	if monitor {
+		logger.V(1).Info(fmt.Sprintf("monitor already exists %s, skipping create", smName))
+		return nil
+	} else {
+		logger.V(1).Info(fmt.Sprintf("creating monitor %s", smName))
+		obj, err := controller.Destruct(sm)
+		if err != nil {
+			return err
+		}
+
+		_, err = r.Client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(kObj.Namespace).Create(ctx, obj, metav1.CreateOptions{})
 		return err
 	}
-
-	_, err = r.Client.Resource(monitoringv1.SchemeGroupVersion.WithResource("servicemonitors")).Namespace(kObj.Namespace).Create(ctx, obj, metav1.CreateOptions{})
-	return err
 }
 
 func (r *ObservabilityReconciler) deleteAllMonitors(ctx context.Context, monitorObjs []machinery.Object, logger logr.Logger) {

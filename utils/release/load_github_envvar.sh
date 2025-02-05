@@ -32,15 +32,15 @@ log() {
 
 log "Loading Environment Variables"
 
-authorinoOperatorVersion=$(yq '.dependencies.Authorino' $ROOT/release.toml)
-consolePluginURL=$(yq '.dependencies.Console_plugin' $ROOT/release.toml)
-dnsOperatorVersion=$(yq '.dependencies.DNS' $ROOT/release.toml)
-limitadorOperatorVersion=$(yq '.dependencies.Limitador' $ROOT/release.toml)
-wasmShimVersion=$(yq '.dependencies.Wasm_shim' $ROOT/release.toml)
+authorinoOperatorVersion=$(yq '.dependencies.authorino-operator' $ROOT/release.yaml)
+consolePluginURL=$(yq '.dependencies.console-plugin' $ROOT/release.yaml)
+dnsOperatorVersion=$(yq '.dependencies.dns-operator' $ROOT/release.yaml)
+limitadorOperatorVersion=$(yq '.dependencies.limitador-operator' $ROOT/release.yaml)
+wasmShimVersion=$(yq '.dependencies.wasm-shim' $ROOT/release.yaml)
 
 releaseBody="**This release enables installations of Authorino Operator v$authorinoOperatorVersion, Limitador Operator v$limitadorOperatorVersion, DNS Operator v$dnsOperatorVersion, WASM Shim v$wasmShimVersion and ConsolePlugin $consolePluginURL**"
 
-kuadrantOperatorVersion=$(yq '.kuadrant.release' $ROOT/release.toml)
+kuadrantOperatorVersion=$(yq '.kuadrant-operator.version' $ROOT/release.yaml)
 
 prerelease=false
 if [[ "$kuadrantOperatorVersion" == *"-"* ]]; then

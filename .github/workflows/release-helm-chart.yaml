@@ -25,11 +25,18 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
+      - name: Configure GPG Key
+        run: |
+          echo -n "$GPG_SIGNING_KEY" | base64 -d > ~/.gnupg/pubring.gpg
+        env:
+          GPG_SIGNING_KEY: ${{ secrets.HELM_CHARTS_SIGNING_KEY }}
+
       - name: Package Helm Chart
         run: |
           make helm-add-kuadrant-repo
           make helm-dependency-build
-          make helm-package
+          GPG_KEY_UID="Kuadrant Development Team" \
+          make helm-package-sign
 
       - name: Parse Tag
         run: |
@@ -44,6 +51,16 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: kuadrant-operator-${{ env.OPERATOR_VERSION }}.tgz
           asset_name: chart-kuadrant-operator-${{ env.OPERATOR_VERSION }}.tgz
+          tag: ${{ env.OPERATOR_TAG }}
+          overwrite: true
+
+      - name: Upload provenance file to GitHub Release
+        uses: svenstaro/upload-release-action@v2
+        id: upload-prov-file
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: kuadrant-operator-${{ env.OPERATOR_VERSION }}.tgz.prov
+          asset_name: chart-kuadrant-operator-${{ env.OPERATOR_VERSION }}.tgz.prov
           tag: ${{ env.OPERATOR_TAG }}
           overwrite: true
 

@@ -34,3 +34,6 @@ tmp
 
 # Vendor dependencies
 vendor
+
+# Helm chart packages
+*operator*.tgz*

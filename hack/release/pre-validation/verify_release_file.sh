@@ -22,10 +22,10 @@ check_field() {
 check_field ".kuadrant.channels" "kuadrant.channels"
 check_field ".kuadrant.default_channel" "kuadrant.default_channel"
 check_field ".kuadrant.release" "kuadrant.release"
-check_field ".dependencies.Authorino_bundle" "dependencies.Authorino_bundle"
+check_field ".dependencies.Authorino" "dependencies.Authorino"
 check_field ".dependencies.Console_plugin" "dependencies.Console_plugin"
-check_field ".dependencies.DNS_bundle" "dependencies.DNS_bundle"
-check_field ".dependencies.Limitador_bundle" "dependencies.Limitador_bundle"
+check_field ".dependencies.DNS" "dependencies.DNS"
+check_field ".dependencies.Limitador" "dependencies.Limitador"
 check_field ".dependencies.Wasm_shim" "dependencies.Wasm_shim"
 
 exit $has_error

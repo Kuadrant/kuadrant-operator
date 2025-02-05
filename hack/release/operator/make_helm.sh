@@ -26,6 +26,6 @@ kustomize build $env/config/helm > $env/charts/kuadrant-operator/templates/manif
 operator_version=$(yq '.kuadrant.release' $env/release.toml)
 V="$(yq '.kuadrant.release' $env/release.toml)" yq --inplace eval '.version = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.kuadrant.release' $env/release.toml)" yq --inplace eval '.appVersion = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.Authorino_bundle' $env/release.toml)" yq --inplace eval '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.Limitador_bundle' $env/release.toml)" yq --inplace eval '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.DNS_bundle' $env/release.toml)" yq --inplace eval '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
+V="$(yq '.dependencies.Authorino' $env/release.toml)" yq --inplace eval '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
+V="$(yq '.dependencies.Limitador' $env/release.toml)" yq --inplace eval '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
+V="$(yq '.dependencies.DNS' $env/release.toml)" yq --inplace eval '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml

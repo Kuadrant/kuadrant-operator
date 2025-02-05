@@ -44,25 +44,25 @@ key=$openshift_version_annotation_key yq --inplace '(.annotations[strenv(key)] |
 echo "reading data form quay.io, slow process."
 dep_file="$env/bundle/metadata/dependencies.yaml"
 
-limitador_bundle_version=$(yq '.dependencies.Limitador_bundle' $env/release.toml)
-limitador_bundle_image=quay.io/kuadrant/limitador-operator-bundle:v$limitador_bundle_version
-V=$(opm render $limitador_bundle_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
+limitador_version=$(yq '.dependencies.Limitador' $env/release.toml)
+limitador_image=quay.io/kuadrant/limitador-operator-bundle:v$limitador_version
+V=$(opm render $limitador_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
 COMPONENT=limitador-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file
 
 
-authorino_bundle_version=$(yq '.dependencies.Authorino_bundle' $env/release.toml)
-authorino_bundle_image=quay.io/kuadrant/authorino-operator-bundle:v$authorino_bundle_version
-V=$(opm render $authorino_bundle_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
+authorino_version=$(yq '.dependencies.Authorino' $env/release.toml)
+authorino_image=quay.io/kuadrant/authorino-operator-bundle:v$authorino_version
+V=$(opm render $authorino_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
 COMPONENT=authorino-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file
 
 
-dns_bundle_version=$(yq '.dependencies.DNS_bundle' $env/release.toml)
-dns_bundle_image=quay.io/kuadrant/dns-operator-bundle:v$dns_bundle_version
-V=$(opm render $dns_bundle_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
+dns_version=$(yq '.dependencies.DNS' $env/release.toml)
+dns_image=quay.io/kuadrant/dns-operator-bundle:v$dns_version
+V=$(opm render $dns_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
 COMPONENT=dns-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file

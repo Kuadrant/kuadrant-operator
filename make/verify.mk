@@ -30,3 +30,9 @@ verify-go-mod: ## Verify go.mod matches source code
 verify-helm-charts: helm-build ## Verify helm charts update.
 	git diff --exit-code ./charts
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./charts)" ]
+
+.PHONY: verify-prepare-release
+verify-prepare-release: prepare-release
+	git diff --exit-code .
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory .)" ]
+

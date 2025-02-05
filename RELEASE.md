@@ -1,36 +1,68 @@
 # How to release Kuadrant Operator
 
-## Process
+## Kuadrant Operator Release
 
 To release a version _“v0.W.Z”_ of Kuadrant Operator in GitHub and Quay.io, follow these steps:
 
-1. Verify correct versions for the Kuadrant release and its dependencies are listed in the `release.toml` file.
-   The verification should be done as part of the community call prior to cutting the release.[^1]
-   Update versions if required, release of dependency may be required, see step 2.
-   This file is located in the root of the kuadrant operator.
+### Release file format.
+This example of the `release.toml` file uses tag `v1.0.1` as reference.
 
-   [^1]: This is the general guide, for hot fixes the discretion for releaser can be used.
+```toml
+# FILE: ./release.toml
+[kuadrant]
+default_channel = "alpha"
+channels = ["alpha",]
+release = "1.0.1"
 
-2. (Optional) Release Kuadrant dependencies:
+[dependencies]
+Authorino = "0.16.0"
+Console_plugin = "0.0.14"
+DNS = "0.12.0"
+Limitador = "0.12.1"
+Wasm_shim = "0.8.1"
+```
+The `[kuadrant]` section relates to the release version of the kuadrant operator.
+While the `[dependencies]` section relates to the released versions of the subcomponents that will be included in a release.
+There are validation steps during the `make prepare-release` that require the dependencies to be release before generating the release of the Kuadrant operator.
+
+
+### Local steps
+
+1. Create the `kuadrant-vX.Y` branch, if the branch does not already exist. 
+2. Push the `kuadrant-vX.Y` to the remote (kuadrant/kuadrant-operator)
+3. Create the `kuadrant-vX.Y.Z-rc(n)` branch with the updated versions of the `release.toml`.
+4. Run `make prepare-release` on the `kuadrant-vX.Y.Z-rc(n)` 
+
+
+### Remote steps
+
+1. Open a PR against the `kuadrant-vX.Y` branch with the changes from `kuadrant-vX.Y.Z-rc(n)` branch. 
+2. PR verification checks will run.
+3. Get manual review of PR with focus on changes in these areas:
+   * `./bundle.Dockerfile`
+   * `./bundle`
+   * `./config`
+   * `./charts/`
+4. Merge PR
+5. Run the Release Workflow on the `kuadrant-vX.Y`. This does the following:
+   * Creates the GitHub release
+   * Creates tags
+6. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
+
+## Kuadrant Operator Dependencies
+
+1. Release Kuadrant dependencies as required:
    * [Authorino Operator](https://github.com/Kuadrant/authorino-operator/blob/main/RELEASE.md).
    * [Limitador Operator](https://github.com/Kuadrant/limitador-operator/blob/main/RELEASE.md).
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md).
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/).
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin).
 
-   Once dependencies have being released jump to step 1.
+2. Update the `release.toml` with the versions of required dependencies.
 
-3. Run the GHA [Release operator](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/release.yaml); make
-   sure to fill all the fields:
-    * Branch containing the release workflow file – default: `main`
-    * Commit SHA or branch name of the operator to release – usually: `main`
 
-3. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
 
-4. Verify the new version can be installed from the catalog image, see [Verify OLM Deployment](#verify-olm-deployment)
-
-5. Release to the [community operator index catalogs](#community-operator-index-catalogs).
-
+## Verification 
 ### Verify OLM Deployment
 
 1. Deploy the OLM catalog image following the [Deploy kuadrant operator using OLM](/doc/development.md#deploy-kuadrant-operator-using-olm) and providing the generated catalog image. For example:
@@ -71,7 +103,7 @@ image: quay.io/kuadrant/kuadrant-operator:v1.0.0-rc4
 image: quay.io/kuadrant/limitador-operator:v0.12.0
 ```
 
-### Community Operator Index Catalogs
+## Release Community Operator Index Catalogs
 
 - [Operatorhub Community Operators](https://github.com/k8s-operatorhub/community-operators)
 - [Openshift Community Operators](http://github.com/redhat-openshift-ecosystem/community-operators-prod)
@@ -89,32 +121,3 @@ The usual steps are:
     * Copy `github.com/kuadrant/kuadrant-operator/tree/v0.W.Z/bundle.Dockerfile` with the proper fix to the COPY commands
       (i.e. remove /bundle from the paths)
 
---- 
-
-## Release file format.
-
-This example of the `release.toml` file uses tag `v1.0.1` as reference.
-
-```toml
-# FILE: ./release.toml
-[kuadrant]
-channel = "alpha"
-channels = ["alpha",]
-release = "1.0.1"
-
-[dependencies]
-Authorino_bundle = "0.16.0"
-Console_plugin = "0.0.14"
-DNS_bundle = "0.12.0"
-Limitador_bundle = "0.12.1"
-Wasm_shim = "0.8.1"
-
-```
-
-## Automated Verification Processes.
-
-* Check that dependencies release images exist for stated version
-* Check that the git tag does not already exist for the stated release.
-* Automated test, install via OLM and ensure the correct images are on cluster.
-This should handle most of [Verify OLM Deployment](#verify-olm-deployment), except the checking of the logs.
-* Ensure all required fields are stated in the `release.toml`.

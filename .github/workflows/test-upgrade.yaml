@@ -97,10 +97,19 @@ jobs:
           --version ${{ inputs.kuadrantStartVersion }} \
           --namespace ${{ inputs.kuadrantNamespace }} \
           --create-namespace
+      - name: Deploy Kuadrant
+        run: |
+          kubectl -n ${{ inputs.kuadrantNamespace }} apply -f - <<EOF
+          apiVersion: kuadrant.io/v1beta1
+          kind: Kuadrant
+          metadata:
+            name: kuadrant
+          spec: {}
+          EOF
       - name: Verify Kuadrant installation
         run: |
-          # TODO
-          echo "kuadrant installation ✅" &&  exit 0
+          kubectl wait --timeout=300s --for=condition=Ready kuadrant kuadrant -n ${{ inputs.kuadrantNamespace }}
+          echo "kuadrant installation ✅"
       - name: Build local chart dependencies for version ${{ steps.upgrade-version.outputs.version }}
         run: |
           make helm-dependency-build
@@ -122,5 +131,5 @@ jobs:
         run: exit 1
       - name: Verify Kuadrant upgrade
         run: |
-          # TODO
-          echo "kuadrant upgrade ✅" &&  exit 0
+          kubectl wait --timeout=300s --for=condition=Ready kuadrant kuadrant -n ${{ inputs.kuadrantNamespace }}
+          echo "kuadrant upgrade ✅"

@@ -71,6 +71,7 @@ func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
 		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				// ServiceMonitors outside the Kuadrant namespace will be outside the topology tree
 				return kuadrant.GetNamespace() == child.GetNamespace()
 			})
 		},
@@ -85,6 +86,7 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				// PodMonitors outside the Kuadrant namespace will be outside the topology tree
 				return kuadrant.GetNamespace() == child.GetNamespace()
 			})
 		},

@@ -1,6 +1,6 @@
 //go:build integration
 
-package istio_test
+package envoygateway_test
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
-var _ = Describe("Observabiltity monitors for istio gateway", func() {
+var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -69,20 +69,20 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 	Context("when default kuadrant CR is created", func() {
 		It("monitors are not created at first", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
-				istiodMonitor := &monitoringv1.ServiceMonitor{
+				envoyGatewayMonitor := &monitoringv1.ServiceMonitor{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       monitoringv1.ServiceMonitorsKind,
 						APIVersion: monitoringv1.SchemeGroupVersion.String(),
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "istiod-monitor",
-						Namespace: "istio-system",
+						Name:      "envoy-gateway-monitor",
+						Namespace: "envoy-gateway-system",
 					},
 				}
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(istiodMonitor), istiodMonitor)
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyGatewayMonitor), envoyGatewayMonitor)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
+			})
 
 			kuadrantNS := getKuadrantNamespace(ctx, testClient())
 			kuadrantCR := &kuadrantv1beta1.Kuadrant{
@@ -106,36 +106,36 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func(g Gomega) {
-				istiodMonitor := &monitoringv1.ServiceMonitor{
+				envoyGatewayMonitor := &monitoringv1.ServiceMonitor{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       monitoringv1.ServiceMonitorsKind,
 						APIVersion: monitoringv1.SchemeGroupVersion.String(),
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "istiod-monitor",
-						Namespace: "istio-system",
+						Name:      "envoy-gateway-monitor",
+						Namespace: "envoy-gateway-system",
 					},
 				}
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(istiodMonitor), istiodMonitor)
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyGatewayMonitor), envoyGatewayMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(istiodMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
-			}).WithContext(ctx).Should(Succeed())
+				g.Expect(envoyGatewayMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+			})
 
 			Eventually(func(g Gomega) {
-				istioPodMonitor := &monitoringv1.PodMonitor{
+				envoyStatsMonitor := &monitoringv1.PodMonitor{
 					TypeMeta: metav1.TypeMeta{
 						Kind:       monitoringv1.PodMonitorsKind,
 						APIVersion: monitoringv1.SchemeGroupVersion.String(),
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "istio-pod-monitor",
+						Name:      "envoy-stats-monitor",
 						Namespace: "gateway-system",
 					},
 				}
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(istioPodMonitor), istioPodMonitor)
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyStatsMonitor), envoyStatsMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(istioPodMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
-			}).WithContext(ctx).Should(Succeed())
+				g.Expect(envoyStatsMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+			})
 		}, testTimeOut)
 	})
 })

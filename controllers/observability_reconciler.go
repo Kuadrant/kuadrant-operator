@@ -427,7 +427,7 @@ func (r *ObservabilityReconciler) deleteAllMonitors(ctx context.Context, monitor
 			return
 		}
 		if err = r.Client.Resource(mapping.Resource).Namespace(monitor.GetNamespace()).Delete(ctx, monitor.GetName(), metav1.DeleteOptions{}); err != nil {
-			logger.Error(err, fmt.Sprint("failed to delete monitor % %s/%s", monitor.GroupVersionKind().Kind, monitor.GetNamespace(), monitor.GetName()))
+			logger.Error(err, fmt.Sprintf("failed to delete monitor %s %s/%s", monitor.GroupVersionKind().Kind, monitor.GetNamespace(), monitor.GetName()))
 			return
 		}
 		logger.V(1).Info(fmt.Sprintf("deleted monitor %s %s/%s", monitor.GroupVersionKind().Kind, monitor.GetNamespace(), monitor.GetName()))

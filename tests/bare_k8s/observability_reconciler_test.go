@@ -16,7 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-var _ = Describe("Observabiltity monitors", func() {
+var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 	var (
 		testNamespace    string
 		testTimeOut      = SpecTimeout(15 * time.Second)

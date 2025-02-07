@@ -120,6 +120,22 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(istiodMonitor.Labels).To(HaveKeyWithValue("kuadrant-observabilidty", "true"))
 			})
+
+			Eventually(func(g Gomega) {
+				istioPodMonitor := &monitoringv1.PodMonitor{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       monitoringv1.PodMonitorsKind,
+						APIVersion: monitoringv1.SchemeGroupVersion.String(),
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "istio-pod-monitor",
+						Namespace: "gateway-system",
+					},
+				}
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(istioPodMonitor), istioPodMonitor)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(istioPodMonitor.Labels).To(HaveKeyWithValue("kuadrant-observabilidty", "true"))
+			})
 		}, testTimeOut)
 	})
 })

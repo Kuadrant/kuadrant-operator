@@ -19,7 +19,7 @@ import (
 var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 	var (
 		testNamespace    string
-		testTimeOut      = SpecTimeout(15 * time.Second)
+		testTimeOut      = SpecTimeout(30 * time.Second)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 
@@ -32,7 +32,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 	}, afterEachTimeOut)
 
 	Context("when default kuadrant CR is created", func() {
-		It("Monitors are not created", func(ctx SpecContext) {
+		It("monitors are not created at first", func(ctx SpecContext) {
 			kuadrantCR := &kuadrantv1beta1.Kuadrant{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "Kuadrant",
@@ -108,69 +108,13 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-	})
 
-	Context("when kuadrant CR with observability enabled is created", func() {
-		It("Monitors are created", func(ctx SpecContext) {
-			kuadrantCR := &kuadrantv1beta1.Kuadrant{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Kuadrant",
-					APIVersion: kuadrantv1beta1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "local",
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta1.KuadrantSpec{
-					Observability: kuadrantv1beta1.Observability{
-						Enable: true,
-					},
-				},
-			}
-			kuadrantMonitor := &monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       monitoringv1.ServiceMonitorsKind,
-					APIVersion: monitoringv1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "kuadrant-operator-monitor",
-					Namespace: testNamespace,
-				},
-			}
-			authorinoMonitor := &monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       monitoringv1.ServiceMonitorsKind,
-					APIVersion: monitoringv1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "authorino-operator-monitor",
-					Namespace: testNamespace,
-				},
-			}
-			limitadorMonitor := &monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       monitoringv1.ServiceMonitorsKind,
-					APIVersion: monitoringv1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "limitador-operator-monitor",
-					Namespace: testNamespace,
-				},
-			}
-			dnsMonitor := &monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       monitoringv1.ServiceMonitorsKind,
-					APIVersion: monitoringv1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "dns-operator-monitor",
-					Namespace: testNamespace,
-				},
-			}
-
-			// Create Kuadrant CR with observability eanbled
-			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
+			// Fetch current CR & set observability flag to enable the feature
+			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
+			Expect(err).NotTo(HaveOccurred())
+			kuadrantCR.Spec.Observability.Enable = true
+			err = testClient().Update(ctx, kuadrantCR)
+			Expect(err).NotTo(HaveOccurred())
 
 			// Verify monitors created
 			Eventually(func(g Gomega) {
@@ -195,7 +139,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Disable observability feature
-			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
+			err = testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
 			Expect(err).NotTo(HaveOccurred())
 			kuadrantCR.Spec.Observability.Enable = false
 			err = testClient().Update(ctx, kuadrantCR)

@@ -31,8 +31,8 @@ V="$operator_image" yq eval '.metadata.annotations.containerImage = strenv(V)' -
 
 cd -
 
-channels=$(yq -oy '.kuadrant.channels | join(",")' $env/release.toml)
-default_channel=$(yq '.kuadrant.default_channel' $env/release.toml)
+channels=$(yq -oy '.kuadrant.olm.channels | join(",")' $env/release.toml)
+default_channel=$(yq '.kuadrant.olm.default_channel' $env/release.toml)
 kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $operator_version --channels $channels --default-channel $default_channel
 
 openshift_version_annotation_key="com.redhat.openshift.versions"

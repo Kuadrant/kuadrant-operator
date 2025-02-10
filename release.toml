@@ -1,7 +1,9 @@
 [kuadrant]
+release = "1.0.1"
+
+[kuadrant.olm]
 channels = ["alpha"]
 default_channel = "alpha"
-release = "1.0.1"
 
 [dependencies]
 Authorino = "0.16.0"

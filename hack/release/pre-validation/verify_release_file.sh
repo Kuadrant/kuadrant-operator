@@ -19,8 +19,8 @@ check_field() {
     fi
 }
 
-check_field ".kuadrant.channels" "kuadrant.channels"
-check_field ".kuadrant.default_channel" "kuadrant.default_channel"
+check_field ".kuadrant.olm.channels" "kuadrant.olm.channels"
+check_field ".kuadrant.olm.default_channel" "kuadrant.olm.default_channel"
 check_field ".kuadrant.release" "kuadrant.release"
 check_field ".dependencies.Authorino" "dependencies.Authorino"
 check_field ".dependencies.Console_plugin" "dependencies.Console_plugin"

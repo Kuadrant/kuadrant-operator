@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -16,6 +15,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
 
 const (
@@ -399,23 +400,23 @@ func (r *ObservabilityReconciler) createMonitor(ctx context.Context, monitorObjs
 	if monitorExists {
 		logger.V(1).Info(fmt.Sprintf("monitor already exists %s/%s, skipping create", ns, monitor.GetName()))
 		return nil
-	} else {
-		logger.V(1).Info(fmt.Sprintf("creating monitor %s/%s", monitor.GetNamespace(), monitor.GetName()))
-		obj, err := controller.Destruct(monitor)
-		if err != nil {
-			return err
-		}
+	}
 
-		mapping, err := r.restMapper.RESTMapping(monitor.GetObjectKind().GroupVersionKind().GroupKind())
-		if err != nil {
-			logger.Error(err, "failed to get monitor restmapping")
-			return err
-		}
-		if _, err = r.Client.Resource(mapping.Resource).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{}); err == nil {
-			logger.V(1).Info(fmt.Sprintf("created monitor %s", monitor.GetName()))
-		}
+	logger.V(1).Info(fmt.Sprintf("creating monitor %s/%s", monitor.GetNamespace(), monitor.GetName()))
+	obj, err := controller.Destruct(monitor)
+	if err != nil {
 		return err
 	}
+
+	mapping, err := r.restMapper.RESTMapping(monitor.GetObjectKind().GroupVersionKind().GroupKind())
+	if err != nil {
+		logger.Error(err, "failed to get monitor restmapping")
+		return err
+	}
+	if _, err = r.Client.Resource(mapping.Resource).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{}); err == nil {
+		logger.V(1).Info(fmt.Sprintf("created monitor %s", monitor.GetName()))
+	}
+	return err
 }
 
 func (r *ObservabilityReconciler) deleteAllMonitors(ctx context.Context, monitorObjs []machinery.Object, logger logr.Logger) {
@@ -432,5 +433,4 @@ func (r *ObservabilityReconciler) deleteAllMonitors(ctx context.Context, monitor
 		}
 		logger.V(1).Info(fmt.Sprintf("deleted monitor %s %s/%s", monitor.GroupVersionKind().Kind, monitor.GetNamespace(), monitor.GetName()))
 	}
-
 }

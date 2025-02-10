@@ -29,6 +29,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	consolev1 "github.com/openshift/api/console/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
@@ -48,7 +49,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	//+kubebuilder:scaffold:imports
 )
 

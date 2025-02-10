@@ -1,4 +1,4 @@
-name: Release Operator
+name: Release Validation
 
 on:
   pull_request:
@@ -6,10 +6,11 @@ on:
     - opened
     branches:
       - 'release-v[0-9]+.[0-9]+'
+  workflow_dispatch: {}
 
 jobs:
   build:
-    name: Release canidate
+    name: Validate release data 
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.22.x

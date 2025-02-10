@@ -6,6 +6,7 @@ on:
     - closed
     branches:
       - 'release-v[0-9]+.[0-9]+'
+  workflow_dispatch: {}
 
 jobs:
   if_merged:
@@ -22,13 +23,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Set envoironment variables
         run: |
-          bash ./hack/release/load_envvar.sh
+          bash ./hack/release/load_github_envvar.sh
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          name: v${{ kuadrantOperatorVersion }}
-          tag_name: v${{ kuadrantOperatorVersion }}
-          body: "${{ releaseBody }}"
+          name: v${{ env.kuadrantOperatorVersion }}
+          tag_name: v${{ env.kuadrantOperatorVersion }}
+          body: "${{ env.releaseBody }}"
           generate_release_notes: true
-          target_commitish: release-v${{ kuadrantOperatorVersion }}
-          prerelease: ${{ prerelease }}
+          target_commitish: release-v${{ env.kuadrantOperatorVersion }}
+          prerelease: ${{ env.prerelease }}

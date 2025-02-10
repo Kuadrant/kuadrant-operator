@@ -43,22 +43,68 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 					Namespace: testNamespace,
 				},
 			}
+			kuadrantMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+			authorinoMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "authorino-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+			limitadorMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "limitador-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+			dnsMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dns-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+
+			// Create Kuadrant CR with observability not enabled
 			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
 
+			// Verify monitors not created
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
-
-				kuadrantMonitor := &monitoringv1.ServiceMonitor{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       monitoringv1.ServiceMonitorsKind,
-						APIVersion: monitoringv1.SchemeGroupVersion.String(),
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kuadrant-operator-monitor",
-						Namespace: testNamespace,
-					},
-				}
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantMonitor), kuadrantMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(limitadorMonitor), limitadorMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(dnsMonitor), dnsMonitor)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
@@ -82,74 +128,99 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 					},
 				},
 			}
+			kuadrantMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+			authorinoMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "authorino-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+			limitadorMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "limitador-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+			dnsMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dns-operator-monitor",
+					Namespace: testNamespace,
+				},
+			}
+
+			// Create Kuadrant CR with observability eanbled
 			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
 
+			// Verify monitors created
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
-			}).WithContext(ctx).Should(Succeed())
-
-			Eventually(func(g Gomega) {
-				kuadrantMonitor := &monitoringv1.ServiceMonitor{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       monitoringv1.ServiceMonitorsKind,
-						APIVersion: monitoringv1.SchemeGroupVersion.String(),
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kuadrant-operator-monitor",
-						Namespace: testNamespace,
-					},
-				}
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantMonitor), kuadrantMonitor)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(kuadrantMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
-
 			Eventually(func(g Gomega) {
-				authorinoMonitor := &monitoringv1.ServiceMonitor{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       monitoringv1.ServiceMonitorsKind,
-						APIVersion: monitoringv1.SchemeGroupVersion.String(),
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "authorino-operator-monitor",
-						Namespace: testNamespace,
-					},
-				}
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(authorinoMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
-
 			Eventually(func(g Gomega) {
-				limitadorMonitor := &monitoringv1.ServiceMonitor{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       monitoringv1.ServiceMonitorsKind,
-						APIVersion: monitoringv1.SchemeGroupVersion.String(),
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "limitador-operator-monitor",
-						Namespace: testNamespace,
-					},
-				}
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(limitadorMonitor), limitadorMonitor)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(limitadorMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
-
 			Eventually(func(g Gomega) {
-				dnsMonitor := &monitoringv1.ServiceMonitor{
-					TypeMeta: metav1.TypeMeta{
-						Kind:       monitoringv1.ServiceMonitorsKind,
-						APIVersion: monitoringv1.SchemeGroupVersion.String(),
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "dns-operator-monitor",
-						Namespace: testNamespace,
-					},
-				}
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(dnsMonitor), dnsMonitor)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(dnsMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Disable observability feature
+			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
+			Expect(err).NotTo(HaveOccurred())
+			kuadrantCR.Spec.Observability.Enable = false
+			err = testClient().Update(ctx, kuadrantCR)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify monitors deleted
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantMonitor), kuadrantMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(limitadorMonitor), limitadorMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(dnsMonitor), dnsMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})

@@ -91,8 +91,8 @@ helm-sync-package-deleted: ## Sync the deleted helm chart package to the helm-ch
 	  -d '{"event_type":"chart-deleted","client_payload":{"chart":"$(CHART_NAME)","version":"$(CHART_VERSION)"}}'
 
 .PHONY: helm-print-chart-version
-helm-print-chart-version: $(HELM) ## Reads chart version
-	@$(HELM) show chart charts/$(REPO) | grep -E "^version:" | awk '{print $$2}'
+helm-print-chart-version: $(HELM) ## Reads local chart version
+	@$(HELM) show chart charts/$(CHART_NAME) | grep -E "^version:" | awk '{print $$2}'
 
-helm-print-installed-chart-version: $(YQ) $(HELM) ## Reads chart version
+helm-print-installed-chart-version: $(YQ) $(HELM) ## Reads installed chart version
 	@$(HELM) list --all-namespaces -o yaml | $(YQ) '(.[] | select(.name == "kuadrant") | .app_version)'

@@ -25,7 +25,6 @@ jobs:
   helm-charts-upgrade-test:
     runs-on: ubuntu-latest
     name: Helm Charts Upgrade Test
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     env:
       KIND_CLUSTER_NAME: kuadrant-test
       K8S_USER: kuadrant-admin  # can be whatever, it does not matter.

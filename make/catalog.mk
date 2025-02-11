@@ -2,7 +2,8 @@
 
 
 # The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
-CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(IMAGE_TAG)
+CATALOG_IMG_REPO ?= $(IMAGE_TAG_BASE)-catalog
+CATALOG_IMG ?= $(CATALOG_IMG_REPO):$(IMAGE_TAG)
 
 CATALOG_FILE = $(PROJECT_PATH)/catalog/kuadrant-operator-catalog/operator.yaml
 CATALOG_DOCKERFILE = $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfile
@@ -74,3 +75,9 @@ deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy operator to the K8s cluster specifi
 .PHONY: undeploy-catalog
 undeploy-catalog: $(KUSTOMIZE) ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
+
+print-catalog-repo: ## Print catalog repo
+	@echo $(CATALOG_IMG_REPO)
+
+print-catalog-image: ## Print catalog image
+	@echo $(CATALOG_IMG)

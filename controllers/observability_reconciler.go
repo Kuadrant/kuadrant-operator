@@ -12,12 +12,15 @@ import (
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
+
+//+kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;podmonitors,verbs=get;list;watch;create;update;patch;delete
 
 const (
 	kuadrantObservabilityLabel = "kuadrant-observability"
@@ -302,7 +305,12 @@ func NewObservabilityReconciler(client *dynamic.DynamicClient, rm meta.RESTMappe
 
 func (r *ObservabilityReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{ReconcileFunc: r.Reconcile, Events: []controller.ResourceEventMatcher{
-		{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind)},
+		{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+		{Kind: ptr.To(schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind}), EventType: ptr.To(controller.DeleteEvent)},
+		{Kind: ptr.To(schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind}), EventType: ptr.To(controller.DeleteEvent)},
+		{Kind: &machinery.GatewayGroupKind}, // all events
+		{Kind: &machinery.GatewayClassGroupKind, EventType: ptr.To(controller.CreateEvent)},
+		{Kind: &machinery.GatewayClassGroupKind, EventType: ptr.To(controller.DeleteEvent)},
 	},
 	}
 }
@@ -333,58 +341,33 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 	logger.V(1).Info("observability enabled, creating monitors")
 
 	// Kuadrant Operator monitor
-	if err := r.createMonitor(ctx, monitorObjs, kOpMonitorSpec, kObj.Namespace, logger); err != nil {
-		logger.Error(err, "failed to create kuadrant operator monitor", "status", "error")
-		return err
-	}
+	r.createMonitor(ctx, monitorObjs, kOpMonitorSpec, kObj.Namespace, logger)
 
 	// DNS Operator monitor
-	if err := r.createMonitor(ctx, monitorObjs, dnsOpMonitorSpec, kObj.Namespace, logger); err != nil {
-		logger.Error(err, "failed to create dns operator monitor", "status", "error")
-		return err
-	}
+	r.createMonitor(ctx, monitorObjs, dnsOpMonitorSpec, kObj.Namespace, logger)
 
 	// Authorino operator monitor
-	if err := r.createMonitor(ctx, monitorObjs, authOpMonitorSpec, kObj.Namespace, logger); err != nil {
-		logger.Error(err, "failed to create authorino operator monitor", "status", "error")
-		return err
-	}
+	r.createMonitor(ctx, monitorObjs, authOpMonitorSpec, kObj.Namespace, logger)
 
 	// Limitador operator monitor
-	if err := r.createMonitor(ctx, monitorObjs, limitOpMonitorSpec, kObj.Namespace, logger); err != nil {
-		logger.Error(err, "failed to create limitador operator monitor", "status", "error")
-		return err
-	}
+	r.createMonitor(ctx, monitorObjs, limitOpMonitorSpec, kObj.Namespace, logger)
 
 	// Create monitors for each gateway instance of each gateway class
-	// gatewayClasses := topology.Targetables().Children(kObj) // assumes only and all valid gateway classes are linked to kuadrant in the topology
-
 	gatewayClasses := topology.Targetables().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind
 	})
 	for _, gatewayClass := range gatewayClasses {
 		gateways := topology.All().Children(gatewayClass)
-
-		for _, gateway := range gateways {
-			gwClass := gatewayClass.(*machinery.GatewayClass)
-			if gwClass.GatewayClass.Spec.ControllerName == istioGatewayControllerName {
-				if err := r.createMonitor(ctx, monitorObjs, istiodMonitorSpec, istiodMonitorNS, logger); err != nil {
-					logger.Error(err, "failed to create istiod monitor", "status", "error")
-					return err
-				}
-				if err := r.createMonitor(ctx, monitorObjs, istioPodMonitorSpec, gateway.GetNamespace(), logger); err != nil {
-					logger.Error(err, "failed to create istio pod monitor", "status", "error")
-					return err
-				}
-			} else if gwClass.GatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName {
-				if err := r.createMonitor(ctx, monitorObjs, envoyGatewayMonitorSpec, envoyGatewayMonitorNS, logger); err != nil {
-					logger.Error(err, "failed to create envoy gateway monitor", "status", "error")
-					return err
-				}
-				if err := r.createMonitor(ctx, monitorObjs, envoyStatsMonitorSpec, gateway.GetNamespace(), logger); err != nil {
-					logger.Error(err, "failed to create envoy stats monitor", "status", "error")
-					return err
-				}
+		gwClass := gatewayClass.(*machinery.GatewayClass)
+		if gwClass.GatewayClass.Spec.ControllerName == istioGatewayControllerName {
+			for _, gateway := range gateways {
+				r.createMonitor(ctx, monitorObjs, istiodMonitorSpec, istiodMonitorNS, logger)
+				r.createMonitor(ctx, monitorObjs, istioPodMonitorSpec, gateway.GetNamespace(), logger)
+			}
+		} else if gwClass.GatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName {
+			for _, gateway := range gateways {
+				r.createMonitor(ctx, monitorObjs, envoyGatewayMonitorSpec, envoyGatewayMonitorNS, logger)
+				r.createMonitor(ctx, monitorObjs, envoyStatsMonitorSpec, gateway.GetNamespace(), logger)
 			}
 		}
 	}
@@ -392,30 +375,32 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 	return nil
 }
 
-func (r *ObservabilityReconciler) createMonitor(ctx context.Context, monitorObjs []machinery.Object, monitor client.Object, ns string, logger logr.Logger) error {
+func (r *ObservabilityReconciler) createMonitor(ctx context.Context, monitorObjs []machinery.Object, monitor client.Object, ns string, logger logr.Logger) {
 	_, monitorExists := lo.Find(monitorObjs, func(item machinery.Object) bool {
 		return item.GroupVersionKind().Kind == monitor.GetObjectKind().GroupVersionKind().Kind && item.GetName() == monitor.GetName() && item.GetNamespace() == ns
 	})
 	if monitorExists {
 		logger.V(1).Info(fmt.Sprintf("monitor already exists %s/%s, skipping create", ns, monitor.GetName()))
-		return nil
+		return
 	}
 
 	logger.V(1).Info(fmt.Sprintf("creating monitor %s/%s", monitor.GetNamespace(), monitor.GetName()))
 	obj, err := controller.Destruct(monitor)
 	if err != nil {
-		return err
+		logger.Error(err, fmt.Sprintf("error destructing monitor %s/%s", ns, monitor.GetName()))
+		return
 	}
 
 	mapping, err := r.restMapper.RESTMapping(monitor.GetObjectKind().GroupVersionKind().GroupKind())
 	if err != nil {
-		logger.Error(err, "failed to get monitor restmapping")
-		return err
+		logger.Error(err, fmt.Sprintf("failed to get monitor restmapping %s/%s", ns, monitor.GetName()))
+		return
 	}
-	if _, err = r.Client.Resource(mapping.Resource).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{}); err == nil {
-		logger.V(1).Info(fmt.Sprintf("created monitor %s", monitor.GetName()))
+	if _, err = r.Client.Resource(mapping.Resource).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{}); err != nil {
+		logger.Error(err, fmt.Sprintf("error creating monitor %s/%s", ns, monitor.GetName()))
+		return
 	}
-	return err
+	logger.V(1).Info(fmt.Sprintf("created monitor %s/%s", ns, monitor.GetName()))
 }
 
 func (r *ObservabilityReconciler) deleteAllMonitors(ctx context.Context, monitorObjs []machinery.Object, logger logr.Logger) {

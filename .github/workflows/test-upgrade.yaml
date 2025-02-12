@@ -1,0 +1,134 @@
+---
+name: Kuadrant Upgrade Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      kuadrantStartVersion:
+        description: Kuadrant start version
+        required: true
+        type: string
+      clusterServer:
+        description: Cluster server URL
+        required: false
+        type: string
+      clusterToken:
+        description: Cluster Server Bearer Token
+        required: false
+        type: string
+      kuadrantNamespace:
+        description: Namespace where Kuadrant is installed
+        required: false
+        default: kuadrant-system
+        type: string
+jobs:
+  helm-charts-upgrade-test:
+    runs-on: ubuntu-latest
+    name: Helm Charts Upgrade Test
+    env:
+      KIND_CLUSTER_NAME: kuadrant-test
+      K8S_USER: kuadrant-admin  # can be whatever, it does not matter.
+      CLUSTER_NAME: remote-cluster
+      LOCAL_CLUSTER: ${{ inputs.clusterServer == '' && inputs.clusterToken == '' }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install helm
+        run: |
+          make helm
+      - name: Install yq tool
+        run: |
+          # following sub-shells running make target should have yq already installed
+          make yq
+      - name: Determine upgrade version
+        id: upgrade-version
+        run: |
+          version=`make helm-print-chart-version`
+          echo version=$version >> $GITHUB_OUTPUT
+      - name: Print versions
+        run: echo "Installing version ${{ inputs.kuadrantStartVersion }}, upgrading to version ${{ steps.upgrade-version.outputs.version }}"
+      - name: Deploy local Kind cluster
+        if: ${{ env.LOCAL_CLUSTER }}
+        uses: helm/kind-action@v1.12.0
+        with:
+          version: v0.23.0
+          config: utils/kind-cluster.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+      - name: Install kubectl for remote cluster
+        if: ${{ !env.LOCAL_CLUSTER }}
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.25.3
+      - name: Mask cluster token
+        if: ${{ !env.LOCAL_CLUSTER }}
+        run: |
+          CLUSTER_TOKEN=$(jq -r '.inputs.clusterToken' $GITHUB_EVENT_PATH)
+          echo ::add-mask::$CLUSTER_TOKEN
+          echo CLUSTER_TOKEN=$CLUSTER_TOKEN >> $GITHUB_ENV
+      - name: Setup kubectl for remote cluster
+        if: ${{ !env.LOCAL_CLUSTER }}
+        run: |
+          kubectl config set-credentials ${{ env.K8S_USER }}/${{ env.CLUSTER_NAME }} --token ${{ env.CLUSTER_TOKEN }}
+          kubectl config set-cluster ${{ env.CLUSTER_NAME }} --insecure-skip-tls-verify=true --server=${{ inputs.clusterServer }}
+          kubectl config set-context ${{ inputs.kuadrantNamespace }}/${{ env.CLUSTER_NAME }}/${{ env.K8S_USER }} --user=${{ env.K8S_USER }}/${{ env.CLUSTER_NAME }} --namespace=${{ inputs.kuadrantNamespace }} --cluster=${{ env.CLUSTER_NAME }}
+          kubectl config use-context ${{ inputs.kuadrantNamespace }}/${{ env.CLUSTER_NAME }}/${{ env.K8S_USER }}
+      ## makes sure cluster is up and running
+      - run: |
+          kubectl cluster-info
+          kubectl get nodes
+      - name: Deploy pre-requisites on local Kind cluster
+        if: ${{ env.LOCAL_CLUSTER }}
+        run: |
+          make install-metallb
+          make install-cert-manager
+          make envoy-gateway-install
+          make deploy-eg-gateway
+      - name: Install helm and add Kuadrant repo
+        run: |
+          make helm-add-kuadrant-repo
+          bin/helm search repo kuadrant
+      - name: Install Kuadrant ${{ inputs.kuadrantStartVersion }}
+        run: |
+          bin/helm install kuadrant kuadrant/kuadrant-operator \
+          --wait \
+          --timeout 3m0s \
+          --version ${{ inputs.kuadrantStartVersion }} \
+          --namespace ${{ inputs.kuadrantNamespace }} \
+          --create-namespace
+      - name: Deploy Kuadrant
+        run: |
+          kubectl -n ${{ inputs.kuadrantNamespace }} apply -f - <<EOF
+          apiVersion: kuadrant.io/v1beta1
+          kind: Kuadrant
+          metadata:
+            name: kuadrant
+          spec: {}
+          EOF
+      - name: Verify Kuadrant installation
+        run: |
+          kubectl wait --timeout=300s --for=condition=Ready kuadrant kuadrant -n ${{ inputs.kuadrantNamespace }}
+          echo "kuadrant installation ✅"
+      - name: Build local chart dependencies for version ${{ steps.upgrade-version.outputs.version }}
+        run: |
+          make helm-dependency-build
+      - name: Start upgrade to kuadrant ${{ steps.upgrade-version.outputs.version }}
+        run: |
+          bin/helm upgrade kuadrant charts/kuadrant-operator \
+          --wait \
+          --timeout 3m0s \
+          --namespace ${{ inputs.kuadrantNamespace }}
+      - name: Determine installed chart
+        id: installed-version-after-upgrade
+        run: |
+          installed_version=`make helm-print-installed-chart-version`
+          echo installed_version=$installed_version >> $GITHUB_OUTPUT
+      - name: Print versions
+        run: echo "Installed version ${{ steps.installed-version-after-upgrade.outputs.installed_version }}, expected version ${{steps.upgrade-version.outputs.version}}"
+      - name: Fail when installed version is not the upgraded one
+        if: ${{ steps.installed-version-after-upgrade.outputs.installed_version != steps.upgrade-version.outputs.version }}
+        run: exit 1
+      - name: Verify Kuadrant upgrade
+        run: |
+          kubectl wait --timeout=300s --for=condition=Ready kuadrant kuadrant -n ${{ inputs.kuadrantNamespace }}
+          echo "kuadrant upgrade ✅"

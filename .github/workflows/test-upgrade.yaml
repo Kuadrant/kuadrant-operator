@@ -135,23 +135,20 @@ jobs:
   olm-upgrade-test:
     runs-on: ubuntu-latest
     name: OLM Upgrade Test
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     env:
       KIND_CLUSTER_NAME: kuadrant-test
       K8S_USER: kuadrant-admin  # can be whatever, it does not matter.
       CLUSTER_NAME: remote-cluster
+      LOCAL_CLUSTER: ${{ inputs.clusterServer == '' && inputs.clusterToken == '' }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-      - name: Install helm
-        run: |
-          make helm
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
           make yq
       - name: Deploy local Kind cluster
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.clusterServer == '' }}
+        if: ${{ env.LOCAL_CLUSTER }}
         uses: helm/kind-action@v1.12.0
         with:
           version: v0.23.0
@@ -159,18 +156,18 @@ jobs:
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           wait: 120s
       - name: Install kubectl for remote cluster
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.clusterServer != '' }}
+        if: ${{ !env.LOCAL_CLUSTER }}
         uses: azure/setup-kubectl@v4
         with:
           version: v1.31.0
       - name: Mask cluster token
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.clusterToken != '' }}
+        if: ${{ !env.LOCAL_CLUSTER }}
         run: |
           CLUSTER_TOKEN=$(jq -r '.inputs.clusterToken' $GITHUB_EVENT_PATH)
           echo ::add-mask::$CLUSTER_TOKEN
           echo CLUSTER_TOKEN=$CLUSTER_TOKEN >> $GITHUB_ENV
       - name: Setup kubectl for remote cluster
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.clusterServer != '' }}
+        if: ${{ !env.LOCAL_CLUSTER }}
         run: |
           kubectl config set-credentials ${{ env.K8S_USER }}/${{ env.CLUSTER_NAME }} --token ${{ env.CLUSTER_TOKEN }}
           kubectl config set-cluster ${{ env.CLUSTER_NAME }} --insecure-skip-tls-verify=true --server=${{ inputs.clusterServer }}
@@ -181,11 +178,11 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
       - name: Deploy OLM on local Kind cluster
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.clusterServer == '' }}
+        if: ${{ env.LOCAL_CLUSTER }}
         run: |
           make install-olm
       - name: Deploy pre-requisites on local Kind cluster
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.clusterServer == '' }}
+        if: ${{ env.LOCAL_CLUSTER }}
         run: |
           make install-metallb
           make install-cert-manager

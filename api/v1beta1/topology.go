@@ -7,8 +7,11 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	kuad "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 var (
@@ -71,8 +74,12 @@ func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
 		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
-				// ServiceMonitors outside the Kuadrant namespace will be outside the topology tree
-				return kuadrant.GetNamespace() == child.GetNamespace()
+				if metaObj, ok := child.(metav1.Object); ok {
+					if val, exists := metaObj.GetLabels()[kuad.ObservabilityLabel]; exists {
+						return val == "true"
+					}
+				}
+				return false
 			})
 		},
 	}
@@ -86,8 +93,12 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
-				// PodMonitors outside the Kuadrant namespace will be outside the topology tree
-				return kuadrant.GetNamespace() == child.GetNamespace()
+				if metaObj, ok := child.(metav1.Object); ok {
+					if val, exists := metaObj.GetLabels()[kuad.ObservabilityLabel]; exists {
+						return val == "true"
+					}
+				}
+				return false
 			})
 		},
 	}

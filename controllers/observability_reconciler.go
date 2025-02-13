@@ -18,22 +18,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;podmonitors,verbs=get;list;watch;create;update;patch;delete
 
 const (
-	kuadrantObservabilityLabel = "kuadrant-observability"
-	kOpMonitorName             = "kuadrant-operator-monitor"
-	dnsOpMonitorName           = "dns-operator-monitor"
-	authOpMonitorName          = "authorino-operator-monitor"
-	limitOpMonitorName         = "limitador-operator-monitor"
-	istiodMonitorName          = "istiod-monitor"
-	istiodMonitorNS            = "istio-system"
-	istioPodMonitorName        = "istio-pod-monitor"
-	envoyGatewayMonitorName    = "envoy-gateway-monitor"
-	envoyGatewayMonitorNS      = "envoy-gateway-system"
-	envoyStatsMonitorName      = "envoy-stats-monitor"
+	kOpMonitorName          = "kuadrant-operator-monitor"
+	dnsOpMonitorName        = "dns-operator-monitor"
+	authOpMonitorName       = "authorino-operator-monitor"
+	limitOpMonitorName      = "limitador-operator-monitor"
+	istiodMonitorName       = "istiod-monitor"
+	istiodMonitorNS         = "istio-system"
+	istioPodMonitorName     = "istio-pod-monitor"
+	envoyGatewayMonitorName = "envoy-gateway-monitor"
+	envoyGatewayMonitorNS   = "envoy-gateway-system"
+	envoyStatsMonitorName   = "envoy-stats-monitor"
 )
 
 var kOpMonitorSpec = &monitoringv1.ServiceMonitor{
@@ -44,8 +44,8 @@ var kOpMonitorSpec = &monitoringv1.ServiceMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: kOpMonitorName,
 		Labels: map[string]string{
-			"control-plane":            "controller-manager",
-			kuadrantObservabilityLabel: "true",
+			"control-plane":             "controller-manager",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.ServiceMonitorSpec{
@@ -71,7 +71,7 @@ var dnsOpMonitorSpec = &monitoringv1.ServiceMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: dnsOpMonitorName,
 		Labels: map[string]string{
-			kuadrantObservabilityLabel:     "true",
+			kuadrant.ObservabilityLabel:    "true",
 			"control-plane":                "controller-manager",
 			"app.kubernetes.io/name":       "servicemonitor",
 			"app.kubernetes.io/instance":   "controller-manager-metrics-monitor",
@@ -103,8 +103,8 @@ var authOpMonitorSpec = &monitoringv1.ServiceMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: authOpMonitorName,
 		Labels: map[string]string{
-			"control-plane":            "controller-manager",
-			kuadrantObservabilityLabel: "true",
+			"control-plane":             "controller-manager",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.ServiceMonitorSpec{
@@ -128,8 +128,8 @@ var limitOpMonitorSpec = &monitoringv1.ServiceMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: limitOpMonitorName,
 		Labels: map[string]string{
-			"control-plane":            "controller-manager",
-			kuadrantObservabilityLabel: "true",
+			"control-plane":             "controller-manager",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.ServiceMonitorSpec{
@@ -153,7 +153,7 @@ var istiodMonitorSpec = &monitoringv1.ServiceMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: istiodMonitorName,
 		Labels: map[string]string{
-			kuadrantObservabilityLabel: "true",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.ServiceMonitorSpec{
@@ -178,7 +178,7 @@ var istioPodMonitorSpec = &monitoringv1.PodMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: istioPodMonitorName,
 		Labels: map[string]string{
-			kuadrantObservabilityLabel: "true",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.PodMonitorSpec{
@@ -252,7 +252,7 @@ var envoyGatewayMonitorSpec = &monitoringv1.ServiceMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: envoyGatewayMonitorName,
 		Labels: map[string]string{
-			kuadrantObservabilityLabel: "true",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.ServiceMonitorSpec{
@@ -275,7 +275,7 @@ var envoyStatsMonitorSpec = &monitoringv1.PodMonitor{
 	ObjectMeta: metav1.ObjectMeta{
 		Name: envoyStatsMonitorName,
 		Labels: map[string]string{
-			kuadrantObservabilityLabel: "true",
+			kuadrant.ObservabilityLabel: "true",
 		},
 	},
 	Spec: monitoringv1.PodMonitorSpec{
@@ -294,12 +294,14 @@ var envoyStatsMonitorSpec = &monitoringv1.PodMonitor{
 type ObservabilityReconciler struct {
 	Client     *dynamic.DynamicClient
 	restMapper meta.RESTMapper
+	namespace  string
 }
 
-func NewObservabilityReconciler(client *dynamic.DynamicClient, rm meta.RESTMapper) *ObservabilityReconciler {
+func NewObservabilityReconciler(client *dynamic.DynamicClient, rm meta.RESTMapper, namespace string) *ObservabilityReconciler {
 	return &ObservabilityReconciler{
 		Client:     client,
 		restMapper: rm,
+		namespace:  namespace,
 	}
 }
 
@@ -341,16 +343,16 @@ func (r *ObservabilityReconciler) Reconcile(ctx context.Context, _ []controller.
 	logger.V(1).Info("observability enabled, creating monitors")
 
 	// Kuadrant Operator monitor
-	r.createMonitor(ctx, monitorObjs, kOpMonitorSpec, kObj.Namespace, logger)
+	r.createMonitor(ctx, monitorObjs, kOpMonitorSpec, r.namespace, logger)
 
 	// DNS Operator monitor
-	r.createMonitor(ctx, monitorObjs, dnsOpMonitorSpec, kObj.Namespace, logger)
+	r.createMonitor(ctx, monitorObjs, dnsOpMonitorSpec, r.namespace, logger)
 
 	// Authorino operator monitor
-	r.createMonitor(ctx, monitorObjs, authOpMonitorSpec, kObj.Namespace, logger)
+	r.createMonitor(ctx, monitorObjs, authOpMonitorSpec, r.namespace, logger)
 
 	// Limitador operator monitor
-	r.createMonitor(ctx, monitorObjs, limitOpMonitorSpec, kObj.Namespace, logger)
+	r.createMonitor(ctx, monitorObjs, limitOpMonitorSpec, r.namespace, logger)
 
 	// Create monitors for each gateway instance of each gateway class
 	gatewayClasses := topology.Targetables().Items(func(o machinery.Object) bool {

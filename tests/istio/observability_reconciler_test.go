@@ -123,12 +123,12 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(istiodMonitor), istiodMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(istiodMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+				g.Expect(istiodMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(istioPodMonitor), istioPodMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(istioPodMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+				g.Expect(istioPodMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
 
 			// Unset observability flag to disable the feature

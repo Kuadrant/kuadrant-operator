@@ -163,8 +163,8 @@ func (p *TLSPolicy) GetMergeStrategy() machinery.MergeStrategy {
 	}
 }
 
-func (p *TLSPolicy) Merge(other machinery.Policy) machinery.Policy {
-	return other
+func (p *TLSPolicy) Merge(_ machinery.Policy) machinery.Policy {
+	return p
 }
 
 func (p *TLSPolicy) GetLocator() string {

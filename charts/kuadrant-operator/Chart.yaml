@@ -24,13 +24,13 @@ version: "0.0.0"
 appVersion: "0.0.0"
 dependencies:
   - name: authorino-operator
-    version: 0.0.0
+    version: 0.16.0
     repository: https://kuadrant.io/helm-charts/
   - name: limitador-operator
-    version: 0.0.0
+    version: 0.12.1
     repository: https://kuadrant.io/helm-charts/
   - name: dns-operator
-    version: 0.0.0
+    version: 0.12.0
     repository: https://kuadrant.io/helm-charts/
 maintainers:
   - email: acatterm@redhat.com

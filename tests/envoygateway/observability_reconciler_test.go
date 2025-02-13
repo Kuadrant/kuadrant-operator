@@ -124,12 +124,12 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyGatewayMonitor), envoyGatewayMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(envoyGatewayMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+				g.Expect(envoyGatewayMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyStatsMonitor), envoyStatsMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(envoyStatsMonitor.Labels).To(HaveKeyWithValue("kuadrant-observability", "true"))
+				g.Expect(envoyStatsMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
 
 			// Unset observability flag to disable the feature

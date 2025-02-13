@@ -16,8 +16,8 @@ install-metallb: kustomize yq ## Installs the metallb load balancer allowing use
 	./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} | kubectl apply -n metallb-system -f -
 
 .PHONY: install-observability-crds
-install-observability-crds: $(KUSTOMIZE)
-	$(KUSTOMIZE) build ./config/observability/| $(CONTAINER_ENGINE) run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+install-observability-crds: $(KUSTOMIZE) $(YQ)
+	$(KUSTOMIZE) build ./config/observability/| $(YQ) e 'select(.kind == "CustomResourceDefinition")' | kubectl apply --server-side -f -
 
 .PHONY: uninstall-metallb
 uninstall-metallb: $(KUSTOMIZE)

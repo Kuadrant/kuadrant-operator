@@ -26,8 +26,8 @@ spec:
     enable: true
 ```
 
-When enabled, Kuadrant creates ServiceMonitors and PodMonitors for its own components and in each gateway namespace (Envoy Gateway or Istio).
-Monitors are also created in the corresponding gateway "system" namespace:
+When enabled, Kuadrant creates ServiceMonitors and PodMonitors for its own components in the same namespae as the Kuadrant operator.
+Monitors are also created in each gateway namespace (Envoy Gateway or Istio), and in the corresponding gateway "system" namespace:
 
 - Istio: `istio-system` namespace for the istiod pod
 - Envoy Gateway:  `envoy-gateway-system` namespace for the envoy gateway pod
@@ -35,10 +35,10 @@ Monitors are also created in the corresponding gateway "system" namespace:
 You can check all created monitors using this command:
 
 ```yaml
-kubectl get servicemonitor,podmonitor -A -l kuadrant-observability=true
+kubectl get servicemonitor,podmonitor -A -l kuadrant.io/observability=true
 ```
 
-You can make changes to the monitors after they are created if you have need to.
+You can make changes to the monitors after they are created if you need to.
 Monitors will only ever be created or deleted, not updated or reverted.
 If you decide the default monitors aren’t suitable, disable the feature by setting `enable: false` and create your own ServiceMonitor/PodMonitor definitions or configure Prometheus directly.
 For more details on specific metrics, check out the [Metrics reference page](../../observability/metrics.md).

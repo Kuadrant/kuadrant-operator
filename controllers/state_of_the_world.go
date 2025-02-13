@@ -414,13 +414,13 @@ func (b *BootOptionsBuilder) getObservabilityOptions() []controller.ControllerOp
 			&monitoringv1.ServiceMonitor{},
 			monitoringv1.SchemeGroupVersion.WithResource("servicemonitors"),
 			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*monitoringv1.ServiceMonitor]("kuadrant-observability=true"),
+			controller.FilterResourcesByLabel[*monitoringv1.ServiceMonitor](kuadrant.ObservabilityLabel),
 		)),
 		controller.WithRunnable("podmonitor watcher", controller.Watch(
 			&monitoringv1.PodMonitor{},
 			monitoringv1.SchemeGroupVersion.WithResource("podmonitors"),
 			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*monitoringv1.PodMonitor]("kuadrant-observability=true"),
+			controller.FilterResourcesByLabel[*monitoringv1.PodMonitor](kuadrant.ObservabilityLabel),
 		)),
 		controller.WithObjectKinds(
 			schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
@@ -447,7 +447,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
-			NewObservabilityReconciler(b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
+			NewObservabilityReconciler(b.client, b.manager.GetRESTMapper(), operatorNamespace).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}

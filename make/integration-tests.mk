@@ -10,13 +10,14 @@ INTEGRATION_TEST_PACKAGES ?= tests/common/...
 test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only bare kubernetes cluster.
 	mkdir -p $(PROJECT_PATH)/coverage/bare-k8s-integration
 #	Check `ginkgo help run` for command line options. For example to filtering tests.
+# Run in series as limit of 1 Kuadrant CR (procs=1)
 	OPERATOR_NAMESPACE=kuadrant-system $(GINKGO) \
 		--coverpkg $(INTEGRATION_COVER_PKGS) \
 		--output-dir $(PROJECT_PATH)/coverage/bare-k8s-integration \
 		--coverprofile cover.out \
 		-tags integration \
 		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
-		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--procs=1 \
 		--randomize-all \
 		--randomize-suites \
 		--fail-on-pending \

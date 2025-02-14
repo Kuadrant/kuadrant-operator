@@ -6,12 +6,12 @@ cd $env
 operator-sdk generate kustomize manifests --interactive=false
 
 # Set desired Wasm-shim image
-wasm_shim=$(yq '.dependencies.Wasm_shim' $env/release.toml)
+wasm_shim=$(yq '.dependencies.Wasm_shim' $env/release.yaml)
 V="oci://quay.io/kuadrant/wasm-shim:v$wasm_shim" \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' --inplace config/manager/manager.yaml
 
 # Set desired ConsolePlugin image
-console_plugin=$(yq '.dependencies.Console_plugin' $env/release.toml)
+console_plugin=$(yq '.dependencies.Console_plugin' $env/release.yaml)
 V="quay.io/kuadrant/console-plugin:v$console_plugin" \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' --inplace config/manager/manager.yaml
 
@@ -20,7 +20,7 @@ cd $env/config/manager
 # FIX: for the minute the values for the org and registry are hardcoded into the operator image.
 # This should not be the case.
 
-operator_version=$(yq '.kuadrant.release' $env/release.toml)
+operator_version=$(yq '.kuadrant.release' $env/release.yaml)
 operator_image=quay.io/kuadrant/kuadrant-operator:v$operator_version
 kustomize edit set image controller=$operator_image
 
@@ -31,8 +31,8 @@ V="$operator_image" yq eval '.metadata.annotations.containerImage = strenv(V)' -
 
 cd -
 
-channels=$(yq -oy '.kuadrant.olm.channels | join(",")' $env/release.toml)
-default_channel=$(yq '.kuadrant.olm.default_channel' $env/release.toml)
+channels=$(yq '.olm.channels | join(",")' $env/release.yaml)
+default_channel=$(yq '.olm.default_channel' $env/release.yaml)
 kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $operator_version --channels $channels --default-channel $default_channel
 
 openshift_version_annotation_key="com.redhat.openshift.versions"
@@ -44,7 +44,7 @@ key=$openshift_version_annotation_key yq --inplace '(.annotations[strenv(key)] |
 echo "reading data form quay.io, slow process."
 dep_file="$env/bundle/metadata/dependencies.yaml"
 
-limitador_version=$(yq '.dependencies.Limitador' $env/release.toml)
+limitador_version=$(yq '.dependencies.Limitador' $env/release.yaml)
 limitador_image=quay.io/kuadrant/limitador-operator-bundle:v$limitador_version
 V=$(opm render $limitador_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
@@ -52,7 +52,7 @@ COMPONENT=limitador-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file
 
 
-authorino_version=$(yq '.dependencies.Authorino' $env/release.toml)
+authorino_version=$(yq '.dependencies.Authorino' $env/release.yaml)
 authorino_image=quay.io/kuadrant/authorino-operator-bundle:v$authorino_version
 V=$(opm render $authorino_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
@@ -60,7 +60,7 @@ COMPONENT=authorino-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file
 
 
-dns_version=$(yq '.dependencies.DNS' $env/release.toml)
+dns_version=$(yq '.dependencies.DNS' $env/release.yaml)
 dns_image=quay.io/kuadrant/dns-operator-bundle:v$dns_version
 V=$(opm render $dns_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 

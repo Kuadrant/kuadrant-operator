@@ -73,7 +73,7 @@ func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
 		From: KuadrantGroupKind,
 		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
 		Func: func(child machinery.Object) []machinery.Object {
-			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+			return lo.Filter(kuadrants, func(_ machinery.Object, _ int) bool {
 				if metaObj, ok := child.(metav1.Object); ok {
 					if val, exists := metaObj.GetLabels()[kuad.ObservabilityLabel]; exists {
 						return val == "true"
@@ -92,7 +92,7 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 		From: KuadrantGroupKind,
 		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
 		Func: func(child machinery.Object) []machinery.Object {
-			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+			return lo.Filter(kuadrants, func(_ machinery.Object, _ int) bool {
 				if metaObj, ok := child.(metav1.Object); ok {
 					if val, exists := metaObj.GetLabels()[kuad.ObservabilityLabel]; exists {
 						return val == "true"

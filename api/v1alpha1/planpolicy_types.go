@@ -17,9 +17,21 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
+	"strings"
+
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+)
+
+var (
+	PlanPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "PlanPolicy"}
+	PlanPoliciesResource = GroupVersion.WithResource("planpolicies")
 )
 
 //+kubebuilder:object:root=true
@@ -34,13 +46,78 @@ type PlanPolicy struct {
 	Status PlanPolicyStatus `json:"status,omitempty"`
 }
 
+var _ machinery.Policy = &PlanPolicy{}
+
+func (p *PlanPolicy) GetNamespace() string {
+	return p.Namespace
+}
+
+func (p *PlanPolicy) GetName() string {
+	return p.Name
+}
+
+func (p *PlanPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
+}
+
+func (p *PlanPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			PolicyNamespace: p.Namespace,
+		},
+	}
+}
+
+func (p *PlanPolicy) GetMergeStrategy() machinery.MergeStrategy {
+	return machinery.NoMergeStrategy
+}
+
+func (p *PlanPolicy) Merge(other machinery.Policy) machinery.Policy {
+	source, ok := other.(*PlanPolicy)
+	if !ok {
+		return p
+	}
+	return source.GetMergeStrategy()(source, p)
+}
+
+func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {
+	return utils.Associate(p.Spec.Plans, func(plan Plan) (string, kuadrantv1.Limit) {
+		return plan.Tier, kuadrantv1.Limit{
+			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf("auth.kuadrant.plan_tier == %s", plan.Tier)),
+			Rates: plan.Limits.ToRates(),
+		}
+	})
+}
+
+func (p *PlanPolicy) ToCelExpression() authorinov1beta3.CelExpression {
+	var tierList strings.Builder
+	var tierPredicates strings.Builder
+
+	for i, plan := range p.Spec.Plans {
+		tierList.WriteString(fmt.Sprintf("\"%s\"", plan.Tier))
+		tierPredicates.WriteString(fmt.Sprintf("    \"%s\": %s", plan.Tier, plan.Predicate))
+
+		if i < len(p.Spec.Plans)-1 {
+			tierList.WriteString(", ")
+			tierPredicates.WriteString(",\n")
+		}
+	}
+
+	return authorinov1beta3.CelExpression(fmt.Sprintf(
+		`[%s]
+  .filter(i, i in
+    [{
+%s
+    }].map(m, m.filter(key, m[key]))[0][0])`, tierList.String(), tierPredicates.String()))
+}
+
 // PlanPolicySpec defines the desired state of PlanPolicy
-// +kubebuilder:validation:XValidation:rule="self.plans.all(a, self.plans.filter(b, a.tier == b.tier).size() == 1)",message="Plan tier names should be unique"
 type PlanPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// todo(adam-cattermole): This doesn't have to be tied to a particular IdentityPolicy, but could be updated to support other resources
 	// +kubebuilder:validation:XValidation:rule="self.group == 'kuadrant.io'",message="Invalid targetRef.group. The only supported value is 'kuadrant.io'"
-	// +kubebuilder:validation:XValidation:rule="self.kind == 'XIdentityPolicy'",message="Invalid targetRef.kind. The only supported value is 'XIdentityPolicy'"
+	// +kubebuilder:validation:XValidation:rule="self.kind == 'AuthPolicy'",message="Invalid targetRef.kind. The only supported value is 'AuthPolicy'"
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Plans defines the list of plans for the policy. The identity is categorised by the first matching plan in the list.
@@ -53,14 +130,13 @@ type Plan struct {
 
 	// Limits contains the list of limits that the plan enforces.
 	// +optional
-	Limits []Limit `json:"limits,omitempty"`
+	Limits Limits `json:"limits,omitempty"`
 
 	// Predicate is a CEL expression used to determine if the plan is applied.
-	// +kubebuilder:validation:MinLength=1
-	Predicate string `json:"predicate"`
+	kuadrantv1.Predicate `json:",inline"`
 }
 
-type Limit struct {
+type Limits struct {
 	// Daily limit of requests for this plan.
 	// +optional
 	Daily *int `json:"daily,omitempty"`
@@ -75,11 +151,29 @@ type Limit struct {
 
 	// Yearly limit of requests for this plan.
 	// +optional
-	Yearly *int              `json:"yearly,omitempty"`
+	Yearly *int `json:"yearly,omitempty"`
 
 	// Custom defines any additional limits defined in terms of a RateLimitPolicy Rate.
 	// +optional
 	Custom []kuadrantv1.Rate `json:"custom,omitempty"`
+}
+
+func (l *Limits) ToRates() []kuadrantv1.Rate {
+	rates := make([]kuadrantv1.Rate, 0)
+	addRate := func(limit *int, window kuadrantv1.Duration) {
+		if limit != nil {
+			rates = append(rates, kuadrantv1.Rate{
+				Limit:  *limit,
+				Window: window,
+			})
+		}
+	}
+	addRate(l.Daily, "24h")
+	addRate(l.Weekly, "168h")
+	addRate(l.Monthly, "730h")
+	addRate(l.Yearly, "8760h")
+	rates = append(rates, l.Custom...)
+	return rates
 }
 
 // PlanPolicyStatus defines the observed state of PlanPolicy

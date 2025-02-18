@@ -487,8 +487,14 @@ bundle-operator-image-url: $(YQ) ## Read operator image reference URL from the m
 read-release-version: ## Reads release version
 	@echo "v$(VERSION)"
 
-print-bundle-image: ## Pring bundle images.
+print-bundle-image: ## Print bundle image
 	@echo $(BUNDLE_IMG)
+
+print-operator-repo: ## Print operator repo
+	@echo $(IMAGE_TAG_BASE)
+
+print-operator-image: ## Print operator image
+	@echo $(IMG)
 
 .PHONY: update-catalogsource
 update-catalogsource:

@@ -7,6 +7,7 @@ import (
 const (
 	ControllerName               = "kuadrant.io/policy-controller"
 	TopologyLabel                = "kuadrant.io/topology"
+	ObservabilityLabel           = "kuadrant.io/observability"
 	KuadrantRateLimitClusterName = "kuadrant-ratelimit-service"
 	KuadrantAuthClusterName      = "kuadrant-auth-service"
 	LimitadorName                = "limitador"

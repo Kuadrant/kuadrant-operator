@@ -10,7 +10,6 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -40,11 +39,16 @@ var (
 //+kubebuilder:rbac:groups="cert-manager.io",resources=clusterissuers,verbs=get;list;watch;
 //+kubebuilder:rbac:groups="cert-manager.io",resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
-func NewTLSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isGatewayAPIInstalled, isCertManagerInstalled bool) *controller.Workflow {
+func NewTLSWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled, isCertManagerInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewTLSPoliciesValidator(isGatewayAPIInstalled, isCertManagerInstalled).Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{
-			NewEffectiveTLSPoliciesReconciler(client, scheme).Subscription().Reconcile,
+			(&controller.Workflow{
+				Precondition: NewEffectiveTLSPoliciesReconciler().Subscription().Reconcile,
+				Tasks: []controller.ReconcileFunc{
+					NewCertificateReconciler(client).Subscription().Reconcile,
+				},
+			}).Run,
 		},
 		Postcondition: NewTLSPolicyStatusUpdater(client).Subscription().Reconcile,
 	}

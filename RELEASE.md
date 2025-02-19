@@ -5,38 +5,42 @@
 To release a version _“v0.W.Z”_ of Kuadrant Operator in GitHub and Quay.io, follow these steps:
 
 ### Release file format.
-This example of the `release.toml` file uses tag `v1.0.1` as reference.
+This example of the `release.yaml` file uses tag `v1.0.1` as reference.
 
-```toml
-# FILE: ./release.toml
-[kuadrant]
-default_channel = "alpha"
-channels = ["alpha",]
-release = "1.0.1"
-
-[dependencies]
-Authorino = "0.16.0"
-Console_plugin = "0.0.14"
-DNS = "0.12.0"
-Limitador = "0.12.1"
-Wasm_shim = "0.8.1"
+```yaml
+# FILE: ./release.yaml
+kuadrant:
+  release: "1.0.1"
+olm:
+ channels:
+ - "alpha"
+ default_channel: "alpha"
+dependencies:
+ Authorino: "0.16.0"
+ Console_plugin: "0.0.14"
+ DNS: "0.12.0"
+ Limitador: "0.12.1"
+ Wasm_shim: "0.8.1"
 ```
-The `[kuadrant]` section relates to the release version of the kuadrant operator.
-While the `[dependencies]` section relates to the released versions of the subcomponents that will be included in a release.
+The `kuadrant` section relates to the release version of the kuadrant operator.
+While the `olm` section relates to fields required for building the olm catalogs.
+And the `dependencies` section relates to the released versions of the subcomponents that will be included in a release.
 There are validation steps during the `make prepare-release` that require the dependencies to be release before generating the release of the Kuadrant operator.
 
 
 ### Local steps
 
-1. Create the `kuadrant-vX.Y` branch, if the branch does not already exist. 
-2. Push the `kuadrant-vX.Y` to the remote (kuadrant/kuadrant-operator)
-3. Create the `kuadrant-vX.Y.Z-rc(n)` branch with the updated versions of the `release.toml`.
-4. Run `make prepare-release` on the `kuadrant-vX.Y.Z-rc(n)` 
+1. Create the `release-vX.Y` branch, if the branch does not already exist. 
+2. Push the `release-vX.Y` to the remote (kuadrant/kuadrant-operator)
+3. Create the `release-vX.Y.Z-rc(n)` branch with `release-vX.Y` as the base.
+4. Cherry-pick commits to the `kudrant-vX.Y.Z-rc(n)` from the relevant sources, i.e. `main`.
+5. Update the applicable version in the `release.yaml`.
+6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)` 
 
 
 ### Remote steps
 
-1. Open a PR against the `kuadrant-vX.Y` branch with the changes from `kuadrant-vX.Y.Z-rc(n)` branch. 
+1. Open a PR against the `release-vX.Y` branch with the changes from `release-vX.Y.Z-rc(n)` branch. 
 2. PR verification checks will run.
 3. Get manual review of PR with focus on changes in these areas:
    * `./bundle.Dockerfile`
@@ -44,7 +48,7 @@ There are validation steps during the `make prepare-release` that require the de
    * `./config`
    * `./charts/`
 4. Merge PR
-5. Run the Release Workflow on the `kuadrant-vX.Y`. This does the following:
+5. Run the Release Workflow on the `release-vX.Y`. This does the following:
    * Creates the GitHub release
    * Creates tags
 6. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
@@ -58,7 +62,7 @@ There are validation steps during the `make prepare-release` that require the de
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/).
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin).
 
-2. Update the `release.toml` with the versions of required dependencies.
+2. Update the `release.yaml` with the versions of required dependencies.
 
 
 

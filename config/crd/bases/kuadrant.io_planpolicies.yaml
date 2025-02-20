@@ -17,7 +17,8 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PlanPolicy defines
+        description: PlanPolicy enables rate limiting through plans of identified
+          requests
         properties:
           apiVersion:
             description: |-
@@ -47,46 +48,42 @@ spec:
                     limits:
                       description: Limits contains the list of limits that the plan
                         enforces.
-                      items:
-                        properties:
-                          custom:
-                            description: Custom defines any additional limits defined
-                              in terms of a RateLimitPolicy Rate.
-                            items:
-                              description: Rate defines the actual rate limit that
-                                will be used when there is a match
-                              properties:
-                                limit:
-                                  description: Limit defines the max value allowed
-                                    for a given period of time
-                                  type: integer
-                                window:
-                                  description: Window defines the time period for
-                                    which the Limit specified above applies.
-                                  pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                  type: string
-                              required:
-                              - limit
-                              - window
-                              type: object
-                            type: array
-                          daily:
-                            description: Daily limit of requests for this plan.
-                            type: integer
-                          monthly:
-                            description: Monthly limit of requests for this plan.
-                            type: integer
-                          weekly:
-                            description: Weekly limit of requests for this plan.
-                            type: integer
-                          yearly:
-                            description: Yearly limit of requests for this plan.
-                            type: integer
-                        type: object
-                      type: array
+                      properties:
+                        custom:
+                          description: Custom defines any additional limits defined
+                            in terms of a RateLimitPolicy Rate.
+                          items:
+                            description: Rate defines the actual rate limit that will
+                              be used when there is a match
+                            properties:
+                              limit:
+                                description: Limit defines the max value allowed for
+                                  a given period of time
+                                type: integer
+                              window:
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                                type: string
+                            required:
+                            - limit
+                            - window
+                            type: object
+                          type: array
+                        daily:
+                          description: Daily limit of requests for this plan.
+                          type: integer
+                        monthly:
+                          description: Monthly limit of requests for this plan.
+                          type: integer
+                        weekly:
+                          description: Weekly limit of requests for this plan.
+                          type: integer
+                        yearly:
+                          description: Yearly limit of requests for this plan.
+                          type: integer
+                      type: object
                     predicate:
-                      description: Predicate is a CEL expression used to determine
-                        if the plan is applied.
                       minLength: 1
                       type: string
                     tier:
@@ -143,16 +140,12 @@ spec:
                 x-kubernetes-validations:
                 - message: Invalid targetRef.group. The only supported value is 'kuadrant.io'
                   rule: self.group == 'kuadrant.io'
-                - message: Invalid targetRef.kind. The only supported value is 'XIdentityPolicy'
-                  rule: self.kind == 'XIdentityPolicy'
+                - message: Invalid targetRef.kind. The only supported value is 'AuthPolicy'
+                  rule: self.kind == 'AuthPolicy'
             required:
             - plans
             - targetRef
             type: object
-            x-kubernetes-validations:
-            - message: Plan tier names should be unique
-              rule: self.plans.all(a, self.plans.filter(b, a.tier == b.tier).size()
-                == 1)
           status:
             description: PlanPolicyStatus defines the observed state of PlanPolicy
             type: object

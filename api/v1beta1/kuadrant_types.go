@@ -48,16 +48,32 @@ type Kuadrant struct {
 
 var _ machinery.Object = &Kuadrant{}
 
-func (p *Kuadrant) GetLocator() string {
-	return machinery.LocatorFromObject(p)
+func (k *Kuadrant) GetLocator() string {
+	return machinery.LocatorFromObject(k)
+}
+
+func (k *Kuadrant) IsMTLSEnabled() bool {
+	if k == nil {
+		return false
+	}
+	return k.Spec.MTLS != nil && k.Spec.MTLS.Enable
 }
 
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	Observability Observability `json:"observability,omitempty"`
+	// +optional
+	// MTLS is an optional entry which when enabled is set to true, kuadrant-operator
+	// will add the configuration required to enable mTLS between an Istio provided
+	// gateway and the Kuadrant components.
+	MTLS *MTLS `json:"mtls,omitempty"`
 }
 
 type Observability struct {
+	Enable bool `json:"enable,omitempty"`
+}
+
+type MTLS struct {
 	Enable bool `json:"enable,omitempty"`
 }
 

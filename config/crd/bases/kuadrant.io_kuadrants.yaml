@@ -48,6 +48,11 @@ spec:
           spec:
             description: KuadrantSpec defines the desired state of Kuadrant
             properties:
+              mtls:
+                properties:
+                  enable:
+                    type: boolean
+                type: object
               observability:
                 properties:
                   enable:

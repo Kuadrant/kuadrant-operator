@@ -39,7 +39,7 @@ func (r *LimitadorReconciler) Subscription() *controller.Subscription {
 
 func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorResourceReconciler")
-	logger.Info("reconciling limtador resource", "status", "started")
+	logger.Info("reconciling limitador resource", "status", "started")
 	defer logger.Info("reconciling limitador resource", "status", "completed")
 
 	kobj := GetKuadrantFromTopology(topology)

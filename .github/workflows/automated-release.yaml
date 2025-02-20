@@ -1,0 +1,138 @@
+name: Automated Release Operator
+
+on:
+  workflow_dispatch:
+    inputs:
+      gitRef:
+        description: Commit SHA, tag or branch name (usually main branch)
+        required: true
+        default: "main"
+        type: string
+      kuadrantOperatorVersion:
+        description: Kuadrant Operator version (semver)
+        default: 0.0.0
+        type: string
+      authorinoOperatorVersion:
+        description: Authorino Operator bundle version (semver)
+        default: 0.0.0
+        type: string
+      limitadorOperatorVersion:
+        description: Limitador Operator bundle version (semver)
+        default: 0.0.0
+        type: string
+      dnsOperatorVersion:
+        description: DNS Operator bundle version (semver)
+        default: 0.0.0
+        type: string
+      wasmShimVersion:
+        description: WASM Shim version (semver)
+        default: 0.0.0
+        type: string
+      consolePluginVersion:
+        description: ConsolePlugin version (semver)
+        default: 0.0.0
+        type: string
+      olmChannel:
+        description: OLM channel
+        required: false
+        type: string
+        default: "stable"
+
+jobs:
+  auto-release:
+    name: Release operator
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Checkout code at git ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.gitRef }}
+          token: ${{ secrets.KUADRANT_DEV_PAT }}
+
+      - name: Install gettext-base
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
+
+      - name: Install yq tool
+        run: |
+          make yq
+
+      - name: Create release branch(es)
+        id: create-release-branch
+        shell: bash
+        run: |
+          base_branch=release-v$(echo "${{ github.event.inputs.kuadrantOperatorVersion }}" | sed 's/[+-].*//; s/\.[0-9]*$//')
+          echo BASE_BRANCH=$base_branch >> $GITHUB_ENV
+          
+          if git ls-remote --exit-code --heads origin $base_branch ; then
+            echo "Base branch $base_branch already exists"
+          else
+            echo Creating branch "$base_branch"
+            git checkout -b "$base_branch"
+            git push origin
+          fi
+
+      - name: Prepare release
+        id: prepare-release
+        run: |
+          echo "Updating release.yaml with desired versions"
+
+          VERSION=${{ github.event.inputs.kuadrantOperatorVersion }} \
+          AUTHORINO_OPERATOR_VERSION=${{ github.event.inputs.authorinoOperatorVersion }} \
+          DNS_OPERATOR_VERSION=${{ github.event.inputs.dnsOperatorVersion }} \
+          LIMITADOR_OPERATOR_VERSION=${{ github.event.inputs.limitadorOperatorVersion }} \
+          CONSOLE_PLUGIN_VERSION=${{ github.event.inputs.consolePluginVersion }} \
+          WASM_SHIM_VERSION=${{ github.event.inputs.wasmShimVersion }} \
+          OLM_CHANNEL=${{ github.event.inputs.olmChannel }} \
+          yq eval '(.kuadrant-operator.version = strenv(VERSION)) |
+            (.dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION)) |
+            (.dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION)) |
+            (.dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION)) |
+            (.dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION)) |
+            (.dependencies.wasm-shim = strenv(WASM_SHIM_VERSION)) |
+            (.olm.default-channel = strenv(OLM_CHANNEL)) |
+            (.olm.channels[0] = strenv(OLM_CHANNEL))' --inplace ./release.yaml
+
+          echo "release.yaml file updated as follows:"
+
+          cat ./release.yaml
+
+          echo "Running prepare-release script"
+
+          make prepare-release
+          
+      - name: Create Pull Request
+        id: cpr
+        if: ${{ !env.ACT }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.KUADRANT_DEV_PAT }}
+          commit-message: Prepare release ${{ github.event.inputs.kuadrantOperatorVersion }}
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
+          signoff: true
+          base: ${{ env.BASE_BRANCH }}
+          branch: release-v${{ github.event.inputs.kuadrantOperatorVersion }}
+          delete-branch: true
+          title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
+          body: |
+            The following PR for the release candidate of Kuadrant Operator version ${{ github.event.inputs.kuadrantOperatorVersion }} includes:
+            - Authorino Operator version ${{ github.event.inputs.authorinoOperatorVersion }}
+            - DNS Operator version ${{ github.event.inputs.dnsOperatorVersion }}
+            - Limitador Operator version ${{ github.event.inputs.limitadorOperatorVersion }}
+            - Console Plugin version ${{ github.event.inputs.consolePluginVersion }}
+            - WASM Shim version ${{ github.event.inputs.wasmShimVersion }}
+            
+            Auto-generated by [create-pull-request][1]
+
+            [1]: https://github.com/peter-evans/create-pull-request
+          team-reviewers: |
+            Kuadrant/developers
+            Kuadrant/qe
+          draft: false

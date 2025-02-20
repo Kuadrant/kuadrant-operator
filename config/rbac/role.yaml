@@ -169,6 +169,7 @@ rules:
   - authpolicies
   - dnspolicies
   - kuadrants
+  - planpolicies
   - ratelimitpolicies
   - tlspolicies
   verbs:
@@ -183,6 +184,7 @@ rules:
   - authpolicies/finalizers
   - dnspolicies/finalizers
   - kuadrants/finalizers
+  - planpolicies/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
   verbs:
@@ -193,6 +195,7 @@ rules:
   - authpolicies/status
   - dnspolicies/status
   - kuadrants/status
+  - planpolicies/status
   - ratelimitpolicies/status
   - tlspolicies/status
   verbs:

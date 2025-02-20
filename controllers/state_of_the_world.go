@@ -11,6 +11,8 @@ import (
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/metapolicy"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -113,11 +115,18 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		controller.WithRunnable("planpolicy watcher", controller.Watch(
+			&kuadrantv1alpha1.PlanPolicy{},
+			kuadrantv1alpha1.PlanPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.PlanPolicy]{}),
+		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
 			kuadrantv1.AuthPolicyGroupKind,
 			kuadrantv1.RateLimitPolicyGroupKind,
+			kuadrantv1alpha1.PlanPolicyGroupKind,
 		),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,
@@ -125,6 +134,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
+			metapolicy.LinkPlanPolicyToRateLimitPolicy,
 		),
 	}
 
@@ -447,6 +457,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
+			NewPlanPolicyReconciler(b.client, b.manager.GetScheme()).Subscription().Reconcile,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager.GetRESTMapper(), operatorNamespace).Subscription().Reconcile,
 		},

@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuad "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 var (
@@ -45,8 +45,8 @@ func LinkKuadrantToLimitador(objs controller.Store) machinery.LinkFunc {
 		From: KuadrantGroupKind,
 		To:   LimitadorGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
-			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
-				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "limitador"
+			return lo.Filter(kuadrants, func(k machinery.Object, _ int) bool {
+				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "limitador"
 			})
 		},
 	}
@@ -59,8 +59,8 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 		From: KuadrantGroupKind,
 		To:   AuthorinoGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
-			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
-				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
+			return lo.Filter(kuadrants, func(k machinery.Object, _ int) bool {
+				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
 			})
 		},
 	}
@@ -75,7 +75,7 @@ func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(_ machinery.Object, _ int) bool {
 				if metaObj, ok := child.(metav1.Object); ok {
-					if val, exists := metaObj.GetLabels()[kuad.ObservabilityLabel]; exists {
+					if val, exists := metaObj.GetLabels()[kuadrant.ObservabilityLabel]; exists {
 						return val == "true"
 					}
 				}
@@ -94,7 +94,7 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(_ machinery.Object, _ int) bool {
 				if metaObj, ok := child.(metav1.Object); ok {
-					if val, exists := metaObj.GetLabels()[kuad.ObservabilityLabel]; exists {
+					if val, exists := metaObj.GetLabels()[kuadrant.ObservabilityLabel]; exists {
 						return val == "true"
 					}
 				}

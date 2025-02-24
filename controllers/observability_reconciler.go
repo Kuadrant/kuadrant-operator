@@ -386,7 +386,7 @@ func (r *ObservabilityReconciler) createMonitor(ctx context.Context, monitorObjs
 		return
 	}
 
-	logger.V(1).Info(fmt.Sprintf("creating monitor %s/%s", monitor.GetNamespace(), monitor.GetName()))
+	logger.V(1).Info(fmt.Sprintf("creating monitor %s/%s", ns, monitor.GetName()))
 	obj, err := controller.Destruct(monitor)
 	if err != nil {
 		logger.Error(err, fmt.Sprintf("error destructing monitor %s/%s", ns, monitor.GetName()))

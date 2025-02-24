@@ -5,13 +5,13 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	observability "github.com/kuadrant/kuadrant-operator/pkg/observability"
 )
 
 var (
@@ -71,7 +71,7 @@ func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
 
 	return machinery.LinkFunc{
 		From: KuadrantGroupKind,
-		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
+		To:   observability.ServiceMonitorGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(_ machinery.Object, _ int) bool {
 				if metaObj, ok := child.(metav1.Object); ok {
@@ -90,7 +90,7 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 
 	return machinery.LinkFunc{
 		From: KuadrantGroupKind,
-		To:   schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
+		To:   observability.PodMonitorGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(_ machinery.Object, _ int) bool {
 				if metaObj, ok := child.(metav1.Object); ok {

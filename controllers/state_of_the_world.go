@@ -37,6 +37,7 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/observability"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 	"github.com/kuadrant/kuadrant-operator/pkg/utils"
@@ -423,8 +424,8 @@ func (b *BootOptionsBuilder) getObservabilityOptions() []controller.ControllerOp
 			controller.FilterResourcesByLabel[*monitoringv1.PodMonitor](kuadrant.ObservabilityLabel),
 		)),
 		controller.WithObjectKinds(
-			schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.ServiceMonitorsKind},
-			schema.GroupKind{Group: monitoringv1.SchemeGroupVersion.Group, Kind: monitoringv1.PodMonitorsKind},
+			observability.ServiceMonitorGroupKind,
+			observability.PodMonitorGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToServiceMonitor,

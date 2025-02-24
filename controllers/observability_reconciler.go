@@ -24,16 +24,16 @@ import (
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;podmonitors,verbs=get;list;watch;create;update;patch;delete
 
 const (
-	kOpMonitorName          = "kuadrant-operator-monitor"
-	dnsOpMonitorName        = "dns-operator-monitor"
 	authOpMonitorName       = "authorino-operator-monitor"
-	limitOpMonitorName      = "limitador-operator-monitor"
-	istiodMonitorName       = "istiod-monitor"
-	istiodMonitorNS         = "istio-system"
-	istioPodMonitorName     = "istio-pod-monitor"
+	dnsOpMonitorName        = "dns-operator-monitor"
 	envoyGatewayMonitorName = "envoy-gateway-monitor"
 	envoyGatewayMonitorNS   = "envoy-gateway-system"
 	envoyStatsMonitorName   = "envoy-stats-monitor"
+	istiodMonitorName       = "istiod-monitor"
+	istiodMonitorNS         = "istio-system"
+	istioPodMonitorName     = "istio-pod-monitor"
+	kOpMonitorName          = "kuadrant-operator-monitor"
+	limitOpMonitorName      = "limitador-operator-monitor"
 )
 
 var kOpMonitorSpec = &monitoringv1.ServiceMonitor{

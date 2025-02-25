@@ -3,8 +3,8 @@ kuadrant-operator:
 
 olm:
   channels: 
-  - "0.0.0"
-  default-channel: "0.0.0"
+  - "alpha"
+  default-channel: "alpha"
 
 dependencies:
   authorino-operator: "0.0.0"

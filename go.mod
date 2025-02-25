@@ -8,7 +8,7 @@ require (
 	github.com/envoyproxy/gateway v1.1.0
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.6.0
-	github.com/kuadrant/authorino v0.19.0
+	github.com/kuadrant/authorino v0.20.0
 	github.com/kuadrant/authorino-operator v0.11.1
 	github.com/kuadrant/dns-operator v0.10.0
 	github.com/kuadrant/limitador-operator v0.9.0

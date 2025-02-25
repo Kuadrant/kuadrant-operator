@@ -20,12 +20,12 @@ check_field() {
 }
 
 check_field ".olm.channels" "olm.channels"
-check_field ".olm.default_channel" "olm.default_channel"
-check_field ".kuadrant.release" "kuadrant.release"
-check_field ".dependencies.Authorino" "dependencies.Authorino"
-check_field ".dependencies.Console_plugin" "dependencies.Console_plugin"
-check_field ".dependencies.DNS" "dependencies.DNS"
-check_field ".dependencies.Limitador" "dependencies.Limitador"
-check_field ".dependencies.Wasm_shim" "dependencies.Wasm_shim"
+check_field ".olm.default-channel" "olm.default-channel"
+check_field ".kuadrant.version" "kuadrant.version"
+check_field ".dependencies.authorino-operator" "dependencies.authorino-operator"
+check_field ".dependencies.console-plugin" "dependencies.console-plugin"
+check_field ".dependencies.dns-operator" "dependencies.dns-operator"
+check_field ".dependencies.limitador-operator" "dependencies.limitador-operator"
+check_field ".dependencies.wasm-shim" "dependencies.wasm-shim"
 
 exit $has_error

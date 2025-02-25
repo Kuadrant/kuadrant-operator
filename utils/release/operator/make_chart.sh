@@ -28,4 +28,4 @@ V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.ver
 V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.appVersion = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.dependencies.authorino-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.dependencies.limitador-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.dns-operartor' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
+V="$(yq '.dependencies.dns-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml

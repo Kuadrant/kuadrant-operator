@@ -32,7 +32,7 @@ log "RUN: root: $ROOT -- grep: $grep"
 log $script_dir
 
 log "RUNNING: pre-validation"
-tasks=`find $script_dir/pre-validation -mindepth 1 -maxdepth 1 -executable | sort`
+tasks=`find $script_dir/pre-validation -mindepth 1 -maxdepth 1 -perm -001 | sort`
 for s in $tasks; do
 	if echo "$s" | grep -vq "$grep"; then
 		log "gerp \"$grep\" fileterd out $s"
@@ -49,7 +49,7 @@ for s in $tasks; do
 	fi
 done
 log "RUNNING: dependencies"
-tasks=`find $script_dir/dependencies -mindepth 1 -maxdepth 1 -executable | sort`
+tasks=`find $script_dir/dependencies -mindepth 1 -maxdepth 1 -perm -001 | sort`
 for s in $tasks; do
 	if echo "$s" | grep -vq "$grep"; then
 		log "gerp \"$grep\" fileterd out $s"
@@ -66,7 +66,7 @@ for s in $tasks; do
 	fi
 done
 log "RUNNING: operator"
-tasks=`find $script_dir/operator -mindepth 1 -maxdepth 1 -executable | sort`
+tasks=`find $script_dir/operator -mindepth 1 -maxdepth 1 -perm -001 | sort`
 for s in $tasks; do
 	if echo "$s" | grep -vq "$grep"; then
 		log "gerp \"$grep\" fileterd out $s"
@@ -83,7 +83,7 @@ for s in $tasks; do
 	fi
 done
 log "RUNNING: post-validation"
-tasks=`find $script_dir/post-validation -mindepth 1 -maxdepth 1 -executable | sort`
+tasks=`find $script_dir/post-validation -mindepth 1 -maxdepth 1 -perm -001 | sort`
 for s in $tasks; do
 	if echo "$s" | grep -vq "$grep"; then
 		log "gerp \"$grep\" fileterd out $s"

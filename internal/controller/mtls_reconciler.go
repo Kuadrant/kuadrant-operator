@@ -4,9 +4,7 @@ import (
 	"context"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/limitador"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -19,7 +17,6 @@ import (
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 	v12 "k8s.io/api/apps/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -37,14 +34,12 @@ func (pa *PeerAuthentication) GetLocator() string {
 type MTLSReconciler struct {
 	*reconcilers.BaseReconciler
 
-	Client     *dynamic.DynamicClient
-	restMapper meta.RESTMapper
+	Client *dynamic.DynamicClient
 }
 
-func NewMTLSReconciler(mgr controllerruntime.Manager, client *dynamic.DynamicClient, rm meta.RESTMapper) *MTLSReconciler {
+func NewMTLSReconciler(mgr controllerruntime.Manager, client *dynamic.DynamicClient) *MTLSReconciler {
 	return &MTLSReconciler{
-		Client:     client,
-		restMapper: rm,
+		Client: client,
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
@@ -123,57 +118,43 @@ outer:
 		return nil
 	}
 
-	installed, err := authorino.IsAuthorinoOperatorInstalled(r.restMapper, logger)
-	if err != nil || !installed {
-		logger.Info("authorino is not installed")
-		return err
-	}
-	if installed {
-		// find an authorino object, then find and update the associated deployment
-		aobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
-			if item.GroupVersionKind().Kind == kuadrantv1beta1.AuthorinoGroupKind.Kind {
-				return item, true
-			}
-			return nil, false
-		})
-		// add label to authorino deployment {"sidecar.istio.io/inject":"true"}}}}}
-		deployment := &v12.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				// TODO can't be hardcoded, this is just one example
-				Name:      "authorino",
-				Namespace: aobjs[0].GetNamespace(),
-			},
+	// find an authorino object, then find and update the associated deployment
+	aobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
+		if item.GroupVersionKind().Kind == kuadrantv1beta1.AuthorinoGroupKind.Kind {
+			return item, true
 		}
-		deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
-		deploymentMutators = append(deploymentMutators, reconcilers.DeploymentTemplateLabelIstioInjectMutator)
-		err = r.ReconcileResource(eventCtx, &v12.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
+		return nil, false
+	})
+	// add label to authorino deployment {"sidecar.istio.io/inject":"true"}}}}}
+	aDeployment := &v12.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			// TODO can't be hardcoded, this is just one example
+			Name:      "authorino",
+			Namespace: aobjs[0].GetNamespace(),
+		},
 	}
+	aDeploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
+	aDeploymentMutators = append(aDeploymentMutators, reconcilers.DeploymentTemplateLabelIstioInjectMutator)
+	err := r.ReconcileResource(eventCtx, &v12.Deployment{}, aDeployment, reconcilers.DeploymentMutator(aDeploymentMutators...))
 
-	installed, err = limitador.IsLimitadorOperatorInstalled(r.restMapper, logger)
-	if err != nil || !installed {
-		logger.Info("limitador is not installed")
-		return err
-	}
-	if installed {
-		// find a limitador object, then find and update the associated deployment
-		lobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
-			if item.GroupVersionKind().Kind == kuadrantv1beta1.LimitadorGroupKind.Kind {
-				return item, true
-			}
-			return nil, false
-		})
-		// add label to limitador deployment {"sidecar.istio.io/inject":"true"}}}}}
-		deployment := &v12.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				// TODO can't be hardcoded, this is just one example
-				Name:      "limitador-limitador",
-				Namespace: lobjs[0].GetNamespace(),
-			},
+	// find a limitador object, then find and update the associated deployment
+	lobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
+		if item.GroupVersionKind().Kind == kuadrantv1beta1.LimitadorGroupKind.Kind {
+			return item, true
 		}
-		deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
-		deploymentMutators = append(deploymentMutators, reconcilers.DeploymentTemplateLabelIstioInjectMutator)
-		err = r.ReconcileResource(eventCtx, &v12.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
+		return nil, false
+	})
+	// add label to limitador deployment {"sidecar.istio.io/inject":"true"}}}}}
+	lDeployment := &v12.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			// TODO can't be hardcoded, this is just one example
+			Name:      "limitador-limitador",
+			Namespace: lobjs[0].GetNamespace(),
+		},
 	}
+	lDeploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
+	lDeploymentMutators = append(lDeploymentMutators, reconcilers.DeploymentTemplateLabelIstioInjectMutator)
+	err = r.ReconcileResource(eventCtx, &v12.Deployment{}, lDeployment, reconcilers.DeploymentMutator(lDeploymentMutators...))
 
 	valueMap := map[string]interface{}{
 		"transport_socket": map[string]interface{}{

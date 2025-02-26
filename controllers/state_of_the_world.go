@@ -458,7 +458,6 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager.GetRESTMapper(), operatorNamespace).Subscription().Reconcile,
-			NewMTLSReconciler(b.manager, b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}
@@ -478,6 +477,12 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	if b.isAuthorinoOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile)
+	}
+
+	if b.isIstioInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewMTLSReconciler(b.manager, b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
+		)
 	}
 
 	return mainWorkflow.Run

@@ -81,13 +81,6 @@ func (r *MTLSReconciler) Run(eventCtx context.Context, _ []controller.ResourceEv
 		return nil
 	}
 
-	// check that istio is installed
-	installed, err := istio.IsIstioInstalled(r.restMapper)
-	if err != nil || !installed {
-		logger.Info("istio is not installed, only istio provider is currently supported for mtls configuration", "err", err)
-		return err
-	}
-
 	// only gateway associated with gatewayclass of type istio
 	// path may be able to take list of gateways and list rules
 
@@ -123,19 +116,20 @@ outer:
 				}
 			}
 		}
+
 	}
 	if anyEffectivePolicy == false {
 		logger.Info("no effective policy found")
 		return nil
 	}
 
-	installed, err = authorino.IsAuthorinoOperatorInstalled(r.restMapper, logger)
+	installed, err := authorino.IsAuthorinoOperatorInstalled(r.restMapper, logger)
 	if err != nil || !installed {
 		logger.Info("authorino is not installed")
 		return err
 	}
 	if installed {
-		// find a authorino object, then find and update the associated deployment
+		// find an authorino object, then find and update the associated deployment
 		aobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 			if item.GroupVersionKind().Kind == kuadrantv1beta1.AuthorinoGroupKind.Kind {
 				return item, true

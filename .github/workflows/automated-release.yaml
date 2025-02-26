@@ -30,6 +30,10 @@ on:
         description: ConsolePlugin version (X.Y.Z)
         default: "latest"
         type: string
+      prerelease:
+        description: Is the release a pre-release?
+        required: false
+        type: boolean
 
 jobs:
   build:
@@ -70,15 +74,22 @@ jobs:
       
 
       - name: Prepare release
+        id: prepare-release
         run: |
           echo "Updating release.yaml with desired versions"
           
+          OLM_CHANNEL='stable'
+          if ${{ inputs.prerelease }}; then
+            OLM_CHANNEL='alpha'
+          fi
+
           VERSION=${{ inputs.kuadrantOperatorVersion }} \
           AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
           DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
           LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
           CONSOLE_PLUGIN_VERSION=${{ inputs.consolePluginImageURL }} \
           WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+          OLM_CHANNEL=${OLM_CHANNEL} \
   
           yq eval '.version = strenv(VERSION) | \
                   .dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION) | \
@@ -86,11 +97,17 @@ jobs:
                   .dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION) | \
                   .dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION) | \
                   .dependencies.wasm-shim = strenv(WASM_SHIM_VERSION) | \
+                  .olm.defautl_channel = strenv(OLM_CHANNEL) | \
+                  .olm.channels = strenv(OLM_CHANNEL) | \
                   ' -i ./release.yaml
           
-          echo "Running make target `prepare-release`"
-          
-          make prepare-release
+          if $?; then
+            echo "Running make target `prepare-release`"
+            make prepare-release
+          else
+            echo "Something went wrong updating the release.yaml file"
+            exit 1
+          fi
 
       - name: Create Pull Request
         id: cpr

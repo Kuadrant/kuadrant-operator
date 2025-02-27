@@ -1,0 +1,38 @@
+---
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-na
+  namespace: kuadrant-coredns-1
+  labels:
+    coredns: 'demo'
+spec:
+  loadBalancing:
+    weight: 125
+    geo: GEO-NA
+    defaultGeo: false
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: external-na
+  providerRefs:
+    - name: core-dns
+---
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-eu1
+  namespace: kuadrant-coredns-2
+  labels:
+    coredns: 'demo'
+spec:
+  loadBalancing:
+    weight: 100
+    geo: GEO-EU
+    defaultGeo: true
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: external-eu
+  providerRefs:
+    - name: core-dns

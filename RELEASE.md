@@ -1,32 +1,28 @@
 # How to release Kuadrant Operator
 
-## Kuadrant Operator Release
+To release a version _“vX.Y.Z”_ of Kuadrant Operator in GitHub and Quay.io, there are two options, a manual and an automated process.
+For both processes, first make sure every [Kuadrant Operator dependency](https://github.com/Kuadrant/kuadrant-operator/blob/main/RELEASE.md#kuadrant-operator-dependencies) has been already released.
 
-To release a version _“v0.W.Z”_ of Kuadrant Operator in GitHub and Quay.io, follow these steps:
+## Automated Workflow
 
-### Release file format.
-This example of the `release.yaml` file uses tag `v1.0.1` as reference.
+1. Run the GHA  [Automated Release](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/automated-release.yaml)
+   filling the following fields:
+   - gitRef: Select the branch/tag/commit where you want to cut a release from.
+   - kuadrantOperatorVersion: the [Semantic Version](https://semver.org/) of the desired release.
+   - authorinoOperatorVersion: Authorino Operator bundle version (X.Y.Z)
+   - limitadorOperatorVersion: Limitador Operator bundle version (X.Y.Z)
+   - dnsOperatorVersion: DNS Operator bundle version (X.Y.Z)
+   - wasmShimVersion: WASM Shim version (X.Y.Z)
+   - consolePluginVersion: ConsolePlugin version (X.Y.Z)
+   - olmChannel: This will set the OLM `channels` and `default-channel` annotations
+2. The workflow will create a Pull Request that should be peer-reviewed and approved by a member of the Kuadrant team, focusing on the changes made in Kustomize config, OLM bundles and Helm Charts.
+3. Once the PR is merged, a release workflow will be triggered tagging and publishing the [Github release](https://github.com/Kuadrant/kuadrant-operator/releases)
+   it will also build the images and packages and publish them on Quay, Helm repository.
 
-```yaml
-# FILE: ./release.yaml
-kuadrant:
-  release: "1.0.1"
-olm:
- channels:
- - "alpha"
- default_channel: "alpha"
-dependencies:
- Authorino: "0.16.0"
- Console_plugin: "0.0.14"
- DNS: "0.12.0"
- Limitador: "0.12.1"
- Wasm_shim: "0.8.1"
-```
-The `kuadrant` section relates to the release version of the kuadrant operator.
-While the `olm` section relates to fields required for building the olm catalogs.
-And the `dependencies` section relates to the released versions of the subcomponents that will be included in a release.
-There are validation steps during the `make prepare-release` that require the dependencies to be release before generating the release of the Kuadrant operator.
+### Notes
+* It's not possible to cherry-pick commits, the workflow will pick a branch/tag/commit and all the history behind to the PR.
 
+## Manual Workflow
 
 ### Local steps
 
@@ -34,9 +30,8 @@ There are validation steps during the `make prepare-release` that require the de
 2. Push the `release-vX.Y` to the remote (kuadrant/kuadrant-operator)
 3. Create the `release-vX.Y.Z-rc(n)` branch with `release-vX.Y` as the base.
 4. Cherry-pick commits to the `kudrant-vX.Y.Z-rc(n)` from the relevant sources, i.e. `main`.
-5. Update the applicable version in the `release.yaml`.
-6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)` 
-
+5. Update the applicable version in the [release.yaml](https://github.com/Kuadrant/kuadrant-operator/blob/main/RELEASE.md#release-file-format).
+6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)`
 
 ### Remote steps
 
@@ -53,20 +48,39 @@ There are validation steps during the `make prepare-release` that require the de
    * Creates tags
 6. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
 
-## Kuadrant Operator Dependencies
+## Release file format.
+This example of the `release.yaml` file uses tag `v1.0.1` as reference.
 
-1. Release Kuadrant dependencies as required:
+```yaml
+# FILE: ./release.yaml
+kuadrant-operator:
+  version: "1.0.1"
+olm:
+  default-channel: "stable"
+  channels:
+    - "stable"
+dependencies:
+  authorino-operator: "0.16.0"
+  console-plugin: "0.0.14"
+  dns-operator: "0.12.0"
+  limitador-operator: "0.12.1"
+  wasm-shim: "0.8.1"
+```
+
+The `kuadrant-operator` section relates to the release version of the kuadrant operator.
+While the `olm` section relates to fields required for building the olm catalogs.
+And the `dependencies` section relates to the released versions of the subcomponents that will be included in a release.
+There are validation steps during the `make prepare-release` that require the dependencies to be release before generating the release of the Kuadrant operator.
+
+## Kuadrant Operator Dependencies
    * [Authorino Operator](https://github.com/Kuadrant/authorino-operator/blob/main/RELEASE.md).
    * [Limitador Operator](https://github.com/Kuadrant/limitador-operator/blob/main/RELEASE.md).
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md).
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/).
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin).
 
-2. Update the `release.yaml` with the versions of required dependencies.
-
-
-
 ## Verification 
+
 ### Verify OLM Deployment
 
 1. Deploy the OLM catalog image following the [Deploy kuadrant operator using OLM](/doc/development.md#deploy-kuadrant-operator-using-olm) and providing the generated catalog image. For example:

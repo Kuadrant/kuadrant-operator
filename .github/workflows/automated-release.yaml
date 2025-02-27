@@ -38,7 +38,7 @@ on:
         type: boolean
 
 jobs:
-  build:
+  auto-release:
     name: Release operator
     runs-on: ubuntu-latest
     steps:
@@ -73,7 +73,6 @@ jobs:
           
           echo "Creating candidate release branch"
           git checkout -b release-v${cr_version}
-      
 
       - name: Prepare release
         id: prepare-release
@@ -92,15 +91,14 @@ jobs:
           CONSOLE_PLUGIN_VERSION=${{ inputs.consolePluginImageURL }} \
           WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
           OLM_CHANNEL=${OLM_CHANNEL} \
-  
-          yq eval '.version = strenv(VERSION) | \
-                  .dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION) | \
-                  .dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION) | \
-                  .dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION) | \
-                  .dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION) | \
-                  .dependencies.wasm-shim = strenv(WASM_SHIM_VERSION) | \
-                  .olm.defautl_channel = strenv(OLM_CHANNEL) | \
-                  .olm.channels = strenv(OLM_CHANNEL) | \
+
+          yq eval '(.kuadrant-operator.version = strenv(VERSION)) |
+                  (.dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION)) |
+                  (.dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION)) |
+                  (.dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION)) |
+                  (.dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION)) |
+                  (.dependencies.wasm-shim = strenv(WASM_SHIM_VERSION)) |
+                  (.olm.default-channel = strenv(OLM_CHANNEL)) | (.olm.channels[0] = strenv(OLM_CHANNEL))
                   ' -i ./release.yaml
           
           if $?; then
@@ -114,6 +112,7 @@ jobs:
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v7
+        if: ${{ !env.ACT }}
         with:
           token: ${{ secrets.KUADRANT_DEV_PAT }}
           commit-message: Prepare release ${{ inputs.kuadrantOperatorVersion }}

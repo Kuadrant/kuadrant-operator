@@ -14,7 +14,6 @@ import (
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -39,7 +38,6 @@ func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string) *Cons
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			mgr.GetAPIReader(),
-			log.Log.WithName("consoleplugin"),
 		),
 		namespace: namespace,
 	}
@@ -67,9 +65,10 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 }
 
 func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-	logger := r.Logger()
-	logger.V(1).Info("task started")
+	logger := controller.LoggerFromContext(eventCtx).WithName("ConsolePluginReconciler")
 	ctx := logr.NewContext(eventCtx, logger)
+	logger.V(1).Info("reconciling console plugin", "status", "started")
+	defer logger.V(1).Info("reconciling console plugin", "status", "completed")
 
 	existingTopologyConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
 		return object.GetName() == TopologyConfigMapName && object.GetNamespace() == r.namespace && object.GroupVersionKind().Kind == ConfigMapGroupKind.Kind

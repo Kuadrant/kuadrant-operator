@@ -77,7 +77,7 @@ func TestBaseReconcilerCreate(t *testing.T) {
 	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log)
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader)
 
 	desiredConfigmap := &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -143,7 +143,7 @@ func TestBaseReconcilerUpdateNeeded(t *testing.T) {
 	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log)
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader)
 
 	desiredConfigmap := &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -228,7 +228,7 @@ func TestBaseReconcilerDelete(t *testing.T) {
 	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log)
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader)
 
 	desired := &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{

@@ -84,7 +84,7 @@ func (p *PlanPolicy) Merge(other machinery.Policy) machinery.Policy {
 func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {
 	return utils.Associate(p.Spec.Plans, func(plan Plan) (string, kuadrantv1.Limit) {
 		return plan.Tier, kuadrantv1.Limit{
-			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf("auth.kuadrant.plan_tier == %s", plan.Tier)),
+			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan_tier == "%s"`, plan.Tier)),
 			Rates: plan.Limits.ToRates(),
 		}
 	})
@@ -95,12 +95,13 @@ func (p *PlanPolicy) ToCelExpression() authorinov1beta3.CelExpression {
 	var tierPredicates strings.Builder
 
 	for i, plan := range p.Spec.Plans {
-		tierList.WriteString(fmt.Sprintf("\"%s\"", plan.Tier))
-		tierPredicates.WriteString(fmt.Sprintf("    \"%s\": %s", plan.Tier, plan.Predicate))
+		predicate := strings.ReplaceAll(plan.Predicate, "\n", "")
+		tierList.WriteString(fmt.Sprintf(`"%s"`, plan.Tier))
+		tierPredicates.WriteString(fmt.Sprintf(`    "%s": %s,`, plan.Tier, predicate))
 
 		if i < len(p.Spec.Plans)-1 {
 			tierList.WriteString(", ")
-			tierPredicates.WriteString(",\n")
+			tierPredicates.WriteString("\n")
 		}
 	}
 
@@ -109,7 +110,7 @@ func (p *PlanPolicy) ToCelExpression() authorinov1beta3.CelExpression {
   .filter(i, i in
     [{
 %s
-    }].map(m, m.filter(key, m[key]))[0][0])`, tierList.String(), tierPredicates.String()))
+    }].map(m, m.filter(key, m[key]))[0])[0]`, tierList.String(), tierPredicates.String()))
 }
 
 // PlanPolicySpec defines the desired state of PlanPolicy
@@ -133,7 +134,8 @@ type Plan struct {
 	Limits Limits `json:"limits,omitempty"`
 
 	// Predicate is a CEL expression used to determine if the plan is applied.
-	kuadrantv1.Predicate `json:",inline"`
+	// +kubebuilder:validation:MinLength=1
+	Predicate string `json:"predicate"`
 }
 
 type Limits struct {

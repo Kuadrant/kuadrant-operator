@@ -84,6 +84,8 @@ spec:
                           type: integer
                       type: object
                     predicate:
+                      description: Predicate is a CEL expression used to determine
+                        if the plan is applied.
                       minLength: 1
                       type: string
                     tier:

@@ -42,37 +42,43 @@ jobs:
     name: Release operator
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.21.x
+      - name: Set up Go 1.22.x
         uses: actions/setup-go@v4
         with:
-          go-version: 1.21.x
+          go-version: 1.22.x
         id: go
       - name: Checkout code at git ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.gitRef }}
+          ref: ${{ github.event.inputs.gitRef }}
           token: ${{ secrets.KUADRANT_DEV_PAT }}
+
+      - name: Install gettext-base
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
 
       - name: Install yq tool
         run: |
           make yq
 
       - name: Create release branch(es)
+        id: create-release-branch
+        shell: bash
         run: |
-          cr_version = ${{ inputs.kuadrantOperatorVersion }}
-          base_branch = release-v${${cr_version%%-*}%.*}
-          echo BASE_BRANCH=${base_branch} >> $GITHUB_ENV
+          base_branch=release-v$(echo "${{ github.event.inputs.kuadrantOperatorVersion }}" | sed 's/-.*//; s/\.[0-9]*$//')
+          echo BASE_BRANCH=$base_branch >> $GITHUB_ENV
           
-          if git ls-remote --exit-code --heads origin ${base_branch} ; then
-            echo "Base branch ${base_branch} already exists"
+          if git ls-remote --exit-code --heads origin $base_branch ; then
+            echo "Base branch $base_branch already exists"
           else
-            echo "Creating branch ${base_branch}"
-            git checkout -b ${base_branch}
+            echo Creating branch "$base_branch"
+            git checkout -b "$base_branch"
             git push origin
           fi
           
           echo "Creating candidate release branch"
-          git checkout -b release-v${cr_version}
+          git checkout -b release-v${{ github.event.inputs.kuadrantOperatorVersion }}
 
       - name: Prepare release
         id: prepare-release
@@ -80,56 +86,54 @@ jobs:
           echo "Updating release.yaml with desired versions"
           
           OLM_CHANNEL='stable'
-          if ${{ inputs.prerelease }}; then
+          if ${{ github.event.inputs.prerelease }}; then
             OLM_CHANNEL='alpha'
           fi
 
-          VERSION=${{ inputs.kuadrantOperatorVersion }} \
-          AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
-          DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
-          LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-          CONSOLE_PLUGIN_VERSION=${{ inputs.consolePluginImageURL }} \
-          WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+          VERSION=${{ github.event.inputs.kuadrantOperatorVersion }} \
+          AUTHORINO_OPERATOR_VERSION=${{ github.event.inputs.authorinoOperatorVersion }} \
+          DNS_OPERATOR_VERSION=${{ github.event.inputs.dnsOperatorVersion }} \
+          LIMITADOR_OPERATOR_VERSION=${{ github.event.inputs.limitadorOperatorVersion }} \
+          CONSOLE_PLUGIN_VERSION=${{ github.event.inputs.consolePluginVersion }} \
+          WASM_SHIM_VERSION=${{ github.event.inputs.wasmShimVersion }} \
           OLM_CHANNEL=${OLM_CHANNEL} \
-
           yq eval '(.kuadrant-operator.version = strenv(VERSION)) |
-                  (.dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION)) |
-                  (.dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION)) |
-                  (.dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION)) |
-                  (.dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION)) |
-                  (.dependencies.wasm-shim = strenv(WASM_SHIM_VERSION)) |
-                  (.olm.default-channel = strenv(OLM_CHANNEL)) | (.olm.channels[0] = strenv(OLM_CHANNEL))
-                  ' -i ./release.yaml
-          
-          if $?; then
-            echo "Running make target `prepare-release`"
-            make prepare-release
-          else
-            echo "Something went wrong updating the release.yaml file"
-            exit 1
-          fi
+            (.dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION)) |
+            (.dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION)) |
+            (.dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION)) |
+            (.dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION)) |
+            (.dependencies.wasm-shim = strenv(WASM_SHIM_VERSION)) |
+            (.olm.default-channel = strenv(OLM_CHANNEL)) |
+            (.olm.channels[0] = strenv(OLM_CHANNEL))' -i ./release.yaml
 
+          echo "release.yaml file updated as follows:"
+
+          cat ./release.yaml
+
+          echo "Running prepare-release script"
+
+          make prepare-release
+          
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v7
-        if: ${{ !env.ACT }}
         with:
           token: ${{ secrets.KUADRANT_DEV_PAT }}
-          commit-message: Prepare release ${{ inputs.kuadrantOperatorVersion }}
+          commit-message: Prepare release ${{ github.event.inputs.kuadrantOperatorVersion }}
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: true
           base: ${{ env.BASE_BRANCH }}
-          branch: release-v${{ inputs.kuadrantOperatorVersion }}
+          branch: release-v${{ github.event.inputs.kuadrantOperatorVersion }}
           delete-branch: true
-          title: '[Release] Kuadrant Operator v${{ inputs.kuadrantOperatorVersion }}'
+          title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
           body: |
-            The following PR for the release candidate of Kuadrant Operator version ${{ inputs.kuadrantOperatorVersion }} includes:
-            - Authorino Operator version ${{ inputs.authorinoOperatorVersion }}
-            - DNS Operator version ${{ inputs.dnsOperatorVersion }}
-            - Limitador Operator version ${{ inputs.limitadorOperatorVersion }}
-            - Console Plugin version ${{ inputs.consolePluginImageURL }}
-            - WASM Shim version ${{ inputs.wasmShimVersion }}
+            The following PR for the release candidate of Kuadrant Operator version ${{ github.event.inputs.kuadrantOperatorVersion }} includes:
+            - Authorino Operator version ${{ github.event.inputs.authorinoOperatorVersion }}
+            - DNS Operator version ${{ github.event.inputs.dnsOperatorVersion }}
+            - Limitador Operator version ${{ github.event.inputs.limitadorOperatorVersion }}
+            - Console Plugin version ${{ github.event.inputs.consolePluginVersion }}
+            - WASM Shim version ${{ github.event.inputs.wasmShimVersion }}
             
             Auto-generated by [create-pull-request][1]
 

@@ -70,18 +70,16 @@ type BaseReconciler struct {
 	client          client.Client
 	scheme          *runtime.Scheme
 	apiClientReader client.Reader
-	logger          logr.Logger
 }
 
 // blank assignment to verify that BaseReconciler implements reconcile.Reconciler
 var _ reconcile.Reconciler = &BaseReconciler{}
 
-func NewBaseReconciler(client client.Client, scheme *runtime.Scheme, apiClientReader client.Reader, logger logr.Logger) *BaseReconciler {
+func NewBaseReconciler(client client.Client, scheme *runtime.Scheme, apiClientReader client.Reader) *BaseReconciler {
 	return &BaseReconciler{
 		client:          client,
 		scheme:          scheme,
 		apiClientReader: apiClientReader,
-		logger:          logger,
 	}
 }
 
@@ -103,10 +101,6 @@ func (b *BaseReconciler) APIClientReader() client.Reader {
 
 func (b *BaseReconciler) Scheme() *runtime.Scheme {
 	return b.scheme
-}
-
-func (b *BaseReconciler) Logger() logr.Logger {
-	return b.logger
 }
 
 // ReconcileResource attempts to mutate the existing state

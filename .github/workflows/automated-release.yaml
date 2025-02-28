@@ -76,9 +76,6 @@ jobs:
             git checkout -b "$base_branch"
             git push origin
           fi
-          
-          echo "Creating candidate release branch"
-          git checkout -b release-v${{ github.event.inputs.kuadrantOperatorVersion }}
 
       - name: Prepare release
         id: prepare-release
@@ -116,6 +113,7 @@ jobs:
           
       - name: Create Pull Request
         id: cpr
+        if: ${{ !env.ACT }}
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.KUADRANT_DEV_PAT }}

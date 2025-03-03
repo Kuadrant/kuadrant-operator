@@ -273,8 +273,8 @@ jobs:
         run: |
           kubectl get pods -n kuadrant-system
 
-  verify-manifests:
-    name: Verify manifests
+  verify-release:
+    name: Validate release data 
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
@@ -284,28 +284,10 @@ jobs:
         with:
           go-version: 1.22.x
         id: go
-      - name: Check out code
+      - name: Checkout code at git ref
         uses: actions/checkout@v4
-      - name: Run make verify-manifests
-        run: |
-          make verify-manifests
-
-  verify-bundle:
-    name: Verify bundle
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Go 1.22.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.22.x
-        id: go
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Run make verify-bundle
-        run: |
-          make verify-bundle
+      - name: Check bundles and manifests
+        run: make verify-prepare-release
 
   verify-fmt:
     name: Verify fmt
@@ -382,28 +364,12 @@ jobs:
         run: |
           make verify-go-mod
 
-  verify-helm-charts:
-    name: Verify helm charts
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Go 1.22.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.22.x
-        id: go
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Run make verify-helm-charts
-        run: |
-          make verify-helm-charts
   required-checks:
     name: Test Required Checks
     # This check adds a list of checks to one job to simplify adding settings to the repo.
     # If a new check is added in this file, and it should be retested on entry to the merge queue,
     # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
-    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-manifests, verify-bundle, verify-fmt, test-scripts, verify-generate, verify-go-mod, verify-helm-charts ]
+    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-release, verify-fmt, test-scripts, verify-generate, verify-go-mod ]
     if: always()
     runs-on: ubuntu-latest
     steps:

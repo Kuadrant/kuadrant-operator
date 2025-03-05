@@ -1,101 +1,67 @@
 #!/usr/bin/env bash
 
+# Set strict error handling
+set -euo pipefail
+
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-if [[ -z "${ROOT}" ]]; then
-	echo "[WARNING] env var ROOT not set, using $(pwd)"
-	ROOT=$(pwd)
-fi
-
+# Configuration
+ROOT="${ROOT:-$(pwd)}"
 grep=""
 dry_run="0"
 
+# Parse arguments
 while [[ $# -gt 0 ]]; do
-	echo "ARG: \"$1\""
-	if [[ "$1" == "--dry_run" ]]; then
-		dry_run="1"
-	else
-		grep="$1"
-	fi
-	shift
+    echo "ARG: \"$1\""
+    case "$1" in
+        "--dry_run") dry_run="1"; shift ;;
+        *) grep="$1"; shift; break ;;
+    esac
 done
 
+# Logging function
 log() {
-	if [[ $dry_run == "1" ]]; then
-		echo "[DRY_RUN]: $1"
-	else
-		echo "$1"
-	fi
+    if [[ $dry_run == "1" ]]; then
+        echo "[DRY_RUN]: $1"
+    else
+        echo "$1"
+    fi
 }
 
+# Task runner function
+run_tasks() {
+    local dir_name="$1"
+    local tasks=()
+
+    log "RUNNING: $dir_name"
+
+    tasks=($(find "$script_dir/$dir_name" -mindepth 1 -maxdepth 1 -perm -001 | sort))
+
+    for task in "${tasks[@]}"; do
+        if [[ -n "$grep" && ! "$task" =~ "$grep" ]]; then
+            log "grep '$grep' filtered out $task"
+            continue
+        fi
+
+        log "running script: $task"
+
+        if [[ $dry_run == "0" ]]; then
+            env=$ROOT "$task"
+            local retVal=$?
+
+            if [[ $retVal -ne 0 ]]; then
+                exit $retVal
+            fi
+        fi
+    done
+}
+
+# Main execution
 log "RUN: root: $ROOT -- grep: $grep"
-log $script_dir
+log "$script_dir"
 
-log "RUNNING: pre-validation"
-tasks=`find $script_dir/pre-validation -mindepth 1 -maxdepth 1 -perm -001 | sort`
-for s in $tasks; do
-	if echo "$s" | grep -vq "$grep"; then
-		log "gerp \"$grep\" fileterd out $s"
-		continue
-	fi
-
-	log "running script: $s"
-	if [[ $dry_run == "0" ]]; then
-		env=$ROOT $s
-		retVal=$?
-		if [[ $retVal -ne 0 ]]; then
-			exit $retVal
-		fi
-	fi
-done
-log "RUNNING: dependencies"
-tasks=`find $script_dir/dependencies -mindepth 1 -maxdepth 1 -perm -001 | sort`
-for s in $tasks; do
-	if echo "$s" | grep -vq "$grep"; then
-		log "gerp \"$grep\" fileterd out $s"
-		continue
-	fi
-
-	log "running script: $s"
-	if [[ $dry_run == "0" ]]; then
-		env=$ROOT $s
-		retVal=$?
-		if [[ $retVal -ne 0 ]]; then
-			exit $retVal
-		fi
-	fi
-done
-log "RUNNING: operator"
-tasks=`find $script_dir/operator -mindepth 1 -maxdepth 1 -perm -001 | sort`
-for s in $tasks; do
-	if echo "$s" | grep -vq "$grep"; then
-		log "gerp \"$grep\" fileterd out $s"
-		continue
-	fi
-
-	log "running script: $s"
-	if [[ $dry_run == "0" ]]; then
-		env=$ROOT $s
-		retVal=$?
-		if [[ $retVal -ne 0 ]]; then
-			exit $retVal
-		fi
-	fi
-done
-log "RUNNING: post-validation"
-tasks=`find $script_dir/post-validation -mindepth 1 -maxdepth 1 -perm -001 | sort`
-for s in $tasks; do
-	if echo "$s" | grep -vq "$grep"; then
-		log "gerp \"$grep\" fileterd out $s"
-		continue
-	fi
-
-	log "running script: $s"
-	if [[ $dry_run == "0" ]]; then
-		env=$ROOT $s
-		retVal=$?
-		if [[ $retVal -ne 0 ]]; then
-			exit $retVal
-		fi
-	fi
+# Run all phases
+phases=("pre-validation" "dependencies" "operator" "post-validation")
+for phase in "${phases[@]}"; do
+    run_tasks "$phase"
 done

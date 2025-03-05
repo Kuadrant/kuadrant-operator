@@ -6,7 +6,7 @@ Kuadrant's DNS capabilities can be used with [CoreDNS](https://coredns.io/) at a
 >Note: This guide uses a proof of concept and is intended only for experimenting and learning. It is not currently a core part of the Kuadrant DNS offering.
 
 
-The basic architecture is shown in the image below:
+The basic architecture for how the Core DNS integration works is shown in the image below:
 
 ![architecture](./core-dns.png)
 
@@ -20,7 +20,11 @@ Kuadrant's custom CoreDNS plugin, will read and serve these two new records. If 
 
 ### Setup a local Kuadrant development environment with CoreDNS enabled
 
-For this local setup we are going to use a single cluster rather than multiple to reduce the setup overhead. The same architecture is true, but rather than a core dns per cluster we have one per namespace. For this guide, we will have two instances of core dns.  To try this out, clone the kuadrant-operator repo first.
+For this local setup we are going to use a single cluster rather than multiple to reduce the setup overhead. The same architecture is true, but rather than a core dns per cluster we have one per namespace (see image below). For this guide, we will have two instances of core dns.  
+
+![local-setup](./local-setup.png)
+
+To try this out, clone the kuadrant-operator repo first:
 
 ```
 git clone https://github.com/Kuadrant/kuadrant-operator.git

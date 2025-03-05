@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 
+mod_version() {
+  version=$1
+  if [ "$version" == "0.0.0" ]; then
+    echo "latest"
+  else
+    echo "v$version"
+  fi
+}
+
 echo "make bundle"
 root=$(pwd)
 cd $env
 operator-sdk generate kustomize manifests --interactive=false
 
 # Set desired Wasm-shim image
-wasm_shim=$(yq '.dependencies.wasm-shim' $env/release.yaml)
-V="oci://quay.io/kuadrant/wasm-shim:v$wasm_shim" \
+wasm_shim=$(mod_version $(yq '.dependencies.wasm-shim' $env/release.yaml))
+V="oci://quay.io/kuadrant/wasm-shim:$wasm_shim" \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' --inplace config/manager/manager.yaml
 
 # Set desired ConsolePlugin image
-console_plugin=$(yq '.dependencies.console-plugin' $env/release.yaml)
-V="quay.io/kuadrant/console-plugin:v$console_plugin" \
+console_plugin=$(mod_version $(yq '.dependencies.console-plugin' $env/release.yaml))
+V="quay.io/kuadrant/console-plugin:$console_plugin" \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' --inplace config/manager/manager.yaml
 
 # Set desired operator image
@@ -21,7 +30,7 @@ cd $env/config/manager
 # This should not be the case.
 
 operator_version=$(yq '.kuadrant-operator.version' $env/release.yaml)
-operator_image=quay.io/kuadrant/kuadrant-operator:v$operator_version
+operator_image=quay.io/kuadrant/kuadrant-operator:$(mod_version $operator_version)
 kustomize edit set image controller=$operator_image
 
 csv=$env/config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
@@ -44,24 +53,24 @@ key=$openshift_version_annotation_key yq --inplace '(.annotations[strenv(key)] |
 echo "reading data form quay.io, slow process."
 dep_file="$env/bundle/metadata/dependencies.yaml"
 
-limitador_version=$(yq '.dependencies.limitador-operator' $env/release.yaml)
-limitador_image=quay.io/kuadrant/limitador-operator-bundle:v$limitador_version
+limitador_version=$(mod_version $(yq '.dependencies.limitador-operator' $env/release.yaml))
+limitador_image=quay.io/kuadrant/limitador-operator-bundle:$limitador_version
 V=$(opm render $limitador_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
 COMPONENT=limitador-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file
 
 
-authorino_version=$(yq '.dependencies.authorino-operator' $env/release.yaml)
-authorino_image=quay.io/kuadrant/authorino-operator-bundle:v$authorino_version
+authorino_version=$(mod_version $(yq '.dependencies.authorino-operator' $env/release.yaml))
+authorino_image=quay.io/kuadrant/authorino-operator-bundle:$authorino_version
 V=$(opm render $authorino_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
 COMPONENT=authorino-operator V=$V \
   yq eval '(.dependencies[] | select(.value.packageName == strenv(COMPONENT)).value.version) = strenv(V)' -i $dep_file
 
 
-dns_version=$(yq '.dependencies.dns-operator' $env/release.yaml)
-dns_image=quay.io/kuadrant/dns-operator-bundle:v$dns_version
+dns_version=$(mod_version $(yq '.dependencies.dns-operator' $env/release.yaml))
+dns_image=quay.io/kuadrant/dns-operator-bundle:$dns_version
 V=$(opm render $dns_image | yq eval '.properties[] | select(.type == "olm.package") | .value.version' -)
 
 COMPONENT=dns-operator V=$V \

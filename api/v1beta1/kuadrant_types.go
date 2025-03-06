@@ -55,9 +55,14 @@ func (p *Kuadrant) GetLocator() string {
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	Observability Observability `json:"observability,omitempty"`
+	MTLS          *MTLS         `json:"mtls,omitempty"`
 }
 
 type Observability struct {
+	Enable bool `json:"enable,omitempty"`
+}
+
+type MTLS struct {
 	Enable bool `json:"enable,omitempty"`
 }
 

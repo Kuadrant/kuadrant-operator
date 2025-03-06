@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 	"reflect"
 	"sort"
 
@@ -259,6 +260,12 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
+		controller.WithRunnable("peerauthentication watcher", controller.Watch(
+			&istiosecurity.PeerAuthentication{},
+			istio.PeerAuthenticationResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*PeerAuthentication](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+		)),
 		controller.WithRunnable("wasmplugin watcher", controller.Watch(
 			&istioclientgoextensionv1alpha1.WasmPlugin{},
 			istio.WasmPluginsResource,
@@ -268,10 +275,14 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 		controller.WithObjectKinds(
 			istio.EnvoyFilterGroupKind,
 			istio.WasmPluginGroupKind,
+			istio.PeerAuthenticationGroupKind,
 		),
 		controller.WithObjectLinks(
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
+			istio.LinkPeerAuthenticationToGateway,
+			kuadrantv1beta1.LinkAuthorinoToDeployment,
+			kuadrantv1beta1.LinkLimitadorToDeployment,
 		),
 	)
 
@@ -470,6 +481,12 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile)
 	}
 
+	if b.isIstioInstalled && b.isAuthorinoOperatorInstalled && b.isLimitadorOperatorInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewMTLSReconciler(b.manager, b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
+		)
+	}
+
 	return mainWorkflow.Run
 }
 
@@ -564,7 +581,7 @@ func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuad
 }
 
 func KuadrantManagedObjectLabels() labels.Set {
-	return labels.Set(map[string]string{
+	return map[string]string{
 		kuadrantManagedLabelKey: "true",
-	})
+	}
 }

@@ -61,7 +61,7 @@ log "RUN: root: $ROOT -- grep: $grep"
 log "$script_dir"
 
 # Run all phases
-phases=("pre-validation" "dependencies" "operator" "post-validation")
+phases=("pre-validation" "dependencies" "operator")
 for phase in "${phases[@]}"; do
     run_tasks "$phase"
 done

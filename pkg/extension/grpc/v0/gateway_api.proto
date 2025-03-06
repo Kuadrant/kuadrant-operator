@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0";
+
+package kuadrant.v0;
+
+message Policy {
+  repeated TargetRef targetRefs = 1;
+}
+
+message Gateway {
+  Metadata metadata = 1;
+  string gatewayClassName = 2;
+  repeated Listener listeners = 3;
+}
+
+message Metadata {
+  string name = 1;
+  string namespace = 2;
+}
+
+message Listener {
+  string hostname = 1;
+}
+
+message TargetRef {
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string sectionName = 4;
+}

@@ -2,6 +2,7 @@ package istio
 
 import (
 	"encoding/json"
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -11,6 +12,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
+	v12 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -183,6 +185,22 @@ func LinkPeerAuthenticationToGateway(objs controller.Store) machinery.LinkFunc {
 			})
 		},
 	}
+}
+
+func LinkDeploymentToAuthorino(objs controller.Store) machinery.LinkFunc {
+	authorinos := lo.Map(objs.FilterByGroupKind(v1beta1.AuthorinoGroupKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: v1beta1.AuthorinoGroupKind,
+		To:   v12.DeploymentGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			gateway := child.(*controller.RuntimeObject).Object.(*gatewayapiv1.Gateway)
+			return lo.Filter(peerAuthentications, func(_ machinery.Object, _ int) bool {
+				return gateway.Spec.GatewayClassName == "istio"
+			})
+		},
+	}
+
 }
 
 func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {

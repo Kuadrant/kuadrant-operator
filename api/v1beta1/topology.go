@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	LimitadorGroupKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
-	AuthorinoGroupKind = schema.GroupKind{Group: authorinooperatorv1beta1.GroupVersion.Group, Kind: "Authorino"}
+	LimitadorGroupKind  = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
+	AuthorinoGroupKind  = schema.GroupKind{Group: authorinooperatorv1beta1.GroupVersion.Group, Kind: "Authorino"}
+	DeploymentGroupKind = metav1.SchemeGroupVersion.WithKind("Deployment").GroupKind()
 
 	LimitadorsResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
 	AuthorinosResource = authorinooperatorv1beta1.GroupVersion.WithResource("authorinos")
@@ -61,6 +62,34 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(k machinery.Object, _ int) bool {
 				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
+			})
+		},
+	}
+}
+
+func LinkAuthorinoToDeployment(objs controller.Store) machinery.LinkFunc {
+	authorinos := lo.Map(objs.FilterByGroupKind(AuthorinoGroupKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: AuthorinoGroupKind,
+		To:   DeploymentGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(authorinos, func(k machinery.Object, _ int) bool {
+				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
+			})
+		},
+	}
+}
+
+func LinkLimitadorToDeployment(objs controller.Store) machinery.LinkFunc {
+	limitadors := lo.Map(objs.FilterByGroupKind(LimitadorGroupKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: LimitadorGroupKind,
+		To:   DeploymentGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(limitadors, func(k machinery.Object, _ int) bool {
+				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "limitador"
 			})
 		},
 	}

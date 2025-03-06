@@ -281,6 +281,8 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
 			istio.LinkPeerAuthenticationToGateway,
+			kuadrantv1beta1.LinkAuthorinoToDeployment,
+			kuadrantv1beta1.LinkLimitadorToDeployment,
 		),
 	)
 
@@ -481,7 +483,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 
 	if b.isIstioInstalled && b.isAuthorinoOperatorInstalled && b.isLimitadorOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewMTLSReconciler(b.manager, b.client).Subscription().Reconcile,
+			NewMTLSReconciler(b.manager, b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
 		)
 	}
 

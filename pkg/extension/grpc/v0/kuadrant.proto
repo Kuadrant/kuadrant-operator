@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0";
+
+package kuadrant.v0;
+
+import "google/protobuf/timestamp.proto";
+
+// The greeting service definition.
+service ExtensionService {
+  // Sends a greeting
+  rpc Ping (PingRequest) returns (PongResponse) {}
+}
+
+// The request message containing the time the request was dispatched.
+message PingRequest {
+  google.protobuf.Timestamp out = 1;
+}
+
+// The response message containing the time the request was received.
+message PongResponse {
+  google.protobuf.Timestamp in = 1;
+}

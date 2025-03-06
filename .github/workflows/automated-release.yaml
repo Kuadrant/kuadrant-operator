@@ -37,6 +37,7 @@ on:
         required: false
         type: string
         default: "stable"
+  pull_request:
 
 jobs:
   auto-release:

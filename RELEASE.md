@@ -31,7 +31,7 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
 3. Create the `release-vX.Y.Z-rc(n)` branch with `release-vX.Y` as the base.
 4. Cherry-pick commits to the `kudrant-vX.Y.Z-rc(n)` from the relevant sources, i.e. `main`.
 5. Update the applicable version in the [release.yaml](https://github.com/Kuadrant/kuadrant-operator/blob/main/RELEASE.md#release-file-format).
-6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)`
+6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)`. If you run into rate limit errors, set the env `GITHUB_TOKEN` with your PAT.
 
 ### Remote steps
 

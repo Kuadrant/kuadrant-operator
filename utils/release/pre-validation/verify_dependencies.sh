@@ -10,7 +10,20 @@ if [[ $GITHUB_TOKEN ]]; then
 fi
 
 for dependency in "${dependencies[@]}"; do
-  dependency_tag=v$(yq "(.dependencies.$dependency)" "$file")
+  dependency_version=$(yq "(.dependencies.$dependency)" "$file")
+
+  if [[ "$dependency_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$ ]]; then
+    if [[ $dependency_version == "0.0.0" ]]; then
+      echo "$dependency version $dependency_version is reserved and not valid for a release"
+      exit 0
+    fi
+    echo "$dependency version $dependency_version is valid semver"
+  else
+    echo "$dependency version $dependency_version is not valid semver"
+    exit 1
+  fi
+
+  dependency_tag="v$dependency_version"
 
   echo "Checking dependency $dependency tag $dependency_tag"
 

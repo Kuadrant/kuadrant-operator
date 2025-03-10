@@ -1,15 +1,15 @@
 name: Test
 
 on:
+  workflow_dispatch:
   push:
-    branches: [ 'main', 'release-*' ]
+    branches: ['main', 'release-v*']
   pull_request:
     branches: ['*']
   merge_group:
     types: [ checks_requested ]
   schedule:
     - cron: "15 1 * * *"
-  workflow_dispatch:
 
 jobs:
   pre-job:
@@ -272,10 +272,9 @@ jobs:
         if: always()
         run: |
           kubectl get pods -n kuadrant-system
-
   verify-release:
-    name: Validate release data 
-    if: needs.pre-job.outputs.should_skip != 'true'
+    name: Validate release data
+    if: startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
@@ -288,6 +287,26 @@ jobs:
         uses: actions/checkout@v4
       - name: Check bundles and manifests
         run: make verify-prepare-release
+
+  verify-manifests:
+    name: Validate set of manifests
+    if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install gettext-base
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Checkout code at git ref
+        uses: actions/checkout@v4
+      - name: Check bundles and manifests
+        run: make verify-manifests
 
   verify-fmt:
     name: Verify fmt
@@ -369,7 +388,7 @@ jobs:
     # This check adds a list of checks to one job to simplify adding settings to the repo.
     # If a new check is added in this file, and it should be retested on entry to the merge queue,
     # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
-    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-release, verify-fmt, test-scripts, verify-generate, verify-go-mod ]
+    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-fmt, test-scripts, verify-generate, verify-go-mod ]
     if: always()
     runs-on: ubuntu-latest
     steps:

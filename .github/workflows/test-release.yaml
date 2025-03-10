@@ -1,14 +1,12 @@
-name: Test
+name: Test Release
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: [ 'release-*' ]
   pull_request:
-    branches: ['main']
+    branches: ['release-*']
   merge_group:
     types: [ checks_requested ]
-  schedule:
-    - cron: "15 1 * * *"
   workflow_dispatch:
 
 jobs:
@@ -273,8 +271,8 @@ jobs:
         run: |
           kubectl get pods -n kuadrant-system
 
-  verify-manifests:
-    name: Validate set of manifests
+  verify-release:
+    name: Validate release data 
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
@@ -287,7 +285,7 @@ jobs:
       - name: Checkout code at git ref
         uses: actions/checkout@v4
       - name: Check bundles and manifests
-        run: make verify-manifests
+        run: make verify-prepare-release
 
   verify-fmt:
     name: Verify fmt

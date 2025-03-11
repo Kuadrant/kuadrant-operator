@@ -1,0 +1,63 @@
+name: Verify Main
+
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: ['main']
+  merge_group:
+    types: [ checks_requested ]
+  schedule:
+    - cron: "15 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  pre-job:
+    runs-on: ubuntu-latest
+    name: Pre job checks
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.1
+        with:
+          cancel_others: false
+          paths_ignore: '["**.adoc", "**.md", "examples/**", "LICENSE"]'
+  test:
+    name: Calls test workflow
+    uses: ./.github/workflows/test.yaml
+    secrets: inherit
+
+  verify-manifests:
+    name: Validate set of manifests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install gettext-base
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Checkout code at git ref
+        uses: actions/checkout@v4
+      - name: Check bundles and manifests
+        run: make verify-manifests
+
+
+  required-checks:
+    name: Test Required Checks
+    # This check adds a list of checks to one job to simplify adding settings to the repo.
+    # If a new check is added in this file, and it should be retested on entry to the merge queue,
+    # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
+    needs: [ test, verify-manifests ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'

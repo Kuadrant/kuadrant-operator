@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
+	"k8s.io/apimachinery/pkg/types"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -15,10 +15,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"google.golang.org/protobuf/types/known/structpb"
-	v1alpha32 "istio.io/api/networking/v1alpha3"
 	securityv1beta1 "istio.io/api/security/v1"
-	"istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 	v12 "k8s.io/api/apps/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,8 +28,8 @@ import (
 
 type PeerAuthentication istiosecurity.PeerAuthentication
 
-func (pa *PeerAuthentication) GetLocator() string {
-	return machinery.LocatorFromObject(pa)
+func (p *PeerAuthentication) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 type MTLSReconciler struct {
@@ -74,21 +71,11 @@ func (r *MTLSReconciler) Run(eventCtx context.Context, _ []controller.ResourceEv
 	logger := controller.LoggerFromContext(eventCtx).WithName("MTLSReconciler")
 	logger.V(1).Info("reconciling mtls", "status", "started")
 	defer logger.V(1).Info("reconciling mtls", "status", "completed")
-
 	targetables := topology.Targetables()
-	// only gateway associated with gatewayclass of type istio
-	// path may be able to take list of gateways and list rules
-
-	// the path is from a specific gateway to HttpRouteRule
 	gateways := targetables.Items(func(o machinery.Object) bool {
 		gateway, ok := o.(*machinery.Gateway)
 		return ok && gateway.Spec.GatewayClassName == "istio"
 	})
-
-	// default to removal for envoyfilters
-	// if adding the configuration these will be updated later.
-	valueMap := map[string]interface{}{}
-	operation := v1alpha32.EnvoyFilter_Patch_REMOVE
 
 	httpRouteRules := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.HTTPRouteRule)
@@ -121,8 +108,8 @@ outer:
 
 	// Check that a kuadrant resource exists, and mtls enabled, and that there is at least one RateLimit or Auth Policy attached.
 	kObj := GetKuadrantFromTopology(topology)
-	if kObj == nil || !kObj.Spec.MTLS.Enable || anyAttachedAuthorRateLimitPolicy == false {
-		defer logger.V(1).Info("mtls not enabled, finishing", "status", "completed")
+	if kObj == nil && kObj.Spec.MTLS == nil && (!kObj.Spec.MTLS.Enable || anyAttachedAuthorRateLimitPolicy == false) {
+		defer logger.V(1).Info("mtls not enabled or applicable", "status", "completed")
 		peerAuthentications := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 			if peerAuthentication, ok := item.(*PeerAuthentication); ok {
 				if value, exists := peerAuthentication.Labels["kuadrant.io/managed"]; exists && value == "true" {
@@ -133,7 +120,6 @@ outer:
 		})
 		r.deleteAllPeerAuthentications(eventCtx, peerAuthentications, logger)
 	} else {
-
 		// find an authorino object, then find and update the associated deployment
 		aobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 			if item.GroupVersionKind().Kind == kuadrantv1beta1.AuthorinoGroupKind.Kind {
@@ -149,9 +135,19 @@ outer:
 				Namespace: aobjs[0].GetNamespace(),
 			},
 		}
+		err := r.GetResource(eventCtx, types.NamespacedName{
+			Namespace: aDeployment.Namespace,
+			Name:      aDeployment.Name,
+		}, aDeployment)
+		if err != nil {
+			return fmt.Errorf("could not get authorino deployment %w", err)
+		}
 		aDeploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
 		aDeploymentMutators = append(aDeploymentMutators, reconcilers.DeploymentTemplateLabelIstioInjectMutator)
-		err := r.ReconcileResource(eventCtx, &v12.Deployment{}, aDeployment, reconcilers.DeploymentMutator(aDeploymentMutators...))
+		err = r.ReconcileResource(eventCtx, &v12.Deployment{}, aDeployment, reconcilers.DeploymentMutator(aDeploymentMutators...))
+		if err != nil {
+			return fmt.Errorf("could not add label to authorino deployment %w", err)
+		}
 
 		// find a limitador object, then find and update the associated deployment
 		lobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
@@ -168,56 +164,25 @@ outer:
 				Namespace: lobjs[0].GetNamespace(),
 			},
 		}
+		err = r.GetResource(eventCtx, types.NamespacedName{
+			Namespace: lDeployment.Namespace,
+			Name:      lDeployment.Name,
+		}, lDeployment)
+		if err != nil {
+			return fmt.Errorf("could not get authorino deployment %w", err)
+		}
 		lDeploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
 		lDeploymentMutators = append(lDeploymentMutators, reconcilers.DeploymentTemplateLabelIstioInjectMutator)
 		err = r.ReconcileResource(eventCtx, &v12.Deployment{}, lDeployment, reconcilers.DeploymentMutator(lDeploymentMutators...))
-		operation = v1alpha32.EnvoyFilter_Patch_MERGE
-		valueMap = map[string]interface{}{
-			"transport_socket": map[string]interface{}{
-				"name": "envoy.transport_sockets.tls",
-				"typed_config": map[string]interface{}{
-					"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
-					"common_tls_context": map[string]interface{}{
-						"tls_certificate_sds_secret_configs": []map[string]interface{}{
-							{
-								"name": "default",
-								"sds_config": map[string]interface{}{
-									"api_config_source": map[string]interface{}{
-										"api_type": "GRPC",
-										"grpc_services": []map[string]interface{}{
-											{
-												"envoy_grpc": map[string]interface{}{
-													"cluster_name": "sds-grpc",
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						"validation_context_sds_secret_config": map[string]interface{}{
-							"name": "ROOTCA",
-							"sds_config": map[string]interface{}{
-								"api_config_source": map[string]interface{}{
-									"api_type": "GRPC",
-									"grpc_services": []map[string]interface{}{
-										{
-											"envoy_grpc": map[string]interface{}{
-												"cluster_name": "sds-grpc",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+		if err != nil {
+			return fmt.Errorf("could not add label to limitador deployment %w", err)
 		}
 
 		peerAuth := &istiosecurity.PeerAuthentication{
 			ObjectMeta: controllerruntime.ObjectMeta{
-				Labels: KuadrantManagedObjectLabels(),
+				Name:      "default",
+				Namespace: kObj.Namespace,
+				Labels:    KuadrantManagedObjectLabels(),
 			},
 			Spec: securityv1beta1.PeerAuthentication{
 				Mtls: &securityv1beta1.PeerAuthentication_MutualTLS{
@@ -226,66 +191,13 @@ outer:
 			},
 		}
 
-		unstructuredPeerAuth, err := controller.Destruct(peerAuth)
-		if err != nil {
-			logger.Error(err, "failed to destruct peer authentication", "status", "error")
+		logger.Info("creating peer authentication resource", "status", "processing")
+
+		err = r.CreateResource(eventCtx, peerAuth)
+		if err != nil && !apiErrors.IsAlreadyExists(err) {
+			logger.Error(err, "failed to create peer authentication resource", "status", "error")
 			return err
 		}
-		logger.Info("creating peer authentication resource", "status", "processing")
-		_, err = r.Client.Resource(istio.PeerAuthenticationResource).Namespace(kObj.Namespace).Create(eventCtx, unstructuredPeerAuth, metav1.CreateOptions{})
-		if err != nil {
-			if apiErrors.IsAlreadyExists(err) {
-				logger.Info("already created peer authentication resource", "status", "acceptable")
-			} else {
-				logger.Error(err, "failed to create peer authentication resource", "status", "error")
-				return err
-			}
-		}
-	}
-
-	// update the envoyfilters to either patch or remove based on previous logic
-	valueStruct, err := structpb.NewStruct(valueMap)
-	if err != nil {
-		logger.Info("problem processing patch for Envoy Filter")
-		return err
-	}
-	patch := &v1alpha32.EnvoyFilter_EnvoyConfigObjectPatch{
-		ApplyTo: v1alpha32.EnvoyFilter_CLUSTER,
-		Patch: &v1alpha32.EnvoyFilter_Patch{
-			Operation: operation,
-			Value:     valueStruct,
-		},
-	}
-
-	// add or remove the patch to each EnvoyFilter with prefix kuadrant- in the same namespace as your gateway.
-	for _, gateway := range gateways {
-
-		envoyFilters := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (*v1alpha3.EnvoyFilter, bool) {
-			if rObj, isObj := item.(*controller.RuntimeObject); isObj {
-				if record, isRec := rObj.Object.(*v1alpha3.EnvoyFilter); isRec {
-					if strings.HasPrefix(record.Name, "kuadrant-") && gateway.GetNamespace() == record.Namespace {
-						return record, true
-					}
-				}
-			}
-			return nil, false
-		})
-
-		for _, envoyFilter := range envoyFilters {
-			envoyFilter.Spec.ConfigPatches = append(envoyFilter.Spec.ConfigPatches, patch)
-			unstructuredEnvoyFilter, err := controller.Destruct(envoyFilter)
-			if err != nil {
-				logger.Error(err, "failed to destruct limitador", "status", "error")
-				return err
-			}
-			logger.Info("creating limitador resource", "status", "processing")
-			_, err = r.Client.Resource(istio.EnvoyFiltersResource).Namespace(envoyFilter.Namespace).Update(eventCtx, unstructuredEnvoyFilter, metav1.UpdateOptions{})
-			if err != nil && !apiErrors.IsAlreadyExists(err) {
-				logger.Error(err, "failed to update envoyfilter resource", "status", "error")
-				return err
-			}
-		}
-
 	}
 	return nil
 }

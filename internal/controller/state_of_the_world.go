@@ -265,7 +265,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 			&istiosecurity.PeerAuthentication{},
 			istio.PeerAuthenticationResource,
 			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*PeerAuthentication](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.FilterResourcesByLabel[*istiosecurity.PeerAuthentication](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
 		controller.WithRunnable("wasmplugin watcher", controller.Watch(
 			&istioclientgoextensionv1alpha1.WasmPlugin{},
@@ -281,7 +281,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 		controller.WithObjectLinks(
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
-			istio.LinkPeerAuthenticationToGateway,
+			//istio.LinkPeerAuthenticationToGateway,
 			kuadrantv1beta1.LinkAuthorinoToDeployment,
 			kuadrantv1beta1.LinkLimitadorToDeployment,
 		),

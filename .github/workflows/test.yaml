@@ -1,8 +1,13 @@
 name: Test
 
 on:
-  workflow_call:
   workflow_dispatch:
+  push:
+    branches: ['main', 'release-v*']
+  pull_request:
+    branches: ['*']
+  schedule:
+    - cron: "15 1 * * *"
 
 jobs:
   pre-job:

@@ -23,11 +23,6 @@ jobs:
           cancel_others: false
           paths_ignore: '["**.adoc", "**.md", "examples/**", "LICENSE"]'
 
-  test:
-    name: Calls test workflow
-    uses: ./.github/workflows/test.yaml
-    secrets: inherit
-
   verify-release:
     name: Validate release manifests
     if: needs.pre-job.outputs.should_skip != 'true'
@@ -53,7 +48,7 @@ jobs:
     # This check adds a list of checks to one job to simplify adding settings to the repo.
     # If a new check is added in this file, and it should be retested on entry to the merge queue,
     # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
-    needs: [ test, verify-release ]
+    needs: [ verify-release ]
     if: always()
     runs-on: ubuntu-latest
     steps:

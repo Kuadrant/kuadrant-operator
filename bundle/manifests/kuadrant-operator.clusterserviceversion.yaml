@@ -103,13 +103,17 @@ metadata:
           "metadata": {
             "name": "kuadrant-sample"
           },
-          "spec": {}
+          "spec": {
+            "mtls": {
+              "enable": false
+            }
+          }
         }
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-03-13T20:05:27Z"
+    createdAt: "2025-03-24T10:55:54Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -414,6 +418,18 @@ spec:
           - operator.authorino.kuadrant.io
           resources:
           - authorinos
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security.istio.io
+          resources:
+          - peerauthentications
           verbs:
           - create
           - delete

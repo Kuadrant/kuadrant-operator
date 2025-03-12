@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"istio.io/client-go/pkg/apis/networking/v1alpha3"
 	"k8s.io/apimachinery/pkg/types"
 	"sync"
 
@@ -19,7 +20,6 @@ import (
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 	v12 "k8s.io/api/apps/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -35,14 +35,12 @@ func (p *PeerAuthentication) GetLocator() string {
 type MTLSReconciler struct {
 	*reconcilers.BaseReconciler
 
-	restMapper meta.RESTMapper
-	Client     *dynamic.DynamicClient
+	Client *dynamic.DynamicClient
 }
 
-func NewMTLSReconciler(mgr controllerruntime.Manager, client *dynamic.DynamicClient, rm meta.RESTMapper) *MTLSReconciler {
+func NewMTLSReconciler(mgr controllerruntime.Manager, client *dynamic.DynamicClient) *MTLSReconciler {
 	return &MTLSReconciler{
-		Client:     client,
-		restMapper: rm,
+		Client: client,
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
@@ -112,7 +110,7 @@ outer:
 		defer logger.V(1).Info("mtls not enabled or applicable", "status", "completed")
 		peerAuthentications := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 			if peerAuthentication, ok := item.(*PeerAuthentication); ok {
-				if value, exists := peerAuthentication.Labels["kuadrant.io/managed"]; exists && value == "true" {
+				if value, exists := peerAuthentication.Labels[kuadrantManagedLabelKey]; exists && value == "true" {
 					return item, true
 				}
 			}
@@ -205,12 +203,7 @@ outer:
 func (r *MTLSReconciler) deleteAllPeerAuthentications(ctx context.Context, peerAuthenticationObjs []machinery.Object, logger logr.Logger) {
 	for _, peerAuthentication := range peerAuthenticationObjs {
 		logger.V(1).Info(fmt.Sprintf("deleting peer authentication %s %s/%s", peerAuthentication.GroupVersionKind().Kind, peerAuthentication.GetNamespace(), peerAuthentication.GetName()))
-		mapping, err := r.restMapper.RESTMapping(peerAuthentication.GroupVersionKind().GroupKind())
-		if err != nil {
-			logger.Error(err, "failed to get peer authentication restmapping")
-			return
-		}
-		if err = r.Client.Resource(mapping.Resource).Namespace(peerAuthentication.GetNamespace()).Delete(ctx, peerAuthentication.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.Client.Resource(v1alpha3.SchemeGroupVersion.WithResource("peerauthentications")).Namespace(peerAuthentication.GetNamespace()).Delete(ctx, peerAuthentication.GetName(), metav1.DeleteOptions{}); err != nil {
 			logger.Error(err, fmt.Sprintf("failed to delete peer authentication %s %s/%s", peerAuthentication.GroupVersionKind().Kind, peerAuthentication.GetNamespace(), peerAuthentication.GetName()))
 			return
 		}

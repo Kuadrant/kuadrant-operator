@@ -3,15 +3,15 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"istio.io/client-go/pkg/apis/networking/v1alpha3"
 	"k8s.io/apimachinery/pkg/types"
-	"sync"
 
 	"github.com/go-logr/logr"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -45,7 +45,6 @@ func NewMTLSReconciler(mgr controllerruntime.Manager, client *dynamic.DynamicCli
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			mgr.GetAPIReader(),
-			log.Log.WithName("mtls"),
 		),
 	}
 }

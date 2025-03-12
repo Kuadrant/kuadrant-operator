@@ -56,6 +56,10 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	if kuadrant == nil {
 		return nil
 	}
+	mtls := false
+	if kuadrant != nil && kuadrant.Spec.MTLS != nil && kuadrant.Spec.MTLS.Enable {
+		mtls = true
+	}
 
 	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
 		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
@@ -86,17 +90,19 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway)
+		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway, mtls)
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy filter")
 			continue
 		}
 		desiredEnvoyFilters[k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()}] = struct{}{}
-
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
 		existingEnvoyFilterObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && child.GetName() == desiredEnvoyFilter.GetName() && child.GetNamespace() == desiredEnvoyFilter.GetNamespace() && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyFilter.GetLabels()))
+			return child.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind &&
+				child.GetName() == desiredEnvoyFilter.GetName() &&
+				child.GetNamespace() == desiredEnvoyFilter.GetNamespace() &&
+				labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyFilter.GetLabels()))
 		})
 
 		// create
@@ -144,7 +150,9 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	// cleanup istio clusters for gateways that are not in the effective policies
 	staleEnvoyFilters := topology.Objects().Items(func(o machinery.Object) bool {
 		_, desired := desiredEnvoyFilters[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
-		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) && !desired
+		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind &&
+			labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) &&
+			!desired
 	})
 	for _, envoyFilter := range staleEnvoyFilters {
 		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
@@ -156,7 +164,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway, mtls bool) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
@@ -192,7 +200,7 @@ func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 	if limitadorService == nil {
 		return nil, ErrMissingLimitadorServiceInfo
 	}
-	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), rateLimitClusterPatch)
+	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), mtls, rateLimitClusterPatch)
 	if err != nil {
 		return nil, err
 	}

@@ -130,8 +130,8 @@ func LinkGatewayToEnvoyExtensionPolicy(objs controller.Store) machinery.LinkFunc
 }
 
 // BuildEnvoyPatchPolicyClusterPatch returns an envoy config patch that adds a cluster to the gateway.
-func BuildEnvoyPatchPolicyClusterPatch(name, host string, port int, clusterPatchBuilder func(string, int) map[string]any) ([]envoygatewayv1alpha1.EnvoyJSONPatchConfig, error) {
-	patchRaw, _ := json.Marshal(clusterPatchBuilder(host, port))
+func BuildEnvoyPatchPolicyClusterPatch(name, host string, port int, mtls bool, clusterPatchBuilder func(string, int, bool) map[string]any) ([]envoygatewayv1alpha1.EnvoyJSONPatchConfig, error) {
+	patchRaw, _ := json.Marshal(clusterPatchBuilder(host, port, mtls))
 	patch := &apiextensionsv1.JSON{}
 	if err := patch.UnmarshalJSON(patchRaw); err != nil {
 		return nil, err

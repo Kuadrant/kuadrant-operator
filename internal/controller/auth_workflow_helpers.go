@@ -62,8 +62,8 @@ func AuthClusterName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-auth-%s", gatewayName)
 }
 
-func authClusterPatch(host string, port int) map[string]any {
-	return map[string]any{
+func authClusterPatch(host string, port int, mTLS bool) map[string]any {
+	patch := map[string]any{
 		"name":                   kuadrant.KuadrantAuthClusterName,
 		"type":                   "STRICT_DNS",
 		"connect_timeout":        "1s",
@@ -89,6 +89,49 @@ func authClusterPatch(host string, port int) map[string]any {
 			},
 		},
 	}
+	if mTLS {
+		patch["transport_socket"] = map[string]interface{}{
+			"name": "envoy.transport_sockets.tls",
+			"typed_config": map[string]interface{}{
+				"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
+				"common_tls_context": map[string]interface{}{
+					"tls_certificate_sds_secret_configs": []interface{}{
+						map[string]interface{}{
+							"name": "default",
+							"sds_config": map[string]interface{}{
+								"api_config_source": map[string]interface{}{
+									"api_type": "GRPC",
+									"grpc_services": []interface{}{
+										map[string]interface{}{
+											"envoy_grpc": map[string]interface{}{
+												"cluster_name": "sds-grpc",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					"validation_context_sds_secret_config": map[string]interface{}{
+						"name": "ROOTCA",
+						"sds_config": map[string]interface{}{
+							"api_config_source": map[string]interface{}{
+								"api_type": "GRPC",
+								"grpc_services": []interface{}{
+									map[string]interface{}{
+										"envoy_grpc": map[string]interface{}{
+											"cluster_name": "sds-grpc",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	return patch
 }
 
 type authorinoServiceInfo struct {

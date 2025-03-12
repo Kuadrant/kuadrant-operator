@@ -269,7 +269,7 @@ rules:
 - apiGroups:
   - security.istio.io
   resources:
-  - peerauthenticators
+  - peerauthentications
   verbs:
   - create
   - delete

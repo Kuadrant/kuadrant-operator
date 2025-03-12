@@ -485,7 +485,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 
 	if b.isIstioInstalled && b.isAuthorinoOperatorInstalled && b.isLimitadorOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewMTLSReconciler(b.manager, b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
+			NewMTLSReconciler(b.manager, b.client).Subscription().Reconcile,
 		)
 	}
 	return mainWorkflow.Run

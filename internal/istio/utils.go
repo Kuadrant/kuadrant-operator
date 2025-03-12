@@ -2,6 +2,7 @@ package istio
 
 import (
 	"encoding/json"
+
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"

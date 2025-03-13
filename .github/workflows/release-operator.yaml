@@ -34,5 +34,5 @@ jobs:
           tag_name: v${{ env.kuadrantOperatorVersion }}
           body: "${{ env.releaseBody }}"
           generate_release_notes: true
-          target_commitish: release-v${{ env.kuadrantOperatorVersion }}
+          target_commitish: v${{ env.kuadrantOperatorVersion }}
           prerelease: ${{ env.prerelease }}

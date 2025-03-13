@@ -13,7 +13,6 @@ RUN go mod download
 COPY cmd/main.go cmd/main.go
 COPY api/ api/
 COPY internal/ internal/
-COPY pkg/ pkg/
 
 # Set environment variables for cross-compilation
 ARG TARGETARCH

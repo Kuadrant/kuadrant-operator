@@ -19,9 +19,9 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
 const (

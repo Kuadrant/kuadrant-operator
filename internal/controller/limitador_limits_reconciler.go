@@ -15,9 +15,9 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
-	"github.com/kuadrant/kuadrant-operator/pkg/ratelimit"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/ratelimit"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 type LimitadorLimitsReconciler struct {

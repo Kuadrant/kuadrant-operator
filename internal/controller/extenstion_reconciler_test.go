@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/policy-machinery/machinery"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

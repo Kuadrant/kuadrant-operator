@@ -14,10 +14,10 @@ import (
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
-	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
+	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;watch;create;update;patch;delete

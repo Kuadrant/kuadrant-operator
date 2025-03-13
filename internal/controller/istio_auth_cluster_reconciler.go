@@ -20,8 +20,8 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
+	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete

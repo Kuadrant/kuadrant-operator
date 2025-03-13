@@ -31,8 +31,8 @@ import (
 	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 const (

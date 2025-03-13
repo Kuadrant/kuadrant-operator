@@ -21,11 +21,11 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 //+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete

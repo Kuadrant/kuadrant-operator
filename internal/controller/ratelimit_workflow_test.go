@@ -10,7 +10,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 func TestLimitNameToLimitadorIdentifier(t *testing.T) {

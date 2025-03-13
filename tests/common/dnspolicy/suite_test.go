@@ -39,7 +39,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/internal/controller"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/internal/log"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

@@ -18,9 +18,9 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/pkg/authorino"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete

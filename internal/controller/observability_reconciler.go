@@ -18,9 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/observability"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/observability"
+	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 )
 
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;podmonitors,verbs=get;list;watch;create;update;patch;delete

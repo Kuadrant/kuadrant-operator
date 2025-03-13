@@ -23,11 +23,11 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
+	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
 type RateLimitPolicyStatusUpdater struct {

@@ -22,11 +22,11 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
+	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 //+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete

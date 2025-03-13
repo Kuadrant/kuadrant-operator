@@ -21,9 +21,9 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 const rateLimitObjectLabelKey = "kuadrant.io/ratelimit"

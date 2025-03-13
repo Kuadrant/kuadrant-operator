@@ -19,7 +19,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 var (

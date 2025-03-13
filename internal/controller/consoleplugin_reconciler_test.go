@@ -23,9 +23,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	controllersfake "github.com/kuadrant/kuadrant-operator/internal/controller/fake"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
-	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
 )
 
 var (

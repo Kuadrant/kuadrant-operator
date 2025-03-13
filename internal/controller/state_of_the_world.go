@@ -32,15 +32,15 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
-	"github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/observability"
-	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
-	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/authorino"
+	"github.com/kuadrant/kuadrant-operator/internal/envoygateway"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/observability"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 var (

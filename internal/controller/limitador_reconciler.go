@@ -14,7 +14,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrant "github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 type LimitadorReconciler struct {

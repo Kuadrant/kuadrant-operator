@@ -6,7 +6,7 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"k8s.io/apimachinery/pkg/api/meta"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )

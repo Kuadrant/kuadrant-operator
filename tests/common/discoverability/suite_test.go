@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/kuadrant/kuadrant-operator/internal/controller"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/internal/log"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 

@@ -10,8 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	observability "github.com/kuadrant/kuadrant-operator/pkg/observability"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	observability "github.com/kuadrant/kuadrant-operator/internal/observability"
 )
 
 var (

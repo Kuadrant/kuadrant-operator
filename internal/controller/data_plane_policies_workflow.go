@@ -12,9 +12,9 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/pkg/authorino"
-	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
-	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
+	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
+	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
 )
 
 const (

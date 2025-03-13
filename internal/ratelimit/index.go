@@ -10,7 +10,7 @@ import (
 	"github.com/elliotchance/orderedmap/v2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 // NewIndex builds an index to manage sets of rate limits, organized by key

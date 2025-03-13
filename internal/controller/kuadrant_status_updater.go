@@ -18,8 +18,8 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/authorino"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 const (

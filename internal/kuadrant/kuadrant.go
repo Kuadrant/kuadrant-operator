@@ -1,7 +1,7 @@
 package kuadrant
 
 import (
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 )
 
 const (

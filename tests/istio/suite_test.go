@@ -24,7 +24,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/tests"
 	. "github.com/onsi/ginkgo/v2"

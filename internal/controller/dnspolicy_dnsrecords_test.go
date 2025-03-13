@@ -8,7 +8,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/internal/controller"
 )
 
 func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {

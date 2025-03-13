@@ -21,7 +21,6 @@ jobs:
         run: |
           bash ./utils/release/load_github_envvar.sh
       - name: Create tag
-        needs: set_env_variables
         id: create_tag
         run: |
           tag_name="v${{ env.kuadrantOperatorVersion }}"
@@ -29,7 +28,6 @@ jobs:
           git push origin $tag_name
       - name: Create release
         id: create_release
-        needs: create_tag
         uses: softprops/action-gh-release@v1
         with:
           name: v${{ env.kuadrantOperatorVersion }}

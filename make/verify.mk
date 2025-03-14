@@ -15,11 +15,11 @@ verify-bundle: bundle ## Verify bundle update.
 
 .PHONY: verify-fmt
 verify-fmt: fmt ## Verify fmt update.
-	git diff --exit-code ./api ./controllers
+	git diff --exit-code ./api ./internal/controller
 
 .PHONY: verify-generate
 verify-generate: generate ## Verify generate update.
-	git diff --exit-code ./api ./controllers
+	git diff --exit-code ./api ./internal/controller
 
 .PHONY: verify-go-mod
 verify-go-mod: ## Verify go.mod matches source code

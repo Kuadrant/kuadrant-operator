@@ -31,8 +31,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/internal/log"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

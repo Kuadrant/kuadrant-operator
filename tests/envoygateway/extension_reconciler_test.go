@@ -24,9 +24,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 

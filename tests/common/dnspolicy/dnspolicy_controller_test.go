@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kuadrant/kuadrant-operator/controllers"
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
@@ -23,8 +23,8 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 

@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 var (

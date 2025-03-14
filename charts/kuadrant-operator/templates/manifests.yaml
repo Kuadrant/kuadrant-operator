@@ -8103,6 +8103,11 @@ spec:
           spec:
             description: KuadrantSpec defines the desired state of Kuadrant
             properties:
+              mtls:
+                properties:
+                  enable:
+                    type: boolean
+                type: object
               observability:
                 properties:
                   enable:
@@ -9356,6 +9361,18 @@ rules:
   - operator.authorino.kuadrant.io
   resources:
   - authorinos
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - security.istio.io
+  resources:
+  - peerauthenticators
   verbs:
   - create
   - delete

@@ -40,21 +40,24 @@ wasmShimVersion=$(yq '.dependencies.wasm-shim' $ROOT/release.yaml)
 
 releaseBody="**This release enables installations of Authorino Operator v$authorinoOperatorVersion, Limitador Operator v$limitadorOperatorVersion, DNS Operator v$dnsOperatorVersion, WASM Shim v$wasmShimVersion and ConsolePlugin $consolePluginURL**"
 
-kuadrantOperatorVersion=$(yq '.kuadrant-operator.version' $ROOT/release.yaml)
+kuadratantOperatorTag="v$(yq '.kuadrant-operator.version' $ROOT/release.yaml)"
+releaseBranch="release-$(echo "$kuadratantOperatorTag" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
 
 prerelease=false
-if [[ "$kuadrantOperatorVersion" == *"-"* ]]; then
+if [[ "$kuadratantOperatorTag" =~ [-+] ]]; then
 	prerelease=true
 fi
 
 if [[ $_log == "1" ]]; then
-	log $kuadrantOperatorVersion
-	log "$releaseBody"
-	log $prerelease
+	log "kuadratantOperatorTag=$kuadratantOperatorTag"
+	log "releaseBody=$releaseBody"
+	log "prerelease=$prerelease"
+	log "releaseBranch=$releaseBranch"
 fi
 
 if [[ $dry_run == "0" ]]; then
-	echo "kuadrantOperatorVersion=$kuadrantOperatorVersion" >> "$GITHUB_ENV"
+	echo "kuadratantOperatorTag=$kuadratantOperatorTag" >> "$GITHUB_ENV"
 	echo "releaseBody=$releaseBody" >> "$GITHUB_ENV"
 	echo "prerelease=$prerelease" >> "$GITHUB_ENV"
+	echo "releaseBranch=$releaseBranch" >> "$GITHUB_ENV"
 fi

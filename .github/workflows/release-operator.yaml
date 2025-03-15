@@ -1,0 +1,38 @@
+name: Release Operator
+
+on:
+  pull_request:
+    types:
+    - closed
+    branches:
+      - 'release-v[0-9]+.[0-9]+'
+  workflow_dispatch: {}
+
+jobs:
+  release-operator:
+    if: github.event.pull_request.merged == true
+    name: Release operator
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code at git ref
+        uses: actions/checkout@v4
+      - name: Set environment variables
+        id: set_env_variables
+        run: |
+          bash ./utils/release/load_github_envvar.sh
+      - name: Create tag
+        id: create_tag
+        run: |
+          tag_name="${{ env.kuadratantOperatorTag }}"
+          git tag $tag_name
+          git push origin $tag_name
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.kuadratantOperatorTag }}
+          tag_name: ${{ env.kuadratantOperatorTag }}
+          body: "${{ env.releaseBody }}"
+          generate_release_notes: true
+          target_commitish: ${{ env.releaseBranch }}
+          prerelease: ${{ env.prerelease }}

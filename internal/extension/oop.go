@@ -73,7 +73,7 @@ func (p *OOPExtension) Start() error {
 		return err
 	}
 
-	cmd := exec.Command(p.executable, p.socket)
+	cmd := exec.Command(p.executable, p.socket) // #nosec G204
 	if err := cmd.Start(); err != nil {
 		if e := p.stopServer(); e != nil {
 			p.logger.Error(e, "failed starting process, then stopping gRPC server failed")

@@ -24,6 +24,8 @@ import (
 	"syscall"
 	"time"
 
+	extension "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -38,10 +40,11 @@ type EmbeddedPlugin struct {
 	socket     string
 	cmd        *exec.Cmd
 	server     *grpc.Server
+	service    extension.HeartBeatServer
 	logger     logr.Logger
 }
 
-func NewEmbeddedPlugin(name string, location string, logger logr.Logger) (EmbeddedPlugin, error) {
+func NewEmbeddedPlugin(name string, location string, service extension.HeartBeatServer, logger logr.Logger) (EmbeddedPlugin, error) {
 	var err error
 
 	executable := fmt.Sprintf("%s/%s/%s", location, name, name)
@@ -55,6 +58,7 @@ func NewEmbeddedPlugin(name string, location string, logger logr.Logger) (Embedd
 		name:       name,
 		socket:     fmt.Sprintf("%s/%s/%s", location, name, defaultUnixSocket),
 		executable: executable,
+		service:    service,
 		logger:     logger.WithName(name),
 	}, err
 }
@@ -134,6 +138,7 @@ func (p *EmbeddedPlugin) startServer() error {
 
 		p.server = grpc.NewServer()
 		grpc_health_v1.RegisterHealthServer(p.server, health.NewServer())
+		extension.RegisterHeartBeatServer(p.server, p.service)
 
 		go func() {
 			p.server.Serve(ln)

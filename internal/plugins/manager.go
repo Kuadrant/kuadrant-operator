@@ -17,15 +17,21 @@ limitations under the License.
 package plugins
 
 import (
+	"context"
 	"fmt"
+	"time"
+
+	extension "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 
 	"github.com/go-logr/logr"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const DefaultPluginsDir = "/plugins"
 
 type PluginManager struct {
 	plugins []Plugin
+	service extension.HeartBeatServer
 	logger  logr.Logger
 }
 
@@ -39,10 +45,11 @@ func NewPluginManager(names []string, location string, logger logr.Logger) (Plug
 	var plugins []Plugin
 	var err error
 
+	service := newHeartBeatService()
 	logger = logger.WithName("plugins")
 
 	for _, name := range names {
-		if embeddedPlugin, e := NewEmbeddedPlugin(name, location, logger); e != nil {
+		if embeddedPlugin, e := NewEmbeddedPlugin(name, location, service, logger); e != nil {
 			plugins = append(plugins, &embeddedPlugin)
 		} else {
 			if err == nil {
@@ -55,6 +62,7 @@ func NewPluginManager(names []string, location string, logger logr.Logger) (Plug
 
 	return PluginManager{
 		plugins: plugins,
+		service: service,
 		logger:  logger,
 	}, err
 }
@@ -89,4 +97,18 @@ func (m *PluginManager) Stop() error {
 	}
 
 	return err
+}
+
+type heartBeatServer struct {
+	extension.UnimplementedHeartBeatServer
+}
+
+func (s *heartBeatServer) Ping(_ context.Context, req *extension.PingRequest) (*extension.PongResponse, error) {
+	return &extension.PongResponse{
+		In: timestamppb.New(time.Now()),
+	}, nil
+}
+
+func newHeartBeatService() extension.HeartBeatServer {
+	return &heartBeatServer{}
 }

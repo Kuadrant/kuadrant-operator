@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/reflection"
 )
 
 const defaultUnixSocket = ".grpc.sock"
@@ -135,7 +134,6 @@ func (p *EmbeddedPlugin) startServer() error {
 
 		p.server = grpc.NewServer()
 		grpc_health_v1.RegisterHealthServer(p.server, health.NewServer())
-		reflection.Register(p.server)
 
 		go func() {
 			p.server.Serve(ln)

@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package plugins
+package extension
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	extension "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -31,7 +31,7 @@ const DefaultPluginsDir = "/plugins"
 
 type PluginManager struct {
 	plugins []Plugin
-	service extension.HeartBeatServer
+	service extpb.HeartBeatServer
 	logger  logr.Logger
 }
 
@@ -100,15 +100,15 @@ func (m *PluginManager) Stop() error {
 }
 
 type heartBeatServer struct {
-	extension.UnimplementedHeartBeatServer
+	extpb.UnimplementedHeartBeatServer
 }
 
-func (s *heartBeatServer) Ping(_ context.Context, req *extension.PingRequest) (*extension.PongResponse, error) {
-	return &extension.PongResponse{
+func (s *heartBeatServer) Ping(_ context.Context, req *extpb.PingRequest) (*extpb.PongResponse, error) {
+	return &extpb.PongResponse{
 		In: timestamppb.New(time.Now()),
 	}, nil
 }
 
-func newHeartBeatService() extension.HeartBeatServer {
+func newHeartBeatService() extpb.HeartBeatServer {
 	return &heartBeatServer{}
 }

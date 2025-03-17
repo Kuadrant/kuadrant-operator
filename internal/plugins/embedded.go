@@ -56,7 +56,7 @@ func NewEmbeddedPlugin(name string, location string, logger logr.Logger) (Embedd
 		name:       name,
 		socket:     fmt.Sprintf("%s/%s/%s", location, name, defaultUnixSocket),
 		executable: executable,
-		logger:     logger,
+		logger:     logger.WithName(name),
 	}, err
 }
 
@@ -65,7 +65,7 @@ func (p *EmbeddedPlugin) Name() string {
 }
 
 func (p *EmbeddedPlugin) Start() error {
-	p.logger.Info("Plugin `%s` starting...", p.name)
+	p.logger.Info("starting...")
 
 	if err := p.startServer(); err != nil {
 		return err
@@ -73,10 +73,12 @@ func (p *EmbeddedPlugin) Start() error {
 
 	cmd := exec.Command(p.executable, p.socket)
 	if err := cmd.Start(); err != nil {
-		p.stopServer()
+		if e := p.stopServer(); e != nil {
+			p.logger.Error(e, "failed starting process, then stopping gRPC server failed")
+		}
 		return err
 	}
-	p.logger.Info("Plugin `%s` started", p.name)
+	p.logger.Info("started")
 
 	// only set this, if we successfully started it all
 	p.cmd = cmd
@@ -88,7 +90,7 @@ func (p *EmbeddedPlugin) IsAlive() bool {
 }
 
 func (p *EmbeddedPlugin) Stop() error {
-	p.logger.Info("Plugin `%s` stopping...", p.name)
+	p.logger.Info("stopping...")
 	var err error
 
 	// Did we ever successfully started?
@@ -112,13 +114,13 @@ func (p *EmbeddedPlugin) Stop() error {
 			if err == nil {
 				err = e
 			} else {
-				p.logger.Error(e, "Plugin `%s` stopping gRPC server failed, while shutting down the plugin also failed", p.name)
+				p.logger.Error(e, "stopping gRPC server failed, while shutting down the plugin also failed")
 			}
 		}
-		p.logger.Info("Plugin `%s` stopped", p.name)
+		p.logger.Info("stopped")
 		p.cmd = nil
 	} else {
-		p.logger.Info("Plugin `%s` nothing to stop", p.name)
+		p.logger.Info("nothing to stop")
 	}
 
 	return err

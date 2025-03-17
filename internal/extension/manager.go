@@ -27,30 +27,28 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const DefaultPluginsDir = "/plugins"
-
-type PluginManager struct {
-	plugins []Plugin
-	service extpb.HeartBeatServer
-	logger  logr.Logger
+type Manager struct {
+	extensions []Extension
+	service    extpb.HeartBeatServer
+	logger     logr.Logger
 }
 
-type Plugin interface {
+type Extension interface {
 	Start() error
 	Stop() error
 	Name() string
 }
 
-func NewPluginManager(names []string, location string, logger logr.Logger) (PluginManager, error) {
-	var plugins []Plugin
+func NewManager(names []string, location string, logger logr.Logger) (Manager, error) {
+	var extensions []Extension
 	var err error
 
 	service := newHeartBeatService()
-	logger = logger.WithName("plugins")
+	logger = logger.WithName("extension")
 
 	for _, name := range names {
-		if embeddedPlugin, e := NewEmbeddedPlugin(name, location, service, logger); e != nil {
-			plugins = append(plugins, &embeddedPlugin)
+		if oopExtension, e := NewOOPExtension(name, location, service, logger); e != nil {
+			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {
 				err = fmt.Errorf("%s: %w", name, e)
@@ -60,22 +58,22 @@ func NewPluginManager(names []string, location string, logger logr.Logger) (Plug
 		}
 	}
 
-	return PluginManager{
-		plugins: plugins,
-		service: service,
-		logger:  logger,
+	return Manager{
+		extensions: extensions,
+		service:    service,
+		logger:     logger,
 	}, err
 }
 
-func (m *PluginManager) Start() error {
+func (m *Manager) Start() error {
 	var err error
 
-	for _, plugin := range m.plugins {
-		if e := plugin.Start(); e != nil {
+	for _, extension := range m.extensions {
+		if e := extension.Start(); e != nil {
 			if err == nil {
-				err = fmt.Errorf("%s: %w", plugin.Name(), e)
+				err = fmt.Errorf("%s: %w", extension.Name(), e)
 			} else {
-				err = fmt.Errorf("%w; %s: %w", err, plugin.Name(), e)
+				err = fmt.Errorf("%w; %s: %w", err, extension.Name(), e)
 			}
 		}
 	}
@@ -83,15 +81,15 @@ func (m *PluginManager) Start() error {
 	return err
 }
 
-func (m *PluginManager) Stop() error {
+func (m *Manager) Stop() error {
 	var err error
 
-	for _, plugin := range m.plugins {
-		if e := plugin.Stop(); e != nil {
+	for _, extension := range m.extensions {
+		if e := extension.Stop(); e != nil {
 			if err == nil {
-				err = fmt.Errorf("%s: %w", plugin.Name(), e)
+				err = fmt.Errorf("%s: %w", extension.Name(), e)
 			} else {
-				err = fmt.Errorf("%w; %s: %w", err, plugin.Name(), e)
+				err = fmt.Errorf("%w; %s: %w", err, extension.Name(), e)
 			}
 		}
 	}

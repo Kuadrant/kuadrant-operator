@@ -34,7 +34,7 @@ import (
 
 const defaultUnixSocket = ".grpc.sock"
 
-type EmbeddedPlugin struct {
+type OOPExtension struct {
 	name       string
 	executable string
 	socket     string
@@ -44,7 +44,7 @@ type EmbeddedPlugin struct {
 	logger     logr.Logger
 }
 
-func NewEmbeddedPlugin(name string, location string, service extpb.HeartBeatServer, logger logr.Logger) (EmbeddedPlugin, error) {
+func NewOOPExtension(name string, location string, service extpb.HeartBeatServer, logger logr.Logger) (OOPExtension, error) {
 	var err error
 
 	executable := fmt.Sprintf("%s/%s/%s", location, name, name)
@@ -54,7 +54,7 @@ func NewEmbeddedPlugin(name string, location string, service extpb.HeartBeatServ
 		}
 	}
 
-	return EmbeddedPlugin{
+	return OOPExtension{
 		name:       name,
 		socket:     fmt.Sprintf("%s/%s/%s", location, name, defaultUnixSocket),
 		executable: executable,
@@ -63,11 +63,11 @@ func NewEmbeddedPlugin(name string, location string, service extpb.HeartBeatServ
 	}, err
 }
 
-func (p *EmbeddedPlugin) Name() string {
+func (p *OOPExtension) Name() string {
 	return p.name
 }
 
-func (p *EmbeddedPlugin) Start() error {
+func (p *OOPExtension) Start() error {
 	p.logger.Info("starting...")
 
 	if err := p.startServer(); err != nil {
@@ -88,11 +88,11 @@ func (p *EmbeddedPlugin) Start() error {
 	return nil
 }
 
-func (p *EmbeddedPlugin) IsAlive() bool {
+func (p *OOPExtension) IsAlive() bool {
 	return p.cmd != nil && p.cmd.Process.Signal(syscall.Signal(0)) == nil
 }
 
-func (p *EmbeddedPlugin) Stop() error {
+func (p *OOPExtension) Stop() error {
 	p.logger.Info("stopping...")
 	var err error
 
@@ -100,7 +100,7 @@ func (p *EmbeddedPlugin) Stop() error {
 	if p.cmd != nil {
 		if err = p.cmd.Process.Signal(syscall.SIGTERM); err == nil {
 			timer := time.AfterFunc(2*time.Second, func() {
-				p.cmd.Process.Kill() // we know this can fail, as this is racy. All that really matters is the `Wait()` below
+				_ = p.cmd.Process.Kill() // we know this can fail, as this is racy. All that really matters is the `Wait()` below
 			})
 
 			if e := p.cmd.Wait(); e != nil {
@@ -117,7 +117,7 @@ func (p *EmbeddedPlugin) Stop() error {
 			if err == nil {
 				err = e
 			} else {
-				p.logger.Error(e, "stopping gRPC server failed, while shutting down the plugin also failed")
+				p.logger.Error(e, "stopping gRPC server failed, while shutting down the process also failed")
 			}
 		}
 		p.logger.Info("stopped")
@@ -129,7 +129,7 @@ func (p *EmbeddedPlugin) Stop() error {
 	return err
 }
 
-func (p *EmbeddedPlugin) startServer() error {
+func (p *OOPExtension) startServer() error {
 	if p.server == nil {
 		ln, err := net.Listen("unix", p.socket)
 		if err != nil {
@@ -141,13 +141,16 @@ func (p *EmbeddedPlugin) startServer() error {
 		extpb.RegisterHeartBeatServer(p.server, p.service)
 
 		go func() {
-			p.server.Serve(ln)
+			if err := p.server.Serve(ln); err != nil {
+				// FIXME: Make this fail synchronously somehow
+				p.logger.Error(err, "failed to start server")
+			}
 		}()
 	}
 	return nil
 }
 
-func (p *EmbeddedPlugin) stopServer() error {
+func (p *OOPExtension) stopServer() error {
 	if p.server != nil {
 		p.server.Stop()
 		p.server = nil

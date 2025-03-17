@@ -22,8 +22,8 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func TestEmbeddedPluginManagesExternalProcess(t *testing.T) {
-	plugin := EmbeddedPlugin{
+func TestOOPExtensionManagesExternalProcess(t *testing.T) {
+	oop := OOPExtension{
 		name:       "test",
 		executable: "/bin/sleep",
 		socket:     "1d",
@@ -31,19 +31,19 @@ func TestEmbeddedPluginManagesExternalProcess(t *testing.T) {
 		logger:     logr.Discard(),
 	}
 
-	if plugin.IsAlive() {
+	if oop.IsAlive() {
 		t.Errorf("Must not be alive")
 	}
-	if err := plugin.Start(); err != nil {
+	if err := oop.Start(); err != nil {
 		t.Errorf("Should have started: %v", err)
 	}
-	if !plugin.IsAlive() {
+	if !oop.IsAlive() {
 		t.Errorf("Must be alive")
 	}
-	if err := plugin.Stop(); err != nil {
+	if err := oop.Stop(); err != nil {
 		t.Errorf("Should have stopped: %v", err)
 	}
-	if plugin.IsAlive() {
+	if oop.IsAlive() {
 		t.Errorf("Must not be alive")
 	}
 }

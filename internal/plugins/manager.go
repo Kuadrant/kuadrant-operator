@@ -26,6 +26,7 @@ const DefaultPluginsDir = "/plugins"
 
 type PluginManager struct {
 	plugins []Plugin
+	logger  logr.Logger
 }
 
 type Plugin interface {
@@ -37,6 +38,8 @@ type Plugin interface {
 func NewPluginManager(names []string, location string, logger logr.Logger) (PluginManager, error) {
 	var plugins []Plugin
 	var err error
+
+	logger = logger.WithName("plugins")
 
 	for _, name := range names {
 		if embeddedPlugin, e := NewEmbeddedPlugin(name, location, logger); e != nil {
@@ -52,6 +55,7 @@ func NewPluginManager(names []string, location string, logger logr.Logger) (Plug
 
 	return PluginManager{
 		plugins: plugins,
+		logger:  logger,
 	}, err
 }
 

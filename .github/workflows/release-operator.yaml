@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code at git ref
         uses: actions/checkout@v4
+        with:
+          token: '${{ secrets.KUADRANT_DEV_PAT }}'
       - name: Set environment variables
         id: set_env_variables
         run: |

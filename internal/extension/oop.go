@@ -38,11 +38,11 @@ type OOPExtension struct {
 	socket     string
 	cmd        *exec.Cmd
 	server     *grpc.Server
-	service    extpb.HeartBeatServer
+	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
 }
 
-func NewOOPExtension(name string, location string, service extpb.HeartBeatServer, logger logr.Logger) (OOPExtension, error) {
+func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger) (OOPExtension, error) {
 	var err error
 
 	executable := fmt.Sprintf("%s/%s/%s", location, name, name)
@@ -135,7 +135,7 @@ func (p *OOPExtension) startServer() error {
 		}
 
 		p.server = grpc.NewServer()
-		extpb.RegisterHeartBeatServer(p.server, p.service)
+		extpb.RegisterExtensionServiceServer(p.server, p.service)
 
 		go func() {
 			if err := p.server.Serve(ln); err != nil {

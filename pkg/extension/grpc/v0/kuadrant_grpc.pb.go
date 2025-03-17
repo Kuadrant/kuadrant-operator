@@ -19,107 +19,107 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HeartBeat_Ping_FullMethodName = "/kuadrant.HeartBeat/Ping"
+	ExtensionService_Ping_FullMethodName = "/kuadrant.ExtensionService/Ping"
 )
 
-// HeartBeatClient is the client API for HeartBeat service.
+// ExtensionServiceClient is the client API for ExtensionService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // The greeting service definition.
-type HeartBeatClient interface {
+type ExtensionServiceClient interface {
 	// Sends a greeting
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
 }
 
-type heartBeatClient struct {
+type extensionServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewHeartBeatClient(cc grpc.ClientConnInterface) HeartBeatClient {
-	return &heartBeatClient{cc}
+func NewExtensionServiceClient(cc grpc.ClientConnInterface) ExtensionServiceClient {
+	return &extensionServiceClient{cc}
 }
 
-func (c *heartBeatClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error) {
+func (c *extensionServiceClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PongResponse)
-	err := c.cc.Invoke(ctx, HeartBeat_Ping_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ExtensionService_Ping_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// HeartBeatServer is the server API for HeartBeat service.
-// All implementations must embed UnimplementedHeartBeatServer
+// ExtensionServiceServer is the server API for ExtensionService service.
+// All implementations must embed UnimplementedExtensionServiceServer
 // for forward compatibility.
 //
 // The greeting service definition.
-type HeartBeatServer interface {
+type ExtensionServiceServer interface {
 	// Sends a greeting
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
-	mustEmbedUnimplementedHeartBeatServer()
+	mustEmbedUnimplementedExtensionServiceServer()
 }
 
-// UnimplementedHeartBeatServer must be embedded to have
+// UnimplementedExtensionServiceServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedHeartBeatServer struct{}
+type UnimplementedExtensionServiceServer struct{}
 
-func (UnimplementedHeartBeatServer) Ping(context.Context, *PingRequest) (*PongResponse, error) {
+func (UnimplementedExtensionServiceServer) Ping(context.Context, *PingRequest) (*PongResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
-func (UnimplementedHeartBeatServer) mustEmbedUnimplementedHeartBeatServer() {}
-func (UnimplementedHeartBeatServer) testEmbeddedByValue()                   {}
+func (UnimplementedExtensionServiceServer) mustEmbedUnimplementedExtensionServiceServer() {}
+func (UnimplementedExtensionServiceServer) testEmbeddedByValue()                          {}
 
-// UnsafeHeartBeatServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to HeartBeatServer will
+// UnsafeExtensionServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ExtensionServiceServer will
 // result in compilation errors.
-type UnsafeHeartBeatServer interface {
-	mustEmbedUnimplementedHeartBeatServer()
+type UnsafeExtensionServiceServer interface {
+	mustEmbedUnimplementedExtensionServiceServer()
 }
 
-func RegisterHeartBeatServer(s grpc.ServiceRegistrar, srv HeartBeatServer) {
-	// If the following call pancis, it indicates UnimplementedHeartBeatServer was
+func RegisterExtensionServiceServer(s grpc.ServiceRegistrar, srv ExtensionServiceServer) {
+	// If the following call pancis, it indicates UnimplementedExtensionServiceServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&HeartBeat_ServiceDesc, srv)
+	s.RegisterService(&ExtensionService_ServiceDesc, srv)
 }
 
-func _HeartBeat_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ExtensionService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PingRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HeartBeatServer).Ping(ctx, in)
+		return srv.(ExtensionServiceServer).Ping(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HeartBeat_Ping_FullMethodName,
+		FullMethod: ExtensionService_Ping_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HeartBeatServer).Ping(ctx, req.(*PingRequest))
+		return srv.(ExtensionServiceServer).Ping(ctx, req.(*PingRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// HeartBeat_ServiceDesc is the grpc.ServiceDesc for HeartBeat service.
+// ExtensionService_ServiceDesc is the grpc.ServiceDesc for ExtensionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var HeartBeat_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "kuadrant.HeartBeat",
-	HandlerType: (*HeartBeatServer)(nil),
+var ExtensionService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "kuadrant.ExtensionService",
+	HandlerType: (*ExtensionServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Ping",
-			Handler:    _HeartBeat_Ping_Handler,
+			Handler:    _ExtensionService_Ping_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

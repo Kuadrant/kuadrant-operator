@@ -29,7 +29,7 @@ import (
 
 type Manager struct {
 	extensions []Extension
-	service    extpb.HeartBeatServer
+	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
 }
 
@@ -43,7 +43,7 @@ func NewManager(names []string, location string, logger logr.Logger) (Manager, e
 	var extensions []Extension
 	var err error
 
-	service := newHeartBeatService()
+	service := newExtensionService()
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
@@ -97,16 +97,16 @@ func (m *Manager) Stop() error {
 	return err
 }
 
-type heartBeatServer struct {
-	extpb.UnimplementedHeartBeatServer
+type extensionService struct {
+	extpb.UnimplementedExtensionServiceServer
 }
 
-func (s *heartBeatServer) Ping(_ context.Context, req *extpb.PingRequest) (*extpb.PongResponse, error) {
+func (s *extensionService) Ping(_ context.Context, req *extpb.PingRequest) (*extpb.PongResponse, error) {
 	return &extpb.PongResponse{
 		In: timestamppb.New(time.Now()),
 	}, nil
 }
 
-func newHeartBeatService() extpb.HeartBeatServer {
-	return &heartBeatServer{}
+func newExtensionService() extpb.ExtensionServiceServer {
+	return &extensionService{}
 }

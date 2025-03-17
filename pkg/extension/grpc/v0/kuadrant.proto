@@ -7,7 +7,7 @@ package kuadrant;
 import "google/protobuf/timestamp.proto";
 
 // The greeting service definition.
-service HeartBeat {
+service ExtensionService {
   // Sends a greeting
   rpc Ping (PingRequest) returns (PongResponse) {}
 }

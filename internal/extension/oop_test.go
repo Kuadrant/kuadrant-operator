@@ -27,7 +27,7 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 		name:       "test",
 		executable: "/bin/sleep",
 		socket:     "1d",
-		service:    newHeartBeatService(),
+		service:    newExtensionService(),
 		logger:     logr.Discard(),
 	}
 

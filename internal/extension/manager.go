@@ -101,7 +101,7 @@ type extensionService struct {
 	extpb.UnimplementedExtensionServiceServer
 }
 
-func (s *extensionService) Ping(_ context.Context, req *extpb.PingRequest) (*extpb.PongResponse, error) {
+func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb.PongResponse, error) {
 	return &extpb.PongResponse{
 		In: timestamppb.New(time.Now()),
 	}, nil

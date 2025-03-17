@@ -28,8 +28,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/health"
-	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 const defaultUnixSocket = ".grpc.sock"
@@ -137,7 +135,6 @@ func (p *OOPExtension) startServer() error {
 		}
 
 		p.server = grpc.NewServer()
-		grpc_health_v1.RegisterHealthServer(p.server, health.NewServer())
 		extpb.RegisterHeartBeatServer(p.server, p.service)
 
 		go func() {

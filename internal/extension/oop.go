@@ -44,9 +44,10 @@ type OOPExtension struct {
 
 func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger) (OOPExtension, error) {
 	var err error
+	var stat os.FileInfo
 
 	executable := fmt.Sprintf("%s/%s/%s", location, name, name)
-	if stat, err := os.Stat(executable); err == nil {
+	if stat, err = os.Stat(executable); err == nil {
 		if stat.IsDir() || stat.Mode()&0111 == 0 {
 			err = fmt.Errorf("%s: Not an executable", executable)
 		}

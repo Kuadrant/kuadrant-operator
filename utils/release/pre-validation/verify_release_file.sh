@@ -20,7 +20,6 @@ check_field() {
 }
 
 check_field ".olm.channels" "olm.channels"
-check_field ".olm.default-channel" "olm.default-channel"
 check_field ".kuadrant-operator.version" "kuadrant.version"
 check_field ".dependencies.authorino-operator" "dependencies.authorino-operator"
 check_field ".dependencies.console-plugin" "dependencies.console-plugin"

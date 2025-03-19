@@ -42,11 +42,16 @@ cd -
 
 channels=$(yq '.olm.channels | join(",")' $env/release.yaml)
 default_channel=$(yq '.olm.default-channel' $env/release.yaml)
-kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $operator_version --channels $channels --default-channel $default_channel
+default_channel_opt="--default-channel $default_channel"
+if [[ "$default_channel" == "null" ]]; then
+  default_channel_opt=""
+fi
+
+kustomize build config/manifests | operator-sdk generate bundle -q --overwrite --version $operator_version --channels $channels $default_channel_opt
 
 openshift_version_annotation_key="com.redhat.openshift.versions"
-# Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
-openshift_supported_versions="v4.12"
+# Supports Openshift v4.14+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
+openshift_supported_versions="v4.14"
 key=$openshift_version_annotation_key value=$openshift_supported_versions yq --inplace '.annotations[strenv(key)] = strenv(value)' bundle/metadata/annotations.yaml
 key=$openshift_version_annotation_key yq --inplace '(.annotations[strenv(key)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
 

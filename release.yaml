@@ -2,7 +2,7 @@ kuadrant-operator:
   version: "0.0.0"
 
 olm:
-  channels: 
+  channels:
   - "alpha"
   default-channel: "alpha"
 

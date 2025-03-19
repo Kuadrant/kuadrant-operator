@@ -20,17 +20,14 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-
-      - name: Read release string version
-        id: release
+      - name: Set environment variables
+        id: set_env_variables
         run: |
-          version=`make read-release-version`
-          echo version=$version >> $GITHUB_OUTPUT
-
+          bash ./utils/release/load_github_envvar.sh
       - name: Print tags
-        run: echo "Git reference name = ${{ github.ref_name }}, release version = ${{ steps.release.outputs.version }}"
-      - name: Verify git reference name matches the release version
-        if: ${{ github.ref_name != steps.release.outputs.version }}
+        run: echo "Git reference name = ${{ github.ref_name }}, kuadrant operator tag = ${{ env.kuadrantOperatorTag }}"
+      - name: Verify git reference name matches the kuadrant operator tag
+        if: ${{ github.ref_name != env.kuadrantOperatorTag }}
         run: exit 1
 
       - name: Install qemu dependency

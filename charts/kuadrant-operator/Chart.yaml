@@ -20,11 +20,11 @@ sources:
 kubeVersion: ">=1.19.0-0"
 type: application
 # The chart version and dependencies will be properly set when the chart is released matching the operator version
-version: "1.1.0-alpha1"
-appVersion: "1.1.0-alpha1"
+version: "1.1.0-dev-eguzki-01"
+appVersion: "1.1.0-dev-eguzki-01"
 dependencies:
   - name: authorino-operator
-    version: 0.16.0
+    version: 0.17.0
     repository: https://kuadrant.io/helm-charts/
   - name: limitador-operator
     version: 0.12.1

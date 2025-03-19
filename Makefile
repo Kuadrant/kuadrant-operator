@@ -444,6 +444,8 @@ bundle-build: ## Build the bundle image.
 bundle-push: ## Push the bundle image.
 	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
 
+##@ Release
+
 .PHONY: prepare-release
 prepare-release: $(YQ) $(CONTROLLER_GEN) $(OPM) $(KUSTOMIZE) $(OPERATOR_SDK) ## Prepare the manifests for OLM and Helm Chart for a release.
 	PATH=$(PROJECT_PATH)/bin:$$PATH; $(PROJECT_PATH)/utils/release/release.sh

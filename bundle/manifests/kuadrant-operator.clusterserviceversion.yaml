@@ -108,14 +108,14 @@ metadata:
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
-    containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-02-25T10:17:48Z"
+    containerImage: quay.io/kuadrant/kuadrant-operator:v0.0.1-dev-eguzki-01
+    createdAt: "2025-03-19T18:17:58Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v0.0.0
+  name: kuadrant-operator.v0.0.1-dev-eguzki-01
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -448,14 +448,14 @@ spec:
                 - /manager
                 env:
                 - name: RELATED_IMAGE_WASMSHIM
-                  value: oci://quay.io/kuadrant/wasm-shim:latest
+                  value: oci://quay.io/kuadrant/wasm-shim:v0.8.1
                 - name: RELATED_IMAGE_CONSOLEPLUGIN
-                  value: quay.io/kuadrant/console-plugin:latest
+                  value: quay.io/kuadrant/console-plugin:v0.0.19
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
-                image: quay.io/kuadrant/kuadrant-operator:latest
+                image: quay.io/kuadrant/kuadrant-operator:v0.0.1-dev-eguzki-01
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -557,8 +557,8 @@ spec:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
   relatedImages:
-  - image: oci://quay.io/kuadrant/wasm-shim:latest
+  - image: oci://quay.io/kuadrant/wasm-shim:v0.8.1
     name: wasmshim
-  - image: quay.io/kuadrant/console-plugin:latest
+  - image: quay.io/kuadrant/console-plugin:v0.0.19
     name: consoleplugin
-  version: 0.0.0
+  version: 0.0.1-dev-eguzki-01

@@ -25,15 +25,15 @@ jobs:
       - name: Create tag
         id: create_tag
         run: |
-          tag_name="${{ env.kuadratantOperatorTag }}"
+          tag_name="${{ env.kuadrantOperatorTag }}"
           git tag $tag_name
           git push origin $tag_name
       - name: Create release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.kuadratantOperatorTag }}
-          tag_name: ${{ env.kuadratantOperatorTag }}
+          name: ${{ env.kuadrantOperatorTag }}
+          tag_name: ${{ env.kuadrantOperatorTag }}
           body: "${{ env.releaseBody }}"
           generate_release_notes: true
           target_commitish: ${{ env.releaseBranch }}

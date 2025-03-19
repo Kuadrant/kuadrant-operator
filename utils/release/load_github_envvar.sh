@@ -40,24 +40,27 @@ wasmShimVersion=$(yq '.dependencies.wasm-shim' $ROOT/release.yaml)
 
 releaseBody="**This release enables installations of Authorino Operator v$authorinoOperatorVersion, Limitador Operator v$limitadorOperatorVersion, DNS Operator v$dnsOperatorVersion, WASM Shim v$wasmShimVersion and ConsolePlugin $consolePluginURL**"
 
-kuadratantOperatorTag="v$(yq '.kuadrant-operator.version' $ROOT/release.yaml)"
-releaseBranch="release-$(echo "$kuadratantOperatorTag" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
+releaseVersion="$(yq '.kuadrant-operator.version' $ROOT/release.yaml)"
+kuadrantOperatorTag="v$(yq '.kuadrant-operator.version' $ROOT/release.yaml)"
+releaseBranch="release-$(echo "$kuadrantOperatorTag" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
 
 prerelease=false
-if [[ "$kuadratantOperatorTag" =~ [-+] ]]; then
+if [[ "$kuadrantOperatorTag" =~ [-+] ]]; then
 	prerelease=true
 fi
 
 if [[ $_log == "1" ]]; then
-	log "kuadratantOperatorTag=$kuadratantOperatorTag"
+	log "kuadrantOperatorTag=$kuadrantOperatorTag"
 	log "releaseBody=$releaseBody"
 	log "prerelease=$prerelease"
 	log "releaseBranch=$releaseBranch"
+	log "releaseVersion=$releaseVersion"
 fi
 
 if [[ $dry_run == "0" ]]; then
-	echo "kuadratantOperatorTag=$kuadratantOperatorTag" >> "$GITHUB_ENV"
+	echo "kuadrantOperatorTag=$kuadrantOperatorTag" >> "$GITHUB_ENV"
 	echo "releaseBody=$releaseBody" >> "$GITHUB_ENV"
 	echo "prerelease=$prerelease" >> "$GITHUB_ENV"
 	echo "releaseBranch=$releaseBranch" >> "$GITHUB_ENV"
+	echo "releaseVersion=$releaseVersion" >> "$GITHUB_ENV"
 fi

@@ -7,56 +7,27 @@ if [[ -z "${ROOT}" ]]; then
 	ROOT=$(pwd)
 fi
 
-dry_run="0"
-_log="0"
-
-while [[ $# -gt 0 ]]; do
-	echo "ARG: \"$1\""
-	if [[ "$1" == "--dry_run" ]]; then
-		dry_run="1"
-	elif [[ "$1" == "--echo" ]]; then
-		_log="1"
-	else
-		grep="$1"
-	fi
-	shift
-done
-
-log() {
-	if [[ $dry_run == "1" ]]; then
-		echo "[DRY_RUN]: $1"
-	else
-		echo "$1"
-	fi
-}
+source $script_dir/shared.sh
 
 log "Loading Environment Variables"
 
-authorinoOperatorVersion=$(yq '.dependencies.authorino-operator' $ROOT/release.yaml)
-consolePluginURL=$(yq '.dependencies.console-plugin' $ROOT/release.yaml)
-dnsOperatorVersion=$(yq '.dependencies.dns-operator' $ROOT/release.yaml)
-limitadorOperatorVersion=$(yq '.dependencies.limitador-operator' $ROOT/release.yaml)
-wasmShimVersion=$(yq '.dependencies.wasm-shim' $ROOT/release.yaml)
-
-releaseBody="**This release enables installations of Authorino Operator v$authorinoOperatorVersion, Limitador Operator v$limitadorOperatorVersion, DNS Operator v$dnsOperatorVersion, WASM Shim v$wasmShimVersion and ConsolePlugin $consolePluginURL**"
-
-kuadratantOperatorTag="v$(yq '.kuadrant-operator.version' $ROOT/release.yaml)"
-releaseBranch="release-$(echo "$kuadratantOperatorTag" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
+releaseBody="**This release enables installations of Authorino Operator v$AUTHORINO_OPERATOR_VERSION, Limitador Operator v$LIMITADOR_OPERATOR_VERSION, DNS Operator v$DNS_OPERATOR_VERSION, WASM Shim v$WASM_SHIM_VERSION and ConsolePlugin $CONSOLEPLUGIN_URL**"
+releaseBranch="release-$(echo "$KUADRANT_OPERATOR_TAG" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
 
 prerelease=false
-if [[ "$kuadratantOperatorTag" =~ [-+] ]]; then
+if [[ "$KUADRANT_OPERATOR_TAG" =~ [-+] ]]; then
 	prerelease=true
 fi
 
 if [[ $_log == "1" ]]; then
-	log "kuadratantOperatorTag=$kuadratantOperatorTag"
+	log "kuadrantOperatorTag=$KUADRANT_OPERATOR_TAG"
 	log "releaseBody=$releaseBody"
 	log "prerelease=$prerelease"
 	log "releaseBranch=$releaseBranch"
 fi
 
 if [[ $dry_run == "0" ]]; then
-	echo "kuadratantOperatorTag=$kuadratantOperatorTag" >> "$GITHUB_ENV"
+	echo "kuadrantOperatorTag=$KUADRANT_OPERATOR_TAG" >> "$GITHUB_ENV"
 	echo "releaseBody=$releaseBody" >> "$GITHUB_ENV"
 	echo "prerelease=$prerelease" >> "$GITHUB_ENV"
 	echo "releaseBranch=$releaseBranch" >> "$GITHUB_ENV"

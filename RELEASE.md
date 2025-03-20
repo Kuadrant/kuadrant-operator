@@ -19,6 +19,11 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
 3. Once the PR is merged, a release workflow will be triggered tagging and publishing the [Github release](https://github.com/Kuadrant/kuadrant-operator/releases)
    it will also build the images and packages and publish them on Quay, Helm repository.
 
+_**IMPORTANT: **_
+The release note are incorrectly generated, and needs to be manually regenerated. 
+This requires editing the release notes in the GitHub UI, and selecting the correct previous tag.
+Resolution of this issue is tracked in [Auto generation of release notes failure](https://github.com/Kuadrant/kuadrant-operator/issues/1211).
+
 ### Notes
 * It's not possible to cherry-pick commits, the workflow will pick a branch/tag/commit and all the history behind to the PR.
 
@@ -47,6 +52,11 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
    * Creates the GitHub release
    * Creates tags
 6. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
+
+_**IMPORTANT: **_
+The release note are incorrectly generated, and needs to be manually regenerated. 
+This requires editing the release notes in the GitHub UI, and selecting the correct previous tag.
+Resolution of this issue is tracked in [Auto generation of release notes failure](https://github.com/Kuadrant/kuadrant-operator/issues/1211).
 
 ## Release file format.
 This example of the `release.yaml` file uses tag `v1.0.1` as reference.

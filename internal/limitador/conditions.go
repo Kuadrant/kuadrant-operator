@@ -4,7 +4,7 @@ import (
 	"github.com/go-logr/logr"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 )

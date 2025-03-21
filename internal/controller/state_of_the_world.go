@@ -461,7 +461,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
-			NewMTLSReconciler(b.manager, b.client, b.manager.GetRESTMapper()).Subscription().Reconcile,
+			NewMTLSReconciler(b.manager, b.client).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}

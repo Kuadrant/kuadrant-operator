@@ -28,6 +28,10 @@ jobs:
           tag_name="${{ env.kuadrantOperatorTag }}"
           git tag $tag_name
           git push origin $tag_name
+      - name: Generate release body
+        id: generate_release_body
+        run: |
+          GITHUB_TOKEN=${{ secrets.KUADRANT_WORKFLOWS_PAT }} bash ./utils/release/github-release-changelog.sh
       - name: Create release
         id: create_release
         uses: softprops/action-gh-release@v2
@@ -35,6 +39,10 @@ jobs:
           name: ${{ env.kuadrantOperatorTag }}
           tag_name: ${{ env.kuadrantOperatorTag }}
           body: "${{ env.releaseBody }}"
-          generate_release_notes: true
+          # The generate of release notes does not pick up the correct tag to compare.
+          # There is an open PR within softprops/action-gh-release that would solve the problem.
+          # Till then we cannot use the generate release notes feature.
+          # https://github.com/softprops/action-gh-release/pull/372
+          generate_release_notes: false
           target_commitish: ${{ env.releaseBranch }}
           prerelease: ${{ env.prerelease }}

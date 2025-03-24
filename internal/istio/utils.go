@@ -3,7 +3,6 @@ package istio
 import (
 	"encoding/json"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -169,38 +168,6 @@ func LinkGatewayToWasmPlugin(objs controller.Store) machinery.LinkFunc {
 			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(wasmPlugin.Spec.TargetRefs, wasmPlugin.GetNamespace()))
 		},
 	}
-}
-
-/*
-	func LinkPeerAuthenticationToGateway(objs controller.Store) machinery.LinkFunc {
-		peerAuthentications := lo.Map(objs.FilterByGroupKind(PeerAuthenticationGroupKind), controller.ObjectAs[machinery.Object])
-
-		return machinery.LinkFunc{
-			From: PeerAuthenticationGroupKind,
-			To:   machinery.GatewayGroupKind,
-			Func: func(child machinery.Object) []machinery.Object {
-				gateway := child.(*controller.RuntimeObject).Object.(*gatewayapiv1.Gateway)
-				return lo.Filter(peerAuthentications, func(_ machinery.Object, _ int) bool {
-					return gateway.Spec.GatewayClassName == "istio"
-				})
-			},
-		}
-	}
-*/
-func LinkDeploymentToAuthorino(objs controller.Store) machinery.LinkFunc {
-	authorinos := lo.Map(objs.FilterByGroupKind(v1beta1.AuthorinoGroupKind), controller.ObjectAs[machinery.Object])
-
-	return machinery.LinkFunc{
-		From: v1beta1.AuthorinoGroupKind,
-		To:   v1beta1.DeploymentGroupKind,
-		Func: func(child machinery.Object) []machinery.Object {
-			gateway := child.(*controller.RuntimeObject).Object.(*gatewayapiv1.Gateway)
-			return lo.Filter(authorinos, func(_ machinery.Object, _ int) bool {
-				return gateway.Spec.GatewayClassName == "istio"
-			})
-		},
-	}
-
 }
 
 func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {

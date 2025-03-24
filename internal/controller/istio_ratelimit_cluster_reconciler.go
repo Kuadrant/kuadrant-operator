@@ -56,10 +56,6 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	if kuadrant == nil {
 		return nil
 	}
-	mtls := false
-	if kuadrant != nil && kuadrant.Spec.MTLS != nil && kuadrant.Spec.MTLS.Enable {
-		mtls = true
-	}
 
 	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
 		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
@@ -90,7 +86,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway, mtls)
+		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway, kuadrant.IsMTLSEnabled())
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy filter")
 			continue

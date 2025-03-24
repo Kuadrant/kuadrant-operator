@@ -64,48 +64,50 @@ func (r *MTLSReconciler) Subscription() *controller.Subscription {
 //+kubebuilder:rbac:groups=security.istio.io,resources=peerauthentications,verbs=get;list;watch;create;update;patch;delete
 
 func (r *MTLSReconciler) Run(eventCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-
 	logger := controller.LoggerFromContext(eventCtx).WithName("MTLSReconciler")
 	logger.V(1).Info("reconciling mtls", "status", "started")
 	defer logger.V(1).Info("reconciling mtls", "status", "completed")
 	targetables := topology.Targetables()
-	gateways := targetables.Items(func(o machinery.Object) bool {
-		gateway, ok := o.(*machinery.Gateway)
-		return ok && gateway.Spec.GatewayClassName == "istio"
+	// Create monitors for each gateway instance of each gateway class
+	gatewayClasses := topology.Targetables().Items(func(o machinery.Object) bool {
+		return o.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind
 	})
-
 	httpRouteRules := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.HTTPRouteRule)
 		return ok
 	})
 	anyAttachedAuthorRateLimitPolicy := false
-	policies := make([]machinery.Policy, 0)
 outer:
-	for _, gateway := range gateways {
-		for _, httpRouteRule := range httpRouteRules {
-			paths := targetables.Paths(gateway, httpRouteRule)
-			for _, path := range paths {
-				policies = kuadrantv1.PoliciesInPath(path, func(policy machinery.Policy) bool {
-					if _, ok := policy.(*kuadrantv1.AuthPolicy); ok {
-						return true
+	for _, gatewayClass := range gatewayClasses {
+		gateways := topology.All().Children(gatewayClass)
+		gwClass := gatewayClass.(*machinery.GatewayClass)
+		if gwClass.GatewayClass.Spec.ControllerName == istioGatewayControllerName {
+			for _, gateway := range gateways {
+				for _, httpRouteRule := range httpRouteRules {
+					paths := targetables.Paths(gateway, httpRouteRule)
+					for _, path := range paths {
+						policies := kuadrantv1.PoliciesInPath(path, func(policy machinery.Policy) bool {
+							if _, ok := policy.(*kuadrantv1.AuthPolicy); ok {
+								return true
+							}
+							if _, ok := policy.(*kuadrantv1.RateLimitPolicy); ok {
+								return true
+							}
+							return false
+						})
+						if len(policies) > 0 {
+							anyAttachedAuthorRateLimitPolicy = true
+							break outer
+						}
 					}
-					if _, ok := policy.(*kuadrantv1.RateLimitPolicy); ok {
-						return true
-					}
-					return false
-				})
-				if len(policies) > 0 {
-					anyAttachedAuthorRateLimitPolicy = true
-					break outer
 				}
 			}
 		}
-
 	}
 
 	// Check that a kuadrant resource exists, and mtls enabled, and that there is at least one RateLimit or Auth Policy attached.
 	kObj := GetKuadrantFromTopology(topology)
-	if kObj == nil && kObj.Spec.MTLS == nil && (!kObj.Spec.MTLS.Enable || anyAttachedAuthorRateLimitPolicy == false) {
+	if !kObj.IsMTLSEnabled() || !anyAttachedAuthorRateLimitPolicy {
 		defer logger.V(1).Info("mtls not enabled or applicable", "status", "completed")
 		peerAuthentications := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 			if peerAuthentication, ok := item.(*PeerAuthentication); ok {
@@ -180,6 +182,16 @@ outer:
 				Name:      "default",
 				Namespace: kObj.Namespace,
 				Labels:    KuadrantManagedObjectLabels(),
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         kObj.GroupVersionKind().GroupVersion().String(),
+						Kind:               kObj.GroupVersionKind().Kind,
+						Name:               kObj.Name,
+						UID:                kObj.UID,
+						BlockOwnerDeletion: ptr.To(true),
+						Controller:         ptr.To(true),
+					},
+				},
 			},
 			Spec: securityv1beta1.PeerAuthentication{
 				Mtls: &securityv1beta1.PeerAuthentication_MutualTLS{
@@ -190,7 +202,7 @@ outer:
 
 		logger.Info("creating peer authentication resource", "status", "processing")
 
-		err = r.CreateResource(eventCtx, peerAuth)
+		err = r.ReconcileResource(eventCtx, &istiosecurity.PeerAuthentication{}, peerAuth, reconcilers.CreateOnlyMutator)
 		if err != nil && !apiErrors.IsAlreadyExists(err) {
 			logger.Error(err, "failed to create peer authentication resource", "status", "error")
 			return err

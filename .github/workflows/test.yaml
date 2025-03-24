@@ -288,16 +288,12 @@ jobs:
       - name: Check bundles and manifests
         run: make verify-prepare-release
 
-  verify-manifests:
-    name: Validate set of manifests
+  verify-controller-manifests:
+    name: Validate set of controller-gen manifests
     if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
-      - name: Install gettext-base
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gettext-base
       - name: Set up Go 1.22.x
         uses: actions/setup-go@v4
         with:
@@ -306,7 +302,41 @@ jobs:
       - name: Checkout code at git ref
         uses: actions/checkout@v4
       - name: Check bundles and manifests
-        run: make verify-manifests
+        run: make verify-controller-manifests
+
+  verify-bundle:
+    name: Verify bundle
+    if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Run make verify-bundle
+        run: |
+          make verify-bundle
+
+  verify-helm-charts:
+    name: Verify helm charts
+    if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Run make verify-helm-charts
+        run: |
+          make verify-helm-charts
 
   verify-fmt:
     name: Verify fmt

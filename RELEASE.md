@@ -9,9 +9,9 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
    filling the following fields:
    - gitRef: Select the branch/tag/commit where you want to cut a release from.
    - kuadrantOperatorVersion: the [Semantic Version](https://semver.org/) of the desired release.
-   - authorinoOperatorVersion: Authorino Operator bundle version (X.Y.Z)
-   - limitadorOperatorVersion: Limitador Operator bundle version (X.Y.Z)
-   - dnsOperatorVersion: DNS Operator bundle version (X.Y.Z)
+   - authorinoOperatorVersion: Authorino Operator version (X.Y.Z)
+   - limitadorOperatorVersion: Limitador Operator version (X.Y.Z)
+   - dnsOperatorVersion: DNS Operator version (X.Y.Z)
    - wasmShimVersion: WASM Shim version (X.Y.Z)
    - consolePluginVersion: ConsolePlugin version (X.Y.Z)
    - olmChannel: This will set the OLM `channels` and `default-channel` annotations

@@ -2,7 +2,7 @@
 
 # Access token will be required. Check to ensure that is it provied
 if [[ -z "$GITHUB_TOKEN" ]]; then
-	echo "GITHUB_TOKEN most be set"
+	echo "GITHUB_TOKEN must be set"
 fi
 auth_header="-H Authorization: Bearer $GITHUB_TOKEN"
 
@@ -10,9 +10,9 @@ script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 source $script_dir/shared.sh
 
 # Get latest release version
-log "Getti previous release version tag"
+log "Getting 'latest' release version tag"
 previous_tag_name=$(curl -L "https://api.github.com/repos/kuadrant/kuadrant-operator/releases/latest" -H "Accept: apllication/vnd.github+json" | yq '.tag_name')
-log "Previous released version is $previous_tag_name"
+log "'latest' released version is $previous_tag_name"
 
 # Get current release tag
 log "Getting this releases tag"
@@ -28,7 +28,8 @@ EOF
 
 data=$(curl -L "https://api.github.com/repos/kuadrant/kuadrant-operator/releases/generate-notes" -X POST -H "Accept: apllication/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" -d "$payload")
 
-release_body=$(echo $data | yq '.body')
+release_body_data=$(echo $data | yq '.body')
+release_body="**This release enables installations of Authorino Operator v$AUTHORINO_OPERATOR_VERSION, Limitador Operator v$LIMITADOR_OPERATOR_VERSION, DNS Operator v$DNS_OPERATOR_VERSION, WASM Shim v$WASM_SHIM_VERSION and ConsolePlugin $CONSOLEPLUGIN_URL**$release_body_data"
 
 if [[ $_log == "1" ]]; then
 	log "releaseBody=$release_body"

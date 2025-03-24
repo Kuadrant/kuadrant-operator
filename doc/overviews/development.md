@@ -192,14 +192,14 @@ The `make catalog` target accepts the following variables:
 | `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL      | `quay.io/kuadrant/limitador-operator-bundle:latest` |
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL      | `quay.io/kuadrant/authorino-operator-bundle:latest` |
 | `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL            | `quay.io/kuadrant/dns-operator-bundle:latest`       |
-| `DEFAULT_CHANNEL`               | Catalog default channel            | `alpha`                                             |
+| `CHANNEL`                       | Channel used within the catalog    | `alpha`                                             |
 
 ```sh
 make catalog [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest] \
             [LIMITADOR_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/limitador-operator-bundle:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
             [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
-            [DEFAULT_CHANNEL=alpha]
+            [CHANNEL=alpha]
 ```
 
 * Build the catalog image from the manifests

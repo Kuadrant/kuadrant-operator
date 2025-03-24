@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-if [[ -z "${env}" ]]; then
-	echo "[WARNING] env var env not set, using $(pwd)"
-	env=$(pwd)
-fi
-
 dry_run="0"
 _log="0"
 
@@ -27,6 +22,16 @@ log() {
 		echo "$1"
 	fi
 }
+
+if [[ -z "${env}" ]]; then
+	echo "[WARNING] env var env not set, using $(pwd)"
+	env=$(pwd)
+fi
+
+if [ ! -f $env/release.yaml ]; then
+  >&2 echo "🚨 File $env/release.yaml does not exist"
+  exit 1
+fi
 
 AUTHORINO_OPERATOR_VERSION=$(yq '.dependencies.authorino-operator' $env/release.yaml)
 CONSOLEPLUGIN_VERSION=$(yq '.dependencies.console-plugin' $env/release.yaml)

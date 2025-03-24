@@ -39,6 +39,7 @@ jobs:
           name: ${{ env.kuadrantOperatorTag }}
           tag_name: ${{ env.kuadrantOperatorTag }}
           body: "${{ env.releaseBody }}"
+          # TODO: https://github.com/Kuadrant/kuadrant-operator/issues/1229
           # The generate of release notes does not pick up the correct tag to compare.
           # There is an open PR within softprops/action-gh-release that would solve the problem.
           # Till then we cannot use the generate release notes feature.

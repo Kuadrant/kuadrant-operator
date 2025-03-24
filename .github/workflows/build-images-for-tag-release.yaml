@@ -21,7 +21,6 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
       - name: Set environment variables
-        id: set_env_variables
         run: |
           bash ./utils/release/load_github_envvar.sh
       - name: Print tags
@@ -139,7 +138,6 @@ jobs:
           # following sub-shells running make target should have yq already installed
           make yq
       - name: Set environment variables
-        id: set_env_variables
         run: |
           bash ./utils/release/load_github_envvar.sh
       - name: Build catalog variables

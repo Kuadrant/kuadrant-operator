@@ -145,7 +145,7 @@ jobs:
         run: |
           bundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.kuadrantOperatorTag }}
           echo bundleImg=$bundleImg >> $GITHUB_OUTPUT
-          limitadorBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/limitador-operator-bundle:v${{ env.limitadorOperatorTag }}
+          limitadorBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/limitador-operator-bundle:v${{ env.limitadorOperatorVersion }}
           echo limitadorBundleImg=$limitadorBundleImg >> $GITHUB_OUTPUT
           authorinoBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/authorino-operator-bundle:v${{ env.authorinoOperatorVersion }}
           echo authorinoBundleImg=$authorinoBundleImg >> $GITHUB_OUTPUT

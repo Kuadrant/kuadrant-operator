@@ -140,7 +140,7 @@ jobs:
       - name: Set environment variables
         run: |
           bash ./utils/release/load_github_envvar.sh
-      - name: Build catalog variables
+      - name: Set catalog image variables
         id: catalog-variables
         run: |
           bundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.kuadrantOperatorTag }}

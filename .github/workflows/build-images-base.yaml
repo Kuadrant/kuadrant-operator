@@ -206,7 +206,7 @@ jobs:
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             RELATED_IMAGE_CONSOLEPLUGIN=${{ inputs.consolePluginImageURL }} \
-            DEFAULT_CHANNEL=${{ inputs.defaultChannel }}
+            CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to container registry

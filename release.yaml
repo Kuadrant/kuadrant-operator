@@ -1,14 +1,12 @@
 kuadrant-operator:
-  version: "0.0.0"
-
+  version: "0.0.1-dev-03"
 olm:
   channels:
-  - "alpha"
-  default-channel: "alpha"
-
+    - "stable"
+  default-channel: "stable"
 dependencies:
-  authorino-operator: "0.0.0"
-  console-plugin: "0.0.0"
-  dns-operator: "0.0.0"
-  limitador-operator: "0.0.0"
-  wasm-shim: "0.0.0"
+  authorino-operator: "0.17.0"
+  console-plugin: "0.0.18"
+  dns-operator: "0.12.0"
+  limitador-operator: "0.13.0"
+  wasm-shim: "0.9.0"

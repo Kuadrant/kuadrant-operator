@@ -412,7 +412,7 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 .PHONY: bundle-post-generate
 bundle-post-generate: OPENSHIFT_VERSIONS_ANNOTATION_KEY="com.redhat.openshift.versions"
 # Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
-bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.12"
+bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.14"
 bundle-post-generate: $(YQ) $(OPM)
 	# Set Openshift version in bundle annotations
 	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml

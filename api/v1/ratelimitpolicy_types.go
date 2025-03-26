@@ -19,6 +19,8 @@ package v1
 import (
 	"time"
 
+	transformer "github.com/kuadrant/kuadrant-operator/internal/cel"
+
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -237,7 +239,14 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return utils.Map(l.Counters, func(counter Counter) string { return "descriptors[0]." + string(counter.Expression) })
+	return utils.Map(l.Counters, func(counter Counter) string {
+		str := string(counter.Expression)
+		if transformer.SafeToSimplyPrefix(str) {
+			return "descriptors[0]." + str
+		} else {
+			return str
+		}
+	})
 }
 
 var _ MergeableRule = &Limit{}

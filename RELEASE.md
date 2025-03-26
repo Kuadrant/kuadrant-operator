@@ -1,30 +1,95 @@
 # How to release Kuadrant Operator
 
-## Process
+To release a version _“vX.Y.Z”_ of Kuadrant Operator in GitHub and Quay.io, there are two options, a manual and an automated process.
+For both processes, first make sure every [Kuadrant Operator dependency](https://github.com/Kuadrant/kuadrant-operator/blob/main/RELEASE.md#kuadrant-operator-dependencies) has been already released.
 
-To release a version _“v0.W.Z”_ of Kuadrant Operator in GitHub and Quay.io, follow these steps:
+## Automated Workflow
 
-1. Kuadrant dependencies need to be released first:
+1. Run the GHA  [Automated Release](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/automated-release.yaml)
+   filling the following fields:
+   - gitRef: Select the branch/tag/commit where you want to cut a release from.
+   - kuadrantOperatorVersion: the [Semantic Version](https://semver.org/) of the desired release.
+   - authorinoOperatorVersion: Authorino Operator version (X.Y.Z)
+   - limitadorOperatorVersion: Limitador Operator version (X.Y.Z)
+   - dnsOperatorVersion: DNS Operator version (X.Y.Z)
+   - wasmShimVersion: WASM Shim version (X.Y.Z)
+   - consolePluginVersion: ConsolePlugin version (X.Y.Z)
+   - olmChannel: This will set the OLM `channels` and `default-channel` annotations
+2. The workflow will create a Pull Request that should be peer-reviewed and approved by a member of the Kuadrant team, focusing on the changes made in Kustomize config, OLM bundles and Helm Charts.
+3. Once the PR is merged, a release workflow will be triggered tagging and publishing the [Github release](https://github.com/Kuadrant/kuadrant-operator/releases)
+   it will also build the images and packages and publish them on Quay, Helm repository.
+
+_**IMPORTANT: **_
+The release note are incorrectly generated, and needs to be manually regenerated. 
+This requires editing the release notes in the GitHub UI, and selecting the correct previous tag.
+Resolution of this issue is tracked in [Auto generation of release notes failure](https://github.com/Kuadrant/kuadrant-operator/issues/1211).
+
+### Notes
+* It's not possible to cherry-pick commits, the workflow will pick a branch/tag/commit and all the history behind to the PR.
+
+## Manual Workflow
+
+### Local steps
+
+1. Create the `release-vX.Y` branch, if the branch does not already exist. 
+2. Push the `release-vX.Y` to the remote (kuadrant/kuadrant-operator)
+3. Create the `release-vX.Y.Z-rc(n)` branch with `release-vX.Y` as the base.
+4. Cherry-pick commits to the `kudrant-vX.Y.Z-rc(n)` from the relevant sources, i.e. `main`.
+5. Update the applicable version in the [release.yaml](https://github.com/Kuadrant/kuadrant-operator/blob/main/RELEASE.md#release-file-format).
+6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)`. If you run into rate limit errors, set the env `GITHUB_TOKEN` with your PAT.
+
+### Remote steps
+
+1. Open a PR against the `release-vX.Y` branch with the changes from `release-vX.Y.Z-rc(n)` branch. 
+2. PR verification checks will run.
+3. Get manual review of PR with focus on changes in these areas:
+   * `./bundle.Dockerfile`
+   * `./bundle`
+   * `./config`
+   * `./charts/`
+4. Merge PR
+5. Run the Release Workflow on the `release-vX.Y`. This does the following:
+   * Creates the GitHub release
+   * Creates tags
+6. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
+
+_**IMPORTANT: **_
+The release note are incorrectly generated, and needs to be manually regenerated. 
+This requires editing the release notes in the GitHub UI, and selecting the correct previous tag.
+Resolution of this issue is tracked in [Auto generation of release notes failure](https://github.com/Kuadrant/kuadrant-operator/issues/1211).
+
+## Release file format.
+This example of the `release.yaml` file uses tag `v1.0.1` as reference.
+
+```yaml
+# FILE: ./release.yaml
+kuadrant-operator:
+  version: "1.0.1"
+olm:
+  default-channel: "stable"
+  channels:
+    - "stable"
+dependencies:
+  authorino-operator: "0.16.0"
+  console-plugin: "0.0.14"
+  dns-operator: "0.12.0"
+  limitador-operator: "0.12.1"
+  wasm-shim: "0.8.1"
+```
+
+The `kuadrant-operator` section relates to the release version of the kuadrant operator.
+While the `olm` section relates to fields required for building the olm catalogs.
+And the `dependencies` section relates to the released versions of the subcomponents that will be included in a release.
+There are validation steps during the `make prepare-release` that require the dependencies to be release before generating the release of the Kuadrant operator.
+
+## Kuadrant Operator Dependencies
    * [Authorino Operator](https://github.com/Kuadrant/authorino-operator/blob/main/RELEASE.md).
    * [Limitador Operator](https://github.com/Kuadrant/limitador-operator/blob/main/RELEASE.md).
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md).
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/).
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin).
 
-2. Run the GHA [Release operator](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/release.yaml); make
-   sure to fill all the fields:
-
-    * Branch containing the release workflow file – default: `main`
-    * Commit SHA or branch name of the operator to release – usually: `main`
-    * Operator version to release (without prefix) – i.e. `0.W.Z`
-    * Kuadrant dependencies (WASM Shim, Console Plugin, Authorino, Limitador and DNS operators) versions (without prefix) – i.e. `0.X.Y`
-    * If the release is a prerelease
-
-3. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
-
-4. Verify the new version can be installed from the catalog image, see [Verify OLM Deployment](#verify-olm-deployment)
-
-5. Release to the [community operator index catalogs](#community-operator-index-catalogs).
+## Verification 
 
 ### Verify OLM Deployment
 
@@ -66,7 +131,7 @@ image: quay.io/kuadrant/kuadrant-operator:v1.0.0-rc4
 image: quay.io/kuadrant/limitador-operator:v0.12.0
 ```
 
-### Community Operator Index Catalogs
+## Release Community Operator Index Catalogs
 
 - [Operatorhub Community Operators](https://github.com/k8s-operatorhub/community-operators)
 - [Openshift Community Operators](http://github.com/redhat-openshift-ecosystem/community-operators-prod)
@@ -83,3 +148,4 @@ The usual steps are:
     * Copy the bundle files from `github.com/kuadrant/kuadrant-operator/tree/v0.W.Z/bundle`
     * Copy `github.com/kuadrant/kuadrant-operator/tree/v0.W.Z/bundle.Dockerfile` with the proper fix to the COPY commands
       (i.e. remove /bundle from the paths)
+

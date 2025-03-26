@@ -97,8 +97,6 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-RELEASE_FILE = $(PROJECT_PATH)/make/release.mk
-
 # Kuadrant Namespace
 KUADRANT_NAMESPACE ?= kuadrant-system
 OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
@@ -414,7 +412,7 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 .PHONY: bundle-post-generate
 bundle-post-generate: OPENSHIFT_VERSIONS_ANNOTATION_KEY="com.redhat.openshift.versions"
 # Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
-bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.12"
+bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.14"
 bundle-post-generate: $(YQ) $(OPM)
 	# Set Openshift version in bundle annotations
 	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
@@ -446,38 +444,12 @@ bundle-build: ## Build the bundle image.
 bundle-push: ## Push the bundle image.
 	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
 
+##@ Release
+
 .PHONY: prepare-release
-prepare-release: ## Prepare the manifests for OLM and Helm Chart for a release.
-	echo -e "#Release default values\\n\
-AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION)\\n\
-AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG)\\n\
-LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION)\\n\
-LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG)\\n\
-DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION)\\n\
-DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)\\n\
-WASM_SHIM_VERSION=$(WASM_SHIM_VERSION)\\n\
-RELATED_IMAGE_WASMSHIM=$(RELATED_IMAGE_WASMSHIM)\\n\
-RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN)\\n\
-IMG=$(IMG)\\n\
-BUNDLE_VERSION=$(BUNDLE_VERSION)\\n\
-BUNDLE_IMG=$(BUNDLE_IMG)\\n\
-CATALOG_IMG=$(CATALOG_IMG)\\n\
-CHANNELS=$(CHANNELS)\\n\
-BUNDLE_CHANNELS=--channels=$(CHANNELS)\\n\
-VERSION=$(VERSION)" > $(RELEASE_FILE)
-	$(MAKE) bundle VERSION=$(VERSION) \
-		AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION) \
-		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
-		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
-		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
-		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN) \
-	$(MAKE) helm-build VERSION=$(VERSION) \
-		AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION) \
-		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
-		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
-		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
-		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN)
-	$(MAKE) update-catalogsource CATALOG_IMG=$(CATALOG_IMG)		
+prepare-release: $(YQ) $(CONTROLLER_GEN) $(OPM) $(KUSTOMIZE) $(OPERATOR_SDK) ## Prepare the manifests for OLM and Helm Chart for a release.
+	PATH=$(PROJECT_PATH)/bin:$$PATH; $(PROJECT_PATH)/utils/release/release.sh
+
 
 .PHONY: bundle-operator-image-url
 bundle-operator-image-url: $(YQ) ## Read operator image reference URL from the manifest bundle.

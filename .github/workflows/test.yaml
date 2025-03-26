@@ -274,7 +274,7 @@ jobs:
           kubectl get pods -n kuadrant-system
   verify-release:
     name: Validate release data
-    if: startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    if: ${{ startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true' }}
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
@@ -290,7 +290,7 @@ jobs:
 
   verify-controller-manifests:
     name: Validate set of controller-gen manifests
-    if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    if: ${{ !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true' }}
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
@@ -306,7 +306,7 @@ jobs:
 
   verify-bundle:
     name: Verify bundle
-    if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    if: ${{ !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true' }}
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
@@ -323,7 +323,7 @@ jobs:
 
   verify-helm-charts:
     name: Verify helm charts
-    if: !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true'
+    if: ${{ !startsWith(github.ref_name, 'release-v') && needs.pre-job.outputs.should_skip != 'true' }}
     needs: pre-job
     runs-on: ubuntu-latest
     steps:

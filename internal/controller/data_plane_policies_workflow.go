@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"fmt"
+	"strings"
+
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -48,6 +51,9 @@ var (
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 	}
+
+	istioGatewayControllerNames        = getGatewayControllerNames("ISTIO_GATEWAY_CONTROLLER_NAMES", defaultIstioGatewayControllerName)
+	envoyGatewayGatewayControllerNames = getGatewayControllerNames("ENVOY_GATEWAY_GATEWAY_CONTROLLER_NAMES", defaultEnvoyGatewayGatewayControllerName)
 )
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;update;patch
@@ -117,4 +123,25 @@ func gatewayComponentsToSync(gateway *machinery.Gateway, componentGroupKind sche
 		return []string{fmt.Sprintf("%s (%s/%s)", componentGroupKind.Kind, gateway.GetNamespace(), gateway.GetName())}
 	}
 	return nil
+}
+
+func getGatewayControllerNames(envName string, defaultGatewayControllerName string) []gatewayapiv1.GatewayController {
+	envValue := env.GetString(envName, defaultGatewayControllerName)
+	gatewayControllers := lo.Map(strings.Split(envValue, ","), func(c string, _ int) gatewayapiv1.GatewayController {
+		return gatewayapiv1.GatewayController(strings.TrimSpace(c))
+	})
+
+	if envValue == defaultGatewayControllerName {
+		return gatewayControllers
+	}
+	return append(gatewayControllers, gatewayapiv1.GatewayController(defaultGatewayControllerName))
+}
+
+func defaultGatewayControllerName(controllerName gatewayapiv1.GatewayController) gatewayapiv1.GatewayController {
+	if lo.Contains(istioGatewayControllerNames, controllerName) {
+		return defaultIstioGatewayControllerName
+	} else if lo.Contains(envoyGatewayGatewayControllerNames, controllerName) {
+		return defaultEnvoyGatewayGatewayControllerName
+	}
+	return "Unknown"
 }

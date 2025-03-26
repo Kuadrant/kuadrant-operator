@@ -74,7 +74,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, gatewayClass.Spec.ControllerName == defaultIstioGatewayControllerName
+		return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

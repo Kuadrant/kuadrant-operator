@@ -174,7 +174,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 
 		// ignore if not an envoy gateway gateway
-		if gatewayClass.Spec.ControllerName != defaultEnvoyGatewayGatewayControllerName {
+		if !lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName) {
 			continue
 		}
 

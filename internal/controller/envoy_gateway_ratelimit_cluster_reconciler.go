@@ -74,7 +74,7 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, gatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName
+		return gateway, gatewayClass.Spec.ControllerName == defaultEnvoyGatewayGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

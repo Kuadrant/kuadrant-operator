@@ -18,9 +18,8 @@ import (
 )
 
 const (
-	// make these configurable?
-	istioGatewayControllerName        = "istio.io/gateway-controller"
-	envoyGatewayGatewayControllerName = "gateway.envoyproxy.io/gatewayclass-controller"
+	defaultIstioGatewayControllerName        = "istio.io/gateway-controller"
+	defaultEnvoyGatewayGatewayControllerName = "gateway.envoyproxy.io/gatewayclass-controller"
 )
 
 var (

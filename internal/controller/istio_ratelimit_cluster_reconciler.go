@@ -74,7 +74,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, gatewayClass.Spec.ControllerName == istioGatewayControllerName
+		return gateway, gatewayClass.Spec.ControllerName == defaultIstioGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

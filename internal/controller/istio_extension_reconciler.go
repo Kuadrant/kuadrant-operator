@@ -179,7 +179,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 
 		// ignore if not an istio gateway
-		if gatewayClass.Spec.ControllerName != istioGatewayControllerName {
+		if gatewayClass.Spec.ControllerName != defaultIstioGatewayControllerName {
 			continue
 		}
 

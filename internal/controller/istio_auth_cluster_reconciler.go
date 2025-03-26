@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -74,7 +75,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, gatewayClass.Spec.ControllerName == defaultIstioGatewayControllerName
+		return gateway, slices.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

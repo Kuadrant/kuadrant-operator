@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -74,7 +75,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) Reconcile(ctx context.Context, _ []c
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, gatewayClass.Spec.ControllerName == defaultEnvoyGatewayGatewayControllerName
+		return gateway, slices.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName)
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

@@ -2,7 +2,7 @@
 
 # Access token will be required. Check to ensure that is it provied
 if [[ -z "$GITHUB_TOKEN" ]]; then
-	echo "GITHUB_TOKEN must be set"
+  echo "GITHUB_TOKEN must be set"
 fi
 auth_header="-H Authorization: Bearer $GITHUB_TOKEN"
 
@@ -29,12 +29,16 @@ EOF
 data=$(curl -L "https://api.github.com/repos/kuadrant/kuadrant-operator/releases/generate-notes" -X POST -H "Accept: apllication/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" -d "$payload")
 
 release_body_data=$(echo $data | yq '.body')
-release_body="**This release enables installations of Authorino Operator v$AUTHORINO_OPERATOR_VERSION, Limitador Operator v$LIMITADOR_OPERATOR_VERSION, DNS Operator v$DNS_OPERATOR_VERSION, WASM Shim v$WASM_SHIM_VERSION and ConsolePlugin $CONSOLEPLUGIN_URL**$release_body_data"
+release_body="**This release enables installations of Authorino Operator v$AUTHORINO_OPERATOR_VERSION, Limitador Operator v$LIMITADOR_OPERATOR_VERSION, DNS Operator v$DNS_OPERATOR_VERSION, WASM Shim v$WASM_SHIM_VERSION and ConsolePlugin v$CONSOLEPLUGIN_VERSION**$release_body_data"
 
 if [[ $_log == "1" ]]; then
-	log "releaseBody=$release_body"
+  log "releaseBody=$release_body"
 fi
 
 if [[ $dry_run == "0" ]]; then
-	echo "releaseBody=$release_body" >> "$GITHUB_ENV"
+  # For multiline strings, you may use a delimiter
+  # https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/workflow-commands-for-github-actions#multiline-strings
+  echo "releaseBody<<EOF" >> $GITHUB_ENV
+  echo "$release_body" >> $GITHUB_ENV
+  echo "EOF" >> $GITHUB_ENV
 fi

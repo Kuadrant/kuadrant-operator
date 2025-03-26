@@ -21,7 +21,6 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
       - name: Set environment variables
-        id: set_env_variables
         run: |
           bash ./utils/release/load_github_envvar.sh
       - name: Print tags
@@ -138,18 +137,40 @@ jobs:
         run: |
           # following sub-shells running make target should have yq already installed
           make yq
-      - name: Read operator bundle image reference
-        id: parsed-operator-bundle
+      - name: Set environment variables
         run: |
-          image=`make print-bundle-image`
-          echo image=$image >> $GITHUB_OUTPUT
+          bash ./utils/release/load_github_envvar.sh
+      - name: Set catalog image variables
+        id: catalog-variables
+        run: |
+          bundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.kuadrantOperatorTag }}
+          echo bundleImg=$bundleImg >> $GITHUB_OUTPUT
+          limitadorBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/limitador-operator-bundle:v${{ env.limitadorOperatorVersion }}
+          echo limitadorBundleImg=$limitadorBundleImg >> $GITHUB_OUTPUT
+          authorinoBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/authorino-operator-bundle:v${{ env.authorinoOperatorVersion }}
+          echo authorinoBundleImg=$authorinoBundleImg >> $GITHUB_OUTPUT
+          dnsOperatorBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/dns-operator-bundle:v${{ env.dnsOperatorVersion }}
+          echo dnsOperatorBundleImg=$dnsOperatorBundleImg >> $GITHUB_OUTPUT
       - name: Print tags and references
-        run: echo "Operator bundle image tag = ${{ needs.build-bundle.outputs.image }}, Reference in catalog = ${{ steps.parsed-operator-bundle.outputs.image }}"
+        run: |
+          echo "Operator bundle image tag = ${{ needs.build-bundle.outputs.image }}"
+          echo "Reference in catalog = ${{ steps.catalog-variables.outputs.bundleImg }}"
+          echo "Limitador Operator bundle image tag = ${{ steps.catalog-variables.outputs.limitadorBundleImg }}"
+          echo "Authorino Operator bundle image tag = ${{ steps.catalog-variables.outputs.authorinoBundleImg }}"
+          echo "DNS Operator bundle image tag = ${{ steps.catalog-variables.outputs.dnsOperatorBundleImg }}"
       - name: Verify referenced bundle tag matches the bundle tag currently being built
-        if: ${{ needs.build-bundle.outputs.image != steps.parsed-operator-bundle.outputs.image }}
+        if: ${{ needs.build-bundle.outputs.image != steps.catalog-variables.outputs.bundleImg }}
         run: exit 1
       - name: Generate Catalog Content
-        run: make catalog
+        run: |
+          # Pinning the channel used in the catalog to "stable".
+          # It should not matter for catalogs built for a single release
+          make catalog \
+            BUNDLE_IMG=${{ steps.catalog-variables.outputs.bundleImg }} \
+            LIMITADOR_OPERATOR_BUNDLE_IMG=${{ steps.catalog-variables.outputs.limitadorBundleImg }} \
+            AUTHORINO_OPERATOR_BUNDLE_IMG=${{ steps.catalog-variables.outputs.authorinoBundleImg }} \
+            DNS_OPERATOR_BUNDLE_IMG=${{ steps.catalog-variables.outputs.dnsOperatorBundleImg }} \
+            CHANNEL=stable
       - name: Install qemu dependency
         run: |
           sudo apt-get update
@@ -165,7 +186,10 @@ jobs:
           dockerfiles: ./catalog/${{ env.OPERATOR_NAME }}-catalog.Dockerfile
 
       - name: Print Build Info
-        run: echo "Image = ${{ steps.build-image.outputs.image }}, Tags = ${{ steps.build-image.outputs.tags }}, Bundle IMG = ${{ steps.parsed-operator-bundle.outputs.image }}"
+        run: |
+          echo "Image = ${{ steps.build-image.outputs.image }}"
+          echo "Tags = ${{ steps.build-image.outputs.tags }}"
+          echo "Bundle IMG = ${{ steps.parsed-operator-bundle.outputs.image }}"
 
       - name: Push Image
         if: github.repository_owner == 'kuadrant'

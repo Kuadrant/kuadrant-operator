@@ -237,7 +237,7 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return utils.Map(l.Counters, func(counter Counter) string { return string(counter.Expression) })
+	return utils.Map(l.Counters, func(counter Counter) string { return "descriptors[0]." + string(counter.Expression) })
 }
 
 var _ MergeableRule = &Limit{}

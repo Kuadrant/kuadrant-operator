@@ -63,7 +63,6 @@ func TransformCounterVariable(expression string) (*string, error) {
 					stack.push(mapEntry.Key())
 					stack.push(mapEntry.Value())
 				}
-
 			}
 		}
 

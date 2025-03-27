@@ -243,9 +243,8 @@ func (l Limit) CountersAsStringList() []string {
 		str := string(counter.Expression)
 		if exp, err := transformer.TransformCounterVariable(str); err != nil {
 			return *exp
-		} else {
-			return str
 		}
+		return str
 	})
 }
 

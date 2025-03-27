@@ -3,6 +3,7 @@ package transformer
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/google/cel-go/common"
@@ -25,6 +26,7 @@ func parseExpression(expression string) (*ast.AST, error) {
 }
 
 func TransformCounterVariable(expression string) (*string, error) {
+	knownAttributes := []string{"request", "source", "destination", "connection", "metadata", "filter_state", "auth", "ratelimit"}
 	var err error
 	var p *ast.AST
 	if p, err = parseExpression(expression); err != nil {
@@ -38,7 +40,7 @@ func TransformCounterVariable(expression string) (*string, error) {
 
 	for next := stack.pop(); next != nil; next = stack.pop() {
 		expr := *next
-		if expr.Kind() == ast.IdentKind && expr.AsIdent() != "descriptors" {
+		if expr.Kind() == ast.IdentKind && slices.Contains(knownAttributes, expr.AsIdent()) {
 			if decls[expr.AsIdent()] == nil {
 				if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
 					toReplace = append(toReplace, offset)

@@ -5,22 +5,22 @@ import (
 )
 
 func TestTransformNoReplaces(t *testing.T) {
-	exp := "foobar('test', 'otherthingy')"
+	exp := "foobar('auth', 'request')"
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
-		if *out != `foobar('test', 'otherthingy')` {
+		if *out != `foobar('auth', 'request')` {
 			t.Errorf(`This must not be transformed: %s`, *out)
 		}
 	}
 }
 
 func TestTransformWithStraightReplaces(t *testing.T) {
-	exp := `test`
+	exp := `request`
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
-		if *out != `descriptors[0].test` {
+		if *out != `descriptors[0].request` {
 			t.Errorf(`Not transformed as expected: %s`, *out)
 		}
 	}
@@ -38,44 +38,44 @@ func TestTransformNoRecursiveReplaces(t *testing.T) {
 }
 
 func TestTransformWithComplexReplaces(t *testing.T) {
-	exp := `foobar(test, other.thingy, "foo") + foo(descriptors[0].test)`
+	exp := `foobar(request, auth.thingy, "foo") + foo(descriptors[0].test)`
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
-		if *out != `foobar(descriptors[0].test, descriptors[0].other.thingy, "foo") + foo(descriptors[0].test)` {
+		if *out != `foobar(descriptors[0].request, descriptors[0].auth.thingy, "foo") + foo(descriptors[0].test)` {
 			t.Errorf(`Not transformed as expected: %s`, *out)
 		}
 	}
 }
 
 func TestTransformWithListReplaces(t *testing.T) {
-	exp := `[test, other.thingy, "foo", foo(descriptors[0].test)]`
+	exp := `[source, destination.thingy, "foo", foo(descriptors[0].test)]`
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
-		if *out != `[descriptors[0].test, descriptors[0].other.thingy, "foo", foo(descriptors[0].test)]` {
+		if *out != `[descriptors[0].source, descriptors[0].destination.thingy, "foo", foo(descriptors[0].test)]` {
 			t.Errorf(`Not transformed as expected: %s`, *out)
 		}
 	}
 }
 
 func TestTransformWithMapReplaces(t *testing.T) {
-	exp := `{test: other.thingy, "foo": foo(descriptors[0].test)}`
+	exp := `{test: source.thingy, "foo": foo(descriptors[0].test)}`
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
-		if *out != `{descriptors[0].test: descriptors[0].other.thingy, "foo": foo(descriptors[0].test)}` {
+		if *out != `{test: descriptors[0].source.thingy, "foo": foo(descriptors[0].test)}` {
 			t.Errorf(`Not transformed as expected: %s`, *out)
 		}
 	}
 }
 
 func TestTransformWithMapLookupReplaces(t *testing.T) {
-	exp := `other[thingy]`
+	exp := `source[destination.thingy]`
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
-		if *out != `descriptors[0].other[descriptors[0].thingy]` {
+		if *out != `descriptors[0].source[descriptors[0].destination.thingy]` {
 			t.Errorf(`Not transformed as expected: %s`, *out)
 		}
 	}
@@ -83,18 +83,18 @@ func TestTransformWithMapLookupReplaces(t *testing.T) {
 
 func TestTransformMultiLines(t *testing.T) {
 	exp := `{
-test: other.thingy, 
+source: request.thingy, 
 "foo": foo(descriptors[0].test),
-"bar": [test, other.thingy, "foo", foo(descriptors[0].test)],
+"bar": [request, other.thingy, "foo", foo(descriptors[0].test)],
 }
 `
 	if out, err := TransformCounterVariable(exp); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `{
-descriptors[0].test: descriptors[0].other.thingy, 
+descriptors[0].source: descriptors[0].request.thingy, 
 "foo": foo(descriptors[0].test),
-"bar": [descriptors[0].test, descriptors[0].other.thingy, "foo", foo(descriptors[0].test)],
+"bar": [descriptors[0].request, other.thingy, "foo", foo(descriptors[0].test)],
 }
 ` {
 			t.Errorf(`Not transformed as expected: %s`, *out)

@@ -38,26 +38,26 @@ component_management:
       paths:
         - api/v1beta2
     - component_id: common
-      name: pkg/common (u)
+      name: internal/common (u)
       paths:
-        - pkg/common
+        - internal/common
     - component_id: istio
-      name: pkg/istio (u)
+      name: internal/istio (u)
       paths:
-        - pkg/istio
+        - internal/istio
     - component_id: log
-      name: pkg/log (u)
+      name: internal/log (u)
       paths:
-        - pkg/log
+        - internal/log
     - component_id: reconcilers
-      name: pkg/reconcilers (u)
+      name: internal/reconcilers (u)
       paths:
-        - pkg/reconcilers
+        - internal/reconcilers
     - component_id: rlptools
-      name: pkg/rlptools (u)
+      name: internal/rlptools (u)
       paths:
-        - pkg/rlptools
+        - internal/rlptools
     - component_id: controllers
       name: controllers (i)
       paths:
-        - controllers
+        - internal/controller

@@ -28,7 +28,7 @@ func TransformCounterVariable(expression string) (*string, error) {
 	if p, err := parseExpression(expression); err != nil {
 		return nil, err
 	} else {
-		to_replace := make([]ast.OffsetRange, 0)
+		toReplace := make([]ast.OffsetRange, 0)
 
 		stack := newStack()
 		stack.push(p.Expr())
@@ -36,7 +36,7 @@ func TransformCounterVariable(expression string) (*string, error) {
 			expr := *next
 			if expr.Kind() == ast.IdentKind && expr.AsIdent() != "descriptors" {
 				if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
-					to_replace = append(to_replace, offset)
+					toReplace = append(toReplace, offset)
 				} else {
 					return nil, fmt.Errorf("could not find offset range for %d", expr.ID())
 				}
@@ -52,23 +52,32 @@ func TransformCounterVariable(expression string) (*string, error) {
 			} else if expr.Kind() == ast.SelectKind {
 				stack.push(expr.AsSelect().Operand())
 			} else if expr.Kind() == ast.ListKind {
-
+				l := expr.AsList()
+				for _, arg := range l.Elements() {
+					stack.push(arg)
+				}
 			} else if expr.Kind() == ast.MapKind {
+				m := expr.AsMap()
+				for _, entry := range m.Entries() {
+					mapEntry := entry.AsMapEntry()
+					stack.push(mapEntry.Key())
+					stack.push(mapEntry.Value())
+				}
 
 			}
 		}
 
-		if len(to_replace) == 0 {
+		if len(toReplace) == 0 {
 			return &expression, nil
 		}
 
-		sort.Slice(to_replace, func(i, j int) bool {
-			return to_replace[i].Start < to_replace[j].Start
+		sort.Slice(toReplace, func(i, j int) bool {
+			return toReplace[i].Start < toReplace[j].Start
 		})
 
 		exp := ""
 		cur := int32(0)
-		for _, offset := range to_replace {
+		for _, offset := range toReplace {
 			if offset.Start > cur {
 				exp = exp + expression[cur:offset.Start]
 			}

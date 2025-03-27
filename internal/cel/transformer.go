@@ -25,69 +25,71 @@ func parseExpression(expression string) (*ast.AST, error) {
 }
 
 func TransformCounterVariable(expression string) (*string, error) {
-	if p, err := parseExpression(expression); err != nil {
+	var err error
+	var p *ast.AST
+	if p, err = parseExpression(expression); err != nil {
 		return nil, err
-	} else {
-		toReplace := make([]ast.OffsetRange, 0)
+	}
 
-		stack := newStack()
-		stack.push(p.Expr())
-		for next := stack.pop(); next != nil; next = stack.pop() {
-			expr := *next
-			if expr.Kind() == ast.IdentKind && expr.AsIdent() != "descriptors" {
-				if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
-					toReplace = append(toReplace, offset)
-				} else {
-					return nil, fmt.Errorf("could not find offset range for %d", expr.ID())
-				}
-			} else if expr.Kind() == ast.CallKind {
-				call := expr.AsCall()
-				if call.FunctionName() == "_[_]" {
-					stack.push(call.Args()[0])
-				} else {
-					for _, arg := range call.Args() {
-						stack.push(arg)
-					}
-				}
-			} else if expr.Kind() == ast.SelectKind {
-				stack.push(expr.AsSelect().Operand())
-			} else if expr.Kind() == ast.ListKind {
-				l := expr.AsList()
-				for _, arg := range l.Elements() {
+	toReplace := make([]ast.OffsetRange, 0)
+	stack := newStack()
+	stack.push(p.Expr())
+
+	for next := stack.pop(); next != nil; next = stack.pop() {
+		expr := *next
+		if expr.Kind() == ast.IdentKind && expr.AsIdent() != "descriptors" {
+			if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
+				toReplace = append(toReplace, offset)
+			} else {
+				return nil, fmt.Errorf("could not find offset range for %d", expr.ID())
+			}
+		} else if expr.Kind() == ast.CallKind {
+			call := expr.AsCall()
+			if call.FunctionName() == "_[_]" {
+				stack.push(call.Args()[0])
+			} else {
+				for _, arg := range call.Args() {
 					stack.push(arg)
 				}
-			} else if expr.Kind() == ast.MapKind {
-				m := expr.AsMap()
-				for _, entry := range m.Entries() {
-					mapEntry := entry.AsMapEntry()
-					stack.push(mapEntry.Key())
-					stack.push(mapEntry.Value())
-				}
+			}
+		} else if expr.Kind() == ast.SelectKind {
+			stack.push(expr.AsSelect().Operand())
+		} else if expr.Kind() == ast.ListKind {
+			l := expr.AsList()
+			for _, arg := range l.Elements() {
+				stack.push(arg)
+			}
+		} else if expr.Kind() == ast.MapKind {
+			m := expr.AsMap()
+			for _, entry := range m.Entries() {
+				mapEntry := entry.AsMapEntry()
+				stack.push(mapEntry.Key())
+				stack.push(mapEntry.Value())
 			}
 		}
-
-		if len(toReplace) == 0 {
-			return &expression, nil
-		}
-
-		sort.Slice(toReplace, func(i, j int) bool {
-			return toReplace[i].Start < toReplace[j].Start
-		})
-
-		exp := ""
-		cur := int32(0)
-		for _, offset := range toReplace {
-			if offset.Start > cur {
-				exp = exp + expression[cur:offset.Start]
-			}
-			exp = exp + "descriptors[0]." + expression[offset.Start:offset.Stop]
-			cur = offset.Stop
-		}
-		if int(cur) < len(expression) {
-			exp = exp + expression[cur:]
-		}
-		return &exp, nil
 	}
+
+	if len(toReplace) == 0 {
+		return &expression, nil
+	}
+
+	sort.Slice(toReplace, func(i, j int) bool {
+		return toReplace[i].Start < toReplace[j].Start
+	})
+
+	exp := ""
+	cur := int32(0)
+	for _, offset := range toReplace {
+		if offset.Start > cur {
+			exp = exp + expression[cur:offset.Start]
+		}
+		exp = exp + "descriptors[0]." + expression[offset.Start:offset.Stop]
+		cur = offset.Stop
+	}
+	if int(cur) < len(expression) {
+		exp = exp + expression[cur:]
+	}
+	return &exp, nil
 }
 
 type stack []ast.Expr

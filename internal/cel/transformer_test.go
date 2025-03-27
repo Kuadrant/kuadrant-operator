@@ -90,3 +90,9 @@ descriptors[0].test: descriptors[0].other.thingy,
 		}
 	}
 }
+
+func TestTransformErrsOutOnBadSyntax(t *testing.T) {
+	if exp, err := TransformCounterVariable("[foobar"); err == nil {
+		t.Errorf(`We expected to fail here! But got "%s"`, *exp)
+	}
+}

@@ -31,6 +31,7 @@ func TransformCounterVariable(expression string) (*string, error) {
 		return nil, err
 	}
 
+	decls := make(map[string]ast.CallExpr)
 	toReplace := make([]ast.OffsetRange, 0)
 	stack := newStack()
 	stack.push(p.Expr())
@@ -38,15 +39,32 @@ func TransformCounterVariable(expression string) (*string, error) {
 	for next := stack.pop(); next != nil; next = stack.pop() {
 		expr := *next
 		if expr.Kind() == ast.IdentKind && expr.AsIdent() != "descriptors" {
-			if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
-				toReplace = append(toReplace, offset)
-			} else {
-				return nil, fmt.Errorf("could not find offset range for %d", expr.ID())
+			if decls[expr.AsIdent()] == nil {
+				if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
+					toReplace = append(toReplace, offset)
+				} else {
+					return nil, fmt.Errorf("could not find offset range for %d", expr.ID())
+				}
 			}
 		} else if expr.Kind() == ast.CallKind {
 			call := expr.AsCall()
-			for _, arg := range call.Args() {
-				stack.push(arg)
+			stack.push(call.Target())
+			if (call.FunctionName() == "all" ||
+				call.FunctionName() == "exists" ||
+				call.FunctionName() == "exists_one" ||
+				call.FunctionName() == "map" ||
+				call.FunctionName() == "filter") &&
+				len(call.Args()) >= 2 &&
+				call.Args()[0].Kind() == ast.IdentKind &&
+				call.Args()[1].Kind() == ast.CallKind {
+				decls[call.Args()[0].AsIdent()] = call.Args()[1].AsCall()
+				for _, arg := range call.Args()[1:] {
+					stack.push(arg)
+				}
+			} else {
+				for _, arg := range call.Args() {
+					stack.push(arg)
+				}
 			}
 		} else if expr.Kind() == ast.SelectKind {
 			stack.push(expr.AsSelect().Operand())

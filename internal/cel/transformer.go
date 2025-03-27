@@ -45,12 +45,8 @@ func TransformCounterVariable(expression string) (*string, error) {
 			}
 		} else if expr.Kind() == ast.CallKind {
 			call := expr.AsCall()
-			if call.FunctionName() == "_[_]" {
-				stack.push(call.Args()[0])
-			} else {
-				for _, arg := range call.Args() {
-					stack.push(arg)
-				}
+			for _, arg := range call.Args() {
+				stack.push(arg)
 			}
 		} else if expr.Kind() == ast.SelectKind {
 			stack.push(expr.AsSelect().Operand())

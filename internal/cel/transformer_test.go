@@ -70,6 +70,17 @@ func TestTransformWithMapReplaces(t *testing.T) {
 	}
 }
 
+func TestTransformWithMapLookupReplaces(t *testing.T) {
+	exp := `other[thingy]`
+	if out, err := TransformCounterVariable(exp); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `descriptors[0].other[descriptors[0].thingy]` {
+			t.Errorf(`Not transformed as expected: %s`, *out)
+		}
+	}
+}
+
 func TestTransformMultiLines(t *testing.T) {
 	exp := `{
 test: other.thingy, 

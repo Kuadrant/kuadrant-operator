@@ -4,23 +4,46 @@ import (
 	"testing"
 )
 
-func TestSafeToPrefix(t *testing.T) {
-	if !SafeToSimplyPrefix("foobar") {
-		t.Errorf("Should be safe to simply prefix")
+func TestTransformNoReplaces(t *testing.T) {
+	exp := "foobar('test', 'otherthingy')"
+	if out, err := TransformCounterVariable(exp); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `foobar('test', 'otherthingy')` {
+			t.Errorf(`This must not be transformed: %s`, *out)
+		}
 	}
-	if !SafeToSimplyPrefix("foobar[0]['foo'].bar") {
-		t.Errorf("Should be safe to simply prefix")
+}
+
+func TestTransformWithStraightReplaces(t *testing.T) {
+	exp := `test`
+	if out, err := TransformCounterVariable(exp); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `descriptors[0].test` {
+			t.Errorf(`Not transformed as expected: %s`, *out)
+		}
 	}
-	if SafeToSimplyPrefix("descriptors") {
-		t.Errorf("Should not be safe to simply prefix")
+}
+
+func TestTransformNoRecursiveReplaces(t *testing.T) {
+	exp := `descriptors[0]["test"]`
+	if out, err := TransformCounterVariable(exp); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `descriptors[0]["test"]` {
+			t.Errorf(`Not transformed as expected: %s`, *out)
+		}
 	}
-	if SafeToSimplyPrefix("descriptors[0]['foo'].bar") {
-		t.Errorf("Should not be safe to simply prefix")
-	}
-	if SafeToSimplyPrefix("!foobar") {
-		t.Errorf("Should not be safe to simply prefix")
-	}
-	if SafeToSimplyPrefix("foobar(foo, bar)") {
-		t.Errorf("Should not be safe to simply prefix")
+}
+
+func TestTransformWithComplexReplaces(t *testing.T) {
+	exp := `foobar(test, other.thingy, "foo") + foo(descriptors[0].test)`
+	if out, err := TransformCounterVariable(exp); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `foobar(descriptors[0].test, descriptors[0].other.thingy, "foo") + foo(descriptors[0].test)` {
+			t.Errorf(`Not transformed as expected: %s`, *out)
+		}
 	}
 }

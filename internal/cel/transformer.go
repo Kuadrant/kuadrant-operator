@@ -2,12 +2,11 @@ package transformer
 
 import (
 	"errors"
+	"fmt"
+	"sort"
 
-	//"github.com/google/cel-go/checker/decls"
 	"github.com/google/cel-go/common"
 	"github.com/google/cel-go/common/ast"
-	//"github.com/google/cel-go/common/types/ref"
-	//"github.com/google/cel-go/ext"
 	"github.com/google/cel-go/parser"
 )
 
@@ -25,21 +24,79 @@ func parseExpression(expression string) (*ast.AST, error) {
 	return p, nil
 }
 
-func SafeToSimplyPrefix(expression string) bool {
+func TransformCounterVariable(expression string) (*string, error) {
 	if p, err := parseExpression(expression); err != nil {
-		return false
+		return nil, err
 	} else {
-		expr := p.Expr()
-		for {
+		to_replace := make([]ast.OffsetRange, 0)
+
+		stack := newStack()
+		stack.push(p.Expr())
+		for next := stack.pop(); next != nil; next = stack.pop() {
+			expr := *next
 			if expr.Kind() == ast.IdentKind && expr.AsIdent() != "descriptors" {
-				return true
-			} else if expr.Kind() == ast.CallKind && len(expr.AsCall().Args()) == 2 && expr.AsCall().FunctionName() == "_[_]" {
-				expr = expr.AsCall().Args()[0]
+				if offset, found := p.SourceInfo().GetOffsetRange(expr.ID()); found {
+					to_replace = append(to_replace, offset)
+				} else {
+					return nil, fmt.Errorf("could not find offset range for %d", expr.ID())
+				}
+			} else if expr.Kind() == ast.CallKind {
+				call := expr.AsCall()
+				if call.FunctionName() == "_[_]" {
+					stack.push(call.Args()[0])
+				} else {
+					for _, arg := range call.Args() {
+						stack.push(arg)
+					}
+				}
 			} else if expr.Kind() == ast.SelectKind {
-				expr = expr.AsSelect().Operand()
-			} else {
-				return false
+				stack.push(expr.AsSelect().Operand())
+			} else if expr.Kind() == ast.ListKind {
+
+			} else if expr.Kind() == ast.MapKind {
+
 			}
 		}
+
+		if len(to_replace) == 0 {
+			return &expression, nil
+		}
+
+		sort.Slice(to_replace, func(i, j int) bool {
+			return to_replace[i].Start < to_replace[j].Start
+		})
+
+		exp := ""
+		cur := int32(0)
+		for _, offset := range to_replace {
+			if offset.Start > cur {
+				exp = exp + expression[cur:offset.Start]
+			}
+			exp = exp + "descriptors[0]." + expression[offset.Start:offset.Stop]
+			cur = offset.Stop
+		}
+		if int(cur) < len(expression) {
+			exp = exp + expression[cur:]
+		}
+		return &exp, nil
 	}
+}
+
+type stack []ast.Expr
+
+func newStack() stack {
+	return make([]ast.Expr, 0)
+}
+
+func (s *stack) push(expr ast.Expr) {
+	*s = append(*s, expr)
+}
+
+func (s *stack) pop() *ast.Expr {
+	var ret *ast.Expr
+	if len(*s) > 0 {
+		ret = &(*s)[len(*s)-1]
+		*s = (*s)[:len(*s)-1]
+	}
+	return ret
 }

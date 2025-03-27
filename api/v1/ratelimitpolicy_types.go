@@ -241,8 +241,8 @@ func (l Limit) CountersAsStringList() []string {
 	}
 	return utils.Map(l.Counters, func(counter Counter) string {
 		str := string(counter.Expression)
-		if transformer.SafeToSimplyPrefix(str) {
-			return "descriptors[0]." + str
+		if exp, err := transformer.TransformCounterVariable(str); err != nil {
+			return *exp
 		} else {
 			return str
 		}

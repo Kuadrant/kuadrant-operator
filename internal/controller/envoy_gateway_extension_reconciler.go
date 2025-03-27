@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -174,7 +175,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 
 		// ignore if not an envoy gateway gateway
-		if gatewayClass.Spec.ControllerName != envoyGatewayGatewayControllerName {
+		if !slices.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName) {
 			continue
 		}
 

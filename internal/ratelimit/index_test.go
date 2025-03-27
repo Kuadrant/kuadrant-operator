@@ -140,49 +140,49 @@ func TestIndexToRateLimits(t *testing.T) {
 
 func TestEqualsTo(t *testing.T) {
 	global_l0 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l0",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	global_l1 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l1",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	global_l2 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l2",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	global_l3 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l3",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	global_l4 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l4",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	global_l5 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._global___3f2bfd8b == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l5",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	global_l6 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._global___3f2bfd8b\"] == \"1\""},
+		Conditions: []string{"limit._httproute_level__ac417cac == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l6",
 		Seconds:    10,
@@ -190,21 +190,21 @@ func TestEqualsTo(t *testing.T) {
 	}
 
 	httproute_l0 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._httproute_level__ac417cac\"] == \"1\""},
+		Conditions: []string{"limit._httproute_level__e4abd750 == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l0",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	httproute_l1 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._httproute_level__e4abd750\"] == \"1\""},
+		Conditions: []string{"limit._httproute_level__e4abd750 == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l1",
 		Seconds:    10,
 		Variables:  []string{},
 	}
 	httproute_l5 := limitadorv1alpha1.RateLimit{
-		Conditions: []string{"descriptors[0][\"limit._httproute_level__e1d71177\"] == \"1\""},
+		Conditions: []string{"limit._httproute_level__e1d71177 == \"1\""},
 		MaxValue:   3,
 		Namespace:  "default/test-3-gw0-l5",
 		Seconds:    10,

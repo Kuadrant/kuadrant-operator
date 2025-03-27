@@ -86,7 +86,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(authorino, gateway)
+		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(authorino, gateway, kuadrant.IsMTLSEnabled())
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy filter")
 			continue
@@ -156,7 +156,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	return nil
 }
 
-func (r *IstioAuthClusterReconciler) buildDesiredEnvoyFilter(authorino *authorinooperatorv1beta1.Authorino, gateway *machinery.Gateway) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+func (r *IstioAuthClusterReconciler) buildDesiredEnvoyFilter(authorino *authorinooperatorv1beta1.Authorino, gateway *machinery.Gateway, mtls bool) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
@@ -189,7 +189,7 @@ func (r *IstioAuthClusterReconciler) buildDesiredEnvoyFilter(authorino *authorin
 	}
 
 	authorinoServiceInfo := authorinoServiceInfoFromAuthorino(authorino)
-	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), authClusterPatch)
+	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), mtls, authClusterPatch)
 	if err != nil {
 		return nil, err
 	}

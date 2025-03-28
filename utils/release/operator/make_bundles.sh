@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
 # Set strict error handling
-#set -euo pipefail
+set -euo pipefail
+
+if [[ ! -v env ]]; then
+  echo "[WARNING] env var 'env' not set, using $(pwd)"
+  env=$(pwd)
+fi
 
 source $env/utils/release/shared.sh
 

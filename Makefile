@@ -14,6 +14,9 @@ ifeq (podman,$(CONTAINER_ENGINE))
 	CONTAINER_ENGINE_EXTRA_FLAGS ?= --load
 endif
 
+# Quay image default expiry
+QUAY_IMAGE_EXPIRY ?= never
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -281,30 +284,10 @@ $(HELM):
 helm: $(HELM) ## Download helm locally if necessary.
 
 ##@ Development
-define patch-config
-	envsubst \
-		< $1 \
-		> $2
-endef
-
-define update-csv-config
-	V="$1" \
-	$(YQ) eval '$(3) = strenv(V)' -i $2
-endef
-
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
-
-.PHONY: dependencies-manifests
-dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
-dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
-dependencies-manifests: ## Update kuadrant dependencies manifests.
-	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
-	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -349,7 +332,6 @@ docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 docker-build: ## Build docker image with the manager.
 		$(CONTAINER_ENGINE) build \
-		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
 		--build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
@@ -386,55 +368,8 @@ endef
 RELATED_IMAGE_CONSOLEPLUGIN ?= quay.io/kuadrant/console-plugin:latest
 
 .PHONY: bundle
-bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
-	$(OPERATOR_SDK) generate kustomize manifests -q
-	# Set desired Wasm-shim image
-	V="$(RELATED_IMAGE_WASMSHIM)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
-	# Set desired ConsolePlugin image
-	V="$(RELATED_IMAGE_CONSOLEPLUGIN)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' -i config/manager/manager.yaml
-	# Set desired operator image
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	# Update CSV
-	$(call update-csv-config,kuadrant-operator.v$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.name)
-	$(call update-csv-config,$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.version)
-	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
-	# Generate bundle
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
-	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
-		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
-	$(OPERATOR_SDK) bundle validate ./bundle
-	$(MAKE) bundle-ignore-createdAt
-	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
-
-.PHONY: bundle-post-generate
-bundle-post-generate: OPENSHIFT_VERSIONS_ANNOTATION_KEY="com.redhat.openshift.versions"
-# Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
-bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.14"
-bundle-post-generate: $(YQ) $(OPM)
-	# Set Openshift version in bundle annotations
-	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
-	$(YQ) -i '(.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
-	# Update operator dependencies
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_BUNDLE_IMG)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_BUNDLE_IMG)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_BUNDLE_IMG)
-
-.PHONY: bundle-ignore-createdAt
-bundle-ignore-createdAt:
-	# Since operator-sdk 1.26.0, `make bundle` changes the `createdAt` field from the bundle
-	# even if it is patched:
-	#   https://github.com/operator-framework/operator-sdk/pull/6136
-	# This code checks if only the createdAt field. If is the only change, it is ignored.
-	# Else, it will do nothing.
-	# https://github.com/operator-framework/operator-sdk/issues/6285#issuecomment-1415350333
-	# https://github.com/operator-framework/operator-sdk/issues/6285#issuecomment-1532150678
-	git diff --quiet -I'^    createdAt: ' ./bundle && git checkout ./bundle || true
+bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+	PATH=$(PROJECT_PATH)/bin:$$PATH; $(PROJECT_PATH)/utils/release/operator/make_bundles.sh
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.

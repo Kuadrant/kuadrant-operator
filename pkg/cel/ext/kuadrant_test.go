@@ -12,7 +12,8 @@ var tests = []struct {
 	expr string
 	err  string
 }{
-	{expr: `__KUADRANT_VERSION == "1"`},
+	{expr: `__KUADRANT_VERSION == "1_dev"`},
+	{expr: `gatewaysForNGK("foo", "bar", "baz") == "foo-bar-baz"`},
 }
 
 func TestKuadrantExt(t *testing.T) {
@@ -53,11 +54,18 @@ func TestKuadrantExt(t *testing.T) {
 func testKuadrantEnv(t *testing.T, opts ...cel.EnvOption) *cel.Env {
 	t.Helper()
 	baseOpts := []cel.EnvOption{
-		CelExt(),
+		CelExt(&TestDAG{}),
 	}
 	env, err := cel.NewEnv(append(baseOpts, opts...)...)
 	if err != nil {
 		t.Fatalf("cel.NewEnv(CelExt()) failed: %v", err)
 	}
 	return env
+}
+
+type TestDAG struct {
+}
+
+func (d *TestDAG) FindGatewaysFor(name, group, kind string) (string, error) {
+	return fmt.Sprintf("%s-%s-%s", name, group, kind), nil
 }

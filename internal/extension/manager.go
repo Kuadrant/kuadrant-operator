@@ -47,7 +47,7 @@ func NewManager(names []string, location string, logger logr.Logger) (Manager, e
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
-		if oopExtension, e := NewOOPExtension(name, location, service, logger); e != nil {
+		if oopExtension, e := NewOOPExtension(name, location, service, logger); e == nil {
 			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {

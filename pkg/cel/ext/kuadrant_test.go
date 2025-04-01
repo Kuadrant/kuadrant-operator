@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	v0 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+
 	"github.com/google/cel-go/cel"
 )
 
@@ -13,7 +15,7 @@ var tests = []struct {
 	err  string
 }{
 	{expr: `__KUADRANT_VERSION == "1_dev"`},
-	{expr: `gatewaysForNGK("foo", "bar", "baz") == "foo-bar-baz"`},
+	{expr: `self.findGateways() == "foo-bar-baz"`},
 }
 
 func TestKuadrantExt(t *testing.T) {
@@ -33,7 +35,13 @@ func TestKuadrantExt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			out, _, err := prg.Eval(cel.NoVars())
+			out, _, err := prg.Eval(map[string]any{
+				"self": &v0.NGK{
+					Name:  "foo",
+					Group: "bar",
+					Kind:  "baz",
+				},
+			})
 			if tc.err != "" {
 				if err == nil {
 					t.Fatalf("got value %v, wanted error %s for expr: %s",

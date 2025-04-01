@@ -3,6 +3,8 @@ package kuadrant
 import (
 	"math"
 
+	v0 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
@@ -40,17 +42,17 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 	// only dev adds anything for now really
 	if l.dev {
 		opts = append(opts,
-			cel.Function("gatewaysForNGK",
-				cel.Overload("gateways_for_ngk",
+			cel.Function("findGateways",
+				cel.MemberOverload("gateways_for_ngk",
 					[]*cel.Type{
-						cel.StringType, cel.StringType, cel.StringType,
+						cel.ObjectType("kuadrant.v0.NGK"),
 					}, cel.StringType,
-					cel.FunctionBinding(func(args ...ref.Val) ref.Val {
-						name := args[0].(types.String)
-						group := args[1].(types.String)
-						kind := args[2].(types.String)
-
-						return stringOrError(l.dag.FindGatewaysFor(string(name), string(group), string(kind)))
+					cel.UnaryBinding(func(arg ref.Val) ref.Val {
+						if ngk, err := refToProto[*v0.NGK](arg); err != nil {
+							return types.NewErr(err.Error())
+						} else {
+							return stringOrError(l.dag.FindGatewaysFor(ngk.Name, ngk.Group, ngk.Kind))
+						}
 					})),
 				//cel.MemberOverload("gateways_for_route", []*cel.Type{cel.StringType, cel.StringType, cel.IntType}, cel.IntType,
 				//	cel.FunctionBinding(func(args ...ref.Val) ref.Val {
@@ -68,6 +70,10 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 	opts = append(opts,
 		cel.Constant("__KUADRANT_VERSION", cel.StringType, types.String(constVersion)),
 	)
+
+	opts = append(opts, cel.Container("kuadrant.v0"))
+	opts = append(opts, cel.Types(&v0.NGK{}))
+	opts = append(opts, cel.Variable("self", cel.ObjectType("kuadrant.v0.NGK")))
 
 	return opts
 }

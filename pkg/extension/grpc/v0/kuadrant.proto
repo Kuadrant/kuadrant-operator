@@ -2,9 +2,10 @@ syntax = "proto3";
 
 option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0";
 
-package kuadrant;
+package kuadrant.v0;
 
 import "google/protobuf/timestamp.proto";
+import "gateway_api.proto";
 
 // The greeting service definition.
 service ExtensionService {

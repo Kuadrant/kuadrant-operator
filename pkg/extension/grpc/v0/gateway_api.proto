@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0";
+
+package kuadrant.v0;
+
+message NGK {
+  string name = 1;
+  string group = 2;
+  string kind = 3;
+}

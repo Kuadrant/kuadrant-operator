@@ -38,8 +38,8 @@ func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 
 func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler")
-	logger.Info("reconciling authorino resource", "status", "started")
-	defer logger.Info("reconciling authorino resource", "status", "completed")
+	logger.V(1).Info("reconciling authorino resource", "status", "started")
+	defer logger.V(1).Info("reconciling authorino resource", "status", "completed")
 
 	kobj := GetKuadrantFromTopology(topology)
 	if kobj == nil {
@@ -54,7 +54,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	})
 
 	if len(aobjs) > 0 {
-		logger.Info("authorino resource already exists, no need to create", "status", "skipping")
+		logger.V(1).Info("authorino resource already exists, no need to create", "status", "skipping")
 		return nil
 	}
 
@@ -97,14 +97,17 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	if err != nil {
 		logger.Error(err, "failed to destruct authorino", "status", "error")
 	}
-	logger.Info("creating authorino resource", "status", "processing")
+	logger.V(1).Info("creating authorino resource", "status", "processing")
 	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
 		if apiErrors.IsAlreadyExists(err) {
-			logger.Info("already created authorino resource", "status", "acceptable")
+			logger.V(1).Info("already created authorino resource", "status", "acceptable")
 		} else {
 			logger.Error(err, "failed to create authorino resource", "status", "error")
 		}
+	} else {
+		logger.Info("created authorino resource", "status", "acceptable")
 	}
+
 	return nil
 }

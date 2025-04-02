@@ -21,6 +21,7 @@ import (
 	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -115,6 +116,18 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		controller.WithRunnable("limitador deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			// the key of the label ("limitador-resource") is hardcoded. This deployment is owned by the limitador operator.
+			// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
+			controller.FilterResourcesByLabel[*appsv1.Deployment](fmt.Sprintf("limitador-resource=%s", kuadrant.LimitadorName)),
+			// the key and value of the label are hardcoded. This deployment is owned by the limitador operator.
+			// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
+			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=limitador"),
+		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
@@ -124,6 +137,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
+			kuadrantv1beta1.DeploymentGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
@@ -282,8 +296,6 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
 			//istio.LinkPeerAuthenticationToGateway,
-			kuadrantv1beta1.LinkAuthorinoToDeployment,
-			kuadrantv1beta1.LinkLimitadorToDeployment,
 		),
 	)
 
@@ -368,6 +380,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() []controller.Controll
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToLimitador,
+			kuadrantv1beta1.LinkLimitadorToDeployment,
 		),
 	)
 
@@ -461,7 +474,6 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
-			NewMTLSReconciler(b.manager, b.client).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}

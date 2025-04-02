@@ -74,6 +74,25 @@ func (p *OOPExtension) Start() error {
 	}
 
 	cmd := exec.Command(p.executable, p.socket) // #nosec G204
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		p.logger.Error(err, "failed to open stderr pipe")
+		return err
+	}
+
+	// Read from pipes
+	go func() {
+		buf := make([]byte, 1024)
+		for {
+			n, err := stderr.Read(buf)
+			if err != nil {
+				break
+			}
+			p.logger.Error(fmt.Errorf("error from extension %q ->", p.name), string(buf[:n]))
+		}
+	}()
+
 	if err := cmd.Start(); err != nil {
 		if e := p.stopServer(); e != nil {
 			p.logger.Error(e, "failed starting process, then stopping gRPC server failed")

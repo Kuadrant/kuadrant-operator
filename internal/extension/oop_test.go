@@ -17,6 +17,9 @@ limitations under the License.
 package extension
 
 import (
+	"github.com/go-logr/logr/funcr"
+	"gotest.tools/assert"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -46,4 +49,34 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 	if oop.IsAlive() {
 		t.Errorf("Must not be alive")
 	}
+}
+
+func TestOOPExtensionForwardsLog(t *testing.T) {
+	var messages []string
+
+	logger := funcr.New(func(_, args string) {
+		messages = append(messages, args)
+	}, funcr.Options{})
+
+	oopErrorLog := OOPExtension{
+		name:       "testErrorLog",
+		executable: "/bin/ps",
+		socket:     "--foobar",
+		service:    newExtensionService(),
+		logger:     logger,
+	}
+
+	if err := oopErrorLog.Start(); err != nil {
+		t.Errorf("Should have started: %v", err)
+	}
+
+	if err := oopErrorLog.cmd.Wait(); err == nil {
+		t.Errorf("Should have returned an error because of exit 1: %v", err)
+	}
+
+	_ = oopErrorLog.Stop()
+
+	errorMsg := messages[2]
+	assert.Assert(t, strings.Contains(errorMsg, "error from extension \\\"testErrorLog\\\""))
+	assert.Assert(t, strings.Contains(strings.ToLower(errorMsg), "usage:"))
 }

@@ -15,7 +15,10 @@ var tests = []struct {
 	err  string
 }{
 	{expr: `__KUADRANT_VERSION == "1_dev"`},
-	{expr: `self.findGateways() == "foo-bar-baz"`},
+	{expr: `self.findGateways().size() == 1`},
+	{expr: `self.findGateways()[0].name == "kuadrant-gw"`},
+	{expr: `self.findGateways()[0].listeners.size() == 1`},
+	{expr: `self.findGateways()[0].listeners[0].hostname == "kuadrant.io"`},
 }
 
 func TestKuadrantExt(t *testing.T) {
@@ -64,7 +67,8 @@ func testKuadrantEnv(t *testing.T, opts ...cel.EnvOption) *cel.Env {
 	baseOpts := []cel.EnvOption{
 		CelExt(&TestDAG{}),
 	}
-	env, err := cel.NewEnv(append(baseOpts, opts...)...)
+	opts = append(baseOpts, opts...)
+	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		t.Fatalf("cel.NewEnv(CelExt()) failed: %v", err)
 	}
@@ -74,6 +78,19 @@ func testKuadrantEnv(t *testing.T, opts ...cel.EnvOption) *cel.Env {
 type TestDAG struct {
 }
 
-func (d *TestDAG) FindGatewaysFor(name, group, kind string) (string, error) {
-	return fmt.Sprintf("%s-%s-%s", name, group, kind), nil
+func (d *TestDAG) FindGatewaysFor(name, group, kind string) ([]*v0.Gateway, error) {
+	if name == "foo" && group == "bar" && kind == "baz" {
+		return []*v0.Gateway{
+			{
+				Name: "kuadrant-gw",
+				Listeners: []*v0.Listener{
+					{
+						Hostname: "kuadrant.io",
+					},
+				},
+			},
+		}, nil
+
+	}
+	return nil, nil
 }

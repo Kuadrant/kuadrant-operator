@@ -3,6 +3,4 @@ apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
   name: kuadrant-sample
-spec:
-  mtls:
-    enable: false
+spec: {}

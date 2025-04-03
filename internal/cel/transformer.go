@@ -25,6 +25,15 @@ func parseExpression(expression string) (*ast.AST, error) {
 	return p, nil
 }
 
+// TransformCounterVariable Limitador, as of v2, does expose `descriptors` explicitly. As such `Limit`'s variables
+// need to be accessed through that root binding's `Ident`: `descriptors[0]`.
+// This function parses the CEL `expression` and traverses its AST to "rename" all bindings that are from "well-known
+// attributes" and prefixes them, e.g. `request.method` will become `descriptors[0].request.method`, so that the value
+// can be successfully looked up at request time by `Limitador`.
+// Note: This will _only_ replace `knownAttributes` and will leave others as is... tho these _should_ be meaningless
+// anyway. This function does *NOT* try to validate or make any assumption about the expression being otherwise valid.
+// Rather than transforming the AST directly, it only uses the AST to find the `Ident` that need renaming directly in
+// the `expression` passed in. This keeps the resulting expression as close to the input as possible.
 func TransformCounterVariable(expression string) (*string, error) {
 	knownAttributes := []string{"request", "source", "destination", "connection", "metadata", "filter_state", "auth", "ratelimit"}
 	var err error

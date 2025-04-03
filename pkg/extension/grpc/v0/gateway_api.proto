@@ -4,17 +4,28 @@ option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0
 
 package kuadrant.v0;
 
-message NGK {
+message Policy {
+  repeated TargetRef targetRefs = 1;
+}
+
+message Gateway {
+  Metadata metadata = 1;
+  string gatewayClassName = 2;
+  repeated Listener listeners = 3;
+}
+
+message Metadata {
   string name = 1;
-  string group = 2;
-  string kind = 3;
+  string namespace = 2;
 }
 
 message Listener {
   string hostname = 1;
 }
 
-message Gateway {
-  string   name = 1;
-  repeated Listener listeners = 2;
+message TargetRef {
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string sectionName = 4;
 }

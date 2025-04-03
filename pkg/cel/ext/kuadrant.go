@@ -20,7 +20,7 @@ func CelExt(dag DAG) cel.EnvOption {
 }
 
 type DAG interface {
-	FindGatewaysFor(name, group, kind string) ([]*v0.Gateway, error)
+	FindGatewaysFor([]*v0.TargetRef) ([]*v0.Gateway, error)
 }
 
 type kuadrantLib struct {
@@ -40,28 +40,28 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 	}
 
 	// only dev adds anything for now really
-	registery, _ := types.NewRegistry(&v0.NGK{}, &v0.Gateway{})
+	registry, _ := types.NewRegistry(&v0.Policy{}, &v0.Gateway{})
 	if l.dev {
 		opts = append(opts,
 			cel.Function("findGateways",
-				cel.MemberOverload("gateways_for_ngk",
+				cel.MemberOverload("gateways_for_policy",
 					[]*cel.Type{
-						cel.ObjectType("kuadrant.v0.NGK"),
+						cel.ObjectType("kuadrant.v0.Policy"),
 					}, cel.ListType(cel.ObjectType("kuadrant.v0.Gateway")),
 					cel.UnaryBinding(func(arg ref.Val) ref.Val {
-						if ngk, err := refToProto[*v0.NGK](arg); err != nil {
+						if policy, err := refToProto[*v0.Policy](arg); err != nil {
 							return types.NewErr(err.Error())
 						} else {
-							if gws, err := l.dag.FindGatewaysFor(ngk.Name, ngk.Group, ngk.Kind); err != nil {
+							if gws, err := l.dag.FindGatewaysFor(policy.TargetRefs); err != nil {
 								return types.NewErr(err.Error())
 							} else {
 								list := make([]ref.Val, 0, len(gws))
 								for _, gw := range gws {
 									gateway :=
-										registery.NativeToValue(gw)
+										registry.NativeToValue(gw)
 									list = append(list, gateway)
 								}
-								return registery.NativeToValue(list)
+								return registry.NativeToValue(list)
 							}
 						}
 					})),
@@ -74,9 +74,9 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 		cel.Constant("__KUADRANT_VERSION", cel.StringType, types.String(constVersion)),
 	)
 
-	opts = append(opts, cel.CustomTypeAdapter(registery))
-	opts = append(opts, cel.CustomTypeProvider(registery))
-	opts = append(opts, cel.Variable("self", cel.ObjectType("kuadrant.v0.NGK")))
+	opts = append(opts, cel.CustomTypeAdapter(registry))
+	opts = append(opts, cel.CustomTypeProvider(registry))
+	opts = append(opts, cel.Variable("self", cel.ObjectType("kuadrant.v0.Policy")))
 
 	return opts
 }

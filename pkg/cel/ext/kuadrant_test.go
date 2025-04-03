@@ -16,7 +16,7 @@ var tests = []struct {
 }{
 	{expr: `__KUADRANT_VERSION == "1_dev"`},
 	{expr: `self.findGateways().size() == 1`},
-	{expr: `self.findGateways()[0].name == "kuadrant-gw"`},
+	{expr: `self.findGateways()[0].metadata.name == "kuadrant-gw"`},
 	{expr: `self.findGateways()[0].listeners.size() == 1`},
 	{expr: `self.findGateways()[0].listeners[0].hostname == "kuadrant.io"`},
 }
@@ -39,10 +39,14 @@ func TestKuadrantExt(t *testing.T) {
 				t.Fatal(err)
 			}
 			out, _, err := prg.Eval(map[string]any{
-				"self": &v0.NGK{
-					Name:  "foo",
-					Group: "bar",
-					Kind:  "baz",
+				"self": &v0.Policy{
+					TargetRefs: []*v0.TargetRef{
+						{
+							Name:  "foo",
+							Group: "bar",
+							Kind:  "baz",
+						},
+					},
 				},
 			})
 			if tc.err != "" {
@@ -78,11 +82,14 @@ func testKuadrantEnv(t *testing.T, opts ...cel.EnvOption) *cel.Env {
 type TestDAG struct {
 }
 
-func (d *TestDAG) FindGatewaysFor(name, group, kind string) ([]*v0.Gateway, error) {
-	if name == "foo" && group == "bar" && kind == "baz" {
+func (d *TestDAG) FindGatewaysFor(targets []*v0.TargetRef) ([]*v0.Gateway, error) {
+	if targets[0].Name == "foo" && targets[0].Group == "bar" && targets[0].Kind == "baz" {
 		return []*v0.Gateway{
 			{
-				Name: "kuadrant-gw",
+				Metadata: &v0.Metadata{
+					Name:      "kuadrant-gw",
+					Namespace: "some-ns",
+				},
 				Listeners: []*v0.Listener{
 					{
 						Hostname: "kuadrant.io",

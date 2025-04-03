@@ -19,7 +19,7 @@ func parseExpression(expression string) (*ast.AST, error) {
 
 	p, iss := prsr.Parse(common.NewTextSource(expression))
 	if len(iss.GetErrors()) > 0 {
-		return nil, errors.New("got errors parsing")
+		return nil, errors.New(iss.ToDisplayString())
 	}
 
 	return p, nil

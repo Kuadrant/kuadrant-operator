@@ -539,14 +539,6 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled, is
 		)
 	}
 
-	if isIstioInstalled {
-		workflow.Tasks = append(workflow.Tasks, NewIstioExtensionsJanitor(client).Subscription().Reconcile)
-	}
-
-	if isEnvoyGatewayInstalled {
-		workflow.Tasks = append(workflow.Tasks, NewEnvoyGatewayJanitor(client).Subscription().Reconcile)
-	}
-
 	return workflow
 }
 

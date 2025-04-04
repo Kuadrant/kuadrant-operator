@@ -81,5 +81,27 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 
 	logAsString := strings.Join(messages, "\n")
 	assert.Assert(t, lo.Contains(messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
-	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "usage"))
+	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "is not a valid log level range 0-1"))
+}
+
+func TestOOPExtensionParseStderr(t *testing.T) {
+	lvl, text, err := ParseStderr(append([]byte{0}, []byte("Info")...))
+	assert.Equal(t, lvl, 0)
+	assert.Equal(t, text, "Info")
+	assert.Equal(t, err, nil)
+
+	lvl, text, err = ParseStderr(append([]byte{1}, []byte("Error")...))
+	assert.Equal(t, lvl, 1)
+	assert.Equal(t, text, "Error")
+	assert.Equal(t, err, nil)
+
+	lvl, text, err = ParseStderr(append([]byte{5}, []byte("not valid log level")...))
+	assert.Equal(t, lvl, 1)
+	assert.Equal(t, text, "")
+	assert.Error(t, err, "first byte value 5 is not a valid log level range 0-1")
+
+	lvl, text, err = ParseStderr([]byte{})
+	assert.Equal(t, lvl, 1)
+	assert.Equal(t, text, "")
+	assert.Error(t, err, "input byte slice is empty")
 }

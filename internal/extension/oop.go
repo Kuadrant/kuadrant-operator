@@ -97,7 +97,7 @@ func (p *OOPExtension) Start() error {
 	go func() {
 		if err := cmd.Wait(); err != nil {
 			close(stopChan)
-			p.logger.Error(err, fmt.Sprintf("Extension %q finished with an error", p.name))
+			p.logStderr(1, fmt.Sprintf("Extension %q finished with an error", p.name), err)
 		}
 	}()
 
@@ -193,8 +193,8 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 			}
 
 			if scanner.Scan() {
-				// Call StderrParser, for now just logging as INFO
-				p.logger.Info(scanner.Text())
+				lvl, text, err := ParseStderr(scanner.Bytes())
+				p.logStderr(lvl, text, err)
 				lastReadTime = time.Now()
 			} else if err := scanner.Err(); err != nil {
 				p.logger.Error(err, "failed to read stderr")
@@ -203,5 +203,34 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 
 			// If this turns out to be causing busy-waiting/CPU spikes we could sleep for a brief time
 		}
+	}
+}
+
+func ParseStderr(logLine []byte) (logLevel int, logString string, err error) { // We could extract this to utils in the future
+	if len(logLine) == 0 {
+		return 1, "", fmt.Errorf("input byte slice is empty")
+	}
+
+	// Convert first byte to integer and validate log range
+	logLevel = int(logLine[0])
+	if logLevel < 0 || logLevel > 1 {
+		// At the moment only differencing from Info and Error
+		return 1, "", fmt.Errorf("first byte value %d is not a valid log level range 0-1", logLevel)
+	}
+
+	// Convert rest to string (if exists)
+	if len(logLine) > 1 {
+		logString = string(logLine[1:])
+	}
+
+	return logLevel, logString, nil
+}
+
+func (p *OOPExtension) logStderr(logLevel int, logString string, err error) {
+	switch logLevel {
+	case 0:
+		p.logger.Info(logString)
+	default:
+		p.logger.Error(err, logString)
 	}
 }

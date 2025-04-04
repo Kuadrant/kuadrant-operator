@@ -19,6 +19,7 @@ var tests = []struct {
 	{expr: `self.findGateways()[0].metadata.name == "kuadrant-gw"`},
 	{expr: `self.findGateways()[0].listeners.size() == 1`},
 	{expr: `self.findGateways()[0].listeners[0].hostname == "kuadrant.io"`},
+	{expr: `self.findGateways()[0].metadata.name == self.targetRefs[0].findGateways()[0].metadata.name`},
 }
 
 func TestKuadrantExt(t *testing.T) {

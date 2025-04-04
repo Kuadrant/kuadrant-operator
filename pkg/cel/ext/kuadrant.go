@@ -65,6 +65,27 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 							}
 						}
 					})),
+				cel.MemberOverload("gateways_for_target",
+					[]*cel.Type{
+						cel.ObjectType("kuadrant.v0.TargetRef"),
+					}, cel.ListType(cel.ObjectType("kuadrant.v0.Gateway")),
+					cel.UnaryBinding(func(arg ref.Val) ref.Val {
+						if target, err := refToProto[*v0.TargetRef](arg); err != nil {
+							return types.NewErr(err.Error())
+						} else {
+							if gws, err := l.dag.FindGatewaysFor([]*v0.TargetRef{target}); err != nil {
+								return types.NewErr(err.Error())
+							} else {
+								list := make([]ref.Val, 0, len(gws))
+								for _, gw := range gws {
+									gateway :=
+										registry.NativeToValue(gw)
+									list = append(list, gateway)
+								}
+								return registry.NativeToValue(list)
+							}
+						}
+					})),
 			),
 		)
 		constVersion = constVersion + "_dev"

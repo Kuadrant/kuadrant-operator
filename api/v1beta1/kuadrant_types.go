@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"reflect"
+
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -35,6 +37,7 @@ var (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,priority=2
+//+kubebuilder:printcolumn:name="mTLS",type=boolean,JSONPath=".status.mtls"
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Kuadrant configures installations of Kuadrant Service Protection components
@@ -90,12 +93,22 @@ type KuadrantStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
+	// Mtls reflects the mtls feature state.
+	// +optional
+	Mtls *bool `json:"mtls,omitempty"`
 }
 
 func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool {
 	if r.ObservedGeneration != other.ObservedGeneration {
 		diff := cmp.Diff(r.ObservedGeneration, other.ObservedGeneration)
 		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
+		return false
+	}
+
+	if !reflect.DeepEqual(r.Mtls, other.Mtls) {
+		diff := cmp.Diff(r.Mtls, other.Mtls)
+		logger.V(1).Info("Mtls not equal", "difference", diff)
 		return false
 	}
 

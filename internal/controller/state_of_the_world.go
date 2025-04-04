@@ -450,7 +450,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
 		},
-		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
+		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled).Run,
 	}
 
 	if b.isConsolePluginInstalled {
@@ -527,7 +527,7 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	}
 }
 
-func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
+func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled bool) *controller.Workflow {
 	workflow := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{},
 	}

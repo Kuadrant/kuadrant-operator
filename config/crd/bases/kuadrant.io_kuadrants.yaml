@@ -19,6 +19,9 @@ spec:
       name: Status
       priority: 2
       type: string
+    - jsonPath: .status.mtls
+      name: mTLS
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -48,6 +51,15 @@ spec:
           spec:
             description: KuadrantSpec defines the desired state of Kuadrant
             properties:
+              mtls:
+                description: |-
+                  MTLS is an optional entry which when enabled is set to true, kuadrant-operator
+                  will add the configuration required to enable mTLS between an Istio provided
+                  gateway and the Kuadrant components.
+                properties:
+                  enable:
+                    type: boolean
+                type: object
               observability:
                 properties:
                   enable:
@@ -119,6 +131,9 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              mtls:
+                description: Mtls reflects the mtls feature state.
+                type: boolean
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
                   recently observed spec.

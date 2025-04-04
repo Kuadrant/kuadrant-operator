@@ -6,12 +6,14 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	observability "github.com/kuadrant/kuadrant-operator/internal/observability"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 var (
@@ -20,6 +22,9 @@ var (
 
 	LimitadorsResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
 	AuthorinosResource = authorinooperatorv1beta1.GroupVersion.WithResource("authorinos")
+
+	DeploymentGroupKind = appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind()
+	DeploymentsResource = appsv1.SchemeGroupVersion.WithResource("deployments")
 )
 
 func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
@@ -66,6 +71,23 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 	}
 }
 
+func LinkLimitadorToDeployment(objs controller.Store) machinery.LinkFunc {
+	limitadors := utils.Map(objs.FilterByGroupKind(LimitadorGroupKind), ControllerObjectToMachineryObject)
+
+	return machinery.LinkFunc{
+		From: LimitadorGroupKind,
+		To:   DeploymentGroupKind,
+		Func: func(deployment machinery.Object) []machinery.Object {
+			return lo.Filter(limitadors, func(limitador machinery.Object, _ int) bool {
+				// the name of the deployment is hardcoded. This deployment is owned by the limitador operator.
+				// This Link is used to inject pod template label to the deployment.
+				// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
+				return limitador.GetNamespace() == deployment.GetNamespace() && deployment.GetName() == "limitador-limitador"
+			})
+		},
+	}
+}
+
 func LinkKuadrantToServiceMonitor(objs controller.Store) machinery.LinkFunc {
 	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantGroupKind), controller.ObjectAs[machinery.Object])
 
@@ -102,4 +124,11 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 			})
 		},
 	}
+}
+
+func ControllerObjectToMachineryObject(cObj controller.Object) machinery.Object {
+	if mObj, ok := cObj.(machinery.Object); ok {
+		return mObj
+	}
+	return &controller.RuntimeObject{Object: cObj}
 }

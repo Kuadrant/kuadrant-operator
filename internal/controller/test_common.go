@@ -37,6 +37,7 @@ import (
 	consolev1 "github.com/openshift/api/console/v1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -104,6 +105,7 @@ func BootstrapScheme() *runtime.Scheme {
 		egv1alpha1.AddToScheme,
 		consolev1.AddToScheme,
 		monitoringv1.AddToScheme,
+		istiosecurity.AddToScheme,
 	)
 
 	err := sb.AddToScheme(s)

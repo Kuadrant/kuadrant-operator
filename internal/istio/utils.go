@@ -11,6 +11,7 @@ import (
 	istioapiv1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istiosecurityv1 "istio.io/client-go/pkg/apis/security/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,11 +21,13 @@ import (
 )
 
 var (
-	EnvoyFiltersResource = istioclientgonetworkingv1alpha3.SchemeGroupVersion.WithResource("envoyfilters")
-	WasmPluginsResource  = istioclientgoextensionv1alpha1.SchemeGroupVersion.WithResource("wasmplugins")
+	EnvoyFiltersResource       = istioclientgonetworkingv1alpha3.SchemeGroupVersion.WithResource("envoyfilters")
+	WasmPluginsResource        = istioclientgoextensionv1alpha1.SchemeGroupVersion.WithResource("wasmplugins")
+	PeerAuthenticationResource = istiosecurityv1.SchemeGroupVersion.WithResource("peerauthentications")
 
-	EnvoyFilterGroupKind = schema.GroupKind{Group: istioclientgonetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
-	WasmPluginGroupKind  = schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"}
+	EnvoyFilterGroupKind        = schema.GroupKind{Group: istioclientgonetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
+	WasmPluginGroupKind         = schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"}
+	PeerAuthenticationGroupKind = schema.GroupKind{Group: istiosecurityv1.GroupName, Kind: "PeerAuthentication"}
 )
 
 func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
@@ -36,8 +39,8 @@ func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
 }
 
 // BuildEnvoyFilterClusterPatch returns an envoy config patch that adds a cluster to the gateway.
-func BuildEnvoyFilterClusterPatch(host string, port int, clusterPatchBuilder func(string, int) map[string]any) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
-	patchRaw, _ := json.Marshal(map[string]any{"operation": "ADD", "value": clusterPatchBuilder(host, port)})
+func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatchBuilder func(string, int, bool) map[string]any) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+	patchRaw, _ := json.Marshal(map[string]any{"operation": "ADD", "value": clusterPatchBuilder(host, port, mtls)})
 	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
 	if err := patch.UnmarshalJSON(patchRaw); err != nil {
 		return nil, err
@@ -99,7 +102,6 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 			if aPatch.Operation != bPatch.Operation || aPatch.FilterClass != bPatch.FilterClass {
 				return false
 			}
-
 			aPatchJSON, _ := aPatch.Value.MarshalJSON()
 			bPatchJSON, _ := aPatch.Value.MarshalJSON()
 			return string(aPatchJSON) == string(bPatchJSON)
@@ -132,6 +134,14 @@ func IsWASMPluginInstalled(restMapper meta.RESTMapper) (bool, error) {
 		istioclientgoextensionv1alpha1.SchemeGroupVersion.Version)
 }
 
+func IsPeerAuthenticationInstalled(restMapper meta.RESTMapper) (bool, error) {
+	return utils.IsCRDInstalled(
+		restMapper,
+		istiosecurityv1.GroupName,
+		"PeerAuthentication",
+		istiosecurityv1.SchemeGroupVersion.Version)
+}
+
 func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 	ok, err := IsWASMPluginInstalled(restMapper)
 	if err != nil {
@@ -142,6 +152,14 @@ func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 	}
 
 	ok, err = IsEnvoyFilterInstalled(restMapper)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+
+	ok, err = IsPeerAuthenticationInstalled(restMapper)
 	if err != nil {
 		return false, err
 	}

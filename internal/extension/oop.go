@@ -17,7 +17,9 @@ limitations under the License.
 package extension
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -81,17 +83,8 @@ func (p *OOPExtension) Start() error {
 		return err
 	}
 
-	// Read from pipes
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, err := stderr.Read(buf)
-			if err != nil {
-				break
-			}
-			p.logger.Error(fmt.Errorf("error from extension %q ->", p.name), string(buf[:n]))
-		}
-	}()
+	stopChan := make(chan struct{})
+	go p.monitorStderr(stderr, stopChan)
 
 	if err := cmd.Start(); err != nil {
 		if e := p.stopServer(); e != nil {
@@ -100,6 +93,13 @@ func (p *OOPExtension) Start() error {
 		return err
 	}
 	p.logger.Info("started")
+
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			close(stopChan)
+			p.logger.Error(err, fmt.Sprintf("Extension %q finished with an error", p.name))
+		}
+	}()
 
 	// only set this, if we successfully started it all
 	p.cmd = cmd
@@ -176,4 +176,32 @@ func (p *OOPExtension) stopServer() error {
 		}
 	}
 	return nil
+}
+
+func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struct{}) {
+	scanner := bufio.NewScanner(stderr)
+	var lastReadTime time.Time
+
+	for {
+		select {
+		case <-stopChan:
+			// If the channel has been closed when the cmd has exited, we return
+			return
+		default:
+			if !lastReadTime.IsZero() && time.Since(lastReadTime) > 30*time.Second {
+				// We could check for liveness here
+			}
+
+			if scanner.Scan() {
+				// Call StderrParser, for now just logging as INFO
+				p.logger.Info(scanner.Text())
+				lastReadTime = time.Now()
+			} else if err := scanner.Err(); err != nil {
+				p.logger.Error(err, "failed to read stderr")
+				return
+			}
+
+			// If this turns out to be causing busy-waiting/CPU spikes we could sleep for a brief time
+		}
+	}
 }

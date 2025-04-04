@@ -17,10 +17,13 @@ limitations under the License.
 package extension
 
 import (
-	"github.com/go-logr/logr/funcr"
-	"gotest.tools/assert"
 	"strings"
 	"testing"
+
+	"github.com/samber/lo"
+
+	"github.com/go-logr/logr/funcr"
+	"gotest.tools/assert"
 
 	"github.com/go-logr/logr"
 )
@@ -76,7 +79,7 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 
 	_ = oopErrorLog.Stop()
 
-	errorMsg := messages[2]
-	assert.Assert(t, strings.Contains(errorMsg, "error from extension \\\"testErrorLog\\\""))
-	assert.Assert(t, strings.Contains(strings.ToLower(errorMsg), "usage:"))
+	logAsString := strings.Join(messages, "\n")
+	assert.Assert(t, lo.Contains(messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
+	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "usage"))
 }

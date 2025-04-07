@@ -113,12 +113,9 @@ func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 		return fmt.Errorf("could not get limitador deployment %w", err)
 	}
 
-	updated := false
-
 	// add "sidecar.istio.io/inject" label to limitador deployment.
 	// label value depends on whether MTLS is enabled or not
-	reconcilers.MergeMapStringString(
-		&updated,
+	updated := utils.MergeMapStringString(
 		&deployment.Spec.Template.Labels,
 		map[string]string{
 			"sidecar.istio.io/inject": strconv.FormatBool(kObj.IsMTLSEnabled()),

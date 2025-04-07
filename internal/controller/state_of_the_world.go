@@ -295,7 +295,6 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 		controller.WithObjectLinks(
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
-			//istio.LinkPeerAuthenticationToGateway,
 		),
 	)
 
@@ -596,7 +595,7 @@ func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuad
 }
 
 func KuadrantManagedObjectLabels() labels.Set {
-	return map[string]string{
+	return labels.Set(map[string]string{
 		kuadrantManagedLabelKey: "true",
-	}
+	})
 }

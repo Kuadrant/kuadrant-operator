@@ -21,6 +21,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 type AuthorinoIstioIntegrationReconciler struct {
@@ -88,12 +89,9 @@ func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 		return fmt.Errorf("could not get authorino deployment %w", err)
 	}
 
-	updated := false
-
 	// add "sidecar.istio.io/inject" label to authorino deployment.
 	// label value depends on whether MTLS is enabled or not
-	reconcilers.MergeMapStringString(
-		&updated,
+	updated := utils.MergeMapStringString(
 		&deployment.Spec.Template.Labels,
 		map[string]string{
 			"sidecar.istio.io/inject": strconv.FormatBool(kObj.IsMTLSEnabled()),

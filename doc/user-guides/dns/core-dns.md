@@ -33,7 +33,7 @@ git clone https://github.com/Kuadrant/kuadrant-operator.git
 From the root of the kuadrant-operator repo execute:
 
 ```
-make local-setup DNS_OPERATOR_GITREF=coredns && ./bin/kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/coredns-multi?ref=coredns | kubectl apply -f -
+make local-setup && ./bin/kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/coredns-multi | kubectl apply -f -
 ```
 
 This will install Kuadrant into a local kind cluster and configure the CoreDNS instances. Once you have Kuadrant installed, you will need to enable the CoreDNS provider integration and disable the health checks probes (which are not currently a part of this integration):

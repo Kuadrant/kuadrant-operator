@@ -11,6 +11,7 @@ import (
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
@@ -32,6 +33,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/internal/authorino"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 )
 
@@ -635,19 +637,18 @@ func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
 	}
 }
 
-func LimitadorIsReady(ctx context.Context, cl client.Client, lKey client.ObjectKey) func(g Gomega) {
-	return func(g Gomega) {
+func LimitadorIsReady(cl client.Client, lKey client.ObjectKey) func(g Gomega, ctx context.Context) {
+	return func(g Gomega, ctx context.Context) {
 		existing := &limitadorv1alpha1.Limitador{}
 		g.Expect(cl.Get(ctx, lKey, existing)).To(Succeed())
 		g.Expect(meta.IsStatusConditionTrue(existing.Status.Conditions, limitadorv1alpha1.StatusConditionReady)).To(BeTrue())
 	}
 }
 
-func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey) func(g Gomega) {
-	return func(g Gomega) {
+func KuadrantIsReady(cl client.Client, key client.ObjectKey) func(g Gomega, ctx context.Context) {
+	return func(g Gomega, ctx context.Context) {
 		kuadrantCR := &kuadrantv1beta1.Kuadrant{}
-		err := cl.Get(ctx, key, kuadrantCR)
-		g.Expect(err).To(Succeed())
+		g.Expect(cl.Get(ctx, key, kuadrantCR)).To(Succeed())
 		g.Expect(meta.IsStatusConditionTrue(kuadrantCR.Status.Conditions, "Ready")).To(BeTrue())
 	}
 }
@@ -690,4 +691,15 @@ func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, p
 	g.Expect(enforcedCond).ToNot(BeNil())
 	g.Expect(enforcedCond.Status).To(Equal(metav1.ConditionTrue))
 	g.Expect(enforcedCond.Reason).To(Equal(string(kuadrant.PolicyReasonEnforced)))
+}
+
+func IsAuthorionReady(cl client.Client, key client.ObjectKey) func(g Gomega, ctx context.Context) {
+	return func(g Gomega, ctx context.Context) {
+		authorinoObj := &authorinooperatorv1beta1.Authorino{}
+		g.Expect(cl.Get(ctx, key, authorinoObj)).ToNot(HaveOccurred())
+
+		readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")
+		g.Expect(readyCondition).ToNot(BeNil())
+		g.Expect(readyCondition.Status).To(Equal(corev1.ConditionTrue))
+	}
 }

@@ -23,14 +23,14 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
+var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
-		rlpName       = "toystore-rlp"
+		apName        = "toystore-authpolicy"
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
@@ -41,8 +41,8 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 
-		Eventually(tests.LimitadorIsReady(testClient(), client.ObjectKey{
-			Name:      kuadrant.LimitadorName,
+		Eventually(tests.IsAuthorionReady(testClient(), client.ObjectKey{
+			Name:      "authorino",
 			Namespace: kuadrantInstallationNS,
 		})).WithContext(ctx).Should(Succeed())
 	}
@@ -52,7 +52,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	Context("RLP targeting Gateway", func() {
+	Context("AuthPolicy targeting Gateway", func() {
 
 		// kuadrant mTLS is off
 		BeforeEach(func(ctx SpecContext) {
@@ -64,18 +64,18 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 		})
 
-		It("EnvoyFilter only created if RLP is in the path to a route", func(ctx SpecContext) {
-			// create ratelimitpolicy
-			rlp := &kuadrantv1.RateLimitPolicy{
+		It("EnvoyFilter only created if KAP is in the path to a route", func(ctx SpecContext) {
+			// create authpolicy
+			authPolicy := &kuadrantv1.AuthPolicy{
 				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
+					Kind:       "AuthPolicy",
 					APIVersion: kuadrantv1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
+					Name:      apName,
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1.RateLimitPolicySpec{
+				Spec: kuadrantv1.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
@@ -83,34 +83,27 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
 						},
 					},
-					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1.Limit{
-							"l1": {
-								Rates: []kuadrantv1.Rate{
-									{
-										Limit: 1, Window: kuadrantv1.Duration("3m"),
-									},
-								},
-							},
+					Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: tests.BuildBasicAuthScheme(),
 						},
 					},
 				},
 			}
-			err := testClient().Create(ctx, rlp)
-			Expect(err).ToNot(HaveOccurred())
-			// Check RLP status is available
-			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(tests.RLPIsAccepted(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
+			Expect(testClient().Create(ctx, authPolicy)).ToNot(HaveOccurred())
+			// Check policy status is available
+			policyKey := client.ObjectKey{Name: apName, Namespace: testNamespace}
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.IsAuthPolicyEnforced(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeFalse())
+			Expect(tests.IsAuthPolicyEnforcedCondition(ctx, testClient(), policyKey, kuadrant.PolicyReasonUnknown, "AuthPolicy is not in the path to any existing routes"))
 
 			// Check envoy filter has not been created
-			Eventually(func() bool {
+			Eventually(func(g Gomega, ctx context.Context) {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
-				err = testClient().Get(ctx, efKey, existingEF)
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
+				efKey := client.ObjectKey{Name: controllers.AuthClusterName(TestGatewayName), Namespace: testNamespace}
+				err := testClient().Get(ctx, efKey, existingEF)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
 
 			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			Expect(k8sClient.Create(ctx, route)).To(Succeed())
@@ -119,7 +112,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 			// Check envoy filter has been created
 			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega, ctx context.Context) {
-				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.AuthClusterName(TestGatewayName), Namespace: testNamespace}
 				g.Expect(testClient().Get(ctx, efKey, existingEF)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
@@ -136,13 +129,13 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 			// transport_socket config only added when mTLS is configured
 			Expect(patchValue).NotTo(HaveKey("transport_socket"))
 
-			err = testClient().Delete(ctx, rlp)
+			err = testClient().Delete(ctx, authPolicy)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check envoy filter is gone
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.AuthClusterName(TestGatewayName), Namespace: testNamespace}
 				err = testClient().Get(ctx, efKey, existingEF)
 				return apierrors.IsNotFound(err)
 			}).WithContext(ctx).Should(BeTrue())
@@ -165,17 +158,17 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 			Expect(k8sClient.Create(ctx, route)).To(Succeed())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 
-			// create ratelimitpolicy
-			rlp := &kuadrantv1.RateLimitPolicy{
+			// create authpolicy
+			authPolicy := &kuadrantv1.AuthPolicy{
 				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
+					Kind:       "AuthPolicy",
 					APIVersion: kuadrantv1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
+					Name:      apName,
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1.RateLimitPolicySpec{
+				Spec: kuadrantv1.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
@@ -183,29 +176,21 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
 						},
 					},
-					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1.Limit{
-							"l1": {
-								Rates: []kuadrantv1.Rate{
-									{
-										Limit: 1, Window: kuadrantv1.Duration("3m"),
-									},
-								},
-							},
+					Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: tests.BuildBasicAuthScheme(),
 						},
 					},
 				},
 			}
-			err := testClient().Create(ctx, rlp)
-			Expect(err).ToNot(HaveOccurred())
-			// Check RLP status is available
-			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(tests.RLPIsAccepted(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
+			Expect(testClient().Create(ctx, authPolicy)).ToNot(HaveOccurred())
+			// Check policy status is available
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.IsAuthPolicyEnforced(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
 
 			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega, ctx context.Context) {
-				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.AuthClusterName(TestGatewayName), Namespace: testNamespace}
 				g.Expect(testClient().Get(ctx, efKey, existingEF)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 

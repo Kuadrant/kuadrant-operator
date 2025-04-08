@@ -16,20 +16,20 @@ on:
         description: Authorino Operator bundle version (semver)
         default: 0.0.0
         type: string
-      limitadorOperatorVersion:
-        description: Limitador Operator bundle version (semver)
+      consolePluginVersion:
+        description: ConsolePlugin version (semver)
         default: 0.0.0
         type: string
       dnsOperatorVersion:
         description: DNS Operator bundle version (semver)
         default: 0.0.0
         type: string
-      wasmShimVersion:
-        description: WASM Shim version (semver)
+      limitadorOperatorVersion:
+        description: Limitador Operator bundle version (semver)
         default: 0.0.0
         type: string
-      consolePluginVersion:
-        description: ConsolePlugin version (semver)
+      wasmShimVersion:
+        description: WASM Shim version (semver)
         default: 0.0.0
         type: string
       olmChannel:

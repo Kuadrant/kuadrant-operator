@@ -73,7 +73,7 @@ var (
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
-func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) (*controller.Controller, error) {
 	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
@@ -146,10 +146,14 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 	// Boot options and reconciler based on detected dependencies
 	bootOptions := NewBootOptionsBuilder(manager, client, logger)
-	controllerOpts = append(controllerOpts, bootOptions.getOptions()...)
+	options, err := bootOptions.getOptions()
+	if err != nil {
+		return nil, err
+	}
+	controllerOpts = append(controllerOpts, options...)
 	controllerOpts = append(controllerOpts, controller.WithReconcile(bootOptions.Reconciler()))
 
-	return controller.NewController(controllerOpts...)
+	return controller.NewController(controllerOpts...), nil
 }
 
 // NewBootOptionsBuilder is used to return a list of controller.ControllerOption and a controller.ReconcileFunc that depend
@@ -179,10 +183,14 @@ type BootOptionsBuilder struct {
 	isPrometheusOperatorInstalled bool
 }
 
-func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	opts = append(opts, b.getGatewayAPIOptions()...)
-	opts = append(opts, b.getIstioOptions()...)
+	istioOpts, err := b.getIstioOptions()
+	if err != nil {
+		return opts, err
+	}
+	opts = append(opts, istioOpts...)
 	opts = append(opts, b.getEnvoyGatewayOptions()...)
 	opts = append(opts, b.getCertManagerOptions()...)
 	opts = append(opts, b.getConsolePluginOptions()...)
@@ -191,7 +199,7 @@ func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
 	opts = append(opts, b.getAuthorinoOperatorOptions()...)
 	opts = append(opts, b.getObservabilityOptions()...)
 
-	return opts
+	return opts, nil
 }
 
 func (b *BootOptionsBuilder) getGatewayAPIOptions() []controller.ControllerOption {
@@ -259,13 +267,12 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 	return opts
 }
 
-func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
-	if err != nil || !b.isIstioInstalled {
-		b.logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+	if err != nil {
+		return opts, err
 	}
 
 	opts = append(opts,
@@ -299,7 +306,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 		),
 	)
 
-	return opts
+	return opts, nil
 }
 
 func (b *BootOptionsBuilder) getCertManagerOptions() []controller.ControllerOption {

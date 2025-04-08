@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
@@ -229,5 +230,19 @@ func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTarget
 				name == obj.GetName() &&
 				namespace == obj.GetNamespace()
 		})
+	}
+}
+
+func LinkKuadrantToPeerAuthentication(objs controller.Store) machinery.LinkFunc {
+	kuadrants := lo.Map(objs.FilterByGroupKind(kuadrantv1beta1.KuadrantGroupKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: kuadrantv1beta1.KuadrantGroupKind,
+		To:   PeerAuthenticationGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(kuadrants, func(k machinery.Object, _ int) bool {
+				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "default"
+			})
+		},
 	}
 }

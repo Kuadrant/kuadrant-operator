@@ -295,6 +295,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 		controller.WithObjectLinks(
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
+			istio.LinkKuadrantToPeerAuthentication,
 		),
 	)
 

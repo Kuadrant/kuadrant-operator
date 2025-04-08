@@ -98,7 +98,6 @@ func (d *TestDAG) FindGatewaysFor(targets []*v0.TargetRef) ([]*v0.Gateway, error
 				},
 			},
 		}, nil
-
 	}
 	return nil, nil
 }

@@ -49,42 +49,42 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 						cel.ObjectType("kuadrant.v0.Policy"),
 					}, cel.ListType(cel.ObjectType("kuadrant.v0.Gateway")),
 					cel.UnaryBinding(func(arg ref.Val) ref.Val {
-						if policy, err := refToProto[*v0.Policy](arg); err != nil {
-							return types.NewErr(err.Error())
-						} else {
-							if gws, err := l.dag.FindGatewaysFor(policy.TargetRefs); err != nil {
-								return types.NewErr(err.Error())
-							} else {
-								list := make([]ref.Val, 0, len(gws))
-								for _, gw := range gws {
-									gateway :=
-										registry.NativeToValue(gw)
-									list = append(list, gateway)
-								}
-								return registry.NativeToValue(list)
-							}
+						policy, err := refToProto[*v0.Policy](arg)
+						if err != nil {
+							return types.NewErr("pbError: %w", err)
 						}
+						gws, err := l.dag.FindGatewaysFor(policy.TargetRefs)
+						if err != nil {
+							return types.NewErr("cel-kuadrant(gateways_for_policy): %w", err)
+						}
+						list := make([]ref.Val, 0, len(gws))
+						for _, gw := range gws {
+							gateway :=
+								registry.NativeToValue(gw)
+							list = append(list, gateway)
+						}
+						return registry.NativeToValue(list)
 					})),
 				cel.MemberOverload("gateways_for_target",
 					[]*cel.Type{
 						cel.ObjectType("kuadrant.v0.TargetRef"),
 					}, cel.ListType(cel.ObjectType("kuadrant.v0.Gateway")),
 					cel.UnaryBinding(func(arg ref.Val) ref.Val {
-						if target, err := refToProto[*v0.TargetRef](arg); err != nil {
-							return types.NewErr(err.Error())
-						} else {
-							if gws, err := l.dag.FindGatewaysFor([]*v0.TargetRef{target}); err != nil {
-								return types.NewErr(err.Error())
-							} else {
-								list := make([]ref.Val, 0, len(gws))
-								for _, gw := range gws {
-									gateway :=
-										registry.NativeToValue(gw)
-									list = append(list, gateway)
-								}
-								return registry.NativeToValue(list)
-							}
+						target, err := refToProto[*v0.TargetRef](arg)
+						if err != nil {
+							return types.NewErr("pbError: %w", err)
 						}
+						gws, err := l.dag.FindGatewaysFor([]*v0.TargetRef{target})
+						if err != nil {
+							return types.NewErr("cel-kuadrant(gateways_for_target): %w", err)
+						}
+						list := make([]ref.Val, 0, len(gws))
+						for _, gw := range gws {
+							gateway :=
+								registry.NativeToValue(gw)
+							list = append(list, gateway)
+						}
+						return registry.NativeToValue(list)
 					})),
 			),
 		)

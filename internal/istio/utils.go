@@ -101,7 +101,7 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 			}
 
 			aPatchJSON, _ := aPatch.Value.MarshalJSON()
-			bPatchJSON, _ := aPatch.Value.MarshalJSON()
+			bPatchJSON, _ := bPatch.Value.MarshalJSON()
 			return string(aPatchJSON) == string(bPatchJSON)
 		})
 	})

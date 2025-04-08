@@ -170,7 +170,11 @@ func main() {
 		}
 	}
 
-	stateOfTheWorld := controllers.NewPolicyMachineryController(mgr, client, log.Log)
+	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log)
+	if err != nil {
+		setupLog.Error(err, "unable to setup policy controller")
+		os.Exit(1)
+	}
 	if err = stateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "unable to start stateOfTheWorld controller")
 		os.Exit(1)

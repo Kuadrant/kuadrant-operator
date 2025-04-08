@@ -266,7 +266,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					MaxValue:   1,
 					Seconds:    3 * 60,
 					Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 					Variables:  []string{},
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -339,7 +339,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					MaxValue:   1,
 					Seconds:    3 * 60,
 					Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 					Variables:  []string{},
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -421,7 +421,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					MaxValue:   10,
 					Seconds:    5,
 					Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 					Variables:  []string{},
 				})).WithContext(ctx).Should(Succeed())
 			})
@@ -520,7 +520,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  limitsNamespace,
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 
@@ -532,7 +532,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  limitsNamespace,
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -557,7 +557,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -588,7 +588,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  limitsNamespace,
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 
@@ -610,7 +610,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  limitsNamespace,
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -637,7 +637,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  limitsNamespace,
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 
@@ -659,7 +659,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  limitsNamespace,
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -851,28 +851,28 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					MaxValue:   1000,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(targetedRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwA)},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, limitIdentifierGwA)},
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(targetedRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwB)},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, limitIdentifierGwB)},
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{ // FIXME(@guicassolato): we need to create one limit definition per gateway × route combination, not one per gateway × policy combination
 					MaxValue:   1000,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(untargetedRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwA)},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, limitIdentifierGwA)},
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(untargetedRoute),
-					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwB)},
+					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, limitIdentifierGwB)},
 					Variables:  []string{},
 				},
 			)).WithContext(ctx).Should(Succeed())

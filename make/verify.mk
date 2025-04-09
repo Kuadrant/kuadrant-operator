@@ -31,12 +31,6 @@ verify-helm-charts: helm-build ## Verify helm charts update.
 	git diff --exit-code ./charts
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./charts)" ]
 
-.PHONY: verify-manifests ## Verify controller-gen, bundle and helm charts manifests.
-verify-manifests: ## Verify manifests update.
-	make verify-controller-manifests
-	make verify-bundle
-	make verify-helm-charts
-
 .PHONY: verify-prepare-release ## Verify set of manifests based on release.yaml file.
 verify-prepare-release: prepare-release
 	git diff --exit-code .

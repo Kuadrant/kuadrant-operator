@@ -34,6 +34,13 @@ import (
 
 const defaultUnixSocket = ".grpc.sock"
 
+type logLevel int
+
+const (
+	LogLevelInfo logLevel = iota
+	LogLevelError
+)
+
 type OOPExtension struct {
 	name       string
 	executable string
@@ -207,25 +214,25 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 	}
 }
 
-func (p *OOPExtension) logStderr(logLevel int, logString string, err error) {
-	switch logLevel {
-	case 0:
+func (p *OOPExtension) logStderr(logLvl logLevel, logString string, err error) {
+	switch logLvl {
+	case LogLevelInfo:
 		p.logger.Info(logString)
 	default:
 		p.logger.Error(err, logString)
 	}
 }
 
-func parseStderr(logLine []byte) (logLevel int, logString string, err error) {
+func parseStderr(logLine []byte) (logLvl logLevel, logString string, err error) {
 	if len(logLine) == 0 {
-		return 1, "", fmt.Errorf("input byte slice is empty")
+		return LogLevelError, "", fmt.Errorf("input byte slice is empty")
 	}
 
 	// Convert first byte to integer and validate log range
-	logLevel = int(logLine[0])
-	if logLevel < 0 || logLevel > 1 {
+	logLvl = logLevel(logLine[0])
+	if logLvl < LogLevelInfo || logLvl > LogLevelError {
 		// At the moment only differencing from Info and Error
-		return 1, "", fmt.Errorf("first byte is not a valid log level range 0-1. log: %q", string(logLine))
+		return LogLevelError, "", fmt.Errorf("first byte is not a valid log level range 0-1. log: %q", string(logLine))
 	}
 
 	// Convert rest to string (if exists)
@@ -233,5 +240,5 @@ func parseStderr(logLine []byte) (logLevel int, logString string, err error) {
 		logString = string(logLine[1:])
 	}
 
-	return logLevel, logString, nil
+	return logLvl, logString, nil
 }

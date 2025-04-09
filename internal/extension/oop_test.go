@@ -87,22 +87,22 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 
 func TestOOPExtensionParseStderr(t *testing.T) {
 	lvl, text, err := parseStderr(append([]byte{0}, []byte("Info")...))
-	assert.Equal(t, lvl, 0)
+	assert.Equal(t, lvl, LogLevelInfo)
 	assert.Equal(t, text, "Info")
 	assert.Equal(t, err, nil)
 
 	lvl, text, err = parseStderr(append([]byte{1}, []byte("Error")...))
-	assert.Equal(t, lvl, 1)
+	assert.Equal(t, lvl, LogLevelError)
 	assert.Equal(t, text, "Error")
 	assert.Equal(t, err, nil)
 
 	lvl, text, err = parseStderr(append([]byte{5}, []byte("not valid log level")...))
-	assert.Equal(t, lvl, 1)
+	assert.Equal(t, lvl, LogLevelError)
 	assert.Equal(t, text, "")
 	assert.Error(t, err, "first byte is not a valid log level range 0-1. log: \"\\x05not valid log level\"")
 
 	lvl, text, err = parseStderr([]byte{})
-	assert.Equal(t, lvl, 1)
+	assert.Equal(t, lvl, LogLevelError)
 	assert.Equal(t, text, "")
 	assert.Error(t, err, "input byte slice is empty")
 }

@@ -17,7 +17,14 @@ limitations under the License.
 package extension
 
 import (
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/samber/lo"
+
+	"github.com/go-logr/logr/funcr"
+	"gotest.tools/assert"
 
 	"github.com/go-logr/logr"
 )
@@ -46,4 +53,56 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 	if oop.IsAlive() {
 		t.Errorf("Must not be alive")
 	}
+}
+
+func TestOOPExtensionForwardsLog(t *testing.T) {
+	var messages []string
+
+	logger := funcr.New(func(_, args string) {
+		messages = append(messages, args)
+	}, funcr.Options{})
+
+	oopErrorLog := OOPExtension{
+		name:       "testErrorLog",
+		executable: "/bin/ps",
+		socket:     "--foobar",
+		service:    newExtensionService(),
+		logger:     logger,
+	}
+
+	if err := oopErrorLog.Start(); err != nil {
+		t.Errorf("Should have started: %v", err)
+	}
+
+	for oopErrorLog.cmd.ProcessState == nil {
+		time.Sleep(5 * time.Millisecond) // wait for the command to return
+	}
+
+	logAsString := strings.Join(messages, "\n")
+	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "is not a valid log level range 0-1. log:"))
+
+	_ = oopErrorLog.Stop() // gracefully kill the process/server
+	assert.Assert(t, lo.Contains(messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
+}
+
+func TestOOPExtensionParseStderr(t *testing.T) {
+	lvl, text, err := parseStderr(append([]byte{0}, []byte("Info")...))
+	assert.Equal(t, lvl, LogLevelInfo)
+	assert.Equal(t, text, "Info")
+	assert.Equal(t, err, nil)
+
+	lvl, text, err = parseStderr(append([]byte{1}, []byte("Error")...))
+	assert.Equal(t, lvl, LogLevelError)
+	assert.Equal(t, text, "Error")
+	assert.Equal(t, err, nil)
+
+	lvl, text, err = parseStderr(append([]byte{5}, []byte("not valid log level")...))
+	assert.Equal(t, lvl, LogLevelError)
+	assert.Equal(t, text, "")
+	assert.Error(t, err, "first byte is not a valid log level range 0-1. log: \"\\x05not valid log level\"")
+
+	lvl, text, err = parseStderr([]byte{})
+	assert.Equal(t, lvl, LogLevelError)
+	assert.Equal(t, text, "")
+	assert.Error(t, err, "input byte slice is empty")
 }

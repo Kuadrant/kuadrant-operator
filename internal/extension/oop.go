@@ -17,7 +17,9 @@ limitations under the License.
 package extension
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -31,6 +33,13 @@ import (
 )
 
 const defaultUnixSocket = ".grpc.sock"
+
+type logLevel int
+
+const (
+	LogLevelInfo logLevel = iota
+	LogLevelError
+)
 
 type OOPExtension struct {
 	name       string
@@ -74,13 +83,30 @@ func (p *OOPExtension) Start() error {
 	}
 
 	cmd := exec.Command(p.executable, p.socket) // #nosec G204
-	if err := cmd.Start(); err != nil {
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		p.logger.Error(err, "failed to open stderr pipe")
+		return err
+	}
+
+	stopChan := make(chan struct{})
+	go p.monitorStderr(stderr, stopChan)
+
+	if err = cmd.Start(); err != nil {
 		if e := p.stopServer(); e != nil {
 			p.logger.Error(e, "failed starting process, then stopping gRPC server failed")
 		}
 		return err
 	}
 	p.logger.Info("started")
+
+	go func() {
+		if e := cmd.Wait(); e != nil {
+			p.logStderr(1, fmt.Sprintf("Extension %q finished with an error", p.name), e)
+			close(stopChan)
+		}
+	}()
 
 	// only set this, if we successfully started it all
 	p.cmd = cmd
@@ -102,10 +128,10 @@ func (p *OOPExtension) Stop() error {
 				_ = p.cmd.Process.Kill() // we know this can fail, as this is racy. All that really matters is the `Wait()` below
 			})
 
-			if e := p.cmd.Wait(); e != nil {
-				status := p.cmd.ProcessState.Sys().(syscall.WaitStatus)
+			if processState := p.cmd.ProcessState; processState != nil {
+				status := processState.Sys().(syscall.WaitStatus)
 				if !status.Signaled() || status.Signal() != syscall.SIGTERM {
-					err = e
+					err = fmt.Errorf("process terminated with non-SIGTERM %q", status)
 				}
 			}
 
@@ -157,4 +183,62 @@ func (p *OOPExtension) stopServer() error {
 		}
 	}
 	return nil
+}
+
+func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struct{}) {
+	scanner := bufio.NewScanner(stderr)
+	var lastReadTime time.Time
+
+	for {
+		select {
+		case <-stopChan:
+			// If the channel has been closed when the cmd has exited, we return
+			return
+		default:
+			//nolint:revive,staticcheck
+			if !lastReadTime.IsZero() && time.Since(lastReadTime) > 30*time.Second {
+				// We could check for liveness here
+			}
+
+			if scanner.Scan() {
+				lvl, text, err := parseStderr(scanner.Bytes())
+				p.logStderr(lvl, text, err)
+				lastReadTime = time.Now()
+			} else if err := scanner.Err(); err != nil {
+				p.logger.Error(err, "failed to read stderr")
+				return
+			}
+
+			// If this turns out to be causing busy-waiting/CPU spikes we could sleep for a brief time
+		}
+	}
+}
+
+func (p *OOPExtension) logStderr(logLvl logLevel, logString string, err error) {
+	switch logLvl {
+	case LogLevelInfo:
+		p.logger.Info(logString)
+	default:
+		p.logger.Error(err, logString)
+	}
+}
+
+func parseStderr(logLine []byte) (logLvl logLevel, logString string, err error) {
+	if len(logLine) == 0 {
+		return LogLevelError, "", fmt.Errorf("input byte slice is empty")
+	}
+
+	// Convert first byte to integer and validate log range
+	logLvl = logLevel(logLine[0])
+	if logLvl < LogLevelInfo || logLvl > LogLevelError {
+		// At the moment only differencing from Info and Error
+		return LogLevelError, "", fmt.Errorf("first byte is not a valid log level range 0-1. log: %q", string(logLine))
+	}
+
+	// Convert rest to string (if exists)
+	if len(logLine) > 1 {
+		logString = string(logLine[1:])
+	}
+
+	return logLvl, logString, nil
 }

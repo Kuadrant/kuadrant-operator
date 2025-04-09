@@ -51,8 +51,13 @@ namespace: ## Creates a namespace where to deploy Kuadrant Operator
 	kubectl create namespace $(KUADRANT_NAMESPACE)
 
 .PHONY: local-deploy
+ifeq (true,$(WITH_EXTENSIONS))
+local-deploy: DOCKER_BUILD=docker-build-with-extensions
+else
+local-deploy: DOCKER_BUILD=docker-build
+endif
 local-deploy: ## Deploy Kuadrant Operator from the current code
-	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
+	$(MAKE) $(DOCKER_BUILD) IMG=$(IMAGE_TAG_BASE):dev
 	$(MAKE) kind-load-image IMG=$(IMAGE_TAG_BASE):dev
 
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev

@@ -47,6 +47,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
+
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -55,12 +57,13 @@ import (
 )
 
 var (
-	scheme   = k8sruntime.NewScheme()
-	logLevel = env.GetString("LOG_LEVEL", "info")
-	logMode  = env.GetString("LOG_MODE", "production")
-	gitSHA   string // value injected in compilation-time
-	dirty    string // value injected in compilation-time
-	version  string // value injected in compilation-time
+	scheme            = k8sruntime.NewScheme()
+	logLevel          = env.GetString("LOG_LEVEL", "info")
+	logMode           = env.GetString("LOG_MODE", "production")
+	gitSHA            string // value injected in compilation-time
+	dirty             string // value injected in compilation-time
+	version           string // value injected in compilation-time
+	withExtensions, _ = env.GetBool("WITH_EXTENSIONS", false)
 )
 
 func init() {
@@ -152,6 +155,19 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to create client")
 		os.Exit(1)
+	}
+
+	if withExtensions {
+		// start extension manager
+		extManager, err := extension.NewManager([]string{"myextension"}, "/extensions", log.Log)
+		if err != nil {
+			setupLog.Error(err, "unable to create extension manager")
+			os.Exit(1)
+		}
+		if err = extManager.Start(); err != nil {
+			setupLog.Error(err, "unable to start extension manager")
+			os.Exit(1)
+		}
 	}
 
 	stateOfTheWorld := controllers.NewPolicyMachineryController(mgr, client, log.Log)

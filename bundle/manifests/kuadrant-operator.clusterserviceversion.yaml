@@ -108,14 +108,14 @@ metadata:
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
-    containerImage: quay.io/kuadrant/kuadrant-operator:v1.2.0-rc1
-    createdAt: "2025-04-08T08:02:47Z"
+    containerImage: quay.io/kuadrant/kuadrant-operator:v1.2.0-rc2
+    createdAt: "2025-04-09T09:09:09Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v1.2.0-rc1
+  name: kuadrant-operator.v1.2.0-rc2
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -455,7 +455,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
-                image: quay.io/kuadrant/kuadrant-operator:v1.2.0-rc1
+                image: quay.io/kuadrant/kuadrant-operator:v1.2.0-rc2
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -561,4 +561,4 @@ spec:
     name: wasmshim
   - image: quay.io/kuadrant/console-plugin:v0.1.1
     name: consoleplugin
-  version: 1.2.0-rc1
+  version: 1.2.0-rc2

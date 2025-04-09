@@ -3,12 +3,13 @@ package main
 import (
 	"os"
 
-	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 
 	"go.uber.org/zap/zapcore"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -34,7 +35,6 @@ func init() {
 }
 
 func main() {
-
 	options := ctrl.Options{
 		Scheme:  scheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},

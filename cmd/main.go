@@ -27,6 +27,7 @@ import (
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -53,12 +54,13 @@ import (
 )
 
 var (
-	scheme   = k8sruntime.NewScheme()
-	logLevel = env.GetString("LOG_LEVEL", "info")
-	logMode  = env.GetString("LOG_MODE", "production")
-	gitSHA   string // value injected in compilation-time
-	dirty    string // value injected in compilation-time
-	version  string // value injected in compilation-time
+	scheme            = k8sruntime.NewScheme()
+	logLevel          = env.GetString("LOG_LEVEL", "info")
+	logMode           = env.GetString("LOG_MODE", "production")
+	gitSHA            string // value injected in compilation-time
+	dirty             string // value injected in compilation-time
+	version           string // value injected in compilation-time
+	withExtensions, _ = env.GetBool("WITH_EXTENSIONS", false)
 )
 
 func init() {
@@ -149,6 +151,19 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to create client")
 		os.Exit(1)
+	}
+
+	if withExtensions {
+		// start extension manager
+		extManager, err := extension.NewManager([]string{"myextension"}, "/extensions", log.Log)
+		if err != nil {
+			setupLog.Error(err, "unable to create extension manager")
+			os.Exit(1)
+		}
+		if err = extManager.Start(); err != nil {
+			setupLog.Error(err, "unable to start extension manager")
+			os.Exit(1)
+		}
 	}
 
 	stateOfTheWorld := controllers.NewPolicyMachineryController(mgr, client, log.Log)

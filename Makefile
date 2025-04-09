@@ -173,6 +173,8 @@ endif
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
+WITH_EXTENSIONS ?= false
+
 all: build
 
 ##@ General
@@ -357,6 +359,19 @@ docker-build: ## Build docker image with the manager.
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 
+docker-build-with-extensions: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
+docker-build-with-extensions: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
+docker-build-with-extensions: ## Build docker image with the manager.
+		$(CONTAINER_ENGINE) build \
+		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		--build-arg GIT_SHA=$(GIT_SHA) \
+		--build-arg DIRTY=$(DIRTY) \
+		--build-arg VERSION=v$(VERSION) \
+		--build-arg IMG=$(IMG) \
+		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
+		-t $(IMG) \
+		-f extension.Dockerfile .
+
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_ENGINE) push $(IMG)
 
@@ -394,6 +409,9 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	# Set desired ConsolePlugin image
 	V="$(RELATED_IMAGE_CONSOLEPLUGIN)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' -i config/manager/manager.yaml
+	#  Set WITH_EXTENSIONS env var
+	V="$(WITH_EXTENSIONS)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "WITH_EXTENSIONS").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV

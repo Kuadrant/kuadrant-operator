@@ -41,7 +41,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 
-		Eventually(tests.AuthorionIsReady(testClient(), client.ObjectKey{
+		Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 			Name:      "authorino",
 			Namespace: kuadrantInstallationNS,
 		})).WithContext(ctx).Should(Succeed())

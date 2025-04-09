@@ -29,7 +29,7 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 
-			Eventually(tests.AuthorionIsReady(testClient(), client.ObjectKey{
+			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
@@ -55,7 +55,7 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 
-			Eventually(tests.AuthorionIsReady(testClient(), client.ObjectKey{
+			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())

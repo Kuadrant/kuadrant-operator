@@ -693,7 +693,7 @@ func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, p
 	g.Expect(enforcedCond.Reason).To(Equal(string(kuadrant.PolicyReasonEnforced)))
 }
 
-func AuthorionIsReady(cl client.Client, key client.ObjectKey) func(g Gomega, ctx context.Context) {
+func AuthorinoIsReady(cl client.Client, key client.ObjectKey) func(g Gomega, ctx context.Context) {
 	return func(g Gomega, ctx context.Context) {
 		authorinoObj := &authorinooperatorv1beta1.Authorino{}
 		g.Expect(cl.Get(ctx, key, authorinoObj)).ToNot(HaveOccurred())

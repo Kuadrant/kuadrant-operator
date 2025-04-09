@@ -111,6 +111,7 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
+		Mtls:               ptr.To(kObj.IsMTLSEnabled()),
 	}
 
 	availableCond := r.readyCondition(topology, logger)

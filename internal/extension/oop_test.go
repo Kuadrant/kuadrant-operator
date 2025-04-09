@@ -19,6 +19,7 @@ package extension
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/samber/lo"
 
@@ -73,15 +74,15 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		t.Errorf("Should have started: %v", err)
 	}
 
-	if err := oopErrorLog.cmd.Wait(); err == nil {
-		t.Errorf("Should have returned an error because of exit 1: %v", err)
+	for oopErrorLog.cmd.ProcessState == nil {
+		time.Sleep(5 * time.Millisecond) // wait for the command to return
 	}
 
-	_ = oopErrorLog.Stop()
-
 	logAsString := strings.Join(messages, "\n")
+	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "is not a valid log level range 0-1. log:"))
+
+	_ = oopErrorLog.Stop() // gracefully kill the process/server
 	assert.Assert(t, lo.Contains(messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
-	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "is not a valid log level range 0-1"))
 }
 
 func TestOOPExtensionParseStderr(t *testing.T) {
@@ -98,7 +99,7 @@ func TestOOPExtensionParseStderr(t *testing.T) {
 	lvl, text, err = parseStderr(append([]byte{5}, []byte("not valid log level")...))
 	assert.Equal(t, lvl, 1)
 	assert.Equal(t, text, "")
-	assert.Error(t, err, "first byte value 5 is not a valid log level range 0-1")
+	assert.Error(t, err, "first byte is not a valid log level range 0-1. log: \"\\x05not valid log level\"")
 
 	lvl, text, err = parseStderr([]byte{})
 	assert.Equal(t, lvl, 1)

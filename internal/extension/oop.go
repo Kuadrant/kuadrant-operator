@@ -86,7 +86,7 @@ func (p *OOPExtension) Start() error {
 	stopChan := make(chan struct{})
 	go p.monitorStderr(stderr, stopChan)
 
-	if err := cmd.Start(); err != nil {
+	if err = cmd.Start(); err != nil {
 		if e := p.stopServer(); e != nil {
 			p.logger.Error(e, "failed starting process, then stopping gRPC server failed")
 		}
@@ -95,9 +95,9 @@ func (p *OOPExtension) Start() error {
 	p.logger.Info("started")
 
 	go func() {
-		if err := cmd.Wait(); err != nil {
+		if e := cmd.Wait(); e != nil {
+			p.logStderr(1, fmt.Sprintf("Extension %q finished with an error", p.name), e)
 			close(stopChan)
-			p.logStderr(1, fmt.Sprintf("Extension %q finished with an error", p.name), err)
 		}
 	}()
 
@@ -121,10 +121,10 @@ func (p *OOPExtension) Stop() error {
 				_ = p.cmd.Process.Kill() // we know this can fail, as this is racy. All that really matters is the `Wait()` below
 			})
 
-			if e := p.cmd.Wait(); e != nil {
-				status := p.cmd.ProcessState.Sys().(syscall.WaitStatus)
+			if processState := p.cmd.ProcessState; processState != nil {
+				status := processState.Sys().(syscall.WaitStatus)
 				if !status.Signaled() || status.Signal() != syscall.SIGTERM {
-					err = e
+					err = fmt.Errorf("process terminated with non-SIGTERM %q", status)
 				}
 			}
 
@@ -225,7 +225,7 @@ func parseStderr(logLine []byte) (logLevel int, logString string, err error) {
 	logLevel = int(logLine[0])
 	if logLevel < 0 || logLevel > 1 {
 		// At the moment only differencing from Info and Error
-		return 1, "", fmt.Errorf("first byte value %d is not a valid log level range 0-1", logLevel)
+		return 1, "", fmt.Errorf("first byte is not a valid log level range 0-1. log: %q", string(logLine))
 	}
 
 	// Convert rest to string (if exists)

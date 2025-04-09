@@ -109,7 +109,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-04-09T13:46:10Z"
+    createdAt: "2025-03-13T20:05:27Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -455,8 +455,6 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
-                - name: WITH_EXTENSIONS
-                  value: "false"
                 image: quay.io/kuadrant/kuadrant-operator:latest
                 livenessProbe:
                   httpGet:

@@ -409,9 +409,6 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	# Set desired ConsolePlugin image
 	V="$(RELATED_IMAGE_CONSOLEPLUGIN)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' -i config/manager/manager.yaml
-	#  Set WITH_EXTENSIONS env var
-	V="$(WITH_EXTENSIONS)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "WITH_EXTENSIONS").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV

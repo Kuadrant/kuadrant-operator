@@ -12,6 +12,7 @@ At the time of writing there is [an RFC](https://github.com/Kuadrant/architectur
 
 ## Prerequisites
 
+- Have [Istio](https://istio.io/) as the Gateway API provider installed.
 - You have installed Kuadrant in a Kubernetes cluster.
 - Additionally, you have at least 1 AuthPolicy or RateLimitPolicy attached to your Gateway or HTTPRoute.
 

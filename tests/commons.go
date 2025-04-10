@@ -297,7 +297,12 @@ func RLPEnforcedCondition(ctx context.Context, cl client.Client, rlpKey client.O
 		return false
 	}
 
-	return cond.Reason == string(reason) && cond.Message == message
+	success := cond.Reason == string(reason) && cond.Message == message
+	if !success {
+		fmt.Println("expected condition reason:", cond.Reason, "message:", cond.Message)
+		fmt.Println("  actual condition reason:", string(reason), "message:", message)
+	}
+	return success
 }
 
 func WasmPluginIsAvailable(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {

@@ -241,7 +241,7 @@ func (l Limit) CountersAsStringList() []string {
 	}
 	return utils.Map(l.Counters, func(counter Counter) string {
 		str := string(counter.Expression)
-		if exp, err := transformer.TransformCounterVariable(str); err != nil {
+		if exp, err := transformer.TransformCounterVariable(str, false); err == nil {
 			return *exp
 		}
 		return str

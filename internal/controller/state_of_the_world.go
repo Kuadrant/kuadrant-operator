@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 
@@ -37,9 +38,11 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/authorino"
 	"github.com/kuadrant/kuadrant-operator/internal/envoygateway"
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/internal/istio"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/log"
 	"github.com/kuadrant/kuadrant-operator/internal/observability"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
@@ -181,6 +184,7 @@ type BootOptionsBuilder struct {
 	isLimitadorOperatorInstalled  bool
 	isAuthorinoOperatorInstalled  bool
 	isPrometheusOperatorInstalled bool
+	isUsingExtensions             bool
 }
 
 func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
@@ -218,6 +222,7 @@ func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error)
 		return opts, optionErr
 	}
 	opts = append(opts, consoleOpts...)
+	opts = append(opts, b.getExtensionsOptions()...)
 
 	dnsOpts, optionErr := b.getDNSOperatorOptions()
 	if optionErr != nil {
@@ -538,6 +543,26 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 	return opts, nil
 }
 
+func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", false)
+	if b.isUsingExtensions {
+		opts = append(opts, controller.WithRunnable(
+			"extension manager",
+			func(*controller.Controller) controller.Runnable {
+				// start extension manager
+				extManager, err := extension.NewManager([]string{"myextension"}, "/extensions", b.logger.WithName("extensions"), log.Sync)
+				if err != nil {
+					b.logger.Error(err, "unable to create extension manager")
+					os.Exit(1)
+				}
+				return &extManager
+			},
+		))
+	}
+	return opts
+}
+
 func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {
 	return b.isIstioInstalled || b.isEnvoyGatewayInstalled
 }
@@ -552,7 +577,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
 		},
-		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled).Run,
+		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isUsingExtensions).Run,
 	}
 
 	if b.isConsolePluginInstalled {
@@ -572,6 +597,13 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile)
 	}
 
+	if b.isIstioInstalled && b.isAuthorinoOperatorInstalled && b.isLimitadorOperatorInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewPeerAuthenticationReconciler(b.manager, b.client).Subscription().Reconcile,
+			NewLimitadorIstioIntegrationReconciler(b.manager, b.client).Subscription().Reconcile,
+			NewAuthorinoIstioIntegrationReconciler(b.manager, b.client).Subscription().Reconcile,
+		)
+	}
 	return mainWorkflow.Run
 }
 
@@ -629,7 +661,7 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	}
 }
 
-func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled bool) *controller.Workflow {
+func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled bool, isUsingExtensions bool) *controller.Workflow {
 	workflow := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{},
 	}
@@ -639,6 +671,10 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled boo
 			NewGatewayPolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
 			NewHTTPRoutePolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
 		)
+	}
+
+	if isUsingExtensions {
+		workflow.Tasks = append(workflow.Tasks, extension.Reconcile)
 	}
 
 	return workflow

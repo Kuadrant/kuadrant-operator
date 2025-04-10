@@ -20,17 +20,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"sync/atomic"
 	"time"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Manager struct {
 	extensions []Extension
 	service    extpb.ExtensionServiceServer
+	dag        *atomic.Pointer[machinery.Topology]
 	logger     logr.Logger
 	sync       io.Writer
 }
@@ -45,7 +49,8 @@ func NewManager(names []string, location string, logger logr.Logger, sync io.Wri
 	var extensions []Extension
 	var err error
 
-	service := newExtensionService()
+	DAG = &atomic.Pointer[machinery.Topology]{}
+	service := newExtensionService(DAG)
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
@@ -63,6 +68,7 @@ func NewManager(names []string, location string, logger logr.Logger, sync io.Wri
 	return Manager{
 		extensions,
 		service,
+		dag:        DAG,
 		logger,
 		sync,
 	}, err
@@ -100,7 +106,25 @@ func (m *Manager) Stop() error {
 	return err
 }
 
+func (m *Manager) Run(stopCh <-chan struct{}) {
+	if err := m.Start(); err != nil {
+		m.logger.Error(err, "unable to start extension manager")
+		os.Exit(1)
+	}
+	go func() {
+		<-stopCh
+		if err := m.Stop(); err != nil {
+			m.logger.Error(err, "unable to stop extension manager")
+		}
+	}()
+}
+
+func (m *Manager) HasSynced() bool {
+	return m.dag.Load() != nil
+}
+
 type extensionService struct {
+	dag *atomic.Pointer[machinery.Topology]
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -110,6 +134,14 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func newExtensionService() extpb.ExtensionServiceServer {
-	return &extensionService{}
+func newExtensionService(dag *atomic.Pointer[machinery.Topology]) extpb.ExtensionServiceServer {
+	return &extensionService{dag: dag}
+}
+
+type TopologyDAG struct {
+	machinery.Topology
+}
+
+func (d *TopologyDAG) FindGatewaysFor([]*extpb.TargetRef) ([]*extpb.Gateway, error) {
+	return nil, nil
 }

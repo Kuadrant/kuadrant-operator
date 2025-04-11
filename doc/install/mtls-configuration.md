@@ -2,9 +2,10 @@
 
 ## Overview
 
-This guide includes manual steps to enable mTLS between an Istio provided gateway and the Kuadrant components.
+This guide includes manual steps to enable mTLS between an Istio provided gateway and the Kuadrant data plane components.
 If you use an AuthPolicy or RateLimitPolicy, there will be communication between the gateway and the respective Kuadrant components at request time. This communication happens between the Wasm plugin in Envoy proxy, and Authorino or Limitador.
 At the time of writing there is [an RFC](https://github.com/Kuadrant/architecture/pull/110) discussing how to add mTLS capabilities as a feature of the Kuadrant operator. If you are interested in having that feature or influencing how it is delivered, please engage on that pull request.
+
 
 !!! note
 
@@ -14,11 +15,10 @@ At the time of writing there is [an RFC](https://github.com/Kuadrant/architectur
 
 - Have [Istio](https://istio.io/) as the Gateway API provider installed.
 - You have installed Kuadrant in a Kubernetes cluster.
-- Additionally, you have at least 1 AuthPolicy or RateLimitPolicy attached to your Gateway or HTTPRoute.
 
 ## Enabling mTLS
 
-In order to ensure that communications between the gateway and the kuadrant components are secured,
+In order to ensure that communications between the gateway and the kuadrant data plane components are secured,
 set kuadrant's custom resource `spec.mtls.enable` field to `true`.
 
 Example:
@@ -32,6 +32,10 @@ spec:
   mtls:
     enable: true
 ```
+
+!!! note
+
+    In the absence of AuthPolicy or RateLimitPolicy, the gateway does not communicate with kuadrant data plane components. Hence, enabling mTLS is useless.
 
 !!! note
 

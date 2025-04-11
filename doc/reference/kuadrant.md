@@ -18,7 +18,7 @@
 
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `enable`    | Boolean     |  No | Enable mutual authentication on every communication between any kuadrant components. Default: `false`|
+| `enable`    | Boolean     |  No | Enable mutual authentication communication between the gateway and the kuadrant data plane components. Default: `false`|
 
 #### Observability
 

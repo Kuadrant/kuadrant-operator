@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -147,7 +146,7 @@ func IsPeerAuthenticationInstalled(restMapper meta.RESTMapper) (bool, error) {
 func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 	ok, err := IsWASMPluginInstalled(restMapper)
 	if err != nil {
-		return false, client.IgnoreNotFound(err)
+		return false, err
 	}
 	if !ok {
 		return false, nil
@@ -155,7 +154,7 @@ func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 
 	ok, err = IsEnvoyFilterInstalled(restMapper)
 	if err != nil {
-		return false, client.IgnoreNotFound(err)
+		return false, err
 	}
 	if !ok {
 		return false, nil

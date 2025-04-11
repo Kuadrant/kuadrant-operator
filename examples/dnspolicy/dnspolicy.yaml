@@ -12,5 +12,5 @@ spec:
     - name: aws-credentials
   loadBalancing:
     weight: 120
-    geo: EU
+    geo: GEO-EU
     defaultGeo: true

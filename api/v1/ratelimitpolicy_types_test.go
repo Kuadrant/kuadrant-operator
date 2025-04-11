@@ -6,6 +6,26 @@ import (
 	"testing"
 )
 
+func TestVariablesRewritten(t *testing.T) {
+
+	limit := &Limit{
+		Counters: []Counter{
+			{Expression("auth.identity.username")},
+		},
+	}
+
+	actual := limit.CountersAsStringList()
+	expected := []string{`descriptors[0]["auth.identity.username"]`}
+	if len(actual) != len(expected) {
+		t.Errorf("maxValue does not match, expected(%v), got (%v)", expected, actual)
+	}
+	for i := range actual {
+		if actual[i] != expected[i] {
+			t.Errorf("maxValue does not match, expected(%s), got (%s)", expected[i], actual[i])
+		}
+	}
+}
+
 func TestConvertRateIntoSeconds(t *testing.T) {
 	testCases := []struct {
 		name             string

@@ -184,31 +184,75 @@ type BootOptionsBuilder struct {
 }
 
 func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
-	opts = append(opts, b.getGatewayAPIOptions()...)
-	istioOpts, err := b.getIstioOptions()
-	if err != nil {
-		return opts, err
+	var (
+		opts      []controller.ControllerOption
+		optionErr error
+	)
+
+	gwapiOpts, optionErr := b.getGatewayAPIOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, gwapiOpts...)
+
+	istioOpts, optionErr := b.getIstioOptions()
+	if optionErr != nil {
+		return opts, optionErr
 	}
 	opts = append(opts, istioOpts...)
-	opts = append(opts, b.getEnvoyGatewayOptions()...)
-	opts = append(opts, b.getCertManagerOptions()...)
-	opts = append(opts, b.getConsolePluginOptions()...)
-	opts = append(opts, b.getDNSOperatorOptions()...)
-	opts = append(opts, b.getLimitadorOperatorOptions()...)
-	opts = append(opts, b.getAuthorinoOperatorOptions()...)
-	opts = append(opts, b.getObservabilityOptions()...)
+
+	envoyGatewayOpts, optionErr := b.getEnvoyGatewayOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, envoyGatewayOpts...)
+
+	certManagerOpts, optionErr := b.getCertManagerOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, certManagerOpts...)
+
+	consoleOpts, optionErr := b.getConsolePluginOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, consoleOpts...)
+
+	dnsOpts, optionErr := b.getDNSOperatorOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, dnsOpts...)
+
+	limitadorOpts, optionErr := b.getLimitadorOperatorOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, limitadorOpts...)
+
+	authorinoOpts, optionErr := b.getAuthorinoOperatorOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, authorinoOpts...)
+
+	observabilityOpts, optionErr := b.getObservabilityOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, observabilityOpts...)
 
 	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getGatewayAPIOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isGatewayAPIInstalled, err = kuadrantgatewayapi.IsGatewayAPIInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isGatewayAPIInstalled {
 		b.logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 
 	opts = append(opts,
@@ -229,18 +273,17 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() []controller.ControllerOptio
 		)),
 	)
 
-	return opts
+	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isEnvoyGatewayInstalled, err = envoygateway.IsEnvoyGatewayInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isEnvoyGatewayInstalled {
 		b.logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
-
 	opts = append(opts,
 		controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
 			&egv1alpha1.EnvoyPatchPolicy{},
@@ -264,17 +307,17 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 		),
 	)
 
-	return opts
+	return opts, nil
 }
 
 func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
-	if err != nil {
+	if err != nil || !b.isIstioInstalled {
+		b.logger.Info("istio is not installed. skipping related watches and reconcilers", "err", err)
 		return opts, err
 	}
-
 	opts = append(opts,
 		controller.WithRunnable("envoyfilter watcher", controller.Watch(
 			&istioclientnetworkingv1alpha3.EnvoyFilter{},
@@ -309,27 +352,27 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getCertManagerOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isCertManagerInstalled, err = kuadrantgatewayapi.IsCertManagerInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil || !b.isCertManagerInstalled {
 		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 
 	opts = append(opts, certManagerControllerOpts()...)
 
-	return opts
+	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isConsolePluginInstalled, err = openshift.IsConsolePluginInstalled(b.manager.GetRESTMapper())
 	if err != nil || !b.isConsolePluginInstalled {
 		b.logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 
 	opts = append(opts,
@@ -339,16 +382,16 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOp
 		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
 	)
 
-	return opts
+	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), DNSRecordGroupKind.Group, DNSRecordGroupKind.Kind, kuadrantdnsv1alpha1.GroupVersion.Version)
 	if err != nil || !b.isDNSOperatorInstalled {
 		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 
 	opts = append(opts,
@@ -364,16 +407,16 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOpti
 		),
 	)
 
-	return opts
+	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getLimitadorOperatorOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
 	if err != nil || !b.isLimitadorOperatorInstalled {
 		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 
 	opts = append(opts,
@@ -391,16 +434,16 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() []controller.Controll
 		),
 	)
 
-	return opts
+	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 	b.isAuthorinoOperatorInstalled, err = authorino.IsAuthorinoOperatorInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil || !b.isAuthorinoOperatorInstalled {
 		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 
 	opts = append(opts,
@@ -425,22 +468,22 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() []controller.Controll
 		),
 	)
 
-	return opts
+	return opts, nil
 }
 
-func (b *BootOptionsBuilder) getObservabilityOptions() []controller.ControllerOption {
+func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
 	var err error
 
 	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.ServiceMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
 	if err != nil || !b.isPrometheusOperatorInstalled {
 		b.logger.Info("prometheus operator is not installed (ServiceMonitor CRD not found), skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.PodMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
 	if err != nil || !b.isPrometheusOperatorInstalled {
 		b.logger.Info("prometheus operator is not installed (PodMonitor CRD not found), skipping related watches and reconcilers", "err", err)
-		return opts
+		return opts, err
 	}
 	opts = append(opts,
 		controller.WithRunnable("servicemonitor watcher", controller.Watch(
@@ -465,7 +508,7 @@ func (b *BootOptionsBuilder) getObservabilityOptions() []controller.ControllerOp
 		),
 	)
 
-	return opts
+	return opts, nil
 }
 
 func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -64,7 +65,7 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 
-func NewDataPlanePoliciesWorkflow(client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
+func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
 	isGatewayProviderInstalled := isIstioInstalled || isEnvoyGatewayInstalled
 	dataPlanePoliciesValidation := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
@@ -96,6 +97,14 @@ func NewDataPlanePoliciesWorkflow(client *dynamic.DynamicClient, isGatewayAPInst
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&EnvoyGatewayAuthClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&EnvoyGatewayRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&EnvoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile)
+	}
+
+	if isIstioInstalled && isAuthorinoOperatorInstalled && isLimitadorOperatorInstalled {
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			NewPeerAuthenticationReconciler(mgr, client).Subscription().Reconcile,
+			NewLimitadorIstioIntegrationReconciler(mgr, client).Subscription().Reconcile,
+			NewAuthorinoIstioIntegrationReconciler(mgr, client).Subscription().Reconcile,
+		)
 	}
 
 	dataPlanePoliciesStatus := &controller.Workflow{

@@ -5,6 +5,7 @@ import (
 
 	"k8s.io/utils/env"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
@@ -56,13 +57,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	exampleReconciler := controllers.NewExampleReconciler(client, logger)
-	if err = exampleReconciler.SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to setup extension reconciler")
-	}
+	exampleReconciler := controllers.NewExampleReconciler(client)
+	controller := extensioncontroller.NewExtensionController("example-extension-controller", mgr, client, logger, exampleReconciler.Reconcile)
 
 	logger.Info("starting example-controller")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = controller.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")
 		os.Exit(1)
 	}

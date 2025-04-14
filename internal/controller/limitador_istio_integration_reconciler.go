@@ -18,6 +18,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -45,11 +46,16 @@ func (l *LimitadorIstioIntegrationReconciler) Subscription() *controller.Subscri
 		ReconcileFunc: l.Run, Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind)},
 			{Kind: ptr.To(kuadrantv1beta1.LimitadorGroupKind)},
+			// Effective policies impact on the istio integration
+			{Kind: &machinery.GatewayClassGroupKind},
+			{Kind: &machinery.GatewayGroupKind},
+			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 		},
 	}
 }
 
-func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(baseCtx).WithName("LimitadorIstioIntegrationReconciler")
 	ctx := logr.NewContext(baseCtx, logger)
 	logger.V(1).Info("reconciling limitador integration in istio", "status", "started")
@@ -62,6 +68,14 @@ func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 		// to be removed as well
 		return nil
 	}
+
+	effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	if !ok {
+		return ErrMissingStateEffectiveRateLimitPolicies
+	}
+	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
+
+	logger.V(1).Info("effective rate limit policies info", "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
 
 	// read limitador objects that are children of kuadrant instead of fetching the list all limitador objects of the cluster
 	limitadorObjs := utils.Filter(topology.All().Children(kObj), func(o machinery.Object) bool {
@@ -113,12 +127,15 @@ func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 		return fmt.Errorf("could not get limitador deployment %w", err)
 	}
 
+	// Only enable sidecar when enabled in kuadrant CR AND effective policies in place
+	allowMTLS := kObj.IsMTLSEnabled() && len(effectiveRateLimitPoliciesMap) > 0
+
 	// add "sidecar.istio.io/inject" label to limitador deployment.
 	// label value depends on whether MTLS is enabled or not
 	updated := utils.MergeMapStringString(
 		&deployment.Spec.Template.Labels,
 		map[string]string{
-			"sidecar.istio.io/inject": strconv.FormatBool(kObj.IsMTLSEnabled()),
+			"sidecar.istio.io/inject": strconv.FormatBool(allowMTLS),
 			kuadrantManagedLabelKey:   "true",
 		},
 	)

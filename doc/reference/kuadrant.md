@@ -7,11 +7,26 @@
 | `spec`    | [KuadrantSpec](#kuadrantspec)     |      No      | Blank specification                  |
 | `status`  | [KuadrantStatus](#kuadrantstatus) |      No      | The status for the custom resources. |
 
-## KuadrantSpec
+### KuadrantSpec
 
-Currently blank specification.
+| **Field** | **Type**                          | **Required** | **Description**                      |
+|-----------|-----------------------------------|:------------:|--------------------------------------|
+| `observability`    | [Observability](#observability)     | No | Kuadrant observability configuration. |
+| `mtls`  | [mTLS](#mtls) |      No      | Two way authentication between kuadrant components. |
 
-## KuadrantStatus
+#### mTLS
+
+| **Field** | **Type**                          | **Required** | **Description**                      |
+|-----------|-----------------------------------|:------------:|--------------------------------------|
+| `enable`    | Boolean     |  No | Enable mutual authentication communication between the gateway and the kuadrant data plane components. Default: `false`|
+
+#### Observability
+
+| **Field** | **Type**                          | **Required** | **Description**                      |
+|-----------|-----------------------------------|:------------:|--------------------------------------|
+| `enable`    | Boolean     |  No | Enable observability on kuadrant. Default: `false` |
+
+### KuadrantStatus
 
 | **Field**            | **Type**                                                                                     | **Description**                                                                                                                     |
 |----------------------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|

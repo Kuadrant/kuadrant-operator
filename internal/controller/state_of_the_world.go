@@ -250,9 +250,12 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOpti
 	var opts []controller.ControllerOption
 	var err error
 	b.isGatewayAPIInstalled, err = kuadrantgatewayapi.IsGatewayAPIInstalled(b.manager.GetRESTMapper())
-	if err != nil || !b.isGatewayAPIInstalled {
-		b.logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isGatewayAPIInstalled {
+		b.logger.Info("gateway api is not installed, skipping watches and reconcilers")
+		return opts, nil
 	}
 
 	opts = append(opts,
@@ -280,9 +283,12 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOp
 	var opts []controller.ControllerOption
 	var err error
 	b.isEnvoyGatewayInstalled, err = envoygateway.IsEnvoyGatewayInstalled(b.manager.GetRESTMapper())
-	if err != nil || !b.isEnvoyGatewayInstalled {
-		b.logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isEnvoyGatewayInstalled {
+		b.logger.Info("envoygateway is not installed, skipping related watches and reconcilers")
+		return opts, nil
 	}
 	opts = append(opts,
 		controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
@@ -314,9 +320,12 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 	var opts []controller.ControllerOption
 	var err error
 	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
-	if err != nil || !b.isIstioInstalled {
-		b.logger.Info("istio is not installed. skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isIstioInstalled {
+		b.logger.Info("istio is not installed. skipping related watches and reconcilers")
+		return opts, nil
 	}
 	opts = append(opts,
 		controller.WithRunnable("envoyfilter watcher", controller.Watch(
@@ -356,9 +365,12 @@ func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOpt
 	var opts []controller.ControllerOption
 	var err error
 	b.isCertManagerInstalled, err = kuadrantgatewayapi.IsCertManagerInstalled(b.manager.GetRESTMapper(), b.logger)
-	if err != nil || !b.isCertManagerInstalled {
-		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isCertManagerInstalled {
+		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers")
+		return opts, nil
 	}
 
 	opts = append(opts, certManagerControllerOpts()...)
@@ -370,9 +382,12 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 	var opts []controller.ControllerOption
 	var err error
 	b.isConsolePluginInstalled, err = openshift.IsConsolePluginInstalled(b.manager.GetRESTMapper())
-	if err != nil || !b.isConsolePluginInstalled {
-		b.logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isConsolePluginInstalled {
+		b.logger.Info("console plugin is not installed, skipping related watches and reconcilers")
+		return opts, nil
 	}
 
 	opts = append(opts,
@@ -389,9 +404,12 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 	var opts []controller.ControllerOption
 	var err error
 	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), DNSRecordGroupKind.Group, DNSRecordGroupKind.Kind, kuadrantdnsv1alpha1.GroupVersion.Version)
-	if err != nil || !b.isDNSOperatorInstalled {
-		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isDNSOperatorInstalled {
+		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers")
+		return opts, nil
 	}
 
 	opts = append(opts,
@@ -414,9 +432,12 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 	var opts []controller.ControllerOption
 	var err error
 	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
-	if err != nil || !b.isLimitadorOperatorInstalled {
-		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isLimitadorOperatorInstalled {
+		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers")
+		return nil, err
 	}
 
 	opts = append(opts,
@@ -441,9 +462,12 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 	var opts []controller.ControllerOption
 	var err error
 	b.isAuthorinoOperatorInstalled, err = authorino.IsAuthorinoOperatorInstalled(b.manager.GetRESTMapper(), b.logger)
-	if err != nil || !b.isAuthorinoOperatorInstalled {
-		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isAuthorinoOperatorInstalled {
+		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers")
+		return opts, nil
 	}
 
 	opts = append(opts,
@@ -476,9 +500,12 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 	var err error
 
 	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.ServiceMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
-	if err != nil || !b.isPrometheusOperatorInstalled {
-		b.logger.Info("prometheus operator is not installed (ServiceMonitor CRD not found), skipping related watches and reconcilers", "err", err)
-		return opts, err
+	if err != nil {
+		return nil, err
+	}
+	if !b.isPrometheusOperatorInstalled {
+		b.logger.Info("prometheus operator is not installed (ServiceMonitor CRD not found), skipping related watches and reconcilers")
+		return opts, nil
 	}
 	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.PodMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
 	if err != nil || !b.isPrometheusOperatorInstalled {

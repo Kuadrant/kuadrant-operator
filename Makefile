@@ -272,7 +272,7 @@ $(HELM):
 	set -e ;\
 	mkdir -p $(dir $(HELM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl https://get.helm.sh/helm-${HELM_VERSION}-$${OS}-$${ARCH}.tar.gz -o helm.tar.gz ;\
+	curl https://get.helm.sh/helm-$(HELM_VERSION)-$${OS}-$${ARCH}.tar.gz -o helm.tar.gz ;\
 	tar -zxvf helm.tar.gz ;\
 	mv $${OS}-$${ARCH}/helm $(HELM) ;\
 	chmod +x $(HELM) ;\

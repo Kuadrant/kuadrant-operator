@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ExtensionService_Ping_FullMethodName = "/kuadrant.v0.ExtensionService/Ping"
+	ExtensionService_Ping_FullMethodName      = "/kuadrant.v0.ExtensionService/Ping"
+	ExtensionService_Subscribe_FullMethodName = "/kuadrant.v0.ExtensionService/Subscribe"
 )
 
 // ExtensionServiceClient is the client API for ExtensionService service.
@@ -30,6 +31,7 @@ const (
 type ExtensionServiceClient interface {
 	// Sends a greeting
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
+	Subscribe(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PongResponse], error)
 }
 
 type extensionServiceClient struct {
@@ -50,6 +52,25 @@ func (c *extensionServiceClient) Ping(ctx context.Context, in *PingRequest, opts
 	return out, nil
 }
 
+func (c *extensionServiceClient) Subscribe(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PongResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ExtensionService_ServiceDesc.Streams[0], ExtensionService_Subscribe_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PingRequest, PongResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ExtensionService_SubscribeClient = grpc.ServerStreamingClient[PongResponse]
+
 // ExtensionServiceServer is the server API for ExtensionService service.
 // All implementations must embed UnimplementedExtensionServiceServer
 // for forward compatibility.
@@ -58,6 +79,7 @@ func (c *extensionServiceClient) Ping(ctx context.Context, in *PingRequest, opts
 type ExtensionServiceServer interface {
 	// Sends a greeting
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
+	Subscribe(*PingRequest, grpc.ServerStreamingServer[PongResponse]) error
 	mustEmbedUnimplementedExtensionServiceServer()
 }
 
@@ -70,6 +92,9 @@ type UnimplementedExtensionServiceServer struct{}
 
 func (UnimplementedExtensionServiceServer) Ping(context.Context, *PingRequest) (*PongResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
+}
+func (UnimplementedExtensionServiceServer) Subscribe(*PingRequest, grpc.ServerStreamingServer[PongResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
 func (UnimplementedExtensionServiceServer) mustEmbedUnimplementedExtensionServiceServer() {}
 func (UnimplementedExtensionServiceServer) testEmbeddedByValue()                          {}
@@ -110,6 +135,17 @@ func _ExtensionService_Ping_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExtensionService_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(PingRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ExtensionServiceServer).Subscribe(m, &grpc.GenericServerStream[PingRequest, PongResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ExtensionService_SubscribeServer = grpc.ServerStreamingServer[PongResponse]
+
 // ExtensionService_ServiceDesc is the grpc.ServiceDesc for ExtensionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -122,6 +158,12 @@ var ExtensionService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ExtensionService_Ping_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Subscribe",
+			Handler:       _ExtensionService_Subscribe_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "kuadrant.proto",
 }

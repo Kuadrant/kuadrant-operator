@@ -18,6 +18,7 @@ package extension
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -33,13 +34,6 @@ import (
 )
 
 const defaultUnixSocket = ".grpc.sock"
-
-type logLevel int
-
-const (
-	LogLevelInfo logLevel = iota
-	LogLevelError
-)
 
 type OOPExtension struct {
 	name       string
@@ -103,7 +97,7 @@ func (p *OOPExtension) Start() error {
 
 	go func() {
 		if e := cmd.Wait(); e != nil {
-			p.logStderr(1, fmt.Sprintf("Extension %q finished with an error", p.name), e)
+			p.logger.Error(e, fmt.Sprintf("Extension %q finished with an error", p.name))
 			close(stopChan)
 		}
 	}()
@@ -201,8 +195,12 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 			}
 
 			if scanner.Scan() {
-				lvl, text, err := parseStderr(scanner.Bytes())
-				p.logStderr(lvl, text, err)
+				logLine, err := unmarshalLogEntry(scanner.Bytes())
+				if err != nil {
+					p.logger.Error(err, "failed to parse extension log entry")
+					return
+				}
+				p.logStderr(logLine)
 				lastReadTime = time.Now()
 			} else if err := scanner.Err(); err != nil {
 				p.logger.Error(err, "failed to read stderr")
@@ -214,31 +212,53 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 	}
 }
 
-func (p *OOPExtension) logStderr(logLvl logLevel, logString string, err error) {
-	switch logLvl {
+func (p *OOPExtension) logStderr(logLine *oopLogEntry) {
+	keysAndValues := make([]any, 0, len(logLine.KeysAndValues)*2)
+	for key, value := range logLine.KeysAndValues {
+		keysAndValues = append(keysAndValues, key, value)
+	}
+	switch logLine.Level {
 	case LogLevelInfo:
-		p.logger.Info(logString)
+		p.logger.Info(logLine.Msg, keysAndValues...)
+	case LogLevelError:
+		p.logger.Error(fmt.Errorf("%v", logLine.Error), logLine.Msg, keysAndValues...)
 	default:
-		p.logger.Error(err, logString)
+		p.logger.Error(fmt.Errorf("unknown LogLevel %v", logLine.Level), logLine.Msg, keysAndValues...)
 	}
 }
 
-func parseStderr(logLine []byte) (logLvl logLevel, logString string, err error) {
-	if len(logLine) == 0 {
-		return LogLevelError, "", fmt.Errorf("input byte slice is empty")
+type logLevel string
+
+const (
+	LogLevelInfo  logLevel = "info"
+	LogLevelError logLevel = "error"
+)
+
+type oopLogEntry struct {
+	Level         logLevel               `json:"level"`
+	Msg           string                 `json:"msg"`
+	Error         string                 `json:"error,omitempty"`
+	Timestamp     string                 `json:"ts"`
+	KeysAndValues map[string]interface{} `json:"-,omitempty"`
+}
+
+func unmarshalLogEntry(jsonString []byte) (*oopLogEntry, error) {
+	var entry oopLogEntry
+	err := json.Unmarshal(jsonString, &entry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+	// Second unmarshal for extra keys and values
+	err = json.Unmarshal(jsonString, &entry.KeysAndValues)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
-	// Convert first byte to integer and validate log range
-	logLvl = logLevel(logLine[0])
-	if logLvl < LogLevelInfo || logLvl > LogLevelError {
-		// At the moment only differencing from Info and Error
-		return LogLevelError, "", fmt.Errorf("first byte is not a valid log level range 0-1. log: %q", string(logLine))
-	}
+	// Delete from well known fields from the second unmarshalling
+	delete(entry.KeysAndValues, "level")
+	delete(entry.KeysAndValues, "msg")
+	delete(entry.KeysAndValues, "ts")
+	delete(entry.KeysAndValues, "error")
 
-	// Convert rest to string (if exists)
-	if len(logLine) > 1 {
-		logString = string(logLine[1:])
-	}
-
-	return logLvl, logString, nil
+	return &entry, nil
 }

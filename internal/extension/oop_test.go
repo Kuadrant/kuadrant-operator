@@ -17,7 +17,6 @@ limitations under the License.
 package extension
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -78,31 +77,73 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		time.Sleep(5 * time.Millisecond) // wait for the command to return
 	}
 
-	logAsString := strings.Join(messages, "\n")
-	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "is not a valid log level range 0-1. log:"))
-
 	_ = oopErrorLog.Stop() // gracefully kill the process/server
 	assert.Assert(t, lo.Contains(messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
 }
 
-func TestOOPExtensionParseStderr(t *testing.T) {
-	lvl, text, err := parseStderr(append([]byte{0}, []byte("Info")...))
-	assert.Equal(t, lvl, LogLevelInfo)
-	assert.Equal(t, text, "Info")
-	assert.Equal(t, err, nil)
+func TestOOPExtensionUnmarshalLogEntry(t *testing.T) {
+	jsonString := "{\"level\":\"info\",\"ts\":\"2025-04-16T13:16:07Z\",\"logger\":\"test-extension\",\"msg\":\"Starting workers\",\"controller\":\"example-extension-controller\",\"worker count\":1}"
+	jsonUnmarshaled, err := unmarshalLogEntry([]byte(jsonString))
 
-	lvl, text, err = parseStderr(append([]byte{1}, []byte("Error")...))
-	assert.Equal(t, lvl, LogLevelError)
-	assert.Equal(t, text, "Error")
-	assert.Equal(t, err, nil)
+	assert.NilError(t, err)
+	assert.Equal(t, jsonUnmarshaled.Level, logLevel("info"))
+	assert.Equal(t, jsonUnmarshaled.Timestamp, "2025-04-16T13:16:07Z")
+	assert.Equal(t, jsonUnmarshaled.Msg, "Starting workers")
+	assert.Equal(t, len(jsonUnmarshaled.KeysAndValues), 3)
+	assert.Equal(t, jsonUnmarshaled.KeysAndValues["logger"], "test-extension")
+	assert.Equal(t, jsonUnmarshaled.KeysAndValues["worker count"], float64(1))
+	assert.Equal(t, jsonUnmarshaled.KeysAndValues["controller"], "example-extension-controller")
+}
 
-	lvl, text, err = parseStderr(append([]byte{5}, []byte("not valid log level")...))
-	assert.Equal(t, lvl, LogLevelError)
-	assert.Equal(t, text, "")
-	assert.Error(t, err, "first byte is not a valid log level range 0-1. log: \"\\x05not valid log level\"")
+func TestOOPExtensionUnmarshalWrongFormat(t *testing.T) {
+	jsonString := "Not JSON"
+	jsonUnmarshaled, err := unmarshalLogEntry([]byte(jsonString))
 
-	lvl, text, err = parseStderr([]byte{})
-	assert.Equal(t, lvl, LogLevelError)
-	assert.Equal(t, text, "")
-	assert.Error(t, err, "input byte slice is empty")
+	assert.Error(t, err, "failed to unmarshal JSON: invalid character 'N' looking for beginning of value")
+	assert.Assert(t, jsonUnmarshaled == nil)
+}
+
+func TestOOPExtensionLogStderr(t *testing.T) {
+	var messages []string
+
+	logger := funcr.New(func(_, args string) {
+		messages = append(messages, args)
+	}, funcr.Options{})
+
+	oop := OOPExtension{
+		name:       "testLogStderr",
+		executable: "some_exec",
+		socket:     "socket",
+		service:    newExtensionService(),
+		logger:     logger,
+	}
+
+	logLineInfo := &oopLogEntry{
+		Level: "info",
+		Msg:   "Executing something",
+	}
+	logLineError := &oopLogEntry{
+		Level: "error",
+		Msg:   "Error executing something",
+		Error: "Error executing something",
+	}
+	logLineExtraValues := &oopLogEntry{
+		Level:         "info",
+		Msg:           "Extra values executing something",
+		KeysAndValues: map[string]interface{}{"controller": "test-controller"},
+	}
+	logLineWrongLogLevel := &oopLogEntry{
+		Level: "wrong",
+		Msg:   "mhmmm",
+	}
+	oop.logStderr(logLineInfo)
+	oop.logStderr(logLineError)
+	oop.logStderr(logLineExtraValues)
+	oop.logStderr(logLineWrongLogLevel)
+
+	assert.Equal(t, len(messages), 4)
+	assert.Equal(t, messages[0], `"level"=0 "msg"="Executing something"`)
+	assert.Equal(t, messages[1], `"msg"="Error executing something" "error"="Error executing something"`)
+	assert.Equal(t, messages[2], `"level"=0 "msg"="Extra values executing something" "controller"="test-controller"`)
+	assert.Equal(t, messages[3], `"msg"="mhmmm" "error"="unknown LogLevel wrong"`)
 }

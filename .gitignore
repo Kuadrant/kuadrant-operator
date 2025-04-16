@@ -25,7 +25,7 @@ testbin/*
 *.swo
 *.env
 *~
-/kuadrant-operator
+/cmd/cmd
 tmp
 
 /catalog/kuadrant-operator-catalog

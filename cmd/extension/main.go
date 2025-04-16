@@ -23,7 +23,7 @@ var (
 	logger = zap.New(
 		zap.Level(zapcore.DebugLevel),
 		zap.UseDevMode(false),
-		zap.WriteTo(os.Stdout),
+		zap.WriteTo(os.Stderr),
 	).WithName("test-extension")
 )
 

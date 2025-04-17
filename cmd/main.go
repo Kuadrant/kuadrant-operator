@@ -22,6 +22,8 @@ import (
 	"os"
 	"runtime"
 
+	"go.uber.org/zap/zapcore"
+
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -86,12 +88,15 @@ func init() {
 	utilruntime.Must(istiosecurity.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
+	sync := zapcore.Lock(zapcore.AddSync(os.Stdout))
+
 	logger := log.NewLogger(
 		log.SetLevel(log.ToLevel(logLevel)),
 		log.SetMode(log.ToMode(logMode)),
-		log.WriteTo(os.Stdout),
+		log.WriteTo(sync),
 	).WithName("kuadrant-operator")
 	log.SetLogger(logger)
+	log.SetSync(sync)
 }
 
 func printControllerMetaInfo() {

@@ -32,7 +32,8 @@ import (
 
 var (
 	// Log is the base logger
-	Log logr.Logger = logr.New(ctrllog.NullLogSink{})
+	Log  logr.Logger = logr.New(ctrllog.NullLogSink{})
+	Sync             = zapcore.WriteSyncer(nil)
 )
 
 // Level configures the verbosity of the logging.
@@ -114,6 +115,11 @@ func SetLogger(logger logr.Logger) {
 
 	ctrl.SetLogger(logger) // fulfills `logger` as the de facto logger used by controller-runtime
 	klog.SetLogger(logger)
+}
+
+// SetSync sets the zapcore.WriterSyncer used to write the logs.
+func SetSync(sync zapcore.WriteSyncer) {
+	Sync = sync
 }
 
 // WriteTo configures the logger to write to the given io.Writer, instead of standard error.

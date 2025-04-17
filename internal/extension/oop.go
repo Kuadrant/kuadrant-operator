@@ -26,6 +26,8 @@ import (
 	"syscall"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 
 	"github.com/go-logr/logr"
@@ -49,9 +51,10 @@ type OOPExtension struct {
 	server     *grpc.Server
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
+	sync       zapcore.WriteSyncer
 }
 
-func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger) (OOPExtension, error) {
+func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync zapcore.WriteSyncer) (OOPExtension, error) {
 	var err error
 	var stat os.FileInfo
 
@@ -68,6 +71,7 @@ func NewOOPExtension(name string, location string, service extpb.ExtensionServic
 		executable: executable,
 		service:    service,
 		logger:     logger.WithName(name),
+		sync:       sync,
 	}, err
 }
 

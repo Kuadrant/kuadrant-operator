@@ -36,6 +36,7 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 		socket:     "1d",
 		service:    newExtensionService(),
 		logger:     logr.Discard(),
+		sync:       nil,
 	}
 
 	if oop.IsAlive() {
@@ -68,6 +69,7 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		socket:     "--foobar",
 		service:    newExtensionService(),
 		logger:     logger,
+		sync:       nil,
 	}
 
 	if err := oopErrorLog.Start(); err != nil {

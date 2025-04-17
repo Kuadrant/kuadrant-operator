@@ -164,7 +164,7 @@ func main() {
 
 	if withExtensions {
 		// start extension manager
-		extManager, err := extension.NewManager([]string{"myextension"}, "/extensions", log.Log)
+		extManager, err := extension.NewManager([]string{"myextension"}, "/extensions", log.Log, log.Sync)
 		if err != nil {
 			setupLog.Error(err, "unable to create extension manager")
 			os.Exit(1)

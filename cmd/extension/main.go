@@ -40,6 +40,14 @@ func init() {
 }
 
 func main() {
+	// build the extension client from socket
+	if len(os.Args) < 1 {
+		logger.Error(nil, "no command line argument provided")
+		os.Exit(1)
+	}
+
+	socketPath := os.Args[1]
+
 	options := ctrl.Options{
 		Scheme:  scheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},
@@ -57,8 +65,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// first arg is grpc socket
+	// extension controller needs this as an arg
+
 	exampleReconciler := controllers.NewExampleReconciler(client)
-	controller := extensioncontroller.NewExtensionController("example-extension-controller", mgr, client, logger, exampleReconciler.Reconcile)
+	controller, err := extensioncontroller.NewExtensionController("example-extension-controller", mgr, client, logger, exampleReconciler.Reconcile, socketPath)
+	if err != nil {
+		logger.Error(err, "unable to create controller")
+		os.Exit(1)
+	}
 
 	logger.Info("starting example-controller")
 	if err = controller.Start(ctrl.SetupSignalHandler()); err != nil {

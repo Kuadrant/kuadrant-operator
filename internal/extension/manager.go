@@ -27,6 +27,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -184,4 +185,15 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 		ls[i] = &listener
 	}
 	return ls
+}
+
+func (s *extensionService) Subscribe(_ *extpb.PingRequest, stream grpc.ServerStreamingServer[extpb.PongResponse]) error {
+	for {
+		time.Sleep(time.Second * 5)
+		if err := stream.Send(&extpb.PongResponse{
+			In: timestamppb.New(time.Now()),
+		}); err != nil {
+			return err
+		}
+	}
 }

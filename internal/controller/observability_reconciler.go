@@ -399,26 +399,72 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 	gatewayClasses := topology.Targetables().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind
 	})
+
+	wantedSMs := []monitoringv1.ServiceMonitor{
+		*kOpMonitor,
+		*dnsOpMonitor,
+		*authOpMonitor,
+		*limitOpMonitor,
+	}
+
+	var wantedPMs []monitoringv1.PodMonitor
+	var monitorsToDelete []machinery.Object
+
 	for _, gatewayClass := range gatewayClasses {
 		gateways := topology.All().Children(gatewayClass)
 		gwClass := gatewayClass.(*machinery.GatewayClass)
 		if lo.Contains(istioGatewayControllerNames, gwClass.GatewayClass.Spec.ControllerName) {
 			istiodMonitor := istiodMonitorBuild(istiodMonitorNS)
 			r.createServiceMonitor(ctx, istiodMonitor, logger)
+			wantedSMs = append(wantedSMs, *istiodMonitor)
 
 			for _, gateway := range gateways {
 				istioPodMonitor := istioPodMonitorBuild(gateway.GetNamespace())
 				r.createPodMonitor(ctx, istioPodMonitor, logger)
+				wantedPMs = append(wantedPMs, *istioPodMonitor)
 			}
 		} else if lo.Contains(envoyGatewayGatewayControllerNames, gwClass.GatewayClass.Spec.ControllerName) {
 			envoyGatewayMonitor := envoyGatewayMonitorBuild(envoyGatewayMonitorNS)
 			r.createServiceMonitor(ctx, envoyGatewayMonitor, logger)
+			wantedSMs = append(wantedSMs, *envoyGatewayMonitor)
 
 			for _, gateway := range gateways {
 				envoyStatsMonitor := envoyStatsMonitorBuild(gateway.GetNamespace())
 				r.createPodMonitor(ctx, envoyStatsMonitor, logger)
+				wantedPMs = append(wantedPMs, *envoyStatsMonitor)
 			}
 		}
+	}
+
+	// Check for unwanted monitors
+	for _, monitor := range monitorObjs {
+		monitorName := monitor.GetName()
+		monitorNamespace := monitor.GetNamespace()
+
+		switch monitor.GroupVersionKind().Kind {
+		case monitoringv1.ServiceMonitorsKind:
+			if !lo.ContainsBy(wantedSMs, func(wanted monitoringv1.ServiceMonitor) bool {
+				return wanted.Name == monitorName && wanted.Namespace == monitorNamespace && wanted.Labels[kuadrant.ObservabilityLabel] == "true"
+			}) {
+				monitorsToDelete = append(monitorsToDelete, monitor)
+			}
+		case monitoringv1.PodMonitorsKind:
+			if !lo.ContainsBy(wantedPMs, func(wanted monitoringv1.PodMonitor) bool {
+				return wanted.Name == monitorName && wanted.Namespace == monitorNamespace && wanted.Labels[kuadrant.ObservabilityLabel] == "true"
+			}) {
+				monitorsToDelete = append(monitorsToDelete, monitor)
+			}
+		default:
+			logger.Info("unexpected monitor object", "kind", monitor.GroupVersionKind().Kind, "namespace", monitorNamespace, "name", monitorName)
+		}
+	}
+
+	// Delete unwanted monitors
+	if len(monitorsToDelete) > 0 {
+		for _, monitor := range monitorsToDelete {
+			logger.Info("deleting unwanted monitor", "monitors", monitor.GetName(), "namespace", monitor.GetNamespace())
+		}
+		r.deleteAllMonitors(ctx, monitorsToDelete, logger)
 	}
 
 	return nil

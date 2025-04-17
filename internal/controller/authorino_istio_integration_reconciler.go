@@ -19,6 +19,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -46,11 +47,16 @@ func (a *AuthorinoIstioIntegrationReconciler) Subscription() *controller.Subscri
 		ReconcileFunc: a.Run, Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind)},
 			{Kind: ptr.To(kuadrantv1beta1.AuthorinoGroupKind)},
+			// Effective policies impact on the istio integration
+			{Kind: &machinery.GatewayClassGroupKind},
+			{Kind: &machinery.GatewayGroupKind},
+			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		},
 	}
 }
 
-func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(baseCtx).WithName("AuthorinoIstioIntegrationReconciler")
 	ctx := logr.NewContext(baseCtx, logger)
 	logger.V(1).Info("reconciling authorino integration in istio", "status", "started")
@@ -63,6 +69,14 @@ func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 		// to be removed as well
 		return nil
 	}
+
+	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
+	if !ok {
+		return ErrMissingStateEffectiveAuthPolicies
+	}
+	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
+
+	logger.V(1).Info("effective policies info", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap))
 
 	// Authorino deployment cannot be added to the topology without
 	// adding all the cluster deployments to the topology because it does not have any label
@@ -89,12 +103,15 @@ func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 		return fmt.Errorf("could not get authorino deployment %w", err)
 	}
 
+	// Only enable sidecar when enabled in kuadrant CR AND effective policies in place
+	allowMTLS := kObj.IsMTLSEnabled() && len(effectiveAuthPoliciesMap) > 0
+
 	// add "sidecar.istio.io/inject" label to authorino deployment.
 	// label value depends on whether MTLS is enabled or not
 	updated := utils.MergeMapStringString(
 		&deployment.Spec.Template.Labels,
 		map[string]string{
-			"sidecar.istio.io/inject": strconv.FormatBool(kObj.IsMTLSEnabled()),
+			"sidecar.istio.io/inject": strconv.FormatBool(allowMTLS),
 			kuadrantManagedLabelKey:   "true",
 		},
 	)

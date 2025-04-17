@@ -19,9 +19,8 @@ package extension
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
-
-	"go.uber.org/zap/zapcore"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 
@@ -33,7 +32,7 @@ type Manager struct {
 	extensions []Extension
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
-	sync       zapcore.WriteSyncer
+	sync       io.Writer
 }
 
 type Extension interface {
@@ -42,7 +41,7 @@ type Extension interface {
 	Name() string
 }
 
-func NewManager(names []string, location string, logger logr.Logger, sync zapcore.WriteSyncer) (Manager, error) {
+func NewManager(names []string, location string, logger logr.Logger, sync io.Writer) (Manager, error) {
 	var extensions []Extension
 	var err error
 

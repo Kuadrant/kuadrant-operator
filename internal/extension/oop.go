@@ -26,8 +26,6 @@ import (
 	"syscall"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 
 	"github.com/go-logr/logr"
@@ -35,13 +33,6 @@ import (
 )
 
 const defaultUnixSocket = ".grpc.sock"
-
-type logLevel int
-
-const (
-	LogLevelInfo logLevel = iota
-	LogLevelError
-)
 
 type OOPExtension struct {
 	name       string
@@ -51,10 +42,10 @@ type OOPExtension struct {
 	server     *grpc.Server
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
-	sync       zapcore.WriteSyncer
+	sync       io.Writer
 }
 
-func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync zapcore.WriteSyncer) (OOPExtension, error) {
+func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
 	var err error
 	var stat os.FileInfo
 
@@ -107,7 +98,7 @@ func (p *OOPExtension) Start() error {
 
 	go func() {
 		if e := cmd.Wait(); e != nil {
-			p.logStderr(1, fmt.Sprintf("Extension %q finished with an error", p.name), e)
+			p.logger.Error(e, fmt.Sprintf("Extension %q finished with an error", p.name))
 			close(stopChan)
 		}
 	}()
@@ -205,8 +196,9 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 			}
 
 			if scanner.Scan() {
-				lvl, text, err := parseStderr(scanner.Bytes())
-				p.logStderr(lvl, text, err)
+				if _, err := p.sync.Write(append(scanner.Bytes(), []byte("\n")...)); err != nil {
+					p.logger.Error(err, "failed to write to logger")
+				}
 				lastReadTime = time.Now()
 			} else if err := scanner.Err(); err != nil {
 				p.logger.Error(err, "failed to read stderr")
@@ -216,33 +208,4 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 			// If this turns out to be causing busy-waiting/CPU spikes we could sleep for a brief time
 		}
 	}
-}
-
-func (p *OOPExtension) logStderr(logLvl logLevel, logString string, err error) {
-	switch logLvl {
-	case LogLevelInfo:
-		p.logger.Info(logString)
-	default:
-		p.logger.Error(err, logString)
-	}
-}
-
-func parseStderr(logLine []byte) (logLvl logLevel, logString string, err error) {
-	if len(logLine) == 0 {
-		return LogLevelError, "", fmt.Errorf("input byte slice is empty")
-	}
-
-	// Convert first byte to integer and validate log range
-	logLvl = logLevel(logLine[0])
-	if logLvl < LogLevelInfo || logLvl > LogLevelError {
-		// At the moment only differencing from Info and Error
-		return LogLevelError, "", fmt.Errorf("first byte is not a valid log level range 0-1. log: %q", string(logLine))
-	}
-
-	// Convert rest to string (if exists)
-	if len(logLine) > 1 {
-		logString = string(logLine[1:])
-	}
-
-	return logLvl, logString, nil
 }

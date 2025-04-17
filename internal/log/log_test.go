@@ -19,6 +19,7 @@ limitations under the License.
 package log
 
 import (
+	"fmt"
 	"testing"
 
 	// In this package there is no ginkgo tests
@@ -60,4 +61,17 @@ func TestToMode(t *testing.T) {
 		// should panic
 		ToMode("invalid")
 	}()
+}
+
+type writerMock struct{}
+
+func (w *writerMock) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func TestSetSync(t *testing.T) {
+	assert.Equal(t, Sync, nil)
+
+	SetSync(&writerMock{})
+	assert.Equal(t, fmt.Sprintf("%T", Sync), "*log.writerMock")
 }

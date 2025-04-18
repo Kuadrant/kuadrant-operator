@@ -21,9 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samber/lo"
-
 	"github.com/go-logr/logr/funcr"
+	"github.com/samber/lo"
 	"gotest.tools/assert"
 
 	"github.com/go-logr/logr"
@@ -36,6 +35,7 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 		socket:     "1d",
 		service:    newExtensionService(),
 		logger:     logr.Discard(),
+		sync:       nil,
 	}
 
 	if oop.IsAlive() {
@@ -55,11 +55,20 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 	}
 }
 
+type writerMock struct {
+	messages []string
+}
+
+func (w *writerMock) Write(p []byte) (n int, err error) {
+	w.messages = append(w.messages, string(p))
+	return len(p), nil
+}
+
 func TestOOPExtensionForwardsLog(t *testing.T) {
-	var messages []string
+	writer := &writerMock{}
 
 	logger := funcr.New(func(_, args string) {
-		messages = append(messages, args)
+		writer.Write([]byte(args))
 	}, funcr.Options{})
 
 	oopErrorLog := OOPExtension{
@@ -68,6 +77,7 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		socket:     "--foobar",
 		service:    newExtensionService(),
 		logger:     logger,
+		sync:       writer,
 	}
 
 	if err := oopErrorLog.Start(); err != nil {
@@ -78,31 +88,8 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		time.Sleep(5 * time.Millisecond) // wait for the command to return
 	}
 
-	logAsString := strings.Join(messages, "\n")
-	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "is not a valid log level range 0-1. log:"))
-
 	_ = oopErrorLog.Stop() // gracefully kill the process/server
-	assert.Assert(t, lo.Contains(messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
-}
-
-func TestOOPExtensionParseStderr(t *testing.T) {
-	lvl, text, err := parseStderr(append([]byte{0}, []byte("Info")...))
-	assert.Equal(t, lvl, LogLevelInfo)
-	assert.Equal(t, text, "Info")
-	assert.Equal(t, err, nil)
-
-	lvl, text, err = parseStderr(append([]byte{1}, []byte("Error")...))
-	assert.Equal(t, lvl, LogLevelError)
-	assert.Equal(t, text, "Error")
-	assert.Equal(t, err, nil)
-
-	lvl, text, err = parseStderr(append([]byte{5}, []byte("not valid log level")...))
-	assert.Equal(t, lvl, LogLevelError)
-	assert.Equal(t, text, "")
-	assert.Error(t, err, "first byte is not a valid log level range 0-1. log: \"\\x05not valid log level\"")
-
-	lvl, text, err = parseStderr([]byte{})
-	assert.Equal(t, lvl, LogLevelError)
-	assert.Equal(t, text, "")
-	assert.Error(t, err, "input byte slice is empty")
+	assert.Assert(t, lo.Contains(writer.messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
+	logAsString := strings.Join(writer.messages, "\n")
+	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "usage:"))
 }

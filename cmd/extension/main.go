@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	"k8s.io/utils/env"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
@@ -19,11 +21,13 @@ import (
 )
 
 var (
-	scheme = k8sruntime.NewScheme()
-	logger = zap.New(
-		zap.Level(zapcore.DebugLevel),
-		zap.UseDevMode(false),
-		zap.WriteTo(os.Stdout),
+	scheme      = k8sruntime.NewScheme()
+	logLevel, _ = zapcore.ParseLevel(env.GetString("LOG_LEVEL", "info"))
+	logMode     = env.GetString("LOG_MODE", "production") != "production"
+	logger      = zap.New(
+		zap.Level(logLevel),
+		zap.UseDevMode(logMode),
+		zap.WriteTo(os.Stderr),
 	).WithName("test-extension")
 )
 

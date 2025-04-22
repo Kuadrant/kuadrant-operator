@@ -39,7 +39,7 @@ type ExtensionController struct {
 	manager         ctrlruntime.Manager
 	client          *dynamic.DynamicClient
 	reconcile       ReconcileFn
-	WatchSource     []ctrlruntimesrc.Source
+	watchSources    []ctrlruntimesrc.Source
 	kuadrantCtx     *KuadrantCtx
 	extensionClient *extensionClient
 }
@@ -47,7 +47,7 @@ type ExtensionController struct {
 func (ec *ExtensionController) Start(ctx context.Context) error {
 	stopCh := make(chan struct{})
 	reconcileChan := make(chan event.GenericEvent, 10)
-	ec.WatchSource = append(ec.WatchSource, ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{}))
+	ec.watchSources = append(ec.watchSources, ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{}))
 
 	if ec.manager != nil {
 		ctrl, err := ctrlruntimectrl.New(ec.name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
@@ -55,7 +55,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 			return fmt.Errorf("error creating controller: %v", err)
 		}
 
-		for _, source := range ec.WatchSource {
+		for _, source := range ec.watchSources {
 			err := ctrl.Watch(source)
 			if err != nil {
 				return fmt.Errorf("error watching resource: %v", err)
@@ -102,24 +102,6 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	// overrides reconcile method
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
 	return ec.reconcile(ctx, request, ec.kuadrantCtx)
-}
-
-// TODO(adam-cattermole): replace with builder pattern
-func NewExtensionController(name string, manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, reconcile ReconcileFn, socketPath string) (*ExtensionController, error) {
-	extClient, err := newExtensionClient(socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create extension client: %v", err)
-	}
-	return &ExtensionController{
-		name:            name,
-		logger:          logger,
-		manager:         manager,
-		client:          client,
-		reconcile:       reconcile,
-		WatchSource:     []ctrlruntimesrc.Source{},
-		kuadrantCtx:     &KuadrantCtx{},
-		extensionClient: extClient,
-	}, nil
 }
 
 type extensionClient struct {
@@ -173,4 +155,91 @@ func (ec *extensionClient) subscribe(ctx context.Context, callback func(*extpb.P
 
 func (ec *extensionClient) close() error {
 	return ec.conn.Close()
+}
+
+type ExtensionControllerBuilder struct {
+	name         string
+	manager      ctrlruntime.Manager
+	client       *dynamic.DynamicClient
+	logger       logr.Logger
+	reconcile    ReconcileFn
+	socketPath   string
+	watchSources []ctrlruntimesrc.Source
+}
+
+func NewExtensionControllerBuilder() *ExtensionControllerBuilder {
+	return &ExtensionControllerBuilder{
+		watchSources: make([]ctrlruntimesrc.Source, 0),
+	}
+}
+
+func (b *ExtensionControllerBuilder) WithName(name string) *ExtensionControllerBuilder {
+	b.name = name
+	return b
+}
+
+func (b *ExtensionControllerBuilder) WithManager(mgr ctrlruntime.Manager) *ExtensionControllerBuilder {
+	b.manager = mgr
+	return b
+}
+
+func (b *ExtensionControllerBuilder) WithClient(client *dynamic.DynamicClient) *ExtensionControllerBuilder {
+	b.client = client
+	return b
+}
+
+func (b *ExtensionControllerBuilder) WithLogger(logger logr.Logger) *ExtensionControllerBuilder {
+	b.logger = logger
+	return b
+}
+
+func (b *ExtensionControllerBuilder) WithReconciler(fn ReconcileFn) *ExtensionControllerBuilder {
+	b.reconcile = fn
+	return b
+}
+
+func (b *ExtensionControllerBuilder) WithSocketPath(path string) *ExtensionControllerBuilder {
+	b.socketPath = path
+	return b
+}
+
+func (b *ExtensionControllerBuilder) WithWatchSource(source ctrlruntimesrc.Source) *ExtensionControllerBuilder {
+	b.watchSources = append(b.watchSources, source)
+	return b
+}
+
+func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
+	if b.name == "" {
+		return nil, fmt.Errorf("controller name must be set")
+	}
+	if b.manager == nil {
+		return nil, fmt.Errorf("manager must be set")
+	}
+	if b.client == nil {
+		return nil, fmt.Errorf("dynamic client must be set")
+	}
+	if b.reconcile == nil {
+		return nil, fmt.Errorf("reconcile function must be set")
+	}
+	if b.socketPath == "" {
+		return nil, fmt.Errorf("socket path must be set")
+	}
+	if len(b.watchSources) == 0 {
+		return nil, fmt.Errorf("watch sources must be set")
+	}
+	extClient, err := newExtensionClient(b.socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create extension client: %v", err)
+	}
+
+	return &ExtensionController{
+		name:            b.name,
+		manager:         b.manager,
+		client:          b.client,
+		logger:          b.logger,
+		reconcile:       b.reconcile,
+		watchSources:    b.watchSources,
+		kuadrantCtx:     &KuadrantCtx{},
+		extensionClient: extClient,
+	}, nil
 }

@@ -69,7 +69,14 @@ func main() {
 	// extension controller needs this as an arg
 
 	exampleReconciler := controllers.NewExampleReconciler(client)
-	controller, err := extensioncontroller.NewExtensionController("example-extension-controller", mgr, client, logger, exampleReconciler.Reconcile, socketPath)
+	controller, err := extensioncontroller.NewExtensionControllerBuilder().
+		WithName("example-extension-controller").
+		WithManager(mgr).
+		WithLogger(logger).
+		WithClient(client).
+		WithReconciler(exampleReconciler.Reconcile).
+		WithSocketPath(socketPath).
+		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")
 		os.Exit(1)

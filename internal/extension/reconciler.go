@@ -9,9 +9,18 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-var DAG *atomic.Pointer[machinery.Topology]
+var DAG *atomic.Pointer[StateAwareDAG]
 
-func Reconcile(_ context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-	DAG.Store(topology)
+type StateAwareDAG struct {
+	dag   *machinery.Topology
+	state *sync.Map
+}
+
+func Reconcile(_ context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	newDag := StateAwareDAG{
+		dag:   topology,
+		state: state,
+	}
+	DAG.Store(&newDag)
 	return nil
 }

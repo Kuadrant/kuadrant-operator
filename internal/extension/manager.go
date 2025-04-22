@@ -34,7 +34,7 @@ import (
 type Manager struct {
 	extensions []Extension
 	service    extpb.ExtensionServiceServer
-	dag        *atomic.Pointer[machinery.Topology]
+	dag        *atomic.Pointer[StateAwareDAG]
 	logger     logr.Logger
 	sync       io.Writer
 }
@@ -49,7 +49,7 @@ func NewManager(names []string, location string, logger logr.Logger, sync io.Wri
 	var extensions []Extension
 	var err error
 
-	DAG = &atomic.Pointer[machinery.Topology]{}
+	DAG = &atomic.Pointer[StateAwareDAG]{}
 	service := newExtensionService(DAG)
 	logger = logger.WithName("extension")
 
@@ -124,7 +124,7 @@ func (m *Manager) HasSynced() bool {
 }
 
 type extensionService struct {
-	dag *atomic.Pointer[machinery.Topology]
+	dag *atomic.Pointer[StateAwareDAG]
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -134,7 +134,7 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func newExtensionService(dag *atomic.Pointer[machinery.Topology]) extpb.ExtensionServiceServer {
+func newExtensionService(dag *atomic.Pointer[StateAwareDAG]) extpb.ExtensionServiceServer {
 	return &extensionService{dag: dag}
 }
 

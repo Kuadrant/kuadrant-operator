@@ -26,7 +26,7 @@ import (
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-type KuadrantCtx struct{}
+type KuadrantCtx interface{}
 
 type MetaReconciler = TypedMetaReconciler[reconcile.Request]
 
@@ -263,7 +263,7 @@ func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
 		logger:          b.logger,
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,
-		kuadrantCtx:     &KuadrantCtx{},
+		kuadrantCtx:     nil,
 		extensionClient: extClient,
 		resources:       make(map[types.NamespacedName]struct{}),
 	}, nil

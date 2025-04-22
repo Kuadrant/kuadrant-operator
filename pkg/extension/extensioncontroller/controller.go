@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
@@ -43,11 +45,18 @@ type ExtensionController struct {
 	watchSources    []ctrlruntimesrc.Source
 	kuadrantCtx     *KuadrantCtx
 	extensionClient *extensionClient
+	// map of namespaced names
+	// todo(adam-cattermole): This could change to be keyed on the cel expression, value of the set of namespaced names
+	//   that should be triggered. This would let us pick which set of resources require update for which expression
+	resources   map[types.NamespacedName]struct{}
+	resourcesMu sync.Mutex
 }
 
 func (ec *ExtensionController) Start(ctx context.Context) error {
 	stopCh := make(chan struct{})
-	reconcileChan := make(chan event.GenericEvent, 10)
+	// todo(adam-cattermole): how big do we make the reconcile event channel?
+	//	 how many should we queue before we block?
+	reconcileChan := make(chan event.GenericEvent, 50)
 	ec.watchSources = append(ec.watchSources, ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{}))
 
 	if ec.manager != nil {
@@ -87,12 +96,15 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan event.GenericEvent) {
 	err := ec.extensionClient.subscribe(ctx, func(pong *extpb.PongResponse) {
 		ec.logger.Info("received pong", "timestamp", pong.In.AsTime())
-		//todo(adam-cattermole): temporarily generating unstructured
-		us := &unstructured.Unstructured{}
-		us.SetNamespace("default")
-		us.SetName("pong-trigger")
-
-		reconcileChan <- event.GenericEvent{Object: us}
+		// lock the resources map
+		ec.resourcesMu.Lock()
+		for nn := range ec.resources {
+			us := &unstructured.Unstructured{}
+			us.SetNamespace(nn.Namespace)
+			us.SetName(nn.Name)
+			reconcileChan <- event.GenericEvent{Object: us}
+		}
+		ec.resourcesMu.Unlock()
 	})
 	if err != nil {
 		ec.logger.Error(err, "grpc subscribe failed")
@@ -102,6 +114,9 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// overrides reconcile method
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
+	ec.resourcesMu.Lock()
+	ec.resources[request.NamespacedName] = struct{}{}
+	ec.resourcesMu.Unlock()
 	return ec.reconcile(ctx, request, ec.kuadrantCtx)
 }
 
@@ -189,6 +204,7 @@ func (b *ExtensionControllerBuilder) WithClient(client *dynamic.DynamicClient) *
 	return b
 }
 
+// todo(adam-cattermole): we could choose not to expose this and use this to enforce the logger is using the env vars
 func (b *ExtensionControllerBuilder) WithLogger(logger logr.Logger) *ExtensionControllerBuilder {
 	b.logger = logger
 	return b
@@ -199,6 +215,7 @@ func (b *ExtensionControllerBuilder) WithReconciler(fn ReconcileFn) *ExtensionCo
 	return b
 }
 
+// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
 func (b *ExtensionControllerBuilder) WithSocketPath(path string) *ExtensionControllerBuilder {
 	b.socketPath = path
 	return b
@@ -248,5 +265,6 @@ func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
 		watchSources:    watchSources,
 		kuadrantCtx:     &KuadrantCtx{},
 		extensionClient: extClient,
+		resources:       make(map[types.NamespacedName]struct{}),
 	}, nil
 }

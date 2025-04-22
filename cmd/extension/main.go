@@ -5,6 +5,7 @@ import (
 
 	"k8s.io/utils/env"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
@@ -34,18 +35,20 @@ var (
 
 func init() {
 	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
 
 	ctrl.SetLogger(logger)
 	klog.SetLogger(logger)
 }
 
 func main() {
+	// todo(adam-cattermole): We should abstract all of this away from the user, it should be as simple as implementing
+	//   the reconcile function, providing a name, and a list of watches for their extension
 	// build the extension client from socket
 	if len(os.Args) < 1 {
 		logger.Error(nil, "no command line argument provided")
 		os.Exit(1)
 	}
-
 	socketPath := os.Args[1]
 
 	options := ctrl.Options{
@@ -65,9 +68,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// first arg is grpc socket
-	// extension controller needs this as an arg
-
 	exampleReconciler := controllers.NewExampleReconciler(client)
 	controller, err := extensioncontroller.NewExtensionControllerBuilder().
 		WithName("example-extension-controller").
@@ -76,6 +76,7 @@ func main() {
 		WithClient(client).
 		WithReconciler(exampleReconciler.Reconcile).
 		WithSocketPath(socketPath).
+		Watches(&kuadrantv1.AuthPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")

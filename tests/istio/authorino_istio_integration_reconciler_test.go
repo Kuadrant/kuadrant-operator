@@ -24,7 +24,6 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
-		kapName          = "toystore-kap"
 	)
 
 	var (

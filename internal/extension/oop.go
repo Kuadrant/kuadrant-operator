@@ -196,6 +196,8 @@ func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struc
 			}
 
 			if scanner.Scan() {
+				// TODO (didierofrivia): Check output of scanner.Bytes() to see if it's sink compatible, otherwise log
+				// instead of directly write.
 				if _, err := p.sync.Write(append(scanner.Bytes(), []byte("\n")...)); err != nil {
 					p.logger.Error(err, "failed to write to logger")
 				}

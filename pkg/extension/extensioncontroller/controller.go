@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
@@ -158,18 +159,18 @@ func (ec *extensionClient) close() error {
 }
 
 type ExtensionControllerBuilder struct {
-	name         string
-	manager      ctrlruntime.Manager
-	client       *dynamic.DynamicClient
-	logger       logr.Logger
-	reconcile    ReconcileFn
-	socketPath   string
-	watchSources []ctrlruntimesrc.Source
+	name       string
+	manager    ctrlruntime.Manager
+	client     *dynamic.DynamicClient
+	logger     logr.Logger
+	reconcile  ReconcileFn
+	socketPath string
+	watchTypes []client.Object
 }
 
 func NewExtensionControllerBuilder() *ExtensionControllerBuilder {
 	return &ExtensionControllerBuilder{
-		watchSources: make([]ctrlruntimesrc.Source, 0),
+		watchTypes: make([]client.Object, 0),
 	}
 }
 
@@ -203,8 +204,8 @@ func (b *ExtensionControllerBuilder) WithSocketPath(path string) *ExtensionContr
 	return b
 }
 
-func (b *ExtensionControllerBuilder) WithWatchSource(source ctrlruntimesrc.Source) *ExtensionControllerBuilder {
-	b.watchSources = append(b.watchSources, source)
+func (b *ExtensionControllerBuilder) Watches(obj client.Object) *ExtensionControllerBuilder {
+	b.watchTypes = append(b.watchTypes, obj)
 	return b
 }
 
@@ -224,12 +225,18 @@ func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
 	if b.socketPath == "" {
 		return nil, fmt.Errorf("socket path must be set")
 	}
-	if len(b.watchSources) == 0 {
+	if len(b.watchTypes) == 0 {
 		return nil, fmt.Errorf("watch sources must be set")
 	}
 	extClient, err := newExtensionClient(b.socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extension client: %v", err)
+	}
+
+	watchSources := make([]ctrlruntimesrc.Source, 0)
+	for _, obj := range b.watchTypes {
+		source := ctrlruntimesrc.Kind(b.manager.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
+		watchSources = append(watchSources, source)
 	}
 
 	return &ExtensionController{
@@ -238,7 +245,7 @@ func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
 		client:          b.client,
 		logger:          b.logger,
 		reconcile:       b.reconcile,
-		watchSources:    b.watchSources,
+		watchSources:    watchSources,
 		kuadrantCtx:     &KuadrantCtx{},
 		extensionClient: extClient,
 	}, nil

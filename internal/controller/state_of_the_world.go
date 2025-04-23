@@ -650,6 +650,7 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
+			InitializeHistoryFunc,
 		},
 	}
 }
@@ -658,6 +659,7 @@ func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	workflow := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
+			UpdateHistoryFunc,
 		},
 	}
 

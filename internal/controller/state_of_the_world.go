@@ -651,13 +651,16 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
+			InitializeHistoryFunc,
 		},
 	}
 }
 
 func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled bool, isUsingExtensions bool) *controller.Workflow {
 	workflow := &controller.Workflow{
-		Tasks: []controller.ReconcileFunc{},
+		Tasks: []controller.ReconcileFunc{
+			UpdateHistoryFunc,
+		},
 	}
 
 	if isGatewayAPIInstalled {

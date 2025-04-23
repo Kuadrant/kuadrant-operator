@@ -49,6 +49,7 @@ func (r *KuadrantStatusUpdater) Subscription() *controller.Subscription {
 		{Kind: ptr.To(kuadrantv1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.CreateEvent)},
 		{Kind: ptr.To(kuadrantv1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.UpdateEvent)},
 		{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
+		{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
 		{Kind: ptr.To(kuadrantv1beta1.LimitadorGroupKind), EventType: ptr.To(controller.CreateEvent)},
 		{Kind: ptr.To(kuadrantv1beta1.LimitadorGroupKind), EventType: ptr.To(controller.UpdateEvent)},
 	},
@@ -111,7 +112,8 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
-		Mtls:               ptr.To(kObj.IsMTLSEnabled()),
+		MtlsAuthorino:      ptr.To(kObj.IsMTLSAuthorinoEnabled()),
+		MtlsLimitador:      ptr.To(kObj.IsMTLSLimitadorEnabled()),
 	}
 
 	availableCond := r.readyCondition(topology, logger)

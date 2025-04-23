@@ -128,7 +128,7 @@ func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 	}
 
 	// Only enable sidecar when enabled in kuadrant CR AND effective policies in place
-	allowMTLS := kObj.IsMTLSEnabled() && len(effectiveRateLimitPoliciesMap) > 0
+	allowMTLS := kObj.IsMTLSLimitadorEnabled() && len(effectiveRateLimitPoliciesMap) > 0
 
 	// add "sidecar.istio.io/inject" label to limitador deployment.
 	// label value depends on whether MTLS is enabled or not

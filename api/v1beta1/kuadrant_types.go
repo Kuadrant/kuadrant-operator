@@ -24,6 +24,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
@@ -37,7 +38,8 @@ var (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,priority=2
-//+kubebuilder:printcolumn:name="mTLS",type=boolean,JSONPath=".status.mtls"
+//+kubebuilder:printcolumn:name="mTLS Authorino",type=boolean,JSONPath=".status.mtlsAuthorino"
+//+kubebuilder:printcolumn:name="mTLS Limitador",type=boolean,JSONPath=".status.mtlsLimitador"
 //+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Kuadrant configures installations of Kuadrant Service Protection components
@@ -55,11 +57,18 @@ func (k *Kuadrant) GetLocator() string {
 	return machinery.LocatorFromObject(k)
 }
 
-func (k *Kuadrant) IsMTLSEnabled() bool {
+func (k *Kuadrant) IsMTLSLimitadorEnabled() bool {
 	if k == nil {
 		return false
 	}
-	return k.Spec.MTLS != nil && k.Spec.MTLS.Enable
+	return k.Spec.MTLS.IsMTLSEnabled() && k.Spec.MTLS.IsLimitadorEnabled()
+}
+
+func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
+	if k == nil {
+		return false
+	}
+	return k.Spec.MTLS.IsMTLSEnabled() && k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
 // KuadrantSpec defines the desired state of Kuadrant
@@ -78,6 +87,36 @@ type Observability struct {
 
 type MTLS struct {
 	Enable bool `json:"enable,omitempty"`
+
+	// +optional
+	Authorino *bool `json:"authorino,omitempty"`
+
+	// +optional
+	Limitador *bool `json:"limitador,omitempty"`
+}
+
+func (m *MTLS) IsMTLSEnabled() bool {
+	if m == nil {
+		return false
+	}
+
+	return m.Enable
+}
+
+func (m *MTLS) IsLimitadorEnabled() bool {
+	if m == nil {
+		return false
+	}
+
+	return ptr.Deref(m.Limitador, m.Enable)
+}
+
+func (m *MTLS) IsAuthorinoEnabled() bool {
+	if m == nil {
+		return false
+	}
+
+	return ptr.Deref(m.Authorino, m.Enable)
 }
 
 // KuadrantStatus defines the observed state of Kuadrant
@@ -94,9 +133,13 @@ type KuadrantStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 
-	// Mtls reflects the mtls feature state.
+	// Mtls Authorino reflects the mtls feature state regarding comms with authorino.
 	// +optional
-	Mtls *bool `json:"mtls,omitempty"`
+	MtlsAuthorino *bool `json:"mtlsAuthorino,omitempty"`
+
+	// Mtls Limitador reflects the mtls feature state regarding comms with limitador.
+	// +optional
+	MtlsLimitador *bool `json:"mtlsLimitador,omitempty"`
 }
 
 func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool {
@@ -106,9 +149,15 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 		return false
 	}
 
-	if !reflect.DeepEqual(r.Mtls, other.Mtls) {
-		diff := cmp.Diff(r.Mtls, other.Mtls)
-		logger.V(1).Info("Mtls not equal", "difference", diff)
+	if !reflect.DeepEqual(r.MtlsAuthorino, other.MtlsAuthorino) {
+		diff := cmp.Diff(r.MtlsAuthorino, other.MtlsAuthorino)
+		logger.V(1).Info("MtlsAuthorino not equal", "difference", diff)
+		return false
+	}
+
+	if !reflect.DeepEqual(r.MtlsLimitador, other.MtlsLimitador) {
+		diff := cmp.Diff(r.MtlsLimitador, other.MtlsLimitador)
+		logger.V(1).Info("MtlsAuthorino not equal", "difference", diff)
 		return false
 	}
 

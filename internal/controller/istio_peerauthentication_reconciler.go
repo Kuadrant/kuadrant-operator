@@ -16,6 +16,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/istio"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
@@ -45,12 +46,18 @@ func (p *PeerAuthenticationReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: p.Run, Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind)},
+			// Effective policies impact on the peerauthentication reconciliation
+			{Kind: &machinery.GatewayClassGroupKind},
+			{Kind: &machinery.GatewayGroupKind},
+			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: ptr.To(istio.PeerAuthenticationGroupKind)},
 		},
 	}
 }
 
-func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(baseCtx).WithName("PeerAuthenticationReconciler")
 	ctx := logr.NewContext(baseCtx, logger)
 	logger.V(1).Info("reconciling peerauthentication", "status", "started")
@@ -63,6 +70,20 @@ func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controll
 		// managed by kuadrant to be removed as well
 		return nil
 	}
+
+	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
+	if !ok {
+		return ErrMissingStateEffectiveAuthPolicies
+	}
+	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
+
+	effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	if !ok {
+		return ErrMissingStateEffectiveRateLimitPolicies
+	}
+	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
+
+	logger.V(1).Info("effective policies info", "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveAuthPolicies", len(effectiveAuthPoliciesMap))
 
 	peerAuth := &istiosecurityv1.PeerAuthentication{
 		TypeMeta: metav1.TypeMeta{
@@ -84,7 +105,11 @@ func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controll
 		},
 	}
 
-	if !kObj.IsMTLSEnabled() {
+	// Only create peerauthentication when enabled in kuadrant CR AND effective policies in place
+	allowMTLS := kObj.IsMTLSEnabled() &&
+		(len(effectiveAuthPoliciesMap)+len(effectiveRateLimitPoliciesMap)) > 0
+
+	if !allowMTLS {
 		utils.TagObjectToDelete(peerAuth)
 	}
 

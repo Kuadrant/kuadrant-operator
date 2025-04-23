@@ -19,6 +19,7 @@ package extension
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
@@ -31,6 +32,7 @@ type Manager struct {
 	extensions []Extension
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
+	sync       io.Writer
 }
 
 type Extension interface {
@@ -39,7 +41,7 @@ type Extension interface {
 	Name() string
 }
 
-func NewManager(names []string, location string, logger logr.Logger) (Manager, error) {
+func NewManager(names []string, location string, logger logr.Logger, sync io.Writer) (Manager, error) {
 	var extensions []Extension
 	var err error
 
@@ -47,7 +49,7 @@ func NewManager(names []string, location string, logger logr.Logger) (Manager, e
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
-		if oopExtension, e := NewOOPExtension(name, location, service, logger); e == nil {
+		if oopExtension, e := NewOOPExtension(name, location, service, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {
@@ -59,9 +61,10 @@ func NewManager(names []string, location string, logger logr.Logger) (Manager, e
 	}
 
 	return Manager{
-		extensions: extensions,
-		service:    service,
-		logger:     logger,
+		extensions,
+		service,
+		logger,
+		sync,
 	}, err
 }
 

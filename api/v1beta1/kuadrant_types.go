@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -70,6 +71,10 @@ type KuadrantSpec struct {
 	// will add the configuration required to enable mTLS between an Istio provided
 	// gateway and the Kuadrant components.
 	MTLS *MTLS `json:"mtls,omitempty"`
+
+	// +optional
+	// Resilience is an optional entry which enables different control plane resilience features.
+	Resilience *Resilience `json:"resilience,omitempty"`
 }
 
 type Observability struct {
@@ -78,6 +83,10 @@ type Observability struct {
 
 type MTLS struct {
 	Enable bool `json:"enable,omitempty"`
+}
+
+type Resilience struct {
+	CounterStorage *limitadorv1alpha1.Storage `json:"counterStorage,omitempty"`
 }
 
 // KuadrantStatus defines the observed state of Kuadrant

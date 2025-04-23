@@ -139,7 +139,7 @@ func (r *ResilienceCounterStorageReconciler) Subscription() controller.Subscript
 	}
 }
 
-func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, state *sync.Map) error {
+func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("ResilienceCounterStorageReconciler")
 
 	logger.V(level).Info("ResilienceCounterStorageReconciler Task", "status", "started")
@@ -150,7 +150,27 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 	}
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
+	kObj := GetKuadrantFromTopology(topology)
+	if !r.isConfigured(kObj) {
+		logger.V(level).Info("CounterStorage not configured", "status", "exiting")
+		return nil
+	}
+	logger.V(level).Info("CounterStorage configured", "status", "contiune")
+
 	return nil
+}
+
+func (r *ResilienceCounterStorageReconciler) isConfigured(kObj *kuadrantv1beta1.Kuadrant) bool {
+	if kObj == nil {
+		return false
+	}
+	if resilience := kObj.Spec.Resilience; resilience == nil {
+		return false
+	}
+	if configuration := kObj.Spec.Resilience.CounterStorage; configuration != nil {
+		return true
+	}
+	return false
 }
 
 // INFO: Postconditon Section

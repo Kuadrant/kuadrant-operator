@@ -6,8 +6,11 @@ import (
 	"context"
 	"sync"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
@@ -21,10 +24,10 @@ const (
 	ResilienceFeatureAnnotation   = "kuadrant.io/experimental-dont-use-resilient-data-plane"
 )
 
-func NewResilienceDeploymentWorkflow() *controller.Workflow {
+func NewResilienceDeploymentWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition:  NewResilienceDeploymentPrecondition().Subscription().Reconcile,
-		Tasks:         NewResilienceDeploymentTasks(),
+		Tasks:         NewResilienceDeploymentTasks(client),
 		Postcondition: NewResilienceDeploymentPostcondition().Subscription().Reconcile,
 	}
 }
@@ -42,6 +45,8 @@ func (r *ResilienceDeploymentPrecondition) Subscription() controller.Subscriptio
 		ReconcileFunc: r.run,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+			// TODO: review the limitador event watch after the feature comes out of experimental
+			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		},
 	}
 }
@@ -58,10 +63,10 @@ func (r *ResilienceDeploymentPrecondition) run(ctx context.Context, _ []controll
 
 // INFO: Task Section
 
-func NewResilienceDeploymentTasks() []controller.ReconcileFunc {
+func NewResilienceDeploymentTasks(client *dynamic.DynamicClient) []controller.ReconcileFunc {
 	return []controller.ReconcileFunc{
 		NewResilienceAuthorizationReconciler().Subscription().Reconcile,
-		NewResilienceCounterStorageReconciler().Subscription().Reconcile,
+		NewResilienceCounterStorageReconciler(client).Subscription().Reconcile,
 		NewResilienceRateLimitingReconciler().Subscription().Reconcile,
 	}
 }
@@ -124,17 +129,22 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	return nil
 }
 
-func NewResilienceCounterStorageReconciler() *ResilienceCounterStorageReconciler {
-	return &ResilienceCounterStorageReconciler{}
+func NewResilienceCounterStorageReconciler(client *dynamic.DynamicClient) *ResilienceCounterStorageReconciler {
+	return &ResilienceCounterStorageReconciler{
+		Client: client,
+	}
 }
 
-type ResilienceCounterStorageReconciler struct{}
+type ResilienceCounterStorageReconciler struct {
+	Client *dynamic.DynamicClient
+}
 
 func (r *ResilienceCounterStorageReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.reconcile,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		},
 	}
 }
@@ -151,11 +161,24 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
 	kObj := GetKuadrantFromTopology(topology)
+	lObj := GetLimitadorFromTopology(topology)
+	if lObj == nil {
+		logger.V(level).Info("limitador resource has not being created yet.")
+		return nil
+	}
+
 	if !r.isConfigured(kObj) {
 		logger.V(level).Info("CounterStorage not configured", "status", "exiting")
 		return nil
 	}
 	logger.V(level).Info("CounterStorage configured", "status", "contiune")
+
+	lObj.Spec.Storage = kObj.Spec.Resilience.CounterStorage
+	err := r.updateLimitador(ctx, lObj)
+	if err != nil {
+		logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+		return nil
+	}
 
 	return nil
 }
@@ -171,6 +194,15 @@ func (r *ResilienceCounterStorageReconciler) isConfigured(kObj *kuadrantv1beta1.
 		return true
 	}
 	return false
+}
+
+func (r *ResilienceCounterStorageReconciler) updateLimitador(ctx context.Context, lObj *limitadorv1alpha1.Limitador) error {
+	obj, err := controller.Destruct(lObj)
+	if err != nil {
+		return err
+	}
+	_, err = r.Client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(lObj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
 }
 
 // INFO: Postconditon Section

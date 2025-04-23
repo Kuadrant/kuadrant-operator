@@ -597,13 +597,6 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile)
 	}
 
-	if b.isIstioInstalled && b.isAuthorinoOperatorInstalled && b.isLimitadorOperatorInstalled {
-		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewPeerAuthenticationReconciler(b.manager, b.client).Subscription().Reconcile,
-			NewLimitadorIstioIntegrationReconciler(b.manager, b.client).Subscription().Reconcile,
-			NewAuthorinoIstioIntegrationReconciler(b.manager, b.client).Subscription().Reconcile,
-		)
-	}
 	return mainWorkflow.Run
 }
 

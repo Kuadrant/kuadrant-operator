@@ -160,6 +160,8 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 	}
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
+	history := GetHistory()
+
 	kObj := GetKuadrantFromTopology(topology)
 	lObj := GetLimitadorFromTopology(topology)
 	if lObj == nil {
@@ -167,7 +169,21 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 		return nil
 	}
 
-	if !r.isConfigured(kObj) {
+	wasConfigured := r.isConfigured(history.kuadrant)
+	nowConfigured := r.isConfigured(kObj)
+
+	if wasConfigured && !nowConfigured {
+		logger.V(level).Info("spec.storage should be removed from the limitador resource", "status", "cleanup")
+		lObj.Spec.Storage = nil
+		err := r.updateLimitador(ctx, lObj)
+		if err != nil {
+			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+			return nil
+		}
+		return nil
+	}
+
+	if !nowConfigured {
 		logger.V(level).Info("CounterStorage not configured", "status", "exiting")
 		return nil
 	}

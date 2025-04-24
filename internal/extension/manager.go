@@ -124,7 +124,7 @@ func (m *Manager) Run(stopCh <-chan struct{}) {
 }
 
 func (m *Manager) HasSynced() bool {
-	return m.dag.Load() != nil
+	return true
 }
 
 type extensionService struct {

@@ -29,12 +29,6 @@ import (
 
 type KuadrantCtx interface{}
 
-type MetaReconciler = TypedMetaReconciler[reconcile.Request]
-
-type TypedMetaReconciler[request comparable] interface {
-	Reconcile(context.Context, request, *KuadrantCtx) (reconcile.Result, error)
-}
-
 type ReconcileFn func(ctx context.Context, request reconcile.Request, kuadrant *KuadrantCtx) (reconcile.Result, error)
 
 type ExtensionController struct {

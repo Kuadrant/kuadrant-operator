@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -32,8 +33,9 @@ const (
 type ExtensionServiceClient interface {
 	// Sends a greeting
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
-	// Subscribe to a set of pongs
-	Subscribe(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PongResponse], error)
+	// Subscribe to a set of Events
+	Subscribe(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
+	// Resolve the expression for context and subscribe (or not)
 	Resolve(ctx context.Context, in *ResolveRequest, opts ...grpc.CallOption) (*ResolveResponse, error)
 }
 
@@ -55,13 +57,13 @@ func (c *extensionServiceClient) Ping(ctx context.Context, in *PingRequest, opts
 	return out, nil
 }
 
-func (c *extensionServiceClient) Subscribe(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PongResponse], error) {
+func (c *extensionServiceClient) Subscribe(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &ExtensionService_ServiceDesc.Streams[0], ExtensionService_Subscribe_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[PingRequest, PongResponse]{ClientStream: stream}
+	x := &grpc.GenericClientStream[emptypb.Empty, Event]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -72,7 +74,7 @@ func (c *extensionServiceClient) Subscribe(ctx context.Context, in *PingRequest,
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ExtensionService_SubscribeClient = grpc.ServerStreamingClient[PongResponse]
+type ExtensionService_SubscribeClient = grpc.ServerStreamingClient[Event]
 
 func (c *extensionServiceClient) Resolve(ctx context.Context, in *ResolveRequest, opts ...grpc.CallOption) (*ResolveResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -92,8 +94,9 @@ func (c *extensionServiceClient) Resolve(ctx context.Context, in *ResolveRequest
 type ExtensionServiceServer interface {
 	// Sends a greeting
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
-	// Subscribe to a set of pongs
-	Subscribe(*PingRequest, grpc.ServerStreamingServer[PongResponse]) error
+	// Subscribe to a set of Events
+	Subscribe(*emptypb.Empty, grpc.ServerStreamingServer[Event]) error
+	// Resolve the expression for context and subscribe (or not)
 	Resolve(context.Context, *ResolveRequest) (*ResolveResponse, error)
 	mustEmbedUnimplementedExtensionServiceServer()
 }
@@ -108,7 +111,7 @@ type UnimplementedExtensionServiceServer struct{}
 func (UnimplementedExtensionServiceServer) Ping(context.Context, *PingRequest) (*PongResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
-func (UnimplementedExtensionServiceServer) Subscribe(*PingRequest, grpc.ServerStreamingServer[PongResponse]) error {
+func (UnimplementedExtensionServiceServer) Subscribe(*emptypb.Empty, grpc.ServerStreamingServer[Event]) error {
 	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
 func (UnimplementedExtensionServiceServer) Resolve(context.Context, *ResolveRequest) (*ResolveResponse, error) {
@@ -154,15 +157,15 @@ func _ExtensionService_Ping_Handler(srv interface{}, ctx context.Context, dec fu
 }
 
 func _ExtensionService_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(PingRequest)
+	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(ExtensionServiceServer).Subscribe(m, &grpc.GenericServerStream[PingRequest, PongResponse]{ServerStream: stream})
+	return srv.(ExtensionServiceServer).Subscribe(m, &grpc.GenericServerStream[emptypb.Empty, Event]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ExtensionService_SubscribeServer = grpc.ServerStreamingServer[PongResponse]
+type ExtensionService_SubscribeServer = grpc.ServerStreamingServer[Event]
 
 func _ExtensionService_Resolve_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResolveRequest)

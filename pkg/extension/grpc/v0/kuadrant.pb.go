@@ -9,6 +9,7 @@ package v0
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -218,11 +219,48 @@ func (x *ResolveResponse) GetCelResult() string {
 	return ""
 }
 
+// todo: define the message to be streamed back to the client
+type Event struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Event) Reset() {
+	*x = Event{}
+	mi := &file_kuadrant_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Event) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Event) ProtoMessage() {}
+
+func (x *Event) ProtoReflect() protoreflect.Message {
+	mi := &file_kuadrant_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Event.ProtoReflect.Descriptor instead.
+func (*Event) Descriptor() ([]byte, []int) {
+	return file_kuadrant_proto_rawDescGZIP(), []int{4}
+}
+
 var File_kuadrant_proto protoreflect.FileDescriptor
 
 const file_kuadrant_proto_rawDesc = "" +
 	"\n" +
-	"\x0ekuadrant.proto\x12\vkuadrant.v0\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11gateway_api.proto\";\n" +
+	"\x0ekuadrant.proto\x12\vkuadrant.v0\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11gateway_api.proto\";\n" +
 	"\vPingRequest\x12,\n" +
 	"\x03out\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x03out\":\n" +
 	"\fPongResponse\x12*\n" +
@@ -235,10 +273,11 @@ const file_kuadrant_proto_rawDesc = "" +
 	"\tsubscribe\x18\x03 \x01(\bR\tsubscribe\"0\n" +
 	"\x0fResolveResponse\x12\x1d\n" +
 	"\n" +
-	"cel_result\x18\x01 \x01(\tR\tcelResult2\xdf\x01\n" +
+	"cel_result\x18\x01 \x01(\tR\tcelResult\"\a\n" +
+	"\x05Event2\xd6\x01\n" +
 	"\x10ExtensionService\x12=\n" +
-	"\x04Ping\x12\x18.kuadrant.v0.PingRequest\x1a\x19.kuadrant.v0.PongResponse\"\x00\x12D\n" +
-	"\tSubscribe\x12\x18.kuadrant.v0.PingRequest\x1a\x19.kuadrant.v0.PongResponse\"\x000\x01\x12F\n" +
+	"\x04Ping\x12\x18.kuadrant.v0.PingRequest\x1a\x19.kuadrant.v0.PongResponse\"\x00\x12;\n" +
+	"\tSubscribe\x12\x16.google.protobuf.Empty\x1a\x12.kuadrant.v0.Event\"\x000\x01\x12F\n" +
 	"\aResolve\x12\x1b.kuadrant.v0.ResolveRequest\x1a\x1c.kuadrant.v0.ResolveResponse\"\x00B=Z;github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0b\x06proto3"
 
 var (
@@ -253,24 +292,26 @@ func file_kuadrant_proto_rawDescGZIP() []byte {
 	return file_kuadrant_proto_rawDescData
 }
 
-var file_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_kuadrant_proto_goTypes = []any{
 	(*PingRequest)(nil),           // 0: kuadrant.v0.PingRequest
 	(*PongResponse)(nil),          // 1: kuadrant.v0.PongResponse
 	(*ResolveRequest)(nil),        // 2: kuadrant.v0.ResolveRequest
 	(*ResolveResponse)(nil),       // 3: kuadrant.v0.ResolveResponse
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
-	(*Policy)(nil),                // 5: kuadrant.v0.Policy
+	(*Event)(nil),                 // 4: kuadrant.v0.Event
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*Policy)(nil),                // 6: kuadrant.v0.Policy
+	(*emptypb.Empty)(nil),         // 7: google.protobuf.Empty
 }
 var file_kuadrant_proto_depIdxs = []int32{
-	4, // 0: kuadrant.v0.PingRequest.out:type_name -> google.protobuf.Timestamp
-	4, // 1: kuadrant.v0.PongResponse.in:type_name -> google.protobuf.Timestamp
-	5, // 2: kuadrant.v0.ResolveRequest.policy:type_name -> kuadrant.v0.Policy
+	5, // 0: kuadrant.v0.PingRequest.out:type_name -> google.protobuf.Timestamp
+	5, // 1: kuadrant.v0.PongResponse.in:type_name -> google.protobuf.Timestamp
+	6, // 2: kuadrant.v0.ResolveRequest.policy:type_name -> kuadrant.v0.Policy
 	0, // 3: kuadrant.v0.ExtensionService.Ping:input_type -> kuadrant.v0.PingRequest
-	0, // 4: kuadrant.v0.ExtensionService.Subscribe:input_type -> kuadrant.v0.PingRequest
+	7, // 4: kuadrant.v0.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
 	2, // 5: kuadrant.v0.ExtensionService.Resolve:input_type -> kuadrant.v0.ResolveRequest
 	1, // 6: kuadrant.v0.ExtensionService.Ping:output_type -> kuadrant.v0.PongResponse
-	1, // 7: kuadrant.v0.ExtensionService.Subscribe:output_type -> kuadrant.v0.PongResponse
+	4, // 7: kuadrant.v0.ExtensionService.Subscribe:output_type -> kuadrant.v0.Event
 	3, // 8: kuadrant.v0.ExtensionService.Resolve:output_type -> kuadrant.v0.ResolveResponse
 	6, // [6:9] is the sub-list for method output_type
 	3, // [3:6] is the sub-list for method input_type
@@ -291,7 +332,7 @@ func file_kuadrant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kuadrant_proto_rawDesc), len(file_kuadrant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

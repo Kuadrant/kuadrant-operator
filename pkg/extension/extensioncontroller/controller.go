@@ -12,6 +12,7 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -20,7 +21,7 @@ import (
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
+	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
@@ -56,7 +57,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	stopCh := make(chan struct{})
 	// todo(adam-cattermole): how big do we make the reconcile event channel?
 	//	 how many should we queue before we block?
-	reconcileChan := make(chan event.GenericEvent, 50)
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent, 50)
 	ec.watchSources = append(ec.watchSources, ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{}))
 
 	if ec.manager != nil {
@@ -93,16 +94,16 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	return nil
 }
 
-func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan event.GenericEvent) {
-	err := ec.extensionClient.subscribe(ctx, func(pong *extpb.PongResponse) {
-		ec.logger.Info("received pong", "timestamp", pong.In.AsTime())
+func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+	err := ec.extensionClient.subscribe(ctx, func(event *extpb.Event) {
+		ec.logger.Info("received event", "event", event)
 		// lock the resources map
 		ec.resourcesMu.Lock()
-		for nn := range ec.resources {
-			us := &unstructured.Unstructured{}
-			us.SetNamespace(nn.Namespace)
-			us.SetName(nn.Name)
-			reconcileChan <- event.GenericEvent{Object: us}
+		for resource := range ec.resources {
+			unstr := &unstructured.Unstructured{}
+			unstr.SetNamespace(resource.Namespace)
+			unstr.SetName(resource.Name)
+			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: unstr}
 		}
 		ec.resourcesMu.Unlock()
 	})
@@ -151,20 +152,20 @@ func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error
 	})
 }
 
-func (ec *extensionClient) subscribe(ctx context.Context, callback func(*extpb.PongResponse)) error {
-	stream, err := ec.client.Subscribe(ctx, &extpb.PingRequest{})
+func (ec *extensionClient) subscribe(ctx context.Context, callback func(*extpb.Event)) error {
+	stream, err := ec.client.Subscribe(ctx, &emptypb.Empty{})
 	if err != nil {
 		return err
 	}
 	for {
-		pong, err := stream.Recv()
+		event, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		callback(pong)
+		callback(event)
 	}
 	return nil
 }

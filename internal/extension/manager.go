@@ -27,6 +27,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -122,7 +124,7 @@ func (m *Manager) Run(stopCh <-chan struct{}) {
 }
 
 func (m *Manager) HasSynced() bool {
-	return m.dag.Load() != nil
+	return true
 }
 
 type extensionService struct {
@@ -184,4 +186,13 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 		ls[i] = &listener
 	}
 	return ls
+}
+
+func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.Event]) error {
+	for {
+		time.Sleep(time.Second * 5)
+		if err := stream.Send(&extpb.Event{}); err != nil {
+			return err
+		}
+	}
 }

@@ -5,7 +5,8 @@ option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0
 package kuadrant.v0;
 
 message Policy {
-  repeated TargetRef targetRefs = 1;
+  string identifier = 1;
+  repeated TargetRef targetRefs = 2;
 }
 
 message Gateway {

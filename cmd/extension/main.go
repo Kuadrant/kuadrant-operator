@@ -3,66 +3,39 @@ package main
 import (
 	"os"
 
-	"k8s.io/utils/env"
-
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/klog/v2"
-	ctrl "sigs.k8s.io/controller-runtime"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
-	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
-
-	"go.uber.org/zap/zapcore"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
 )
 
 var (
-	scheme      = k8sruntime.NewScheme()
-	logLevel, _ = zapcore.ParseLevel(env.GetString("LOG_LEVEL", "info"))
-	logMode     = env.GetString("LOG_MODE", "production") != "production"
-	logger      = zap.New(
-		zap.Level(logLevel),
-		zap.UseDevMode(logMode),
-		zap.WriteTo(os.Stderr),
-	).WithName("test-extension")
+	scheme = k8sruntime.NewScheme()
 )
 
 func init() {
 	utilruntime.Must(corev1.AddToScheme(scheme))
-
-	ctrl.SetLogger(logger)
-	klog.SetLogger(logger)
+	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
 }
 
 func main() {
-	options := ctrl.Options{
-		Scheme:  scheme,
-		Metrics: metricsserver.Options{BindAddress: "0"},
-	}
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
+	exampleReconciler := controllers.ExampleExtensionReconciler{}
+	builder, logger := extensioncontroller.NewBuilder("example-extension-controller")
+	controller, err := builder.
+		WithScheme(scheme).
+		WithReconciler(exampleReconciler.Reconcile).
+		Watches(&kuadrantv1.AuthPolicy{}).
+		Build()
 	if err != nil {
-		logger.Error(err, "unable to start manager")
+		logger.Error(err, "unable to create controller")
 		os.Exit(1)
 	}
 
-	client, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		logger.Error(err, "unable to create client")
-		os.Exit(1)
-	}
-
-	exampleReconciler := controllers.NewExampleReconciler(client, logger)
-	if err = exampleReconciler.SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to setup extension reconciler")
-	}
-
-	logger.Info("starting example-controller")
-	if err = mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = controller.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")
 		os.Exit(1)
 	}

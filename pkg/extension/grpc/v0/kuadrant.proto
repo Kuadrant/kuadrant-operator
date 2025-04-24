@@ -5,11 +5,17 @@ option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0
 package kuadrant.v0;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "gateway_api.proto";
 
 // The greeting service definition.
 service ExtensionService {
   // Sends a greeting
   rpc Ping (PingRequest) returns (PongResponse) {}
+  // Subscribe to a set of Events
+  rpc Subscribe(google.protobuf.Empty) returns (stream Event) {}
+  // Resolve the expression for context and subscribe (or not)
+  rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
 }
 
 // The request message containing the time the request was dispatched.
@@ -20,4 +26,21 @@ message PingRequest {
 // The response message containing the time the request was received.
 message PongResponse {
   google.protobuf.Timestamp in = 1;
+}
+
+// evaluate the expression and whether or not to subscribe
+message ResolveRequest {
+  kuadrant.v0.Policy policy = 1;
+  string expression = 2;
+  bool subscribe = 3;
+}
+
+// todo(adam-cattermole): this should return a Cel value not a string
+message ResolveResponse {
+  string cel_result = 1;
+}
+
+// todo: define the message to be streamed back to the client
+message Event {
+
 }

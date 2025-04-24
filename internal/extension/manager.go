@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -38,7 +37,7 @@ import (
 type Manager struct {
 	extensions []Extension
 	service    extpb.ExtensionServiceServer
-	dag        *atomic.Pointer[StateAwareDAG]
+	dag        *nilGuardedPointer[StateAwareDAG]
 	logger     logr.Logger
 	sync       io.Writer
 }
@@ -53,8 +52,7 @@ func NewManager(names []string, location string, logger logr.Logger, sync io.Wri
 	var extensions []Extension
 	var err error
 
-	DAG = &atomic.Pointer[StateAwareDAG]{}
-	service := newExtensionService(DAG)
+	service := newExtensionService(BlockingDAG)
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
@@ -72,7 +70,7 @@ func NewManager(names []string, location string, logger logr.Logger, sync io.Wri
 	return Manager{
 		extensions,
 		service,
-		DAG,
+		BlockingDAG,
 		logger,
 		sync,
 	}, err
@@ -128,7 +126,7 @@ func (m *Manager) HasSynced() bool {
 }
 
 type extensionService struct {
-	dag *atomic.Pointer[StateAwareDAG]
+	dag *nilGuardedPointer[StateAwareDAG]
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -138,7 +136,7 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func newExtensionService(dag *atomic.Pointer[StateAwareDAG]) extpb.ExtensionServiceServer {
+func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
 	return &extensionService{dag: dag}
 }
 

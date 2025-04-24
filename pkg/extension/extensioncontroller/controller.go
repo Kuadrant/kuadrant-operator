@@ -6,27 +6,39 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+)
+
+var (
+	logLevel, _ = zapcore.ParseLevel(env.GetString("LOG_LEVEL", "info"))
+	logMode     = env.GetString("LOG_MODE", "production") != "production"
 )
 
 type KuadrantCtx interface{}
@@ -172,49 +184,35 @@ func (ec *extensionClient) close() error {
 
 type Builder struct {
 	name       string
-	manager    ctrlruntime.Manager
-	client     *dynamic.DynamicClient
+	scheme     *runtime.Scheme
 	logger     logr.Logger
 	reconcile  ReconcileFn
-	socketPath string
 	watchTypes []client.Object
 }
 
-func NewExtensionControllerBuilder() *Builder {
+func NewBuilder(name string) (*Builder, logr.Logger) {
+	logger := zap.New(
+		zap.Level(logLevel),
+		zap.UseDevMode(logMode),
+		zap.WriteTo(os.Stderr),
+	).WithName(name)
+	ctrlruntime.SetLogger(logger)
+	klog.SetLogger(logger)
+
 	return &Builder{
+		name:       name,
+		logger:     logger,
 		watchTypes: make([]client.Object, 0),
-	}
+	}, logger
 }
 
-func (b *Builder) WithName(name string) *Builder {
-	b.name = name
-	return b
-}
-
-func (b *Builder) WithManager(mgr ctrlruntime.Manager) *Builder {
-	b.manager = mgr
-	return b
-}
-
-func (b *Builder) WithClient(client *dynamic.DynamicClient) *Builder {
-	b.client = client
-	return b
-}
-
-// todo(adam-cattermole): we could choose not to expose this and use this to enforce the logger is using the env vars
-func (b *Builder) WithLogger(logger logr.Logger) *Builder {
-	b.logger = logger
+func (b *Builder) WithScheme(scheme *runtime.Scheme) *Builder {
+	b.scheme = scheme
 	return b
 }
 
 func (b *Builder) WithReconciler(fn ReconcileFn) *Builder {
 	b.reconcile = fn
-	return b
-}
-
-// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
-func (b *Builder) WithSocketPath(path string) *Builder {
-	b.socketPath = path
 	return b
 }
 
@@ -227,36 +225,52 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	if b.name == "" {
 		return nil, fmt.Errorf("controller name must be set")
 	}
-	if b.manager == nil {
-		return nil, fmt.Errorf("manager must be set")
-	}
-	if b.client == nil {
-		return nil, fmt.Errorf("dynamic client must be set")
+	if b.scheme == nil {
+		return nil, fmt.Errorf("scheme must be set")
 	}
 	if b.reconcile == nil {
 		return nil, fmt.Errorf("reconcile function must be set")
 	}
-	if b.socketPath == "" {
-		return nil, fmt.Errorf("socket path must be set")
-	}
 	if len(b.watchTypes) == 0 {
 		return nil, fmt.Errorf("watch sources must be set")
 	}
-	extClient, err := newExtensionClient(b.socketPath)
+
+	options := ctrlruntime.Options{
+		Scheme:  b.scheme,
+		Metrics: metricsserver.Options{BindAddress: "0"},
+	}
+
+	mgr, err := ctrlruntime.NewManager(ctrlruntime.GetConfigOrDie(), options)
+	if err != nil {
+		return nil, fmt.Errorf("unable to construct manager: %w", err)
+	}
+
+	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("unable to create client for manager: %w", err)
+	}
+
+	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
+	if len(os.Args) < 2 {
+		return nil, errors.New("missing socket path argument")
+	}
+	socketPath := os.Args[1]
+
+	extClient, err := newExtensionClient(socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extension client: %w", err)
 	}
 
 	watchSources := make([]ctrlruntimesrc.Source, 0)
 	for _, obj := range b.watchTypes {
-		source := ctrlruntimesrc.Kind(b.manager.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
+		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
 		watchSources = append(watchSources, source)
 	}
 
 	return &ExtensionController{
 		name:            b.name,
-		manager:         b.manager,
-		client:          b.client,
+		manager:         mgr,
+		client:          dynamicClient,
 		logger:          b.logger,
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,

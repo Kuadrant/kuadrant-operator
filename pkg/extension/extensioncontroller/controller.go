@@ -2,6 +2,7 @@ package extensioncontroller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -25,6 +25,8 @@ import (
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
+
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 )
 
 type KuadrantCtx interface{}
@@ -57,20 +59,20 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	if ec.manager != nil {
 		ctrl, err := ctrlruntimectrl.New(ec.name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
 		if err != nil {
-			return fmt.Errorf("error creating controller: %v", err)
+			return fmt.Errorf("error creating controller: %w", err)
 		}
 
 		for _, source := range ec.watchSources {
 			err := ctrl.Watch(source)
 			if err != nil {
-				return fmt.Errorf("error watching resource: %v", err)
+				return fmt.Errorf("error watching resource: %w", err)
 			}
 		}
 
 		go ec.Subscribe(ctx, reconcileChan)
 		err = ec.manager.Start(ctx)
 		if err != nil {
-			return fmt.Errorf("error starting manager: %v", err)
+			return fmt.Errorf("error starting manager: %w", err)
 		}
 		return nil
 	}
@@ -78,10 +80,8 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	// keep the thread alive
 	ec.logger.Info("waiting until stop signal is received")
 	wait.Until(func() {
-		select {
-		case <-ctx.Done():
-			close(stopCh)
-		}
+		<-ctx.Done()
+		close(stopCh)
 	}, time.Second, stopCh)
 	ec.logger.Info("stop signal received. finishing controller...")
 
@@ -121,7 +121,7 @@ type extensionClient struct {
 }
 
 func newExtensionClient(socketPath string) (*extensionClient, error) {
-	dialer := func(ctx context.Context, addr string) (net.Conn, error) {
+	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 	}
 
@@ -140,6 +140,7 @@ func newExtensionClient(socketPath string) (*extensionClient, error) {
 	}, nil
 }
 
+//lint:ignore U1000
 func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error) {
 	return ec.client.Ping(ctx, &extpb.PingRequest{
 		Out: timestamppb.New(time.Now()),
@@ -153,7 +154,7 @@ func (ec *extensionClient) subscribe(ctx context.Context, callback func(*extpb.E
 	}
 	for {
 		event, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -164,11 +165,12 @@ func (ec *extensionClient) subscribe(ctx context.Context, callback func(*extpb.E
 	return nil
 }
 
+//lint:ignore U1000
 func (ec *extensionClient) close() error {
 	return ec.conn.Close()
 }
 
-type ExtensionControllerBuilder struct {
+type Builder struct {
 	name       string
 	manager    ctrlruntime.Manager
 	client     *dynamic.DynamicClient
@@ -178,50 +180,50 @@ type ExtensionControllerBuilder struct {
 	watchTypes []client.Object
 }
 
-func NewExtensionControllerBuilder() *ExtensionControllerBuilder {
-	return &ExtensionControllerBuilder{
+func NewExtensionControllerBuilder() *Builder {
+	return &Builder{
 		watchTypes: make([]client.Object, 0),
 	}
 }
 
-func (b *ExtensionControllerBuilder) WithName(name string) *ExtensionControllerBuilder {
+func (b *Builder) WithName(name string) *Builder {
 	b.name = name
 	return b
 }
 
-func (b *ExtensionControllerBuilder) WithManager(mgr ctrlruntime.Manager) *ExtensionControllerBuilder {
+func (b *Builder) WithManager(mgr ctrlruntime.Manager) *Builder {
 	b.manager = mgr
 	return b
 }
 
-func (b *ExtensionControllerBuilder) WithClient(client *dynamic.DynamicClient) *ExtensionControllerBuilder {
+func (b *Builder) WithClient(client *dynamic.DynamicClient) *Builder {
 	b.client = client
 	return b
 }
 
 // todo(adam-cattermole): we could choose not to expose this and use this to enforce the logger is using the env vars
-func (b *ExtensionControllerBuilder) WithLogger(logger logr.Logger) *ExtensionControllerBuilder {
+func (b *Builder) WithLogger(logger logr.Logger) *Builder {
 	b.logger = logger
 	return b
 }
 
-func (b *ExtensionControllerBuilder) WithReconciler(fn ReconcileFn) *ExtensionControllerBuilder {
+func (b *Builder) WithReconciler(fn ReconcileFn) *Builder {
 	b.reconcile = fn
 	return b
 }
 
 // todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
-func (b *ExtensionControllerBuilder) WithSocketPath(path string) *ExtensionControllerBuilder {
+func (b *Builder) WithSocketPath(path string) *Builder {
 	b.socketPath = path
 	return b
 }
 
-func (b *ExtensionControllerBuilder) Watches(obj client.Object) *ExtensionControllerBuilder {
+func (b *Builder) Watches(obj client.Object) *Builder {
 	b.watchTypes = append(b.watchTypes, obj)
 	return b
 }
 
-func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
+func (b *Builder) Build() (*ExtensionController, error) {
 	if b.name == "" {
 		return nil, fmt.Errorf("controller name must be set")
 	}
@@ -242,7 +244,7 @@ func (b *ExtensionControllerBuilder) Build() (*ExtensionController, error) {
 	}
 	extClient, err := newExtensionClient(b.socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create extension client: %v", err)
+		return nil, fmt.Errorf("failed to create extension client: %w", err)
 	}
 
 	watchSources := make([]ctrlruntimesrc.Source, 0)

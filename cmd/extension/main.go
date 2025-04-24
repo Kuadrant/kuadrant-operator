@@ -3,23 +3,20 @@ package main
 import (
 	"os"
 
-	"k8s.io/utils/env"
-
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/klog/v2"
-	ctrl "sigs.k8s.io/controller-runtime"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
-	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
-
 	"go.uber.org/zap/zapcore"
+	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-
+	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/env"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
 )
 
 var (

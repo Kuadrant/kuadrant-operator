@@ -11,6 +11,13 @@ import (
 type ExampleExtensionReconciler struct {
 }
 
-func (e *ExampleExtensionReconciler) Reconcile(_ context.Context, _ reconcile.Request, _ *extensioncontroller.KuadrantCtx) (reconcile.Result, error) {
+func (e *ExampleExtensionReconciler) Reconcile(ctx context.Context, _ reconcile.Request, _ *extensioncontroller.KuadrantCtx) (reconcile.Result, error) {
+	logger := extensioncontroller.LoggerFromContext(ctx).WithName("ExampleExtensionReconciler")
+	logger.Info("Reconciling ExampleExtension")
+
+	_, err := extensioncontroller.DynamicClientFromContext(ctx)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	return reconcile.Result{}, nil
 }

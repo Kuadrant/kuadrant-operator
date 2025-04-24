@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 
+	policycontroller "github.com/kuadrant/policy-machinery/controller"
+
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 )
 
@@ -119,6 +121,13 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 }
 
 func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	// todo(adam-cattermole): the ctx passed here is a different one created by ctrlruntime for each reconcile so we
+	//  have to inject here instead of in Start(). Is there any benefit to us storing this in the context for it be
+	//  retrieved by the user in their Reconcile method, or should it just pass them as parameters?
+	// update ctx to hold our logger and client
+	ctx = context.WithValue(ctx, logr.Logger{}, ec.logger)
+	ctx = context.WithValue(ctx, (*dynamic.DynamicClient)(nil), ec.client)
+
 	// overrides reconcile method
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
 	ec.resourcesMu.Lock()
@@ -278,4 +287,16 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		extensionClient: extClient,
 		resources:       make(map[types.NamespacedName]struct{}),
 	}, nil
+}
+
+func LoggerFromContext(ctx context.Context) logr.Logger {
+	return policycontroller.LoggerFromContext(ctx)
+}
+
+func DynamicClientFromContext(ctx context.Context) (*dynamic.DynamicClient, error) {
+	dynamicClient, ok := ctx.Value((*dynamic.DynamicClient)(nil)).(*dynamic.DynamicClient)
+	if !ok {
+		return nil, errors.New("failed to retrieve dynamic client from context")
+	}
+	return dynamicClient, nil
 }

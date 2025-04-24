@@ -142,6 +142,27 @@ func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, n
 	Expect(err).ToNot(HaveOccurred())
 }
 
+func UpdateKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, name string, mutateFns ...func(*kuadrantv1beta1.Kuadrant)) {
+	kuadrantCR := &kuadrantv1beta1.Kuadrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Kuadrant",
+			APIVersion: kuadrantv1beta1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    CommonLabels,
+		},
+	}
+
+	for _, mutateFn := range mutateFns {
+		mutateFn(kuadrantCR)
+	}
+
+	err := cl.Update(ctx, kuadrantCR)
+	Expect(err).ToNot(HaveOccurred())
+}
+
 func GatewayIsReady(ctx context.Context, cl client.Client, gateway *gatewayapiv1.Gateway) func() bool {
 	return func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}

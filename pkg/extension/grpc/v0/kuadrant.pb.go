@@ -112,18 +112,134 @@ func (x *PongResponse) GetIn() *timestamppb.Timestamp {
 	return nil
 }
 
+// evaluate the expression and whether or not to subscribe
+type ResolveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	Expression    string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
+	Subscribe     bool                   `protobuf:"varint,3,opt,name=subscribe,proto3" json:"subscribe,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveRequest) Reset() {
+	*x = ResolveRequest{}
+	mi := &file_kuadrant_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveRequest) ProtoMessage() {}
+
+func (x *ResolveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kuadrant_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveRequest.ProtoReflect.Descriptor instead.
+func (*ResolveRequest) Descriptor() ([]byte, []int) {
+	return file_kuadrant_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ResolveRequest) GetPolicy() *Policy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+func (x *ResolveRequest) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+func (x *ResolveRequest) GetSubscribe() bool {
+	if x != nil {
+		return x.Subscribe
+	}
+	return false
+}
+
+// todo(adam-cattermole): this should return a Cel value not a string
+type ResolveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CelResult     string                 `protobuf:"bytes,1,opt,name=cel_result,json=celResult,proto3" json:"cel_result,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveResponse) Reset() {
+	*x = ResolveResponse{}
+	mi := &file_kuadrant_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveResponse) ProtoMessage() {}
+
+func (x *ResolveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kuadrant_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveResponse.ProtoReflect.Descriptor instead.
+func (*ResolveResponse) Descriptor() ([]byte, []int) {
+	return file_kuadrant_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ResolveResponse) GetCelResult() string {
+	if x != nil {
+		return x.CelResult
+	}
+	return ""
+}
+
 var File_kuadrant_proto protoreflect.FileDescriptor
 
 const file_kuadrant_proto_rawDesc = "" +
 	"\n" +
-	"\x0ekuadrant.proto\x12\vkuadrant.v0\x1a\x1fgoogle/protobuf/timestamp.proto\";\n" +
+	"\x0ekuadrant.proto\x12\vkuadrant.v0\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11gateway_api.proto\";\n" +
 	"\vPingRequest\x12,\n" +
 	"\x03out\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x03out\":\n" +
 	"\fPongResponse\x12*\n" +
-	"\x02in\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02in2\x97\x01\n" +
+	"\x02in\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02in\"{\n" +
+	"\x0eResolveRequest\x12+\n" +
+	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v0.PolicyR\x06policy\x12\x1e\n" +
+	"\n" +
+	"expression\x18\x02 \x01(\tR\n" +
+	"expression\x12\x1c\n" +
+	"\tsubscribe\x18\x03 \x01(\bR\tsubscribe\"0\n" +
+	"\x0fResolveResponse\x12\x1d\n" +
+	"\n" +
+	"cel_result\x18\x01 \x01(\tR\tcelResult2\xdf\x01\n" +
 	"\x10ExtensionService\x12=\n" +
 	"\x04Ping\x12\x18.kuadrant.v0.PingRequest\x1a\x19.kuadrant.v0.PongResponse\"\x00\x12D\n" +
-	"\tSubscribe\x12\x18.kuadrant.v0.PingRequest\x1a\x19.kuadrant.v0.PongResponse\"\x000\x01B=Z;github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0b\x06proto3"
+	"\tSubscribe\x12\x18.kuadrant.v0.PingRequest\x1a\x19.kuadrant.v0.PongResponse\"\x000\x01\x12F\n" +
+	"\aResolve\x12\x1b.kuadrant.v0.ResolveRequest\x1a\x1c.kuadrant.v0.ResolveResponse\"\x00B=Z;github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0b\x06proto3"
 
 var (
 	file_kuadrant_proto_rawDescOnce sync.Once
@@ -137,24 +253,30 @@ func file_kuadrant_proto_rawDescGZIP() []byte {
 	return file_kuadrant_proto_rawDescData
 }
 
-var file_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_kuadrant_proto_goTypes = []any{
 	(*PingRequest)(nil),           // 0: kuadrant.v0.PingRequest
 	(*PongResponse)(nil),          // 1: kuadrant.v0.PongResponse
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(*ResolveRequest)(nil),        // 2: kuadrant.v0.ResolveRequest
+	(*ResolveResponse)(nil),       // 3: kuadrant.v0.ResolveResponse
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*Policy)(nil),                // 5: kuadrant.v0.Policy
 }
 var file_kuadrant_proto_depIdxs = []int32{
-	2, // 0: kuadrant.v0.PingRequest.out:type_name -> google.protobuf.Timestamp
-	2, // 1: kuadrant.v0.PongResponse.in:type_name -> google.protobuf.Timestamp
-	0, // 2: kuadrant.v0.ExtensionService.Ping:input_type -> kuadrant.v0.PingRequest
-	0, // 3: kuadrant.v0.ExtensionService.Subscribe:input_type -> kuadrant.v0.PingRequest
-	1, // 4: kuadrant.v0.ExtensionService.Ping:output_type -> kuadrant.v0.PongResponse
-	1, // 5: kuadrant.v0.ExtensionService.Subscribe:output_type -> kuadrant.v0.PongResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4, // 0: kuadrant.v0.PingRequest.out:type_name -> google.protobuf.Timestamp
+	4, // 1: kuadrant.v0.PongResponse.in:type_name -> google.protobuf.Timestamp
+	5, // 2: kuadrant.v0.ResolveRequest.policy:type_name -> kuadrant.v0.Policy
+	0, // 3: kuadrant.v0.ExtensionService.Ping:input_type -> kuadrant.v0.PingRequest
+	0, // 4: kuadrant.v0.ExtensionService.Subscribe:input_type -> kuadrant.v0.PingRequest
+	2, // 5: kuadrant.v0.ExtensionService.Resolve:input_type -> kuadrant.v0.ResolveRequest
+	1, // 6: kuadrant.v0.ExtensionService.Ping:output_type -> kuadrant.v0.PongResponse
+	1, // 7: kuadrant.v0.ExtensionService.Subscribe:output_type -> kuadrant.v0.PongResponse
+	3, // 8: kuadrant.v0.ExtensionService.Resolve:output_type -> kuadrant.v0.ResolveResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_kuadrant_proto_init() }
@@ -162,13 +284,14 @@ func file_kuadrant_proto_init() {
 	if File_kuadrant_proto != nil {
 		return
 	}
+	file_gateway_api_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kuadrant_proto_rawDesc), len(file_kuadrant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

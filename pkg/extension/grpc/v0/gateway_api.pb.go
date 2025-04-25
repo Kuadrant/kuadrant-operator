@@ -23,7 +23,7 @@ const (
 
 type Policy struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Identifier    string                 `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	Metadata      *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	TargetRefs    []*TargetRef           `protobuf:"bytes,2,rep,name=targetRefs,proto3" json:"targetRefs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -59,11 +59,11 @@ func (*Policy) Descriptor() ([]byte, []int) {
 	return file_gateway_api_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Policy) GetIdentifier() string {
+func (x *Policy) GetMetadata() *Metadata {
 	if x != nil {
-		return x.Identifier
+		return x.Metadata
 	}
-	return ""
+	return nil
 }
 
 func (x *Policy) GetTargetRefs() []*TargetRef {
@@ -135,8 +135,10 @@ func (x *Gateway) GetListeners() []*Listener {
 
 type Metadata struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,6 +171,20 @@ func (x *Metadata) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Metadata.ProtoReflect.Descriptor instead.
 func (*Metadata) Descriptor() ([]byte, []int) {
 	return file_gateway_api_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Metadata) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *Metadata) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
 }
 
 func (x *Metadata) GetName() string {
@@ -234,7 +250,8 @@ type TargetRef struct {
 	Group         string                 `protobuf:"bytes,1,opt,name=group,proto3" json:"group,omitempty"`
 	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	SectionName   string                 `protobuf:"bytes,4,opt,name=sectionName,proto3" json:"sectionName,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	SectionName   string                 `protobuf:"bytes,5,opt,name=sectionName,proto3" json:"sectionName,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -290,6 +307,13 @@ func (x *TargetRef) GetName() string {
 	return ""
 }
 
+func (x *TargetRef) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 func (x *TargetRef) GetSectionName() string {
 	if x != nil {
 		return x.SectionName
@@ -301,28 +325,29 @@ var File_gateway_api_proto protoreflect.FileDescriptor
 
 const file_gateway_api_proto_rawDesc = "" +
 	"\n" +
-	"\x11gateway_api.proto\x12\vkuadrant.v0\"`\n" +
-	"\x06Policy\x12\x1e\n" +
-	"\n" +
-	"identifier\x18\x01 \x01(\tR\n" +
-	"identifier\x126\n" +
+	"\x11gateway_api.proto\x12\vkuadrant.v0\"s\n" +
+	"\x06Policy\x121\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v0.MetadataR\bmetadata\x126\n" +
 	"\n" +
 	"targetRefs\x18\x02 \x03(\v2\x16.kuadrant.v0.TargetRefR\n" +
 	"targetRefs\"\x9d\x01\n" +
 	"\aGateway\x121\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v0.MetadataR\bmetadata\x12*\n" +
 	"\x10gatewayClassName\x18\x02 \x01(\tR\x10gatewayClassName\x123\n" +
-	"\tlisteners\x18\x03 \x03(\v2\x15.kuadrant.v0.ListenerR\tlisteners\"<\n" +
-	"\bMetadata\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"&\n" +
+	"\tlisteners\x18\x03 \x03(\v2\x15.kuadrant.v0.ListenerR\tlisteners\"f\n" +
+	"\bMetadata\x12\x14\n" +
+	"\x05group\x18\x01 \x01(\tR\x05group\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\"&\n" +
 	"\bListener\x12\x1a\n" +
-	"\bhostname\x18\x01 \x01(\tR\bhostname\"k\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\"\x89\x01\n" +
 	"\tTargetRef\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
-	"\vsectionName\x18\x04 \x01(\tR\vsectionNameB=Z;github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0b\x06proto3"
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12 \n" +
+	"\vsectionName\x18\x05 \x01(\tR\vsectionNameB=Z;github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0b\x06proto3"
 
 var (
 	file_gateway_api_proto_rawDescOnce sync.Once
@@ -345,14 +370,15 @@ var file_gateway_api_proto_goTypes = []any{
 	(*TargetRef)(nil), // 4: kuadrant.v0.TargetRef
 }
 var file_gateway_api_proto_depIdxs = []int32{
-	4, // 0: kuadrant.v0.Policy.targetRefs:type_name -> kuadrant.v0.TargetRef
-	2, // 1: kuadrant.v0.Gateway.metadata:type_name -> kuadrant.v0.Metadata
-	3, // 2: kuadrant.v0.Gateway.listeners:type_name -> kuadrant.v0.Listener
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 0: kuadrant.v0.Policy.metadata:type_name -> kuadrant.v0.Metadata
+	4, // 1: kuadrant.v0.Policy.targetRefs:type_name -> kuadrant.v0.TargetRef
+	2, // 2: kuadrant.v0.Gateway.metadata:type_name -> kuadrant.v0.Metadata
+	3, // 3: kuadrant.v0.Gateway.listeners:type_name -> kuadrant.v0.Listener
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_gateway_api_proto_init() }

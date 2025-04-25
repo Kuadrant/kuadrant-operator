@@ -1,4 +1,4 @@
-package extensioncontroller
+package controller
 
 import (
 	"context"

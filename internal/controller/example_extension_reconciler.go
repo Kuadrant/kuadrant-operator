@@ -3,7 +3,7 @@ package controllers
 import (
 	"context"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
+	extensioncontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )

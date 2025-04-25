@@ -44,7 +44,7 @@ func (c *nilGuardedPointer[T]) get() *T {
 func (c *nilGuardedPointer[T]) getWait() T {
 	// First try a quick non-blocking check
 	if val := c.ptr.Load(); val != nil {
-		return *c.ptr.Load()
+		return *val
 	}
 
 	c.mu.Lock()
@@ -68,9 +68,7 @@ func (c *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, bo
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	done := make(chan struct{})
-	var result *T
-	var success bool
+	result := make(chan *T, 1)
 
 	go func() {
 		c.mu.Lock()
@@ -80,14 +78,13 @@ func (c *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, bo
 			c.cond.Wait()
 		}
 
-		result = c.ptr.Load()
-		success = true
-		close(done)
+		val := c.ptr.Load()
+		result <- val
 	}()
 
 	select {
-	case <-done:
-		return result, success
+	case val := <-result:
+		return val, true
 	case <-timer.C:
 		return c.ptr.Load(), false
 	}

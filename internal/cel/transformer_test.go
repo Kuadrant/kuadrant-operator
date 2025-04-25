@@ -6,7 +6,7 @@ import (
 
 func TestTransformNoReplaces(t *testing.T) {
 	exp := "foobar('auth', 'request')"
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `foobar('auth', 'request')` {
@@ -15,9 +15,20 @@ func TestTransformNoReplaces(t *testing.T) {
 	}
 }
 
+func TestSimpleTransform(t *testing.T) {
+	exp := "auth.identity.user"
+	if out, err := TransformCounterVariable(exp, false); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `descriptors[0]["auth.identity.user"]` {
+			t.Errorf(`Not transformed as expected: %s`, *out)
+		}
+	}
+}
+
 func TestTransformWithStraightReplaces(t *testing.T) {
 	exp := `request`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `descriptors[0].request` {
@@ -28,7 +39,7 @@ func TestTransformWithStraightReplaces(t *testing.T) {
 
 func TestTransformNoRecursiveReplaces(t *testing.T) {
 	exp := `descriptors[0]["test"]`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `descriptors[0]["test"]` {
@@ -39,7 +50,7 @@ func TestTransformNoRecursiveReplaces(t *testing.T) {
 
 func TestTransformWithComplexReplaces(t *testing.T) {
 	exp := `foobar(request, auth.thingy, "foo") + foo(descriptors[0].test)`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `foobar(descriptors[0].request, descriptors[0].auth.thingy, "foo") + foo(descriptors[0].test)` {
@@ -50,7 +61,7 @@ func TestTransformWithComplexReplaces(t *testing.T) {
 
 func TestTransformWithListReplaces(t *testing.T) {
 	exp := `[source, destination.thingy, "foo", foo(descriptors[0].test)]`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `[descriptors[0].source, descriptors[0].destination.thingy, "foo", foo(descriptors[0].test)]` {
@@ -61,7 +72,7 @@ func TestTransformWithListReplaces(t *testing.T) {
 
 func TestTransformWithMapReplaces(t *testing.T) {
 	exp := `{test: source.thingy, "foo": foo(descriptors[0].test)}`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `{test: descriptors[0].source.thingy, "foo": foo(descriptors[0].test)}` {
@@ -72,7 +83,7 @@ func TestTransformWithMapReplaces(t *testing.T) {
 
 func TestTransformWithMapLookupReplaces(t *testing.T) {
 	exp := `source[destination.thingy]`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `descriptors[0].source[descriptors[0].destination.thingy]` {
@@ -88,7 +99,7 @@ source: request.thingy,
 "bar": [request, other.thingy, "foo", foo(descriptors[0].test)],
 }
 `
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `{
@@ -111,7 +122,7 @@ func TestTransformIdentDecl(t *testing.T) {
         "silver": has(auth.identity),
         "bronze": true,
         }].map(m, m.filter(key, m[key]))[0])[0]`
-	if out, err := TransformCounterVariable(exp); err != nil {
+	if out, err := TransformCounterVariable(exp, true); err != nil {
 		t.Errorf(`err: %v`, err)
 	} else {
 		if *out != `
@@ -127,8 +138,21 @@ func TestTransformIdentDecl(t *testing.T) {
 	}
 }
 
+func TestTransformIdentDeclAsString(t *testing.T) {
+	exp := `
+['gold', 'silver', 'bronze']
+`
+	if out, err := TransformCounterVariable(exp, false); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		if *out != `descriptors[0]["['gold', 'silver', 'bronze']"]` {
+			t.Errorf(`Not transformed as expected: %s`, *out)
+		}
+	}
+}
+
 func TestTransformErrsOutOnBadSyntax(t *testing.T) {
-	if exp, err := TransformCounterVariable("[foobar"); err == nil {
+	if exp, err := TransformCounterVariable("[foobar", true); err == nil {
 		t.Errorf(`We expected to fail here! But got "%s"`, *exp)
 	}
 }

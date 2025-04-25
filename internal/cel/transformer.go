@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/google/cel-go/common"
 	"github.com/google/cel-go/common/ast"
@@ -34,7 +35,11 @@ func parseExpression(expression string) (*ast.AST, error) {
 // anyway. This function does *NOT* try to validate or make any assumption about the expression being otherwise valid.
 // Rather than transforming the AST directly, it only uses the AST to find the `Ident` that need renaming directly in
 // the `expression` passed in. This keeps the resulting expression as close to the input as possible.
-func TransformCounterVariable(expression string) (*string, error) {
+func TransformCounterVariable(expression string, celAstTransform bool) (*string, error) {
+	if !celAstTransform {
+		exp := fmt.Sprintf(`descriptors[0]["%s"]`, strings.TrimSpace(expression))
+		return &exp, nil
+	}
 	knownAttributes := []string{"request", "source", "destination", "connection", "metadata", "filter_state", "auth", "ratelimit"}
 	var err error
 	var p *ast.AST

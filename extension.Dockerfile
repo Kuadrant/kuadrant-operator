@@ -11,7 +11,7 @@ RUN go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
-COPY cmd/extensions/main.go cmd/extensions/main.go
+COPY cmd/extensions/oidc-meta-policy/main.go cmd/extensions/oidc-meta-policy/main.go
 COPY api/ api/
 COPY internal/ internal/
 COPY pkg/ pkg/
@@ -32,8 +32,8 @@ ENV VERSION=${VERSION:-unknown}
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.version=${VERSION} -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o manager cmd/main.go
 
 
-RUN mkdir -p extensions/myextension
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/myextension/myextension cmd/extensions/main.go
+RUN mkdir -p extensions/oidc-meta-policy
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/oidc-meta-policy/oidc-meta-policy cmd/extensions/oidc-meta-policy/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

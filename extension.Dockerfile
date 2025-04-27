@@ -11,7 +11,7 @@ RUN go mod download
 
 # Copy the go source
 COPY cmd/main.go cmd/main.go
-COPY cmd/extension/main.go cmd/extension/main.go
+COPY cmd/extensions/main.go cmd/extensions/main.go
 COPY api/ api/
 COPY internal/ internal/
 COPY pkg/ pkg/
@@ -33,7 +33,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.
 
 
 RUN mkdir -p extensions/myextension
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/myextension/myextension cmd/extension/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/myextension/myextension cmd/extensions/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

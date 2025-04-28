@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -18,7 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
@@ -35,6 +33,7 @@ import (
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
 
 var (
@@ -51,11 +50,6 @@ type ExtensionController struct {
 	watchSources    []ctrlruntimesrc.Source
 	kuadrantCtx     *exttypes.KuadrantCtx
 	extensionClient *extensionClient
-	// map of namespaced names
-	// todo(adam-cattermole): This could change to be keyed on the cel expression, value of the set of namespaced names
-	//   that should be triggered. This would let us pick which set of resources require update for which expression
-	resources   map[types.NamespacedName]struct{}
-	resourcesMu sync.Mutex
 }
 
 func (ec *ExtensionController) Start(ctx context.Context) error {
@@ -100,15 +94,13 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
 	err := ec.extensionClient.subscribe(ctx, func(event *extpb.Event) {
 		ec.logger.Info("received event", "event", event)
-		// lock the resources map
-		ec.resourcesMu.Lock()
-		for resource := range ec.resources {
-			unstr := &unstructured.Unstructured{}
-			unstr.SetNamespace(resource.Namespace)
-			unstr.SetName(resource.Name)
-			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: unstr}
+		trigger := &unstructured.Unstructured{}
+		if event.Metadata != nil {
+			trigger.SetName(event.Metadata.Name)
+			trigger.SetNamespace(event.Metadata.Namespace)
+			trigger.SetKind(event.Metadata.Kind)
+			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
 		}
-		ec.resourcesMu.Unlock()
 	})
 	if err != nil {
 		ec.logger.Error(err, "grpc subscribe failed")
@@ -125,10 +117,19 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 
 	// overrides reconcile method
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
-	ec.resourcesMu.Lock()
-	ec.resources[request.NamespacedName] = struct{}{}
-	ec.resourcesMu.Unlock()
 	return ec.reconcile(ctx, request, ec.kuadrantCtx)
+}
+
+func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (string, error) {
+	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
+		Policy:     utils.MapToExtPolicy(policy),
+		Expression: expression,
+		Subscribe:  subscribe,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.CelResult, nil
 }
 
 type extensionClient struct {
@@ -280,6 +281,5 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		watchSources:    watchSources,
 		kuadrantCtx:     nil,
 		extensionClient: extClient,
-		resources:       make(map[types.NamespacedName]struct{}),
 	}, nil
 }

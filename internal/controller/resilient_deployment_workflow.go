@@ -130,6 +130,8 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
+	history := GetHistory()
+
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
 		logger.V(level).Info("kuadrant resource has not being created yet.")
@@ -141,7 +143,17 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		return nil
 	}
 
+	wasConfigured := r.isConfigured(history.kuadrant)
 	nowConfigured := r.isConfigured(kObj)
+
+	if wasConfigured && !nowConfigured {
+		lObj.Spec.Replicas = ptr.To(1)
+		err := r.updateLimitador(ctx, lObj)
+		if err != nil {
+			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+			return nil
+		}
+	}
 
 	if !nowConfigured {
 		logger.V(level).Info("RateLimiting not configured", "status", "exiting")
@@ -149,7 +161,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 	logger.V(level).Info("RateLimiting configured", "status", "contiune")
 
-	if lObj.Spec.Replicas == nil {
+	if lObj.Spec.Replicas == nil || !wasConfigured {
 		lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {

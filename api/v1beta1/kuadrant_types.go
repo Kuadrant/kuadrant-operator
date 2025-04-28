@@ -72,6 +72,17 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
+func (k *Kuadrant) IsResilienceEnabled() ResilienceStatus {
+	result := ResilienceStatus{}
+	result.RateLimiting = ptr.To((k.Spec.Resilience != nil && k.Spec.Resilience.RateLimiting))
+	if k.Spec.Resilience != nil && k.Spec.Resilience.CounterStorage != nil {
+		result.CounterStorage = ptr.To(true)
+	} else {
+		result.CounterStorage = ptr.To(false)
+	}
+	return result
+}
+
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	Observability Observability `json:"observability,omitempty"`
@@ -122,6 +133,11 @@ type Resilience struct {
 	CounterStorage *limitadorv1alpha1.Storage `json:"counterStorage,omitempty"`
 }
 
+type ResilienceStatus struct {
+	RateLimiting   *bool `json:"rateLimiting,omitempty"`
+	CounterStorage *bool `json:"counterStorage,omitempty"`
+}
+
 // KuadrantStatus defines the observed state of Kuadrant
 type KuadrantStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed spec.
@@ -143,6 +159,10 @@ type KuadrantStatus struct {
 	// Mtls Limitador reflects the mtls feature state regarding comms with limitador.
 	// +optional
 	MtlsLimitador *bool `json:"mtlsLimitador,omitempty"`
+
+	// Resilience reflects the resilience deployment state
+	// +optional
+	Resilience *ResilienceStatus `json:"resilience,omitempty"`
 }
 
 func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool {

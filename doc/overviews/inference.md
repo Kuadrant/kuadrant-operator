@@ -254,9 +254,9 @@ The selectors within the `when` conditions of an PromptGuardPolicy or TokenRateL
 
 ## Implementation details
 
-### AI/Inference service
+### Inference service
 
-The AI/Inference service can run in 2 different modes: Single tenant and multi tenant.
+The Inference service can run in 2 different modes: Single tenant and multi tenant.
 
 #### Single tenant mode
 
@@ -321,13 +321,13 @@ spec:
   phase: STATS
   pluginConfig:
     services:
-      ai-promptguard-service:
+      inference-promptguard-service:
         type: ext_proc
-        endpoint: kuadrant-ai-promptguard-service
+        endpoint: kuadrant-inference-promptguard-service
         failureMode: deny
-      ai-tokenratelimit-service:
+      inference-tokenratelimit-service:
         type: ext_proc
-        endpoint: kuadrant-ai-tokenratelimit-service
+        endpoint: kuadrant-inference-tokenratelimit-service
         failureMode: allow
     actionSets:
       - name: some_name_0
@@ -338,7 +338,7 @@ spec:
           predicates:
             - request.url_path.startsWith("/openai/v1/completions")
         actions:
-          - service: ai-promptguard-service
+          - service: inference-promptguard-service
             scope: gateway-system/app-promptguard
             predicates:
               - request.host.endsWith('.models.website')
@@ -349,14 +349,14 @@ spec:
           predicates:
             - request.url_path.startsWith("/openai/v1/completions")
         actions:
-          - service: ai-tokenratelimit-service
+          - service: inference-tokenratelimit-service
             scope: gateway-system/app-tokenratelimit
             predicates:
               - request.host.endsWith('.models.website')
 ```
 
 Here is an example EnvoyFilter that configures the `cluster` for the wasm-shim to route to.
-Note the 2 different patches and ports going to the same `cluster` for the AI service.
+Note the 2 different patches and ports going to the same `cluster` for the Inference service.
 The service is listening on different grpc ports for each feature to allow them to be executed at different points in the chain.
 
 ```yaml
@@ -370,7 +370,7 @@ spec:
     - applyTo: CLUSTER
       match:
         cluster:
-          service: ai-service.kuadrant-system.svc.cluster.local
+          service: inference-service.kuadrant-system.svc.cluster.local
       patch:
         operation: ADD
         value:
@@ -378,20 +378,20 @@ spec:
           http2_protocol_options: {}
           lb_policy: ROUND_ROBIN
           load_assignment:
-            cluster_name: kuadrant-ai-promptguard-service
+            cluster_name: kuadrant-inference-promptguard-service
             endpoints:
               - lb_endpoints:
                   - endpoint:
                       address:
                         socket_address:
-                          address: ai-service.kuadrant-system.svc.cluster.local
+                          address: inference-service.kuadrant-system.svc.cluster.local
                           port_value: 9090
-          name: kuadrant-ai-promptguard-service
+          name: kuadrant-inference-promptguard-service
           type: STRICT_DNS
     - applyTo: CLUSTER
       match:
         cluster:
-          service: ai-service.kuadrant-system.svc.cluster.local
+          service: inference-service.kuadrant-system.svc.cluster.local
       patch:
         operation: ADD
         value:
@@ -399,14 +399,14 @@ spec:
           http2_protocol_options: {}
           lb_policy: ROUND_ROBIN
           load_assignment:
-            cluster_name: kuadrant-ai-tokenratelimit-service
+            cluster_name: kuadrant-inference-tokenratelimit-service
             endpoints:
               - lb_endpoints:
                   - endpoint:
                       address:
                         socket_address:
-                          address: ai-service.kuadrant-system.svc.cluster.local
+                          address: inference-service.kuadrant-system.svc.cluster.local
                           port_value: 9091
-          name: kuadrant-ai-tokenratelimit-service
+          name: kuadrant-inference-tokenratelimit-service
           type: STRICT_DNS
 ```

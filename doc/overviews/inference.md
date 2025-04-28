@@ -17,10 +17,10 @@ Kuadrant integrates an [External Processing](https://www.envoyproxy.io/docs/envo
 The workflow per request goes:
 
 1. On incoming request, the gateway checks the matching rules for enforcing the inference policy rules, as stated in the PromptGuardPolicy/TokenRateLimitPolicy custom resources and targeted Gateway API networking objects
-2. If the request matches, the gateway sends a [ProcessingRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#envoy-v3-api-msg-service-ext-proc-v3-processingrequest) to __REPLACE_WITH_NAME_OF_INFERENCE_SERVICE__.
+2. If the request matches, the gateway sends a [ProcessingRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#envoy-v3-api-msg-service-ext-proc-v3-processingrequest) to __REPLACE_WITH_NAME_OF_INFERENCE_SERVICE__ on the specified grpc port for that service.
 3. The external inference service responds with a [ProcessingResponse](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#service-ext-proc-v3-processingresponse) back to the gateway for each stage of the request (e.g. request headers, request body, response headers, response body)
 
-An inference policy custom resource and its targeted Gateway API networking resource contain all the statements to configure both the ingress gateway and the external inference service.
+An inference policy custom resource and its targeted Gateway API networking resource contain all the statements to configure both the ingress gateway and the external inference service. The external inference service is configure indirectly via additional context set by the wasm-shim at request time.
 
 ### The PromptGuardPolicy & TokenRateLimitPolicy custom resources
 
@@ -252,9 +252,62 @@ The selectors within the `when` conditions of an PromptGuardPolicy or TokenRateL
 
 ## Implementation details
 
-TODO
+### AI/Inference service
 
-A Kuadrant wasm-shim configuration for one PromptGuardPolicy custom resources targeting a HTTPRoute looks like the following and it is generated automatically by the Kuadrant control plane:
+The AI/Inference service can run in 2 different modes: Single tenant and multi tenant.
+
+#### Single tenant mode
+
+In single tenant mode, the service can be used without the Kuadrant operator.
+It depends on Envoy Proxy, without Gateway API or a Gateway API provider.
+However, the biggest limitation with this mode is that the configuration is static.
+For example, you configure the service with the prompt guarding LLM and risk categories once on startup.
+All requests that are checked by the service are subject to the same prompt guarding configuration.
+
+Here is a request flow diagram for the single tenant architecture:
+
+![ai_service_single_tenant](./Arch%20Overview%20v1%20-%20ai_service_single_tenant.jpg)
+
+In this setup, Envoy Proxy is configured manually with the service as an 'ExternalProcessor' (ext_proc) filter.
+The service is configured as a 'cluster' in Enovy Proxy.
+The service listens on a different grpc port for each feature (like prompt guarding or semantic caching).
+This allows for different features to be executed at different stages of the request lifecycle.
+
+#### Multi tenant mode
+
+In multi tenant mode, the service integrates with the Kuadrant operator, providing additional configuration options and features.
+The service is set up automatically by the Kuadrant operator via a WasmPlugin & EnvoyFilter (Istio).
+Default configuration must be provided to the inference service via env vars on startup (like the prompt guarding LLM to use).
+Users can configure which gateways, listeners, routes or paths that an inference policy should apply to.
+This is done via the policy resources (i.e. PromptGuardPolicy, TokenRateLimitPolicy) and how they target Gateways and HTTPRotues.
+Some service configuration can then be set differently per policy.
+For example, having a different set of risk categories being check for a specifc HTTPRoute, rather than the defaults across the entire set of Gateways.
+This configuration is passed from the wasm-shim to the inference service at request time as additional context.
+Here is a request flow diagram for the multi tenant architecture
+
+![ai_service_multi_tenant](./Arch%20Overview%20v1%20-%20ai_service_multi_tenant.jpg)
+
+Any additional context is passed to the inference service as request headers.
+For example, `x-kuadrant-guard-categories: harm,violence`.
+The inference service will detect these optional headers and change the execution path accordingly.
+One security consideration with using headers to pass the context is exploitation by users/cients.
+In particular when running in single tenant mode where there is no wasm-shim in between the user and the inference service.
+To alleviate this risk, the set of known headers should be removed by Envoy proxy using the `request_headers_to_remove` [configuration](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route.proto).
+Then, they will never be set in single tenant model, or __only__ by the wasm-shim if running in multi tenant mode.
+
+__NOTE:__ At this time, the token based rate limiting feature is only available in multi tenant mode. This is because of how limiting is applied by limitador at the wasm-shim layer, not the inference service layer. The inference service is responsible for gathering and reporting on token usage stats, not the actual limiting.
+
+TODO: Add details on token rate limting implemenation after these issues are further along:
+
+* https://github.com/Kuadrant/kuadrant-operator/issues/1341
+* https://github.com/Kuadrant/kuadrant-operator/issues/1342
+* https://github.com/Kuadrant/kuadrant-operator/issues/1343
+
+### Wasm-shim configuration
+
+A Kuadrant wasm-shim configuration for one PromptGuardPolicy custom resources targeting a HTTPRoute looks like the following and is generated automatically by the Kuadrant control plane.
+Note the 2 different `services` in the `pluginConfig`, both using `ext_proc`.
+These both ultimately route to the same `cluster`, but on different ports.
 
 ```yaml
 apiVersion: extensions.istio.io/v1alpha1
@@ -266,9 +319,13 @@ spec:
   phase: STATS
   pluginConfig:
     services:
-      ai-policy-service:
+      ai-promptguard-service:
         type: ext_proc
-        endpoint: ai-policy-cluster
+        endpoint: kuadrant-ai-promptguard-service
+        failureMode: deny
+      ai-tokenratelimit-service:
+        type: ext_proc
+        endpoint: kuadrant-ai-tokenratelimit-service
         failureMode: allow
     actionSets:
       - name: some_name_0
@@ -279,8 +336,75 @@ spec:
           predicates:
             - request.url_path.startsWith("/openai/v1/completions")
         actions:
-          - service: ai-policy-service
+          - service: ai-promptguard-service
             scope: gateway-system/app-promptguard
             predicates:
               - request.host.endsWith('.models.website')
+      - name: some_name_1
+        routeRuleConditions:
+          hostnames:
+            - "*.models.website"
+          predicates:
+            - request.url_path.startsWith("/openai/v1/completions")
+        actions:
+          - service: ai-tokenratelimit-service
+            scope: gateway-system/app-tokenratelimit
+            predicates:
+              - request.host.endsWith('.models.website')
+```
+
+Here is an example EnvoyFilter that configures the `cluster` for the wasm-shim to route to.
+Note the 2 different patches and ports going to the same `cluster` for the AI service.
+The service is listening on different grpc ports for each feature to allow them to be executed at different points in the chain.
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: my-inference-gateway
+  namespace: my-inference-gateway-ns
+spec:
+  configPatches:
+    - applyTo: CLUSTER
+      match:
+        cluster:
+          service: ai-service.kuadrant-system.svc.cluster.local
+      patch:
+        operation: ADD
+        value:
+          connect_timeout: 1s
+          http2_protocol_options: {}
+          lb_policy: ROUND_ROBIN
+          load_assignment:
+            cluster_name: kuadrant-ai-promptguard-service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: ai-service.kuadrant-system.svc.cluster.local
+                          port_value: 9090
+          name: kuadrant-ai-promptguard-service
+          type: STRICT_DNS
+    - applyTo: CLUSTER
+      match:
+        cluster:
+          service: ai-service.kuadrant-system.svc.cluster.local
+      patch:
+        operation: ADD
+        value:
+          connect_timeout: 1s
+          http2_protocol_options: {}
+          lb_policy: ROUND_ROBIN
+          load_assignment:
+            cluster_name: kuadrant-ai-tokenratelimit-service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: ai-service.kuadrant-system.svc.cluster.local
+                          port_value: 9091
+          name: kuadrant-ai-tokenratelimit-service
+          type: STRICT_DNS
 ```

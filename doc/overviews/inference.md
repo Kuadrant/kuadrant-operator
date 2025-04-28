@@ -55,7 +55,8 @@ spec:
             "error": "Unauthorized",
             "message": "Request prompt blocked by content policy."
           }
-  rules: { … }
+  when:
+    - predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")'
 ```
 
 ```yaml
@@ -72,9 +73,10 @@ spec:
     rate:
       limit: 20000
       window: 1d
-    predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")' 
-    counter: auth.identity.userid
-  rules: { … }
+    when:
+      - predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")' 
+    counters:
+      - expression: auth.identity.userid
 ```
 
 ## Using the PromptGuardPolicy & TokenRateLimitPolicy
@@ -87,7 +89,7 @@ When targeting a HTTPRoute, an PromptGuardPolicy or TokenRateLimitPolicy can be 
 
 Either way, the policy applies across all hostnames (`spec.hostnames`) and Gateways (`spec.parentRefs`) referenced in the HTTPRoute, provided the route is properly attached to the corresponding Gateway listeners.
 
-Additional filters for applying the policy can be set by specifying top-level conditions in the policy (`spec.rules.when`).
+Additional filters for applying the policy can be set by specifying top-level conditions in the policy (`spec.when`).
 
 **Example 1** - Targeting an entire HTTPRoute
 
@@ -101,7 +103,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: my-route
-  rules: { … }
+  limits: { … }
 ```
 
 ```
@@ -136,7 +138,7 @@ spec:
     kind: HTTPRoute
     name: my-route
     sectionName: rule-2
-  rules: { … }
+  limits: { … }
 ```
 
 ```
@@ -178,7 +180,7 @@ spec:
     kind: Gateway
     name: my-gw
   defaults: # alternatively: `overrides`
-    rules: { … }
+    limits: { … }
 ```
 
 ```

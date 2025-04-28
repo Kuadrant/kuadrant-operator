@@ -116,7 +116,9 @@ func (m *MTLS) IsAuthorinoEnabled() bool {
 	return m.Enable && ptr.Deref(m.Authorino, m.Enable)
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.rateLimiting) ? (self.rateLimiting == true && has(self.counterStorage)) || (self.rateLimiting == false && has(self.counterStorage)) || (self.rateLimiting == false && !has(self.counterStorage)) : true",message="resilience.counterStorage needs to be explictly configured when using resilience.rateLimiting."
 type Resilience struct {
+	RateLimiting   bool                       `json:"rateLimiting,omitempty"`
 	CounterStorage *limitadorv1alpha1.Storage `json:"counterStorage,omitempty"`
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/ptr"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
@@ -22,6 +23,7 @@ var level = 1
 const (
 	ExperimentalResilienceFeature = "ExperimentalResilienceFeature"
 	ResilienceFeatureAnnotation   = "kuadrant.io/experimental-dont-use-resilient-data-plane"
+	LimitadorReplicas             = 2
 )
 
 func NewResilienceDeploymentWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
@@ -67,7 +69,7 @@ func NewResilienceDeploymentTasks(client *dynamic.DynamicClient) []controller.Re
 	return []controller.ReconcileFunc{
 		NewResilienceAuthorizationReconciler().Subscription().Reconcile,
 		NewResilienceCounterStorageReconciler(client).Subscription().Reconcile,
-		NewResilienceRateLimitingReconciler().Subscription().Reconcile,
+		NewResilienceRateLimitingReconciler(client).Subscription().Reconcile,
 	}
 }
 
@@ -100,11 +102,13 @@ func (r *ResilienceAuthorizationReconciler) reconcile(ctx context.Context, _ []c
 	return nil
 }
 
-func NewResilienceRateLimitingReconciler() *ResilienceRateLimitingReconciler {
-	return &ResilienceRateLimitingReconciler{}
+func NewResilienceRateLimitingReconciler(client *dynamic.DynamicClient) *ResilienceRateLimitingReconciler {
+	return &ResilienceRateLimitingReconciler{Client: client}
 }
 
-type ResilienceRateLimitingReconciler struct{}
+type ResilienceRateLimitingReconciler struct {
+	Client *dynamic.DynamicClient
+}
 
 func (r *ResilienceRateLimitingReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
@@ -115,7 +119,7 @@ func (r *ResilienceRateLimitingReconciler) Subscription() controller.Subscriptio
 	}
 }
 
-func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, state *sync.Map) error {
+func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("ResilienceRateLimitingReconciler")
 
 	logger.V(level).Info("ResilienceRateLimitingReconciler Task", "status", "started")
@@ -126,7 +130,54 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
+	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil {
+		logger.V(level).Info("kuadrant resource has not being created yet.")
+		return nil
+	}
+	lObj := GetLimitadorFromTopology(topology)
+	if lObj == nil {
+		logger.V(level).Info("limitador resource has not being created yet.")
+		return nil
+	}
+
+	nowConfigured := r.isConfigured(kObj)
+
+	if !nowConfigured {
+		logger.V(level).Info("RateLimiting not configured", "status", "exiting")
+		return nil
+	}
+	logger.V(level).Info("RateLimiting configured", "status", "contiune")
+
+	if lObj.Spec.Replicas == nil {
+		lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
+		err := r.updateLimitador(ctx, lObj)
+		if err != nil {
+			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+			return nil
+		}
+	}
+
 	return nil
+}
+
+func (r *ResilienceRateLimitingReconciler) isConfigured(kObj *kuadrantv1beta1.Kuadrant) bool {
+	if kObj == nil {
+		return false
+	}
+	if resilience := kObj.Spec.Resilience; resilience == nil {
+		return false
+	}
+	return kObj.Spec.Resilience.RateLimiting
+}
+
+func (r *ResilienceRateLimitingReconciler) updateLimitador(ctx context.Context, lObj *limitadorv1alpha1.Limitador) error {
+	obj, err := controller.Destruct(lObj)
+	if err != nil {
+		return err
+	}
+	_, err = r.Client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(lObj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
 }
 
 func NewResilienceCounterStorageReconciler(client *dynamic.DynamicClient) *ResilienceCounterStorageReconciler {

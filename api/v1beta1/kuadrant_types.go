@@ -85,7 +85,9 @@ type MTLS struct {
 	Enable bool `json:"enable,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.rateLimiting) ? (self.rateLimiting == true && has(self.counterStorage)) || (self.rateLimiting == false && has(self.counterStorage)) || (self.rateLimiting == false && !has(self.counterStorage)) : true",message="resilience.counterStorage needs to be explicitly configured when using resilience.rateLimiting."
 type Resilience struct {
+	RateLimiting   bool                       `json:"rateLimiting,omitempty"`
 	CounterStorage *limitadorv1alpha1.Storage `json:"counterStorage,omitempty"`
 }
 

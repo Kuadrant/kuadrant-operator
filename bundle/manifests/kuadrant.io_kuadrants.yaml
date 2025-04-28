@@ -170,7 +170,15 @@ spec:
                             type: object
                         type: object
                     type: object
+                  rateLimiting:
+                    type: boolean
                 type: object
+                x-kubernetes-validations:
+                - message: resilience.counterStorage needs to be explicitly configured
+                    when using resilience.rateLimiting.
+                  rule: 'has(self.rateLimiting) ? (self.rateLimiting == true && has(self.counterStorage))
+                    || (self.rateLimiting == false && has(self.counterStorage)) ||
+                    (self.rateLimiting == false && !has(self.counterStorage)) : true'
             type: object
           status:
             description: KuadrantStatus defines the observed state of Kuadrant

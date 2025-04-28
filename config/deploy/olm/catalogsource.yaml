@@ -4,7 +4,7 @@ metadata:
   name: kuadrant-operator-catalog
 spec:
   sourceType: grpc
-  image: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0-rc3
+  image: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
   displayName: Kuadrant Operators
   grpcPodConfig:
     securityContextConfig: restricted

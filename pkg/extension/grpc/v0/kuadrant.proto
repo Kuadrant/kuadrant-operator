@@ -42,5 +42,5 @@ message ResolveResponse {
 
 // todo: define the message to be streamed back to the client
 message Event {
-
+  Metadata metadata = 1;
 }

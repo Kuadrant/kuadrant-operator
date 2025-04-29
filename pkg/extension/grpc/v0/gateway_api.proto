@@ -5,7 +5,7 @@ option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0
 package kuadrant.v0;
 
 message Policy {
-  string identifier = 1;
+  Metadata metadata = 1;
   repeated TargetRef targetRefs = 2;
 }
 
@@ -16,8 +16,10 @@ message Gateway {
 }
 
 message Metadata {
-  string name = 1;
-  string namespace = 2;
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string namespace = 4;
 }
 
 message Listener {
@@ -28,5 +30,6 @@ message TargetRef {
   string group = 1;
   string kind = 2;
   string name = 3;
-  string sectionName = 4;
+  string namespace = 4;
+  string sectionName = 5;
 }

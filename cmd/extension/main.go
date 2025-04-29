@@ -10,7 +10,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
-	"github.com/kuadrant/kuadrant-operator/pkg/extension/extensioncontroller"
+	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
 
 var (
@@ -24,7 +24,7 @@ func init() {
 
 func main() {
 	exampleReconciler := controllers.ExampleExtensionReconciler{}
-	builder, logger := extensioncontroller.NewBuilder("example-extension-controller")
+	builder, logger := extcontroller.NewBuilder("example-extension-controller")
 	controller, err := builder.
 		WithScheme(scheme).
 		WithReconciler(exampleReconciler.Reconcile).

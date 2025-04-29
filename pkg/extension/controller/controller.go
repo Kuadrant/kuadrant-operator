@@ -1,4 +1,4 @@
-package extensioncontroller
+package controller
 
 import (
 	"context"
@@ -33,9 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 
-	policycontroller "github.com/kuadrant/policy-machinery/controller"
-
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
 var (
@@ -43,18 +42,14 @@ var (
 	logMode     = env.GetString("LOG_MODE", "production") != "production"
 )
 
-type KuadrantCtx interface{}
-
-type ReconcileFn func(ctx context.Context, request reconcile.Request, kuadrant *KuadrantCtx) (reconcile.Result, error)
-
 type ExtensionController struct {
 	name            string
 	logger          logr.Logger
 	manager         ctrlruntime.Manager
 	client          *dynamic.DynamicClient
-	reconcile       ReconcileFn
+	reconcile       exttypes.ReconcileFn
 	watchSources    []ctrlruntimesrc.Source
-	kuadrantCtx     *KuadrantCtx
+	kuadrantCtx     *exttypes.KuadrantCtx
 	extensionClient *extensionClient
 	// map of namespaced names
 	// todo(adam-cattermole): This could change to be keyed on the cel expression, value of the set of namespaced names
@@ -195,7 +190,7 @@ type Builder struct {
 	name       string
 	scheme     *runtime.Scheme
 	logger     logr.Logger
-	reconcile  ReconcileFn
+	reconcile  exttypes.ReconcileFn
 	watchTypes []client.Object
 }
 
@@ -220,7 +215,7 @@ func (b *Builder) WithScheme(scheme *runtime.Scheme) *Builder {
 	return b
 }
 
-func (b *Builder) WithReconciler(fn ReconcileFn) *Builder {
+func (b *Builder) WithReconciler(fn exttypes.ReconcileFn) *Builder {
 	b.reconcile = fn
 	return b
 }
@@ -287,16 +282,4 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		extensionClient: extClient,
 		resources:       make(map[types.NamespacedName]struct{}),
 	}, nil
-}
-
-func LoggerFromContext(ctx context.Context) logr.Logger {
-	return policycontroller.LoggerFromContext(ctx)
-}
-
-func DynamicClientFromContext(ctx context.Context) (*dynamic.DynamicClient, error) {
-	dynamicClient, ok := ctx.Value((*dynamic.DynamicClient)(nil)).(*dynamic.DynamicClient)
-	if !ok {
-		return nil, errors.New("failed to retrieve dynamic client from context")
-	}
-	return dynamicClient, nil
 }

@@ -103,9 +103,9 @@ type StateAwareDAG struct {
 }
 
 func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb.Gateway, error) {
-	chain := d.topology.Objects().Items(func(o machinery.Object) bool {
+	chain := d.topology.All().Items(func(o machinery.Object) bool {
 		return len(lo.Filter(targetRefs, func(t *extpb.TargetRef, _ int) bool {
-			return t.Name == o.GetName() && t.Kind == o.GroupVersionKind().Kind && t.Group == o.GroupVersionKind().Group
+			return t.Name == o.GetName() && t.Kind == o.GroupVersionKind().Kind
 		})) > 0
 	})
 
@@ -114,7 +114,7 @@ func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb
 
 	for i := 0; i < chainSize; i++ {
 		object := chain[i]
-		parents := d.topology.Objects().Parents(object)
+		parents := d.topology.All().Parents(object)
 		chain = append(chain, parents...)
 		chainSize = len(chain)
 		if gw, ok := object.(*machinery.Gateway); ok && gw != nil {
@@ -122,7 +122,9 @@ func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb
 		}
 	}
 
-	return gateways, nil
+	return lo.UniqBy(gateways, func(gw *extpb.Gateway) string {
+		return gw.GetMetadata().GetNamespace() + "/" + gw.GetMetadata().GetName()
+	}), nil
 }
 
 func toGw(gw machinery.Gateway) *extpb.Gateway {

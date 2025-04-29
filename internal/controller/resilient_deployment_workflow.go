@@ -143,8 +143,11 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		return nil
 	}
 
-	wasConfigured := r.isConfigured(history.kuadrant)
-	nowConfigured := r.isConfigured(kObj)
+	wasConfigured := false
+	if history.kuadrant != nil {
+		wasConfigured = history.kuadrant.Spec.Resilience.IsRateLimitingConfigured()
+	}
+	nowConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
 
 	if wasConfigured && !nowConfigured {
 		lObj.Spec.Replicas = ptr.To(1)
@@ -171,16 +174,6 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 
 	return nil
-}
-
-func (r *ResilienceRateLimitingReconciler) isConfigured(kObj *kuadrantv1beta1.Kuadrant) bool {
-	if kObj == nil {
-		return false
-	}
-	if resilience := kObj.Spec.Resilience; resilience == nil {
-		return false
-	}
-	return kObj.Spec.Resilience.RateLimiting
 }
 
 func (r *ResilienceRateLimitingReconciler) updateLimitador(ctx context.Context, lObj *limitadorv1alpha1.Limitador) error {

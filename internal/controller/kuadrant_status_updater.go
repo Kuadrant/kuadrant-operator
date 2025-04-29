@@ -23,7 +23,9 @@ import (
 )
 
 const (
-	ReadyConditionType string = "Ready"
+	ReadyConditionType               string = "Ready"
+	ResilienceInfoRRConditionType    string = "Resilience.Info.RateLimiting.Replicas"
+	ResilienceWarningRRConditionType string = "Resilience.Warning.RateLimiting.Replicas"
 )
 
 type KuadrantStatusUpdater struct {
@@ -125,6 +127,16 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
+	setResilienceCond, removeResilienceCond := r.resilienceCondition(topology)
+
+	for _, condition := range setResilienceCond {
+		meta.SetStatusCondition(&newStatus.Conditions, *condition)
+	}
+
+	for _, condition := range removeResilienceCond {
+		meta.RemoveStatusCondition(&newStatus.Conditions, condition)
+	}
+
 	return newStatus
 }
 
@@ -144,6 +156,50 @@ func mtlsLimitador(kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *bool {
 	}
 	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 	return ptr.To(kObj.IsMTLSLimitadorEnabled() && len(effectiveRateLimitPoliciesMap) > 0)
+}
+
+func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology) ([]*metav1.Condition, []string) {
+	create := make([]*metav1.Condition, 0)
+	remove := make([]string, 0)
+
+	kObj := GetKuadrantFromTopology(topology)
+	isConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
+	if !isConfigured {
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType)
+		return nil, remove
+	}
+
+	lObj := GetLimitadorFromTopology(topology)
+	if lObj == nil {
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType)
+		return nil, remove
+	}
+
+	if lObj.Spec.Replicas != nil && *lObj.Spec.Replicas < LimitadorReplicas {
+		cond := &metav1.Condition{
+			Type:    ResilienceWarningRRConditionType,
+			Message: fmt.Sprintf("Number of Limitador replicas (%v) below minimum default", *lObj.Spec.Replicas),
+			Reason:  "UserModifiedLimitadorReplicas",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else {
+		remove = append(remove, ResilienceWarningRRConditionType)
+	}
+
+	if lObj.Spec.Replicas != nil && *lObj.Spec.Replicas > LimitadorReplicas {
+		cond := &metav1.Condition{
+			Type:    ResilienceInfoRRConditionType,
+			Message: fmt.Sprintf("Number of Limitador replicas (%v) greater than minimum default", *lObj.Spec.Replicas),
+			Reason:  "UserModifiedLimitadorReplicas",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else {
+		remove = append(remove, ResilienceInfoRRConditionType)
+	}
+
+	return create, remove
 }
 
 func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, logger logr.Logger) *metav1.Condition {

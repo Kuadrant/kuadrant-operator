@@ -72,7 +72,7 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
-func (k *Kuadrant) IsResilienceEnabled() ResilienceStatus {
+func (k *Kuadrant) BasicResilienceStatus() ResilienceStatus {
 	result := ResilienceStatus{}
 	result.RateLimiting = ptr.To((k.Spec.Resilience != nil && k.Spec.Resilience.RateLimiting))
 	if k.Spec.Resilience != nil && k.Spec.Resilience.CounterStorage != nil {
@@ -131,6 +131,13 @@ func (m *MTLS) IsAuthorinoEnabled() bool {
 type Resilience struct {
 	RateLimiting   bool                       `json:"rateLimiting,omitempty"`
 	CounterStorage *limitadorv1alpha1.Storage `json:"counterStorage,omitempty"`
+}
+
+func (r *Resilience) IsRateLimitingConfigured() bool {
+	if r == nil {
+		return false
+	}
+	return r.RateLimiting
 }
 
 type ResilienceStatus struct {

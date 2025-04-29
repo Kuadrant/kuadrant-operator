@@ -21,13 +21,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/google/cel-go/cel"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 )
 
@@ -144,4 +147,43 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 			return err
 		}
 	}
+}
+
+func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequest) (*extpb.ResolveResponse, error) {
+	dag := BlockingDAG.getWait()
+
+	opts := []cel.EnvOption{
+		kuadrant.CelExt(&dag),
+	}
+	env, err := cel.NewEnv(opts...)
+	if err != nil {
+		return nil, err
+	}
+	pAst, issues := env.Parse(request.Expression)
+	if issues.Err() != nil {
+		return nil, issues.Err()
+	}
+	cAst, issues := env.Check(pAst)
+	if issues.Err() != nil {
+		return nil, issues.Err()
+	}
+	prg, err := env.Program(cAst)
+	if err != nil {
+		return nil, err
+	}
+	out, _, err := prg.Eval(map[string]any{
+		"self": request.Policy,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// FIXME: This probably be sent back as a real `CelValue` as protobuf
+	value, err := out.ConvertToNative(reflect.TypeOf(""))
+	if err != nil {
+		return nil, err
+	}
+	return &extpb.ResolveResponse{
+		CelResult: value.(string),
+	}, nil
 }

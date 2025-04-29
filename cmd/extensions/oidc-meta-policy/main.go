@@ -9,6 +9,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
@@ -20,11 +21,12 @@ var (
 func init() {
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
 	exampleReconciler := controllers.ExampleExtensionReconciler{}
-	builder, logger := extcontroller.NewBuilder("example-extension-controller")
+	builder, logger := extcontroller.NewBuilder("oidc-meta-policy-controller")
 	controller, err := builder.
 		WithScheme(scheme).
 		WithReconciler(exampleReconciler.Reconcile).

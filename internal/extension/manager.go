@@ -171,6 +171,11 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	if err != nil {
 		return nil, err
 	}
+
+	if request.Subscribe {
+		// TODO: keep `prg` around and re-eval on dag changing
+	}
+
 	out, _, err := prg.Eval(map[string]any{
 		"self": request.Policy,
 	})

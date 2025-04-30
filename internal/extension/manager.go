@@ -150,10 +150,13 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 }
 
 func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequest) (*extpb.ResolveResponse, error) {
-	dag := s.dag.getWait()
+	dag, success := s.dag.getWaitWithTimeout(15 * time.Second)
+	if !success {
+		return nil, fmt.Errorf("unable to get to a dag in time")
+	}
 
 	opts := []cel.EnvOption{
-		kuadrant.CelExt(&dag),
+		kuadrant.CelExt(dag),
 	}
 	env, err := cel.NewEnv(opts...)
 	if err != nil {

@@ -26,16 +26,12 @@ import (
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;podmonitors,verbs=get;list;watch;create;update;patch;delete
 
 const (
-	authOpMonitorName       = "authorino-operator-monitor"
-	dnsOpMonitorName        = "dns-operator-monitor"
-	envoyGatewayMonitorName = "envoy-gateway-monitor"
-	envoyGatewayMonitorNS   = "envoy-gateway-system"
-	envoyStatsMonitorName   = "envoy-stats-monitor"
-	istiodMonitorName       = "istiod-monitor"
-	istiodMonitorNS         = "istio-system"
-	istioPodMonitorName     = "istio-pod-monitor"
-	kOpMonitorName          = "kuadrant-operator-monitor"
-	limitOpMonitorName      = "limitador-operator-monitor"
+	authOpMonitorName     = "authorino-operator-monitor"
+	dnsOpMonitorName      = "dns-operator-monitor"
+	envoyStatsMonitorName = "envoy-stats-monitor"
+	istioPodMonitorName   = "istio-pod-monitor"
+	kOpMonitorName        = "kuadrant-operator-monitor"
+	limitOpMonitorName    = "limitador-operator-monitor"
 )
 
 func kOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
@@ -161,32 +157,6 @@ func limitOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
 	}
 }
 
-func istiodMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
-	return &monitoringv1.ServiceMonitor{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       monitoringv1.ServiceMonitorsKind,
-			APIVersion: monitoringv1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      istiodMonitorName,
-			Namespace: ns,
-			Labels: map[string]string{
-				kuadrant.ObservabilityLabel: "true",
-			},
-		},
-		Spec: monitoringv1.ServiceMonitorSpec{
-			Endpoints: []monitoringv1.Endpoint{{
-				Port: "http-monitoring",
-			}},
-			Selector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "istiod",
-				},
-			},
-		},
-	}
-}
-
 var istioPodMonitorPortReplacement1 = `[$2]:$1`
 var istioPodMonitorPortReplacement2 = `$2:$1`
 
@@ -261,32 +231,6 @@ func istioPodMonitorBuild(ns string) *monitoringv1.PodMonitor {
 							TargetLabel:  "pod_name",
 						},
 					},
-				},
-			},
-		},
-	}
-}
-
-func envoyGatewayMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
-	return &monitoringv1.ServiceMonitor{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       monitoringv1.ServiceMonitorsKind,
-			APIVersion: monitoringv1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      envoyGatewayMonitorName,
-			Namespace: ns,
-			Labels: map[string]string{
-				kuadrant.ObservabilityLabel: "true",
-			},
-		},
-		Spec: monitoringv1.ServiceMonitorSpec{
-			Endpoints: []monitoringv1.Endpoint{{
-				Port: "metrics",
-			}},
-			Selector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"control-plane": "envoy-gateway",
 				},
 			},
 		},
@@ -400,13 +344,6 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind
 	})
 
-	wantedSMs := []monitoringv1.ServiceMonitor{
-		*kOpMonitor,
-		*dnsOpMonitor,
-		*authOpMonitor,
-		*limitOpMonitor,
-	}
-
 	var wantedPMs []monitoringv1.PodMonitor
 	var monitorsToDelete []machinery.Object
 
@@ -414,20 +351,12 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 		gateways := topology.All().Children(gatewayClass)
 		gwClass := gatewayClass.(*machinery.GatewayClass)
 		if lo.Contains(istioGatewayControllerNames, gwClass.GatewayClass.Spec.ControllerName) {
-			istiodMonitor := istiodMonitorBuild(istiodMonitorNS)
-			r.createServiceMonitor(ctx, istiodMonitor, logger)
-			wantedSMs = append(wantedSMs, *istiodMonitor)
-
 			for _, gateway := range gateways {
 				istioPodMonitor := istioPodMonitorBuild(gateway.GetNamespace())
 				r.createPodMonitor(ctx, istioPodMonitor, logger)
 				wantedPMs = append(wantedPMs, *istioPodMonitor)
 			}
 		} else if lo.Contains(envoyGatewayGatewayControllerNames, gwClass.GatewayClass.Spec.ControllerName) {
-			envoyGatewayMonitor := envoyGatewayMonitorBuild(envoyGatewayMonitorNS)
-			r.createServiceMonitor(ctx, envoyGatewayMonitor, logger)
-			wantedSMs = append(wantedSMs, *envoyGatewayMonitor)
-
 			for _, gateway := range gateways {
 				envoyStatsMonitor := envoyStatsMonitorBuild(gateway.GetNamespace())
 				r.createPodMonitor(ctx, envoyStatsMonitor, logger)
@@ -441,21 +370,12 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 		monitorName := monitor.GetName()
 		monitorNamespace := monitor.GetNamespace()
 
-		switch monitor.GroupVersionKind().Kind {
-		case monitoringv1.ServiceMonitorsKind:
-			if !lo.ContainsBy(wantedSMs, func(wanted monitoringv1.ServiceMonitor) bool {
-				return wanted.Name == monitorName && wanted.Namespace == monitorNamespace && wanted.Labels[kuadrant.ObservabilityLabel] == "true"
-			}) {
-				monitorsToDelete = append(monitorsToDelete, monitor)
-			}
-		case monitoringv1.PodMonitorsKind:
+		if monitor.GroupVersionKind().Kind == monitoringv1.PodMonitorsKind {
 			if !lo.ContainsBy(wantedPMs, func(wanted monitoringv1.PodMonitor) bool {
 				return wanted.Name == monitorName && wanted.Namespace == monitorNamespace && wanted.Labels[kuadrant.ObservabilityLabel] == "true"
 			}) {
 				monitorsToDelete = append(monitorsToDelete, monitor)
 			}
-		default:
-			logger.Info("unexpected monitor object", "kind", monitor.GroupVersionKind().Kind, "namespace", monitorNamespace, "name", monitorName)
 		}
 	}
 

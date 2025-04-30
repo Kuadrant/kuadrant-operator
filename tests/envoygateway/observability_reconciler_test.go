@@ -68,17 +68,6 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 
 	Context("when default kuadrant CR is created", func() {
 		It("monitors are not created at first", func(ctx SpecContext) {
-			envoyGatewayMonitor := &monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       monitoringv1.ServiceMonitorsKind,
-					APIVersion: monitoringv1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "envoy-gateway-monitor",
-					Namespace: "envoy-gateway-system",
-				},
-			}
-
 			envoyStatsMonitor := &monitoringv1.PodMonitor{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       monitoringv1.PodMonitorsKind,
@@ -91,11 +80,6 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 			}
 
 			// Verify monitors don't exists yet
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyGatewayMonitor), envoyGatewayMonitor)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyStatsMonitor), envoyStatsMonitor)
 				g.Expect(err).To(HaveOccurred())
@@ -122,11 +106,6 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 
 			// Verify all monitors are created
 			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyGatewayMonitor), envoyGatewayMonitor)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(envoyGatewayMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
-			}).WithContext(ctx).Should(Succeed())
-			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyStatsMonitor), envoyStatsMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(envoyStatsMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
@@ -140,11 +119,6 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify monitors were deleted
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyGatewayMonitor), envoyGatewayMonitor)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(envoyStatsMonitor), envoyStatsMonitor)
 				g.Expect(err).To(HaveOccurred())

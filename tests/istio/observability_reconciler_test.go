@@ -68,16 +68,6 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 
 	Context("when default kuadrant CR is created", func() {
 		It("monitors are not created at first", func(ctx SpecContext) {
-			istiodMonitor := &monitoringv1.ServiceMonitor{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       monitoringv1.ServiceMonitorsKind,
-					APIVersion: monitoringv1.SchemeGroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "istiod-monitor",
-					Namespace: "istio-system",
-				},
-			}
 			istioPodMonitor := &monitoringv1.PodMonitor{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       monitoringv1.PodMonitorsKind,
@@ -90,11 +80,6 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 			}
 
 			// Verify monitors don't exists yet
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(istiodMonitor), istiodMonitor)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(istioPodMonitor), istioPodMonitor)
 				g.Expect(err).To(HaveOccurred())
@@ -121,11 +106,6 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 
 			// Verify all monitors are created
 			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(istiodMonitor), istiodMonitor)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(istiodMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
-			}).WithContext(ctx).Should(Succeed())
-			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(istioPodMonitor), istioPodMonitor)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(istioPodMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
@@ -139,11 +119,6 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify monitors were deleted
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(istiodMonitor), istiodMonitor)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(istioPodMonitor), istioPodMonitor)
 				g.Expect(err).To(HaveOccurred())

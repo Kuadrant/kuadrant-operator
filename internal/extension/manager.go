@@ -21,16 +21,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
+	"github.com/google/cel-go/cel"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 )
 
@@ -140,52 +140,6 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 	return &extensionService{dag: dag}
 }
 
-func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb.Gateway, error) {
-	chain := d.topology.Objects().Items(func(o machinery.Object) bool {
-		return len(lo.Filter(targetRefs, func(t *extpb.TargetRef, _ int) bool {
-			return t.Name == o.GetName() && t.Kind == o.GroupVersionKind().Kind && t.Group == o.GroupVersionKind().Group
-		})) > 0
-	})
-
-	gateways := make([]*extpb.Gateway, 0)
-	chainSize := len(chain)
-
-	for i := 0; i < chainSize; i++ {
-		object := chain[i]
-		parents := d.topology.Objects().Parents(object)
-		chain = append(chain, parents...)
-		chainSize = len(chain)
-		if gw, ok := object.(*machinery.Gateway); ok && gw != nil {
-			gateways = append(gateways, toGw(*gw))
-		}
-	}
-
-	return gateways, nil
-}
-
-func toGw(gw machinery.Gateway) *extpb.Gateway {
-	return &extpb.Gateway{
-		Metadata: &extpb.Metadata{
-			Name:      gw.Gateway.Name,
-			Namespace: gw.Gateway.Namespace,
-		},
-		GatewayClassName: string(gw.Gateway.Spec.GatewayClassName),
-		Listeners:        toListeners(gw.Gateway.Spec.Listeners),
-	}
-}
-
-func toListeners(listeners []v1.Listener) []*extpb.Listener {
-	ls := make([]*extpb.Listener, len(listeners))
-	for i, l := range listeners {
-		listener := extpb.Listener{}
-		if l.Hostname != nil {
-			listener.Hostname = string(*l.Hostname)
-		}
-		ls[i] = &listener
-	}
-	return ls
-}
-
 func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.Event]) error {
 	for {
 		time.Sleep(time.Second * 5)
@@ -193,4 +147,48 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 			return err
 		}
 	}
+}
+
+func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequest) (*extpb.ResolveResponse, error) {
+	dag := s.dag.getWait()
+
+	opts := []cel.EnvOption{
+		kuadrant.CelExt(&dag),
+	}
+	env, err := cel.NewEnv(opts...)
+	if err != nil {
+		return nil, err
+	}
+	pAst, issues := env.Parse(request.Expression)
+	if issues.Err() != nil {
+		return nil, issues.Err()
+	}
+	cAst, issues := env.Check(pAst)
+	if issues.Err() != nil {
+		return nil, issues.Err()
+	}
+	prg, err := env.Program(cAst)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: keep `prg` around and re-eval on dag changing
+	// if request.Subscribe {
+	// }
+
+	out, _, err := prg.Eval(map[string]any{
+		"self": request.Policy,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// FIXME: This probably be sent back as a real `CelValue` as protobuf
+	value, err := out.ConvertToNative(reflect.TypeOf(""))
+	if err != nil {
+		return nil, err
+	}
+	return &extpb.ResolveResponse{
+		CelResult: value.(string),
+	}, nil
 }

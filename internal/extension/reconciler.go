@@ -17,26 +17,32 @@ import (
 // nilGuardedPointer is an atomic pointer that provides blocking behavior
 // until the pointer is set to a non-nil value.
 type nilGuardedPointer[T any] struct {
-	ptr  atomic.Pointer[T]
-	mu   sync.Mutex
-	cond *sync.Cond
+	ptr     atomic.Pointer[T]
+	mu      sync.Mutex
+	cond    *sync.Cond
+	updates chan T
 }
 
 // newNilGuardedPointer creates a new nilGuardedPointer.
-func newNilGuardedPointer[T any]() *nilGuardedPointer[T] {
-	ngp := nilGuardedPointer[T]{}
+func newNilGuardedPointer[T any](updates chan T) *nilGuardedPointer[T] {
+	ngp := nilGuardedPointer[T]{
+		updates: updates,
+	}
 	ngp.cond = sync.NewCond(&ngp.mu)
 	return &ngp
 }
 
 // set sets the pointer to x and signals any goroutines waiting for a non-nil value.
 func (ngp *nilGuardedPointer[T]) set(x T) {
-	ngp.ptr.Store(&x)
+	previous := ngp.ptr.Swap(&x)
 
 	ngp.mu.Lock()
 	defer ngp.mu.Unlock()
 
 	ngp.cond.Broadcast()
+	if previous != nil && ngp.updates != nil {
+		ngp.updates <- x
+	}
 }
 
 // get returns the current value of the pointer without blocking.
@@ -94,8 +100,7 @@ func (ngp *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, 
 	}
 }
 
-// BlockingDAG is a condition variable guarded atomic pointer that blocks until the pointer is set to a non-nil value
-var BlockingDAG = newNilGuardedPointer[StateAwareDAG]()
+var BlockingDAG = newNilGuardedPointer[StateAwareDAG](make(chan StateAwareDAG))
 
 type StateAwareDAG struct {
 	topology *machinery.Topology

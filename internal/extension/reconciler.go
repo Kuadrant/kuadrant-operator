@@ -24,49 +24,49 @@ type nilGuardedPointer[T any] struct {
 
 // newNilGuardedPointer creates a new nilGuardedPointer.
 func newNilGuardedPointer[T any]() *nilGuardedPointer[T] {
-	cgp := &nilGuardedPointer[T]{}
-	cgp.cond = sync.NewCond(&cgp.mu)
-	return cgp
+	ngp := nilGuardedPointer[T]{}
+	ngp.cond = sync.NewCond(&ngp.mu)
+	return &ngp
 }
 
 // set sets the pointer to x and signals any goroutines waiting for a non-nil value.
-func (c *nilGuardedPointer[T]) set(x T) {
-	c.ptr.Store(&x)
+func (ngp *nilGuardedPointer[T]) set(x T) {
+	ngp.ptr.Store(&x)
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	ngp.mu.Lock()
+	defer ngp.mu.Unlock()
 
-	c.cond.Broadcast()
+	ngp.cond.Broadcast()
 }
 
 // get returns the current value of the pointer without blocking.
-func (c *nilGuardedPointer[T]) get() *T {
-	return c.ptr.Load()
+func (ngp *nilGuardedPointer[T]) get() *T {
+	return ngp.ptr.Load()
 }
 
 // getWait blocks until the pointer is set to a non-nil value and then returns that value.
-func (c *nilGuardedPointer[T]) getWait() T {
+func (ngp *nilGuardedPointer[T]) getWait() T {
 	// First try a quick non-blocking check
-	if val := c.ptr.Load(); val != nil {
+	if val := ngp.ptr.Load(); val != nil {
 		return *val
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	ngp.mu.Lock()
+	defer ngp.mu.Unlock()
 
-	for c.ptr.Load() == nil {
-		c.cond.Wait()
+	for ngp.ptr.Load() == nil {
+		ngp.cond.Wait()
 	}
 
-	return *c.ptr.Load()
+	return *ngp.ptr.Load()
 }
 
 // getWaitWithTimeout blocks until the pointer is set to a non-nil value or until the timeout is reached.
 // Returns the current value of the pointer and a boolean indicating whether the value was set before the timeout.
-func (c *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, bool) {
+func (ngp *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, bool) {
 	// First try a quick non-blocking check
-	if val := c.ptr.Load(); val != nil {
-		return c.ptr.Load(), true
+	if val := ngp.ptr.Load(); val != nil {
+		return ngp.ptr.Load(), true
 	}
 
 	timer := time.NewTimer(timeout)
@@ -75,14 +75,14 @@ func (c *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, bo
 	result := make(chan *T, 1)
 
 	go func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
+		ngp.mu.Lock()
+		defer ngp.mu.Unlock()
 
-		for c.ptr.Load() == nil {
-			c.cond.Wait()
+		for ngp.ptr.Load() == nil {
+			ngp.cond.Wait()
 		}
 
-		val := c.ptr.Load()
+		val := ngp.ptr.Load()
 		result <- val
 	}()
 
@@ -90,7 +90,7 @@ func (c *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, bo
 	case val := <-result:
 		return val, true
 	case <-timer.C:
-		return c.ptr.Load(), false
+		return ngp.ptr.Load(), false
 	}
 }
 

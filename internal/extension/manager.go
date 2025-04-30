@@ -150,7 +150,7 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 }
 
 func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequest) (*extpb.ResolveResponse, error) {
-	dag := BlockingDAG.getWait()
+	dag := s.dag.getWait()
 
 	opts := []cel.EnvOption{
 		kuadrant.CelExt(&dag),
@@ -172,9 +172,9 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 		return nil, err
 	}
 
-	if request.Subscribe {
-		// TODO: keep `prg` around and re-eval on dag changing
-	}
+	// TODO: keep `prg` around and re-eval on dag changing
+	// if request.Subscribe {
+	// }
 
 	out, _, err := prg.Eval(map[string]any{
 		"self": request.Policy,

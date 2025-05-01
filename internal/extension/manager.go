@@ -146,19 +146,24 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 	channel := BlockingDAG.newUpdateChannel()
 	for {
 		dag := <-channel
-
 		opts := []cel.EnvOption{
 			kuadrant.CelExt(&dag),
 		}
+
+		var sendError error
 		if env, err := cel.NewEnv(opts...); err == nil {
 			s.subscribtions.Range(func(sub, _ interface{}) bool {
 				if prg, err := env.Program(sub.(subscription).cAst); err == nil {
 					if _, _, err := prg.Eval(sub.(subscription).input); err == nil {
-						_ = stream.Send(&extpb.Event{})
+						sendError = stream.Send(&extpb.Event{})
 					}
 				}
-				return true
+				return sendError == nil // keep on iterating as long as we can send things over the wires
 			})
+		}
+
+		if sendError != nil {
+			return sendError
 		}
 	}
 }

@@ -128,7 +128,7 @@ func (m *Manager) HasSynced() bool {
 
 type extensionService struct {
 	dag           *nilGuardedPointer[StateAwareDAG]
-	subscribtions sync.Map
+	subscriptions sync.Map
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -152,7 +152,7 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 
 		var sendError error
 		if env, err := cel.NewEnv(opts...); err == nil {
-			s.subscribtions.Range(func(sub, _ interface{}) bool {
+			s.subscriptions.Range(func(sub, _ interface{}) bool {
 				if prg, err := env.Program(sub.(subscription).cAst); err == nil {
 					if _, _, err := prg.Eval(sub.(subscription).input); err == nil {
 						sendError = stream.Send(&extpb.Event{})
@@ -199,7 +199,7 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	}
 
 	if request.Subscribe {
-		s.subscribtions.Store(subscription{
+		s.subscriptions.Store(subscription{
 			cAst,
 			input,
 		}, nil)

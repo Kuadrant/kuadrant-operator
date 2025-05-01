@@ -120,7 +120,7 @@ func TestStateAwareDAG(t *testing.T) {
 
 func TestNilGuardedPointer(t *testing.T) {
 	t.Run("set and get", func(t *testing.T) {
-		ptr := newNilGuardedPointer[string](nil)
+		ptr := newNilGuardedPointer[string]()
 
 		if ptr.get() != nil {
 			t.Errorf("Expected initial value to be nil, got %v", ptr.get())
@@ -138,7 +138,7 @@ func TestNilGuardedPointer(t *testing.T) {
 	})
 
 	t.Run("getWait blocks until value is set", func(t *testing.T) {
-		ptr := newNilGuardedPointer[string](nil)
+		ptr := newNilGuardedPointer[string]()
 
 		done := make(chan struct{})
 		var loaded string
@@ -164,7 +164,7 @@ func TestNilGuardedPointer(t *testing.T) {
 	})
 
 	t.Run("getWait returns immediately if value is already set", func(t *testing.T) {
-		ptr := newNilGuardedPointer[string](nil)
+		ptr := newNilGuardedPointer[string]()
 
 		value := "test"
 		ptr.set(value)
@@ -183,7 +183,7 @@ func TestNilGuardedPointer(t *testing.T) {
 	})
 
 	t.Run("getWaitWithTimeout returns false on timeout", func(t *testing.T) {
-		ptr := newNilGuardedPointer[string](nil)
+		ptr := newNilGuardedPointer[string]()
 
 		start := time.Now()
 		_, success := ptr.getWaitWithTimeout(100 * time.Millisecond)
@@ -199,7 +199,7 @@ func TestNilGuardedPointer(t *testing.T) {
 	})
 
 	t.Run("getWaitWithTimeout returns true when value is set before timeout", func(t *testing.T) {
-		ptr := newNilGuardedPointer[string](nil)
+		ptr := newNilGuardedPointer[string]()
 
 		done := make(chan bool)
 		var loaded string
@@ -230,7 +230,8 @@ func TestNilGuardedPointer(t *testing.T) {
 	})
 
 	t.Run("set sends updates", func(t *testing.T) {
-		ptr := newNilGuardedPointer[string](make(chan string))
+		ptr := newNilGuardedPointer[string]()
+		channel := ptr.newUpdateChannel()
 
 		if ptr.get() != nil {
 			t.Errorf("Expected initial value to be nil, got %v", ptr.get())
@@ -251,7 +252,7 @@ func TestNilGuardedPointer(t *testing.T) {
 			ptr.set("updated twice")
 		}()
 
-		one, two := <-ptr.updates, <-ptr.updates
+		one, two := <-channel, <-channel
 		if one != "updated once" {
 			t.Errorf("Expected update to be `updated once`, got `%s`", one)
 		}

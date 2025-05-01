@@ -20,14 +20,12 @@ type nilGuardedPointer[T any] struct {
 	ptr     atomic.Pointer[T]
 	mu      sync.Mutex
 	cond    *sync.Cond
-	updates chan T
+	updates []chan T
 }
 
 // newNilGuardedPointer creates a new nilGuardedPointer.
-func newNilGuardedPointer[T any](updates chan T) *nilGuardedPointer[T] {
-	ngp := nilGuardedPointer[T]{
-		updates: updates,
-	}
+func newNilGuardedPointer[T any]() *nilGuardedPointer[T] {
+	ngp := nilGuardedPointer[T]{}
 	ngp.cond = sync.NewCond(&ngp.mu)
 	return &ngp
 }
@@ -40,9 +38,21 @@ func (ngp *nilGuardedPointer[T]) set(x T) {
 	defer ngp.mu.Unlock()
 
 	ngp.cond.Broadcast()
+
 	if previous != nil && ngp.updates != nil {
-		ngp.updates <- x
+		for _, update := range ngp.updates {
+			update <- x
+		}
 	}
+}
+
+func (ngp *nilGuardedPointer[T]) newUpdateChannel() chan T {
+	ngp.mu.Lock()
+	defer ngp.mu.Unlock()
+
+	channel := make(chan T)
+	ngp.updates = append(ngp.updates, channel)
+	return channel
 }
 
 // get returns the current value of the pointer without blocking.
@@ -100,7 +110,7 @@ func (ngp *nilGuardedPointer[T]) getWaitWithTimeout(timeout time.Duration) (*T, 
 	}
 }
 
-var BlockingDAG = newNilGuardedPointer[StateAwareDAG](make(chan StateAwareDAG))
+var BlockingDAG = newNilGuardedPointer[StateAwareDAG]()
 
 type StateAwareDAG struct {
 	topology *machinery.Topology

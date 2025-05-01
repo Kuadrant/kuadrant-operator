@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -126,7 +127,8 @@ func (m *Manager) HasSynced() bool {
 }
 
 type extensionService struct {
-	dag *nilGuardedPointer[StateAwareDAG]
+	dag           *nilGuardedPointer[StateAwareDAG]
+	subscribtions sync.Map
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -141,10 +143,22 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 }
 
 func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.Event]) error {
+	channel := BlockingDAG.newUpdateChannel()
 	for {
-		time.Sleep(time.Second * 5)
-		if err := stream.Send(&extpb.Event{}); err != nil {
-			return err
+		dag := <-channel
+
+		opts := []cel.EnvOption{
+			kuadrant.CelExt(&dag),
+		}
+		if env, err := cel.NewEnv(opts...); err == nil {
+			s.subscribtions.Range(func(sub, _ interface{}) bool {
+				if prg, err := env.Program(sub.(subscription).cAst); err == nil {
+					if _, _, err := prg.Eval(sub.(subscription).input); err == nil {
+						_ = stream.Send(&extpb.Event{})
+					}
+				}
+				return true
+			})
 		}
 	}
 }
@@ -175,13 +189,18 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 		return nil, err
 	}
 
-	// TODO: keep `prg` around and re-eval on dag changing
-	// if request.Subscribe {
-	// }
-
-	out, _, err := prg.Eval(map[string]any{
+	input := map[string]any{
 		"self": request.Policy,
-	})
+	}
+
+	if request.Subscribe {
+		s.subscribtions.Store(subscription{
+			cAst,
+			input,
+		}, nil)
+	}
+
+	out, _, err := prg.Eval(input)
 	if err != nil {
 		return nil, err
 	}
@@ -194,4 +213,9 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	return &extpb.ResolveResponse{
 		CelResult: value.(string),
 	}, nil
+}
+
+type subscription struct {
+	cAst  *cel.Ast
+	input map[string]any
 }

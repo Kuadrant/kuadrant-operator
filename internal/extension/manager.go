@@ -160,7 +160,9 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 						if newVal != sub.val {
 							sub.val = newVal
 							s.subscriptions[key] = sub
-							if err := stream.Send(&extpb.Event{}); err != nil {
+							if err := stream.Send(&extpb.Event{
+								Metadata: sub.input["self"].(extpb.Policy).Metadata,
+							}); err != nil {
 								s.mutex.Unlock()
 								return err
 							}

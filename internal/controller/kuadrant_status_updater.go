@@ -116,8 +116,8 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
-		MtlsAuthorino:      r.mtlsAuthorino(kObj, topology, logger, state),
-		MtlsLimitador:      r.mtlsLimitador(kObj, topology, logger, state),
+		MtlsAuthorino:      r.mtlsAuthorino(kObj, logger, state),
+		MtlsLimitador:      r.mtlsLimitador(kObj, logger, state),
 	}
 
 	availableCond := r.readyCondition(topology, logger)
@@ -127,7 +127,7 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 	return newStatus
 }
 
-func (r *KuadrantStatusUpdater) mtlsAuthorino(kObj *kuadrantv1beta1.Kuadrant, topology *machinery.Topology, logger logr.Logger, state *sync.Map) *bool {
+func (r *KuadrantStatusUpdater) mtlsAuthorino(kObj *kuadrantv1beta1.Kuadrant, logger logr.Logger, state *sync.Map) *bool {
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
 		return ptr.To(false)
@@ -136,7 +136,7 @@ func (r *KuadrantStatusUpdater) mtlsAuthorino(kObj *kuadrantv1beta1.Kuadrant, to
 	return ptr.To(kObj.IsMTLSAuthorinoEnabled() && len(effectiveAuthPoliciesMap) > 0)
 }
 
-func (r *KuadrantStatusUpdater) mtlsLimitador(kObj *kuadrantv1beta1.Kuadrant, topology *machinery.Topology, logger logr.Logger, state *sync.Map) *bool {
+func (r *KuadrantStatusUpdater) mtlsLimitador(kObj *kuadrantv1beta1.Kuadrant, logger logr.Logger, state *sync.Map) *bool {
 	effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {
 		return ptr.To(false)

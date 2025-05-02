@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -128,7 +129,8 @@ func (m *Manager) HasSynced() bool {
 
 type extensionService struct {
 	dag           *nilGuardedPointer[StateAwareDAG]
-	subscriptions sync.Map
+	mutex         sync.Mutex
+	subscriptions map[string]subscription
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -150,21 +152,24 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 			kuadrant.CelExt(&dag),
 		}
 
-		var sendError error
+		s.mutex.Lock()
 		if env, err := cel.NewEnv(opts...); err == nil {
-			s.subscriptions.Range(func(sub, _ interface{}) bool {
-				if prg, err := env.Program(sub.(subscription).cAst); err == nil {
-					if _, _, err := prg.Eval(sub.(subscription).input); err == nil {
-						sendError = stream.Send(&extpb.Event{})
+			for key, sub := range s.subscriptions {
+				if prg, err := env.Program(sub.cAst); err == nil {
+					if newVal, _, err := prg.Eval(sub.input); err == nil {
+						if newVal != sub.val {
+							sub.val = newVal
+							s.subscriptions[key] = sub
+							if err := stream.Send(&extpb.Event{}); err != nil {
+								s.mutex.Unlock()
+								return err
+							}
+						}
 					}
 				}
-				return sendError == nil // keep on iterating as long as we can send things over the wires
-			})
+			}
 		}
-
-		if sendError != nil {
-			return sendError
-		}
+		s.mutex.Unlock()
 	}
 }
 
@@ -198,20 +203,29 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 		"self": request.Policy,
 	}
 
+	val, _, err := prg.Eval(input)
+
 	if request.Subscribe {
-		s.subscriptions.Store(subscription{
+		key := ""
+		for _, targetRef := range request.Policy.TargetRefs {
+			key += fmt.Sprintf("[%s/%s]%s/%s#%s\n", targetRef.Group, targetRef.Kind, targetRef.Namespace, targetRef.Name, targetRef.SectionName)
+		}
+		key += request.Expression
+		s.mutex.Lock()
+		s.subscriptions[key] = subscription{
 			cAst,
 			input,
-		}, nil)
+			val,
+		}
+		s.mutex.Unlock()
 	}
 
-	out, _, err := prg.Eval(input)
 	if err != nil {
 		return nil, err
 	}
 
 	// FIXME: This probably be sent back as a real `CelValue` as protobuf
-	value, err := out.ConvertToNative(reflect.TypeOf(""))
+	value, err := val.ConvertToNative(reflect.TypeOf(""))
 	if err != nil {
 		return nil, err
 	}
@@ -223,4 +237,5 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 type subscription struct {
 	cAst  *cel.Ast
 	input map[string]any
+	val   ref.Val
 }

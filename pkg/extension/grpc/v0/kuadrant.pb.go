@@ -7,6 +7,7 @@
 package v0
 
 import (
+	v1alpha1 "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
@@ -174,10 +175,10 @@ func (x *ResolveRequest) GetSubscribe() bool {
 	return false
 }
 
-// todo(adam-cattermole): this should return a Cel value not a string
+// Return the result as a cel value
 type ResolveResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	CelResult     string                 `protobuf:"bytes,1,opt,name=cel_result,json=celResult,proto3" json:"cel_result,omitempty"`
+	CelResult     *v1alpha1.Value        `protobuf:"bytes,1,opt,name=cel_result,json=celResult,proto3" json:"cel_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -212,11 +213,11 @@ func (*ResolveResponse) Descriptor() ([]byte, []int) {
 	return file_kuadrant_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ResolveResponse) GetCelResult() string {
+func (x *ResolveResponse) GetCelResult() *v1alpha1.Value {
 	if x != nil {
 		return x.CelResult
 	}
-	return ""
+	return nil
 }
 
 // todo: define the message to be streamed back to the client
@@ -268,7 +269,7 @@ var File_kuadrant_proto protoreflect.FileDescriptor
 
 const file_kuadrant_proto_rawDesc = "" +
 	"\n" +
-	"\x0ekuadrant.proto\x12\vkuadrant.v0\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11gateway_api.proto\";\n" +
+	"\x0ekuadrant.proto\x12\vkuadrant.v0\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11gateway_api.proto\x1a\x1fgoogle/api/cel/expr/value.proto\";\n" +
 	"\vPingRequest\x12,\n" +
 	"\x03out\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x03out\":\n" +
 	"\fPongResponse\x12*\n" +
@@ -278,10 +279,10 @@ const file_kuadrant_proto_rawDesc = "" +
 	"\n" +
 	"expression\x18\x02 \x01(\tR\n" +
 	"expression\x12\x1c\n" +
-	"\tsubscribe\x18\x03 \x01(\bR\tsubscribe\"0\n" +
-	"\x0fResolveResponse\x12\x1d\n" +
+	"\tsubscribe\x18\x03 \x01(\bR\tsubscribe\"Q\n" +
+	"\x0fResolveResponse\x12>\n" +
 	"\n" +
-	"cel_result\x18\x01 \x01(\tR\tcelResult\":\n" +
+	"cel_result\x18\x01 \x01(\v2\x1f.google.api.expr.v1alpha1.ValueR\tcelResult\":\n" +
 	"\x05Event\x121\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v0.MetadataR\bmetadata2\xd6\x01\n" +
 	"\x10ExtensionService\x12=\n" +
@@ -310,25 +311,27 @@ var file_kuadrant_proto_goTypes = []any{
 	(*Event)(nil),                 // 4: kuadrant.v0.Event
 	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 	(*Policy)(nil),                // 6: kuadrant.v0.Policy
-	(*Metadata)(nil),              // 7: kuadrant.v0.Metadata
-	(*emptypb.Empty)(nil),         // 8: google.protobuf.Empty
+	(*v1alpha1.Value)(nil),        // 7: google.api.expr.v1alpha1.Value
+	(*Metadata)(nil),              // 8: kuadrant.v0.Metadata
+	(*emptypb.Empty)(nil),         // 9: google.protobuf.Empty
 }
 var file_kuadrant_proto_depIdxs = []int32{
 	5, // 0: kuadrant.v0.PingRequest.out:type_name -> google.protobuf.Timestamp
 	5, // 1: kuadrant.v0.PongResponse.in:type_name -> google.protobuf.Timestamp
 	6, // 2: kuadrant.v0.ResolveRequest.policy:type_name -> kuadrant.v0.Policy
-	7, // 3: kuadrant.v0.Event.metadata:type_name -> kuadrant.v0.Metadata
-	0, // 4: kuadrant.v0.ExtensionService.Ping:input_type -> kuadrant.v0.PingRequest
-	8, // 5: kuadrant.v0.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
-	2, // 6: kuadrant.v0.ExtensionService.Resolve:input_type -> kuadrant.v0.ResolveRequest
-	1, // 7: kuadrant.v0.ExtensionService.Ping:output_type -> kuadrant.v0.PongResponse
-	4, // 8: kuadrant.v0.ExtensionService.Subscribe:output_type -> kuadrant.v0.Event
-	3, // 9: kuadrant.v0.ExtensionService.Resolve:output_type -> kuadrant.v0.ResolveResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 3: kuadrant.v0.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
+	8, // 4: kuadrant.v0.Event.metadata:type_name -> kuadrant.v0.Metadata
+	0, // 5: kuadrant.v0.ExtensionService.Ping:input_type -> kuadrant.v0.PingRequest
+	9, // 6: kuadrant.v0.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
+	2, // 7: kuadrant.v0.ExtensionService.Resolve:input_type -> kuadrant.v0.ResolveRequest
+	1, // 8: kuadrant.v0.ExtensionService.Ping:output_type -> kuadrant.v0.PongResponse
+	4, // 9: kuadrant.v0.ExtensionService.Subscribe:output_type -> kuadrant.v0.Event
+	3, // 10: kuadrant.v0.ExtensionService.Resolve:output_type -> kuadrant.v0.ResolveResponse
+	8, // [8:11] is the sub-list for method output_type
+	5, // [5:8] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_kuadrant_proto_init() }

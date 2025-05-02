@@ -7,6 +7,7 @@ package kuadrant.v0;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 import "gateway_api.proto";
+import "google/api/cel/expr/value.proto";
 
 // The greeting service definition.
 service ExtensionService {
@@ -35,9 +36,9 @@ message ResolveRequest {
   bool subscribe = 3;
 }
 
-// todo(adam-cattermole): this should return a Cel value not a string
+// Return the result as a cel value
 message ResolveResponse {
-  string cel_result = 1;
+  google.api.expr.v1alpha1.Value cel_result = 1;
 }
 
 // todo: define the message to be streamed back to the client

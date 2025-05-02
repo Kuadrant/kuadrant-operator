@@ -41,6 +41,36 @@ spec:
 
     Behind the scenes, kuadrant will create a [PeerAuthentication](https://istio.io/latest/docs/reference/config/security/peer_authentication/) resource where the `mtls` mode is set to `STRICT`.
 
+### mTLS enabled at a component level
+
+*mTLS* can also be enabled at a component level. Kuadrant allows to opt-out from using mTLS for some specific component.
+
+For example, enable mTLS for kuadrant data plane components, but disable limitador:
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant-sample
+spec:
+  mtls:
+    enable: true
+    limitador: false
+```
+
+For example, enable mTLS for kuadrant data plane components, but disable authorino:
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant-sample
+spec:
+  mtls:
+    enable: true
+    authorino: false
+```
+
 ## Disabling mTLS
 
 To disable mTLS, either set kuadrant's custom resource `spec.mtls.enable` field to `false` or just remove optional `spec.mtls` field.

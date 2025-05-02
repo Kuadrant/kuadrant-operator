@@ -75,12 +75,6 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 	}
 
 	effectiveDataPlanePoliciesWorkflow := &controller.Workflow{
-		Precondition: (&controller.Workflow{
-			Tasks: []controller.ReconcileFunc{
-				(&EffectiveAuthPolicyReconciler{client: client}).Subscription().Reconcile,
-				(&EffectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
-			},
-		}).Run,
 		Tasks: []controller.ReconcileFunc{
 			(&AuthConfigsReconciler{client: client}).Subscription().Reconcile,
 			(&LimitadorLimitsReconciler{client: client}).Subscription().Reconcile,

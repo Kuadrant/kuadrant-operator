@@ -52,11 +52,15 @@ func (r *KuadrantStatusUpdater) Subscription() *controller.Subscription {
 		{Kind: ptr.To(kuadrantv1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
 		{Kind: ptr.To(kuadrantv1beta1.LimitadorGroupKind), EventType: ptr.To(controller.CreateEvent)},
 		{Kind: ptr.To(kuadrantv1beta1.LimitadorGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+		// required to compute mTLS status fields
+		{Kind: &machinery.GatewayClassGroupKind},
+		{Kind: &machinery.GatewayGroupKind},
+		{Kind: &machinery.HTTPRouteGroupKind},
 	},
 	}
 }
 
-func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("KuadrantStatusUpdater")
 	logger.Info("reconciling kuadrant status", "status", "started")
 	defer logger.Info("reconciling kuadrant status", "status", "completed")
@@ -66,7 +70,7 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 		return nil
 	}
 
-	newStatus := r.calculateStatus(topology, logger, kObj)
+	newStatus := r.calculateStatus(topology, logger, kObj, state)
 
 	equalStatus := kObj.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
@@ -107,13 +111,13 @@ func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *
 	return err
 }
 
-func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, logger logr.Logger, kObj *kuadrantv1beta1.Kuadrant) *kuadrantv1beta1.KuadrantStatus {
+func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, logger logr.Logger, kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *kuadrantv1beta1.KuadrantStatus {
 	newStatus := &kuadrantv1beta1.KuadrantStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
-		MtlsAuthorino:      ptr.To(kObj.IsMTLSAuthorinoEnabled()),
-		MtlsLimitador:      ptr.To(kObj.IsMTLSLimitadorEnabled()),
+		MtlsAuthorino:      r.mtlsAuthorino(kObj, topology, logger, state),
+		MtlsLimitador:      r.mtlsLimitador(kObj, topology, logger, state),
 	}
 
 	availableCond := r.readyCondition(topology, logger)
@@ -121,6 +125,24 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
 	return newStatus
+}
+
+func (r *KuadrantStatusUpdater) mtlsAuthorino(kObj *kuadrantv1beta1.Kuadrant, topology *machinery.Topology, logger logr.Logger, state *sync.Map) *bool {
+	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
+	if !ok {
+		return ptr.To(false)
+	}
+	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
+	return ptr.To(kObj.IsMTLSAuthorinoEnabled() && len(effectiveAuthPoliciesMap) > 0)
+}
+
+func (r *KuadrantStatusUpdater) mtlsLimitador(kObj *kuadrantv1beta1.Kuadrant, topology *machinery.Topology, logger logr.Logger, state *sync.Map) *bool {
+	effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	if !ok {
+		return ptr.To(false)
+	}
+	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
+	return ptr.To(kObj.IsMTLSLimitadorEnabled() && len(effectiveRateLimitPoliciesMap) > 0)
 }
 
 func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, logger logr.Logger) *metav1.Condition {

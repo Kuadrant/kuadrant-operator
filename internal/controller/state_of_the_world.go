@@ -569,7 +569,13 @@ func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {
 
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: initWorkflow(b.client).Run,
+		Precondition: (&controller.Workflow{
+			Tasks: []controller.ReconcileFunc{
+				initWorkflow(b.client).Run,
+				(&EffectiveAuthPolicyReconciler{client: b.client}).Subscription().Reconcile,
+				(&EffectiveRateLimitPolicyReconciler{client: b.client}).Subscription().Reconcile,
+			},
+		}).Run,
 		Tasks: []controller.ReconcileFunc{
 			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,

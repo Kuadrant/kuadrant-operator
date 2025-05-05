@@ -26,7 +26,7 @@ resources:
     crdVersion: v1
     namespaced: true
   domain: kuadrant.io
-  kind: OIDCMetaPolicy
+  kind: OIDCPolicy
   path: github.com/kuadrant/kuadrant-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

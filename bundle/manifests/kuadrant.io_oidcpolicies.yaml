@@ -6,20 +6,20 @@ metadata:
   creationTimestamp: null
   labels:
     app: kuadrant
-  name: oidcmetapolicies.kuadrant.io
+  name: oidcpolicies.kuadrant.io
 spec:
   group: kuadrant.io
   names:
-    kind: OIDCMetaPolicy
-    listKind: OIDCMetaPolicyList
-    plural: oidcmetapolicies
-    singular: oidcmetapolicy
+    kind: OIDCPolicy
+    listKind: OIDCPolicyList
+    plural: oidcpolicies
+    singular: oidcpolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: OIDCMetaPolicy is the Schema for the oidcmetapolicies API
+        description: OIDCPolicy is the Schema for the oidcpolicies API
         properties:
           apiVersion:
             description: |-
@@ -39,7 +39,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: OIDCMetaPolicySpec defines the desired state of OIDCMetaPolicy
+            description: OIDCPolicySpec defines the desired state of OIDCPolicy
             properties:
               provider:
                 description: Provider holds the information for the OIDC provider
@@ -103,7 +103,7 @@ spec:
             - targetRef
             type: object
           status:
-            description: OIDCMetaPolicyStatus defines the observed state of OIDCMetaPolicy
+            description: OIDCPolicyStatus defines the observed state of OIDCPolicy
             type: object
         type: object
     served: true

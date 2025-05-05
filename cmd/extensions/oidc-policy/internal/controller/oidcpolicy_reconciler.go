@@ -9,12 +9,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type OIDCMetaPolicyReconciler struct {
+type OIDCPolicyReconciler struct {
 }
 
-func (e *OIDCMetaPolicyReconciler) Reconcile(ctx context.Context, _ reconcile.Request, _ *types.KuadrantCtx) (reconcile.Result, error) {
-	logger := utils.LoggerFromContext(ctx).WithName("OIDCMetaPolicyReconciler")
-	logger.Info("Reconciling OIDCMetaPolicy")
+func (e *OIDCPolicyReconciler) Reconcile(ctx context.Context, _ reconcile.Request, _ *types.KuadrantCtx) (reconcile.Result, error) {
+	logger := utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler")
+	logger.Info("Reconciling OIDCPolicy")
 
 	_, err := utils.DynamicClientFromContext(ctx)
 	if err != nil {

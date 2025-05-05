@@ -24,19 +24,19 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// OIDCMetaPolicySpec defines the desired state of OIDCMetaPolicy
-type OIDCMetaPolicySpec struct {
+// OIDCPolicySpec defines the desired state of OIDCPolicy
+type OIDCPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Bare set of policy rules (implicit defaults).
-	OIDCMetaPolicySpecProper `json:""`
+	OIDCPolicySpecProper `json:""`
 }
 
-// OIDCMetaPolicySpecProper contains common shared fields for the future inclusion of defaults and overrides
-type OIDCMetaPolicySpecProper struct {
+// OIDCPolicySpecProper contains common shared fields for the future inclusion of defaults and overrides
+type OIDCPolicySpecProper struct {
 	// Provider holds the information for the OIDC provider
 	Provider *Provider `json:"provider,omitempty"`
 }
@@ -46,8 +46,8 @@ type Provider struct {
 	ClientID  string `json:"clientID"`
 }
 
-// OIDCMetaPolicyStatus defines the observed state of OIDCMetaPolicy
-type OIDCMetaPolicyStatus struct {
+// OIDCPolicyStatus defines the observed state of OIDCPolicy
+type OIDCPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
@@ -55,24 +55,24 @@ type OIDCMetaPolicyStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// OIDCMetaPolicy is the Schema for the oidcmetapolicies API
-type OIDCMetaPolicy struct {
+// OIDCPolicy is the Schema for the oidcpolicies API
+type OIDCPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   OIDCMetaPolicySpec   `json:"spec,omitempty"`
-	Status OIDCMetaPolicyStatus `json:"status,omitempty"`
+	Spec   OIDCPolicySpec   `json:"spec,omitempty"`
+	Status OIDCPolicyStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
-// OIDCMetaPolicyList contains a list of OIDCMetaPolicy
-type OIDCMetaPolicyList struct {
+// OIDCPolicyList contains a list of OIDCPolicy
+type OIDCPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []OIDCMetaPolicy `json:"items"`
+	Items           []OIDCPolicy `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&OIDCMetaPolicy{}, &OIDCMetaPolicyList{})
+	SchemeBuilder.Register(&OIDCPolicy{}, &OIDCPolicyList{})
 }

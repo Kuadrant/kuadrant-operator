@@ -8221,20 +8221,20 @@ metadata:
   labels:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
-  name: oidcmetapolicies.kuadrant.io
+  name: oidcpolicies.kuadrant.io
 spec:
   group: kuadrant.io
   names:
-    kind: OIDCMetaPolicy
-    listKind: OIDCMetaPolicyList
-    plural: oidcmetapolicies
-    singular: oidcmetapolicy
+    kind: OIDCPolicy
+    listKind: OIDCPolicyList
+    plural: oidcpolicies
+    singular: oidcpolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: OIDCMetaPolicy is the Schema for the oidcmetapolicies API
+        description: OIDCPolicy is the Schema for the oidcpolicies API
         properties:
           apiVersion:
             description: |-
@@ -8254,7 +8254,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: OIDCMetaPolicySpec defines the desired state of OIDCMetaPolicy
+            description: OIDCPolicySpec defines the desired state of OIDCPolicy
             properties:
               provider:
                 description: Provider holds the information for the OIDC provider
@@ -8318,7 +8318,7 @@ spec:
             - targetRef
             type: object
           status:
-            description: OIDCMetaPolicyStatus defines the observed state of OIDCMetaPolicy
+            description: OIDCPolicyStatus defines the observed state of OIDCPolicy
             type: object
         type: object
     served: true
@@ -9524,12 +9524,12 @@ metadata:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/name: kuadrant-operator
-  name: kuadrant-operator-oidcmetapolicy-editor-role
+  name: kuadrant-operator-oidcpolicy-editor-role
 rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - oidcmetapolicies
+  - oidcpolicies
   verbs:
   - create
   - delete
@@ -9541,7 +9541,7 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - oidcmetapolicies/status
+  - oidcpolicies/status
   verbs:
   - get
 ---
@@ -9552,12 +9552,12 @@ metadata:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/name: kuadrant-operator
-  name: kuadrant-operator-oidcmetapolicy-viewer-role
+  name: kuadrant-operator-oidcpolicy-viewer-role
 rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - oidcmetapolicies
+  - oidcpolicies
   verbs:
   - get
   - list
@@ -9565,7 +9565,7 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - oidcmetapolicies/status
+  - oidcpolicies/status
   verbs:
   - get
 ---

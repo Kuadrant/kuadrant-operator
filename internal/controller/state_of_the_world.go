@@ -551,7 +551,7 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 			"extension manager",
 			func(*controller.Controller) controller.Runnable {
 				// start extension manager
-				extManager, err := extension.NewManager([]string{"oidc-meta-policy"}, "/extensions", b.logger.WithName("extensions"), log.Sync)
+				extManager, err := extension.NewManager([]string{"oidc-policy"}, "/extensions", b.logger.WithName("extensions"), log.Sync)
 				if err != nil {
 					b.logger.Error(err, "unable to create extension manager")
 					os.Exit(1)

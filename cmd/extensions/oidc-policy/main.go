@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-meta-policy/internal/controller"
 	"os"
+
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/internal/controller"
 
 	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -25,11 +26,11 @@ func init() {
 }
 
 func main() {
-	oidcMetaPolicyReconciler := controller.OIDCMetaPolicyReconciler{}
-	builder, logger := extcontroller.NewBuilder("oidc-meta-policy-controller")
+	oidcPolicyReconciler := controller.OIDCPolicyReconciler{}
+	builder, logger := extcontroller.NewBuilder("oidc-policy-controller")
 	controller, err := builder.
 		WithScheme(scheme).
-		WithReconciler(oidcMetaPolicyReconciler.Reconcile).
+		WithReconciler(oidcPolicyReconciler.Reconcile).
 		Watches(&kuadrantv1.AuthPolicy{}).
 		Build()
 	if err != nil {

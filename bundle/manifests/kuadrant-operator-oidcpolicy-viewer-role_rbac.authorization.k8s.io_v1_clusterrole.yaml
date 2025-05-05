@@ -6,23 +6,19 @@ metadata:
     app: kuadrant
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: kuadrant-operator
-  name: kuadrant-operator-oidcmetapolicy-editor-role
+  name: kuadrant-operator-oidcpolicy-viewer-role
 rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - oidcmetapolicies
+  - oidcpolicies
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - kuadrant.io
   resources:
-  - oidcmetapolicies/status
+  - oidcpolicies/status
   verbs:
   - get

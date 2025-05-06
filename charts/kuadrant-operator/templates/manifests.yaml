@@ -9395,6 +9395,7 @@ rules:
   - authpolicies
   - dnspolicies
   - kuadrants
+  - oidcpolicies
   - ratelimitpolicies
   - tlspolicies
   verbs:
@@ -9409,6 +9410,7 @@ rules:
   - authpolicies/finalizers
   - dnspolicies/finalizers
   - kuadrants/finalizers
+  - oidcpolicies/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
   verbs:
@@ -9419,6 +9421,7 @@ rules:
   - authpolicies/status
   - dnspolicies/status
   - kuadrants/status
+  - oidcpolicies/status
   - ratelimitpolicies/status
   - tlspolicies/status
   verbs:

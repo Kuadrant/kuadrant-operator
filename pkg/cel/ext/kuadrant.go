@@ -40,7 +40,8 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 	}
 
 	// only dev adds anything for now really
-	registry, _ := types.NewRegistry(&v0.Policy{}, &v0.Gateway{})
+	registry := getRegistryWithTypes()
+
 	if l.dev {
 		opts = append(opts,
 			cel.Function("findGateways",
@@ -109,4 +110,37 @@ func (l kuadrantLib) ProgramOptions() []cel.ProgramOption {
 // LibraryName implements the SingletonLibrary interface method.
 func (kuadrantLib) LibraryName() string {
 	return "kuadrant.cel.ext.kuadrant"
+}
+
+func getRegistryWithTypes() *types.Registry {
+	registry, _ := types.NewRegistry(
+		// common.proto
+		&v0.Metadata{},
+		&v0.TargetRef{},
+		&v0.Condition{},
+		&v0.ConditionStatus{},
+
+		// gateway_api.proto
+		&v0.Gateway{},
+		&v0.GatewaySpec{},
+		&v0.Listener{},
+		&v0.GatewayAddresses{},
+		&v0.GatewayStatus{},
+		&v0.ListenerStatus{},
+		&v0.GatewayClass{},
+		&v0.GatewayClassSpec{},
+		&v0.GatewayClassStatus{},
+
+		// policy.proto
+		&v0.Policy{},
+		&v0.PolicyStatus{},
+
+		// kuadrant.proto
+		&v0.PingRequest{},
+		&v0.PongResponse{},
+		&v0.ResolveRequest{},
+		&v0.ResolveResponse{},
+		&v0.Event{},
+	)
+	return registry
 }

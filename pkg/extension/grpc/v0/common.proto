@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+option go_package = "/v0";
+
+package kuadrant.v0;
+
+
+// shared
+message Metadata {
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string namespace = 4;
+}
+
+message TargetRef {
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string namespace = 4;
+  string sectionName = 5;
+}
+
+message Condition {
+  string type = 1;
+  string ConditionStatus = 2;
+  int64 observedGeneration = 3;
+  string reason = 4;
+  string message = 5;
+}
+
+message ConditionStatus {
+  string status = 1;
+}

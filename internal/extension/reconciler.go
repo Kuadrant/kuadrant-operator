@@ -148,8 +148,10 @@ func toGw(gw machinery.Gateway) *extpb.Gateway {
 			Name:      gw.Gateway.Name,
 			Namespace: gw.Gateway.Namespace,
 		},
-		GatewayClassName: string(gw.Gateway.Spec.GatewayClassName),
-		Listeners:        toListeners(gw.Gateway.Spec.Listeners),
+		Spec: &extpb.GatewaySpec{
+			GatewayClassName: string(gw.Gateway.Spec.GatewayClassName),
+			Listeners:        toListeners(gw.Gateway.Spec.Listeners),
+		},
 	}
 }
 

@@ -5,7 +5,7 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
 
 ## Automated Workflow
 
-1. Run the GHA  [Automated Release](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/automated-release.yaml)
+1. Run the GHA [Automated Release](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/automated-release.yaml)
    filling the following fields:
    - gitRef: Select the branch/tag/commit where you want to cut a release from.
    - kuadrantOperatorVersion: the [Semantic Version](https://semver.org/) of the desired release.
@@ -20,9 +20,9 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
    it will also build the images and packages and publish them on Quay, Helm repository.
 
 _**IMPORTANT: **_
-The release note are incorrectly generated, and needs to be manually regenerated. 
-This requires editing the release notes in the GitHub UI, and selecting the correct previous tag.
-Resolution of this issue is tracked in [Auto generation of release notes failure](https://github.com/Kuadrant/kuadrant-operator/issues/1211).
+The Automated Workflow can only be used for an RC1 of the first point release.
+The current [GitHub action](https://github.com/peter-evans/create-pull-request) does not support creating a pull request where the initial base branch is not the target branch.
+Reference [slack Chat](https://kubernetes.slack.com/archives/C05J0D0V525/p1744192632523239?thread_ts=1744093102.246619&cid=C05J0D0V525).
 
 ### Notes
 * It's not possible to cherry-pick commits, the workflow will pick a branch/tag/commit and all the history behind to the PR.
@@ -57,6 +57,17 @@ _**IMPORTANT: **_
 The release note are incorrectly generated, and needs to be manually regenerated. 
 This requires editing the release notes in the GitHub UI, and selecting the correct previous tag.
 Resolution of this issue is tracked in [Auto generation of release notes failure](https://github.com/Kuadrant/kuadrant-operator/issues/1211).
+
+## Creating the RC2+
+
+1. Create a local branch based off the, targeted release branch. 
+Example: `git checkout -B release-v1.2.0-rc2 release-v1.2`
+2. Cherry pick the changes required to fix which ever issue justified the creation of a new RC.
+Example: `git cherry-pick <commit sha>`
+3. Update the `release.yaml` with the new version of the kuadrant-operator. 
+Other version should only be update if required to resolve the issue in the release.
+4. Run `make prepare-release` and commit the changes. 
+5. Follow the steps in [Manual Workflow / Remote Steps](#remote-steps)
 
 ## Release file format.
 This example of the `release.yaml` file uses tag `v1.0.1` as reference.

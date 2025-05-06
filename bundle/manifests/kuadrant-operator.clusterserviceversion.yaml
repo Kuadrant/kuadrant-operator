@@ -121,7 +121,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-05-05T15:05:08Z"
+    createdAt: "2025-05-07T15:41:19Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -312,7 +312,6 @@ spec:
           - gateway.networking.k8s.io
           resources:
           - gateways
-          - httproutes
           verbs:
           - get
           - list
@@ -335,14 +334,22 @@ spec:
           - patch
           - update
         - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - kuadrant.io
           resources:
           - authpolicies
-          - dnspolicies
-          - kuadrants
-          - ratelimitpolicies
-          - tlspolicies
           verbs:
+          - create
           - get
           - list
           - patch
@@ -354,6 +361,7 @@ spec:
           - authpolicies/finalizers
           - dnspolicies/finalizers
           - kuadrants/finalizers
+          - oidcpolicies/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
           verbs:
@@ -364,12 +372,27 @@ spec:
           - authpolicies/status
           - dnspolicies/status
           - kuadrants/status
+          - oidcpolicies/status
           - ratelimitpolicies/status
           - tlspolicies/status
           verbs:
           - get
           - patch
           - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies
+          - kuadrants
+          - oidcpolicies
+          - ratelimitpolicies
+          - tlspolicies
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - kuadrant.io
           resources:

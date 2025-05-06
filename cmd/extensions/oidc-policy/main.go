@@ -28,17 +28,17 @@ func init() {
 func main() {
 	oidcPolicyReconciler := controller.OIDCPolicyReconciler{}
 	builder, logger := extcontroller.NewBuilder("oidc-policy-controller")
-	controller, err := builder.
+	extController, err := builder.
 		WithScheme(scheme).
 		WithReconciler(oidcPolicyReconciler.Reconcile).
-		Watches(&kuadrantv1.AuthPolicy{}).
+		Watches(&kuadrantv1alpha1.OIDCPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")
 		os.Exit(1)
 	}
 
-	if err = controller.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = extController.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")
 		os.Exit(1)
 	}

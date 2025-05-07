@@ -7,9 +7,13 @@ import (
 	"io"
 	"net"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/google/cel-go/cel"
+	celtypes "github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -48,7 +52,6 @@ type ExtensionController struct {
 	client          *dynamic.DynamicClient
 	reconcile       exttypes.ReconcileFn
 	watchSources    []ctrlruntimesrc.Source
-	kuadrantCtx     *exttypes.KuadrantCtx
 	extensionClient *extensionClient
 }
 
@@ -117,19 +120,28 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 
 	// overrides reconcile method
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
-	return ec.reconcile(ctx, request, ec.kuadrantCtx)
+	return ec.reconcile(ctx, request, ec)
 }
 
-func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (string, error) {
+func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
 	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
 		Policy:     utils.MapToExtPolicy(policy),
 		Expression: expression,
 		Subscribe:  subscribe,
 	})
 	if err != nil {
-		return "", err
+		return ref.Val(nil), fmt.Errorf("error resolving expression: %w", err)
 	}
-	return resp.CelResult, nil
+
+	if resp == nil || resp.GetCelResult() == nil {
+		return celtypes.NullValue, nil
+	}
+	val, err := cel.ValueToRefValue(celtypes.DefaultTypeAdapter, resp.GetCelResult())
+	if err != nil {
+		return ref.Val(nil), fmt.Errorf("error converting cel result: %w", err)
+	}
+
+	return val, nil
 }
 
 type extensionClient struct {
@@ -279,7 +291,26 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		logger:          b.logger,
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,
-		kuadrantCtx:     nil,
 		extensionClient: extClient,
 	}, nil
+}
+
+func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, policy exttypes.Policy, expression string, subscribe bool) (T, error) {
+	var zero T
+
+	celValue, err := kuadrantCtx.Resolve(ctx, policy, expression, subscribe)
+	if err != nil {
+		return zero, err
+	}
+
+	nativeValue, err := celValue.ConvertToNative(reflect.TypeOf(zero))
+	if err != nil {
+		return zero, err
+	}
+
+	result, ok := nativeValue.(T)
+	if !ok {
+		return zero, fmt.Errorf("value is not type: %T", zero)
+	}
+	return result, nil
 }

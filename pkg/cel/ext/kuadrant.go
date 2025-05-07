@@ -3,7 +3,7 @@ package kuadrant
 import (
 	"math"
 
-	v0 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
@@ -20,7 +20,7 @@ func CelExt(dag DAG) cel.EnvOption {
 }
 
 type DAG interface {
-	FindGatewaysFor([]*v0.TargetRef) ([]*v0.Gateway, error)
+	FindGatewaysFor([]*v1.TargetRef) ([]*v1.Gateway, error)
 }
 
 type kuadrantLib struct {
@@ -47,10 +47,10 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 			cel.Function("findGateways",
 				cel.MemberOverload("gateways_for_policy",
 					[]*cel.Type{
-						cel.ObjectType("kuadrant.v0.Policy"),
-					}, cel.ListType(cel.ObjectType("kuadrant.v0.Gateway")),
+						cel.ObjectType("kuadrant.v1.Policy"),
+					}, cel.ListType(cel.ObjectType("kuadrant.v1.Gateway")),
 					cel.UnaryBinding(func(arg ref.Val) ref.Val {
-						policy, err := refToProto[*v0.Policy](arg)
+						policy, err := refToProto[*v1.Policy](arg)
 						if err != nil {
 							return types.NewErr("pbError: %w", err)
 						}
@@ -68,14 +68,14 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 					})),
 				cel.MemberOverload("gateways_for_target",
 					[]*cel.Type{
-						cel.ObjectType("kuadrant.v0.TargetRef"),
-					}, cel.ListType(cel.ObjectType("kuadrant.v0.Gateway")),
+						cel.ObjectType("kuadrant.v1.TargetRef"),
+					}, cel.ListType(cel.ObjectType("kuadrant.v1.Gateway")),
 					cel.UnaryBinding(func(arg ref.Val) ref.Val {
-						target, err := refToProto[*v0.TargetRef](arg)
+						target, err := refToProto[*v1.TargetRef](arg)
 						if err != nil {
 							return types.NewErr("pbError: %w", err)
 						}
-						gws, err := l.dag.FindGatewaysFor([]*v0.TargetRef{target})
+						gws, err := l.dag.FindGatewaysFor([]*v1.TargetRef{target})
 						if err != nil {
 							return types.NewErr("cel-kuadrant(gateways_for_target): %w", err)
 						}
@@ -98,7 +98,7 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 
 	opts = append(opts, cel.CustomTypeAdapter(registry))
 	opts = append(opts, cel.CustomTypeProvider(registry))
-	opts = append(opts, cel.Variable("self", cel.ObjectType("kuadrant.v0.Policy")))
+	opts = append(opts, cel.Variable("self", cel.ObjectType("kuadrant.v1.Policy")))
 
 	return opts
 }
@@ -115,32 +115,25 @@ func (kuadrantLib) LibraryName() string {
 func getRegistryWithTypes() *types.Registry {
 	registry, _ := types.NewRegistry(
 		// common.proto
-		&v0.Metadata{},
-		&v0.TargetRef{},
-		&v0.Condition{},
-		&v0.ConditionStatus{},
+		&v1.Metadata{},
+		&v1.TargetRef{},
+		&v1.Condition{},
+		&v1.ConditionStatus{},
 
 		// gateway_api.proto
-		&v0.Gateway{},
-		&v0.GatewaySpec{},
-		&v0.Listener{},
-		&v0.GatewayAddresses{},
-		&v0.GatewayStatus{},
-		&v0.ListenerStatus{},
-		&v0.GatewayClass{},
-		&v0.GatewayClassSpec{},
-		&v0.GatewayClassStatus{},
+		&v1.Gateway{},
+		&v1.GatewaySpec{},
+		&v1.Listener{},
+		&v1.GatewayAddresses{},
+		&v1.GatewayStatus{},
+		&v1.ListenerStatus{},
+		&v1.GatewayClass{},
+		&v1.GatewayClassSpec{},
+		&v1.GatewayClassStatus{},
 
 		// policy.proto
-		&v0.Policy{},
-		&v0.PolicyStatus{},
-
-		// kuadrant.proto
-		&v0.PingRequest{},
-		&v0.PongResponse{},
-		&v0.ResolveRequest{},
-		&v0.ResolveResponse{},
-		&v0.Event{},
+		&v1.Policy{},
+		&v1.PolicyStatus{},
 	)
 	return registry
 }

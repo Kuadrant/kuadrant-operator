@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-option go_package = "/v0";
+option go_package = "/v1";
 
-package kuadrant.v0;
+package kuadrant.v1;
 
-import "v0/common.proto";
+import "v1/common.proto";
 
 message Policy {
   Metadata metadata = 1;

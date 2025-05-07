@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-option go_package = "/v0";
+option go_package = "/v1";
 
-package kuadrant.v0;
+package kuadrant.v1;
 
 
 // shared

@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+option go_package = "/v1";
+
+package kuadrant.v1;
+
+import "v1/common.proto";
+
+message Gateway {
+  Metadata metadata = 1;
+  GatewaySpec spec = 2;
+  GatewayStatus status = 3;
+}
+
+message GatewaySpec {
+  string gatewayClassName = 1;
+  repeated Listener listeners = 2;
+  repeated GatewayAddresses addresses = 3;
+}
+
+message Listener {
+  string name = 1;
+  string hostname = 2;
+}
+
+message GatewayAddresses {
+  string addressType = 1;
+  string value = 2;
+}
+
+message GatewayStatus {
+  repeated GatewayAddresses addresses = 1;
+  repeated Condition conditions = 2;
+  repeated ListenerStatus listeners = 3;
+}
+
+message ListenerStatus {
+  string name = 1;
+  int32 attachedRoutes = 2;
+  repeated Condition conditions = 3;
+}
+
+message GatewayClass {
+  Metadata metadata = 1;
+  GatewayClassSpec spec = 2;
+  GatewayClassStatus status = 3;
+}
+
+message GatewayClassSpec {
+  string controllerName = 1;
+}
+
+message GatewayClassStatus {
+  repeated Condition conditions = 1;
+}

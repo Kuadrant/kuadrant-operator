@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.6
 // 	protoc        v3.19.6
-// source: v0/common.proto
+// source: v1/common.proto
 
-package v0
+package v1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -34,7 +34,7 @@ type Metadata struct {
 
 func (x *Metadata) Reset() {
 	*x = Metadata{}
-	mi := &file_v0_common_proto_msgTypes[0]
+	mi := &file_v1_common_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *Metadata) String() string {
 func (*Metadata) ProtoMessage() {}
 
 func (x *Metadata) ProtoReflect() protoreflect.Message {
-	mi := &file_v0_common_proto_msgTypes[0]
+	mi := &file_v1_common_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +59,7 @@ func (x *Metadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Metadata.ProtoReflect.Descriptor instead.
 func (*Metadata) Descriptor() ([]byte, []int) {
-	return file_v0_common_proto_rawDescGZIP(), []int{0}
+	return file_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Metadata) GetGroup() string {
@@ -103,7 +103,7 @@ type TargetRef struct {
 
 func (x *TargetRef) Reset() {
 	*x = TargetRef{}
-	mi := &file_v0_common_proto_msgTypes[1]
+	mi := &file_v1_common_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -115,7 +115,7 @@ func (x *TargetRef) String() string {
 func (*TargetRef) ProtoMessage() {}
 
 func (x *TargetRef) ProtoReflect() protoreflect.Message {
-	mi := &file_v0_common_proto_msgTypes[1]
+	mi := &file_v1_common_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -128,7 +128,7 @@ func (x *TargetRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TargetRef.ProtoReflect.Descriptor instead.
 func (*TargetRef) Descriptor() ([]byte, []int) {
-	return file_v0_common_proto_rawDescGZIP(), []int{1}
+	return file_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TargetRef) GetGroup() string {
@@ -179,7 +179,7 @@ type Condition struct {
 
 func (x *Condition) Reset() {
 	*x = Condition{}
-	mi := &file_v0_common_proto_msgTypes[2]
+	mi := &file_v1_common_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -191,7 +191,7 @@ func (x *Condition) String() string {
 func (*Condition) ProtoMessage() {}
 
 func (x *Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_v0_common_proto_msgTypes[2]
+	mi := &file_v1_common_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -204,7 +204,7 @@ func (x *Condition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Condition.ProtoReflect.Descriptor instead.
 func (*Condition) Descriptor() ([]byte, []int) {
-	return file_v0_common_proto_rawDescGZIP(), []int{2}
+	return file_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Condition) GetType() string {
@@ -251,7 +251,7 @@ type ConditionStatus struct {
 
 func (x *ConditionStatus) Reset() {
 	*x = ConditionStatus{}
-	mi := &file_v0_common_proto_msgTypes[3]
+	mi := &file_v1_common_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -263,7 +263,7 @@ func (x *ConditionStatus) String() string {
 func (*ConditionStatus) ProtoMessage() {}
 
 func (x *ConditionStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_v0_common_proto_msgTypes[3]
+	mi := &file_v1_common_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -276,7 +276,7 @@ func (x *ConditionStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConditionStatus.ProtoReflect.Descriptor instead.
 func (*ConditionStatus) Descriptor() ([]byte, []int) {
-	return file_v0_common_proto_rawDescGZIP(), []int{3}
+	return file_v1_common_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ConditionStatus) GetStatus() string {
@@ -286,11 +286,11 @@ func (x *ConditionStatus) GetStatus() string {
 	return ""
 }
 
-var File_v0_common_proto protoreflect.FileDescriptor
+var File_v1_common_proto protoreflect.FileDescriptor
 
-const file_v0_common_proto_rawDesc = "" +
+const file_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x0fv0/common.proto\x12\vkuadrant.v0\"f\n" +
+	"\x0fv1/common.proto\x12\vkuadrant.v1\"f\n" +
 	"\bMetadata\x12\x14\n" +
 	"\x05group\x18\x01 \x01(\tR\x05group\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -309,28 +309,28 @@ const file_v0_common_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x18\n" +
 	"\amessage\x18\x05 \x01(\tR\amessage\")\n" +
 	"\x0fConditionStatus\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06statusB\x05Z\x03/v0b\x06proto3"
+	"\x06status\x18\x01 \x01(\tR\x06statusB\x05Z\x03/v1b\x06proto3"
 
 var (
-	file_v0_common_proto_rawDescOnce sync.Once
-	file_v0_common_proto_rawDescData []byte
+	file_v1_common_proto_rawDescOnce sync.Once
+	file_v1_common_proto_rawDescData []byte
 )
 
-func file_v0_common_proto_rawDescGZIP() []byte {
-	file_v0_common_proto_rawDescOnce.Do(func() {
-		file_v0_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v0_common_proto_rawDesc), len(file_v0_common_proto_rawDesc)))
+func file_v1_common_proto_rawDescGZIP() []byte {
+	file_v1_common_proto_rawDescOnce.Do(func() {
+		file_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_common_proto_rawDesc), len(file_v1_common_proto_rawDesc)))
 	})
-	return file_v0_common_proto_rawDescData
+	return file_v1_common_proto_rawDescData
 }
 
-var file_v0_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_v0_common_proto_goTypes = []any{
-	(*Metadata)(nil),        // 0: kuadrant.v0.Metadata
-	(*TargetRef)(nil),       // 1: kuadrant.v0.TargetRef
-	(*Condition)(nil),       // 2: kuadrant.v0.Condition
-	(*ConditionStatus)(nil), // 3: kuadrant.v0.ConditionStatus
+var file_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_v1_common_proto_goTypes = []any{
+	(*Metadata)(nil),        // 0: kuadrant.v1.Metadata
+	(*TargetRef)(nil),       // 1: kuadrant.v1.TargetRef
+	(*Condition)(nil),       // 2: kuadrant.v1.Condition
+	(*ConditionStatus)(nil), // 3: kuadrant.v1.ConditionStatus
 }
-var file_v0_common_proto_depIdxs = []int32{
+var file_v1_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
@@ -338,26 +338,26 @@ var file_v0_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_v0_common_proto_init() }
-func file_v0_common_proto_init() {
-	if File_v0_common_proto != nil {
+func init() { file_v1_common_proto_init() }
+func file_v1_common_proto_init() {
+	if File_v1_common_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v0_common_proto_rawDesc), len(file_v0_common_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_common_proto_rawDesc), len(file_v1_common_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_v0_common_proto_goTypes,
-		DependencyIndexes: file_v0_common_proto_depIdxs,
-		MessageInfos:      file_v0_common_proto_msgTypes,
+		GoTypes:           file_v1_common_proto_goTypes,
+		DependencyIndexes: file_v1_common_proto_depIdxs,
+		MessageInfos:      file_v1_common_proto_msgTypes,
 	}.Build()
-	File_v0_common_proto = out.File
-	file_v0_common_proto_goTypes = nil
-	file_v0_common_proto_depIdxs = nil
+	File_v1_common_proto = out.File
+	file_v1_common_proto_goTypes = nil
+	file_v1_common_proto_depIdxs = nil
 }

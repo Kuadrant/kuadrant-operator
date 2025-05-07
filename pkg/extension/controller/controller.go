@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )

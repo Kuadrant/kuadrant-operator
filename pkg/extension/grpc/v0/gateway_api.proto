@@ -1,55 +1,35 @@
 syntax = "proto3";
 
-option go_package = "/v0";
+option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0";
 
 package kuadrant.v0;
 
-import "v0/common.proto";
+message Policy {
+  Metadata metadata = 1;
+  repeated TargetRef targetRefs = 2;
+}
 
 message Gateway {
   Metadata metadata = 1;
-  GatewaySpec spec = 2;
-  GatewayStatus status = 3;
+  string gatewayClassName = 2;
+  repeated Listener listeners = 3;
 }
 
-message GatewaySpec {
-  string gatewayClassName = 1;
-  repeated Listener listeners = 2;
-  repeated GatewayAddresses addresses = 3;
+message Metadata {
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string namespace = 4;
 }
 
 message Listener {
-  string name = 1;
-  string hostname = 2;
+  string hostname = 1;
 }
 
-message GatewayAddresses {
-  string addressType = 1;
-  string value = 2;
-}
-
-message GatewayStatus {
-  repeated GatewayAddresses addresses = 1;
-  repeated Condition conditions = 2;
-  repeated ListenerStatus listeners = 3;
-}
-
-message ListenerStatus {
-  string name = 1;
-  int32 attachedRoutes = 2;
-  repeated Condition conditions = 3;
-}
-
-message GatewayClass {
-  Metadata metadata = 1;
-  GatewayClassSpec spec = 2;
-  GatewayClassStatus status = 3;
-}
-
-message GatewayClassSpec {
-  string controllerName = 1;
-}
-
-message GatewayClassStatus {
-  repeated Condition conditions = 1;
+message TargetRef {
+  string group = 1;
+  string kind = 2;
+  string name = 3;
+  string namespace = 4;
+  string sectionName = 5;
 }

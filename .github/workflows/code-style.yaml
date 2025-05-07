@@ -148,7 +148,7 @@ jobs:
           git ls-files |
           git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
           git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
+          grep -Ev '^(vendor/|third_party/|.git|utils/|pkg/extension/grpc/)' |
           xargs misspell -error |
           reviewdog -efm="%f:%l:%c: %m" \
                 -name="github.com/client9/misspell" \
@@ -208,7 +208,7 @@ jobs:
           LINT_FILES=$(git ls-files |
           git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
           git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
+          grep -Ev '^(vendor/|third_party/|.git|utils/|pkg/extension/grpc/)' |
           grep -v '\.ai$' |
           grep -v '\.svg$')
 
@@ -245,6 +245,7 @@ jobs:
             cat > .wokeignore <<EOF
             vendor/*
             third_party/*
+            pkg/extension/grpc/*
           EOF
           fi
 

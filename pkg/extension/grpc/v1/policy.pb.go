@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.6
 // 	protoc        v3.19.6
-// source: v0/policy.proto
+// source: v1/policy.proto
 
-package v0
+package v1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -32,7 +32,7 @@ type Policy struct {
 
 func (x *Policy) Reset() {
 	*x = Policy{}
-	mi := &file_v0_policy_proto_msgTypes[0]
+	mi := &file_v1_policy_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +44,7 @@ func (x *Policy) String() string {
 func (*Policy) ProtoMessage() {}
 
 func (x *Policy) ProtoReflect() protoreflect.Message {
-	mi := &file_v0_policy_proto_msgTypes[0]
+	mi := &file_v1_policy_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +57,7 @@ func (x *Policy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Policy.ProtoReflect.Descriptor instead.
 func (*Policy) Descriptor() ([]byte, []int) {
-	return file_v0_policy_proto_rawDescGZIP(), []int{0}
+	return file_v1_policy_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Policy) GetMetadata() *Metadata {
@@ -91,7 +91,7 @@ type PolicyStatus struct {
 
 func (x *PolicyStatus) Reset() {
 	*x = PolicyStatus{}
-	mi := &file_v0_policy_proto_msgTypes[1]
+	mi := &file_v1_policy_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +103,7 @@ func (x *PolicyStatus) String() string {
 func (*PolicyStatus) ProtoMessage() {}
 
 func (x *PolicyStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_v0_policy_proto_msgTypes[1]
+	mi := &file_v1_policy_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +116,7 @@ func (x *PolicyStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyStatus.ProtoReflect.Descriptor instead.
 func (*PolicyStatus) Descriptor() ([]byte, []int) {
-	return file_v0_policy_proto_rawDescGZIP(), []int{1}
+	return file_v1_policy_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *PolicyStatus) GetObservedGeneration() int64 {
@@ -133,48 +133,48 @@ func (x *PolicyStatus) GetConditions() []*Condition {
 	return nil
 }
 
-var File_v0_policy_proto protoreflect.FileDescriptor
+var File_v1_policy_proto protoreflect.FileDescriptor
 
-const file_v0_policy_proto_rawDesc = "" +
+const file_v1_policy_proto_rawDesc = "" +
 	"\n" +
-	"\x0fv0/policy.proto\x12\vkuadrant.v0\x1a\x0fv0/common.proto\"\xa6\x01\n" +
+	"\x0fv1/policy.proto\x12\vkuadrant.v1\x1a\x0fv1/common.proto\"\xa6\x01\n" +
 	"\x06Policy\x121\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v0.MetadataR\bmetadata\x126\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v1.MetadataR\bmetadata\x126\n" +
 	"\n" +
-	"targetRefs\x18\x02 \x03(\v2\x16.kuadrant.v0.TargetRefR\n" +
+	"targetRefs\x18\x02 \x03(\v2\x16.kuadrant.v1.TargetRefR\n" +
 	"targetRefs\x121\n" +
-	"\x06status\x18\x03 \x01(\v2\x19.kuadrant.v0.PolicyStatusR\x06status\"v\n" +
+	"\x06status\x18\x03 \x01(\v2\x19.kuadrant.v1.PolicyStatusR\x06status\"v\n" +
 	"\fPolicyStatus\x12.\n" +
 	"\x12observedGeneration\x18\x01 \x01(\x03R\x12observedGeneration\x126\n" +
 	"\n" +
-	"conditions\x18\x02 \x03(\v2\x16.kuadrant.v0.ConditionR\n" +
-	"conditionsB\x05Z\x03/v0b\x06proto3"
+	"conditions\x18\x02 \x03(\v2\x16.kuadrant.v1.ConditionR\n" +
+	"conditionsB\x05Z\x03/v1b\x06proto3"
 
 var (
-	file_v0_policy_proto_rawDescOnce sync.Once
-	file_v0_policy_proto_rawDescData []byte
+	file_v1_policy_proto_rawDescOnce sync.Once
+	file_v1_policy_proto_rawDescData []byte
 )
 
-func file_v0_policy_proto_rawDescGZIP() []byte {
-	file_v0_policy_proto_rawDescOnce.Do(func() {
-		file_v0_policy_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v0_policy_proto_rawDesc), len(file_v0_policy_proto_rawDesc)))
+func file_v1_policy_proto_rawDescGZIP() []byte {
+	file_v1_policy_proto_rawDescOnce.Do(func() {
+		file_v1_policy_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_policy_proto_rawDesc), len(file_v1_policy_proto_rawDesc)))
 	})
-	return file_v0_policy_proto_rawDescData
+	return file_v1_policy_proto_rawDescData
 }
 
-var file_v0_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_v0_policy_proto_goTypes = []any{
-	(*Policy)(nil),       // 0: kuadrant.v0.Policy
-	(*PolicyStatus)(nil), // 1: kuadrant.v0.PolicyStatus
-	(*Metadata)(nil),     // 2: kuadrant.v0.Metadata
-	(*TargetRef)(nil),    // 3: kuadrant.v0.TargetRef
-	(*Condition)(nil),    // 4: kuadrant.v0.Condition
+var file_v1_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_v1_policy_proto_goTypes = []any{
+	(*Policy)(nil),       // 0: kuadrant.v1.Policy
+	(*PolicyStatus)(nil), // 1: kuadrant.v1.PolicyStatus
+	(*Metadata)(nil),     // 2: kuadrant.v1.Metadata
+	(*TargetRef)(nil),    // 3: kuadrant.v1.TargetRef
+	(*Condition)(nil),    // 4: kuadrant.v1.Condition
 }
-var file_v0_policy_proto_depIdxs = []int32{
-	2, // 0: kuadrant.v0.Policy.metadata:type_name -> kuadrant.v0.Metadata
-	3, // 1: kuadrant.v0.Policy.targetRefs:type_name -> kuadrant.v0.TargetRef
-	1, // 2: kuadrant.v0.Policy.status:type_name -> kuadrant.v0.PolicyStatus
-	4, // 3: kuadrant.v0.PolicyStatus.conditions:type_name -> kuadrant.v0.Condition
+var file_v1_policy_proto_depIdxs = []int32{
+	2, // 0: kuadrant.v1.Policy.metadata:type_name -> kuadrant.v1.Metadata
+	3, // 1: kuadrant.v1.Policy.targetRefs:type_name -> kuadrant.v1.TargetRef
+	1, // 2: kuadrant.v1.Policy.status:type_name -> kuadrant.v1.PolicyStatus
+	4, // 3: kuadrant.v1.PolicyStatus.conditions:type_name -> kuadrant.v1.Condition
 	4, // [4:4] is the sub-list for method output_type
 	4, // [4:4] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -182,27 +182,27 @@ var file_v0_policy_proto_depIdxs = []int32{
 	0, // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_v0_policy_proto_init() }
-func file_v0_policy_proto_init() {
-	if File_v0_policy_proto != nil {
+func init() { file_v1_policy_proto_init() }
+func file_v1_policy_proto_init() {
+	if File_v1_policy_proto != nil {
 		return
 	}
-	file_v0_common_proto_init()
+	file_v1_common_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v0_policy_proto_rawDesc), len(file_v0_policy_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_policy_proto_rawDesc), len(file_v1_policy_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_v0_policy_proto_goTypes,
-		DependencyIndexes: file_v0_policy_proto_depIdxs,
-		MessageInfos:      file_v0_policy_proto_msgTypes,
+		GoTypes:           file_v1_policy_proto_goTypes,
+		DependencyIndexes: file_v1_policy_proto_depIdxs,
+		MessageInfos:      file_v1_policy_proto_msgTypes,
 	}.Build()
-	File_v0_policy_proto = out.File
-	file_v0_policy_proto_goTypes = nil
-	file_v0_policy_proto_depIdxs = nil
+	File_v1_policy_proto = out.File
+	file_v1_policy_proto_goTypes = nil
+	file_v1_policy_proto_depIdxs = nil
 }

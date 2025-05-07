@@ -288,8 +288,11 @@ Here is a request flow diagram for this integration:
 
 In this setup, Envoy Proxy is configured manually with the service as an 'ExternalProcessor' (ext_proc) filter.
 The service is configured as a 'cluster' in Enovy Proxy.
-The service listens on a different grpc port for each feature (like prompt guarding or semantic caching).
-This allows for different features to be executed at different stages of the request lifecycle.
+The different inference features to execute for a request are determined by what headers are set.
+For example:
+
+- `x-kuadrant-promptguard`
+- `x-kuadrant-tokenusage`
 
 #### Integration via Gateway API and Kuadrant Policies
 
@@ -323,8 +326,6 @@ TODO: Add details on token rate limting implemenation after these issues are fur
 ### Wasm-shim configuration
 
 A Kuadrant wasm-shim configuration for one PromptGuardPolicy custom resources targeting a HTTPRoute looks like the following and is generated automatically by the Kuadrant control plane.
-Note the 2 different `services` in the `pluginConfig`, both using `ext_proc`.
-These both ultimately route to the same `cluster`, but on different ports.
 
 ```yaml
 apiVersion: extensions.istio.io/v1alpha1
@@ -336,14 +337,10 @@ spec:
   phase: STATS
   pluginConfig:
     services:
-      inference-promptguard-service:
+      inference-service:
         type: ext_proc
-        endpoint: kuadrant-inference-promptguard-service
+        endpoint: kuadrant-inference-service
         failureMode: deny
-      inference-tokenratelimit-service:
-        type: ext_proc
-        endpoint: kuadrant-inference-tokenratelimit-service
-        failureMode: allow
     actionSets:
       - name: some_name_0
         routeRuleConditions:
@@ -353,7 +350,7 @@ spec:
           predicates:
             - request.url_path.startsWith("/openai/v1/completions")
         actions:
-          - service: inference-promptguard-service
+          - service: inference-service
             scope: gateway-system/app-promptguard
             predicates:
               - request.host.endsWith('.models.website')
@@ -364,15 +361,13 @@ spec:
           predicates:
             - request.url_path.startsWith("/openai/v1/completions")
         actions:
-          - service: inference-tokenratelimit-service
+          - service: inference-service
             scope: gateway-system/app-tokenratelimit
             predicates:
               - request.host.endsWith('.models.website')
 ```
 
 Here is an example EnvoyFilter that configures the `cluster` for the wasm-shim to route to.
-Note the 2 different patches and ports going to the same `cluster` for the Inference service.
-The service is listening on different grpc ports for each feature to allow them to be executed at different points in the chain.
 
 ```yaml
 apiVersion: networking.istio.io/v1alpha3
@@ -393,7 +388,7 @@ spec:
           http2_protocol_options: {}
           lb_policy: ROUND_ROBIN
           load_assignment:
-            cluster_name: kuadrant-inference-promptguard-service
+            cluster_name: kuadrant-inference-service
             endpoints:
               - lb_endpoints:
                   - endpoint:
@@ -401,27 +396,6 @@ spec:
                         socket_address:
                           address: inference-service.kuadrant-system.svc.cluster.local
                           port_value: 9090
-          name: kuadrant-inference-promptguard-service
-          type: STRICT_DNS
-    - applyTo: CLUSTER
-      match:
-        cluster:
-          service: inference-service.kuadrant-system.svc.cluster.local
-      patch:
-        operation: ADD
-        value:
-          connect_timeout: 1s
-          http2_protocol_options: {}
-          lb_policy: ROUND_ROBIN
-          load_assignment:
-            cluster_name: kuadrant-inference-tokenratelimit-service
-            endpoints:
-              - lb_endpoints:
-                  - endpoint:
-                      address:
-                        socket_address:
-                          address: inference-service.kuadrant-system.svc.cluster.local
-                          port_value: 9091
-          name: kuadrant-inference-tokenratelimit-service
+          name: kuadrant-inference-service
           type: STRICT_DNS
 ```

@@ -11,7 +11,7 @@ import (
 	"github.com/samber/lo"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 // nilGuardedPointer is an atomic pointer that provides blocking behavior

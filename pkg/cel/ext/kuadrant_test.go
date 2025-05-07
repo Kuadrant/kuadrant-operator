@@ -17,8 +17,8 @@ var tests = []struct {
 	{expr: `__KUADRANT_VERSION == "1_dev"`},
 	{expr: `self.findGateways().size() == 1`},
 	{expr: `self.findGateways()[0].metadata.name == "kuadrant-gw"`},
-	{expr: `self.findGateways()[0].listeners.size() == 1`},
-	{expr: `self.findGateways()[0].listeners[0].hostname == "kuadrant.io"`},
+	{expr: `self.findGateways()[0].spec.listeners.size() == 1`},
+	{expr: `self.findGateways()[0].spec.listeners[0].hostname == "kuadrant.io"`},
 	{expr: `self.findGateways()[0].metadata.name == self.targetRefs[0].findGateways()[0].metadata.name`},
 }
 
@@ -91,9 +91,11 @@ func (d *TestDAG) FindGatewaysFor(targets []*v0.TargetRef) ([]*v0.Gateway, error
 					Name:      "kuadrant-gw",
 					Namespace: "some-ns",
 				},
-				Listeners: []*v0.Listener{
-					{
-						Hostname: "kuadrant.io",
+				Spec: &v0.GatewaySpec{
+					Listeners: []*v0.Listener{
+						{
+							Hostname: "kuadrant.io",
+						},
 					},
 				},
 			},

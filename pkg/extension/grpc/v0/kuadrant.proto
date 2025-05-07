@@ -1,12 +1,13 @@
 syntax = "proto3";
 
-option go_package = "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0";
+option go_package = "/v0";
 
 package kuadrant.v0;
 
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/empty.proto";
-import "gateway_api.proto";
+import "v0/google/protobuf/timestamp.proto";
+import "v0/google/protobuf/empty.proto";
+import "v0/policy.proto";
+import "v0/common.proto";
 
 // The greeting service definition.
 service ExtensionService {
@@ -30,7 +31,7 @@ message PongResponse {
 
 // evaluate the expression and whether or not to subscribe
 message ResolveRequest {
-  kuadrant.v0.Policy policy = 1;
+  Policy policy = 1;
   string expression = 2;
   bool subscribe = 3;
 }

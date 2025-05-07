@@ -4,9 +4,8 @@ A Kuadrant inference custom resource, such as "PromptGuardPolicy" or "TokenRateL
 
 1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to apply inference policies to.
 2. Supports targeting subsets (sections) of a network resource to apply the policies to.
-3. Also supports targeting a specific inference 'model', specified in the request body.
-4. Enables cluster operators to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.
-5. Enables platform engineers to set overrides over policies and/or individual policy rules specified at the lower levels of the network.
+3. Enables cluster operators to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.
+4. Enables platform engineers to set overrides over policies and/or individual policy rules specified at the lower levels of the network.
 
 ## How it works
 
@@ -18,7 +17,9 @@ The workflow per request goes:
 
 1. On incoming request, the gateway checks the matching rules for enforcing the inference policy rules, as stated in the PromptGuardPolicy/TokenRateLimitPolicy custom resources and targeted Gateway API networking objects
 2. If the request matches, the gateway sends a [ProcessingRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#envoy-v3-api-msg-service-ext-proc-v3-processingrequest) to Inferno on the specified grpc port for that service.
-3. The external inference service responds with a [ProcessingResponse](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#service-ext-proc-v3-processingresponse) back to the gateway for each stage of the request (e.g. request headers, request body, response headers, response body)
+3. The request body is parsed by Inferno to pull out the model and prompt (e.g. for prompt guarding)
+4. The external inference service responds with a [ProcessingResponse](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto#service-ext-proc-v3-processingresponse) back to the gateway for each stage of the request (e.g. request headers, request body, response headers, response body)
+5. For the response phase, the response is parsed by Inferno to pull out the response text (e.g. for risk assessment of the response)
 
 An inference policy custom resource and its targeted Gateway API networking resource contain all the statements to configure both the ingress gateway and Inferno. The gateway provides some context from the incoming request.
 Inferno will use that context as well as its own configuration to enforce policies.
@@ -41,10 +42,24 @@ spec:
       secretRef:
         name: granite-api-key
         key: token
-  categories:
-    - harm
-    - violence
-    - sexual_content
+  filters:
+    "over-18":
+      categories:
+        filter: 
+          - hate
+          - discrimination
+      when:
+        - predicate: "auth.identity.age >= 18"
+    "under-18":
+      categories:
+        filter: 
+            - hate
+            - discrimination
+            - harm
+            - sexual_content
+            - violence
+      when:
+        - predicate: "auth.identity.age < 18"
   response:
     unauthorized:
       headers:

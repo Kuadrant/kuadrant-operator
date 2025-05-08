@@ -26,6 +26,7 @@ const (
 	ReadyConditionType               string = "Ready"
 	ResilienceInfoRRConditionType    string = "Resilience.Info.RateLimiting.Replicas"
 	ResilienceWarningRRConditionType string = "Resilience.Warning.RateLimiting.Replicas"
+	ResilienceInfoPDBConditionType   string = "Resilience.Info.RateLimiting.PBD"
 )
 
 type KuadrantStatusUpdater struct {
@@ -165,13 +166,13 @@ func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology
 	kObj := GetKuadrantFromTopology(topology)
 	isConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
 	if !isConfigured {
-		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType)
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType)
 		return nil, remove
 	}
 
 	lObj := GetLimitadorFromTopology(topology)
 	if lObj == nil {
-		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType)
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType)
 		return nil, remove
 	}
 
@@ -197,6 +198,26 @@ func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology
 		create = append(create, cond)
 	} else {
 		remove = append(remove, ResilienceInfoRRConditionType)
+	}
+
+	if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable != nil && *&lObj.Spec.PodDisruptionBudget.MaxUnavailable.IntVal != LimitadorPDB {
+		cond := &metav1.Condition{
+			Type:    ResilienceInfoPDBConditionType,
+			Message: "Limitador recource Pod Disruption Budget differs from default configuration",
+			Reason:  "UserModifiedLimitadorPodDisruptionBudget",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MinAvailable != nil {
+		cond := &metav1.Condition{
+			Type:    ResilienceInfoPDBConditionType,
+			Message: "Limitador recource Pod Disruption Budget differs from default configuration",
+			Reason:  "UserModifiedLimitadorPodDisruptionBudget",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else {
+		remove = append(remove, ResilienceInfoPDBConditionType)
 	}
 
 	return create, remove

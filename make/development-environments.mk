@@ -33,6 +33,21 @@ install-olm: $(OPERATOR_SDK)
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
+define patch-config
+	envsubst \
+		< $1 \
+		> $2
+endef
+
+.PHONY: dependencies-manifests
+dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
+dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
+dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
+dependencies-manifests: ## Update kuadrant dependencies manifests.
+	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
+	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
+	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
+
 deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(MAKE) namespace
 	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -

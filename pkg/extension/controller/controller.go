@@ -95,14 +95,21 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 }
 
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
-	err := ec.extensionClient.subscribe(ctx, func(event *extpb.Event) {
-		ec.logger.Info("received event", "event", event)
+	err := ec.extensionClient.subscribe(ctx, func(response *extpb.SubscribeResponse) {
+		ec.logger.Info("received response", "response", response)
+		// todo(adam-cattermole): how might we inform of an error from subscribe responses?
+		if response.Error != nil && response.Error.Code != 0 {
+			ec.logger.Error(fmt.Errorf("got error from stream: code=%d msg=%s", response.Error.Code, response.Error.Message), "error", response.Error.Message)
+			return
+		}
 		trigger := &unstructured.Unstructured{}
-		if event.Metadata != nil {
-			trigger.SetName(event.Metadata.Name)
-			trigger.SetNamespace(event.Metadata.Namespace)
-			trigger.SetKind(event.Metadata.Kind)
-			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
+		if response.Event != nil {
+			if response.Event.Metadata == nil {
+				trigger.SetName(response.Event.Metadata.Name)
+				trigger.SetNamespace(response.Event.Metadata.Namespace)
+				trigger.SetKind(response.Event.Metadata.Kind)
+				reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
+			}
 		}
 	})
 	if err != nil {
@@ -176,20 +183,20 @@ func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error
 	})
 }
 
-func (ec *extensionClient) subscribe(ctx context.Context, callback func(*extpb.Event)) error {
+func (ec *extensionClient) subscribe(ctx context.Context, callback func(response *extpb.SubscribeResponse)) error {
 	stream, err := ec.client.Subscribe(ctx, &emptypb.Empty{})
 	if err != nil {
 		return err
 	}
 	for {
-		event, err := stream.Recv()
+		response, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		callback(event)
+		callback(response)
 	}
 	return nil
 }

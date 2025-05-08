@@ -86,7 +86,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway, kuadrant.IsMTLSEnabled())
+		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway, kuadrant.IsMTLSLimitadorEnabled())
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy filter")
 			continue

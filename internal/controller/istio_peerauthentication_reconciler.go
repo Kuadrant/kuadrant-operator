@@ -106,8 +106,8 @@ func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controll
 	}
 
 	// Only create peerauthentication when enabled in kuadrant CR AND effective policies in place
-	allowMTLS := kObj.IsMTLSEnabled() &&
-		(len(effectiveAuthPoliciesMap)+len(effectiveRateLimitPoliciesMap)) > 0
+	allowMTLS := (kObj.IsMTLSLimitadorEnabled() && len(effectiveRateLimitPoliciesMap) > 0) ||
+		(kObj.IsMTLSAuthorinoEnabled() && len(effectiveAuthPoliciesMap) > 0)
 
 	if !allowMTLS {
 		utils.TagObjectToDelete(peerAuth)

@@ -86,7 +86,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(authorino, gateway, kuadrant.IsMTLSEnabled())
+		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(authorino, gateway, kuadrant.IsMTLSAuthorinoEnabled())
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy filter")
 			continue

@@ -8,7 +8,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,16 +16,16 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 // The tests need to be run in serial as kuadrant CR namespace is shared
-var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
+var _ = Describe("kuadrant status reconciler", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 		rlpName          = "toystore-rlp"
+		kapName          = "toystore-kap"
 	)
 
 	var (
@@ -80,6 +79,35 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 		rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 		Eventually(tests.RLPIsAccepted(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
 		Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
+
+		authPolicy := &kuadrantv1.AuthPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "AuthPolicy",
+				APIVersion: kuadrantv1.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      kapName,
+				Namespace: testNamespace,
+			},
+			Spec: kuadrantv1.AuthPolicySpec{
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
+					},
+				},
+				Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: tests.BuildBasicAuthScheme(),
+					},
+				},
+			},
+		}
+
+		Expect(testClient().Create(ctx, authPolicy)).ToNot(HaveOccurred())
+		// check policy status
+		Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
 	}
 
 	BeforeEach(beforeEachCallback)
@@ -94,36 +122,42 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
 			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
-
-			Eventually(tests.LimitadorIsReady(testClient(), client.ObjectKey{
-				Name:      kuadrant.LimitadorName,
-				Namespace: kuadrantInstallationNS,
-			})).WithContext(ctx).Should(Succeed())
 		})
 
-		It("deployment pod template labels are correct", func(ctx SpecContext) {
+		It("reconciles status mtls fields", func(ctx SpecContext) {
+			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
 			Eventually(func(g Gomega, ctx context.Context) {
-				deployment := &appsv1.Deployment{}
-				deploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}
-				g.Expect(testClient().Get(ctx, deploymentKey, deployment)).NotTo(HaveOccurred())
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("sidecar.istio.io/inject", "true"))
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("kuadrant.io/managed", "true"))
-			}).WithContext(ctx).Should(Succeed())
+				kuadrantObj := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).NotTo(HaveOccurred())
+				g.Expect(kuadrantObj.Status.MtlsAuthorino).To(Equal(ptr.To(true)))
+				g.Expect(kuadrantObj.Status.MtlsLimitador).To(Equal(ptr.To(true)))
+			})
 
-			// Delete the policy
+			// Delete the RLP
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			rlp := &kuadrantv1.RateLimitPolicy{}
 			Expect(testClient().Get(ctx, rlpKey, rlp)).NotTo(HaveOccurred())
 			Expect(testClient().Delete(ctx, rlp)).ToNot(HaveOccurred())
 
 			Eventually(func(g Gomega, ctx context.Context) {
-				deployment := &appsv1.Deployment{}
-				deploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}
-				g.Expect(testClient().Get(ctx, deploymentKey, deployment)).NotTo(HaveOccurred())
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("sidecar.istio.io/inject", "false"))
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("kuadrant.io/managed", "true"))
+				newK := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, newK)).NotTo(HaveOccurred())
+				g.Expect(newK.Status.MtlsAuthorino).To(Equal(ptr.To(true)))
+				g.Expect(newK.Status.MtlsLimitador).To(Equal(ptr.To(false)))
 			}).WithContext(ctx).Should(Succeed())
 
+			// Delete the AuthPolicy
+			kapKey := client.ObjectKey{Name: kapName, Namespace: testNamespace}
+			kap := &kuadrantv1.AuthPolicy{}
+			Expect(testClient().Get(ctx, kapKey, kap)).NotTo(HaveOccurred())
+			Expect(testClient().Delete(ctx, kap)).ToNot(HaveOccurred())
+
+			Eventually(func(g Gomega, ctx context.Context) {
+				newK := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, newK)).NotTo(HaveOccurred())
+				g.Expect(newK.Status.MtlsAuthorino).To(Equal(ptr.To(false)))
+				g.Expect(newK.Status.MtlsLimitador).To(Equal(ptr.To(false)))
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -134,44 +168,16 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
 			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
-
-			Eventually(tests.LimitadorIsReady(testClient(), client.ObjectKey{
-				Name:      "limitador",
-				Namespace: kuadrantInstallationNS,
-			})).WithContext(ctx).Should(Succeed())
 		})
-		It("deployment pod template labels are correct", func(ctx SpecContext) {
-			Eventually(func(g Gomega, ctx context.Context) {
-				deployment := &appsv1.Deployment{}
-				deploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}
-				g.Expect(testClient().Get(ctx, deploymentKey, deployment)).NotTo(HaveOccurred())
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("sidecar.istio.io/inject", "false"))
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("kuadrant.io/managed", "true"))
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-	})
 
-	Context("when mTLS is on and disabled for limitador ", func() {
-		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
+		It("reconciles status mtls fields", func(ctx SpecContext) {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true, Limitador: ptr.To(false)}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
-
-			Eventually(tests.LimitadorIsReady(testClient(), client.ObjectKey{
-				Name:      "limitador",
-				Namespace: kuadrantInstallationNS,
-			})).WithContext(ctx).Should(Succeed())
-		})
-		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
-				deployment := &appsv1.Deployment{}
-				deploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}
-				g.Expect(testClient().Get(ctx, deploymentKey, deployment)).NotTo(HaveOccurred())
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("sidecar.istio.io/inject", "false"))
-				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("kuadrant.io/managed", "true"))
-			}).WithContext(ctx).Should(Succeed())
+				kuadrantObj := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).NotTo(HaveOccurred())
+				g.Expect(kuadrantObj.Status.MtlsAuthorino).To(Equal(ptr.To(false)))
+				g.Expect(kuadrantObj.Status.MtlsLimitador).To(Equal(ptr.To(false)))
+			})
 		}, testTimeOut)
 	})
 })

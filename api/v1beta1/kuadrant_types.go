@@ -61,14 +61,14 @@ func (k *Kuadrant) IsMTLSLimitadorEnabled() bool {
 	if k == nil {
 		return false
 	}
-	return k.Spec.MTLS.IsMTLSEnabled() && k.Spec.MTLS.IsLimitadorEnabled()
+	return k.Spec.MTLS.IsLimitadorEnabled()
 }
 
 func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	if k == nil {
 		return false
 	}
-	return k.Spec.MTLS.IsMTLSEnabled() && k.Spec.MTLS.IsAuthorinoEnabled()
+	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
 // KuadrantSpec defines the desired state of Kuadrant
@@ -95,20 +95,12 @@ type MTLS struct {
 	Limitador *bool `json:"limitador,omitempty"`
 }
 
-func (m *MTLS) IsMTLSEnabled() bool {
-	if m == nil {
-		return false
-	}
-
-	return m.Enable
-}
-
 func (m *MTLS) IsLimitadorEnabled() bool {
 	if m == nil {
 		return false
 	}
 
-	return ptr.Deref(m.Limitador, m.Enable)
+	return m.Enable && ptr.Deref(m.Limitador, m.Enable)
 }
 
 func (m *MTLS) IsAuthorinoEnabled() bool {
@@ -116,7 +108,7 @@ func (m *MTLS) IsAuthorinoEnabled() bool {
 		return false
 	}
 
-	return ptr.Deref(m.Authorino, m.Enable)
+	return m.Enable && ptr.Deref(m.Authorino, m.Enable)
 }
 
 // KuadrantStatus defines the observed state of Kuadrant

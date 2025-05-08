@@ -10,6 +10,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
@@ -24,6 +25,7 @@ const (
 	ExperimentalResilienceFeature = "ExperimentalResilienceFeature"
 	ResilienceFeatureAnnotation   = "kuadrant.io/experimental-dont-use-resilient-data-plane"
 	LimitadorReplicas             = 2
+	LimitadorPDB                  = 1
 )
 
 func NewResilienceDeploymentWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
@@ -115,6 +117,7 @@ func (r *ResilienceRateLimitingReconciler) Subscription() controller.Subscriptio
 		ReconcileFunc: r.reconcile,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		},
 	}
 }
@@ -151,6 +154,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 
 	if wasConfigured && !nowConfigured {
 		lObj.Spec.Replicas = ptr.To(1)
+		lObj.Spec.PodDisruptionBudget = nil
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
@@ -164,8 +168,23 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 	logger.V(level).Info("RateLimiting configured", "status", "contiune")
 
+	write := false
 	if lObj.Spec.Replicas == nil || !wasConfigured {
 		lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
+		write = true
+	}
+
+	if !limitadorPDBIsConfigured(lObj) || !wasConfigured {
+		if lObj.Spec.PodDisruptionBudget == nil {
+			logger.Info("setting the pdb", "status", "working")
+			lObj.Spec.PodDisruptionBudget = &limitadorv1alpha1.PodDisruptionBudgetType{
+				MaxUnavailable: &intstr.IntOrString{IntVal: LimitadorPDB},
+			}
+			write = true
+		}
+	}
+
+	if write {
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
@@ -322,4 +341,20 @@ func experimentalFeatureEnabledSate(state *sync.Map) bool {
 		return value.(bool)
 	}
 	return false
+}
+
+func limitadorPDBIsConfigured(lObj *limitadorv1alpha1.Limitador) bool {
+	if lObj == nil {
+		return false
+	}
+
+	if lObj.Spec.PodDisruptionBudget == nil {
+		return false
+	}
+
+	if lObj.Spec.PodDisruptionBudget.MaxUnavailable == nil && lObj.Spec.PodDisruptionBudget.MinAvailable == nil {
+		return false
+	}
+
+	return true
 }

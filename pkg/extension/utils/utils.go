@@ -45,5 +45,4 @@ func MapToExtPolicy(p exttypes.Policy) *extpb.Policy {
 		},
 		TargetRefs: targetRefs,
 	}
-
 }

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"sync"
 	"time"
 
@@ -141,10 +140,11 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 }
 
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
-	return &extensionService{dag: dag}
+	return &extensionService{dag: dag,
+		subscriptions: make(map[string]subscription)}
 }
 
-func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.Event]) error {
+func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
 	channel := BlockingDAG.newUpdateChannel()
 	for {
 		dag := <-channel
@@ -160,9 +160,9 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 						if newVal != sub.val {
 							sub.val = newVal
 							s.subscriptions[key] = sub
-							if err := stream.Send(&extpb.Event{
-								Metadata: sub.input["self"].(extpb.Policy).Metadata,
-							}); err != nil {
+							if err := stream.Send(&extpb.SubscribeResponse{Event: &extpb.Event{
+								Metadata: sub.input["self"].(*extpb.Policy).Metadata,
+							}}); err != nil {
 								s.mutex.Unlock()
 								return err
 							}
@@ -176,7 +176,7 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 }
 
 func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequest) (*extpb.ResolveResponse, error) {
-	dag, success := s.dag.getWaitWithTimeout(15 * time.Second)
+	dag, success := s.dag.getWaitWithTimeout(1 * time.Minute)
 	if !success {
 		return nil, fmt.Errorf("unable to get to a dag in time")
 	}
@@ -226,13 +226,12 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 		return nil, err
 	}
 
-	// FIXME: This probably be sent back as a real `CelValue` as protobuf
-	value, err := val.ConvertToNative(reflect.TypeOf(""))
+	value, err := cel.RefValueToValue(val)
 	if err != nil {
 		return nil, err
 	}
 	return &extpb.ResolveResponse{
-		CelResult: value.(string),
+		CelResult: value,
 	}, nil
 }
 

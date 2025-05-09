@@ -89,6 +89,7 @@ IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 
 # Directories containing unit & integration test packages
 UNIT_DIRS := ./pkg/... ./api/... ./internal/...
+COVER_PKGS := $(shell go list ./pkg/... ./api/... ./internal/... | grep -v 'pkg/extension/grpc')
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -330,7 +331,7 @@ test-unit: VERBOSE_FLAG = -v
 endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
 	mkdir -p $(PROJECT_PATH)/coverage/unit
-	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
+	go test $(UNIT_DIRS) -coverpkg=$(COVER_PKGS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
 
 ##@ Build
 
@@ -485,7 +486,7 @@ print-operator-image: ## Print operator image
 
 .PHONY: update-catalogsource
 update-catalogsource:
-	@$(YQ) e -i '.spec.image = "${CATALOG_IMG}"' config/deploy/olm/catalogsource.yaml	
+	@$(YQ) e -i '.spec.image = "${CATALOG_IMG}"' config/deploy/olm/catalogsource.yaml
 
 ##@ Code Style
 

@@ -259,6 +259,17 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, fmt.Errorf("watch sources must be set")
 	}
 
+	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
+	if len(os.Args) < 2 {
+		return nil, errors.New("missing socket path argument")
+	}
+	socketPath := os.Args[1]
+
+	extClient, err := newExtensionClient(socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create extension client: %w", err)
+	}
+
 	options := ctrlruntime.Options{
 		Scheme:  b.scheme,
 		Metrics: metricsserver.Options{BindAddress: "0"},
@@ -272,17 +283,6 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("unable to create client for manager: %w", err)
-	}
-
-	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
-	if len(os.Args) < 2 {
-		return nil, errors.New("missing socket path argument")
-	}
-	socketPath := os.Args[1]
-
-	extClient, err := newExtensionClient(socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create extension client: %w", err)
 	}
 
 	watchSources := make([]ctrlruntimesrc.Source, 0)

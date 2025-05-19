@@ -9,6 +9,8 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
@@ -19,13 +21,16 @@ import (
 
 // WARNING: level varible is only here for the basic dev work and should not end up in the finished feature
 // FIXME: don't merge to main with value of zero, set to one.
-var level = 1
+var level = 0
 
 const (
 	ExperimentalResilienceFeature = "ExperimentalResilienceFeature"
 	ResilienceFeatureAnnotation   = "kuadrant.io/experimental-dont-use-resilient-data-plane"
 	LimitadorReplicas             = 2
 	LimitadorPDB                  = 1
+
+	Resource_10Mi = "10Mi"
+	Resource_10m  = "10m"
 )
 
 func NewResilienceDeploymentWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
@@ -155,6 +160,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	if wasConfigured && !nowConfigured {
 		lObj.Spec.Replicas = ptr.To(1)
 		lObj.Spec.PodDisruptionBudget = nil
+		lObj.Spec.ResourceRequirements = nil
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
@@ -182,6 +188,40 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 			}
 			write = true
 		}
+	}
+
+	if !limitadorResourceRequestsIsConfigured(lObj) || !wasConfigured {
+		logger.Info("setting the Resource Request", "status", "working")
+		cpu, err := resource.ParseQuantity(Resource_10m)
+		if err != nil {
+			logger.Error(err, "failed to parse resurce cpu string", "status", "error")
+		}
+		memory, err := resource.ParseQuantity(Resource_10Mi)
+		if err != nil {
+			logger.Error(err, "failed to parse resurce memory string", "status", "error")
+		}
+
+		if lObj.Spec.ResourceRequirements == nil {
+			lObj.Spec.ResourceRequirements = &corev1.ResourceRequirements{}
+		}
+
+		if lObj.Spec.ResourceRequirements.Requests.Cpu().Value() == 0 {
+			if lObj.Spec.ResourceRequirements.Requests == nil {
+				lObj.Spec.ResourceRequirements.Requests = corev1.ResourceList{corev1.ResourceCPU: cpu}
+			} else {
+				lObj.Spec.ResourceRequirements.Requests[corev1.ResourceCPU] = cpu
+			}
+		}
+
+		if lObj.Spec.ResourceRequirements.Requests.Memory().Value() == 0 {
+			if lObj.Spec.ResourceRequirements.Requests == nil {
+				lObj.Spec.ResourceRequirements.Requests = corev1.ResourceList{corev1.ResourceMemory: memory}
+			} else {
+				lObj.Spec.ResourceRequirements.Requests[corev1.ResourceMemory] = memory
+			}
+		}
+
+		write = true
 	}
 
 	if write {
@@ -353,6 +393,26 @@ func limitadorPDBIsConfigured(lObj *limitadorv1alpha1.Limitador) bool {
 	}
 
 	if lObj.Spec.PodDisruptionBudget.MaxUnavailable == nil && lObj.Spec.PodDisruptionBudget.MinAvailable == nil {
+		return false
+	}
+
+	return true
+}
+
+func limitadorResourceRequestsIsConfigured(lObj *limitadorv1alpha1.Limitador) bool {
+	if lObj == nil {
+		return false
+	}
+
+	if lObj.Spec.ResourceRequirements == nil {
+		return false
+	}
+
+	if lObj.Spec.ResourceRequirements.Requests == nil {
+		return false
+	}
+
+	if lObj.Spec.ResourceRequirements.Requests.Cpu().Value() == 0 || lObj.Spec.ResourceRequirements.Requests.Memory().Value() == 0 {
 		return false
 	}
 

@@ -9,6 +9,8 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -174,10 +176,10 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 	logger.V(level).Info("RateLimiting configured", "status", "contiune")
 
-	write := false
+	writeLimitador := false
 	if lObj.Spec.Replicas == nil || !wasConfigured {
 		lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
-		write = true
+		writeLimitador = true
 	}
 
 	if !limitadorPDBIsConfigured(lObj) || !wasConfigured {
@@ -186,7 +188,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 			lObj.Spec.PodDisruptionBudget = &limitadorv1alpha1.PodDisruptionBudgetType{
 				MaxUnavailable: &intstr.IntOrString{IntVal: LimitadorPDB},
 			}
-			write = true
+			writeLimitador = true
 		}
 	}
 
@@ -221,13 +223,94 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 			}
 		}
 
-		write = true
+		writeLimitador = true
 	}
 
-	if write {
+	if writeLimitador {
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+			return nil
+		}
+	}
+
+	writeLimitadorDeployment := false
+
+	// read deployment objects that are children of limitador
+	deploymentObjs := lo.FilterMap(topology.Objects().Children(GetMachineryObjectFromTopology(topology, kuadrantv1beta1.LimitadorGroupKind)), func(child machinery.Object, _ int) (*appsv1.Deployment, bool) {
+		if child.GroupVersionKind().GroupKind() != kuadrantv1beta1.DeploymentGroupKind {
+			return nil, false
+		}
+
+		runtimeObj, ok := child.(*controller.RuntimeObject)
+		if !ok {
+			return nil, false
+		}
+
+		// cannot do "return runtimeObj.Object.(*appsv1.Deployment)" as strict mode is used and does not match main method signature.
+		deployment, ok := runtimeObj.Object.(*appsv1.Deployment)
+		return deployment, ok
+	})
+
+	if len(deploymentObjs) == 0 {
+		// Nothing to be done.
+		// when limitador is ready, a new event will be triggered for this reconciler
+		logger.V(level).Info("no deployment found", "status", "exiting")
+		return nil
+	}
+
+	// Currently only one instance of deployment is supported as a child of limitaodor
+	// Needs to be deep copied to avoid race conditions with the object living in the topology
+	deployment := deploymentObjs[0].DeepCopy()
+
+	if !limitadorTopologySpreadConstranits(deployment) {
+		// do some work
+		logger.V(level).Info("limitador deployment", "deployment", deployment)
+		hostname, zone := false, false
+		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			logger.V(level).Info("TSC item", "item", item)
+			if item.TopologyKey == "kubernetes.io/hostname" {
+				logger.V(level).Info("hostname", "value", true)
+				hostname = true
+			}
+			if item.TopologyKey == "kubernetes.io/zone" {
+				logger.V(level).Info("zone", "value", true)
+				zone = true
+			}
+		}
+
+		if !hostname {
+			hostnameConstraint := corev1.TopologySpreadConstraint{
+				MaxSkew:           1,
+				TopologyKey:       "kubernetes.io/hostname",
+				WhenUnsatisfiable: "ScheduleAnyway",
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"limitador-reource": "limitador"},
+				},
+			}
+			deployment.Spec.Template.Spec.TopologySpreadConstraints = append(deployment.Spec.Template.Spec.TopologySpreadConstraints, hostnameConstraint)
+			writeLimitadorDeployment = true
+		}
+
+		if !zone {
+			zoneConstraint := corev1.TopologySpreadConstraint{
+				MaxSkew:           1,
+				TopologyKey:       "kubernetes.io/zone",
+				WhenUnsatisfiable: "ScheduleAnyway",
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"limitador-reource": "limitador"},
+				},
+			}
+			deployment.Spec.Template.Spec.TopologySpreadConstraints = append(deployment.Spec.Template.Spec.TopologySpreadConstraints, zoneConstraint)
+			writeLimitadorDeployment = true
+		}
+
+	}
+
+	if writeLimitadorDeployment {
+		err := r.updateDeployment(ctx, deployment)
+		if err != nil {
+			logger.V(level).Info("failed to update limitador deployment resource", "status", "error", "error", err)
 			return nil
 		}
 	}
@@ -241,6 +324,15 @@ func (r *ResilienceRateLimitingReconciler) updateLimitador(ctx context.Context, 
 		return err
 	}
 	_, err = r.Client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(lObj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func (r *ResilienceRateLimitingReconciler) updateDeployment(ctx context.Context, deployment *appsv1.Deployment) error {
+	obj, err := controller.Destruct(deployment)
+	if err != nil {
+		return err
+	}
+	_, err = r.Client.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace(deployment.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
 	return err
 }
 
@@ -413,6 +505,30 @@ func limitadorResourceRequestsIsConfigured(lObj *limitadorv1alpha1.Limitador) bo
 	}
 
 	if lObj.Spec.ResourceRequirements.Requests.Cpu().Value() == 0 || lObj.Spec.ResourceRequirements.Requests.Memory().Value() == 0 {
+		return false
+	}
+
+	return true
+}
+
+func limitadorTopologySpreadConstranits(deployment *appsv1.Deployment) bool {
+	if deployment == nil {
+		return false
+	}
+
+	if deployment.Spec.Template.Spec.TopologySpreadConstraints == nil {
+		return false
+	}
+
+	count := 0
+	for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+		if item.TopologyKey == "kubernetes.io/hostname" || item.TopologyKey == "kubernetes.io/zone" {
+			count += 1
+		}
+	}
+
+	// There is only two types of topologh keys that we care about.
+	if count < 2 {
 		return false
 	}
 

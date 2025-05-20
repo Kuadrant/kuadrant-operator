@@ -3,11 +3,13 @@
 package kuadrant
 
 import (
+	"reflect"
 	"time"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -547,5 +549,257 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			By("")
 			By("")
 		}, testTimeOut)
+	})
+
+	Context("Limitador Deployment (Topology Spread Constraints)", Serial, func() {
+		It("user has existing topology spread constraints", Serial, func(ctx SpecContext) {
+			By("Deploy basic kuadrant resource")
+			kuadrantKey := client.ObjectKey{Name: kuadrantResource, Namespace: testNamespace}
+			tests.ApplyKuadrantCRWithName(ctx, testClient(), testNamespace, kuadrantResource, func(k *kuadrantv1beta1.Kuadrant) {
+				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
+			})
+			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
+
+			By("Set the topology spread contraints on the limitador deployment")
+			// The configuration should be different than the default that kuadrant uses
+			limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
+			lDeployment := &appsv1.Deployment{}
+			err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+			Expect(err).ToNot(HaveOccurred())
+
+
+			hostnameConstraint := corev1.TopologySpreadConstraint{
+				MaxSkew:           2,
+				TopologyKey:       "kubernetes.io/hostname",
+				WhenUnsatisfiable: "ScheduleAnyway",
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"limitador-reource": "limitador"},
+				},
+			}
+			lDeployment.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{hostnameConstraint}
+			err = k8sClient.Update(ctx, lDeployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Enable the limitador reilient deployment in the kuadrant resource")
+			kObj := &kuadrantv1beta1.Kuadrant{}
+			err = k8sClient.Get(ctx, kuadrantKey, kObj)
+			Expect(err).ToNot(HaveOccurred())
+			kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
+				RateLimiting: true,
+				CounterStorage: &limitadorv1alpha1.Storage{},
+			}
+			err = k8sClient.Update(ctx, kObj)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
+
+			By("User configuration should not be modified")
+			err = k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, item := range lDeployment.Spec.Template.Spec.TopologySpreadConstraints {
+				if item.TopologyKey == "kubernetes.io/hostname" {
+					Expect(item.MaxSkew).To(Equal(int32(2)))
+				} 
+			}
+
+			By("Kuadrant status should should the topology spread contraints are not the default")
+			Eventually(func (g Gomega) {
+				err = k8sClient.Get(ctx, kuadrantKey, kObj)
+				g.Expect(err).ToNot(HaveOccurred())
+				contains := false
+				for _, item := range kObj.Status.Conditions {
+					if item.Reason == "UserModifiedLimitadorTopologySpreadConstraints" {
+						contains = true
+						break
+					}
+				}
+				g.Expect(contains).To(Equal(true))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("Limitador Deployment (Topology Spread Constraints)", Serial, func() {
+		It("user updates topology spread contraints after feature enabled", Serial, func(ctx SpecContext) {
+			By("Create kuadrant resource with reslience enabled")
+			kuadrantKey := client.ObjectKey{Name: kuadrantResource, Namespace: testNamespace}
+			tests.ApplyKuadrantCRWithName(ctx, testClient(), testNamespace, kuadrantResource, func(k *kuadrantv1beta1.Kuadrant) {
+				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
+				k.Spec = kuadrantv1beta1.KuadrantSpec{
+					Resilience: &kuadrantv1beta1.Resilience{
+						RateLimiting: true,
+						CounterStorage: &limitadorv1alpha1.Storage{},
+					},
+				}
+			})
+			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
+			
+			By("Limitador Deployment has correct configuration")
+			Eventually(func (g Gomega) {
+				limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
+				lDeployment := &appsv1.Deployment{}
+				err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				correctConfiguration := 0
+				for _, item := range lDeployment.Spec.Template.Spec.TopologySpreadConstraints {
+					if item.TopologyKey == "kubernetes.io/hostname" {
+						hostnameConstraint := corev1.TopologySpreadConstraint{
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: "ScheduleAnyway",
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"limitador-reource": "limitador"},
+							},
+						}
+						if reflect.DeepEqual(item, hostnameConstraint) {
+							correctConfiguration += 1
+						}
+					}
+
+					if item.TopologyKey == "kubernetes.io/zone" {
+						zoneConstraint := corev1.TopologySpreadConstraint{
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/zone",
+							WhenUnsatisfiable: "ScheduleAnyway",
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"limitador-reource": "limitador"},
+							},
+						}
+						if reflect.DeepEqual(item, zoneConstraint) {
+							correctConfiguration += 1
+						}
+					}
+				}
+				g.Expect(correctConfiguration).To(Equal(2))
+
+			}).WithContext(ctx).Should(Succeed())
+
+
+			By("User sets the topology spread contraints on the limitador deployment")
+			// The configuration should be different than the default that kuadrant uses
+			limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
+			lDeployment := &appsv1.Deployment{}
+			err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+			Expect(err).ToNot(HaveOccurred())
+
+
+			hostnameConstraint := corev1.TopologySpreadConstraint{
+				MaxSkew:           2,
+				TopologyKey:       "kubernetes.io/hostname",
+				WhenUnsatisfiable: "ScheduleAnyway",
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"limitador-reource": "limitador"},
+				},
+			}
+			lDeployment.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{hostnameConstraint}
+			err = k8sClient.Update(ctx, lDeployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("User configuration should not be modified")
+			err = k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+			Expect(err).ToNot(HaveOccurred())
+
+			for _, item := range lDeployment.Spec.Template.Spec.TopologySpreadConstraints {
+				if item.TopologyKey == "kubernetes.io/hostname" {
+					Expect(item.MaxSkew).To(Equal(int32(2)))
+				} 
+			}
+
+			By("Kuadrant status should show the topology spread contraints are not the default")
+			Eventually(func (g Gomega) {
+				kObj := &kuadrantv1beta1.Kuadrant{}
+				err = k8sClient.Get(ctx, kuadrantKey, kObj)
+				g.Expect(err).ToNot(HaveOccurred())
+				contains := false
+				for _, item := range kObj.Status.Conditions {
+					if item.Reason == "UserModifiedLimitadorTopologySpreadConstraints" {
+						contains = true
+						break
+					}
+				}
+				g.Expect(contains).To(Equal(true))
+			}).WithContext(ctx).Should(Succeed())
+
+			By("User removes a constraint from the limitador deployment")
+			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
+			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
+			err = k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+			Expect(err).ToNot(HaveOccurred())
+			lDeployment.Spec.Template.Spec.TopologySpreadConstraints = nil
+			err = k8sClient.Update(ctx, lDeployment)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Kuadrant operator recreates the removed constraint")
+			Eventually(func (g Gomega) {
+				limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
+				lDeployment := &appsv1.Deployment{}
+				err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				correctConfiguration := 0
+				for _, item := range lDeployment.Spec.Template.Spec.TopologySpreadConstraints {
+					if item.TopologyKey == "kubernetes.io/hostname" {
+						hostnameConstraint := corev1.TopologySpreadConstraint{
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: "ScheduleAnyway",
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"limitador-reource": "limitador"},
+							},
+						}
+						if reflect.DeepEqual(item, hostnameConstraint) {
+							correctConfiguration += 1
+						}
+					}
+
+					if item.TopologyKey == "kubernetes.io/zone" {
+						zoneConstraint := corev1.TopologySpreadConstraint{
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/zone",
+							WhenUnsatisfiable: "ScheduleAnyway",
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"limitador-reource": "limitador"},
+							},
+						}
+						if reflect.DeepEqual(item, zoneConstraint) {
+							correctConfiguration += 1
+						}
+					}
+				}
+				g.Expect(correctConfiguration).To(Equal(2))
+
+			}).WithContext(ctx).Should(Succeed())
+
+			By("User disable the resilient feature for limitador")
+			Eventually(func (g Gomega) {
+				kObj := &kuadrantv1beta1.Kuadrant{}
+				err = k8sClient.Get(ctx, kuadrantKey, kObj)
+				g.Expect(err).ToNot(HaveOccurred())
+				kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
+					RateLimiting: false,
+					CounterStorage: &limitadorv1alpha1.Storage{},
+				}
+				err = k8sClient.Update(ctx, kObj)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
+
+			By("Expect no error status messages in the kuadrant resource")
+			Eventually(func (g Gomega) {
+				kObj := &kuadrantv1beta1.Kuadrant{}
+				err = k8sClient.Get(ctx, kuadrantKey, kObj)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(len(kObj.Status.Conditions)).To(Equal(1))
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Expect the topology spread constraints to be removed from the limitador deployment")
+			Eventually(func (g Gomega) {
+				limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
+				lDeployment := &appsv1.Deployment{}
+				err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(lDeployment.Spec.Template.Spec.TopologySpreadConstraints).To(BeNil())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut * 2)
 	})
 })

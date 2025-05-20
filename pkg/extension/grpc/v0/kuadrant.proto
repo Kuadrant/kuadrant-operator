@@ -7,13 +7,15 @@ package kuadrant.v0;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 import "gateway_api.proto";
+import "google/api/cel/expr/value.proto";
+import "google/rpc/status.proto";
 
 // The greeting service definition.
 service ExtensionService {
   // Sends a greeting
   rpc Ping (PingRequest) returns (PongResponse) {}
   // Subscribe to a set of Events
-  rpc Subscribe(google.protobuf.Empty) returns (stream Event) {}
+  rpc Subscribe(google.protobuf.Empty) returns (stream SubscribeResponse) {}
   // Resolve the expression for context and subscribe (or not)
   rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
 }
@@ -35,12 +37,16 @@ message ResolveRequest {
   bool subscribe = 3;
 }
 
-// todo(adam-cattermole): this should return a Cel value not a string
+// Return the result as a cel value
 message ResolveResponse {
-  string cel_result = 1;
+  google.api.expr.v1alpha1.Value cel_result = 1;
 }
 
-// todo: define the message to be streamed back to the client
+message SubscribeResponse {
+  Event event = 1;
+  google.rpc.Status error = 2;
+}
+
 message Event {
   Metadata metadata = 1;
 }

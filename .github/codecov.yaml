@@ -24,7 +24,8 @@ comment:
 
 # Find more at https://docs.codecov.com/docs/ignoring-paths
 ignore:
-  - "**/*.deepcopy.go"  # ignore controller-gen generated code
+  - "**/*.deepcopy.go" # ignore controller-gen generated code
+  - "**/*.pb.go"
 
 component_management:
   individual_components:

@@ -485,7 +485,7 @@ print-operator-image: ## Print operator image
 
 .PHONY: update-catalogsource
 update-catalogsource:
-	@$(YQ) e -i '.spec.image = "${CATALOG_IMG}"' config/deploy/olm/catalogsource.yaml	
+	@$(YQ) e -i '.spec.image = "${CATALOG_IMG}"' config/deploy/olm/catalogsource.yaml
 
 ##@ Code Style
 

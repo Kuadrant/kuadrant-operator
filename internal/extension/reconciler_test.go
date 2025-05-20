@@ -229,6 +229,38 @@ func TestNilGuardedPointer(t *testing.T) {
 		}
 	})
 
+	t.Run("set sends updates", func(t *testing.T) {
+		ptr := newNilGuardedPointer[string]()
+		channel := ptr.newUpdateChannel()
+
+		if ptr.get() != nil {
+			t.Errorf("Expected initial value to be nil, got %v", ptr.get())
+		}
+
+		value := "test"
+		ptr.set(value)
+
+		loaded := ptr.get()
+		if loaded == nil {
+			t.Error("Expected loaded value to be non-nil")
+		} else if *loaded != value {
+			t.Errorf("Expected loaded value to be %s, got %s", value, *loaded)
+		}
+
+		go func() {
+			ptr.set("updated once")
+			ptr.set("updated twice")
+		}()
+
+		one, two := <-channel, <-channel
+		if one != "updated once" {
+			t.Errorf("Expected update to be `updated once`, got `%s`", one)
+		}
+		if two != "updated twice" {
+			t.Errorf("Expected update to be `updated twice`, got `%s`", two)
+		}
+	})
+
 	t.Run("BlockingDAG variable", func(t *testing.T) {
 		if BlockingDAG.get() != nil {
 			t.Error("Expected initial BlockingDAG to be nil")

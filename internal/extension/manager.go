@@ -22,10 +22,12 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -126,7 +128,9 @@ func (m *Manager) HasSynced() bool {
 }
 
 type extensionService struct {
-	dag *nilGuardedPointer[StateAwareDAG]
+	dag           *nilGuardedPointer[StateAwareDAG]
+	mutex         sync.Mutex
+	subscriptions map[string]subscription
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -141,19 +145,44 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 }
 
 func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.Event]) error {
+	channel := BlockingDAG.newUpdateChannel()
 	for {
-		time.Sleep(time.Second * 5)
-		if err := stream.Send(&extpb.Event{}); err != nil {
-			return err
+		dag := <-channel
+		opts := []cel.EnvOption{
+			kuadrant.CelExt(&dag),
 		}
+
+		s.mutex.Lock()
+		if env, err := cel.NewEnv(opts...); err == nil {
+			for key, sub := range s.subscriptions {
+				if prg, err := env.Program(sub.cAst); err == nil {
+					if newVal, _, err := prg.Eval(sub.input); err == nil {
+						if newVal != sub.val {
+							sub.val = newVal
+							s.subscriptions[key] = sub
+							if err := stream.Send(&extpb.Event{
+								Metadata: sub.input["self"].(extpb.Policy).Metadata,
+							}); err != nil {
+								s.mutex.Unlock()
+								return err
+							}
+						}
+					}
+				}
+			}
+		}
+		s.mutex.Unlock()
 	}
 }
 
 func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequest) (*extpb.ResolveResponse, error) {
-	dag := s.dag.getWait()
+	dag, success := s.dag.getWaitWithTimeout(15 * time.Second)
+	if !success {
+		return nil, fmt.Errorf("unable to get to a dag in time")
+	}
 
 	opts := []cel.EnvOption{
-		kuadrant.CelExt(&dag),
+		kuadrant.CelExt(dag),
 	}
 	env, err := cel.NewEnv(opts...)
 	if err != nil {
@@ -172,23 +201,43 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 		return nil, err
 	}
 
-	// TODO: keep `prg` around and re-eval on dag changing
-	// if request.Subscribe {
-	// }
-
-	out, _, err := prg.Eval(map[string]any{
+	input := map[string]any{
 		"self": request.Policy,
-	})
+	}
+
+	val, _, err := prg.Eval(input)
+
+	if request.Subscribe {
+		key := ""
+		for _, targetRef := range request.Policy.TargetRefs {
+			key += fmt.Sprintf("[%s/%s]%s/%s#%s\n", targetRef.Group, targetRef.Kind, targetRef.Namespace, targetRef.Name, targetRef.SectionName)
+		}
+		key += request.Expression
+		s.mutex.Lock()
+		s.subscriptions[key] = subscription{
+			cAst,
+			input,
+			val,
+		}
+		s.mutex.Unlock()
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
 	// FIXME: This probably be sent back as a real `CelValue` as protobuf
-	value, err := out.ConvertToNative(reflect.TypeOf(""))
+	value, err := val.ConvertToNative(reflect.TypeOf(""))
 	if err != nil {
 		return nil, err
 	}
 	return &extpb.ResolveResponse{
 		CelResult: value.(string),
 	}, nil
+}
+
+type subscription struct {
+	cAst  *cel.Ast
+	input map[string]any
+	val   ref.Val
 }

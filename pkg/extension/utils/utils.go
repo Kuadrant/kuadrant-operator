@@ -6,25 +6,41 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/policy-machinery/controller"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
-	"github.com/kuadrant/policy-machinery/controller"
 )
+
+type clientKeyType struct{}
+type schemeKeyType struct{}
+
+var ClientKey = clientKeyType{}
+var SchemeKey = schemeKeyType{}
 
 func LoggerFromContext(ctx context.Context) logr.Logger {
 	return controller.LoggerFromContext(ctx)
 }
 
-func DynamicClientFromContext(ctx context.Context) (*dynamic.DynamicClient, error) {
-	dynamicClient, ok := ctx.Value((*dynamic.DynamicClient)(nil)).(*dynamic.DynamicClient)
+func ClientFromContext(ctx context.Context) (client.Client, error) {
+	client, ok := ctx.Value(ClientKey).(client.Client)
 	if !ok {
-		return nil, errors.New("failed to retrieve dynamic client from context")
+		return nil, errors.New("failed to retrieve the client from context")
 	}
-	return dynamicClient, nil
+	return client, nil
+}
+
+func SchemeFromContext(ctx context.Context) (*runtime.Scheme, error) {
+	scheme, ok := ctx.Value(SchemeKey).(*runtime.Scheme)
+	if !ok {
+		return nil, errors.New("failed to retrieve scheme from context")
+	}
+	return scheme, nil
 }
 
 func MapToExtPolicy(p exttypes.Policy) *extpb.Policy {

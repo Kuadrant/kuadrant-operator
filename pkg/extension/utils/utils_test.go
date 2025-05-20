@@ -10,34 +10,63 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-func TestDynamicClientFromContext_Success(t *testing.T) {
-	expectedClient := &dynamic.DynamicClient{}
-	ctx := context.WithValue(context.Background(), (*dynamic.DynamicClient)(nil), expectedClient)
+type MockClient struct {
+	client.Client
+}
 
-	client, err := DynamicClientFromContext(ctx)
+func TestClientFromContext_Success(t *testing.T) {
+	expectedClient := &MockClient{}
+	ctx := context.WithValue(context.Background(), ClientKey, expectedClient)
+
+	c, err := ClientFromContext(ctx)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if client != expectedClient {
-		t.Errorf("expected client %v, got %v", expectedClient, client)
+	if c != expectedClient {
+		t.Errorf("expected client %v, got %v", expectedClient, c)
 	}
 }
 
-func TestDynamicClientFromContext_Missing(t *testing.T) {
+func TestClientFromContext_Missing(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := DynamicClientFromContext(ctx)
+	c, err := ClientFromContext(ctx)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if client != nil {
-		t.Errorf("expected nil client, got %v", client)
+	if c != nil {
+		t.Errorf("expected nil client, got %v", c)
+	}
+}
+
+func TestSchemeFromContext_Success(t *testing.T) {
+	expectedScheme := runtime.NewScheme()
+	ctx := context.WithValue(context.Background(), SchemeKey, expectedScheme)
+
+	s, err := SchemeFromContext(ctx)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if s != expectedScheme {
+		t.Errorf("expected scheme %v, got %v", expectedScheme, s)
+	}
+}
+
+func TestSchemeFromContext_Missing(t *testing.T) {
+	ctx := context.Background()
+
+	s, err := SchemeFromContext(ctx)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if s != nil {
+		t.Errorf("expected nil scheme, got %v", s)
 	}
 }
 
@@ -81,7 +110,7 @@ func TestMapToExtPolicy(t *testing.T) {
 		},
 		GroupVersionKind: schema.GroupVersionKind{Group: "example.group", Kind: "ExamplePolicy"},
 		TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			{
 				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: "my.group",
 					Kind:  "MyKind",

@@ -37,7 +37,7 @@ import (
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
-	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
+	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
 
 var (
@@ -123,7 +123,8 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	//  retrieved by the user in their Reconcile method, or should it just pass them as parameters?
 	// update ctx to hold our logger and client
 	ctx = context.WithValue(ctx, logr.Logger{}, ec.logger)
-	ctx = context.WithValue(ctx, (*dynamic.DynamicClient)(nil), ec.client)
+	ctx = context.WithValue(ctx, extutils.SchemeKey, ec.manager.GetScheme())
+	ctx = context.WithValue(ctx, extutils.ClientKey, ec.manager.GetClient())
 
 	// overrides reconcile method
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
@@ -132,7 +133,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 
 func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
 	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
-		Policy:     utils.MapToExtPolicy(policy),
+		Policy:     extutils.MapToExtPolicy(policy),
 		Expression: expression,
 		Subscribe:  subscribe,
 	})

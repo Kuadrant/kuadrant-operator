@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -23,7 +24,7 @@ import (
 
 // WARNING: level varible is only here for the basic dev work and should not end up in the finished feature
 // FIXME: don't merge to main with value of zero, set to one.
-var level = 0
+var level = 1
 
 const (
 	ExperimentalResilienceFeature = "ExperimentalResilienceFeature"
@@ -160,6 +161,26 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	nowConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
 
 	if wasConfigured && !nowConfigured {
+		deployment := getDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+		if deployment != nil {
+			constraints := []corev1.TopologySpreadConstraint{}
+			for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+				if item.TopologyKey == "kubernetes.io/hostname" || item.TopologyKey == "kubernetes.io/zone" {
+					logger.V(level).Info("skipping item", "item", item)
+					continue
+				}
+				logger.V(level).Info("adding item", "item", item)
+				constraints = append(constraints, item)
+			}
+
+			deployment.Spec.Template.Spec.TopologySpreadConstraints = constraints
+			err := r.updateDeployment(ctx, deployment)
+			if err != nil {
+				logger.V(level).Info("failed to update limitador deployment", "status", "error", "error", err)
+				return nil
+			}
+		}
+
 		lObj.Spec.Replicas = ptr.To(1)
 		lObj.Spec.PodDisruptionBudget = nil
 		lObj.Spec.ResourceRequirements = nil
@@ -168,6 +189,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
 			return nil
 		}
+
 	}
 
 	if !nowConfigured {
@@ -236,36 +258,9 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 
 	writeLimitadorDeployment := false
 
-	// read deployment objects that are children of limitador
-	deploymentObjs := lo.FilterMap(topology.Objects().Children(GetMachineryObjectFromTopology(topology, kuadrantv1beta1.LimitadorGroupKind)), func(child machinery.Object, _ int) (*appsv1.Deployment, bool) {
-		if child.GroupVersionKind().GroupKind() != kuadrantv1beta1.DeploymentGroupKind {
-			return nil, false
-		}
-
-		runtimeObj, ok := child.(*controller.RuntimeObject)
-		if !ok {
-			return nil, false
-		}
-
-		// cannot do "return runtimeObj.Object.(*appsv1.Deployment)" as strict mode is used and does not match main method signature.
-		deployment, ok := runtimeObj.Object.(*appsv1.Deployment)
-		return deployment, ok
-	})
-
-	if len(deploymentObjs) == 0 {
-		// Nothing to be done.
-		// when limitador is ready, a new event will be triggered for this reconciler
-		logger.V(level).Info("no deployment found", "status", "exiting")
-		return nil
-	}
-
-	// Currently only one instance of deployment is supported as a child of limitaodor
-	// Needs to be deep copied to avoid race conditions with the object living in the topology
-	deployment := deploymentObjs[0].DeepCopy()
+	deployment := getDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
 
 	if !limitadorTopologySpreadConstranits(deployment) {
-		// do some work
-		logger.V(level).Info("limitador deployment", "deployment", deployment)
 		hostname, zone := false, false
 		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
 			logger.V(level).Info("TSC item", "item", item)
@@ -533,4 +528,33 @@ func limitadorTopologySpreadConstranits(deployment *appsv1.Deployment) bool {
 	}
 
 	return true
+}
+
+// getDeploymentForParent returns the deployment for the kind in the topology, if a deployment has being linked.
+func getDeploymentForParent(topology *machinery.Topology, groupKind schema.GroupKind) *appsv1.Deployment {
+	// read deployment objects that are children of the groupKind
+	deploymentObjs := lo.FilterMap(topology.Objects().Children(GetMachineryObjectFromTopology(topology, groupKind)), func(child machinery.Object, _ int) (*appsv1.Deployment, bool) {
+		if child.GroupVersionKind().GroupKind() != kuadrantv1beta1.DeploymentGroupKind {
+			return nil, false
+		}
+
+		runtimeObj, ok := child.(*controller.RuntimeObject)
+		if !ok {
+			return nil, false
+		}
+
+		// cannot do "return runtimeObj.Object.(*appsv1.Deployment)" as strict mode is used and does not match main method signature.
+		deployment, ok := runtimeObj.Object.(*appsv1.Deployment)
+		return deployment, ok
+	})
+
+	if len(deploymentObjs) == 0 {
+		// Nothing to be done.
+		return nil
+	}
+
+	// Currently only one instance of deployment is supported as a child of limitaodor
+	// Needs to be deep copied to avoid race conditions with the object living in the topology
+	return deploymentObjs[0].DeepCopy()
+
 }

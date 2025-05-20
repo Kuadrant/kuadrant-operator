@@ -3,7 +3,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -27,6 +29,7 @@ const (
 	ResilienceInfoRRConditionType    string = "Resilience.Info.RateLimiting.Replicas"
 	ResilienceWarningRRConditionType string = "Resilience.Warning.RateLimiting.Replicas"
 	ResilienceInfoPDBConditionType   string = "Resilience.Info.RateLimiting.PBD"
+	ResilienceInfoTSCConditionType   string = "Resilience.Info.RateLimiting.TopologySpreadConstraints"
 )
 
 type KuadrantStatusUpdater struct {
@@ -166,13 +169,13 @@ func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology
 	kObj := GetKuadrantFromTopology(topology)
 	isConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
 	if !isConfigured {
-		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType)
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType, ResilienceInfoTSCConditionType)
 		return nil, remove
 	}
 
 	lObj := GetLimitadorFromTopology(topology)
 	if lObj == nil {
-		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType)
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType, ResilienceInfoTSCConditionType)
 		return nil, remove
 	}
 
@@ -218,6 +221,53 @@ func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology
 		create = append(create, cond)
 	} else {
 		remove = append(remove, ResilienceInfoPDBConditionType)
+	}
+
+	// Get the status of the topology spread constraints.
+	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+	if deployment != nil {
+		message := make([]string, 0)
+		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			if item.TopologyKey == "kubernetes.io/hostname" {
+				hostnameConstraint := corev1.TopologySpreadConstraint{
+					MaxSkew:           1,
+					TopologyKey:       "kubernetes.io/hostname",
+					WhenUnsatisfiable: "ScheduleAnyway",
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"limitador-reource": "limitador"},
+					},
+				}
+				if !reflect.DeepEqual(item, hostnameConstraint) {
+					message = append(message, "Limitador depoloyment TopologySpreadConstraints for key \"kubernetes.io/hostname\" is user modified.")
+				}
+			}
+
+			if item.TopologyKey == "kubernetes.io/zone" {
+				zoneConstraint := corev1.TopologySpreadConstraint{
+					MaxSkew:           1,
+					TopologyKey:       "kubernetes.io/zone",
+					WhenUnsatisfiable: "ScheduleAnyway",
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"limitador-reource": "limitador"},
+					},
+				}
+				if !reflect.DeepEqual(item, zoneConstraint) {
+					message = append(message, "Limitador depoloyment TopologySpreadConstraints for key \"kubernetes.io/zone\" is user modified.")
+				}
+			}
+		}
+
+		if len(message) > 0 {
+			cond := &metav1.Condition{
+				Type:    ResilienceInfoTSCConditionType,
+				Message: strings.Join(message, " "),
+				Reason:  "UserModifiedLimitadorTopologySpreadConstraints",
+				Status:  metav1.ConditionUnknown,
+			}
+			create = append(create, cond)
+		} else {
+			remove = append(remove, ResilienceInfoTSCConditionType)
+		}
 	}
 
 	return create, remove

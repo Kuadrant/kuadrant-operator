@@ -161,7 +161,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	nowConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
 
 	if wasConfigured && !nowConfigured {
-		deployment := getDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+		deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
 		if deployment != nil {
 			constraints := []corev1.TopologySpreadConstraint{}
 			for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
@@ -258,7 +258,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 
 	writeLimitadorDeployment := false
 
-	deployment := getDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
 
 	if !limitadorTopologySpreadConstranits(deployment) {
 		hostname, zone := false, false
@@ -530,8 +530,8 @@ func limitadorTopologySpreadConstranits(deployment *appsv1.Deployment) bool {
 	return true
 }
 
-// getDeploymentForParent returns the deployment for the kind in the topology, if a deployment has being linked.
-func getDeploymentForParent(topology *machinery.Topology, groupKind schema.GroupKind) *appsv1.Deployment {
+// GetDeploymentForParent returns the deployment for the kind in the topology, if a deployment has being linked.
+func GetDeploymentForParent(topology *machinery.Topology, groupKind schema.GroupKind) *appsv1.Deployment {
 	// read deployment objects that are children of the groupKind
 	deploymentObjs := lo.FilterMap(topology.Objects().Children(GetMachineryObjectFromTopology(topology, groupKind)), func(child machinery.Object, _ int) (*appsv1.Deployment, bool) {
 		if child.GroupVersionKind().GroupKind() != kuadrantv1beta1.DeploymentGroupKind {

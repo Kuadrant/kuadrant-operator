@@ -260,7 +260,11 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 
 	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
 
-	if !limitadorTopologySpreadConstranits(deployment) {
+	if !limitadorTopologySpreadConstranits(deployment) && deployment != nil {
+		if deployment.Spec.Template.Spec.TopologySpreadConstraints == nil {
+			deployment.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{}
+		}
+
 		hostname, zone := false, false
 		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
 			logger.V(level).Info("TSC item", "item", item)

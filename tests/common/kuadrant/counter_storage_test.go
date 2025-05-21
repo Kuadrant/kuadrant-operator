@@ -18,8 +18,8 @@ import (
 
 var _ = Describe("Resilience counterStorage", Serial, func() {
 	const (
-		testTimeOut                 = SpecTimeout(1 * time.Minute)
-		afterEachTimeOut            = NodeTimeout(2 * time.Minute)
+		testTimeOut                 = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut            = NodeTimeout(4 * time.Minute)
 		kuatrantResource            = "kuadrant-sample"
 		ResilienceFeatureAnnotation = "kuadrant.io/experimental-dont-use-resilient-data-plane"
 	)

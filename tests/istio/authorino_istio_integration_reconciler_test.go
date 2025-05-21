@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -122,6 +123,30 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
 			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
 			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
+			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+
+			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
+				Name:      "authorino",
+				Namespace: kuadrantInstallationNS,
+			})).WithContext(ctx).Should(Succeed())
+		})
+		It("deployment pod template labels are correct", func(ctx SpecContext) {
+			Eventually(func(g Gomega, ctx context.Context) {
+				deployment := &appsv1.Deployment{}
+				deploymentKey := client.ObjectKey{Name: "authorino", Namespace: kuadrantInstallationNS}
+				g.Expect(testClient().Get(ctx, deploymentKey, deployment)).NotTo(HaveOccurred())
+				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("sidecar.istio.io/inject", "false"))
+				g.Expect(deployment.Spec.Template.Labels).To(HaveKeyWithValue("kuadrant.io/managed", "true"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("when mTLS is on and disabled for authorino", func() {
+		BeforeEach(func(ctx SpecContext) {
+			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
+			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
+			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
+			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true, Authorino: ptr.To(false)}
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{

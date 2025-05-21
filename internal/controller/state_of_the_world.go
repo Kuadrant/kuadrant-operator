@@ -574,10 +574,9 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
-			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
 		},
-		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isUsingExtensions).Run,
+		Postcondition: b.finalStepsWorkflow().Run,
 	}
 
 	if b.isConsolePluginInstalled {
@@ -654,19 +653,21 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	}
 }
 
-func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled bool, isUsingExtensions bool) *controller.Workflow {
+func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	workflow := &controller.Workflow{
-		Tasks: []controller.ReconcileFunc{},
+		Tasks: []controller.ReconcileFunc{
+			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
+		},
 	}
 
-	if isGatewayAPIInstalled {
+	if b.isGatewayAPIInstalled {
 		workflow.Tasks = append(workflow.Tasks,
-			NewGatewayPolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
-			NewHTTPRoutePolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
+			NewGatewayPolicyDiscoverabilityReconciler(b.client).Subscription().Reconcile,
+			NewHTTPRoutePolicyDiscoverabilityReconciler(b.client).Subscription().Reconcile,
 		)
 	}
 
-	if isUsingExtensions {
+	if b.isUsingExtensions {
 		workflow.Tasks = append(workflow.Tasks, extension.Reconcile)
 	}
 

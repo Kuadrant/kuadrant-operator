@@ -104,7 +104,7 @@ func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 	}
 
 	// Only enable sidecar when enabled in kuadrant CR AND effective policies in place
-	allowMTLS := kObj.IsMTLSEnabled() && len(effectiveAuthPoliciesMap) > 0
+	allowMTLS := kObj.IsMTLSAuthorinoEnabled() && len(effectiveAuthPoliciesMap) > 0
 
 	// add "sidecar.istio.io/inject" label to authorino deployment.
 	// label value depends on whether MTLS is enabled or not

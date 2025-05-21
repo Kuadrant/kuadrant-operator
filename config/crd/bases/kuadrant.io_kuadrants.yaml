@@ -19,8 +19,11 @@ spec:
       name: Status
       priority: 2
       type: string
-    - jsonPath: .status.mtls
-      name: mTLS
+    - jsonPath: .status.mtlsAuthorino
+      name: mTLS Authorino
+      type: boolean
+    - jsonPath: .status.mtlsLimitador
+      name: mTLS Limitador
       type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -57,7 +60,11 @@ spec:
                   will add the configuration required to enable mTLS between an Istio provided
                   gateway and the Kuadrant components.
                 properties:
+                  authorino:
+                    type: boolean
                   enable:
+                    type: boolean
+                  limitador:
                     type: boolean
                 type: object
               observability:
@@ -131,8 +138,13 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              mtls:
-                description: Mtls reflects the mtls feature state.
+              mtlsAuthorino:
+                description: Mtls Authorino reflects the mtls feature state regarding
+                  comms with authorino.
+                type: boolean
+              mtlsLimitador:
+                description: Mtls Limitador reflects the mtls feature state regarding
+                  comms with limitador.
                 type: boolean
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most

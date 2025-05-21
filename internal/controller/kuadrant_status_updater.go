@@ -124,7 +124,7 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 		ObservedGeneration: kObj.Status.ObservedGeneration,
 		MtlsAuthorino:      mtlsAuthorino(kObj, state),
 		MtlsLimitador:      mtlsLimitador(kObj, state),
-		Resilience:         ptr.To(kObj.IsResilienceEnabled()),
+		Resilience:         ptr.To(kObj.BasicResilienceStatus()),
 	}
 
 	availableCond := r.readyCondition(topology, logger)

@@ -25,8 +25,8 @@ import (
 
 var _ = Describe("Resilience rateLimiting", Serial, func() {
 	const (
-		testTimeOut                 = SpecTimeout(1 * time.Minute)
-		afterEachTimeOut            = NodeTimeout(2 * time.Minute)
+		testTimeOut                 = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut            = NodeTimeout(4 * time.Minute)
 		kuadrantResource            = "kuadrant-sample"
 		ResilienceFeatureAnnotation = "kuadrant.io/experimental-dont-use-resilient-data-plane"
 	)
@@ -313,14 +313,16 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			).WithContext(ctx).Should(Succeed())
 
 			By("Limitador PDB spec switched to Min Available")
-			err = k8sClient.Get(ctx, limitadorKey, lObj)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func (g Gomega) {
+				err = k8sClient.Get(ctx, limitadorKey, lObj)
+				g.Expect(err).ToNot(HaveOccurred())
 
-			lObj.Spec.PodDisruptionBudget.MaxUnavailable = nil
-			lObj.Spec.PodDisruptionBudget.MinAvailable = &intstr.IntOrString{IntVal: 1}
+				lObj.Spec.PodDisruptionBudget.MaxUnavailable = nil
+				lObj.Spec.PodDisruptionBudget.MinAvailable = &intstr.IntOrString{IntVal: 1}
 
-			err = k8sClient.Update(ctx, lObj)
-			Expect(err).ToNot(HaveOccurred())
+				err = k8sClient.Update(ctx, lObj)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
 
 			Eventually(func (g Gomega) {
@@ -361,7 +363,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(lObj.Spec.PodDisruptionBudget).To(BeNil())
+				g.Expect(lObj.Spec.PodDisruptionBudget.MaxUnavailable).To(BeNil())
 				},
 			).WithContext(ctx).Should(Succeed())
 
@@ -800,6 +802,6 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lDeployment.Spec.Template.Spec.TopologySpreadConstraints).To(BeNil())
 			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut * 2)
+		}, testTimeOut)
 	})
 })

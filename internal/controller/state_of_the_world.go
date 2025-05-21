@@ -576,6 +576,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
+			NewResilienceDeploymentWorkflow(b.client).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isUsingExtensions).Run,
 	}
@@ -650,13 +651,16 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
+			InitializeHistoryFunc,
 		},
 	}
 }
 
 func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled bool, isUsingExtensions bool) *controller.Workflow {
 	workflow := &controller.Workflow{
-		Tasks: []controller.ReconcileFunc{},
+		Tasks: []controller.ReconcileFunc{
+			UpdateHistoryFunc,
+		},
 	}
 
 	if isGatewayAPIInstalled {

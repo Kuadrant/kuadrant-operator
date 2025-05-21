@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/internal/controller"
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
@@ -61,18 +61,18 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 
 			err := k8sClient.Create(ctx, kuadrantCR)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("resilience.counterStorage needs to be explictly configured when using resilience.rateLimiting"))
+			Expect(err.Error()).To(ContainSubstring("resilience.counterStorage needs to be explicitly configured when using resilience.rateLimiting"))
 
 			By("Configuration is configured correctly with counterStorage")
 			kuadrantCR.Spec.Resilience.CounterStorage = &limitadorv1alpha1.Storage{}
 			err = k8sClient.Create(ctx, kuadrantCR)
 			Expect(err).NotTo(HaveOccurred())
-	
+
 			By("counterStorage is removed after correct configuration")
 			kuadrantCR.Spec.Resilience.CounterStorage = nil
 			err = k8sClient.Update(ctx, kuadrantCR)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("resilience.counterStorage needs to be explictly configured when using resilience.rateLimiting"))
+			Expect(err.Error()).To(ContainSubstring("resilience.counterStorage needs to be explicitly configured when using resilience.rateLimiting"))
 		}, testTimeOut)
 	})
 
@@ -84,7 +84,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 				k.Spec = kuadrantv1beta1.KuadrantSpec{
 					Resilience: &kuadrantv1beta1.Resilience{
-						RateLimiting: true,
+						RateLimiting:   true,
 						CounterStorage: &limitadorv1alpha1.Storage{},
 					},
 				}
@@ -105,7 +105,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -116,7 +116,8 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 						g.Expect(condition.Message).To(ContainSubstring("greater than minimum default"))
 					}
 				}
-				g.Expect(found).To(Equal(true))},
+				g.Expect(found).To(Equal(true))
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("The number of replicas is decreased")
@@ -130,7 +131,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -141,7 +142,8 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 						g.Expect(condition.Message).To(ContainSubstring("below minimum default"))
 					}
 				}
-				g.Expect(found).To(Equal(true))},
+				g.Expect(found).To(Equal(true))
+			},
 			).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -155,7 +157,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 				k.Spec = kuadrantv1beta1.KuadrantSpec{
 					Resilience: &kuadrantv1beta1.Resilience{
-						RateLimiting: true,
+						RateLimiting:   true,
 						CounterStorage: &limitadorv1alpha1.Storage{},
 					},
 				}
@@ -163,13 +165,13 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Check the replica vaules in the limitador resource")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(*lObj.Spec.Replicas).To(Equal(controllers.LimitadorReplicas))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("Disable the rateLimiting feature")
@@ -182,13 +184,13 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Check the replica vaules in the limitador resource have being reverted")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(*lObj.Spec.Replicas).To(Equal(1))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -202,14 +204,14 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 			})
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
-			
+
 				g.Expect(lObj.Spec.Replicas).To(BeNil())
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("Update the number of replicas in the limitador resource")
@@ -228,7 +230,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			err = k8sClient.Get(ctx, kuadrantKey, kObj)
 			Expect(err).ToNot(HaveOccurred())
 			kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
-				RateLimiting: true,
+				RateLimiting:   true,
 				CounterStorage: &limitadorv1alpha1.Storage{},
 			}
 			err = k8sClient.Update(ctx, kObj)
@@ -236,13 +238,13 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("limitador resource keeps initial configuration")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(*lObj.Spec.Replicas).To(Equal(0))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -256,7 +258,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 				k.Spec = kuadrantv1beta1.KuadrantSpec{
 					Resilience: &kuadrantv1beta1.Resilience{
-						RateLimiting: true,
+						RateLimiting:   true,
 						CounterStorage: &limitadorv1alpha1.Storage{},
 					},
 				}
@@ -264,7 +266,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Limitador spec has PDB configuration")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				configuration := &limitadorv1alpha1.PodDisruptionBudgetType{MaxUnavailable: &intstr.IntOrString{IntVal: 1}}
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
@@ -272,7 +274,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.PodDisruptionBudget).ToNot(BeNil())
 				g.Expect(*lObj.Spec.PodDisruptionBudget).To(Equal(*configuration))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("User modifies the max unavailable")
@@ -287,7 +289,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
 
 			By("Limitador PDB spec is modified")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				configuration := &limitadorv1alpha1.PodDisruptionBudgetType{MaxUnavailable: &intstr.IntOrString{IntVal: 2}}
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
@@ -295,10 +297,10 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.PodDisruptionBudget).ToNot(BeNil())
 				g.Expect(*lObj.Spec.PodDisruptionBudget).To(Equal(*configuration))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -309,11 +311,12 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 						g.Expect(condition.Message).To(ContainSubstring("Limitador recource Pod Disruption Budget differs from default configuration"))
 					}
 				}
-				g.Expect(found).To(Equal(true))},
+				g.Expect(found).To(Equal(true))
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("Limitador PDB spec switched to Min Available")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				err = k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 
@@ -325,7 +328,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
 
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				configuration := &limitadorv1alpha1.PodDisruptionBudgetType{MinAvailable: &intstr.IntOrString{IntVal: 1}}
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
@@ -333,10 +336,10 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.PodDisruptionBudget).ToNot(BeNil())
 				g.Expect(*lObj.Spec.PodDisruptionBudget).To(Equal(*configuration))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -347,7 +350,8 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 						g.Expect(condition.Message).To(ContainSubstring("Limitador recource Pod Disruption Budget differs from default configuration"))
 					}
 				}
-				g.Expect(found).To(Equal(true))},
+				g.Expect(found).To(Equal(true))
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("User disables resilience feature in kuadrant")
@@ -358,13 +362,13 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			err = k8sClient.Update(ctx, kObj)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.PodDisruptionBudget.MaxUnavailable).To(BeNil())
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -395,7 +399,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			err = k8sClient.Get(ctx, kuadrantKey, kObj)
 			Expect(err).ToNot(HaveOccurred())
 			kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
-				RateLimiting: true,
+				RateLimiting:   true,
 				CounterStorage: &limitadorv1alpha1.Storage{},
 			}
 			err = k8sClient.Update(ctx, kObj)
@@ -403,17 +407,17 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("limitador resource keeps initial configuration")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(*&lObj.Spec.PodDisruptionBudget.MaxUnavailable.IntVal).To(Equal(int32(2)))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("Kuadrant resource gives correct status message")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -424,7 +428,8 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 						g.Expect(condition.Message).To(ContainSubstring("Limitador recource Pod Disruption Budget differs from default configuration"))
 					}
 				}
-				g.Expect(found).To(Equal(true))},
+				g.Expect(found).To(Equal(true))
+			},
 			).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -433,8 +438,8 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 	Context("Limitador Resource Requirements", Serial, func() {
 		Resource_10Mi := "10Mi"
 		Resource_15Mi := "10Mi"
-		Resource_10m  := "10m"
-		Resource_15m  := "15m"
+		Resource_10m := "10m"
+		Resource_15m := "15m"
 		cpu, err := resource.ParseQuantity(Resource_10m)
 		Expect(err).Error().ToNot(HaveOccurred())
 		userCpu, err := resource.ParseQuantity(Resource_15m)
@@ -451,7 +456,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 				k.Spec = kuadrantv1beta1.KuadrantSpec{
 					Resilience: &kuadrantv1beta1.Resilience{
-						RateLimiting: true,
+						RateLimiting:   true,
 						CounterStorage: &limitadorv1alpha1.Storage{},
 					},
 				}
@@ -459,14 +464,14 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Limitador resource has the correct resource requirements")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Cpu().Value()).To(Equal(cpu.Value()))
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Memory().Value()).To(Equal(memory.Value()))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 
 			By("User can modify there resources")
@@ -482,21 +487,21 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
 
 			By("User configuration of limitador was not reverted.")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Cpu().Value()).To(Equal(userCpu.Value()))
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Memory().Value()).To(Equal(userMemory.Value()))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
 	Context("Limitador resource (ResourceRequirements)", Serial, func() {
 		Resource_15Mi := "10Mi"
-		Resource_15m  := "15m"
+		Resource_15m := "15m"
 		userCpu, err := resource.ParseQuantity(Resource_15m)
 		Expect(err).Error().ToNot(HaveOccurred())
 		userMemory, err := resource.ParseQuantity(Resource_15Mi)
@@ -518,8 +523,8 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Expect(err).ToNot(HaveOccurred())
 			lObj.Spec.ResourceRequirements = &corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceMemory: userMemory, 
-					corev1.ResourceCPU: userCpu,
+					corev1.ResourceMemory: userMemory,
+					corev1.ResourceCPU:    userCpu,
 				},
 			}
 			err = k8sClient.Update(ctx, lObj)
@@ -531,7 +536,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			err = k8sClient.Get(ctx, kuadrantKey, kObj)
 			Expect(err).ToNot(HaveOccurred())
 			kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
-				RateLimiting: true,
+				RateLimiting:   true,
 				CounterStorage: &limitadorv1alpha1.Storage{},
 			}
 			err = k8sClient.Update(ctx, kObj)
@@ -539,14 +544,14 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Existing limitador configuration is not overridion")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 				lObj := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, lObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Cpu().Value()).To(Equal(userCpu.Value()))
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Memory().Value()).To(Equal(userMemory.Value()))
-				},
+			},
 			).WithContext(ctx).Should(Succeed())
 			By("")
 			By("")
@@ -569,7 +574,6 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
 			Expect(err).ToNot(HaveOccurred())
 
-
 			hostnameConstraint := corev1.TopologySpreadConstraint{
 				MaxSkew:           2,
 				TopologyKey:       "kubernetes.io/hostname",
@@ -587,7 +591,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			err = k8sClient.Get(ctx, kuadrantKey, kObj)
 			Expect(err).ToNot(HaveOccurred())
 			kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
-				RateLimiting: true,
+				RateLimiting:   true,
 				CounterStorage: &limitadorv1alpha1.Storage{},
 			}
 			err = k8sClient.Update(ctx, kObj)
@@ -601,11 +605,11 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			for _, item := range lDeployment.Spec.Template.Spec.TopologySpreadConstraints {
 				if item.TopologyKey == "kubernetes.io/hostname" {
 					Expect(item.MaxSkew).To(Equal(int32(2)))
-				} 
+				}
 			}
 
 			By("Kuadrant status should should the topology spread contraints are not the default")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				contains := false
@@ -628,15 +632,15 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 				k.Spec = kuadrantv1beta1.KuadrantSpec{
 					Resilience: &kuadrantv1beta1.Resilience{
-						RateLimiting: true,
+						RateLimiting:   true,
 						CounterStorage: &limitadorv1alpha1.Storage{},
 					},
 				}
 			})
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
-			
+
 			By("Limitador Deployment has correct configuration")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
 				lDeployment := &appsv1.Deployment{}
 				err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
@@ -676,14 +680,12 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 
 			}).WithContext(ctx).Should(Succeed())
 
-
 			By("User sets the topology spread contraints on the limitador deployment")
 			// The configuration should be different than the default that kuadrant uses
 			limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
 			lDeployment := &appsv1.Deployment{}
 			err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
 			Expect(err).ToNot(HaveOccurred())
-
 
 			hostnameConstraint := corev1.TopologySpreadConstraint{
 				MaxSkew:           2,
@@ -704,11 +706,11 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			for _, item := range lDeployment.Spec.Template.Spec.TopologySpreadConstraints {
 				if item.TopologyKey == "kubernetes.io/hostname" {
 					Expect(item.MaxSkew).To(Equal(int32(2)))
-				} 
+				}
 			}
 
 			By("Kuadrant status should show the topology spread contraints are not the default")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -732,7 +734,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Kuadrant operator recreates the removed constraint")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
 				lDeployment := &appsv1.Deployment{}
 				err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
@@ -773,12 +775,12 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			By("User disable the resilient feature for limitador")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
 				kObj.Spec.Resilience = &kuadrantv1beta1.Resilience{
-					RateLimiting: false,
+					RateLimiting:   false,
 					CounterStorage: &limitadorv1alpha1.Storage{},
 				}
 				err = k8sClient.Update(ctx, kObj)
@@ -787,7 +789,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Expect no error status messages in the kuadrant resource")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}
 				err = k8sClient.Get(ctx, kuadrantKey, kObj)
 				g.Expect(err).ToNot(HaveOccurred())
@@ -795,7 +797,7 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			By("Expect the topology spread constraints to be removed from the limitador deployment")
-			Eventually(func (g Gomega) {
+			Eventually(func(g Gomega) {
 				limitadorDeploymentKey := client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}
 				lDeployment := &appsv1.Deployment{}
 				err := k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)

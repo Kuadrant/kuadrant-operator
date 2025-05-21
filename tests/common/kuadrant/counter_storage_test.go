@@ -58,8 +58,8 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				g.Expect(err).ToNot(HaveOccurred())
-				result := reflect.DeepEqual(existingLimitador.Spec.Storage,  spec)
-				g.Expect(result).To(BeTrue()) 
+				result := reflect.DeepEqual(existingLimitador.Spec.Storage, spec)
+				g.Expect(result).To(BeTrue())
 
 			}).WithContext(ctx).Should(Succeed())
 
@@ -69,7 +69,7 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 			err := k8sClient.Get(ctx, kuadrantKey, existingKuadrant)
 			Expect(err).ToNot(HaveOccurred())
 			existingKuadrant.Spec.Resilience.CounterStorage = &limitadorv1alpha1.Storage{}
-			
+
 			err = k8sClient.Update(ctx, existingKuadrant)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -80,8 +80,8 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				g.Expect(err).ToNot(HaveOccurred())
-				result := reflect.DeepEqual(existingLimitador.Spec.Storage,  &limitadorv1alpha1.Storage{})
-				g.Expect(result).To(BeTrue()) 
+				result := reflect.DeepEqual(existingLimitador.Spec.Storage, &limitadorv1alpha1.Storage{})
+				g.Expect(result).To(BeTrue())
 
 			}).WithContext(ctx).Should(Succeed())
 
@@ -90,7 +90,7 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 			err = k8sClient.Get(ctx, kuadrantKey, existingKuadrant)
 			Expect(err).ToNot(HaveOccurred())
 			existingKuadrant.Spec.Resilience.CounterStorage = nil
-			
+
 			err = k8sClient.Update(ctx, existingKuadrant)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -102,12 +102,11 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 				err := k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				g.Expect(err).ToNot(HaveOccurred())
 				result := (existingLimitador.Spec.Storage == nil)
-				g.Expect(result).To(BeTrue()) 
+				g.Expect(result).To(BeTrue())
 
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
-
 
 	Context("User set the Storage configuration directly in the limitador resource", Serial, func() {
 		It("not reverting of chanages happen", func(ctx SpecContext) {
@@ -117,7 +116,7 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 			By("Setup the basic kuadrant installation")
 			tests.ApplyKuadrantCR(ctx, testClient(), testNamespace)
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
-			
+
 			By("Configure the storage in the limitador resource")
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err := k8sClient.Get(ctx, limitadorKey, existingLimitador)
@@ -130,7 +129,6 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 			By("Check that kuadrant and limitador are ready")
 			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
-			
 
 			By("Check that the limitador resource is still configured as expected.")
 			Eventually(func(g Gomega) {
@@ -139,11 +137,10 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				g.Expect(err).ToNot(HaveOccurred())
-				result := reflect.DeepEqual(existingLimitador.Spec.Storage,  &limitadorv1alpha1.Storage{Disk: &limitadorv1alpha1.DiskSpec{}})
-				g.Expect(result).To(BeTrue()) 
+				result := reflect.DeepEqual(existingLimitador.Spec.Storage, &limitadorv1alpha1.Storage{Disk: &limitadorv1alpha1.DiskSpec{}})
+				g.Expect(result).To(BeTrue())
 
 			}).WithContext(ctx).Should(Succeed())
-
 
 		}, testTimeOut)
 	})
@@ -186,8 +183,8 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err := k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				g.Expect(err).ToNot(HaveOccurred())
-				result := reflect.DeepEqual(existingLimitador.Spec.Storage,  &limitadorv1alpha1.Storage{Disk: &limitadorv1alpha1.DiskSpec{}})
-				g.Expect(result).To(BeTrue()) 
+				result := reflect.DeepEqual(existingLimitador.Spec.Storage, &limitadorv1alpha1.Storage{Disk: &limitadorv1alpha1.DiskSpec{}})
+				g.Expect(result).To(BeTrue())
 
 			}).WithContext(ctx).Should(Succeed())
 

@@ -213,6 +213,7 @@ type Builder struct {
 	logger     logr.Logger
 	reconcile  exttypes.ReconcileFn
 	watchTypes []client.Object
+	manager    ctrlruntime.Manager
 }
 
 func NewBuilder(name string) (*Builder, logr.Logger) {
@@ -229,6 +230,10 @@ func NewBuilder(name string) (*Builder, logr.Logger) {
 		logger:     logger,
 		watchTypes: make([]client.Object, 0),
 	}, logger
+}
+
+func (b *Builder) Manager() ctrlruntime.Manager {
+	return b.manager
 }
 
 func (b *Builder) WithScheme(scheme *runtime.Scheme) *Builder {
@@ -280,21 +285,22 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to construct manager: %w", err)
 	}
+	b.manager = mgr
 
-	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	dynamicClient, err := dynamic.NewForConfig(b.manager.GetConfig())
 	if err != nil {
 		return nil, fmt.Errorf("unable to create client for manager: %w", err)
 	}
 
 	watchSources := make([]ctrlruntimesrc.Source, 0)
 	for _, obj := range b.watchTypes {
-		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
+		source := ctrlruntimesrc.Kind(b.manager.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
 		watchSources = append(watchSources, source)
 	}
 
 	return &ExtensionController{
 		name:            b.name,
-		manager:         mgr,
+		manager:         b.manager,
 		client:          dynamicClient,
 		logger:          b.logger,
 		reconcile:       b.reconcile,

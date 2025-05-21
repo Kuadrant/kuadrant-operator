@@ -67,6 +67,17 @@ kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/co
 
 For more information on CoreDNS installations, see [here](https://coredns.io/manual/installation/).
 
+#### OpenShift on AWS
+
+If you are using an OpenShift cluster on AWS you will also need to run the following commands:
+
+```shell
+kubectl patch service kuadrant-coredns --type='json' -p='[{"op": "remove", "path": "/spec/externalTrafficPolicy"}]' -n kuadrant-coredns
+kubectl annotate service/kuadrant-coredns service.beta.kubernetes.io/aws-load-balancer-type=nlb -n kuadrant-coredns
+```
+
+>Note: OpenShift on AWS does not currently support exposing a single port on both UDP and TCP, so in this setup only UDP port 53 is exposed via the ELB.  
+
 ### Sample CoreDNS Configuration
 The above installation will create a sample CoreDNS Config file, in the `kuadrant-coredns` namespace, named: `kuadrant-coredns`. This will need to be modified to suit your needs, if you are not running the local sample.
 

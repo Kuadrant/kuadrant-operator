@@ -3,9 +3,8 @@ package controller
 import (
 	"context"
 
-	kuadpolmachinery "github.com/kuadrant/policy-machinery/controller"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
+	types2 "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
@@ -13,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 
@@ -21,7 +20,7 @@ import (
 )
 
 type OIDCPolicyReconciler struct {
-}
+} // TODO: Maybe extend from BaseReconciler ?
 
 // kuadrant permissions
 //+kubebuilder:rbac:groups=kuadrant.io,resources=oidcpolicies,verbs=get;list;watch;update;patch
@@ -35,36 +34,24 @@ type OIDCPolicyReconciler struct {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
-func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, _ *types.KuadrantCtx) (reconcile.Result, error) {
+func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, _ types.KuadrantCtx) (reconcile.Result, error) {
 	logger := utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler")
 	logger.Info("Reconciling OIDCPolicy")
 
-	dynClient, err := utils.DynamicClientFromContext(ctx)
+	cli, err := utils.ClientFromContext(ctx)
 	if err != nil {
-		return reconcile.Result{}, err
+		logger.Error(err, "Failed to retrieve cli")
+		return reconcile.Result{}, nil
 	}
 
-	gvr := schema.GroupVersion{Group: "kuadrant.io", Version: "v1alpha1"}.WithResource("oidcpolicies")
-	oidcPolicyResource := dynClient.Resource(gvr).Namespace(request.Namespace)
-
-	unstructuredOidcPol, err := oidcPolicyResource.Get(ctx, request.Name, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.Error(nil, "Could not find OIDCPolicy")
-			return reconcile.Result{}, nil
-		}
+	oidcPolicy := &kuadrantv1alpha1.OIDCPolicy{}
+	err = cli.Get(ctx, request.NamespacedName, oidcPolicy)
+	if errors.IsNotFound(err) {
 		logger.Error(err, "Failed to get OIDCPolicy")
 		return reconcile.Result{}, err
 	}
 
-	result, err := kuadpolmachinery.Restructure[v1alpha1.OIDCPolicy](unstructuredOidcPol)
-	if err != nil {
-		logger.Error(err, "Failed to restructure OIDCPolicy")
-		return reconcile.Result{}, err
-	}
-	oidcPolicy := result.(v1alpha1.OIDCPolicy)
-
-	_, specErr := r.reconcileSpec(ctx, dynClient, &logger, &oidcPolicy)
+	_, specErr := r.reconcileSpec(ctx, cli, &logger, oidcPolicy)
 
 	if specErr != nil {
 		return reconcile.Result{}, specErr
@@ -74,32 +61,33 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, dynClient *dynamic.DynamicClient, logger *logr.Logger, pol *v1alpha1.OIDCPolicy) (reconcile.Result, error) { //nolint:unparam
+func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, cli client.Client, logger *logr.Logger, pol *kuadrantv1alpha1.OIDCPolicy) (reconcile.Result, error) { //nolint:unparam
 	// Reconcile AuthPolicy for the oidc policy http route
 	desiredAuthPol := buildAuthPolicy(pol)
-	desiredAuthPolUnstructured, err := kuadpolmachinery.Destruct(desiredAuthPol)
-	if err != nil {
-		logger.Error(err, "Failed to destruct AuthPolicy")
-		return reconcile.Result{}, err
-	}
-	// TODO Set Owner reference of AuthPolicy
 
-	gvr := schema.GroupVersion{Group: "kuadrant.io", Version: "v1"}.WithResource("authpolicies")
-	authPolicyResource := dynClient.Resource(gvr).Namespace(pol.Namespace)
-
-	_, err = authPolicyResource.Get(ctx, pol.Name, metav1.GetOptions{})
+	// TODO: Set owner reference, missing scheme
+	/*err := controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
 	if err != nil {
+		logger.Error(err, "Error setting OwnerReference on AuthPolicy",
+			"Kind", pol.GetObjectKind().GroupVersionKind().String(),
+			"Namespace", pol.GetNamespace(),
+			"Name", pol.GetName(),
+		)
+	}*/
+	authPolicy := &kuadrantv1.AuthPolicy{}
+	if err := cli.Get(ctx, types2.NamespacedName{Namespace: pol.Namespace, Name: pol.Name}, authPolicy); err != nil {
 		if !errors.IsNotFound(err) {
-			logger.Error(nil, "Failed to get auth policy")
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, err
 		}
 
-		// Not found, let's create
-		if _, err = authPolicyResource.Create(ctx, desiredAuthPolUnstructured, metav1.CreateOptions{}); err != nil {
+		// TODO: Check if object is tagged for deletion maybe (?)
+		// Create
+		if err = cli.Create(ctx, desiredAuthPol); err != nil {
 			logger.Error(err, "Failed to create auth policy")
 			return reconcile.Result{}, err
 		}
 	}
+	// TODO: If tagged for deletion, delete.
 
 	// TODO: item found successfully, update the AuthPolicy
 
@@ -109,7 +97,7 @@ func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, dynClient *dyn
 	return reconcile.Result{}, nil
 }
 
-func buildAuthPolicy(pol *v1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
+func buildAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthPolicy",

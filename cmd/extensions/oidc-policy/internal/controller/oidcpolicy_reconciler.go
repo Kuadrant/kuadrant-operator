@@ -6,6 +6,8 @@ import (
 	types2 "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
+
 	"github.com/go-logr/logr"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -20,7 +22,12 @@ import (
 )
 
 type OIDCPolicyReconciler struct {
-} // TODO: Maybe extend from BaseReconciler ?
+	*reconcilers.BaseReconciler
+}
+
+func NewOIDCPolicyReconciler() *OIDCPolicyReconciler {
+	return &OIDCPolicyReconciler{}
+}
 
 // kuadrant permissions
 //+kubebuilder:rbac:groups=kuadrant.io,resources=oidcpolicies,verbs=get;list;watch;update;patch

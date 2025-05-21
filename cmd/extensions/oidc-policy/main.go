@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlruntime "sigs.k8s.io/controller-runtime"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -26,7 +26,7 @@ func init() {
 }
 
 func main() {
-	oidcPolicyReconciler := controller.OIDCPolicyReconciler{}
+	oidcPolicyReconciler := controller.NewOIDCPolicyReconciler()
 	builder, logger := extcontroller.NewBuilder("oidc-policy-controller")
 	extController, err := builder.
 		WithScheme(scheme).
@@ -38,7 +38,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = extController.Start(ctrl.SetupSignalHandler()); err != nil {
+	oidcPolicyReconciler.SetupWithManager(builder.Manager())
+
+	if err = extController.Start(ctrlruntime.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")
 		os.Exit(1)
 	}

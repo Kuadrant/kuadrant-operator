@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+option go_package = "/v1";
+
+package kuadrant.v1;
+
+import "v1/google/protobuf/timestamp.proto";
+import "v1/google/protobuf/empty.proto";
+import "v1/google/api/expr/v1alpha1/value.proto";
+import "v1/google/rpc/status.proto";
+
+import "v1/policy.proto";
+import "v1/common.proto";
+
+// The greeting service definition.
+service ExtensionService {
+  // Sends a greeting
+  rpc Ping (PingRequest) returns (PongResponse) {}
+  // Subscribe to a set of Events
+  rpc Subscribe(google.protobuf.Empty) returns (stream SubscribeResponse) {}
+  // Resolve the expression for context and subscribe (or not)
+  rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
+}
+
+// The request message containing the time the request was dispatched.
+message PingRequest {
+  google.protobuf.Timestamp out = 1;
+}
+
+// The response message containing the time the request was received.
+message PongResponse {
+  google.protobuf.Timestamp in = 1;
+}
+
+// evaluate the expression and whether or not to subscribe
+message ResolveRequest {
+  kuadrant.v1.Policy policy = 1;
+  string expression = 2;
+  bool subscribe = 3;
+}
+
+// Return the result as a cel value
+message ResolveResponse {
+  google.api.expr.v1alpha1.Value cel_result = 1;
+}
+
+message SubscribeResponse {
+  Event event = 1;
+  google.rpc.Status error = 2;
+}
+
+message Event {
+  Metadata metadata = 1;
+}

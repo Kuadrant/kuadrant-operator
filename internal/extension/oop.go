@@ -26,7 +26,7 @@ import (
 	"syscall"
 	"time"
 
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"

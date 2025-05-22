@@ -32,7 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 type Manager struct {

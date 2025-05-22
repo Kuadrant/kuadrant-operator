@@ -13,7 +13,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/controller"
 
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 

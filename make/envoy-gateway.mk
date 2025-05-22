@@ -6,9 +6,11 @@
 EG_CONFIG_DIR = config/dependencies/envoy-gateway
 EG_NAMESPACE = envoy-gateway-system
 
+EG_VERSION ?= v1.2.6
+
 # egctl tool
 EGCTL=$(PROJECT_PATH)/bin/egctl
-EGCTL_VERSION ?= v1.1.0
+EGCTL_VERSION ?= $(EG_VERSION)
 
 ifeq ($(ARCH),x86_64)
 	EG_ARCH = amd64
@@ -47,7 +49,6 @@ envoy-gateway-enable-envoypatchpolicy: $(YQ)
 	-rm -rf $(TMP)
 	kubectl rollout restart deployment envoy-gateway -n $(EG_NAMESPACE)
 
-EG_VERSION ?= v1.1.0
 .PHONY: envoy-gateway-install
 envoy-gateway-install: kustomize $(HELM)
 	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n $(EG_NAMESPACE) --create-namespace

@@ -11,6 +11,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -143,7 +144,7 @@ func BuildEnvoyPatchPolicyClusterPatch(name, host string, port int, mtls bool, c
 			Name: name,
 			Operation: envoygatewayv1alpha1.JSONPatchOperation{
 				Op:    envoygatewayv1alpha1.JSONPatchOperationType("add"),
-				Path:  "",
+				Path:  ptr.To(""),
 				Value: patch,
 			},
 		},

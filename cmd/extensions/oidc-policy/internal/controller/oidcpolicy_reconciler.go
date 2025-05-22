@@ -3,8 +3,10 @@ package controller
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
 	types2 "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 
@@ -23,6 +25,7 @@ import (
 
 type OIDCPolicyReconciler struct {
 	*reconcilers.BaseReconciler
+	logger logr.Logger
 }
 
 func NewOIDCPolicyReconciler() *OIDCPolicyReconciler {
@@ -42,69 +45,88 @@ func NewOIDCPolicyReconciler() *OIDCPolicyReconciler {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
 func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, _ types.KuadrantCtx) (reconcile.Result, error) {
-	logger := utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler")
-	logger.Info("Reconciling OIDCPolicy")
-
-	cli, err := utils.ClientFromContext(ctx)
-	if err != nil {
-		logger.Error(err, "Failed to retrieve cli")
-		return reconcile.Result{}, nil
-	}
+	r.logger = utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler")
+	r.logger.Info("Reconciling OIDCPolicy")
 
 	oidcPolicy := &kuadrantv1alpha1.OIDCPolicy{}
-	err = cli.Get(ctx, request.NamespacedName, oidcPolicy)
+	err := r.Client().Get(ctx, request.NamespacedName, oidcPolicy)
 	if errors.IsNotFound(err) {
-		logger.Error(err, "Failed to get OIDCPolicy")
+		r.logger.Error(err, "Failed to get OIDCPolicy")
 		return reconcile.Result{}, err
 	}
 
-	_, specErr := r.reconcileSpec(ctx, cli, &logger, oidcPolicy)
+	_, specErr := r.reconcileSpec(ctx, oidcPolicy)
 
 	if specErr != nil {
 		return reconcile.Result{}, specErr
 	}
 
-	logger.Info("successfully reconciled")
+	r.logger.Info("successfully reconciled")
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, cli client.Client, logger *logr.Logger, pol *kuadrantv1alpha1.OIDCPolicy) (reconcile.Result, error) { //nolint:unparam
+func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy) (reconcile.Result, error) { //nolint:unparam
 	// Reconcile AuthPolicy for the oidc policy http route
-	desiredAuthPol := buildAuthPolicy(pol)
+	if err := r.reconcileMainAuthPolicy(ctx, pol); err != nil {
+		r.logger.Error(err, "Failed to reconcile main auth policy")
+		return reconcile.Result{}, err
+	}
 
-	// TODO: Set owner reference, missing scheme
-	/*err := controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
+	// TODO: Reconcile HTTPRoute for the callback for exchanging code/token
+	if err := r.reconcileCallbackHTTPRoute(ctx, pol); err != nil {
+		r.logger.Error(err, "Failed to reconcile callback HTTP route")
+		return reconcile.Result{}, err
+	}
+	// TODO: Reconcile AuthPolicy for the Token exchange flow with metadata http call
+	if err := r.reconcileCallbackAuthPolicy(ctx, pol); err != nil {
+		r.logger.Error(err, "Failed to reconcile callback auth policy")
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy) error {
+	desiredAuthPol := buildMainAuthPolicy(pol)
+
+	err := controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
 	if err != nil {
-		logger.Error(err, "Error setting OwnerReference on AuthPolicy",
+		r.logger.Error(err, "Error setting OwnerReference on AuthPolicy",
 			"Kind", pol.GetObjectKind().GroupVersionKind().String(),
 			"Namespace", pol.GetNamespace(),
 			"Name", pol.GetName(),
 		)
-	}*/
+	}
 	authPolicy := &kuadrantv1.AuthPolicy{}
-	if err := cli.Get(ctx, types2.NamespacedName{Namespace: pol.Namespace, Name: pol.Name}, authPolicy); err != nil {
+	if err = r.Client().Get(ctx, types2.NamespacedName{Namespace: pol.Namespace, Name: pol.Name}, authPolicy); err != nil {
 		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, err
+			return err
 		}
 
 		// TODO: Check if object is tagged for deletion maybe (?)
 		// Create
-		if err = cli.Create(ctx, desiredAuthPol); err != nil {
-			logger.Error(err, "Failed to create auth policy")
-			return reconcile.Result{}, err
+		if err = r.Client().Create(ctx, desiredAuthPol); err != nil {
+			r.logger.Error(err, "Failed to create auth policy")
+			return err
 		}
 	}
 	// TODO: If tagged for deletion, delete.
 
 	// TODO: item found successfully, update the AuthPolicy
-
-	// TODO: Reconcile HTTPRoute for the callback for exchanging code/token
-	// TODO: Reconcile AuthPolicy for the Token exchange flow with metadata http call
-
-	return reconcile.Result{}, nil
+	return nil
 }
 
-func buildAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
+func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(_ context.Context, _ *kuadrantv1alpha1.OIDCPolicy) error {
+	// TODO: reconcileCallbackAuthPolicy
+	return nil
+}
+
+func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(_ context.Context, _ *kuadrantv1alpha1.OIDCPolicy) error {
+	// TODO: reconcileCallbackHTTPRoute
+	return nil
+}
+
+func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthPolicy",
@@ -131,21 +153,51 @@ func buildAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
 								},
 							},
 						},
-						//Response: &kuadrantv1.MergeableResponseSpec{
-						//	Unauthenticated: &kuadrantv1.MergeableDenyWithSpec{
-						//		DenyWithSpec: authorinov1beta3.DenyWithSpec{
-						//			Code: 302,
-						//			Headers: map[string]authorinov1beta3.ValueOrSelector{
-						//				"location": {
-						//					Value: runtime.RawExtension{
-						//						Raw: []byte(pol.Spec.Provider.IssuerURL + "/oauth/authorize?client_id=" + pol.Spec.Provider.ClientID + "&redirect_uri=https://NEED_THIS_FROM_KUADRANT_CTX_OR_CRD/auth/callback&response_type=code&scope=openid"),
-						//					},
-						//				},
-						//			},
-						//		},
-						//		Source: "dassource",
-						//	},
-						//},
+						Authorization: map[string]kuadrantv1.MergeableAuthorizationSpec{
+							"oidc": {
+								AuthorizationSpec: authorinov1beta3.AuthorizationSpec{
+									CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+										Conditions: []authorinov1beta3.PatternExpressionOrRef{
+											{
+												CelPredicate: authorinov1beta3.CelPredicate{
+													Predicate: "auth.identity.iss == " + pol.Spec.Provider.IssuerURL,
+												},
+											},
+										},
+									},
+									AuthorizationMethodSpec: authorinov1beta3.AuthorizationMethodSpec{
+										PatternMatching: &authorinov1beta3.PatternMatchingAuthorizationSpec{
+											Patterns: []authorinov1beta3.PatternExpressionOrRef{
+												{
+													CelPredicate: authorinov1beta3.CelPredicate{
+														Predicate: "\"companySomething?\" in auth.identity.groups_direct",
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Response: &kuadrantv1.MergeableResponseSpec{
+							Unauthenticated: &kuadrantv1.MergeableDenyWithSpec{
+								DenyWithSpec: authorinov1beta3.DenyWithSpec{
+									Code: 302,
+									Headers: map[string]authorinov1beta3.ValueOrSelector{
+										"location": {
+											Value: runtime.RawExtension{
+												Raw: []byte(pol.Spec.Provider.IssuerURL + "/oauth/authorize?client_id=" + pol.Spec.Provider.ClientID + "&redirect_uri=https://NEED_THIS_FROM_KUADRANT_CTX_OR_CRD/auth/callback&response_type=code&scope=openid"),
+											},
+										},
+										"set-cookie": {
+											Value: runtime.RawExtension{
+												Raw: []byte(`"target=" + request.path + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`),
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},

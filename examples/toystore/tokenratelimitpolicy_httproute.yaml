@@ -1,0 +1,15 @@
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: token-limit-free
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  limit:
+    rate:
+      limit: 20000
+      window: 1d
+    predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")'
+    counter: auth.identity.userid

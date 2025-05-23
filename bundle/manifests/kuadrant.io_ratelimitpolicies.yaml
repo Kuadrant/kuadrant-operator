@@ -28,7 +28,7 @@ spec:
       name: Enforced
       priority: 2
       type: string
-    - description: Kind of the object to which the policy aaplies
+    - description: Kind of the object to which the policy applies
       jsonPath: .spec.targetRef.kind
       name: TargetKind
       priority: 2

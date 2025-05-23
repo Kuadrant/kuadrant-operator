@@ -35,6 +35,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/authorino"
 	"github.com/kuadrant/kuadrant-operator/internal/envoygateway"
@@ -112,6 +113,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			metav1.NamespaceAll,
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.RateLimitPolicy]{}),
 		)),
+		controller.WithRunnable("tokenratelimitpolicy watcher", controller.Watch(
+			&kuadrantv1alpha1.TokenRateLimitPolicy{},
+			kuadrantv1alpha1.TokenRateLimitPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.TokenRateLimitPolicy]{}),
+		)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(
 			&corev1.ConfigMap{},
 			controller.ConfigMapsResource,
@@ -136,6 +143,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1.TLSPolicyGroupKind,
 			kuadrantv1.AuthPolicyGroupKind,
 			kuadrantv1.RateLimitPolicyGroupKind,
+			kuadrantv1alpha1.TokenRateLimitPolicyGroupKind,
 		),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,

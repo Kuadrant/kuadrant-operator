@@ -112,11 +112,13 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Unset observability flag to disable the feature
-			err = testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
-			kuadrantCR.Spec.Observability.Enable = false
-			err = testClient().Update(ctx, kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
+				g.Expect(err).NotTo(HaveOccurred())
+				kuadrantCR.Spec.Observability.Enable = false
+				err = testClient().Update(ctx, kuadrantCR)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors were deleted
 			Eventually(func(g Gomega) {

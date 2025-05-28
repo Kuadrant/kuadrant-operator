@@ -20,7 +20,20 @@ import (
 )
 
 type OIDCPolicyReconciler struct {
-} // TODO: Maybe extend from BaseReconciler ?
+	*reconcilers.BaseReconciler
+	logger logr.Logger
+}
+
+func NewOIDCPolicyReconciler() *OIDCPolicyReconciler {
+	return &OIDCPolicyReconciler{
+		BaseReconciler: reconcilers.NewLazyBaseReconciler(),
+	}
+}
+
+func (r *OIDCPolicyReconciler) WithLogger(logger logr.Logger) *OIDCPolicyReconciler {
+	r.logger = logger
+	return r
+}
 
 // kuadrant permissions
 //+kubebuilder:rbac:groups=kuadrant.io,resources=oidcpolicies,verbs=get;list;watch;update;patch

@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/internal/controller"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,12 +23,13 @@ var (
 
 func init() {
 	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(gatewayapiv1.Install(scheme))
 	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
-	oidcPolicyReconciler := controller.OIDCPolicyReconciler{}
+	oidcPolicyReconciler := controller.NewOIDCPolicyReconciler()
 	builder, logger := extcontroller.NewBuilder("oidc-policy-controller")
 	extController, err := builder.
 		WithScheme(scheme).
@@ -37,6 +40,8 @@ func main() {
 		logger.Error(err, "unable to create controller")
 		os.Exit(1)
 	}
+
+	oidcPolicyReconciler.SetupWithManager(extController.Manager())
 
 	if err = extController.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	v0 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 
 	"github.com/google/cel-go/cel"
 )
@@ -17,8 +17,8 @@ var tests = []struct {
 	{expr: `__KUADRANT_VERSION == "1_dev"`},
 	{expr: `self.findGateways().size() == 1`},
 	{expr: `self.findGateways()[0].metadata.name == "kuadrant-gw"`},
-	{expr: `self.findGateways()[0].listeners.size() == 1`},
-	{expr: `self.findGateways()[0].listeners[0].hostname == "kuadrant.io"`},
+	{expr: `self.findGateways()[0].spec.listeners.size() == 1`},
+	{expr: `self.findGateways()[0].spec.listeners[0].hostname == "kuadrant.io"`},
 	{expr: `self.findGateways()[0].metadata.name == self.targetRefs[0].findGateways()[0].metadata.name`},
 }
 
@@ -40,8 +40,8 @@ func TestKuadrantExt(t *testing.T) {
 				t.Fatal(err)
 			}
 			out, _, err := prg.Eval(map[string]any{
-				"self": &v0.Policy{
-					TargetRefs: []*v0.TargetRef{
+				"self": &v1.Policy{
+					TargetRefs: []*v1.TargetRef{
 						{
 							Name:  "foo",
 							Group: "bar",
@@ -83,17 +83,19 @@ func testKuadrantEnv(t *testing.T, opts ...cel.EnvOption) *cel.Env {
 type TestDAG struct {
 }
 
-func (d *TestDAG) FindGatewaysFor(targets []*v0.TargetRef) ([]*v0.Gateway, error) {
+func (d *TestDAG) FindGatewaysFor(targets []*v1.TargetRef) ([]*v1.Gateway, error) {
 	if targets[0].Name == "foo" && targets[0].Group == "bar" && targets[0].Kind == "baz" {
-		return []*v0.Gateway{
+		return []*v1.Gateway{
 			{
-				Metadata: &v0.Metadata{
+				Metadata: &v1.Metadata{
 					Name:      "kuadrant-gw",
 					Namespace: "some-ns",
 				},
-				Listeners: []*v0.Listener{
-					{
-						Hostname: "kuadrant.io",
+				Spec: &v1.GatewaySpec{
+					Listeners: []*v1.Listener{
+						{
+							Hostname: "kuadrant.io",
+						},
 					},
 				},
 			},

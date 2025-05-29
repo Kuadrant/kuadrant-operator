@@ -13,7 +13,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	v0 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v0"
+	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 func TestStateAwareDAG(t *testing.T) {
@@ -74,7 +74,7 @@ func TestStateAwareDAG(t *testing.T) {
 			nil,
 		}
 
-		gws, err := dag.FindGatewaysFor([]*v0.TargetRef{{Kind: "Service", Name: "service-1"}})
+		gws, err := dag.FindGatewaysFor([]*v1.TargetRef{{Kind: "Service", Name: "service-1"}})
 		if err != nil {
 			t.Fatalf("Unexpected error: %s", err)
 		}
@@ -85,7 +85,7 @@ func TestStateAwareDAG(t *testing.T) {
 			t.Fatalf("Expected gateway-1, got %s", gws[0].GetMetadata().GetName())
 		}
 
-		gws, err = dag.FindGatewaysFor([]*v0.TargetRef{{Kind: "TLSRoute", Name: "tls-route-1"}})
+		gws, err = dag.FindGatewaysFor([]*v1.TargetRef{{Kind: "TLSRoute", Name: "tls-route-1"}})
 		if err != nil {
 			t.Fatalf("Unexpected error: %s", err)
 		}
@@ -99,7 +99,7 @@ func TestStateAwareDAG(t *testing.T) {
 			t.Fatalf("Expected gateway-4")
 		}
 
-		gws, err = dag.FindGatewaysFor([]*v0.TargetRef{{Kind: "Service", Name: "service-3"}})
+		gws, err = dag.FindGatewaysFor([]*v1.TargetRef{{Kind: "Service", Name: "service-3"}})
 		if err != nil {
 			t.Fatalf("Unexpected error: %s", err)
 		}

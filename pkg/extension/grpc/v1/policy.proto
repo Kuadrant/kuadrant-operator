@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "/v1";
+
+package kuadrant.v1;
+
+import "v1/common.proto";
+
+message Policy {
+  Metadata metadata = 1;
+  repeated TargetRef targetRefs = 2;
+  PolicyStatus status = 3;
+}
+
+message PolicyStatus {
+  int64 observedGeneration = 1;
+  repeated Condition conditions = 2;
+}

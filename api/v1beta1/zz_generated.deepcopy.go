@@ -213,12 +213,12 @@ func (in *ResilienceStatus) DeepCopyInto(out *ResilienceStatus) {
 	*out = *in
 	if in.RateLimiting != nil {
 		in, out := &in.RateLimiting, &out.RateLimiting
-		*out = new(bool)
+		*out = new(Reason)
 		**out = **in
 	}
 	if in.CounterStorage != nil {
 		in, out := &in.CounterStorage, &out.CounterStorage
-		*out = new(bool)
+		*out = new(Reason)
 		**out = **in
 	}
 }

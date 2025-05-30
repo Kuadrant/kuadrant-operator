@@ -117,14 +117,87 @@ func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *
 	return err
 }
 
+func calculateResilienceStatus(topology *machinery.Topology) *kuadrantv1beta1.ResilienceStatus {
+	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil {
+		return nil
+	}
+
+	lObj := GetLimitadorFromTopology(topology)
+	if lObj == nil {
+		return nil
+	}
+
+	status := &kuadrantv1beta1.ResilienceStatus{
+		CounterStorage: ptr.To(kuadrantv1beta1.Undefined),
+		RateLimiting:   ptr.To(kuadrantv1beta1.Undefined),
+	}
+
+	if kObj.Spec.Resilience != nil && kObj.Spec.Resilience.RateLimiting == true {
+		status.RateLimiting = ptr.To(kuadrantv1beta1.KuadrantDefined)
+	}
+	if userDefinedRateLimitingResiliences(lObj, topology) && *status.RateLimiting != kuadrantv1beta1.KuadrantDefined {
+		status.RateLimiting = ptr.To(kuadrantv1beta1.UserDefined)
+	}
+
+	if kObj.Spec.Resilience != nil && kObj.Spec.Resilience.CounterStorage != nil {
+		status.CounterStorage = ptr.To(kuadrantv1beta1.KuadrantDefined)
+	}
+
+	if userDefinedCounterStorage(lObj) && *status.CounterStorage != kuadrantv1beta1.KuadrantDefined {
+		status.CounterStorage = ptr.To(kuadrantv1beta1.UserDefined)
+	}
+
+	return status
+}
+
+func userDefinedRateLimitingResiliences(lObj *limitadorv1alpha1.Limitador, topology *machinery.Topology) bool {
+	if lObj == nil {
+		return false
+	}
+
+	requests := false
+	if lObj.Spec.ResourceRequirements != nil && lObj.Spec.ResourceRequirements.Requests != nil {
+		requests = lObj.Spec.ResourceRequirements.Requests.Cpu().Value() != 0 || lObj.Spec.ResourceRequirements.Requests.Memory().Value() != 0
+	}
+
+	pdb := false
+	if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable != nil {
+		pdb = lObj.Spec.PodDisruptionBudget.MinAvailable != nil
+	}
+
+	hasDeployment := false
+	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+	if deployment != nil && deployment.Spec.Template.Spec.TopologySpreadConstraints != nil {
+		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			if item.TopologyKey == "kubernetes.io/hostname" || item.TopologyKey == "kubernetes.io/zone" {
+				hasDeployment = true
+			}
+		}
+	}
+
+	return lObj.Spec.Replicas != nil || requests || pdb || hasDeployment
+}
+
+func userDefinedCounterStorage(lObj *limitadorv1alpha1.Limitador) bool {
+	if lObj == nil {
+		return false
+	}
+
+	return lObj.Spec.Storage != nil
+
+}
+
 func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, logger logr.Logger, kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *kuadrantv1beta1.KuadrantStatus {
+	logger.V(0).Info("calculate kuadrant status", "status", "started")
+	defer logger.V(0).Info("calculate kuadrant status", "status", "completed")
 	newStatus := &kuadrantv1beta1.KuadrantStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
 		MtlsAuthorino:      mtlsAuthorino(kObj, state),
 		MtlsLimitador:      mtlsLimitador(kObj, state),
-		Resilience:         ptr.To(kObj.BasicResilienceStatus()),
+		Resilience:         calculateResilienceStatus(topology),
 	}
 
 	availableCond := r.readyCondition(topology, logger)

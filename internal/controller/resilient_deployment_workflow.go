@@ -6,6 +6,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -141,8 +142,6 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 	}
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
-	history := GetHistory()
-
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
 		logger.V(level).Info("kuadrant resource has not being created yet.")
@@ -154,67 +153,60 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		return nil
 	}
 
-	wasConfigured := false
-	if history.kuadrant != nil {
-		wasConfigured = history.kuadrant.Spec.Resilience.IsRateLimitingConfigured()
-	}
-	nowConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
+	if r.startCleanup(kObj) {
+		logger.V(level).Info("Reconciling Rate Limiting resilient configuration", "status", "started")
+		defer logger.V(level).Info("Reconciling Rate Limiting resilient configuration cleanup", "status", "completed")
 
-	if wasConfigured && !nowConfigured {
-		deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
-		if deployment != nil {
-			constraints := []corev1.TopologySpreadConstraint{}
-			for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
-				if item.TopologyKey == "kubernetes.io/hostname" || item.TopologyKey == "kubernetes.io/zone" {
-					logger.V(level).Info("skipping item", "item", item)
-					continue
-				}
-				logger.V(level).Info("adding item", "item", item)
-				constraints = append(constraints, item)
-			}
-
-			deployment.Spec.Template.Spec.TopologySpreadConstraints = constraints
-			err := r.updateDeployment(ctx, deployment)
-			if err != nil {
-				logger.V(level).Info("failed to update limitador deployment", "status", "error", "error", err)
-				return nil
-			}
-		}
-
-		lObj.Spec.Replicas = ptr.To(1)
-		lObj.Spec.PodDisruptionBudget = nil
-		lObj.Spec.ResourceRequirements = nil
-		err := r.updateLimitador(ctx, lObj)
+		err := r.cleanupLimitadorDeployment(topology, ctx, logger)
 		if err != nil {
-			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+			logger.V(level).Info("failed to cleanup limitador deployment", "status", "error", "error", err)
 			return nil
 		}
 
-	}
+		err = r.cleanupLimitador(ctx, logger, lObj)
+		if err != nil {
+			logger.V(level).Info("failed to cleanup limitador resource", "status", "error", "error", err)
+			return nil
+		}
 
-	if !nowConfigured {
-		logger.V(level).Info("RateLimiting not configured", "status", "exiting")
 		return nil
 	}
-	logger.V(level).Info("RateLimiting configured", "status", "contiune")
 
-	writeLimitador := false
-	if lObj.Spec.Replicas == nil || !wasConfigured {
-		lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
-		writeLimitador = true
+	if r.startReconcile(kObj) {
+		logger.V(level).Info("Reconciling Rate Limiting resilient configuration creation", "status", "started")
+		defer logger.V(level).Info("Reconciling Rate Limiting resilient configuration creation", "status", "completed")
+
+		err := r.configureLimitador(ctx, logger, lObj)
+		if err != nil {
+			logger.V(level).Info("failed to configure limitador deployment", "status", "error", "error", err)
+			return nil
+		}
+
+		err = r.configureLimitadorDeployment(topology, ctx, logger)
+		if err != nil {
+			logger.V(level).Info("failed to configure limitador deployment", "status", "error", "error", err)
+			return nil
+		}
 	}
 
-	if !limitadorPDBIsConfigured(lObj) || !wasConfigured {
+	return nil
+}
+
+func (r *ResilienceRateLimitingReconciler) configureLimitador(ctx context.Context, logger logr.Logger, lObj *limitadorv1alpha1.Limitador) error {
+	update := false
+	lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
+
+	if !limitadorPDBIsConfigured(lObj) {
 		if lObj.Spec.PodDisruptionBudget == nil {
 			logger.Info("setting the pdb", "status", "working")
 			lObj.Spec.PodDisruptionBudget = &limitadorv1alpha1.PodDisruptionBudgetType{
 				MaxUnavailable: &intstr.IntOrString{IntVal: LimitadorPDB},
 			}
-			writeLimitador = true
+			update = true
 		}
 	}
 
-	if !limitadorResourceRequestsIsConfigured(lObj) || !wasConfigured {
+	if !limitadorResourceRequestsIsConfigured(lObj) {
 		logger.Info("setting the Resource Request", "status", "working")
 		cpu, err := resource.ParseQuantity(Resource_10m)
 		if err != nil {
@@ -235,6 +227,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 			} else {
 				lObj.Spec.ResourceRequirements.Requests[corev1.ResourceCPU] = cpu
 			}
+			update = true
 		}
 
 		if lObj.Spec.ResourceRequirements.Requests.Memory().Value() == 0 {
@@ -243,21 +236,22 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 			} else {
 				lObj.Spec.ResourceRequirements.Requests[corev1.ResourceMemory] = memory
 			}
+			update = true
 		}
 
-		writeLimitador = true
 	}
-
-	if writeLimitador {
+	if update {
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
-			return nil
+			return err
 		}
 	}
+	return nil
+}
 
-	writeLimitadorDeployment := false
-
+func (r *ResilienceRateLimitingReconciler) configureLimitadorDeployment(topology *machinery.Topology, ctx context.Context, logger logr.Logger) error {
+	update := false
 	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
 
 	if !limitadorTopologySpreadConstranits(deployment) && deployment != nil {
@@ -267,7 +261,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 
 		hostname, zone := false, false
 		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
-			logger.V(level).Info("TSC item", "item", item)
+			logger.V(level).Info("Topology Spread Constraint item", "item", item)
 			if item.TopologyKey == "kubernetes.io/hostname" {
 				logger.V(level).Info("hostname", "value", true)
 				hostname = true
@@ -288,7 +282,7 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 				},
 			}
 			deployment.Spec.Template.Spec.TopologySpreadConstraints = append(deployment.Spec.Template.Spec.TopologySpreadConstraints, hostnameConstraint)
-			writeLimitadorDeployment = true
+			update = true
 		}
 
 		if !zone {
@@ -301,20 +295,86 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 				},
 			}
 			deployment.Spec.Template.Spec.TopologySpreadConstraints = append(deployment.Spec.Template.Spec.TopologySpreadConstraints, zoneConstraint)
-			writeLimitadorDeployment = true
+			update = true
 		}
 
 	}
 
-	if writeLimitadorDeployment {
+	if update {
 		err := r.updateDeployment(ctx, deployment)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador deployment resource", "status", "error", "error", err)
 			return nil
 		}
 	}
-
 	return nil
+}
+
+func (r *ResilienceRateLimitingReconciler) cleanupLimitador(ctx context.Context, logger logr.Logger, lObj *limitadorv1alpha1.Limitador) error {
+	lObj.Spec.Replicas = ptr.To(1)
+	lObj.Spec.PodDisruptionBudget = nil
+	lObj.Spec.ResourceRequirements = nil
+	err := r.updateLimitador(ctx, lObj)
+	if err != nil {
+		logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+		return err
+	}
+	return nil
+}
+
+func (r *ResilienceRateLimitingReconciler) cleanupLimitadorDeployment(topology *machinery.Topology, ctx context.Context, logger logr.Logger) error {
+	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+	if deployment != nil {
+		constraints := []corev1.TopologySpreadConstraint{}
+		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			if item.TopologyKey == "kubernetes.io/hostname" || item.TopologyKey == "kubernetes.io/zone" {
+				logger.V(level).Info("skipping item", "item", item)
+				continue
+			}
+			logger.V(level).Info("adding item", "item", item)
+			constraints = append(constraints, item)
+		}
+
+		deployment.Spec.Template.Spec.TopologySpreadConstraints = constraints
+		err := r.updateDeployment(ctx, deployment)
+		if err != nil {
+			logger.V(level).Info("failed to update limitador deployment", "status", "error", "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *ResilienceRateLimitingReconciler) startCleanup(kObj *kuadrantv1beta1.Kuadrant) bool {
+	if kObj == nil {
+		return false
+	}
+
+	if kObj.Spec.Resilience == nil {
+		return false
+	}
+
+	if kObj.Spec.Resilience.RateLimiting == false && kObj.Generation > kObj.Status.ObservedGeneration {
+		return true
+	}
+
+	return false
+}
+
+func (r *ResilienceRateLimitingReconciler) startReconcile(kObj *kuadrantv1beta1.Kuadrant) bool {
+	if kObj == nil {
+		return false
+	}
+
+	if kObj.Status.Resilience == nil {
+		return false
+	}
+
+	if *kObj.Status.Resilience.RateLimiting == kuadrantv1beta1.KuadrantDefined {
+		return true
+	}
+
+	return false
 }
 
 func (r *ResilienceRateLimitingReconciler) updateLimitador(ctx context.Context, lObj *limitadorv1alpha1.Limitador) error {
@@ -366,43 +426,50 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 	}
 	logger.V(level).Info("Experimental resilience feature is enabled", "status", "processing")
 
-	history := GetHistory()
-
 	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil {
+		logger.V(level).Info("kuadrant resource has not being created yet.")
+		return nil
+	}
+
 	lObj := GetLimitadorFromTopology(topology)
 	if lObj == nil {
 		logger.V(level).Info("limitador resource has not being created yet.")
 		return nil
 	}
 
-	wasConfigured := r.isConfigured(history.kuadrant)
-	nowConfigured := r.isConfigured(kObj)
+	if r.startReconcile(kObj) {
+		logger.V(level).Info("CounterStorage configured", "status", "contiune")
 
-	if wasConfigured && !nowConfigured {
-		logger.V(level).Info("spec.storage should be removed from the limitador resource", "status", "cleanup")
 		lObj.Spec.Storage = nil
+		if kObj.Spec.Resilience != nil {
+			lObj.Spec.Storage = kObj.Spec.Resilience.CounterStorage
+		}
+
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
 			return nil
 		}
-		return nil
-	}
-
-	if !nowConfigured {
-		logger.V(level).Info("CounterStorage not configured", "status", "exiting")
-		return nil
-	}
-	logger.V(level).Info("CounterStorage configured", "status", "contiune")
-
-	lObj.Spec.Storage = kObj.Spec.Resilience.CounterStorage
-	err := r.updateLimitador(ctx, lObj)
-	if err != nil {
-		logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
-		return nil
 	}
 
 	return nil
+}
+
+func (r *ResilienceCounterStorageReconciler) startReconcile(kObj *kuadrantv1beta1.Kuadrant) bool {
+	if kObj == nil {
+		return false
+	}
+
+	if kObj.Status.Resilience == nil {
+		return false
+	}
+
+	if *kObj.Status.Resilience.CounterStorage == kuadrantv1beta1.KuadrantDefined {
+		return true
+	}
+
+	return false
 }
 
 func (r *ResilienceCounterStorageReconciler) isConfigured(kObj *kuadrantv1beta1.Kuadrant) bool {
@@ -526,7 +593,7 @@ func limitadorTopologySpreadConstranits(deployment *appsv1.Deployment) bool {
 		}
 	}
 
-	// There is only two types of topologh keys that we care about.
+	// There is only two types of topology keys that we care about.
 	if count < 2 {
 		return false
 	}

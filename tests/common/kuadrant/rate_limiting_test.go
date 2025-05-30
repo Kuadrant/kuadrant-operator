@@ -725,13 +725,15 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			By("User removes a constraint from the limitador deployment")
-			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
-			Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
-			err = k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
-			Expect(err).ToNot(HaveOccurred())
-			lDeployment.Spec.Template.Spec.TopologySpreadConstraints = nil
-			err = k8sClient.Update(ctx, lDeployment)
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
+				tests.LimitadorIsReady(testClient(), limitadorKey)
+				err = k8sClient.Get(ctx, limitadorDeploymentKey, lDeployment)
+				g.Expect(err).ToNot(HaveOccurred())
+				lDeployment.Spec.Template.Spec.TopologySpreadConstraints = nil
+				err = k8sClient.Update(ctx, lDeployment)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 
 			By("Kuadrant operator recreates the removed constraint")
 			Eventually(func(g Gomega) {

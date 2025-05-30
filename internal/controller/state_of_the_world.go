@@ -87,7 +87,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			&kuadrantv1beta1.Kuadrant{},
 			kuadrantv1beta1.KuadrantsResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta1.Kuadrant]{}),
 		)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(
 			&kuadrantv1.DNSPolicy{},
@@ -658,7 +657,6 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
-			InitializeHistoryFunc,
 		},
 	}
 }
@@ -667,7 +665,6 @@ func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	workflow := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
 			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
-			UpdateHistoryFunc,
 		},
 	}
 

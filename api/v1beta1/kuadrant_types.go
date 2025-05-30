@@ -72,17 +72,6 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
-func (k *Kuadrant) BasicResilienceStatus() ResilienceStatus {
-	result := ResilienceStatus{}
-	result.RateLimiting = ptr.To((k.Spec.Resilience != nil && k.Spec.Resilience.RateLimiting))
-	if k.Spec.Resilience != nil && k.Spec.Resilience.CounterStorage != nil {
-		result.CounterStorage = ptr.To(true)
-	} else {
-		result.CounterStorage = ptr.To(false)
-	}
-	return result
-}
-
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	Observability Observability `json:"observability,omitempty"`
@@ -140,9 +129,17 @@ func (r *Resilience) IsRateLimitingConfigured() bool {
 	return r.RateLimiting
 }
 
+type Reason string
+
+const (
+	KuadrantDefined Reason = "kuadrant defined"
+	UserDefined     Reason = "user defined"
+	Undefined       Reason = "undefined"
+)
+
 type ResilienceStatus struct {
-	RateLimiting   *bool `json:"rateLimiting,omitempty"`
-	CounterStorage *bool `json:"counterStorage,omitempty"`
+	RateLimiting   *Reason `json:"rateLimiting,omitempty"`
+	CounterStorage *Reason `json:"counterStorage,omitempty"`
 }
 
 // KuadrantStatus defines the observed state of Kuadrant
@@ -188,6 +185,12 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 	if !reflect.DeepEqual(r.MtlsLimitador, other.MtlsLimitador) {
 		diff := cmp.Diff(r.MtlsLimitador, other.MtlsLimitador)
 		logger.V(1).Info("MtlsAuthorino not equal", "difference", diff)
+		return false
+	}
+
+	if !reflect.DeepEqual(r.Resilience, other.Resilience) {
+		diff := cmp.Diff(r.Resilience, other.Resilience)
+		logger.V(0).Info("Resilience not equal", "difference", diff)
 		return false
 	}
 

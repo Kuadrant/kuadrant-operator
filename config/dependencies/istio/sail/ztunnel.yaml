@@ -4,5 +4,5 @@ metadata:
   name: default
 spec:
   version: v1.24.2
-  namespace: ztunnel
+  namespace: istio-system
   profile: ambient

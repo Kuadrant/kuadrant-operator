@@ -23,7 +23,7 @@ spec:
       k8s:
         resources:
           requests:
-            cpu: "0"
+            cpu: '0'
   values:
     pilot:
       autoscaleEnabled: false

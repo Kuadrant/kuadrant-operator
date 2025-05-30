@@ -1,10 +1,9 @@
-apiVersion: sailoperator.io/v1alpha1
+apiVersion: sailoperator.io/v1
 kind: Istio
 metadata:
   name: default
 spec:
-  # Supported values for sail-operator v0.1.0 are [v1.22.4,v1.23.0]
-  version: v1.23.0
+  version: v1.24.2
   namespace: istio-system
   # Disable autoscaling to reduce dev resources
   values:

@@ -13,6 +13,8 @@ else
 INSTALL_COMMAND=sail-install
 endif
 
+ISTIO_MODE ?=default
+
 # istioctl tool
 ISTIOCTL=$(shell pwd)/bin/istioctl
 ISTIOVERSION = 1.22.5
@@ -39,7 +41,7 @@ istioctl-uninstall: istioctl ## Uninstall istio.
 istioctl-verify-install: istioctl ## Verify istio installation.
 	$(ISTIOCTL) verify-install -i $(ISTIO_NAMESPACE)
 
-SAIL_VERSION = 0.1.0
+SAIL_VERSION = 1.26.0
 .PHONY: sail-install
 sail-install: helm
 	$(HELM) install sail-operator \
@@ -48,11 +50,24 @@ sail-install: helm
 		--wait \
 		--timeout=300s \
 		https://github.com/istio-ecosystem/sail-operator/releases/download/$(SAIL_VERSION)/sail-operator-$(SAIL_VERSION).tgz
+	$(MAKE) sail-$(ISTIO_MODE)-install
+
+
+.PHONY: sail-default-install
+sail-default-install:
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+
+.PHONY: sail-ambient-install
+sail-ambient-install:
+	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/ambient.yaml
+	kubectl create ns ztunnel
+	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/ztunnel.yaml
 
 .PHONY: sail-uninstall
 sail-uninstall: helm
-	kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+	-kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+	-kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/ambient.yaml
+	-kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/ztunnel.yaml
 	$(HELM) uninstall sail-operator
 
 .PHONY: istio-install

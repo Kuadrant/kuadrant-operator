@@ -86,7 +86,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			&kuadrantv1beta1.Kuadrant{},
 			kuadrantv1beta1.KuadrantsResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta1.Kuadrant]{}),
 		)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(
 			&kuadrantv1.DNSPolicy{},
@@ -575,6 +574,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
+			NewResilienceDeploymentWorkflow(b.client).Run,
 		},
 		Postcondition: b.finalStepsWorkflow().Run,
 	}

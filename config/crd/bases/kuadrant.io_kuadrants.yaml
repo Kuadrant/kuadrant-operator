@@ -267,9 +267,9 @@ spec:
                 description: Resilience reflects the resilience deployment state
                 properties:
                   counterStorage:
-                    type: boolean
+                    type: string
                   rateLimiting:
-                    type: boolean
+                    type: string
                 type: object
             type: object
         type: object

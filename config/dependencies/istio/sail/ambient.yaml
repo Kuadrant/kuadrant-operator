@@ -17,4 +17,4 @@ metadata:
 spec:
   version: v1.24.2
   profile: ambient
-  namespace: istio-cni
+  namespace: istio-system

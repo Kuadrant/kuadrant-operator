@@ -62,6 +62,10 @@ sail-ambient-install:
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/ambient.yaml
 	kubectl create ns ztunnel
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/ztunnel.yaml
+# todo maybe separate out
+	kubectl apply -f $(ISTIO_INSTALL_DIR)/gateway/waypoint.yaml
+	kubectl label namespace default istio.io/dataplane-mode=ambient
+	kubectl label namespace default istio.io/use-waypoint=waypoint
 
 .PHONY: sail-uninstall
 sail-uninstall: helm

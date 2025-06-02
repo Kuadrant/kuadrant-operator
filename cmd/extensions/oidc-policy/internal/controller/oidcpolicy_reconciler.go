@@ -2,8 +2,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
+
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/utils/ptr"
@@ -182,6 +185,16 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 }
 
 func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
+	location := fmt.Sprintf(`"%s/oauth/authorize?client_id=%s&redirect_uri=https://NEED_THIS_FROM_KUADRANT_CTX_OR_CRD/auth/callback&response_type=code&scope=openid"`, pol.Spec.Provider.IssuerURL, pol.Spec.Provider.ClientID)
+	serializedLocation, err := json.Marshal(location)
+	if err != nil {
+		panic("Failed to serialize OIDC Policy location Header")
+	}
+	setCookie := `"target=" + request.path + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`
+	serializedSetCookie, err := json.Marshal(setCookie)
+	if err != nil {
+		panic("Failed to serialize OIDC Policy Set Cookie")
+	}
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthPolicy",
@@ -238,19 +251,18 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolic
 							Unauthenticated: &kuadrantv1.MergeableDenyWithSpec{
 								DenyWithSpec: authorinov1beta3.DenyWithSpec{
 									Code: 302,
-									// TODO: Need fix/workaround "json: error calling MarshalJSON for type runtime.RawExtension: cannot convert RawExtension with unrecognized content type to unstructured"
-									/*Headers: map[string]authorinov1beta3.ValueOrSelector{
+									Headers: map[string]authorinov1beta3.ValueOrSelector{
 										"location": {
 											Value: runtime.RawExtension{
-												Raw: []byte(fmt.Sprintf("%s/oauth/authorize?client_id=%s&redirect_uri=https://NEED_THIS_FROM_KUADRANT_CTX_OR_CRD/auth/callback&response_type=code&scope=openid", pol.Spec.Provider.IssuerURL, pol.Spec.Provider.ClientID)),
+												Raw: serializedLocation,
 											},
 										},
 										"set-cookie": {
 											Value: runtime.RawExtension{
-												Raw: []byte(`"target=" + request.path + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`),
+												Raw: serializedSetCookie,
 											},
 										},
-									},*/
+									},
 								},
 							},
 						},
@@ -299,6 +311,11 @@ func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy) *gatewayapiv1.HTTP
 }
 
 func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
+	setCookie := `"jwt=" + auth.metadata.token.id_token + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`
+	serializedSetCookie, err := json.Marshal(setCookie)
+	if err != nil {
+		panic("Failed to serialize Callback OIDC Policy Set Cookie")
+	}
 	callbackRoute := gatewayapiv1alpha2.LocalPolicyTargetReference{
 		Group: gatewayapiv1alpha2.GroupName,
 		Kind:  gatewayapiv1alpha2.Kind("HTTPRoute"),
@@ -313,7 +330,6 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthP
 
 	hostname := "THIS_SHOULD_COME_FROM_KUADRANT_CTX"
 
-	// TODO: Rego might not be correct after string interpolation
 	opaAuthorizationRule := fmt.Sprintf(`
 		cookies := { name: value |
 			raw_cookies := input.request.headers.cookie
@@ -399,18 +415,18 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthP
 							Unauthenticated: &kuadrantv1.MergeableDenyWithSpec{
 								DenyWithSpec: authorinov1beta3.DenyWithSpec{
 									Code: 302,
-									/*Headers: map[string]authorinov1beta3.ValueOrSelector{
+									Headers: map[string]authorinov1beta3.ValueOrSelector{
 										"location": {
 											Value: runtime.RawExtension{
-												Raw: []byte("auth.authorization.location.location"),
+												Raw: []byte(`"auth.authorization.location.location"`),
 											},
 										},
 										"set-cookie": {
 											Value: runtime.RawExtension{
-												Raw: []byte(`"jwt=" + auth.metadata.token.id_token + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`),
+												Raw: serializedSetCookie,
 											},
 										},
-									},*/
+									},
 								},
 							},
 						},
@@ -460,9 +476,9 @@ func authPolicyTargetRefMutator(desired, existing *kuadrantv1.AuthPolicy) bool {
 func mainAuthPolicyIssuerURLMutator(desired, existing *kuadrantv1.AuthPolicy) bool {
 	update := false
 
-	if !reflect.DeepEqual(existing.Spec.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl, desired.Spec.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl) {
-		existing.Spec.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl = desired.Spec.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl
-		existing.Spec.AuthScheme.Authorization["oidc"].Conditions[0].Predicate = desired.Spec.AuthScheme.Authorization["oidc"].Conditions[0].Predicate
+	if !reflect.DeepEqual(existing.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl, desired.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl) {
+		existing.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl = desired.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl
+		existing.Spec.Overrides.AuthScheme.Authorization["oidc"].Conditions[0].Predicate = desired.Spec.Overrides.AuthPolicySpecProper.AuthScheme.Authorization["oidc"].AuthorizationSpec.CommonEvaluatorSpec.Conditions[0].Predicate
 		update = true
 	}
 

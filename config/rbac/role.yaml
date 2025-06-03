@@ -170,7 +170,6 @@ rules:
   - dnspolicies
   - kuadrants
   - planpolicies
-  - ratelimitpolicies
   - tlspolicies
   verbs:
   - get
@@ -206,6 +205,7 @@ rules:
   - kuadrant.io
   resources:
   - dnsrecords
+  - ratelimitpolicies
   verbs:
   - create
   - delete

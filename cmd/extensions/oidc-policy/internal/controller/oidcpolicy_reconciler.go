@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"reflect"
 
+	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
+
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -36,6 +38,12 @@ type OIDCPolicyReconciler struct {
 	logger logr.Logger
 }
 
+type IngressGatewayInfo struct { // TODO: Get the gateway protocol (http, https) from Resolve
+	Hostname  string `json:"hostname"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
 func NewOIDCPolicyReconciler() *OIDCPolicyReconciler {
 	return &OIDCPolicyReconciler{
 		BaseReconciler: reconcilers.NewLazyBaseReconciler(),
@@ -59,7 +67,7 @@ func (r *OIDCPolicyReconciler) WithLogger(logger logr.Logger) *OIDCPolicyReconci
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
-func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, _ types.KuadrantCtx) (reconcile.Result, error) {
+func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler"))
 	r.logger.Info("Reconciling OIDCPolicy")
 
@@ -78,7 +86,15 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return ctrl.Result{}, nil
 	}
 
-	specResult, specErr := r.reconcileSpec(ctx, oidcPolicy)
+	ingressGatewayData, err := extcontroller.Resolve[IngressGatewayInfo](ctx, kCtx, oidcPolicy, "{\"hostname\": self.findGateways()[0].listeners[0].hostname, \"name\": self.findGateways()[0].metadata.name, \"namespace\": self.findGateways()[0].metadata.namespace}", true)
+	if err != nil {
+		r.logger.Error(err, "Failed to resolve")
+		return reconcile.Result{}, err
+	}
+
+	r.logger.Info("Resolved", "ingressGateway", ingressGatewayData)
+
+	specResult, specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
 
 	if specErr != nil {
 		return reconcile.Result{}, specErr
@@ -93,20 +109,20 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy) (reconcile.Result, error) { //nolint:unparam
+func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) (reconcile.Result, error) { //nolint:unparam
 	// Reconcile AuthPolicy for the oidc policy http route
-	if err := r.reconcileMainAuthPolicy(ctx, pol); err != nil {
+	if err := r.reconcileMainAuthPolicy(ctx, pol, igw); err != nil {
 		r.logger.Error(err, "Failed to reconcile main AuthPolicy")
 		return reconcile.Result{}, err
 	}
 
 	// Reconcile HTTPRoute for the callback for exchanging code/token
-	if err := r.reconcileCallbackHTTPRoute(ctx, pol); err != nil {
+	if err := r.reconcileCallbackHTTPRoute(ctx, pol, igw); err != nil {
 		r.logger.Error(err, "Failed to reconcile callback HTTPRoute")
 		return reconcile.Result{}, err
 	}
 	// Reconcile AuthPolicy for the Token exchange flow with metadata http call
-	if err := r.reconcileCallbackAuthPolicy(ctx, pol); err != nil {
+	if err := r.reconcileCallbackAuthPolicy(ctx, pol, igw); err != nil {
 		r.logger.Error(err, "Failed to reconcile callback AuthPolicy")
 		return reconcile.Result{}, err
 	}
@@ -114,8 +130,8 @@ func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy) error {
-	desiredAuthPol := buildMainAuthPolicy(pol)
+func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) error {
+	desiredAuthPol := buildMainAuthPolicy(pol, igw)
 
 	err := controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
 	if err != nil {
@@ -135,8 +151,8 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 	return nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy) error {
-	desiredAuthPol := buildCallbackAuthPolicy(pol)
+func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) error {
+	desiredAuthPol := buildCallbackAuthPolicy(pol, igw)
 
 	err := controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
 	if err != nil {
@@ -157,8 +173,8 @@ func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, 
 	return nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy) error {
-	desiredHTTPRoute := buildCallbackHTTPRoute(pol) // TODO: Will need Kuad Ctx for GW
+func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) error {
+	desiredHTTPRoute := buildCallbackHTTPRoute(pol, igw)
 
 	err := controllerutil.SetControllerReference(pol, desiredHTTPRoute, r.Scheme())
 	if err != nil {
@@ -184,13 +200,14 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 	return r.ReconcileResource(ctx, &gatewayapiv1.HTTPRoute{}, desired, mutatefn)
 }
 
-func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
-	location := fmt.Sprintf(`"%s/oauth/authorize?client_id=%s&redirect_uri=https://NEED_THIS_FROM_KUADRANT_CTX_OR_CRD/auth/callback&response_type=code&scope=openid"`, pol.Spec.Provider.IssuerURL, pol.Spec.Provider.ClientID)
+func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) *kuadrantv1.AuthPolicy {
+	hostname := igw.Hostname
+	location := fmt.Sprintf(`"%s/oauth/authorize?client_id=%s&redirect_uri=http://%s/auth/callback&response_type=code&scope=openid"`, pol.Spec.Provider.IssuerURL, pol.Spec.Provider.ClientID, hostname)
 	serializedLocation, err := json.Marshal(location)
 	if err != nil {
 		panic("Failed to serialize OIDC Policy location Header")
 	}
-	setCookie := `"target=" + request.path + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`
+	setCookie := fmt.Sprintf(`"target=" + request.path + "; domain=%s; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`, hostname)
 	serializedSetCookie, err := json.Marshal(setCookie)
 	if err != nil {
 		panic("Failed to serialize OIDC Policy Set Cookie")
@@ -238,7 +255,7 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolic
 											Patterns: []authorinov1beta3.PatternExpressionOrRef{
 												{
 													CelPredicate: authorinov1beta3.CelPredicate{
-														Predicate: "\"companySomething?\" in auth.identity.groups_direct",
+														Predicate: "\"companyGroup\" in auth.identity.groups_direct",
 													},
 												},
 											},
@@ -273,9 +290,11 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolic
 	}
 }
 
-func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy) *gatewayapiv1.HTTPRoute {
+func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) *gatewayapiv1.HTTPRoute {
 	pathMatch := gatewayapiv1.PathMatchPathPrefix
 	path := "/auth/callback"
+	gwName := gatewayapiv1.ObjectName(igw.Name)
+	gwNamespace := gatewayapiv1.Namespace(igw.Namespace)
 
 	return &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
@@ -290,7 +309,8 @@ func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy) *gatewayapiv1.HTTP
 			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 				ParentRefs: []gatewayapiv1.ParentReference{
 					{
-						Name: "THIS_NEEDS_TO_COME_FROM_KUAD_CTX",
+						Name:      gwName,
+						Namespace: &gwNamespace,
 					},
 				},
 			},
@@ -310,8 +330,9 @@ func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy) *gatewayapiv1.HTTP
 	}
 }
 
-func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthPolicy {
-	setCookie := `"jwt=" + auth.metadata.token.id_token + "; domain=NEED_THIS_FROM_KUADRANT_CTX_OR_CRD; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`
+func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *IngressGatewayInfo) *kuadrantv1.AuthPolicy {
+	hostname := igw.Hostname
+	setCookie := fmt.Sprintf(`"jwt=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=3600"`, hostname)
 	serializedSetCookie, err := json.Marshal(setCookie)
 	if err != nil {
 		panic("Failed to serialize Callback OIDC Policy Set Cookie")
@@ -325,10 +346,8 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthP
 	callbackMethod := authorinov1beta3.HttpMethod("POST")
 
 	callbackBody := authorinov1beta3.ValueOrSelector{
-		Expression: authorinov1beta3.CelExpression(`"code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0]` + `"&redirect_uri=https://` + "FROM_KUAD_CTX" + `/auth/callback&client_id=` + pol.Spec.Provider.ClientID + `&grant_type=authorization_code"`),
+		Expression: authorinov1beta3.CelExpression(`"code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0]` + `"&redirect_uri=http://` + "FROM_KUAD_CTX" + `/auth/callback&client_id=` + pol.Spec.Provider.ClientID + `&grant_type=authorization_code"`),
 	}
-
-	hostname := "THIS_SHOULD_COME_FROM_KUADRANT_CTX"
 
 	opaAuthorizationRule := fmt.Sprintf(`
 		cookies := { name: value |
@@ -340,9 +359,9 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthP
 			name := trim(kv[0], " ")
 			value := trim(kv[1], " ")
 		}
-		location := concat("", ["https://%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
-		location := "https://%s/baker" { input.auth.metadata.token.id_token; not cookies.target }
-		location := "%s/oauth/authorize?client_id=%s&redirect_uri=https://%s/auth/callback&response_type=code&scope=openid" { not input.auth.metadata.token.id_token }
+		location := concat("", ["http://%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
+		location := "http://%s/baker" { input.auth.metadata.token.id_token; not cookies.target }
+		location := "%s/oauth/authorize?client_id=%s&redirect_uri=http://%s/auth/callback&response_type=code&scope=openid" { not input.auth.metadata.token.id_token }
 		allow = true`, hostname, hostname, pol.Spec.Provider.IssuerURL, pol.Spec.Provider.ClientID, hostname)
 
 	return &kuadrantv1.AuthPolicy{
@@ -376,7 +395,7 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy) *kuadrantv1.AuthP
 									},
 									MetadataMethodSpec: authorinov1beta3.MetadataMethodSpec{
 										Http: &authorinov1beta3.HttpEndpointSpec{
-											Url:    "https://GET_THIS_FROM_KUAD_CTX/oauth/token",
+											Url:    fmt.Sprintf("http://%s/oauth/token", hostname),
 											Method: &callbackMethod,
 											Body:   &callbackBody,
 										},

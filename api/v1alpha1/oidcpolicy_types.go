@@ -64,6 +64,18 @@ type OIDCPolicy struct {
 	Status OIDCPolicyStatus `json:"status,omitempty"`
 }
 
+func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		{
+			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: p.Spec.TargetRef.Group,
+				Kind:  p.Spec.TargetRef.Kind,
+				Name:  p.Spec.TargetRef.Name,
+			},
+		},
+	}
+}
+
 // +kubebuilder:object:root=true
 
 // OIDCPolicyList contains a list of OIDCPolicy

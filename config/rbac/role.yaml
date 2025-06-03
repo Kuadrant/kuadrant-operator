@@ -191,6 +191,7 @@ rules:
   - dnspolicies/finalizers
   - kuadrants/finalizers
   - oidcpolicies/finalizers
+  - planpolicies/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
   - tokenratelimitpolicies/finalizers
@@ -203,6 +204,7 @@ rules:
   - dnspolicies/status
   - kuadrants/status
   - oidcpolicies/status
+  - planpolicies/status
   - ratelimitpolicies/status
   - tlspolicies/status
   - tokenratelimitpolicies/status
@@ -216,7 +218,7 @@ rules:
   - dnspolicies
   - kuadrants
   - oidcpolicies
-  - ratelimitpolicies
+  - planpolicies
   - tlspolicies
   - tokenratelimitpolicies
   verbs:
@@ -229,6 +231,7 @@ rules:
   - kuadrant.io
   resources:
   - dnsrecords
+  - ratelimitpolicies
   verbs:
   - create
   - delete

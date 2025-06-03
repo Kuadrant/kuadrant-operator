@@ -87,12 +87,14 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 
 			By("kuadrant counterStorage configuration removed")
 
-			err = k8sClient.Get(ctx, kuadrantKey, existingKuadrant)
-			Expect(err).ToNot(HaveOccurred())
-			existingKuadrant.Spec.Resilience.CounterStorage = nil
+			Eventually(func(g Gomega) {
+				err = k8sClient.Get(ctx, kuadrantKey, existingKuadrant)
+				g.Expect(err).ToNot(HaveOccurred())
+				existingKuadrant.Spec.Resilience.CounterStorage = nil
 
-			err = k8sClient.Update(ctx, existingKuadrant)
-			Expect(err).ToNot(HaveOccurred())
+				err = k8sClient.Update(ctx, existingKuadrant)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {

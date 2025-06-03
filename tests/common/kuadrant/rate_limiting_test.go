@@ -175,12 +175,14 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 			).WithContext(ctx).Should(Succeed())
 
 			By("Disable the rateLimiting feature")
-			kObj := &kuadrantv1beta1.Kuadrant{}
-			err := k8sClient.Get(ctx, kuadrantKey, kObj)
-			Expect(err).ToNot(HaveOccurred())
-			kObj.Spec.Resilience.RateLimiting = false
-			err = k8sClient.Update(ctx, kObj)
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				kObj := &kuadrantv1beta1.Kuadrant{}
+				err := k8sClient.Get(ctx, kuadrantKey, kObj)
+				g.Expect(err).ToNot(HaveOccurred())
+				kObj.Spec.Resilience.RateLimiting = false
+				err = k8sClient.Update(ctx, kObj)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 			By("Check the replica vaules in the limitador resource have being reverted")

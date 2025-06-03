@@ -117,10 +117,20 @@ func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *
 	return err
 }
 
-func calculateResilienceStatus(topology *machinery.Topology) *kuadrantv1beta1.ResilienceStatus {
+func calculateResilienceStatus(topology *machinery.Topology, state *sync.Map) *kuadrantv1beta1.ResilienceStatus {
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
 		return nil
+	}
+
+	resilienceError := false
+	stateResilienceError, ok := state.Load("resilienceError")
+	if ok {
+		resilienceError = stateResilienceError.(bool)
+	}
+
+	if resilienceError {
+		return kObj.Status.Resilience
 	}
 
 	lObj := GetLimitadorFromTopology(topology)
@@ -196,7 +206,7 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 		ObservedGeneration: kObj.Status.ObservedGeneration,
 		MtlsAuthorino:      mtlsAuthorino(kObj, state),
 		MtlsLimitador:      mtlsLimitador(kObj, state),
-		Resilience:         calculateResilienceStatus(topology),
+		Resilience:         calculateResilienceStatus(topology, state),
 	}
 
 	availableCond := r.readyCondition(topology, logger)

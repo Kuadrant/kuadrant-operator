@@ -133,7 +133,7 @@ func calculateResilienceStatus(topology *machinery.Topology) *kuadrantv1beta1.Re
 		RateLimiting:   ptr.To(kuadrantv1beta1.Undefined),
 	}
 
-	if kObj.Spec.Resilience != nil && kObj.Spec.Resilience.RateLimiting == true {
+	if kObj.Spec.Resilience != nil && kObj.Spec.Resilience.RateLimiting {
 		status.RateLimiting = ptr.To(kuadrantv1beta1.KuadrantDefined)
 	}
 	if userDefinedRateLimitingResiliences(lObj, topology) && *status.RateLimiting != kuadrantv1beta1.KuadrantDefined {
@@ -185,7 +185,6 @@ func userDefinedCounterStorage(lObj *limitadorv1alpha1.Limitador) bool {
 	}
 
 	return lObj.Spec.Storage != nil
-
 }
 
 func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, logger logr.Logger, kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *kuadrantv1beta1.KuadrantStatus {
@@ -276,7 +275,7 @@ func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology
 		remove = append(remove, ResilienceInfoRRConditionType)
 	}
 
-	if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable != nil && *&lObj.Spec.PodDisruptionBudget.MaxUnavailable.IntVal != LimitadorPDB {
+	if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable.IntVal != LimitadorPDB {
 		cond := &metav1.Condition{
 			Type:    ResilienceInfoPDBConditionType,
 			Message: "Limitador recource Pod Disruption Budget differs from default configuration",

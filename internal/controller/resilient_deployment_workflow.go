@@ -70,6 +70,7 @@ func (r *ResilienceDeploymentPrecondition) run(ctx context.Context, _ []controll
 	defer logger.V(level).Info("ResilienceDeployment Precondition", "status", "completed")
 
 	state.Store(ExperimentalResilienceFeature, isExperimentalFeatureEnabled(topology))
+	state.Store("resilienceError", false)
 
 	return nil
 }
@@ -160,12 +161,14 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		err := r.cleanupLimitadorDeployment(ctx, topology, logger)
 		if err != nil {
 			logger.V(level).Info("failed to cleanup limitador deployment", "status", "error", "error", err)
+			state.Store("resilienceError", true)
 			return nil
 		}
 
 		err = r.cleanupLimitador(ctx, logger, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to cleanup limitador resource", "status", "error", "error", err)
+			state.Store("resilienceError", true)
 			return nil
 		}
 
@@ -179,12 +182,14 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		err := r.configureLimitador(ctx, logger, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to configure limitador deployment", "status", "error", "error", err)
+			state.Store("resilienceError", true)
 			return nil
 		}
 
 		err = r.configureLimitadorDeployment(ctx, topology, logger)
 		if err != nil {
 			logger.V(level).Info("failed to configure limitador deployment", "status", "error", "error", err)
+			state.Store("resilienceError", true)
 			return nil
 		}
 	}
@@ -352,7 +357,11 @@ func (r *ResilienceRateLimitingReconciler) startCleanup(kObj *kuadrantv1beta1.Ku
 		return false
 	}
 
-	if !kObj.Spec.Resilience.RateLimiting && kObj.Generation > kObj.Status.ObservedGeneration {
+	if kObj.Status.Resilience == nil {
+		return false
+	}
+
+	if !kObj.Spec.Resilience.RateLimiting && *kObj.Status.Resilience.RateLimiting == kuadrantv1beta1.KuadrantDefined {
 		return true
 	}
 
@@ -364,11 +373,15 @@ func (r *ResilienceRateLimitingReconciler) startReconcile(kObj *kuadrantv1beta1.
 		return false
 	}
 
+	if kObj.Spec.Resilience == nil {
+		return false
+	}
+
 	if kObj.Status.Resilience == nil {
 		return false
 	}
 
-	if *kObj.Status.Resilience.RateLimiting == kuadrantv1beta1.KuadrantDefined {
+	if kObj.Spec.Resilience.RateLimiting && *kObj.Status.Resilience.RateLimiting == kuadrantv1beta1.KuadrantDefined {
 		return true
 	}
 
@@ -447,6 +460,7 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+			state.Store("resilienceError", true)
 			return nil
 		}
 	}
@@ -497,7 +511,7 @@ func (r *ResilienceDeploymentPostcondition) Subscription() controller.Subscripti
 }
 
 func (r *ResilienceDeploymentPostcondition) run(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, _ *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("ResilienceDeploymentPrecondition")
+	logger := controller.LoggerFromContext(ctx).WithName("ResilienceDeploymentPostcondition")
 
 	logger.V(level).Info("ResilienceDeployment Postcondition", "status", "started")
 	defer logger.V(level).Info("ResilienceDeployment Postcondition", "status", "completed")

@@ -4,8 +4,15 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
@@ -16,6 +23,7 @@ import (
 // +kubebuilder:rbac:groups=kuadrant.io,resources=planpolicies/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=create;delete
+// +kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;update;patch
 
 type PlanPolicyReconciler struct {
 	*reconcilers.BaseReconciler
@@ -35,7 +43,61 @@ func (r *PlanPolicyReconciler) WithLogger(logger logr.Logger) *PlanPolicyReconci
 
 func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("PlanPolicyReconciler"))
-	r.logger.Info("Reconciling PlanPolicy")
+	r.logger.Info("reconciling planpolicies started")
+	defer r.logger.Info("reconciling planpolicies completed")
+
+	planPolicy := &kuadrantv1alpha1.PlanPolicy{}
+	if err := r.Client().Get(ctx, request.NamespacedName, planPolicy); err != nil {
+		if errors.IsNotFound(err) {
+			r.logger.Error(err, "planpolicy not found")
+			return reconcile.Result{}, nil
+		}
+		r.logger.Error(err, "failed to retrieve planpolicy")
+		return reconcile.Result{}, err
+	}
+
+	if planPolicy.GetDeletionTimestamp() != nil {
+		r.logger.Info("planpolicy marked for deletion")
+		// todo(adam-cattermole): handle deletion case
+		return reconcile.Result{}, nil
+	}
+
+	existingAuthPolicy := &kuadrantv1.AuthPolicy{}
+	if err := r.Client().Get(ctx, k8stypes.NamespacedName{Name: string(planPolicy.Spec.TargetRef.Name), Namespace: planPolicy.GetNamespace()}, existingAuthPolicy); err != nil {
+		if errors.IsNotFound(err) {
+			r.logger.Info("planpolicy target does not exist")
+			return reconcile.Result{}, nil
+		}
+		r.logger.Error(err, "failed to retrieve planpolicy target")
+		return reconcile.Result{}, err
+	}
+
+	// todo(adam-cattermole): handle authpolicy binding
+
+	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy, existingAuthPolicy.Spec.TargetRef)
+	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.Scheme()); err != nil {
+		r.logger.Error(err, "failed to set controller reference")
+		return reconcile.Result{}, err
+	}
+	if err := r.ReconcileResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, reconcilers.CreateOnlyMutator); err != nil {
+		r.logger.Error(err, "failed to reconcile desired ratelimitpolicy")
+		return reconcile.Result{}, err
+	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *kuadrantv1alpha1.PlanPolicy, targetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) *kuadrantv1.RateLimitPolicy {
+	return &kuadrantv1.RateLimitPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      planPolicy.GetName(),
+			Namespace: planPolicy.GetNamespace(),
+		},
+		Spec: kuadrantv1.RateLimitPolicySpec{
+			TargetRef: targetRef,
+			RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+				Limits: planPolicy.ToRateLimits(),
+			},
+		},
+	}
 }

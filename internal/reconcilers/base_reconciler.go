@@ -83,6 +83,16 @@ func NewBaseReconciler(client client.Client, scheme *runtime.Scheme, apiClientRe
 	}
 }
 
+func NewLazyBaseReconciler() *BaseReconciler {
+	return &BaseReconciler{}
+}
+
+func (b *BaseReconciler) SetupWithManager(mgr ctrl.Manager) {
+	b.client = mgr.GetClient()
+	b.scheme = mgr.GetScheme()
+	b.apiClientReader = mgr.GetAPIReader()
+}
+
 func (b *BaseReconciler) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
 	return reconcile.Result{}, nil
 }

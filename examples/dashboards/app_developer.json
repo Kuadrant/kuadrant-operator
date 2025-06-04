@@ -1,48 +1,4 @@
 {
-  "__requires": [
-    {
-      "type": "panel",
-      "id": "dashlist",
-      "name": "Dashboard list",
-      "version": ""
-    },
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "9.5.3"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "stat",
-      "name": "Stat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "text",
-      "name": "Text",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -70,10 +26,84 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 158,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "title": "Panel Title",
+      "type": "timeseries"
+    },
     {
       "datasource": {
         "type": "datasource",
@@ -84,7 +114,7 @@
         "h": 7,
         "w": 6,
         "x": 0,
-        "y": 0
+        "y": 8
       },
       "id": 155,
       "options": {
@@ -112,7 +142,7 @@
         "h": 7,
         "w": 18,
         "x": 6,
-        "y": 0
+        "y": 8
       },
       "id": 153,
       "options": {
@@ -134,7 +164,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 15
       },
       "id": 141,
       "panels": [],
@@ -177,7 +207,7 @@
         "h": 3,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 16
       },
       "id": 97,
       "options": {
@@ -476,7 +506,7 @@
         "h": 6,
         "w": 9,
         "x": 0,
-        "y": 11
+        "y": 19
       },
       "id": 156,
       "options": {
@@ -509,11 +539,23 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code!=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "{{response_code}}",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "hide": false,
+          "legendFormat": "{{response_code}}",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "request breakdown by code (req/s)",
@@ -550,7 +592,7 @@
         "h": 2,
         "w": 2,
         "x": 9,
-        "y": 11
+        "y": 19
       },
       "id": 137,
       "options": {
@@ -618,7 +660,7 @@
         "h": 2,
         "w": 2,
         "x": 11,
-        "y": 11
+        "y": 19
       },
       "id": 149,
       "options": {
@@ -764,7 +806,7 @@
         "h": 6,
         "w": 9,
         "x": 13,
-        "y": 11
+        "y": 19
       },
       "id": 129,
       "options": {
@@ -849,7 +891,7 @@
         "h": 2,
         "w": 2,
         "x": 22,
-        "y": 11
+        "y": 19
       },
       "id": 139,
       "options": {
@@ -917,7 +959,7 @@
         "h": 2,
         "w": 2,
         "x": 9,
-        "y": 13
+        "y": 21
       },
       "id": 147,
       "options": {
@@ -985,7 +1027,7 @@
         "h": 2,
         "w": 2,
         "x": 11,
-        "y": 13
+        "y": 21
       },
       "id": 150,
       "options": {
@@ -1052,7 +1094,7 @@
         "h": 2,
         "w": 2,
         "x": 22,
-        "y": 13
+        "y": 21
       },
       "id": 146,
       "options": {
@@ -1120,7 +1162,7 @@
         "h": 2,
         "w": 2,
         "x": 9,
-        "y": 15
+        "y": 23
       },
       "id": 148,
       "options": {
@@ -1188,7 +1230,7 @@
         "h": 2,
         "w": 2,
         "x": 11,
-        "y": 15
+        "y": 23
       },
       "id": 151,
       "options": {
@@ -1255,7 +1297,7 @@
         "h": 2,
         "w": 2,
         "x": 22,
-        "y": 15
+        "y": 23
       },
       "id": 138,
       "options": {
@@ -1398,7 +1440,7 @@
         "h": 9,
         "w": 9,
         "x": 0,
-        "y": 17
+        "y": 25
       },
       "id": 99,
       "options": {
@@ -1431,11 +1473,23 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (cluster_id, destination_service_name, response_code) * on(cluster_id, destination_service_name) group_left(name) (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code!=\"200\"}[5m])) by (cluster_id, destination_service_name, response_code) * on(cluster_id, destination_service_name) group_left(name) (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "\"{{cluster_id}}\" {{response_code}}",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(cluster_id, destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "hide": false,
+          "legendFormat": "\"{{cluster_id}}\" {{response_code}}",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "request breakdown by cluster and code (req/s)",
@@ -1550,7 +1604,7 @@
         "h": 9,
         "w": 9,
         "x": 13,
-        "y": 17
+        "y": 25
       },
       "id": 157,
       "options": {
@@ -1634,7 +1688,11 @@
         "type": "datasource"
       },
       {
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"

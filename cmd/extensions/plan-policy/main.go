@@ -23,17 +23,19 @@ func init() {
 }
 
 func main() {
-	exampleReconciler := controller.PlanPolicyReconciler{}
+	planPolicyReconciler := controller.NewPlanPolicyReconciler()
 	builder, logger := extcontroller.NewBuilder("plan-policy-extension-controller")
 	controller, err := builder.
 		WithScheme(scheme).
-		WithReconciler(exampleReconciler.Reconcile).
+		WithReconciler(planPolicyReconciler.Reconcile).
 		Watches(&kuadrantv1alpha1.PlanPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")
 		os.Exit(1)
 	}
+
+	planPolicyReconciler.SetupWithManager(controller.Manager())
 
 	if err = controller.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")

@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // +kubebuilder:rbac:groups=kuadrant.io,resources=planpolicies,verbs=get;list;watch;update;patch
@@ -16,7 +18,14 @@ import (
 // +kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=create;delete
 
 type PlanPolicyReconciler struct {
+	*reconcilers.BaseReconciler
 	logger logr.Logger
+}
+
+func NewPlanPolicyReconciler() *PlanPolicyReconciler {
+	return &PlanPolicyReconciler{
+		BaseReconciler: reconcilers.NewLazyBaseReconciler(),
+	}
 }
 
 func (r *PlanPolicyReconciler) WithLogger(logger logr.Logger) *PlanPolicyReconciler {

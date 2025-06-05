@@ -3,7 +3,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -23,7 +25,11 @@ import (
 )
 
 const (
-	ReadyConditionType string = "Ready"
+	ReadyConditionType               string = "Ready"
+	ResilienceInfoRRConditionType    string = "Resilience.Info.RateLimiting.Replicas"
+	ResilienceWarningRRConditionType string = "Resilience.Warning.RateLimiting.Replicas"
+	ResilienceInfoPDBConditionType   string = "Resilience.Info.RateLimiting.PBD"
+	ResilienceInfoTSCConditionType   string = "Resilience.Info.RateLimiting.TopologySpreadConstraints"
 )
 
 type KuadrantStatusUpdater struct {
@@ -111,18 +117,111 @@ func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *
 	return err
 }
 
+func calculateResilienceStatus(topology *machinery.Topology, state *sync.Map) *kuadrantv1beta1.ResilienceStatus {
+	kObj := GetKuadrantFromTopology(topology)
+	if kObj == nil {
+		return nil
+	}
+
+	resilienceError := false
+	stateResilienceError, ok := state.Load("resilienceError")
+	if ok {
+		resilienceError = stateResilienceError.(bool)
+	}
+
+	if resilienceError {
+		return kObj.Status.Resilience
+	}
+
+	lObj := GetLimitadorFromTopology(topology)
+	if lObj == nil {
+		return nil
+	}
+
+	status := &kuadrantv1beta1.ResilienceStatus{
+		CounterStorage: ptr.To(kuadrantv1beta1.Undefined),
+		RateLimiting:   ptr.To(kuadrantv1beta1.Undefined),
+	}
+
+	if kObj.Spec.Resilience != nil && kObj.Spec.Resilience.RateLimiting {
+		status.RateLimiting = ptr.To(kuadrantv1beta1.KuadrantDefined)
+	}
+	if userDefinedRateLimitingResiliences(lObj, topology) && *status.RateLimiting != kuadrantv1beta1.KuadrantDefined {
+		status.RateLimiting = ptr.To(kuadrantv1beta1.UserDefined)
+	}
+
+	if kObj.Spec.Resilience != nil && kObj.Spec.Resilience.CounterStorage != nil {
+		status.CounterStorage = ptr.To(kuadrantv1beta1.KuadrantDefined)
+	}
+
+	if userDefinedCounterStorage(lObj) && *status.CounterStorage != kuadrantv1beta1.KuadrantDefined {
+		status.CounterStorage = ptr.To(kuadrantv1beta1.UserDefined)
+	}
+
+	return status
+}
+
+func userDefinedRateLimitingResiliences(lObj *limitadorv1alpha1.Limitador, topology *machinery.Topology) bool {
+	if lObj == nil {
+		return false
+	}
+
+	requests := false
+	if lObj.Spec.ResourceRequirements != nil && lObj.Spec.ResourceRequirements.Requests != nil {
+		requests = lObj.Spec.ResourceRequirements.Requests.Cpu().Value() != 0 || lObj.Spec.ResourceRequirements.Requests.Memory().Value() != 0
+	}
+
+	pdb := false
+	if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable != nil {
+		pdb = lObj.Spec.PodDisruptionBudget.MinAvailable != nil
+	}
+
+	hasDeployment := false
+	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+	if deployment != nil && deployment.Spec.Template.Spec.TopologySpreadConstraints != nil {
+		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			if item.TopologyKey == "kubernetes.io/hostname" || item.TopologyKey == "kubernetes.io/zone" {
+				hasDeployment = true
+			}
+		}
+	}
+
+	return lObj.Spec.Replicas != nil || requests || pdb || hasDeployment
+}
+
+func userDefinedCounterStorage(lObj *limitadorv1alpha1.Limitador) bool {
+	if lObj == nil {
+		return false
+	}
+
+	return lObj.Spec.Storage != nil
+}
+
 func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, logger logr.Logger, kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *kuadrantv1beta1.KuadrantStatus {
+	logger.V(0).Info("calculate kuadrant status", "status", "started")
+	defer logger.V(0).Info("calculate kuadrant status", "status", "completed")
 	newStatus := &kuadrantv1beta1.KuadrantStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
 		MtlsAuthorino:      mtlsAuthorino(kObj, state),
 		MtlsLimitador:      mtlsLimitador(kObj, state),
+		Resilience:         calculateResilienceStatus(topology, state),
 	}
 
 	availableCond := r.readyCondition(topology, logger)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+
+	setResilienceCond, removeResilienceCond := r.resilienceCondition(topology)
+
+	for _, condition := range setResilienceCond {
+		meta.SetStatusCondition(&newStatus.Conditions, *condition)
+	}
+
+	for _, condition := range removeResilienceCond {
+		meta.RemoveStatusCondition(&newStatus.Conditions, condition)
+	}
 
 	return newStatus
 }
@@ -143,6 +242,117 @@ func mtlsLimitador(kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *bool {
 	}
 	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 	return ptr.To(kObj.IsMTLSLimitadorEnabled() && len(effectiveRateLimitPoliciesMap) > 0)
+}
+
+func (r *KuadrantStatusUpdater) resilienceCondition(topology *machinery.Topology) ([]*metav1.Condition, []string) {
+	create := make([]*metav1.Condition, 0)
+	remove := make([]string, 0)
+
+	kObj := GetKuadrantFromTopology(topology)
+	isConfigured := kObj.Spec.Resilience.IsRateLimitingConfigured()
+	if !isConfigured {
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType, ResilienceInfoTSCConditionType)
+		return nil, remove
+	}
+
+	lObj := GetLimitadorFromTopology(topology)
+	if lObj == nil {
+		remove = append(remove, ResilienceInfoRRConditionType, ResilienceWarningRRConditionType, ResilienceInfoPDBConditionType, ResilienceInfoTSCConditionType)
+		return nil, remove
+	}
+
+	if lObj.Spec.Replicas != nil && *lObj.Spec.Replicas < LimitadorReplicas {
+		cond := &metav1.Condition{
+			Type:    ResilienceWarningRRConditionType,
+			Message: fmt.Sprintf("Number of Limitador replicas (%v) below minimum default", *lObj.Spec.Replicas),
+			Reason:  "UserModifiedLimitadorReplicas",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else {
+		remove = append(remove, ResilienceWarningRRConditionType)
+	}
+
+	if lObj.Spec.Replicas != nil && *lObj.Spec.Replicas > LimitadorReplicas {
+		cond := &metav1.Condition{
+			Type:    ResilienceInfoRRConditionType,
+			Message: fmt.Sprintf("Number of Limitador replicas (%v) greater than minimum default", *lObj.Spec.Replicas),
+			Reason:  "UserModifiedLimitadorReplicas",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else {
+		remove = append(remove, ResilienceInfoRRConditionType)
+	}
+
+	if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable != nil && lObj.Spec.PodDisruptionBudget.MaxUnavailable.IntVal != LimitadorPDB {
+		cond := &metav1.Condition{
+			Type:    ResilienceInfoPDBConditionType,
+			Message: "Limitador recource Pod Disruption Budget differs from default configuration",
+			Reason:  "UserModifiedLimitadorPodDisruptionBudget",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else if lObj.Spec.PodDisruptionBudget != nil && lObj.Spec.PodDisruptionBudget.MinAvailable != nil {
+		cond := &metav1.Condition{
+			Type:    ResilienceInfoPDBConditionType,
+			Message: "Limitador recource Pod Disruption Budget differs from default configuration",
+			Reason:  "UserModifiedLimitadorPodDisruptionBudget",
+			Status:  metav1.ConditionUnknown,
+		}
+		create = append(create, cond)
+	} else {
+		remove = append(remove, ResilienceInfoPDBConditionType)
+	}
+
+	// Get the status of the topology spread constraints.
+	deployment := GetDeploymentForParent(topology, kuadrantv1beta1.LimitadorGroupKind)
+	if deployment != nil {
+		message := make([]string, 0)
+		for _, item := range deployment.Spec.Template.Spec.TopologySpreadConstraints {
+			if item.TopologyKey == "kubernetes.io/hostname" {
+				hostnameConstraint := corev1.TopologySpreadConstraint{
+					MaxSkew:           1,
+					TopologyKey:       "kubernetes.io/hostname",
+					WhenUnsatisfiable: "ScheduleAnyway",
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"limitador-reource": "limitador"},
+					},
+				}
+				if !reflect.DeepEqual(item, hostnameConstraint) {
+					message = append(message, "Limitador depoloyment TopologySpreadConstraints for key \"kubernetes.io/hostname\" is user modified.")
+				}
+			}
+
+			if item.TopologyKey == "kubernetes.io/zone" {
+				zoneConstraint := corev1.TopologySpreadConstraint{
+					MaxSkew:           1,
+					TopologyKey:       "kubernetes.io/zone",
+					WhenUnsatisfiable: "ScheduleAnyway",
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"limitador-reource": "limitador"},
+					},
+				}
+				if !reflect.DeepEqual(item, zoneConstraint) {
+					message = append(message, "Limitador depoloyment TopologySpreadConstraints for key \"kubernetes.io/zone\" is user modified.")
+				}
+			}
+		}
+
+		if len(message) > 0 {
+			cond := &metav1.Condition{
+				Type:    ResilienceInfoTSCConditionType,
+				Message: strings.Join(message, " "),
+				Reason:  "UserModifiedLimitadorTopologySpreadConstraints",
+				Status:  metav1.ConditionUnknown,
+			}
+			create = append(create, cond)
+		} else {
+			remove = append(remove, ResilienceInfoTSCConditionType)
+		}
+	}
+
+	return create, remove
 }
 
 func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, logger logr.Logger) *metav1.Condition {

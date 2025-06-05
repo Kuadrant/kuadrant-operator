@@ -17,12 +17,21 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/url"
+	"path"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+const (
+	CallbackPath      = "/auth/callback"
+	TokenExchangePath = "/oauth/token" //nolint:gosec
+	AuthorizePath     = "/oauth/authorize"
+)
 
 // OIDCPolicySpec defines the desired state of OIDCPolicy
 type OIDCPolicySpec struct {
@@ -74,6 +83,40 @@ func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 			},
 		},
 	}
+}
+
+func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) string {
+	redirectURL := *igwURL
+	redirectURL.Path = path.Join(redirectURL.Path, CallbackPath)
+	return redirectURL.String()
+}
+
+func (p *OIDCPolicy) GetIssuerTokenExchangeURL() string {
+	u, err := url.Parse(p.Spec.Provider.IssuerURL)
+	if err != nil {
+		panic(err)
+	}
+	u.Path = path.Join(u.Path, TokenExchangePath)
+	return u.String()
+}
+
+func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
+	authorizeURL, err := url.Parse(p.Spec.Provider.IssuerURL)
+	authorizeURL.Path = AuthorizePath
+	if err != nil {
+		panic(err)
+	}
+	redirectURL := *igwURL
+	redirectURL.Path = path.Join(redirectURL.Path, CallbackPath)
+
+	query := url.Values{}
+	query.Set("client_id", p.Spec.Provider.ClientID)
+	query.Set("redirect_uri", redirectURL.String())
+	query.Set("response_type", "code")
+	query.Set("scope", "openid")
+	authorizeURL.RawQuery = query.Encode()
+
+	return authorizeURL.String()
 }
 
 // +kubebuilder:object:root=true

@@ -17,12 +17,21 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"net/url"
+	"path"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+const (
+	CallbackPath      = "/auth/callback"
+	TokenExchangePath = "/oauth/token" //nolint:gosec
+	AuthorizePath     = "/oauth/authorize"
+)
 
 // OIDCPolicySpec defines the desired state of OIDCPolicy
 type OIDCPolicySpec struct {
@@ -42,8 +51,9 @@ type OIDCPolicySpecProper struct {
 }
 
 type Provider struct {
-	IssuerURL string `json:"issuerURL"`
-	ClientID  string `json:"clientID"`
+	IssuerURL       string   `json:"issuerURL"`
+	ClientID        string   `json:"clientID"`
+	parsedIssuerURL *url.URL `json:"-"`
 }
 
 // OIDCPolicyStatus defines the observed state of OIDCPolicy
@@ -74,6 +84,49 @@ func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 			},
 		},
 	}
+}
+
+func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) string {
+	redirectURL := p.redirectURL(igwURL)
+	return redirectURL.String()
+}
+
+func (p *OIDCPolicy) GetIssuerTokenExchangeURL() string {
+	u := p.issuerURL()
+	u.Path = path.Join(u.Path, TokenExchangePath)
+	return u.String()
+}
+
+func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
+	authorizeURL := p.issuerURL()
+	redirectURL := p.redirectURL(igwURL)
+	authorizeURL.Path = AuthorizePath
+
+	query := url.Values{}
+	query.Set("client_id", p.Spec.Provider.ClientID)
+	query.Set("redirect_uri", redirectURL.String())
+	query.Set("response_type", "code")
+	query.Set("scope", "openid")
+	authorizeURL.RawQuery = query.Encode()
+
+	return authorizeURL.String()
+}
+
+func (p *OIDCPolicy) issuerURL() url.URL {
+	if p.Spec.Provider.parsedIssuerURL == nil {
+		u, err := url.Parse(p.Spec.Provider.IssuerURL)
+		if err != nil {
+			panic(err)
+		}
+		p.Spec.Provider.parsedIssuerURL = u
+	}
+	return *p.Spec.Provider.parsedIssuerURL
+}
+
+func (p *OIDCPolicy) redirectURL(igwURL *url.URL) url.URL {
+	redirectURI := *igwURL
+	redirectURI.Path = path.Join(redirectURI.Path, CallbackPath)
+	return redirectURI
 }
 
 // +kubebuilder:object:root=true

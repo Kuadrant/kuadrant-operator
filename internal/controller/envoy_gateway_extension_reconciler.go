@@ -21,6 +21,7 @@ import (
 	gwapiv1b1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
@@ -157,11 +158,17 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	}
 	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 
-	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectiveRateLimitPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
+	var effectiveTokenRateLimitPoliciesMap EffectiveTokenRateLimitPolicies
+	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
+		effectiveTokenRateLimitPoliciesMap = effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)
+	}
 
-	paths := lo.UniqBy(append(
+	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveTokenRateLimitPolicies", len(effectiveTokenRateLimitPoliciesMap))
+
+	paths := lo.UniqBy(append(append(
 		lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path })),
-		lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))...,
+		lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))...),
+		lo.Entries(lo.MapValues(effectiveTokenRateLimitPoliciesMap, func(p EffectiveTokenRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))...,
 	), func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
@@ -187,7 +194,43 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForRateLimit(effectivePolicy, state)
+			rlAction := buildWasmActionsForAnyRateLimit(
+				effectivePolicy.Path,
+				effectivePolicy.Spec.Rules(),
+				state,
+				kuadrantv1.RulesKeyTopLevelPredicates,
+				isRateLimitPolicyAcceptedAndNotDeletedFunc(state),
+				func(key k8stypes.NamespacedName, limitName string) string {
+					return LimitNameToLimitadorIdentifier(key, limitName)
+				},
+				func(spec interface{}, limitIdentifier, scope string, predicates kuadrantv1.WhenPredicates) wasm.Action {
+					limit := spec.(*kuadrantv1.Limit)
+					return wasmActionFromLimit(limit, limitIdentifier, scope, predicates)
+				},
+			)
+			if hasAuthAccess(rlAction) {
+				actions = append(actions, rlAction...)
+			} else {
+				// pre auth rate limiting
+				actions = append(rlAction, actions...)
+			}
+		}
+
+		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
+			rlAction := buildWasmActionsForAnyRateLimit(
+				effectivePolicy.Path,
+				effectivePolicy.Spec.Rules(),
+				state,
+				kuadrantv1.RulesKeyTopLevelPredicates,
+				isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state),
+				func(key k8stypes.NamespacedName, limitName string) string {
+					return TokenLimitNameToLimitadorIdentifier(key, limitName)
+				},
+				func(spec interface{}, limitIdentifier, scope string, predicates kuadrantv1.WhenPredicates) wasm.Action {
+					limit := spec.(*kuadrantv1alpha1.TokenLimit)
+					return wasmActionFromTokenLimit(limit, limitIdentifier, scope, predicates)
+				},
+			)
 			if hasAuthAccess(rlAction) {
 				actions = append(actions, rlAction...)
 			} else {

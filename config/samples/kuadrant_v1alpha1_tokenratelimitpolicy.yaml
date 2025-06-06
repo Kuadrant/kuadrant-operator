@@ -1,0 +1,23 @@
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: token-limit-free
+  namespace: gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: my-llm-gateway
+  limits:
+    free:
+      rates:
+      - limit: 20000
+        window: 1d
+      predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")'
+      counter: auth.identity.userid
+    gold:
+      rates:
+      - limit: 200000
+        window: 1d
+      predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "gold")'
+      counter: auth.identity.userid

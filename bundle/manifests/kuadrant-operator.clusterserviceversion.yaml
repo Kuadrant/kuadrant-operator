@@ -98,6 +98,43 @@ metadata:
           }
         },
         {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "TokenRateLimitPolicy",
+          "metadata": {
+            "name": "token-limit-free",
+            "namespace": "gateway-system"
+          },
+          "spec": {
+            "limits": {
+              "free": {
+                "counter": "auth.identity.userid",
+                "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"free\")",
+                "rates": [
+                  {
+                    "limit": 20000,
+                    "window": "1d"
+                  }
+                ]
+              },
+              "gold": {
+                "counter": "auth.identity.userid",
+                "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"gold\")",
+                "rates": [
+                  {
+                    "limit": 200000,
+                    "window": "1d"
+                  }
+                ]
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "Gateway",
+              "name": "my-llm-gateway"
+            }
+          }
+        },
+        {
           "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
@@ -109,7 +146,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-04-23T14:42:57Z"
+    createdAt: "2025-06-04T16:31:06Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -151,6 +188,9 @@ spec:
       kind: TLSPolicy
       name: tlspolicies.kuadrant.io
       version: v1
+    - kind: TokenRateLimitPolicy
+      name: tokenratelimitpolicies.kuadrant.io
+      version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:
@@ -327,6 +367,7 @@ spec:
           - kuadrants
           - ratelimitpolicies
           - tlspolicies
+          - tokenratelimitpolicies
           verbs:
           - get
           - list
@@ -341,6 +382,7 @@ spec:
           - kuadrants/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
+          - tokenratelimitpolicies/finalizers
           verbs:
           - update
         - apiGroups:
@@ -351,6 +393,7 @@ spec:
           - kuadrants/status
           - ratelimitpolicies/status
           - tlspolicies/status
+          - tokenratelimitpolicies/status
           verbs:
           - get
           - patch

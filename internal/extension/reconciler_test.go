@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	machinerycontroller "github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 
 	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
@@ -114,6 +117,113 @@ func TestStateAwareDAG(t *testing.T) {
 		}
 		if gws[0].GetMetadata().GetName() != "gateway-3" && gws[1].GetMetadata().GetName() != "gateway-3" && gws[2].GetMetadata().GetName() != "gateway-3" {
 			t.Fatalf("Expected gateway-3, got %#v", gws)
+		}
+	})
+
+	t.Run("findPolicies()", func(t *testing.T) {
+		resources := BuildComplexGatewayAPITopology()
+
+		gatewayClasses := lo.Map(resources.GatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) *machinery.GatewayClass {
+			return &machinery.GatewayClass{GatewayClass: gatewayClass}
+		})
+		gateways := lo.Map(resources.Gateways, func(gateway *gwapiv1.Gateway, _ int) *machinery.Gateway { return &machinery.Gateway{Gateway: gateway} })
+		httpRoutes := lo.Map(resources.HTTPRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) *machinery.HTTPRoute {
+			return &machinery.HTTPRoute{HTTPRoute: httpRoute}
+		})
+		grpcRoutes := lo.Map(resources.GRPCRoutes, func(grpcRoute *gwapiv1.GRPCRoute, _ int) *machinery.GRPCRoute {
+			return &machinery.GRPCRoute{GRPCRoute: grpcRoute}
+		})
+		tcpRoutes := lo.Map(resources.TCPRoutes, func(tcpRoute *gwapiv1alpha2.TCPRoute, _ int) *machinery.TCPRoute {
+			return &machinery.TCPRoute{TCPRoute: tcpRoute}
+		})
+		tlsRoutes := lo.Map(resources.TLSRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *machinery.TLSRoute {
+			return &machinery.TLSRoute{TLSRoute: tlsRoute}
+		})
+		udpRoutes := lo.Map(resources.UDPRoutes, func(updRoute *gwapiv1alpha2.UDPRoute, _ int) *machinery.UDPRoute {
+			return &machinery.UDPRoute{UDPRoute: updRoute}
+		})
+		services := lo.Map(resources.Services, func(service *core.Service, _ int) *machinery.Service { return &machinery.Service{Service: service} })
+
+		policies := []*TestPolicy{
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Name = "my-policy-1"
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  "gateway-1",
+					},
+				}
+			}),
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Name = "my-policy-2"
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "http-route-1",
+					},
+				}
+			}),
+		}
+
+		topology, err := machinery.NewTopology(
+			machinery.WithTargetables(gatewayClasses...),
+			machinery.WithTargetables(gateways...),
+			machinery.WithTargetables(httpRoutes...),
+			machinery.WithTargetables(services...),
+			machinery.WithTargetables(grpcRoutes...),
+			machinery.WithTargetables(tcpRoutes...),
+			machinery.WithTargetables(tlsRoutes...),
+			machinery.WithTargetables(udpRoutes...),
+			machinery.WithPolicies(policies...),
+			machinery.WithLinks(
+				machinery.LinkGatewayClassToGatewayFunc(gatewayClasses),
+				machinery.LinkGatewayToHTTPRouteFunc(gateways),
+				machinery.LinkGatewayToGRPCRouteFunc(gateways),
+				machinery.LinkGatewayToTCPRouteFunc(gateways),
+				machinery.LinkGatewayToTLSRouteFunc(gateways),
+				machinery.LinkGatewayToUDPRouteFunc(gateways),
+				machinery.LinkHTTPRouteToServiceFunc(httpRoutes, false),
+				machinery.LinkGRPCRouteToServiceFunc(grpcRoutes, false),
+				machinery.LinkTCPRouteToServiceFunc(tcpRoutes, false),
+				machinery.LinkTLSRouteToServiceFunc(tlsRoutes, false),
+				machinery.LinkUDPRouteToServiceFunc(udpRoutes, false),
+			),
+		)
+
+		if err != nil {
+			t.Fatalf("Unexpected error: %s", err)
+		}
+
+		dag := StateAwareDAG{
+			topology,
+			nil,
+		}
+
+		pols, err := dag.FindPoliciesFor([]*v1.TargetRef{{Kind: "Gateway", Name: "gateway-1"}}, &TestPolicy{})
+		if err != nil {
+			t.Fatalf("Unexpected error: %s", err)
+		}
+		if len(pols) != 1 {
+			t.Fatalf("Expected exactly 1 policy, got %#v", pols)
+		}
+		if pols[0].GetMetadata().GetName() != "my-policy-1" {
+			t.Fatalf("Expected my-policy-1, got %s", pols[0].GetMetadata().GetName())
+		}
+
+		pols, err = dag.FindPoliciesFor([]*v1.TargetRef{{Kind: "HTTPRoute", Name: "http-route-1"}}, &TestPolicy{})
+		if err != nil {
+			t.Fatalf("Unexpected error: %s", err)
+		}
+		if len(pols) != 2 {
+			t.Fatalf("Expected exactly 2 policies, got %#v", pols)
+		}
+		if pols[0].GetMetadata().GetName() != "my-policy-1" && pols[1].GetMetadata().GetName() != "my-policy-1" {
+			t.Fatalf("Expected my-policy-1")
+		}
+		if pols[0].GetMetadata().GetName() != "my-policy-2" && pols[1].GetMetadata().GetName() != "my-policy-2" {
+			t.Fatal("Expected my-policy-2")
 		}
 	})
 }
@@ -803,6 +913,62 @@ type TestPolicy struct {
 	Spec TestPolicySpec `json:"spec"`
 }
 
+func (p *TestPolicy) DeepCopyObject() runtime.Object {
+	return nil
+}
+
 type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+}
+
+var _ machinery.Policy = &TestPolicy{}
+var _ machinerycontroller.Object = &TestPolicy{}
+
+func (p *TestPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
+}
+
+func (p *TestPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			PolicyNamespace: p.Namespace,
+		},
+	}
+}
+
+func (p *TestPolicy) GetMergeStrategy() machinery.MergeStrategy {
+	return machinery.DefaultMergeStrategy
+}
+
+func (p *TestPolicy) Merge(_ machinery.Policy) machinery.Policy {
+	return &TestPolicy{
+		Spec: p.Spec,
+	}
+}
+
+func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
+	p := &TestPolicy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "test/v1",
+			Kind:       "TestPolicy",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-policy",
+			Namespace: "my-namespace",
+		},
+		Spec: TestPolicySpec{
+			TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+					Group: gwapiv1.Group(core.SchemeGroupVersion.Group),
+					Kind:  "Service",
+					Name:  "my-service",
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(p)
+	}
+	return p
 }

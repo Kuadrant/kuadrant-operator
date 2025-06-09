@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/samber/lo"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
@@ -56,11 +58,15 @@ func (ngp *nilGuardedPointer[T]) newUpdateChannel() chan T {
 }
 
 // get returns the current value of the pointer without blocking.
+//
+//lint:ignore U1000
 func (ngp *nilGuardedPointer[T]) get() *T {
 	return ngp.ptr.Load()
 }
 
 // getWait blocks until the pointer is set to a non-nil value and then returns that value.
+//
+//lint:ignore U1000
 func (ngp *nilGuardedPointer[T]) getWait() T {
 	// First try a quick non-blocking check
 	if val := ngp.ptr.Load(); val != nil {
@@ -118,27 +124,56 @@ type StateAwareDAG struct {
 }
 
 func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb.Gateway, error) {
-	chain := d.topology.All().Items(func(o machinery.Object) bool {
-		return len(lo.Filter(targetRefs, func(t *extpb.TargetRef, _ int) bool {
-			return t.Name == o.GetName() && t.Kind == o.GroupVersionKind().Kind
-		})) > 0
+	targets := d.findTargets(targetRefs)
+
+	roots := lo.Filter(d.topology.All().Roots(), func(o machinery.Object, _ int) bool {
+		return o.GroupVersionKind().Kind == "GatewayClass"
 	})
 
 	gateways := make([]*extpb.Gateway, 0)
-	chainSize := len(chain)
 
-	for i := 0; i < chainSize; i++ {
-		object := chain[i]
-		parents := d.topology.All().Parents(object)
-		chain = append(chain, parents...)
-		chainSize = len(chain)
-		if gw, ok := object.(*machinery.Gateway); ok && gw != nil {
-			gateways = append(gateways, toGw(*gw))
+	for _, root := range roots {
+		for _, t := range targets {
+			paths := d.topology.Targetables().Paths(root, t)
+			for _, path := range paths {
+				for _, o := range path {
+					if o.GroupVersionKind().Kind == "Gateway" {
+						if gw, ok := o.(*machinery.Gateway); ok {
+							gateways = append(gateways, toGw(*gw))
+						}
+					}
+				}
+			}
 		}
 	}
-
 	return lo.UniqBy(gateways, func(gw *extpb.Gateway) string {
 		return gw.GetMetadata().GetNamespace() + "/" + gw.GetMetadata().GetName()
+	}), nil
+}
+
+func (d *StateAwareDAG) FindPoliciesFor(targetRefs []*extpb.TargetRef, policyType machinery.Policy) ([]*extpb.Policy, error) {
+	targets := d.findTargets(targetRefs)
+
+	roots := lo.Filter(d.topology.All().Roots(), func(o machinery.Object, _ int) bool {
+		return o.GroupVersionKind().Kind == "GatewayClass"
+	})
+
+	policies := make([]*extpb.Policy, 0)
+	for _, root := range roots {
+		for _, t := range targets {
+			paths := d.topology.Targetables().Paths(root, t)
+			for i := range paths {
+				pols := kuadrantv1.PoliciesInPath(paths[i], func(p machinery.Policy) bool {
+					return reflect.TypeOf(p) == reflect.TypeOf(policyType)
+				})
+				policies = append(policies, lo.Map(pols, func(item machinery.Policy, _ int) *extpb.Policy {
+					return toPolicy(item)
+				})...)
+			}
+		}
+	}
+	return lo.UniqBy(policies, func(p *extpb.Policy) string {
+		return p.GetMetadata().GetNamespace() + "/" + p.GetMetadata().GetName()
 	}), nil
 }
 
@@ -153,6 +188,30 @@ func toGw(gw machinery.Gateway) *extpb.Gateway {
 			Listeners:        toListeners(gw.Spec.Listeners),
 		},
 	}
+}
+
+func toPolicy(policy machinery.Policy) *extpb.Policy {
+	return &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Name:      policy.GetName(),
+			Namespace: policy.GetNamespace(),
+		},
+		TargetRefs: toTargetRefs(policy.GetTargetRefs()),
+	}
+}
+
+func toTargetRefs(targetRefs []machinery.PolicyTargetReference) []*extpb.TargetRef {
+	trs := make([]*extpb.TargetRef, len(targetRefs))
+	for _, tr := range targetRefs {
+		targetRef := extpb.TargetRef{
+			Name:      tr.GetName(),
+			Namespace: tr.GetNamespace(),
+			Kind:      tr.GroupVersionKind().GroupKind().Kind,
+			Group:     tr.GroupVersionKind().Group,
+		}
+		trs = append(trs, &targetRef)
+	}
+	return trs
 }
 
 func toListeners(listeners []v1.Listener) []*extpb.Listener {
@@ -177,4 +236,12 @@ func Reconcile(_ context.Context, _ []controller.ResourceEvent, topology *machin
 	}
 	BlockingDAG.set(newDag)
 	return nil
+}
+
+func (d *StateAwareDAG) findTargets(targetRefs []*extpb.TargetRef) []machinery.Object {
+	return d.topology.All().Items(func(o machinery.Object) bool {
+		return len(lo.Filter(targetRefs, func(t *extpb.TargetRef, _ int) bool {
+			return t.Name == o.GetName() && t.Kind == o.GroupVersionKind().Kind
+		})) > 0
+	})
 }

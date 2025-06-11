@@ -20,6 +20,8 @@ service ExtensionService {
   rpc Subscribe(google.protobuf.Empty) returns (stream SubscribeResponse) {}
   // Resolve the expression for context and subscribe (or not)
   rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
+  // Add data to an existing policy
+  rpc RegisterMutator(RegisterMutatorRequest) returns (google.protobuf.Empty) {}
 }
 
 // The request message containing the time the request was dispatched.
@@ -51,4 +53,10 @@ message SubscribeResponse {
 
 message Event {
   Metadata metadata = 1;
+}
+
+message RegisterMutatorRequest {
+  kuadrant.v1.Policy policy = 1;
+  string binding = 2;
+  string expression = 3;
 }

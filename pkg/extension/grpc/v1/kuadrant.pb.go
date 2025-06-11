@@ -317,6 +317,66 @@ func (x *Event) GetMetadata() *Metadata {
 	return nil
 }
 
+type RegisterMutatorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	Binding       string                 `protobuf:"bytes,2,opt,name=binding,proto3" json:"binding,omitempty"`
+	Expression    string                 `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterMutatorRequest) Reset() {
+	*x = RegisterMutatorRequest{}
+	mi := &file_v1_kuadrant_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterMutatorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterMutatorRequest) ProtoMessage() {}
+
+func (x *RegisterMutatorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_kuadrant_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterMutatorRequest.ProtoReflect.Descriptor instead.
+func (*RegisterMutatorRequest) Descriptor() ([]byte, []int) {
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RegisterMutatorRequest) GetPolicy() *Policy {
+	if x != nil {
+		return x.Policy
+	}
+	return nil
+}
+
+func (x *RegisterMutatorRequest) GetBinding() string {
+	if x != nil {
+		return x.Binding
+	}
+	return ""
+}
+
+func (x *RegisterMutatorRequest) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
 var File_v1_kuadrant_proto protoreflect.FileDescriptor
 
 const file_v1_kuadrant_proto_rawDesc = "" +
@@ -339,11 +399,18 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x12.kuadrant.v1.EventR\x05event\x12(\n" +
 	"\x05error\x18\x02 \x01(\v2\x12.google.rpc.StatusR\x05error\":\n" +
 	"\x05Event\x121\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v1.MetadataR\bmetadata2\xe2\x01\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v1.MetadataR\bmetadata\"\x7f\n" +
+	"\x16RegisterMutatorRequest\x12+\n" +
+	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x12\x18\n" +
+	"\abinding\x18\x02 \x01(\tR\abinding\x12\x1e\n" +
+	"\n" +
+	"expression\x18\x03 \x01(\tR\n" +
+	"expression2\xb4\x02\n" +
 	"\x10ExtensionService\x12=\n" +
 	"\x04Ping\x12\x18.kuadrant.v1.PingRequest\x1a\x19.kuadrant.v1.PongResponse\"\x00\x12G\n" +
 	"\tSubscribe\x12\x16.google.protobuf.Empty\x1a\x1e.kuadrant.v1.SubscribeResponse\"\x000\x01\x12F\n" +
-	"\aResolve\x12\x1b.kuadrant.v1.ResolveRequest\x1a\x1c.kuadrant.v1.ResolveResponse\"\x00B\x05Z\x03/v1b\x06proto3"
+	"\aResolve\x12\x1b.kuadrant.v1.ResolveRequest\x1a\x1c.kuadrant.v1.ResolveResponse\"\x00\x12P\n" +
+	"\x0fRegisterMutator\x12#.kuadrant.v1.RegisterMutatorRequest\x1a\x16.google.protobuf.Empty\"\x00B\x05Z\x03/v1b\x06proto3"
 
 var (
 	file_v1_kuadrant_proto_rawDescOnce sync.Once
@@ -357,40 +424,44 @@ func file_v1_kuadrant_proto_rawDescGZIP() []byte {
 	return file_v1_kuadrant_proto_rawDescData
 }
 
-var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_v1_kuadrant_proto_goTypes = []any{
-	(*PingRequest)(nil),         // 0: kuadrant.v1.PingRequest
-	(*PongResponse)(nil),        // 1: kuadrant.v1.PongResponse
-	(*ResolveRequest)(nil),      // 2: kuadrant.v1.ResolveRequest
-	(*ResolveResponse)(nil),     // 3: kuadrant.v1.ResolveResponse
-	(*SubscribeResponse)(nil),   // 4: kuadrant.v1.SubscribeResponse
-	(*Event)(nil),               // 5: kuadrant.v1.Event
-	(*timestamp.Timestamp)(nil), // 6: google.protobuf.Timestamp
-	(*Policy)(nil),              // 7: kuadrant.v1.Policy
-	(*v1alpha1.Value)(nil),      // 8: google.api.expr.v1alpha1.Value
-	(*status.Status)(nil),       // 9: google.rpc.Status
-	(*Metadata)(nil),            // 10: kuadrant.v1.Metadata
-	(*empty.Empty)(nil),         // 11: google.protobuf.Empty
+	(*PingRequest)(nil),            // 0: kuadrant.v1.PingRequest
+	(*PongResponse)(nil),           // 1: kuadrant.v1.PongResponse
+	(*ResolveRequest)(nil),         // 2: kuadrant.v1.ResolveRequest
+	(*ResolveResponse)(nil),        // 3: kuadrant.v1.ResolveResponse
+	(*SubscribeResponse)(nil),      // 4: kuadrant.v1.SubscribeResponse
+	(*Event)(nil),                  // 5: kuadrant.v1.Event
+	(*RegisterMutatorRequest)(nil), // 6: kuadrant.v1.RegisterMutatorRequest
+	(*timestamp.Timestamp)(nil),    // 7: google.protobuf.Timestamp
+	(*Policy)(nil),                 // 8: kuadrant.v1.Policy
+	(*v1alpha1.Value)(nil),         // 9: google.api.expr.v1alpha1.Value
+	(*status.Status)(nil),          // 10: google.rpc.Status
+	(*Metadata)(nil),               // 11: kuadrant.v1.Metadata
+	(*empty.Empty)(nil),            // 12: google.protobuf.Empty
 }
 var file_v1_kuadrant_proto_depIdxs = []int32{
-	6,  // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
-	6,  // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
-	7,  // 2: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
-	8,  // 3: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
+	7,  // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
+	7,  // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
+	8,  // 2: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
+	9,  // 3: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
 	5,  // 4: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
-	9,  // 5: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
-	10, // 6: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
-	0,  // 7: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
-	11, // 8: kuadrant.v1.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
-	2,  // 9: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
-	1,  // 10: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
-	4,  // 11: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
-	3,  // 12: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	10, // 5: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
+	11, // 6: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
+	8,  // 7: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
+	0,  // 8: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
+	12, // 9: kuadrant.v1.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
+	2,  // 10: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
+	6,  // 11: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
+	1,  // 12: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
+	4,  // 13: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
+	3,  // 14: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
+	12, // 15: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
+	12, // [12:16] is the sub-list for method output_type
+	8,  // [8:12] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_v1_kuadrant_proto_init() }
@@ -406,7 +477,7 @@ func file_v1_kuadrant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_kuadrant_proto_rawDesc), len(file_v1_kuadrant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

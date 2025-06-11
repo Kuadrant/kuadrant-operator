@@ -225,6 +225,20 @@ func TestStateAwareDAG(t *testing.T) {
 		if pols[0].GetMetadata().GetName() != "my-policy-2" && pols[1].GetMetadata().GetName() != "my-policy-2" {
 			t.Fatal("Expected my-policy-2")
 		}
+
+		pols, err = dag.FindPoliciesFor([]*v1.TargetRef{{Kind: "TestPolicy", Name: "my-policy-2"}}, &TestPolicy{})
+		if err != nil {
+			t.Fatalf("Unexpected error: %s", err)
+		}
+		if len(pols) != 2 {
+			t.Fatalf("Expected exactly 2 policies, got %#v", pols)
+		}
+		if pols[0].GetMetadata().GetName() != "my-policy-1" && pols[1].GetMetadata().GetName() != "my-policy-1" {
+			t.Fatalf("Expected my-policy-1")
+		}
+		if pols[0].GetMetadata().GetName() != "my-policy-2" && pols[1].GetMetadata().GetName() != "my-policy-2" {
+			t.Fatal("Expected my-policy-2")
+		}
 	})
 }
 

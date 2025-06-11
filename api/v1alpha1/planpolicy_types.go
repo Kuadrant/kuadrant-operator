@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
-	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -47,8 +46,6 @@ type PlanPolicy struct {
 	Status PlanPolicyStatus `json:"status,omitempty"`
 }
 
-var _ machinery.Policy = &PlanPolicy{}
-
 func (p *PlanPolicy) GetNamespace() string {
 	return p.Namespace
 }
@@ -57,29 +54,10 @@ func (p *PlanPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *PlanPolicy) GetLocator() string {
-	return machinery.LocatorFromObject(p)
-}
-
-func (p *PlanPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
-	return []machinery.PolicyTargetReference{
-		machinery.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
-			PolicyNamespace: p.Namespace,
-		},
+func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		p.Spec.TargetRef,
 	}
-}
-
-func (p *PlanPolicy) GetMergeStrategy() machinery.MergeStrategy {
-	return machinery.NoMergeStrategy
-}
-
-func (p *PlanPolicy) Merge(other machinery.Policy) machinery.Policy {
-	source, ok := other.(*PlanPolicy)
-	if !ok {
-		return p
-	}
-	return source.GetMergeStrategy()(source, p)
 }
 
 func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {

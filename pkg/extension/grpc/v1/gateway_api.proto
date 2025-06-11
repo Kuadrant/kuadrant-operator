@@ -21,6 +21,7 @@ message GatewaySpec {
 message Listener {
   string name = 1;
   string hostname = 2;
+  string protocol = 3;
 }
 
 message GatewayAddresses {

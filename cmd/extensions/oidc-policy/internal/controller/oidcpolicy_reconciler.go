@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"strings"
 
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 
@@ -39,17 +40,18 @@ type OIDCPolicyReconciler struct {
 	logger logr.Logger
 }
 
-type ingressGatewayInfo struct { // TODO: Get the gateway protocol (http, https) from Resolve
-	Hostname  string `json:"hostname"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
+type ingressGatewayInfo struct {
+	Hostname  string                    `json:"hostname"`
+	Name      string                    `json:"name"`
+	Namespace string                    `json:"namespace"`
+	Protocol  gatewayapiv1.ProtocolType `json:"protocol"`
 	url       *url.URL
 }
 
 func (g *ingressGatewayInfo) GetURL() *url.URL {
 	if g.url == nil {
 		g.url = &url.URL{
-			Scheme: "http",
+			Scheme: strings.ToLower(string(g.Protocol)),
 			Host:   g.Hostname,
 		}
 	}
@@ -98,7 +100,16 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return ctrl.Result{}, nil
 	}
 
-	ingressGatewayData, err := extcontroller.Resolve[ingressGatewayInfo](ctx, kCtx, oidcPolicy, "{\"hostname\": self.findGateways()[0].listeners[0].hostname, \"name\": self.findGateways()[0].metadata.name, \"namespace\": self.findGateways()[0].metadata.namespace}", true)
+	ingressGatewayData, err := extcontroller.Resolve[ingressGatewayInfo](
+		ctx,
+		kCtx,
+		oidcPolicy,
+		`{"protocol": self.findGateways()[0].spec.listeners[0].protocol,
+		"hostname": self.findGateways()[0].spec.listeners[0].hostname,
+		"name": self.findGateways()[0].metadata.name,
+		"namespace": self.findGateways()[0].metadata.namespace}`,
+		true)
+
 	if err != nil {
 		r.logger.Error(err, "Failed to resolve ingress gateway info")
 		return reconcile.Result{}, err

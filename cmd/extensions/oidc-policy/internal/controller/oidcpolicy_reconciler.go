@@ -81,6 +81,8 @@ func (r *OIDCPolicyReconciler) WithLogger(logger logr.Logger) *OIDCPolicyReconci
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
+// TODO: Current OIDC Workflow works only for Browser apps, needs implementation for Native apps
+
 func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler"))
 	r.logger.Info("Reconciling OIDCPolicy")
@@ -232,9 +234,9 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayIn
 	if err != nil {
 		return nil, err
 	}
-	// TODO: Set Cookie needs to check on ingressGatewayInfo for the protocol, and add `Secure` if it's `https`
+
 	setCookie := fmt.Sprintf(`
-"target=" + request.path + "; domain=%s; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600"`, igw.Hostname)
+"target=" + request.path + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, igw.Hostname, getSecureFlag(igw.Protocol))
 
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
@@ -362,10 +364,9 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatew
 	redirectURI := pol.GetRedirectURL(igwURL)
 	authorizeURL := pol.GetAuthorizeURL(igwURL)
 
-	// TODO: Set Cookie needs to check on ingressGatewayInfo for the protocol, and add `Secure` if it's `https`
 	setCookie := fmt.Sprintf(`
-"jwt=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600"
-`, igwHostname)
+"jwt=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
+`, igwHostname, getSecureFlag(igw.Protocol))
 	callBodyCelExpression := fmt.Sprintf(`
 "code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0] + "&redirect_uri=%s&client_id=%s&grant_type=authorization_code"
 `, redirectURI, pol.Spec.Provider.ClientID)
@@ -522,4 +523,12 @@ func mainAuthPolicyIssuerURLMutator(desired, existing *kuadrantv1.AuthPolicy) bo
 	}
 
 	return update
+}
+
+func getSecureFlag(protocol gatewayapiv1.ProtocolType) string {
+	flag := ""
+	if protocol == gatewayapiv1.HTTPSProtocolType {
+		flag = "Secure;"
+	}
+	return flag
 }

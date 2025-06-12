@@ -80,31 +80,40 @@ spec:
                       description: TokenLimit represents a complete token-based rate
                         limit configuration
                       properties:
-                        counter:
-                          description: Counter defines the counter expression using
-                            CEL expressions
-                          type: string
-                        predicate:
-                          description: Predicate defines the condition for applying
-                            this limit using CEL expressions
-                          type: string
+                        counters:
+                          description: Counters defines additional rate limit counters
+                            based on CEL expressions which can reference well known
+                            selectors
+                          items:
+                            properties:
+                              expression:
+                                description: |-
+                                  Expression defines one CEL expression
+                                  Expression can use well known attributes
+                                  Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                                  Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                  They are named by a dot-separated path (e.g. request.path)
+                                  Example: "request.path" -> The path portion of the URL
+                                minLength: 1
+                                type: string
+                            required:
+                            - expression
+                            type: object
+                          type: array
                         rates:
                           description: Rates holds the list of limit rates for token-based
                             limiting
                           items:
-                            description: TokenRate defines the token-based rate limit
-                              details
+                            description: Rate defines the actual rate limit that will
+                              be used when there is a match
                             properties:
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
                               window:
-                                description: |-
-                                  Window defines the time period for which the Limit specified above applies.
-                                  Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
-                                  MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                  MUST be interpreted as specified by Golang's time.ParseDuration
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
                                 pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
                                 type: string
                             required:
@@ -161,31 +170,39 @@ spec:
                   description: TokenLimit represents a complete token-based rate limit
                     configuration
                   properties:
-                    counter:
-                      description: Counter defines the counter expression using CEL
-                        expressions
-                      type: string
-                    predicate:
-                      description: Predicate defines the condition for applying this
-                        limit using CEL expressions
-                      type: string
+                    counters:
+                      description: Counters defines additional rate limit counters
+                        based on CEL expressions which can reference well known selectors
+                      items:
+                        properties:
+                          expression:
+                            description: |-
+                              Expression defines one CEL expression
+                              Expression can use well known attributes
+                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                              They are named by a dot-separated path (e.g. request.path)
+                              Example: "request.path" -> The path portion of the URL
+                            minLength: 1
+                            type: string
+                        required:
+                        - expression
+                        type: object
+                      type: array
                     rates:
                       description: Rates holds the list of limit rates for token-based
                         limiting
                       items:
-                        description: TokenRate defines the token-based rate limit
-                          details
+                        description: Rate defines the actual rate limit that will
+                          be used when there is a match
                         properties:
                           limit:
                             description: Limit defines the max value allowed for a
                               given period of time
                             type: integer
                           window:
-                            description: |-
-                              Window defines the time period for which the Limit specified above applies.
-                              Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
-                              MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                              MUST be interpreted as specified by Golang's time.ParseDuration
+                            description: Window defines the time period for which
+                              the Limit specified above applies.
                             pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
                             type: string
                         required:
@@ -222,31 +239,40 @@ spec:
                       description: TokenLimit represents a complete token-based rate
                         limit configuration
                       properties:
-                        counter:
-                          description: Counter defines the counter expression using
-                            CEL expressions
-                          type: string
-                        predicate:
-                          description: Predicate defines the condition for applying
-                            this limit using CEL expressions
-                          type: string
+                        counters:
+                          description: Counters defines additional rate limit counters
+                            based on CEL expressions which can reference well known
+                            selectors
+                          items:
+                            properties:
+                              expression:
+                                description: |-
+                                  Expression defines one CEL expression
+                                  Expression can use well known attributes
+                                  Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                                  Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                  They are named by a dot-separated path (e.g. request.path)
+                                  Example: "request.path" -> The path portion of the URL
+                                minLength: 1
+                                type: string
+                            required:
+                            - expression
+                            type: object
+                          type: array
                         rates:
                           description: Rates holds the list of limit rates for token-based
                             limiting
                           items:
-                            description: TokenRate defines the token-based rate limit
-                              details
+                            description: Rate defines the actual rate limit that will
+                              be used when there is a match
                             properties:
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
                               window:
-                                description: |-
-                                  Window defines the time period for which the Limit specified above applies.
-                                  Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
-                                  MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                  MUST be interpreted as specified by Golang's time.ParseDuration
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
                                 pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
                                 type: string
                             required:

@@ -22,6 +22,8 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 func TestTokenRateLimitPolicy_GetTargetRef(t *testing.T) {
@@ -120,9 +122,9 @@ func TestTokenRate_WindowSeconds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rate := TokenRate{Window: tt.window}
-			if got := rate.WindowSeconds(); got != tt.expected {
-				t.Errorf("WindowSeconds() = %v, want %v", got, tt.expected)
+			rate := kuadrantv1.Rate{Window: kuadrantv1.Duration(tt.window)}
+			if got := rate.Window.Seconds(); got != tt.expected {
+				t.Errorf("Window.Seconds() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -161,9 +163,9 @@ func TestTokenRate_ToSeconds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rate := TokenRate{
+			rate := kuadrantv1.Rate{
 				Limit:  tt.limit,
-				Window: tt.window,
+				Window: kuadrantv1.Duration(tt.window),
 			}
 			maxValue, seconds := rate.ToSeconds()
 			if maxValue != tt.expectedMax {
@@ -369,16 +371,21 @@ func TestTokenLimit_CountersAsStringList(t *testing.T) {
 		{
 			name: "single counter",
 			limit: TokenLimit{
-				Counter: "auth.identity.userid",
+				Counters: []kuadrantv1.Counter{
+					{Expression: kuadrantv1.Expression("auth.identity.userid")},
+				},
 			},
-			expected: []string{"auth.identity.userid"},
+			expected: []string{"descriptors[0][\"auth.identity.userid\"]"},
 		},
 		{
-			name: "single counter (new API only supports one)",
+			name: "multiple counters",
 			limit: TokenLimit{
-				Counter: "auth.identity.userid",
+				Counters: []kuadrantv1.Counter{
+					{Expression: kuadrantv1.Expression("auth.identity.userid")},
+					{Expression: kuadrantv1.Expression("request.headers.client-id")},
+				},
 			},
-			expected: []string{"auth.identity.userid"},
+			expected: []string{"descriptors[0][\"auth.identity.userid\"]", "descriptors[0][\"request.headers.client-id\"]"},
 		},
 	}
 

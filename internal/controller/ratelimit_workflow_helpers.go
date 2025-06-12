@@ -287,8 +287,8 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
 	}
-	if tokenLimit.Predicate != "" {
-		predicates = append(predicates, tokenLimit.Predicate)
+	for _, pred := range tokenLimit.When {
+		predicates = append(predicates, pred.Predicate)
 	}
 
 	// common both actions
@@ -304,7 +304,14 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	}
 
 	// add model detection if needed
-	if tokenLimit.Predicate != "" && strings.Contains(tokenLimit.Predicate, "requestBodyJSON(\"model\")") {
+	modelDetectionNeeded := false
+	for _, pred := range tokenLimit.When {
+		if strings.Contains(pred.Predicate, "requestBodyJSON(\"model\")") {
+			modelDetectionNeeded = true
+			break
+		}
+	}
+	if modelDetectionNeeded {
 		commonData = append(commonData, wasm.DataType{
 			Value: &wasm.Expression{
 				ExpressionItem: wasm.ExpressionItem{
@@ -315,13 +322,14 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 		})
 	}
 
-	// add counter if specified
-	if tokenLimit.Counter != "" {
+	// add counters if specified
+	for _, counter := range tokenLimit.Counters {
+		counterExpr := string(counter.Expression)
 		commonData = append(commonData, wasm.DataType{
 			Value: &wasm.Expression{
 				ExpressionItem: wasm.ExpressionItem{
-					Key:   tokenLimit.Counter,
-					Value: tokenLimit.Counter,
+					Key:   counterExpr,
+					Value: counterExpr,
 				},
 			},
 		})

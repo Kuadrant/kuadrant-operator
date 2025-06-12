@@ -107,22 +107,38 @@ metadata:
           "spec": {
             "limits": {
               "free": {
-                "counter": "auth.identity.userid",
-                "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"free\")",
+                "counters": [
+                  {
+                    "expression": "auth.identity.userid"
+                  }
+                ],
                 "rates": [
                   {
                     "limit": 20000,
                     "window": "1d"
                   }
+                ],
+                "when": [
+                  {
+                    "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"free\")"
+                  }
                 ]
               },
               "gold": {
-                "counter": "auth.identity.userid",
-                "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"gold\")",
+                "counters": [
+                  {
+                    "expression": "auth.identity.userid"
+                  }
+                ],
                 "rates": [
                   {
                     "limit": 200000,
                     "window": "1d"
+                  }
+                ],
+                "when": [
+                  {
+                    "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"gold\")"
                   }
                 ]
               }

@@ -14,6 +14,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -84,13 +85,17 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1alpha1.TokenLimit{
 							"free-tier": {
-								Rates: []kuadrantv1alpha1.TokenRate{
+								Rates: []kuadrantv1.Rate{
 									{
 										Limit: 20000, Window: "24h",
 									},
 								},
-								Predicate: `request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`,
-								Counter:   "auth.identity.userid",
+								When: kuadrantv1.WhenPredicates{
+									{Predicate: `request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
+								},
+								Counters: []kuadrantv1.Counter{
+									{Expression: kuadrantv1.Expression("auth.identity.userid")},
+								},
 							},
 						},
 					},
@@ -160,13 +165,17 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1alpha1.TokenLimit{
 							"free-tier": {
-								Rates: []kuadrantv1alpha1.TokenRate{
+								Rates: []kuadrantv1.Rate{
 									{
 										Limit: 20000, Window: "24h",
 									},
 								},
-								Predicate: `request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`,
-								Counter:   "auth.identity.userid",
+								When: kuadrantv1.WhenPredicates{
+									{Predicate: `request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
+								},
+								Counters: []kuadrantv1.Counter{
+									{Expression: kuadrantv1.Expression("auth.identity.userid")},
+								},
 							},
 						},
 					},
@@ -235,13 +244,17 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1alpha1.TokenLimit{
 							"free-tier": {
-								Rates: []kuadrantv1alpha1.TokenRate{
+								Rates: []kuadrantv1.Rate{
 									{
 										Limit: 20000, Window: "24h",
 									},
 								},
-								Predicate: `request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`,
-								Counter:   "auth.identity.userid",
+								When: kuadrantv1.WhenPredicates{
+									{Predicate: `request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
+								},
+								Counters: []kuadrantv1.Counter{
+									{Expression: kuadrantv1.Expression("auth.identity.userid")},
+								},
 							},
 						},
 					},

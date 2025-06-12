@@ -162,6 +162,8 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	var effectiveTokenRateLimitPoliciesMap EffectiveTokenRateLimitPolicies
 	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
 		effectiveTokenRateLimitPoliciesMap = effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)
+	} else {
+		logger.V(1).Info("no effective token rate limit policies found in state, continuing with empty map")
 	}
 
 	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveTokenRateLimitPolicies", len(effectiveTokenRateLimitPoliciesMap))

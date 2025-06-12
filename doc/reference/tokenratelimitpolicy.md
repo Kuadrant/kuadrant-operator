@@ -8,15 +8,14 @@ TokenRateLimitPolicy enables token-based rate limiting for service workloads in 
 
 ## Key Features
 
-- **Token-based Rate Limiting**: Create rate limits based on actual token usage from AI/LLM responses
-- **Automatic Token Tracking**: Automatically tracks `usage.total_tokens` from response bodies
-- **Model-specific Rate Limiting**: Support for rate limiting specific AI models through automatic model detection
-- **Multiple Named Limits**: Support for multiple named rate limits within a single policy
-- **CEL Expression Support**: Use CEL expressions for flexible predicate and counter definitions
+- **Token-based Rate Limiting**: Create rate limits based on actual token usage from AI/LLM responses, not request count
+- **Automatic Token Tracking**: Automatically extracts token usage from OpenAI-compatible API responses
+- **Model-specific Rate Limiting**: Different rate limits for different AI models (e.g., GPT-4 vs GPT-3.5)
+- **User Segmentation**: Different limits for different user tiers or organizations
+- **Multiple Time Windows**: Support for burst protection and sustained usage limits
+- **CEL Expression Support**: Powerful predicate and counter definitions using CEL expressions
 - **Gateway API Integration**: Targets Gateway and HTTPRoute resources
-- **Multiple Time Windows**: Support for various time windows (seconds, minutes, hours, days)
 - **Policy Hierarchy**: Support for defaults, overrides, and implicit defaults with proper precedence
-- **Comprehensive Validation**: Built-in CEL validation ensures proper policy configuration
 
 ## API Reference
 
@@ -47,28 +46,22 @@ TokenRateLimitPolicy enables token-based rate limiting for service workloads in 
 | `counters` | `[]kuadrantv1.Counter` | Optional | CEL expressions that define counter keys for rate limiting. If not specified, rate limiting will be applied globally without user-specific tracking |
 
 
-## Default Behaviour
+## Default Behavior
 
-TokenRateLimitPolicy has several automatic behaviours and defaults:
+TokenRateLimitPolicy provides automatic token counting with sensible defaults:
 
-### Automatic Token Tracking
-- **Automatic**: Token usage is automatically tracked from response bodies containing `usage.total_tokens` field
-- **No configuration required**: Works out-of-the-box with OpenAI-compatible API responses
+### Automatic Token Counting
+- **No configuration needed**: Automatically extracts token usage from OpenAI-compatible API responses
+- **Parses `usage.total_tokens`**: Works with any service that returns token usage in this standard format
+- **Graceful fallback**: If token parsing fails, rate limiting still works (falls back to request counting)
 
-### Counter Defaults
-- **When `counter` is specified**: Rate limiting tracks usage per the specified counter (e.g., per user, per organisation)
-- **When `counter` is omitted**: Rate limiting applies globally to all requests matching the predicate
+### Global vs User-Specific Limiting
+- **Without counters**: Applies global rate limits across all requests
+- **With counters**: Tracks usage per counter value (e.g., per user, per organization, per model)
 
-### Predicate Defaults  
-- **When `predicate` is specified**: Limit only applies to requests matching the CEL expression
-- **When `predicate` is omitted**: Limit applies to all requests (subject to top-level `when` conditions)
-
-### Model Detection (Advanced Feature)
-The policy can automatically detect and track AI model usage:
-- **Trigger**: When any predicate contains `requestBodyJSON("model")` 
-- **Behaviour**: Model information is automatically extracted from request bodies and tracked in rate limiting descriptors
-- **Use case**: Enables model-specific rate limiting (e.g., different limits for GPT-4 vs GPT-3.5)
-- **Transparency**: This happens automatically without additional user configuration
+### When Conditions
+- **Without `when` predicates**: Limit applies to all requests
+- **With `when` predicates**: Limit only applies to requests matching the specified conditions
 
 ## Policy Hierarchy and Precedence
 
@@ -103,6 +96,143 @@ When a policy uses the `overrides` field:
 Both `defaults` and `overrides` support merge strategies:
 - **`atomic`** (default): Replace the entire policy configuration
 - **`merge`**: Merge individual limits with existing policies
+
+## Common Use Cases
+
+### Model-Specific Rate Limiting
+
+Different AI models have different costs and capabilities. You can set different limits per model:
+
+```yaml
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: model-based-limits
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: ai-api
+  limits:
+    gpt-4-limit:
+      rates:
+      - limit: 100000
+        window: 24h
+      when:
+      - predicate: 'requestBodyJSON("model") == "gpt-4"'
+      counters:
+      - expression: auth.identity.userid
+    
+    gpt-3-limit:
+      rates:
+      - limit: 500000
+        window: 24h  
+      when:
+      - predicate: 'requestBodyJSON("model") == "gpt-3.5-turbo"'
+      counters:
+      - expression: auth.identity.userid
+
+    default-model:
+      rates:
+      - limit: 200000
+        window: 24h
+      when:
+      - predicate: '!requestBodyJSON("model").matches("gpt-4.*")'
+      counters:
+      - expression: auth.identity.userid
+```
+
+This example:
+- Sets a 100k token/day limit for GPT-4 usage per user
+- Sets a 500k token/day limit for GPT-3.5 usage per user  
+- Sets a 200k token/day limit for other models per user
+- Each user's usage is tracked separately for each model
+
+### User Tier-Based Limiting
+
+Create different limits for different subscription tiers:
+
+```yaml
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: subscription-based-limits
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: api-gateway
+  limits:
+    free-tier:
+      rates:
+      - limit: 20000
+        window: 24h
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "free"'
+      counters:
+      - expression: auth.identity.userid
+    
+    pro-tier:
+      rates:
+      - limit: 200000
+        window: 24h
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "pro"'
+      counters:
+      - expression: auth.identity.userid
+
+    enterprise-tier:
+      rates:
+      - limit: 2000000
+        window: 24h
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "enterprise"'
+      counters:
+      - expression: 'request.auth.claims["org_id"]'  # Organization-level limiting
+```
+
+### Combined Model and User Limits
+
+Sophisticated limiting that considers both model type and user tier:
+
+```yaml
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: advanced-ai-limits
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: chat-api
+  limits:
+    free-gpt4:
+      rates:
+      - limit: 10000   # Free users get 10k GPT-4 tokens/day
+        window: 24h
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "free" && requestBodyJSON("model").startsWith("gpt-4")'
+      counters:
+      - expression: auth.identity.userid
+
+    pro-gpt4:
+      rates:
+      - limit: 100000  # Pro users get 100k GPT-4 tokens/day
+        window: 24h
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "pro" && requestBodyJSON("model").startsWith("gpt-4")'
+      counters:
+      - expression: auth.identity.userid
+
+    free-other-models:
+      rates:
+      - limit: 50000   # Free users get 50k tokens/day for other models
+        window: 24h
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "free" && !requestBodyJSON("model").startsWith("gpt-4")'
+      counters:
+      - expression: auth.identity.userid
+```
 
 ## Examples
 

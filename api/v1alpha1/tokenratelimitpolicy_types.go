@@ -17,15 +17,15 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"time"
-
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	transformer "github.com/kuadrant/kuadrant-operator/internal/cel"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 var (
@@ -215,25 +215,28 @@ type TokenLimit struct {
 
 	// Rates holds the list of limit rates for token-based limiting
 	// +optional
-	Rates []TokenRate `json:"rates,omitempty"`
+	Rates []kuadrantv1.Rate `json:"rates,omitempty"`
 
-	// Predicate defines the condition for applying this limit using CEL expressions
+	// Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
+	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 	// +optional
-	Predicate string `json:"predicate,omitempty"`
-
-	// Counter defines the counter expression using CEL expressions
-	// +optional
-	Counter string `json:"counter,omitempty"`
+	Counters []kuadrantv1.Counter `json:"counters,omitempty"`
 
 	// Source stores the locator of the policy where the limit is originally defined (internal use)
 	Source string `json:"-"`
 }
 
 func (l TokenLimit) CountersAsStringList() []string {
-	if l.Counter == "" {
+	if len(l.Counters) == 0 {
 		return nil
 	}
-	return []string{l.Counter}
+	return utils.Map(l.Counters, func(counter kuadrantv1.Counter) string {
+		str := string(counter.Expression)
+		if exp, err := transformer.TransformCounterVariable(str, false); err == nil {
+			return *exp
+		}
+		return str
+	})
 }
 
 var _ kuadrantv1.MergeableRule = &TokenLimit{}
@@ -249,39 +252,6 @@ func (l *TokenLimit) GetSource() string {
 func (l *TokenLimit) WithSource(source string) kuadrantv1.MergeableRule {
 	l.Source = source
 	return l
-}
-
-// TokenRate defines the token-based rate limit details
-type TokenRate struct {
-	// Limit defines the max value allowed for a given period of time
-	Limit int `json:"limit"`
-
-	// Window defines the time period for which the Limit specified above applies.
-	// Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
-	// MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-	// MUST be interpreted as specified by Golang's time.ParseDuration
-	// +kubebuilder:validation:Pattern=`^([0-9]{1,5}(h|m|s|ms)){1,4}$`
-	Window string `json:"window"`
-}
-
-func (r TokenRate) WindowSeconds() int {
-	duration, err := time.ParseDuration(r.Window)
-	if err != nil {
-		return 0
-	}
-	return int(duration.Seconds())
-}
-
-// ToSeconds converts the rate to to Limitador's Limit format (maxValue, seconds)
-func (r TokenRate) ToSeconds() (maxValue, seconds int) {
-	maxValue = r.Limit
-	seconds = r.WindowSeconds()
-
-	if r.Limit < 0 {
-		maxValue = 0
-	}
-
-	return
 }
 
 type TokenRateLimitPolicyStatus struct {

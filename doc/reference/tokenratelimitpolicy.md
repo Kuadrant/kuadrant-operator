@@ -2,12 +2,15 @@
 
 ## Overview
 
-TokenRateLimitPolicy enables token-based rate limiting for service workloads in a Gateway API network. This policy allows you to create rate limits that are based on token usage metrics from AI/LLM workloads, authentication tokens, and claims. It automatically tracks token consumption from response bodies for accurate usage-based rate limiting.
+TokenRateLimitPolicy enables token-based rate limiting for service workloads in a Gateway API network. This policy creates rate limits based on actual token usage metrics from AI/LLM workloads rather than simple request counts. It automatically tracks token consumption from response bodies for accurate usage-based rate limiting.
+
+**Note**: While this policy uses "token" in the name referring to AI/LLM usage tokens, it can also utilise authentication tokens and claims for counter definitions and predicates.
 
 ## Key Features
 
 - **Token-based Rate Limiting**: Create rate limits based on actual token usage from AI/LLM responses
 - **Automatic Token Tracking**: Automatically tracks `usage.total_tokens` from response bodies
+- **Model-specific Rate Limiting**: Support for rate limiting specific AI models through automatic model detection
 - **Multiple Named Limits**: Support for multiple named rate limits within a single policy
 - **CEL Expression Support**: Use CEL expressions for flexible predicate and counter definitions
 - **Gateway API Integration**: Targets Gateway and HTTPRoute resources
@@ -16,6 +19,8 @@ TokenRateLimitPolicy enables token-based rate limiting for service workloads in 
 - **Comprehensive Validation**: Built-in CEL validation ensures proper policy configuration
 
 ## API Reference
+
+**Note**: This API reference reflects the current stable v1alpha1 specification.
 
 ### TokenRateLimitPolicySpec
 
@@ -37,17 +42,10 @@ TokenRateLimitPolicy enables token-based rate limiting for service workloads in 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `rates` | `[]TokenRate` | Optional | List of rate limit details including limit and window. If not specified, no rate limits are applied for this limit definition |
-| `when` | `WhenPredicates` | Optional | List of additional predicates for this limit. Used in combination with top-level predicates |
-| `predicate` | `string` | Optional | CEL expression that determines if this limit applies to the request. If not specified, the limit applies to all requests (subject to other conditions) |
-| `counter` | `string` | Optional | CEL expression that defines the counter key for rate limiting. If not specified, rate limiting will be applied globally without user-specific tracking |
+| `rates` | `[]kuadrantv1.Rate` | Optional | List of rate limit details including limit and window. If not specified, no rate limits are applied for this limit definition |
+| `when` | `kuadrantv1.WhenPredicates` | Optional | List of predicates for this limit. Used in combination with top-level predicates |
+| `counters` | `[]kuadrantv1.Counter` | Optional | CEL expressions that define counter keys for rate limiting. If not specified, rate limiting will be applied globally without user-specific tracking |
 
-### TokenRate
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `limit` | `int` | **Required** | Maximum number of tokens allowed in the specified window |
-| `window` | `string` | **Required** | Time window using Gateway API Duration format (e.g., "1h", "30m", "1d") |
 
 ## Default Behaviour
 
@@ -65,9 +63,12 @@ TokenRateLimitPolicy has several automatic behaviours and defaults:
 - **When `predicate` is specified**: Limit only applies to requests matching the CEL expression
 - **When `predicate` is omitted**: Limit applies to all requests (subject to top-level `when` conditions)
 
-### Model Detection
-- **Automatic**: When predicate contains `requestBodyJSON("model")`, model information is automatically extracted and tracked
-- **Use case**: Enables model-specific rate limiting for AI/LLM services
+### Model Detection (Advanced Feature)
+The policy can automatically detect and track AI model usage:
+- **Trigger**: When any predicate contains `requestBodyJSON("model")` 
+- **Behaviour**: Model information is automatically extracted from request bodies and tracked in rate limiting descriptors
+- **Use case**: Enables model-specific rate limiting (e.g., different limits for GPT-4 vs GPT-3.5)
+- **Transparency**: This happens automatically without additional user configuration
 
 ## Policy Hierarchy and Precedence
 
@@ -75,20 +76,24 @@ TokenRateLimitPolicy supports three modes of operation that provide different le
 
 ### Implicit Defaults (using `limits`)
 When a policy specifies `limits` directly at the spec level, these act as **implicit defaults**:
-- Applied to the target resource (Gateway or HTTPRoute)
-- Can be overridden by more specific policies targeting individual routes
+- Applied to the target resource (Gateway or HTTPRoute) 
+- When targeting a Gateway: Can be overridden by more specific policies targeting individual routes
+- When targeting an HTTPRoute: Applies directly to that route
 - Most common usage pattern for single-policy scenarios
 
 ### Explicit Defaults (using `defaults`) 
 When a policy uses the `defaults` field:
 - Applied as default rules for routes that lack more specific policies
-- Useful for Gateway-level policies that provide baseline limits
+- Useful for Gateway-level policies that provide baseline limits  
 - Can be overridden by HTTPRoute-level policies or Gateway overrides
+- Same behaviour as implicit defaults, but with explicit merge strategy control
 - Mutually exclusive with `limits` and `overrides`
 
 ### Overrides (using `overrides`)
 When a policy uses the `overrides` field:
-- **Takes precedence over all other policies** in the hierarchy
+- **Takes precedence over**: 
+  - All other "default" policies in the hierarchy
+  - Other override policies downwards in the hierarchy
 - Cannot be overridden by more specific policies
 - Only allowed for Gateway-targeted policies
 - Useful for enforcing organisation-wide limits that cannot be bypassed
@@ -145,14 +150,18 @@ spec:
       rates:
       - limit: 20000
         window: 1d
-      predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")'
-      counter: auth.identity.userid
+      when:
+      - predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")'
+      counters:
+      - expression: auth.identity.userid
     gold:
       rates:
       - limit: 200000
         window: 1d
-      predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "gold")'
-      counter: auth.identity.userid
+      when:
+      - predicate: 'request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "gold")'
+      counters:
+      - expression: auth.identity.userid
 ```
 
 This example:
@@ -180,14 +189,18 @@ spec:
       rates:
       - limit: 1000000
         window: 1h
-      predicate: 'request.auth.claims["subscription"] == "premium"'
-      counter: request.auth.claims.sub
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "premium"'
+      counters:
+      - expression: request.auth.claims.sub
     basic:
       rates:
       - limit: 100000
         window: 1h
-      predicate: 'request.auth.claims["subscription"] == "basic"'
-      counter: request.auth.claims.sub
+      when:
+      - predicate: 'request.auth.claims["subscription"] == "basic"'
+      counters:
+      - expression: request.auth.claims.sub
 ```
 
 ### Multiple Time Windows
@@ -212,7 +225,8 @@ spec:
         window: 1h
       - limit: 500000   # 500k tokens per day (daily quota)
         window: 1d
-      counter: auth.identity.userid
+      counters:
+      - expression: auth.identity.userid
 ```
 
 ### Gateway Defaults (Baseline Limits)
@@ -235,12 +249,14 @@ spec:
         rates:
         - limit: 10000      # 10k tokens per hour baseline
           window: 1h
-        counter: auth.identity.userid
+        counters:
+        - expression: auth.identity.userid
       unauthenticated:
         rates:
         - limit: 1000       # 1k tokens per hour for unauthenticated
           window: 1h
-        predicate: '!has(request.auth.claims)'
+        when:
+        - predicate: '!has(request.auth.claims)'
 ```
 
 This Gateway-level policy provides default limits that apply to all routes attached to the gateway, unless overridden by more specific HTTPRoute-level policies.
@@ -265,13 +281,16 @@ spec:
         rates:
         - limit: 1000000    # 1M tokens per day org-wide limit
           window: 1d
-        counter: 'request.auth.claims["org_id"]'
+        counters:
+        - expression: 'request.auth.claims["org_id"]'
       security-limit:
         rates:
         - limit: 100        # 100 tokens per minute security limit
           window: 1m
-        predicate: 'request.headers["x-suspicious"] != ""'
-        counter: 'request.headers["x-client-ip"]'
+        when:
+        - predicate: 'request.headers["x-suspicious"] != ""'
+        counters:
+        - expression: 'request.headers["x-client-ip"]'
 ```
 
 This policy enforces organisation-wide limits that **cannot be overridden** by any HTTPRoute-level policies.
@@ -296,7 +315,8 @@ spec:
         rates:
         - limit: 50000      # 50k tokens/day default
           window: 1d
-        counter: auth.identity.userid
+        counters:
+        - expression: auth.identity.userid
 
 ---
 # HTTPRoute specific policy (overrides the gateway default)
@@ -315,7 +335,8 @@ spec:
       rates:
       - limit: 500000      # 500k tokens/day for premium API
         window: 1d
-      counter: auth.identity.userid
+      counters:
+      - expression: auth.identity.userid
 ```
 
 In this scenario:
@@ -351,7 +372,7 @@ TokenRateLimitPolicy supports CEL (Common Expression Language) for both predicat
 
 ### CEL Context and Available Attributes
 
-TokenRateLimitPolicy provides access to request attributes through CEL expressions:
+TokenRateLimitPolicy provides access to request attributes through CEL expressions. For a comprehensive list of well-known attributes, see the [Well-Known Attributes RFC](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md).
 
 | Context | Available Attributes | Example Usage |
 |---------|---------------------|---------------|

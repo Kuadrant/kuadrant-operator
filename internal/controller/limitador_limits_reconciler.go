@@ -180,7 +180,7 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 
 		case *kuadrantv1alpha1.TokenLimit:
 			limitIdentifier := TokenLimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-			rateLimits := utils.Map(limit.Rates, func(rate kuadrantv1alpha1.TokenRate) limitadorv1alpha1.RateLimit {
+			rateLimits := utils.Map(limit.Rates, func(rate kuadrantv1.Rate) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
 					Namespace:  limitsNamespace,

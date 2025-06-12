@@ -42,15 +42,15 @@ func (r *EffectiveAuthPolicyReconciler) Reconcile(ctx context.Context, _ []contr
 		return nil
 	}
 
-	effectivePolicies := r.calculateEffectivePolicies(ctx, topology, kuadrant, state)
+	effectivePolicies := CalculateEffectiveAuthPolicies(ctx, topology, kuadrant, state)
 
 	state.Store(StateEffectiveAuthPolicies, effectivePolicies)
 
 	return nil
 }
 
-func (r *EffectiveAuthPolicyReconciler) calculateEffectivePolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveAuthPolicies {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveAuthPolicyReconciler").WithName("calculateEffectivePolicies")
+func CalculateEffectiveAuthPolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveAuthPolicies {
+	logger := controller.LoggerFromContext(ctx).WithName("calculateEffectivePolicies")
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant) // assumes only and all valid gateway classes are linked to kuadrant in the topology

@@ -282,13 +282,7 @@ func TokenLimitNameToLimitadorIdentifier(tlrpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
-func wasmActionFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier, scope string, topLevelPredicates kuadrantv1.WhenPredicates) wasm.Action {
-	action := wasm.Action{
-		ServiceName: wasm.RateLimitServiceName,
-		Scope:       scope,
-		Data:        []wasm.DataType{},
-	}
-
+func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier, scope string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.Action {
 	predicates := make([]string, 0, len(topLevelPredicates)+1)
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
@@ -296,23 +290,22 @@ func wasmActionFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIden
 	if tokenLimit.Predicate != "" {
 		predicates = append(predicates, tokenLimit.Predicate)
 	}
-	if len(predicates) > 0 {
-		action.Predicates = predicates
-	}
 
-	// add limit identifier
-	action.Data = append(action.Data, wasm.DataType{
-		Value: &wasm.Expression{
-			ExpressionItem: wasm.ExpressionItem{
-				Key:   limitIdentifier,
-				Value: "1",
+	// common both actions
+	commonData := []wasm.DataType{
+		{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   limitIdentifier,
+					Value: "1",
+				},
 			},
 		},
-	})
+	}
 
-	// add model if predicate contains requestBodyJSON for model detection
+	// add model detection if needed
 	if tokenLimit.Predicate != "" && strings.Contains(tokenLimit.Predicate, "requestBodyJSON(\"model\")") {
-		action.Data = append(action.Data, wasm.DataType{
+		commonData = append(commonData, wasm.DataType{
 			Value: &wasm.Expression{
 				ExpressionItem: wasm.ExpressionItem{
 					Key:   "model",
@@ -322,19 +315,9 @@ func wasmActionFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIden
 		})
 	}
 
-	// for TokenRateLimitPolicy, automatically add token usage metrics as hits_addend
-	// TODO: API to expose custom selector for usage metrics? supports OpenAI-style responses for now
-	action.Data = append(action.Data, wasm.DataType{
-		Value: &wasm.Expression{
-			ExpressionItem: wasm.ExpressionItem{
-				Key:   "ratelimit.hits_addend",
-				Value: "responseBodyJSON(\"usage.total_tokens\")",
-			},
-		},
-	})
-
+	// add counter if specified
 	if tokenLimit.Counter != "" {
-		action.Data = append(action.Data, wasm.DataType{
+		commonData = append(commonData, wasm.DataType{
 			Value: &wasm.Expression{
 				ExpressionItem: wasm.ExpressionItem{
 					Key:   tokenLimit.Counter,
@@ -344,7 +327,45 @@ func wasmActionFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIden
 		})
 	}
 
-	return action
+	// Request phase
+	requestPhaseData := make([]wasm.DataType, len(commonData))
+	copy(requestPhaseData, commonData)
+	requestPhaseData = append(requestPhaseData, wasm.DataType{
+		Value: &wasm.Expression{
+			ExpressionItem: wasm.ExpressionItem{
+				Key:   "ratelimit.hits_addend",
+				Value: "0",
+			},
+		},
+	})
+
+	requestAction := wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       scope,
+		Predicates:  predicates,
+		Data:        requestPhaseData,
+	}
+
+	// Response phase - Increment counter with actual token usage
+	responsePhaseData := make([]wasm.DataType, len(commonData))
+	copy(responsePhaseData, commonData)
+	responsePhaseData = append(responsePhaseData, wasm.DataType{
+		Value: &wasm.Expression{
+			ExpressionItem: wasm.ExpressionItem{
+				Key:   "ratelimit.hits_addend",
+				Value: "responseBodyJSON(\"usage.total_tokens\")",
+			},
+		},
+	})
+
+	responseAction := wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       scope,
+		Predicates:  predicates,
+		Data:        responsePhaseData,
+	}
+
+	return []wasm.Action{requestAction, responseAction}
 }
 
 func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
@@ -364,19 +385,47 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, poli
 }
 
 func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
-	return buildWasmActionsForAnyRateLimit(
-		effectivePolicy.Path,
-		effectivePolicy.Spec.Rules(),
-		kuadrantv1.RulesKeyTopLevelPredicates,
-		policyPredicate,
-		func(key k8stypes.NamespacedName, limitName string) string {
-			return TokenLimitNameToLimitadorIdentifier(key, limitName)
-		},
-		func(spec interface{}, limitIdentifier, scope string, predicates kuadrantv1.WhenPredicates) wasm.Action {
-			limit := spec.(*kuadrantv1alpha1.TokenLimit)
-			return wasmActionFromTokenLimit(limit, limitIdentifier, scope, predicates)
+	path := effectivePolicy.Path
+	rules := effectivePolicy.Spec.Rules()
+	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
+
+	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+
+	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
+			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates
 		},
 	)
+
+	var topLevelWhenPredicates kuadrantv1.WhenPredicates
+	if len(topLevelRules) > 0 {
+		if len(topLevelRules) > 1 {
+			panic("token rate limit policy with multiple top level 'when' predicate lists")
+		}
+		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
+	}
+
+	var allActions []wasm.Action
+	for _, r := range limitRules {
+		uniquePolicyRuleKey := r.Key
+		policyRule := r.Value
+		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
+			return p.GetLocator() == policyRule.GetSource()
+		})
+		if !found { // should never happen
+			continue
+		}
+		limitIdentifier := TokenLimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
+		limitSpec := policyRule.GetSpec().(*kuadrantv1alpha1.TokenLimit)
+		scope := limitsNamespace
+
+		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
+		tokenActions := wasmActionsFromTokenLimit(limitSpec, limitIdentifier, scope, topLevelWhenPredicates)
+		allActions = append(allActions, tokenActions...)
+	}
+
+	return allActions
 }
 
 // buildWasmActionsForAnyRateLimit is the generic implementation used by both rate limit policy types

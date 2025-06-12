@@ -1,48 +1,4 @@
 {
-  "__requires": [
-    {
-      "type": "panel",
-      "id": "dashlist",
-      "name": "Dashboard list",
-      "version": ""
-    },
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "9.5.3"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "stat",
-      "name": "Stat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "text",
-      "name": "Text",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -70,7 +26,6 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -509,11 +464,23 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code!=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "{{response_code}}",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "hide": false,
+          "legendFormat": "{{response_code}}",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "request breakdown by code (req/s)",
@@ -1431,11 +1398,23 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (cluster_id, destination_service_name, response_code) * on(cluster_id, destination_service_name) group_left(name) (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code!=\"200\"}[5m])) by (cluster_id, destination_service_name, response_code) * on(cluster_id, destination_service_name) group_left(name) (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "\"{{cluster_id}}\" {{response_code}}",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(cluster_id, destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "hide": false,
+          "legendFormat": "\"{{cluster_id}}\" {{response_code}}",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "request breakdown by cluster and code (req/s)",
@@ -1634,7 +1613,11 @@
         "type": "datasource"
       },
       {
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"

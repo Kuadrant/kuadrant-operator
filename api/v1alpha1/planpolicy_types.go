@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -63,13 +62,13 @@ func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {
 	return utils.Associate(p.Spec.Plans, func(plan Plan) (string, kuadrantv1.Limit) {
 		return plan.Tier, kuadrantv1.Limit{
-			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan_tier == "%s"`, plan.Tier)),
+			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan == "%s"`, plan.Tier)),
 			Rates: plan.Limits.ToRates(),
 		}
 	})
 }
 
-func (p *PlanPolicy) ToCelExpression() authorinov1beta3.CelExpression {
+func (p *PlanPolicy) BuildCelExpression() string {
 	var tierList strings.Builder
 	var tierPredicates strings.Builder
 
@@ -84,12 +83,12 @@ func (p *PlanPolicy) ToCelExpression() authorinov1beta3.CelExpression {
 		}
 	}
 
-	return authorinov1beta3.CelExpression(fmt.Sprintf(
+	return fmt.Sprintf(
 		`[%s]
   .filter(i, i in
     [{
 %s
-    }].map(m, m.filter(key, m[key]))[0])[0]`, tierList.String(), tierPredicates.String()))
+    }].map(m, m.filter(key, m[key]))[0])[0]`, tierList.String(), tierPredicates.String())
 }
 
 // PlanPolicySpec defines the desired state of PlanPolicy

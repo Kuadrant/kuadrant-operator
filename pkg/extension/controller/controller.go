@@ -131,7 +131,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	return ec.reconcile(ctx, request, ec)
 }
 
-func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+func (ec *ExtensionController) resolveExpression(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (*extpb.ResolveResponse, error) {
 	pbPolicy := convertPolicyToProtobuf(policy)
 
 	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
@@ -140,18 +140,49 @@ func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Poli
 		Subscribe:  subscribe,
 	})
 	if err != nil {
-		return ref.Val(nil), fmt.Errorf("error resolving expression: %w", err)
+		return nil, fmt.Errorf("error resolving expression: %w", err)
 	}
 
 	if resp == nil || resp.GetCelResult() == nil {
-		return celtypes.NullValue, nil
+		return nil, fmt.Errorf("empty response from extension service")
 	}
+
+	return resp, nil
+}
+
+func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
+	if err != nil {
+		return ref.Val(nil), err
+	}
+
 	val, err := cel.ValueToRefValue(celtypes.DefaultTypeAdapter, resp.GetCelResult())
 	if err != nil {
 		return ref.Val(nil), fmt.Errorf("error converting cel result: %w", err)
 	}
 
 	return val, nil
+}
+
+func (ec *ExtensionController) ResolvePolicy(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error) {
+	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
+	if err != nil {
+		return nil, err
+	}
+
+	celResult := resp.GetCelResult()
+
+	// Handle object values that should be protobuf policies
+	if celResult.GetObjectValue() != nil {
+		// Unmarshal the protobuf object directly
+		pbPolicyResult := &extpb.Policy{}
+		if err := celResult.GetObjectValue().UnmarshalTo(pbPolicyResult); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal CEL object result to protobuf Policy: %w", err)
+		}
+		return extpb.NewPolicyAdapter(pbPolicyResult), nil
+	}
+
+	return nil, fmt.Errorf("CEL result is not an object value that can be converted to Policy")
 }
 
 func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Policy, binding string, expression string) error {

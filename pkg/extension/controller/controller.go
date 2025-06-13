@@ -130,8 +130,10 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 }
 
 func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
 	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
-		Policy:     extutils.MapToExtPolicy(policy),
+		Policy:     pbPolicy,
 		Expression: expression,
 		Subscribe:  subscribe,
 	})
@@ -148,6 +150,17 @@ func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Poli
 	}
 
 	return val, nil
+}
+
+func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Policy, binding string, expression string) error {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
+	_, err := ec.extensionClient.client.RegisterMutator(ctx, &extpb.RegisterMutatorRequest{
+		Policy:     pbPolicy,
+		Binding:    binding,
+		Expression: expression,
+	})
+	return err
 }
 
 func (ec *ExtensionController) Manager() ctrlruntime.Manager {
@@ -303,6 +316,32 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		watchSources:    watchSources,
 		extensionClient: extClient,
 	}, nil
+}
+
+func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
+	pbPolicy := &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Group:     policy.GetObjectKind().GroupVersionKind().Group,
+			Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
+			Namespace: policy.GetNamespace(),
+			Name:      policy.GetName(),
+		},
+		TargetRefs: make([]*extpb.TargetRef, len(policy.GetTargetRefs())),
+	}
+
+	for i, ref := range policy.GetTargetRefs() {
+		pbPolicy.TargetRefs[i] = &extpb.TargetRef{
+			Group:     string(ref.Group),
+			Kind:      string(ref.Kind),
+			Name:      string(ref.Name),
+			Namespace: policy.GetNamespace(), // Use policy namespace for target refs
+		}
+		if ref.SectionName != nil {
+			pbPolicy.TargetRefs[i].SectionName = string(*ref.SectionName)
+		}
+	}
+
+	return pbPolicy
 }
 
 func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, policy exttypes.Policy, expression string, subscribe bool) (T, error) {

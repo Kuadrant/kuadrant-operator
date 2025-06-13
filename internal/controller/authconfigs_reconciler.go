@@ -19,6 +19,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
+	extensionmanager "github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
@@ -246,6 +247,12 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 		authConfig.Spec.Callbacks = lo.MapValues(callbacks, func(v kuadrantv1.MergeableCallbackSpec, _ string) authorinov1beta3.CallbackSpec {
 			return v.CallbackSpec
 		})
+	}
+
+	if err := extensionmanager.ApplyAuthConfigMutators(authConfig, &effectivePolicy.Spec); err != nil {
+		// Log error but don't fail the reconciliation?
+		logger := controller.LoggerFromContext(context.TODO()).WithName("AuthConfigsReconciler")
+		logger.Error(err, "failed to apply AuthConfig mutators")
 	}
 
 	return authConfig

@@ -207,8 +207,10 @@ func toGw(gw machinery.Gateway) *extpb.Gateway {
 func toPolicy(policy machinery.Policy) *extpb.Policy {
 	return &extpb.Policy{
 		Metadata: &extpb.Metadata{
-			Name:      policy.GetName(),
+			Group:     policy.GroupVersionKind().Group,
+			Kind:      policy.GroupVersionKind().Kind,
 			Namespace: policy.GetNamespace(),
+			Name:      policy.GetName(),
 		},
 		TargetRefs: toTargetRefs(policy.GetTargetRefs()),
 	}

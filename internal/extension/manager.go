@@ -27,10 +27,13 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
@@ -41,6 +44,41 @@ type Manager struct {
 	dag        *nilGuardedPointer[StateAwareDAG]
 	logger     logr.Logger
 	sync       io.Writer
+}
+
+type ResourceMutator[TResource any, TPolicy machinery.Policy] interface {
+	Mutate(resource TResource, policy TPolicy) error
+}
+
+type AuthConfigMutator = ResourceMutator[*authorinov1beta3.AuthConfig, *kuadrantv1.AuthPolicy]
+
+type MutatorRegistry struct {
+	authConfigMutators []AuthConfigMutator
+	mutex              sync.RWMutex
+}
+
+var GlobalMutatorRegistry = &MutatorRegistry{}
+
+func (r *MutatorRegistry) RegisterAuthConfigMutator(mutator AuthConfigMutator) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.authConfigMutators = append(r.authConfigMutators, mutator)
+}
+
+func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	for _, mutator := range r.authConfigMutators {
+		if err := mutator.Mutate(authConfig, policy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, policy)
 }
 
 type Extension interface {
@@ -127,9 +165,10 @@ func (m *Manager) HasSynced() bool {
 }
 
 type extensionService struct {
-	dag           *nilGuardedPointer[StateAwareDAG]
-	mutex         sync.Mutex
-	subscriptions map[string]subscription
+	dag            *nilGuardedPointer[StateAwareDAG]
+	mutex          sync.Mutex
+	subscriptions  map[string]subscription
+	registeredData map[string][]registeredDataEntry
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -140,8 +179,19 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 }
 
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
-	return &extensionService{dag: dag,
-		subscriptions: make(map[string]subscription)}
+	service := &extensionService{
+		dag:            dag,
+		subscriptions:  make(map[string]subscription),
+		registeredData: make(map[string][]registeredDataEntry),
+	}
+
+	mutator := &RegisteredDataMutator{
+		registeredData: service.registeredData,
+		mutex:          &service.mutex,
+	}
+	GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
+
+	return service
 }
 
 func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
@@ -239,4 +289,74 @@ type subscription struct {
 	cAst  *cel.Ast
 	input map[string]any
 	val   ref.Val
+}
+
+type RegisteredDataMutator struct {
+	registeredData map[string][]registeredDataEntry
+	mutex          *sync.Mutex
+}
+
+func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	policyKey := fmt.Sprintf("%s/%s/%s", policy.GetObjectKind().GroupVersionKind().Kind, policy.GetNamespace(), policy.GetName())
+
+	registeredEntries, exists := m.registeredData[policyKey]
+	if !exists || len(registeredEntries) == 0 {
+		return nil
+	}
+
+	if authConfig.Spec.Response == nil {
+		authConfig.Spec.Response = &authorinov1beta3.ResponseSpec{
+			Success: authorinov1beta3.WrappedSuccessResponseSpec{
+				DynamicMetadata: make(map[string]authorinov1beta3.SuccessResponseSpec),
+			},
+		}
+	} else if authConfig.Spec.Response.Success.DynamicMetadata == nil {
+		authConfig.Spec.Response.Success.DynamicMetadata = make(map[string]authorinov1beta3.SuccessResponseSpec)
+	}
+
+	for _, entry := range registeredEntries {
+		authConfig.Spec.Response.Success.DynamicMetadata["kuadrant"] = authorinov1beta3.SuccessResponseSpec{
+			AuthResponseMethodSpec: authorinov1beta3.AuthResponseMethodSpec{
+				Json: &authorinov1beta3.JsonAuthResponseSpec{
+					Properties: map[string]authorinov1beta3.ValueOrSelector{
+						entry.binding: {
+							Expression: authorinov1beta3.CelExpression(entry.expression),
+						},
+					},
+				},
+			},
+		}
+	}
+
+	return nil
+}
+
+type registeredDataEntry struct {
+	binding    string
+	expression string
+	cAst       *cel.Ast
+}
+
+func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.RegisterMutatorRequest) (*emptypb.Empty, error) {
+	// we should probably parse / check the cel expression here
+	policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	entry := registeredDataEntry{
+		binding:    request.Binding,
+		expression: request.Expression,
+		cAst:       nil, //todo
+	}
+
+	if _, exists := s.registeredData[policyKey]; !exists {
+		s.registeredData[policyKey] = make([]registeredDataEntry, 0)
+	}
+	s.registeredData[policyKey] = append(s.registeredData[policyKey], entry)
+
+	return &emptypb.Empty{}, nil
 }

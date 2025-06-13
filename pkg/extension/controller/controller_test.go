@@ -19,11 +19,16 @@ import (
 )
 
 type mockKuadrantCtx struct {
-	resolveFn func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error)
+	resolveFn   func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error)
+	addDataToFn func(ctx context.Context, policy exttypes.Policy, binding string, expression string) error
 }
 
 func (m *mockKuadrantCtx) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
 	return m.resolveFn(ctx, policy, expression, subscribe)
+}
+
+func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, policy exttypes.Policy, binding string, expression string) error {
+	return m.addDataToFn(ctx, policy, binding, expression)
 }
 
 func TestGenericResolveSuccess(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -70,6 +71,34 @@ func TestGetTargetRefs(t *testing.T) {
 	}
 	if targetRefs[0].LocalPolicyTargetReference.Group != "gateway.networking.k8s.io" {
 		t.Errorf("incorrect group: actual %q, expected %q", targetRefs[0].LocalPolicyTargetReference.Group, "gateway.networking.k8s.io")
+	}
+}
+
+func TestOIDCPolicyStatus_Equals(t *testing.T) {
+	var (
+		conditions = []metav1.Condition{
+			{
+				Type: StatusConditionReady,
+			},
+		}
+		status = &OIDCPolicyStatus{
+			ObservedGeneration: 0,
+			Conditions:         conditions,
+		}
+	)
+	s := OIDCPolicyStatus{ObservedGeneration: int64(1)}
+	if s.Equals(status, logr.Logger{}) {
+		t.Errorf("observed generation should be different")
+	}
+
+	s = OIDCPolicyStatus{ObservedGeneration: status.ObservedGeneration}
+	if s.Equals(status, logr.Logger{}) {
+		t.Errorf("conditions should be different")
+	}
+
+	s = OIDCPolicyStatus{ObservedGeneration: status.ObservedGeneration, Conditions: status.Conditions}
+	if !s.Equals(status, logr.Logger{}) {
+		t.Errorf("status should be the same")
 	}
 }
 

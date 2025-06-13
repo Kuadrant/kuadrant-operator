@@ -20,6 +20,9 @@ import (
 	"net/url"
 	"path"
 
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/limitador-operator/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -31,6 +34,8 @@ const (
 	CallbackPath      = "/auth/callback"
 	TokenExchangePath = "/oauth/token" //nolint:gosec
 	AuthorizePath     = "/oauth/authorize"
+
+	StatusConditionReady string = "Ready"
 )
 
 // OIDCPolicySpec defines the desired state of OIDCPolicy
@@ -59,6 +64,18 @@ type Provider struct {
 type OIDCPolicyStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Represents the observations of a foo's current state.
+	// Known .status.conditions.type are: "Ready"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
@@ -126,6 +143,25 @@ type OIDCPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []OIDCPolicy `json:"items"`
+}
+
+func (s *OIDCPolicyStatus) Equals(other *OIDCPolicyStatus, logger logr.Logger) bool {
+	if s.ObservedGeneration != other.ObservedGeneration {
+		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
+		logger.Info("status observedGeneration not equal", "difference", diff)
+		return false
+	}
+
+	// Marshalling sorts by condition type
+	currentMarshaledJSON, _ := helpers.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := helpers.ConditionMarshal(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.Info("status conditions not equal", "difference", diff)
+		return false
+	}
+
+	return true
 }
 
 func init() {

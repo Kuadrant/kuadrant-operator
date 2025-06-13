@@ -8,6 +8,9 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/kuadrant/limitador-operator/pkg/helpers"
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -119,15 +122,24 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	specResult, specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
 
-	// TODO: Reconcile status
+	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, specErr)
 
 	if specErr != nil {
 		return reconcile.Result{}, specErr
 	}
 
+	if statusErr != nil {
+		return ctrl.Result{}, statusErr
+	}
+
 	if specResult.Requeue {
 		r.logger.Info("Reconciling OIDCPolicy spec not finished. Requeueing.")
 		return specResult, nil
+	}
+
+	if statusResult.Requeue {
+		r.logger.Info("Reconciling status not finished. Requeueing.")
+		return statusResult, nil
 	}
 
 	r.logger.Info("successfully reconciled")
@@ -153,6 +165,66 @@ func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, specErr error) (ctrl.Result, error) {
+	newStatus := r.calculateStatus(pol, specErr)
+
+	equalStatus := pol.Status.Equals(newStatus, r.logger)
+	r.logger.Info("Status", "status is different", !equalStatus)
+	r.logger.Info("Status", "generation is different", pol.Generation != pol.Status.ObservedGeneration)
+	if equalStatus && pol.Generation == pol.Status.ObservedGeneration {
+		// Steady state
+		r.logger.Info("Status was not updated")
+		return reconcile.Result{}, nil
+	}
+
+	r.logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", pol.Status.ObservedGeneration, newStatus.ObservedGeneration))
+
+	pol.Status = *newStatus
+	updateErr := r.Client().Status().Update(ctx, pol)
+	if updateErr != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(updateErr) {
+			r.logger.Info("Failed to update status: resource might just be outdated")
+			return reconcile.Result{Requeue: true}, nil
+		}
+
+		return reconcile.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
+	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
+		ObservedGeneration: pol.Generation,
+		// Copy initial conditions. Otherwise, status will always be updated
+		Conditions: helpers.DeepCopyConditions(pol.Status.Conditions),
+	}
+
+	availableCond := r.readyCondition(specErr)
+
+	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+
+	return newStatus
+}
+
+func (r *OIDCPolicyReconciler) readyCondition(specErr error) *metav1.Condition {
+	cond := &metav1.Condition{
+		Type:    kuadrantv1alpha1.StatusConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  "Ready",
+		Message: "OIDCPolicy is ready",
+	}
+
+	if specErr != nil {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "ReconciliationError"
+		cond.Message = specErr.Error()
+		return cond
+	}
+
+	return cond
 }
 
 func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {

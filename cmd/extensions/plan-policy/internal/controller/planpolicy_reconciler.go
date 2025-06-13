@@ -4,10 +4,8 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -70,37 +68,50 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	targetRefsData, err := controller.Resolve[[]TargetRefData](ctx, kuadrantCtx, planPolicy,
-		`self.findAuthPolicies()[0].targetRefs.map(ref, {"group": ref.group, "kind": ref.kind, "name": ref.name, "sectionName": ref.sectionName})`, true)
+	// targetRefsData, err := controller.Resolve[[]TargetRefData](ctx, kuadrantCtx, planPolicy,
+	// 	`self.findAuthPolicies()[0].targetRefs.map(ref, {"group": ref.group, "kind": ref.kind, "name": ref.name, "sectionName": ref.sectionName})`, true)
+	// if err != nil {
+	// 	r.logger.Error(err, "failed to resolve target references")
+	// 	return reconcile.Result{}, err
+	// }
+
+	// if len(targetRefsData) == 0 {
+	// 	r.logger.Info("no target references found")
+	// 	return reconcile.Result{}, nil
+	// }
+
+	// targetRefs := lo.Map(targetRefsData, func(tr TargetRefData, _ int) gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	// 	targetRef := gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+	// 		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+	// 			Name:  tr.Name,
+	// 			Group: tr.Group,
+	// 			Kind:  tr.Kind,
+	// 		},
+	// 	}
+	// 	if tr.SectionName != "" {
+	// 		targetRef.SectionName = ptr.To(tr.SectionName)
+	// 	}
+	// 	return targetRef
+	// })
+	//
+
+	// this isn't working because we need a concrete type for this Resolve
+	policy, err := controller.Resolve[types.Policy](ctx, kuadrantCtx, planPolicy,
+		`self.findAuthPolicies()[0]`, true)
 	if err != nil {
-		r.logger.Error(err, "failed to resolve target references")
+		r.logger.Error(err, "failed to resolve policy")
 		return reconcile.Result{}, err
 	}
 
-	if len(targetRefsData) == 0 {
-		r.logger.Info("no target references found")
-		return reconcile.Result{}, nil
-	}
-
-	targetRefs := lo.Map(targetRefsData, func(tr TargetRefData, _ int) gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-		targetRef := gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-				Name:  tr.Name,
-				Group: tr.Group,
-				Kind:  tr.Kind,
-			},
-		}
-		if tr.SectionName != "" {
-			targetRef.SectionName = ptr.To(tr.SectionName)
-		}
-		return targetRef
-	})
-
-	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy, targetRefs[0])
+	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy, policy.GetTargetRefs()[0])
 	if err := r.ReconcileResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, reconcilers.CreateOnlyMutator); err != nil {
 		r.logger.Error(err, "failed to reconcile desired ratelimitpolicy")
 		return reconcile.Result{}, err
 	}
+
+	// err = kuadrantCtx.AddDataTo(ctx, policy, "plan", `true == true`)
+	// response phase as data item
+	// auth.kuadrant.plan
 
 	return reconcile.Result{}, nil
 }

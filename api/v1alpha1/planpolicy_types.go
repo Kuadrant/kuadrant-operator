@@ -62,7 +62,7 @@ func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {
 	return utils.Associate(p.Spec.Plans, func(plan Plan) (string, kuadrantv1.Limit) {
 		return plan.Tier, kuadrantv1.Limit{
-			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan_tier == "%s"`, plan.Tier)),
+			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan == "%s"`, plan.Tier)),
 			Rates: plan.Limits.ToRates(),
 		}
 	})

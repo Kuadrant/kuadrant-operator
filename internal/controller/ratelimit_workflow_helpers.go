@@ -185,8 +185,12 @@ func wasmActionFromLimit(limit *kuadrantv1.Limit, limitIdentifier, scope string,
 	return wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
-		Predicates:  topLevelPredicates.Extend(limit.When).Into(),
-		Data:        wasmDataFromLimit(limitIdentifier, limit),
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: topLevelPredicates.Extend(limit.When).Into(),
+				Data:       wasmDataFromLimit(limitIdentifier, limit),
+			},
+		},
 	}
 }
 
@@ -350,8 +354,12 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	requestAction := wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
-		Predicates:  predicates,
-		Data:        requestPhaseData,
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: predicates,
+				Data:       requestPhaseData,
+			},
+		},
 	}
 
 	// Response phase - Increment counter with actual token usage
@@ -369,8 +377,12 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	responseAction := wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
-		Predicates:  predicates,
-		Data:        responsePhaseData,
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: predicates,
+				Data:       responsePhaseData,
+			},
+		},
 	}
 
 	return []wasm.Action{requestAction, responseAction}

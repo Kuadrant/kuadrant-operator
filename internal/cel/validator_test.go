@@ -72,6 +72,7 @@ func TestPolicyWithKnownRootBinding(t *testing.T) {
 		}
 	}
 }
+
 func TestPolicyWithUnknownRootBinding(t *testing.T) {
 	builder := NewValidatorBuilder()
 	builder.AddBinding("nope", cel.StringType)
@@ -86,6 +87,22 @@ func TestPolicyWithUnknownRootBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestPolicyWithUnknownPolicyBinding(t *testing.T) {
+	builder := NewValidatorBuilder()
+	builder.AddBinding("nope", cel.StringType)
+	builder, _ = builder.AddPolicyBindingAfter(nil, "foo", "first", cel.BoolType)
+	if validator, err := builder.Build(); err != nil {
+		t.Fatal(err)
+	} else {
+		if ast, err := validator.Validate("fo", "!first"); ast != nil {
+			t.Fatal("No ast should have returned for unknown policy")
+		} else if err == nil {
+			t.Fatal("Should have returned an error")
+		}
+	}
+}
+
 func TestPolicyWithKnownPolicyBinding(t *testing.T) {
 	builder := NewValidatorBuilder()
 	builder.AddBinding("nope", cel.StringType)

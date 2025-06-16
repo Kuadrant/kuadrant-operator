@@ -6,7 +6,7 @@ import (
 )
 
 type ValidatorBuilder struct {
-	baseBindings []binding
+	baseBindings map[string]binding
 	policies     []policyBinding
 }
 
@@ -17,20 +17,30 @@ type policyBinding struct {
 
 type binding struct {
 	name string
+	t    *cel.Type
 }
 
 func NewValidatorBuilder() *ValidatorBuilder {
-	return &ValidatorBuilder{}
+	return &ValidatorBuilder{
+		baseBindings: make(map[string]binding),
+	}
 }
 
-func (b *ValidatorBuilder) AddBinding(name string) *ValidatorBuilder {
+func (b *ValidatorBuilder) AddBinding(name string, t *cel.Type) *ValidatorBuilder {
+	b.baseBindings[name] = binding{
+		name: name,
+		t:    t,
+	}
 	return b
 }
 
-func (b *ValidatorBuilder) AddPolicyBindingAfter(after *string, policy string, name string) (*ValidatorBuilder, error) {
+func (b *ValidatorBuilder) AddPolicyBindingAfter(after *string, policy string, name string, t *cel.Type) (*ValidatorBuilder, error) {
 	p := policyBinding{
-		policy:  policy,
-		binding: binding{name: name},
+		policy: policy,
+		binding: binding{
+			name: name,
+			t:    t,
+		},
 	}
 	if after == nil {
 		b.policies = append([]policyBinding{p}, b.policies...)
@@ -59,34 +69,46 @@ func (b *ValidatorBuilder) Build() (*Validator, error) {
 }
 
 type Validator struct {
-	baseBindings []binding
+	baseBindings map[string]binding
 	policies     []policyBinding
 }
 
-func (v *Validator) Validate(policy string, ast *cel.Ast) (*cel.Ast, error) {
-	if ast == nil {
-		return nil, fmt.Errorf("AST is nil")
-	}
+func (v *Validator) Validate(policy string, expr string) (*cel.Ast, error) {
 	var env *cel.Env
 	var err error
-	if env, err = cel.NewEnv(); err != nil {
-		return nil, err
+	opts := []cel.EnvOption{}
+	found := false
+
+	for _, binding := range v.baseBindings {
+		opts = append(opts, cel.Variable(binding.name, binding.t))
 	}
 
-	found := false
 	for _, p := range v.policies {
+		opts = append(opts,
+			cel.Types(p.binding.t),
+			cel.Variable(p.binding.name, p.binding.t),
+		)
 		if p.policy == policy {
 			found = true
+			break
 		}
+	}
+
+	if env, err = cel.NewEnv(opts...); err != nil {
+		return nil, err
 	}
 
 	if !found {
 		return nil, fmt.Errorf("no policy matching `%s`", policy)
 	}
 
-	if cAst, iss := env.Check(ast); iss.Err() != nil {
+	if ast, iss := env.Parse(expr); iss.Err() != nil {
 		return nil, iss.Err()
 	} else {
-		return cAst, nil
+		if cAst, iss := env.Check(ast); iss.Err() != nil {
+			return nil, iss.Err()
+		} else {
+			return cAst, nil
+		}
 	}
 }

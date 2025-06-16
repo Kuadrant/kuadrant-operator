@@ -239,7 +239,7 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 		return err
 	}
 	authPolicyMutators := make([]authPolicyMutateFn, 0)
-	authPolicyMutators = append(authPolicyMutators, authPolicyTargetRefMutator, mainAuthPolicyIssuerURLMutator)
+	authPolicyMutators = append(authPolicyMutators, authPolicyTargetRefMutator, mainAuthPolicyAuthenticationMutator, mainAuthPolicyAuthorizationMutator)
 	autPolicyMutator := authPolicyMutator(authPolicyMutators...)
 
 	if err = r.reconcileAuthPolicy(ctx, desiredAuthPol, autPolicyMutator); err != nil {
@@ -310,6 +310,40 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayIn
 	setCookie := fmt.Sprintf(`
 "target=" + request.path + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, igw.Hostname, getSecureFlag(igw.Protocol))
 
+	var authorization = map[string]kuadrantv1.MergeableAuthorizationSpec{}
+	var authPatterns []authorinov1beta3.PatternExpressionOrRef
+	claims := pol.GetClaims()
+
+	if len(claims) > 0 {
+		for k, v := range claims {
+			authPatterns = append(authPatterns, authorinov1beta3.PatternExpressionOrRef{
+				CelPredicate: authorinov1beta3.CelPredicate{
+					Predicate: fmt.Sprintf(`"%s" in auth.identity.%s`, v, k),
+				},
+			})
+		}
+		authorization = map[string]kuadrantv1.MergeableAuthorizationSpec{
+			"oidc": {
+				AuthorizationSpec: authorinov1beta3.AuthorizationSpec{
+					CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+						Conditions: []authorinov1beta3.PatternExpressionOrRef{
+							{
+								CelPredicate: authorinov1beta3.CelPredicate{
+									Predicate: fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.IssuerURL),
+								},
+							},
+						},
+					},
+					AuthorizationMethodSpec: authorinov1beta3.AuthorizationMethodSpec{
+						PatternMatching: &authorinov1beta3.PatternMatchingAuthorizationSpec{
+							Patterns: authPatterns,
+						},
+					},
+				},
+			},
+		}
+	}
+
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthPolicy",
@@ -339,32 +373,7 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayIn
 								},
 							},
 						},
-						/*Authorization: map[string]kuadrantv1.MergeableAuthorizationSpec{
-							"oidc": {
-								AuthorizationSpec: authorinov1beta3.AuthorizationSpec{
-									CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
-										Conditions: []authorinov1beta3.PatternExpressionOrRef{
-											{
-												CelPredicate: authorinov1beta3.CelPredicate{
-													Predicate: "auth.identity.iss == " + pol.Spec.Provider.IssuerURL,
-												},
-											},
-										},
-									},
-									AuthorizationMethodSpec: authorinov1beta3.AuthorizationMethodSpec{
-										PatternMatching: &authorinov1beta3.PatternMatchingAuthorizationSpec{
-											Patterns: []authorinov1beta3.PatternExpressionOrRef{
-												{
-													CelPredicate: authorinov1beta3.CelPredicate{
-														Predicate: "\"evil-genius-cupcakes\" in auth.identity.groups_direct", // TODO: Define authorization claims in CRD
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},*/
+						Authorization: authorization,
 						Response: &kuadrantv1.MergeableResponseSpec{
 							Unauthenticated: &kuadrantv1.MergeableDenyWithSpec{
 								DenyWithSpec: authorinov1beta3.DenyWithSpec{
@@ -585,12 +594,22 @@ func authPolicyTargetRefMutator(desired, existing *kuadrantv1.AuthPolicy) bool {
 	return update
 }
 
-func mainAuthPolicyIssuerURLMutator(desired, existing *kuadrantv1.AuthPolicy) bool {
+func mainAuthPolicyAuthenticationMutator(desired, existing *kuadrantv1.AuthPolicy) bool {
 	update := false
 
-	if !reflect.DeepEqual(existing.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl, desired.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl) {
-		existing.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl = desired.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl
-		existing.Spec.Overrides.AuthScheme.Authorization["oidc"].Conditions[0].Predicate = desired.Spec.Overrides.AuthPolicySpecProper.AuthScheme.Authorization["oidc"].AuthorizationSpec.CommonEvaluatorSpec.Conditions[0].Predicate
+	if !reflect.DeepEqual(existing.Spec.Overrides.AuthScheme.Authentication["oidc"], desired.Spec.Overrides.AuthScheme.Authentication["oidc"]) {
+		existing.Spec.Overrides.AuthScheme.Authentication["oidc"] = desired.Spec.Overrides.AuthScheme.Authentication["oidc"]
+		update = true
+	}
+
+	return update
+}
+
+func mainAuthPolicyAuthorizationMutator(desired, existing *kuadrantv1.AuthPolicy) bool {
+	update := false
+
+	if !reflect.DeepEqual(existing.Spec.Overrides.AuthScheme.Authorization, desired.Spec.Overrides.AuthScheme.Authorization) {
+		existing.Spec.Overrides.AuthScheme.Authorization = desired.Spec.Overrides.AuthScheme.Authorization
 		update = true
 	}
 

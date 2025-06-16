@@ -39,6 +39,11 @@ spec:
           spec:
             description: OIDCPolicySpec defines the desired state of OIDCPolicy
             properties:
+              claims:
+                additionalProperties:
+                  type: string
+                description: Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
+                type: object
               provider:
                 description: Provider holds the information for the OIDC provider
                 properties:

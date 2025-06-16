@@ -117,3 +117,18 @@ func TestPolicyWithNotYetKnownPolicyBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestPolicyWithAnyKnownPolicyBinding(t *testing.T) {
+	builder := NewValidatorBuilder()
+	builder.AddBinding("nope", cel.StringType)
+	builder, _ = builder.AddPolicyBindingAfter(nil, "foo", "first", cel.AnyType)
+	if validator, err := builder.Build(); err != nil {
+		t.Fatal(err)
+	} else {
+		if ast, err := validator.Validate("foo", "!first.randomField"); err != nil {
+			t.Fatalf("Should have not returned an error: %v", err)
+		} else if ast == nil {
+			t.Fatal("Ast should have returned for known policy binding")
+		}
+	}
+}

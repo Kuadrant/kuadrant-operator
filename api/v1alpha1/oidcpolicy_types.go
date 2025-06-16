@@ -53,6 +53,8 @@ type OIDCPolicySpec struct {
 type OIDCPolicySpecProper struct {
 	// Provider holds the information for the OIDC provider
 	Provider *Provider `json:"provider,omitempty"`
+	// Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
+	Claims map[string]string `json:"claims,omitempty"`
 }
 
 type Provider struct {
@@ -134,6 +136,14 @@ func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
 	authorizeURL.RawQuery = query.Encode()
 
 	return authorizeURL.String()
+}
+
+func (p *OIDCPolicy) GetClaims() map[string]string {
+	claims := make(map[string]string, len(p.Spec.Claims))
+	for k, v := range p.Spec.Claims {
+		claims[k] = v
+	}
+	return claims
 }
 
 // +kubebuilder:object:root=true

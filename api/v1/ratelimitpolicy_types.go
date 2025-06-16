@@ -19,7 +19,7 @@ package v1
 import (
 	"time"
 
-	transformer "github.com/kuadrant/kuadrant-operator/internal/cel"
+	"github.com/kuadrant/kuadrant-operator/internal/cel"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -241,7 +241,7 @@ func (l Limit) CountersAsStringList() []string {
 	}
 	return utils.Map(l.Counters, func(counter Counter) string {
 		str := string(counter.Expression)
-		if exp, err := transformer.TransformCounterVariable(str, false); err == nil {
+		if exp, err := cel.TransformCounterVariable(str, false); err == nil {
 			return *exp
 		}
 		return str

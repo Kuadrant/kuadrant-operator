@@ -2,6 +2,7 @@ package cel
 
 import (
 	"fmt"
+
 	"github.com/google/cel-go/cel"
 )
 

@@ -1,8 +1,9 @@
 package cel
 
 import (
-	"github.com/google/cel-go/cel"
 	"testing"
+
+	"github.com/google/cel-go/cel"
 )
 
 func TestNoPolicy(t *testing.T) {

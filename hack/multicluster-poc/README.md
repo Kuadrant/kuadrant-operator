@@ -104,7 +104,6 @@ Create a simple delegated record with a primary role on cluster 1
 kubectl apply -f ../../hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-1
 ````
 
-
 Create a simple delegated record with a remote role on cluster 2
 ```shell
 kubectl apply -f ../../hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-2
@@ -130,7 +129,6 @@ Expected output:
 NAME                         READY   LABELS
 prod-web-istio-coredns-api   True    app.kubernetes.io/component=kuadrant,app.kubernetes.io/instance=kuadrant,app.kubernetes.io/managed-by=kuadrant-operator,app.kubernetes.io/name=kuadrant,app.kubernetes.io/part-of=kuadrant,app=kuadrant,kuadrant.io/listener-name=api
 ```
-
 
 Verify endpoints of authoritative record on cluster 1 (Primary)
 ```shell
@@ -160,22 +158,20 @@ k.example.com.          60      IN      SOA     ns1.k.example.com. hostmaster.k.
 
 Cleanup:
 ```shell
-kubectl delete -f hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-2
-kubectl delete -f hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-1
-kubectl delete dnsrecord/prod-web-istio-coredns-api-authoritative -n dnstest-1 --context kind-kuadrant-local-1
+kubectl delete -f ../../hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-2
+kubectl delete -f ../../hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-1
 ```
-
 
 ##### LoadBalanced Record (A Records only)
 
 Create a delegated record with a primary role on cluster 1
 ```shell
-kubectl apply -f hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-1
+kubectl apply -f ../../hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-1
 ````
 
 Create a simple delegated record with a remote role on cluster 2
 ```shell
-kubectl apply -f hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-2
+kubectl apply -f ../../hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-2
 ````
 
 Verify records on cluster 1 (Primary)
@@ -254,7 +250,6 @@ k.example.com.          60      IN      SOA     ns1.k.example.com. hostmaster.k.
 
 Cleanup:
 ```shell
-kubectl delete -f hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-2
-kubectl delete -f hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-1
-kubectl delete dnsrecord/prod-web-istio-coredns-api-authoritative -n dnstest-1 --context kind-kuadrant-local-1
+kubectl delete -f ../../hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-2
+kubectl delete -f ../../hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-1
 ```

@@ -2,6 +2,7 @@ package cel
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/google/cel-go/cel"
 )
@@ -46,12 +47,9 @@ func (b *ValidatorBuilder) AddPolicyBindingAfter(after *string, policy string, n
 	if after == nil {
 		b.policies = append([]policyBinding{p}, b.policies...)
 	} else {
-		idx := -1
-		for i, p := range b.policies {
-			if p.policy == *after {
-				idx = i
-			}
-		}
+		idx := slices.IndexFunc(b.policies, func(pb policyBinding) bool {
+			return pb.policy == *after
+		})
 		if idx < 0 {
 			return nil, fmt.Errorf("policy %s not found", *after)
 		}

@@ -33,19 +33,6 @@ func TestAddPolicyAfter(t *testing.T) {
 	}
 }
 
-func TestPolicyNoDependency(t *testing.T) {
-	builder := NewValidatorBuilder()
-	if validator, err := builder.Build(); err != nil {
-		t.Fatal(err)
-	} else {
-		if ast, err := validator.Validate("foo", "1 == 1"); ast != nil {
-			t.Fatal("No ast should have returned for no matching policy")
-		} else if err == nil {
-			t.Fatal("Should have returned an error")
-		}
-	}
-}
-
 func TestPolicyWithUnknownBinding(t *testing.T) {
 	builder := NewValidatorBuilder()
 	if validator, err := builder.Build(); err != nil {

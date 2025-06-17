@@ -9,9 +9,8 @@ CLUSTER_COUNT=2 ./hack/multicluster-poc/create-clusters.sh
 kubectl config get-contexts
 ```
 
-Scale down all dns-operator deployments so we can just use `make run` locally against the primary
+Scale down the dns-operator deployment on cluster 2 (Fairly sure this will cause issues currently)
 ```shell
-kubectl scale deployment/dns-operator-controller-manager -n kuadrant-system --replicas=0 --context kind-kuadrant-local-1
 kubectl scale deployment/dns-operator-controller-manager -n kuadrant-system --replicas=0 --context kind-kuadrant-local-2
 ```
 
@@ -23,6 +22,11 @@ kubectl stern deployment/kuadrant-operator-controller-manager -n kuadrant-system
 Tail the kuadrant operator logs on Cluster 2 (Optional)
 ```shell
 kubectl stern deployment/kuadrant-operator-controller-manager -n kuadrant-system --context kind-kuadrant-local-2
+```
+
+Tail the dns operator logs on Cluster 1 (Optional)
+```shell
+kubectl stern deployment/dns-operator-controller-manager -n kuadrant-system --context kind-kuadrant-local-1
 ```
 
 Watch the topology on Cluster 1 (Optional)
@@ -53,35 +57,38 @@ kubectl get deployments -l app.kubernetes.io/name=coredns -A --context kind-kuad
 kubectl get deployments -l app.kubernetes.io/name=coredns -A --context kind-kuadrant-local-2
 ```
 
-Add Cluster 2 kubeconfig secret 
+Verify CoreDNS is accessible on Cluster 1, and the example domain exists:
 ```shell
-kubectl config use-context kind-kuadrant-local-1
-curl -s https://raw.githubusercontent.com/Kuadrant/dns-operator/refs/heads/multicluster-poc/hack/create-kubeconfig-secret.sh | bash -s - -c kind-kuadrant-local-2 -a dns-operator-controller-manager -n kuadrant-system
-```
-
-Verify the secret exists on the cluster with the correct label
-```shell
-kubectl get secrets -A -l sigs.k8s.io/multicluster-runtime-kubeconfig=true
+CORE_NS=`kubectl get service -A -l app.kubernetes.io/name=coredns,app.kubernetes.io/component!=metrics --context kind-kuadrant-local-1 -o json | jq -r '[.items[] | (.status.loadBalancer.ingress[].ip)][0]'`
+dig @$CORE_NS -t AXFR k.example.com +noall +answer
 ```
 Expected output:
-```shell
-NAMESPACE         NAME                    TYPE     DATA   AGE
-kuadrant-system   kind-kuadrant-local-2   Opaque   1      53s
+```
+k.example.com.          60      IN      SOA     ns1.k.example.com. hostmaster.k.example.com. 12345 7200 1800 86400 60
+k.example.com.          60      IN      NS      ns1.k.example.com.
+k.example.com.          60      IN      SOA     ns1.k.example.com. hostmaster.k.example.com. 12345 7200 1800 86400 60
 ```
 
-Run the dns operator on the primary
+>Note: Ignore the extra SOA record :-)
+
+Add Cluster 2 kubeconfig secret 
 ```shell
-kubectl config use-context kind-kuadrant-local-1
-make run
+docker run --rm -u $UID -v /home/mnairn/go/src/github.com/kuadrant/kuadrant-operator/hack/multicluster-poc:/tmp/multicluster-poc:z --network kind -e KUBECONFIG=/tmp/multicluster-poc/kubeconfigs/kuadrant-local-all.internal.kubeconfig alpine/k8s:1.30.13 /tmp/multicluster-poc/create-kubeconfig-secret.sh
 ```
 
+>Note: This is running in a container in order for the script to properly communicate with the remote and primary servers and generate a config that will work form inside the kind cluster
+
+Verify cluster secret exists on the cluster 1 only
+```shell
+kubectl get secrets -A -l sigs.k8s.io/multicluster-runtime-kubeconfig=true --context kind-kuadrant-local-1
+kubectl get secrets -A -l sigs.k8s.io/multicluster-runtime-kubeconfig=true --context kind-kuadrant-local-2
+```
 
 #### Run a test
 
-
 Deploy gateways, routes and services
 ```shell
-CLUSTER_COUNT=2 ./hack/multicluster-poc/test.sh
+CLUSTER_COUNT=2 ../../hack/multicluster-poc/test.sh
 ```
 
 Verify deployed resources
@@ -94,13 +101,13 @@ kubectl get all,gateway,httproute,secret,dnspolicy -A -l kuadrant.io/test=multic
 
 Create a simple delegated record with a primary role on cluster 1
 ```shell
-kubectl apply -f hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-1
+kubectl apply -f ../../hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-1
 ````
 
 
 Create a simple delegated record with a remote role on cluster 2
 ```shell
-kubectl apply -f hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-2
+kubectl apply -f ../../hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-simple.yaml -n dnstest-1 --context kind-kuadrant-local-2
 ````
 
 Verify records on cluster 1 (Primary)
@@ -108,7 +115,7 @@ Verify records on cluster 1 (Primary)
 kubectl get dnsrecords --context kind-kuadrant-local-1 -n dnstest-1 --show-labels
 ```
 Expected output:
-```shell
+```
 NAME                                       READY   LABELS
 prod-web-istio-coredns-api                 True    app.kubernetes.io/component=kuadrant,app.kubernetes.io/instance=kuadrant,app.kubernetes.io/managed-by=kuadrant-operator,app.kubernetes.io/name=kuadrant,app.kubernetes.io/part-of=kuadrant,app=kuadrant,kuadrant.io/listener-name=api
 prod-web-istio-coredns-api-authoritative   True    kuadrant.io/authoritative-record=myapp.k.example.com,kuadrant.io/coredns-zone-name=k.example.com
@@ -119,7 +126,7 @@ Verify records on cluster 2 (Remote)
 kubectl get dnsrecords --context kind-kuadrant-local-2 -n dnstest-1 --show-labels
 ```
 Expected output:
-```shell
+```
 NAME                         READY   LABELS
 prod-web-istio-coredns-api   True    app.kubernetes.io/component=kuadrant,app.kubernetes.io/instance=kuadrant,app.kubernetes.io/managed-by=kuadrant-operator,app.kubernetes.io/name=kuadrant,app.kubernetes.io/part-of=kuadrant,app=kuadrant,kuadrant.io/listener-name=api
 ```
@@ -130,7 +137,7 @@ Verify endpoints of authoritative record on cluster 1 (Primary)
 kubectl get dnsrecord/prod-web-istio-coredns-api-authoritative --context kind-kuadrant-local-1 -n dnstest-1 -o json | jq '.spec.endpoints[] | "dnsName: \(.dnsName), recordType: \(.recordType), targets: \(.targets), labels: \(.labels)"'
 ```
 Expected output:
-```shell
+```
 "dnsName: myapp.k.example.com, recordType: SOA, targets: null, labels: null"
 "dnsName: myapp.k.example.com, recordType: A, targets: [\"172.18.0.18\",\"172.18.0.33\"], labels: {\"owner\":\"15p262su&&tl6a98es\"}"
 "dnsName: kuadrant-a-myapp.k.example.com, recordType: TXT, targets: [\"\\\"heritage=external-dns,external-dns/owner=15p262su&&tl6a98es\\\"\"], labels: {\"ownedRecord\":\"myapp.k.example.com\"}"
@@ -138,10 +145,11 @@ Expected output:
 
 Verify CoreDNS records on cluster 1 (Primary)
 ```shell
-dig @172.18.0.17 -t AXFR k.example.com +noall +answer
+CORE_NS=`kubectl get service -A -l app.kubernetes.io/name=coredns,app.kubernetes.io/component!=metrics --context kind-kuadrant-local-1 -o json | jq -r '[.items[] | (.status.loadBalancer.ingress[].ip)][0]'`
+dig @$CORE_NS -t AXFR k.example.com +noall +answer
 ```
 Expected output:
-```shell
+```
 k.example.com.          60      IN      SOA     ns1.k.example.com. hostmaster.k.example.com. 12345 7200 1800 86400 60
 k.example.com.          60      IN      NS      ns1.k.example.com.
 kuadrant-a-myapp.k.example.com. 0 IN    TXT     "\"heritage=external-dns,external-dns/owner=15p262su&&tl6a98es\""
@@ -165,7 +173,6 @@ Create a delegated record with a primary role on cluster 1
 kubectl apply -f hack/multicluster-poc/primary/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-1
 ````
 
-
 Create a simple delegated record with a remote role on cluster 2
 ```shell
 kubectl apply -f hack/multicluster-poc/remote/dnspolicy/dnspolicy_prod-web-istio-loadbalanced.yaml -n dnstest-1 --context kind-kuadrant-local-2
@@ -176,7 +183,7 @@ Verify records on cluster 1 (Primary)
 kubectl get dnsrecords --context kind-kuadrant-local-1 -n dnstest-1 --show-labels
 ```
 Expected output:
-```shell
+```
 NAME                                       READY   LABELS
 prod-web-istio-coredns-api                 True    app.kubernetes.io/component=kuadrant,app.kubernetes.io/instance=kuadrant,app.kubernetes.io/managed-by=kuadrant-operator,app.kubernetes.io/name=kuadrant,app.kubernetes.io/part-of=kuadrant,app=kuadrant,kuadrant.io/listener-name=api
 prod-web-istio-coredns-api-authoritative   True    kuadrant.io/authoritative-record=myapp.k.example.com,kuadrant.io/coredns-zone-name=k.example.com
@@ -192,13 +199,12 @@ NAME                         READY   LABELS
 prod-web-istio-coredns-api   True    app.kubernetes.io/component=kuadrant,app.kubernetes.io/instance=kuadrant,app.kubernetes.io/managed-by=kuadrant-operator,app.kubernetes.io/name=kuadrant,app.kubernetes.io/part-of=kuadrant,app=kuadrant,kuadrant.io/listener-name=api
 ```
 
-
 Verify endpoints of authoritative record on cluster 1 (Primary)
 ```shell
 kubectl get dnsrecord/prod-web-istio-coredns-api-authoritative --context kind-kuadrant-local-1 -n dnstest-1 -o json | jq '.spec.endpoints[] | "dnsName: \(.dnsName), recordType: \(.recordType), targets: \(.targets), labels: \(.labels)"'
 ```
 Expected output:
-```shell
+```
 "dnsName: myapp.k.example.com, recordType: SOA, targets: null, labels: null"
 "dnsName: klb.myapp.k.example.com, recordType: CNAME, targets: [\"us.klb.myapp.k.example.com\"], labels: {\"owner\":\"34xubq3u\"}"
 "dnsName: myapp.k.example.com, recordType: CNAME, targets: [\"klb.myapp.k.example.com\"], labels: {\"owner\":\"34xubq3u&&eypir7wu\"}"
@@ -220,10 +226,11 @@ Expected output:
 
 Verify CoreDNS records on cluster 1 (Primary)
 ```shell
-dig @172.18.0.17 -t AXFR k.example.com +noall +answer
+CORE_NS=`kubectl get service -A -l app.kubernetes.io/name=coredns,app.kubernetes.io/component!=metrics --context kind-kuadrant-local-1 -o json | jq -r '[.items[] | (.status.loadBalancer.ingress[].ip)][0]'`
+dig @$CORE_NS -t AXFR k.example.com +noall +answer
 ```
 Expected output:
-```shell
+```
 k.example.com.          60      IN      SOA     ns1.k.example.com. hostmaster.k.example.com. 12345 7200 1800 86400 60
 k.example.com.          60      IN      NS      ns1.k.example.com.
 kuadrant-cname-myapp.k.example.com. 0 IN TXT    "\"heritage=external-dns,external-dns/owner=34xubq3u&&eypir7wu\""

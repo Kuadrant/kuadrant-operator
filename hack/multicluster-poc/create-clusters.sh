@@ -26,7 +26,7 @@ cleanClusters() {
 }
 
 make kind kustomize
-cleanClusters || true
+#cleanClusters || true
 
 KUBECONFIG_DIR="${SCRIPT_DIR}/kubeconfigs"
 
@@ -40,13 +40,13 @@ for ((i = 1; i <= CLUSTER_COUNT; i++)); do
     echo "Creating cluster ${i}/${CLUSTER_COUNT}: ${clusterName}"
 
     make local-setup KIND_CLUSTER_NAME=${clusterName} SUBNET_OFFSET=${i}| prepend "[${clusterName}] "
-    ${KIND_BIN} export kubeconfig -n ${clusterName} --kubeconfig ${KUBECONFIG_DIR}/${clusterName}.kubeconfig
-#     Install latest distributed-dns operator version
-#    make deploy IMG=quay.io/kuadrant/kuadrant-operator:distributed-dns | prepend "[${clusterName}] "
-
-    #Remove kuadrant installed dns operator deployment
-#    kubectl delete deployments dns-operator-controller-manager -n kuadrant-system | prepend "[${clusterName}] "
   fi
+
+  echo "generating kubeconfigs" | prepend "[${clusterName}] "
+  ${KIND_BIN} export kubeconfig -q -n ${clusterName} --kubeconfig ${KUBECONFIG_DIR}/${clusterName}.kubeconfig
+  ${KIND_BIN} export kubeconfig -q -n ${clusterName} --kubeconfig ${KUBECONFIG_DIR}/kuadrant-local-all.kubeconfig
+  ${KIND_BIN} export kubeconfig -q --internal -n ${clusterName} --kubeconfig ${KUBECONFIG_DIR}/${clusterName}.internal.kubeconfig
+  ${KIND_BIN} export kubeconfig -q --internal -n ${clusterName} --kubeconfig ${KUBECONFIG_DIR}/kuadrant-local-all.internal.kubeconfig
 done
 
 ## --- Cluster Setup End --- ##

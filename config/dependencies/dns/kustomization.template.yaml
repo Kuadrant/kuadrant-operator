@@ -6,3 +6,8 @@ patches:
     target:
       kind: Deployment
       name: dns-operator-controller-manager
+
+images:
+  - name: quay.io/kuadrant/dns-operator
+    newName: quay.io/kuadrant/dns-operator
+    newTag: ${DNS_OPERATOR_GITREF}

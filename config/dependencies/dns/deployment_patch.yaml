@@ -12,4 +12,4 @@
 
 - op: add
   path: /spec/template/spec/containers/0/args/-
-  value: --provider=aws,azure,google,inmemory
+  value: --provider=aws,azure,google,inmemory,coredns,crd

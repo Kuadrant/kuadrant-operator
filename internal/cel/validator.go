@@ -54,10 +54,9 @@ func (b *ValidatorBuilder) AddPolicyBindingAfter(after *string, policy string, n
 		}
 		if idx < 0 {
 			return nil, fmt.Errorf("policy %s not found", *after)
-		} else {
-			suffix := append([]policyBinding{p}, b.policies[idx+1:]...)
-			b.policies = append(b.policies[:idx], suffix...)
 		}
+		suffix := append([]policyBinding{p}, b.policies[idx+1:]...)
+		b.policies = append(b.policies[:idx], suffix...)
 	}
 	return b, nil
 }
@@ -106,13 +105,16 @@ func (v *Validator) Validate(policy string, expr string) (*cel.Ast, error) {
 		return nil, fmt.Errorf("no policy matching `%s`", policy)
 	}
 
-	if ast, iss := env.Parse(expr); iss.Err() != nil {
+	var ast *cel.Ast
+	var iss *cel.Issues
+
+	if ast, iss = env.Parse(expr); iss.Err() != nil {
 		return nil, iss.Err()
-	} else {
-		if cAst, iss := env.Check(ast); iss.Err() != nil {
-			return nil, iss.Err()
-		} else {
-			return cAst, nil
-		}
 	}
+
+	if ast, iss = env.Check(ast); iss.Err() != nil {
+		return nil, iss.Err()
+	}
+
+	return ast, nil
 }

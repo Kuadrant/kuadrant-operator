@@ -1,0 +1,96 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: prod-web-istio-coredns
+spec:
+  gatewayClassName: istio
+  listeners:
+    - allowedRoutes:
+        namespaces:
+          from: Same
+      name: api
+      hostname: "myapp.k.example.com"
+      port: 80
+      protocol: HTTP
+#apiVersion: gateway.networking.k8s.io/v1beta1
+#kind: Gateway
+#metadata:
+#  name: prod-web-istio-aws
+#spec:
+#  gatewayClassName: istio
+#  listeners:
+#    - allowedRoutes:
+#        namespaces:
+#          from: Same
+#      name: api
+#      hostname: "myapp.mn.hcpapps.net"
+#      port: 80
+#      protocol: HTTP
+#    - allowedRoutes:
+#        namespaces:
+#          from: Same
+#      name: api2
+#      hostname: "myapp2.mn.hcpapps.net"
+#      port: 80
+#      protocol: HTTP
+#    - allowedRoutes:
+#        namespaces:
+#          from: All
+#      name: api-secure
+#      hostname: "myapp.mn.hcpapps.net"
+#      port: 443
+#      protocol: HTTPS
+#      tls:
+#        mode: Terminate
+#        certificateRefs:
+#          - name: myapp-mn-hcpapps-net-tls
+#            kind: Secret
+#---
+#apiVersion: gateway.networking.k8s.io/v1beta1
+#kind: Gateway
+#metadata:
+#  name: prod-web-istio-aws2
+#spec:
+#  gatewayClassName: istio
+#  listeners:
+#    - allowedRoutes:
+#        namespaces:
+#          from: Same
+#      name: api
+#      hostname: "myapp.mn.hcpapps.net"
+#      port: 80
+#      protocol: HTTP
+#    - allowedRoutes:
+#        namespaces:
+#          from: Same
+#      name: api2
+#      hostname: "myapp2.mn.hcpapps.net"
+#      port: 80
+#      protocol: HTTP
+#    - allowedRoutes:
+#        namespaces:
+#          from: All
+#      name: api-secure
+#      hostname: "myapp.mn.hcpapps.net"
+#      port: 443
+#      protocol: HTTPS
+#      tls:
+#        mode: Terminate
+#        certificateRefs:
+#          - name: myapp-mn-hcpapps-net-tls
+#            kind: Secret
+#---
+#apiVersion: gateway.networking.k8s.io/v1beta1
+#kind: Gateway
+#metadata:
+#  name: prod-web-istio-gcp
+#spec:
+#  gatewayClassName: istio
+#  listeners:
+#    - allowedRoutes:
+#        namespaces:
+#          from: Same
+#      name: api-gcp
+#      hostname: "myapp.mn.google.hcpapps.net"
+#      port: 80
+#      protocol: HTTP

@@ -1,0 +1,16 @@
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web-coredns
+  labels:
+    kuadrant.io/test: multicluster-poc
+    kuadrant.io/cluster-role: remote
+spec:
+  authorityDelegation:
+    role: remote
+  targetRef:
+    name: prod-web-istio-coredns
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: dns-provider-credentials-coredns

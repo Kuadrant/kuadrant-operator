@@ -1,0 +1,21 @@
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web-coredns
+  labels:
+    kuadrant.io/test: multicluster-poc
+    kuadrant.io/cluster-role: primary
+spec:
+  authorityDelegation:
+    role: primary
+  targetRef:
+    name: prod-web-istio-coredns
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: dns-provider-credentials-coredns
+  loadBalancing:
+    defaultGeo: true
+    geo: US
+    weight: 100
+

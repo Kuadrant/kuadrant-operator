@@ -66,6 +66,8 @@ type DNSPolicySpec struct {
 	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting
 	// +optional
 	ExcludeAddresses ExcludeAddresses `json:"excludeAddresses,omitempty"`
+
+	AuthorityDelegation *dnsv1alpha1.AuthorityDelegation `json:"authorityDelegation,omitempty"`
 }
 
 // +kubebuilder:validation:MaxItems=20

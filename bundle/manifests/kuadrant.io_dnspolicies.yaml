@@ -77,6 +77,11 @@ spec:
           spec:
             description: DNSPolicySpec defines the desired state of DNSPolicy
             properties:
+              authorityDelegation:
+                properties:
+                  role:
+                    type: string
+                type: object
               excludeAddresses:
                 description: ExcludeAddresses is a list of addresses (either hostnames,
                   CIDR or IPAddresses) that DNSPolicy should not use as values in

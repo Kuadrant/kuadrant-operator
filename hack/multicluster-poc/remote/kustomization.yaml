@@ -1,0 +1,8 @@
+resources:
+  - ../config
+
+labels:
+  - pairs:
+      kuadrant.io/test: multicluster-poc
+      kuadrant.io/cluster-role: remote
+    includeTemplates: true

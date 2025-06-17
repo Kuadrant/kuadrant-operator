@@ -1,0 +1,3 @@
+resources:
+  - echo-app-istio.yaml
+  - gateway_prod-web-istio.yaml

@@ -148,7 +148,7 @@ kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERS
 ifeq (latest,$(DNS_OPERATOR_VERSION))
 DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
 DNS_OPERATOR_BUNDLE_IMG_TAG = latest
-DNS_OPERATOR_GITREF = main
+DNS_OPERATOR_GITREF = multicluster-poc
 else ifeq (true,$(kuadrantdns_bundle_is_semantic))
 DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
 DNS_OPERATOR_BUNDLE_IMG_TAG = v$(DNS_OPERATOR_BUNDLE_VERSION)

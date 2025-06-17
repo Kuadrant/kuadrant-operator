@@ -1,0 +1,29 @@
+resources:
+  - ../config
+
+labels:
+  - pairs:
+      kuadrant.io/test: multicluster-poc
+      kuadrant.io/cluster-role: primary
+    includeTemplates: true
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+secretGenerator:
+  - name: dns-provider-credentials-coredns
+    type: "kuadrant.io/coredns"
+    literals:
+      - ZONES=k.example.com
+#  - name: dns-provider-credentials-aws
+#    envs:
+#      - aws-credentials.env
+#    type: "kuadrant.io/aws"
+#  - name: dns-provider-credentials-gcp
+#    envs:
+#      - gcp-credentials.env
+#    type: "kuadrant.io/gcp"
+#  - name: dns-provider-credentials-azure
+#    envs:
+#      - azure-credentials.env
+#    type: "kuadrant.io/azure"

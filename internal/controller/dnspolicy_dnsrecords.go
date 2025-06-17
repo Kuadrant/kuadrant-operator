@@ -26,6 +26,7 @@ func dnsRecordName(gatewayName, listenerName string) string {
 func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *kuadrantv1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
+	var authorityDelegation *kuadrantdnsv1alpha1.AuthorityDelegation
 
 	if dnsPolicy.Spec.HealthCheck != nil {
 		healthCheckSpec = &kuadrantdnsv1alpha1.HealthCheckSpec{
@@ -37,6 +38,12 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 			AdditionalHeadersRef: dnsPolicy.Spec.HealthCheck.AdditionalHeadersRef,
 		}
 	}
+	if dnsPolicy.Spec.AuthorityDelegation != nil {
+		authorityDelegation = &kuadrantdnsv1alpha1.AuthorityDelegation{
+			Role: dnsPolicy.Spec.AuthorityDelegation.Role,
+		}
+	}
+
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
@@ -53,7 +60,8 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 				// Currently we only allow a single providerRef to be added. When that changes, we will need to update this to deal with multiple records.
 				Name: dnsPolicy.Spec.ProviderRefs[0].Name,
 			},
-			HealthCheck: healthCheckSpec,
+			HealthCheck:         healthCheckSpec,
+			AuthorityDelegation: authorityDelegation,
 		},
 	}
 	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)

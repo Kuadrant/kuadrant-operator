@@ -412,15 +412,15 @@
           },
           {
             "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
+              "id": "byName",
+              "options": "200"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "light-green",
-                  "mode": "fixed"
+                  "mode": "thresholds",
+                  "seriesBy": "last"
                 }
               }
             ]
@@ -464,23 +464,11 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code!=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "{{response_code}}",
           "range": true,
           "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=\"200\"}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "hide": false,
-          "legendFormat": "{{response_code}}",
-          "range": true,
-          "refId": "C"
         }
       ],
       "title": "request breakdown by code (req/s)",

@@ -464,7 +464,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, response_code) \n* on(destination_service_name) group_left(name) \n(group without(cluster_id, instance, app_kubernetes_io_instance) \n(label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "{{response_code}}",
           "range": true,

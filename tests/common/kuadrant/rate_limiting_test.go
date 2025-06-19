@@ -555,8 +555,6 @@ var _ = Describe("Resilience rateLimiting", Serial, func() {
 				g.Expect(lObj.Spec.ResourceRequirements.Requests.Memory().Value()).To(Equal(userMemory.Value()))
 			},
 			).WithContext(ctx).Should(Succeed())
-			By("")
-			By("")
 		}, testTimeOut)
 	})
 

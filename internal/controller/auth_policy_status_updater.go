@@ -119,8 +119,6 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 		newStatus.ObservedGeneration = policy.Generation
 		policy.Status = *newStatus
 
-		// TODO: Managed field cannot be set when applying
-		policy.ManagedFields = nil
 		obj, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy") // should never happen

@@ -93,7 +93,6 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 }
 
 func (r *HTTPRoutePolicyDiscoverabilityReconciler) updateRouteStatus(ctx context.Context, route *machinery.HTTPRoute, logger logr.Logger) error {
-	route.HTTPRoute.ManagedFields = nil
 	obj, err := controller.Destruct(route.HTTPRoute)
 	if err != nil {
 		logger.Error(err, "unable to destruct route", "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())

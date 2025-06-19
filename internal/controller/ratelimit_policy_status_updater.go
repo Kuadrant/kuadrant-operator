@@ -116,8 +116,6 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 		newStatus.ObservedGeneration = policy.Generation
 		policy.Status = *newStatus
 
-		// TODO: Managed field cannot be set when applying
-		policy.ManagedFields = nil
 		obj, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy") // should never happen

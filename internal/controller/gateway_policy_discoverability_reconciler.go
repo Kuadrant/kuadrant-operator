@@ -69,7 +69,6 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 }
 
 func (r *GatewayPolicyDiscoverabilityReconciler) updateGatewayStatus(ctx context.Context, gw *machinery.Gateway) error {
-	gw.Gateway.ManagedFields = nil
 	obj, err := controller.Destruct(gw.Gateway)
 	if err != nil {
 		return err

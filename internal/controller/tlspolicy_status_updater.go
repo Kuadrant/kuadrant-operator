@@ -105,8 +105,6 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 
 		resource := t.Client.Resource(kuadrantv1.TLSPoliciesResource).Namespace(policy.GetNamespace())
 
-		// TODO: Managed field cannot be set when applying
-		p.ManagedFields = nil
 		un, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy")

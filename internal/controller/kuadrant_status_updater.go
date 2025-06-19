@@ -116,8 +116,6 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 	return nil
 }
 func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	// TODO: Managed field cannot be set when applying
-	kObj.ManagedFields = nil
 	obj, err := controller.Destruct(kObj)
 	if err != nil {
 		return err

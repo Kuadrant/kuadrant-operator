@@ -53,13 +53,44 @@ type OIDCPolicySpec struct {
 type OIDCPolicySpecProper struct {
 	// Provider holds the information for the OIDC provider
 	Provider *Provider `json:"provider,omitempty"`
+	// Auth holds the information regarding AuthN/AuthZ
+	// +optional
+	Auth *Auth `json:"auth,omitempty"`
+}
+
+type Auth struct {
+	// TokenSource informs where the JWT token will be found
+	// +optional
+	// +kubebuilder:default:=cookie
+	// +kubebuilder:validation:Enum:=cookie;custom_header;authorization_header;query
+	TokenSource string `json:"tokenSource,omitempty"`
 	// Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
+	// +optional
 	Claims map[string]string `json:"claims,omitempty"`
 }
 
 type Provider struct {
+	// +optional
+	// One of: jwksURL, issuerURL
 	IssuerURL string `json:"issuerURL"`
 	ClientID  string `json:"clientID"`
+	// +optional
+	ClientSecret string `json:"clientSecret,omitempty"`
+	// +optional
+	// One of: jwksURL, issuerURL
+	JWKSURL string `json:"jwksURL,omitempty"`
+	// +optional
+	DiscoveryEndpoint string `json:"discoveryEndpoint,omitempty"`
+	// +optional
+	TokenIntrospectionEndpoint string `json:"tokenIntrospectionEndpoint,omitempty"`
+	// +optional
+	AuthorizationEndpoint string `json:"authorizationEndpoint,omitempty"`
+	// +optional
+	AuthorizationEndpointQuery map[string]string `json:"authorizationEndpointQuery,omitempty"`
+	// +optional
+	TokenEndpoint string `json:"tokenEndpoint,omitempty"`
+	// +optional
+	RedirectURI string `json:"redirectURI,omitempty"`
 }
 
 // OIDCPolicyStatus defines the observed state of OIDCPolicy
@@ -139,11 +170,10 @@ func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {
 }
 
 func (p *OIDCPolicy) GetClaims() map[string]string {
-	claims := make(map[string]string, len(p.Spec.Claims))
-	for k, v := range p.Spec.Claims {
-		claims[k] = v
+	if p.Spec.Auth != nil && len(p.Spec.Auth.Claims) > 0 {
+		return p.Spec.Auth.Claims
 	}
-	return claims
+	return make(map[string]string)
 }
 
 // +kubebuilder:object:root=true

@@ -110,21 +110,21 @@ func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) string {
 	return redirectURL.String()
 }
 
-func (p *OIDCPolicy) GetIssuerTokenExchangeURL() string {
+func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
 	u, err := url.Parse(p.Spec.Provider.IssuerURL)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	u.Path = path.Join(u.Path, TokenExchangePath)
-	return u.String()
+	return u.String(), nil
 }
 
-func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
+func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {
 	authorizeURL, err := url.Parse(p.Spec.Provider.IssuerURL)
-	authorizeURL.Path = AuthorizePath
 	if err != nil {
-		panic(err)
+		return "", err
 	}
+	authorizeURL.Path = authorizeURL.Path + AuthorizePath
 	redirectURL := *igwURL
 	redirectURL.Path = path.Join(redirectURL.Path, CallbackPath)
 
@@ -135,7 +135,7 @@ func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
 	query.Set("scope", "openid")
 	authorizeURL.RawQuery = query.Encode()
 
-	return authorizeURL.String()
+	return authorizeURL.String(), nil
 }
 
 func (p *OIDCPolicy) GetClaims() map[string]string {
@@ -158,7 +158,7 @@ type OIDCPolicyList struct {
 func (s *OIDCPolicyStatus) Equals(other *OIDCPolicyStatus, logger logr.Logger) bool {
 	if s.ObservedGeneration != other.ObservedGeneration {
 		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
-		logger.Info("status observedGeneration not equal", "difference", diff)
+		logger.V(1).Info("status observedGeneration not equal", "difference", diff)
 		return false
 	}
 
@@ -167,7 +167,7 @@ func (s *OIDCPolicyStatus) Equals(other *OIDCPolicyStatus, logger logr.Logger) b
 	otherMarshaledJSON, _ := helpers.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
-		logger.Info("status conditions not equal", "difference", diff)
+		logger.V(1).Info("status conditions not equal", "difference", diff)
 		return false
 	}
 

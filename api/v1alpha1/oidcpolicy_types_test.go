@@ -15,7 +15,10 @@ import (
 func TestGetIssuerTokenExchangeURL(t *testing.T) {
 	policy := mockOIDCPolicy()
 
-	actual := policy.GetIssuerTokenExchangeURL()
+	actual, err := policy.GetIssuerTokenExchangeURL()
+	if err != nil {
+		t.Fatal(err)
+	}
 	expected := "https://issuer.com/oauth/token"
 
 	if strings.Compare(actual, expected) != 0 {
@@ -47,7 +50,10 @@ func TestGetAuthorizeURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	actual := policy.GetAuthorizeURL(baseURL)
+	actual, err := policy.GetAuthorizeURL(baseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(actual, "client_id=client123") {
 		t.Errorf("missing client_id parameter")
 	}

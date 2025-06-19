@@ -110,20 +110,20 @@ func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) string {
 	return redirectURL.String()
 }
 
-func (p *OIDCPolicy) GetIssuerTokenExchangeURL() string {
+func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
 	u, err := url.Parse(p.Spec.Provider.IssuerURL)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	u.Path = path.Join(u.Path, TokenExchangePath)
-	return u.String()
+	return u.String(), nil
 }
 
-func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
+func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {
 	authorizeURL, err := url.Parse(p.Spec.Provider.IssuerURL)
-	authorizeURL.Path = AuthorizePath
+	authorizeURL.Path = authorizeURL.Path + AuthorizePath
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	redirectURL := *igwURL
 	redirectURL.Path = path.Join(redirectURL.Path, CallbackPath)
@@ -135,7 +135,7 @@ func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) string {
 	query.Set("scope", "openid")
 	authorizeURL.RawQuery = query.Encode()
 
-	return authorizeURL.String()
+	return authorizeURL.String(), nil
 }
 
 func (p *OIDCPolicy) GetClaims() map[string]string {

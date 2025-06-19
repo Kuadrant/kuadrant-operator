@@ -243,9 +243,11 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 }
 
 func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {
-	desiredAuthPol := buildCallbackAuthPolicy(pol, igw)
-
-	err := controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
+	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw)
+	if err != nil {
+		return err
+	}
+	err = controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme())
 	if err != nil {
 		r.logger.Error(err, "Error setting OwnerReference on callback AuthPolicy")
 		return err
@@ -292,7 +294,10 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 }
 
 func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
-	authorizeURL := pol.GetAuthorizeURL(igw.GetURL())
+	authorizeURL, err := pol.GetAuthorizeURL(igw.GetURL())
+	if err != nil {
+		return nil, err
+	}
 	serializedAuthorizeURL, err := json.Marshal(authorizeURL)
 	if err != nil {
 		return nil, err
@@ -429,12 +434,18 @@ func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewa
 	}
 }
 
-func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *kuadrantv1.AuthPolicy {
+func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
 	igwHostname := igw.Hostname
-	tokenExchangeURL := pol.GetIssuerTokenExchangeURL()
+	tokenExchangeURL, err := pol.GetIssuerTokenExchangeURL()
+	if err != nil {
+		return nil, err
+	}
+	authorizeURL, err := pol.GetAuthorizeURL(igwURL)
+	if err != nil {
+		return nil, err
+	}
 	redirectURI := pol.GetRedirectURL(igwURL)
-	authorizeURL := pol.GetAuthorizeURL(igwURL)
 
 	setCookie := fmt.Sprintf(`
 "jwt=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
@@ -546,7 +557,7 @@ allow = true`, igwURL, igwURL, authorizeURL)
 				},
 			},
 		},
-	}
+	}, nil
 }
 
 type authPolicyMutateFn func(desired, existing *kuadrantv1.AuthPolicy) bool

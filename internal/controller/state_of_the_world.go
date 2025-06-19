@@ -700,3 +700,19 @@ func KuadrantManagedObjectLabels() labels.Set {
 		kuadrantManagedLabelKey: "true",
 	})
 }
+
+func GetMachineryObjectFromTopology(topology *machinery.Topology, groupkind schema.GroupKind) machinery.Object {
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
+	}
+
+	object, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
+		return child.GroupVersionKind().GroupKind() == groupkind
+	})
+	if !found {
+		return nil
+	}
+
+	return object
+}

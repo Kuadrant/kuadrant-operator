@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -61,22 +60,6 @@ func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.L
 
 	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
 	return limitador.DeepCopy()
-}
-
-func GetMachineryObjectFromTopology(topology *machinery.Topology, groupkind schema.GroupKind) machinery.Object {
-	kuadrant := GetKuadrantFromTopology(topology)
-	if kuadrant == nil {
-		return nil
-	}
-
-	object, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
-		return child.GroupVersionKind().GroupKind() == groupkind
-	})
-	if !found {
-		return nil
-	}
-
-	return object
 }
 
 func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {

@@ -190,7 +190,7 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 
 	if !reflect.DeepEqual(r.Resilience, other.Resilience) {
 		diff := cmp.Diff(r.Resilience, other.Resilience)
-		logger.V(0).Info("Resilience not equal", "difference", diff)
+		logger.V(1).Info("Resilience not equal", "difference", diff)
 		return false
 	}
 

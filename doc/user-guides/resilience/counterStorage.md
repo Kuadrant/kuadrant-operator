@@ -240,7 +240,7 @@ spec:
 
 ## Disabling Counter Storage
 
-When the counter storage configuration is removed, the Kuadrant Operator will revert the `Limirtador` CR back to the default of using In-Memory counters.
+When the counter storage configuration is removed, the Kuadrant Operator will revert the `Limitador` CR back to the default of using In-Memory counters.
 The Kuadrant Operator will not remove user created resources, such as the redis configuration secret.
 
 With the counter storage not being configured, the Kuadrant Operator allows the user to modify `spec.storage` directly in the `limitador` CR.

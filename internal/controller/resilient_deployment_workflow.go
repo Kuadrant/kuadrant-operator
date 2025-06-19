@@ -35,6 +35,8 @@ const (
 
 	Resource10Mi = "10Mi"
 	Resource10m  = "10m"
+
+	ResilienceError = "resilienceError"
 )
 
 func NewResilienceDeploymentWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
@@ -70,7 +72,7 @@ func (r *ResilienceDeploymentPrecondition) run(ctx context.Context, _ []controll
 	defer logger.V(level).Info("ResilienceDeployment Precondition", "status", "completed")
 
 	state.Store(ExperimentalResilienceFeature, isExperimentalFeatureEnabled(topology))
-	state.Store("resilienceError", false)
+	state.Store(ResilienceError, false)
 
 	return nil
 }
@@ -161,14 +163,14 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		err := r.cleanupLimitadorDeployment(ctx, topology, logger)
 		if err != nil {
 			logger.V(level).Info("failed to cleanup limitador deployment", "status", "error", "error", err)
-			state.Store("resilienceError", true)
+			state.Store(ResilienceError, true)
 			return nil
 		}
 
 		err = r.cleanupLimitador(ctx, logger, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to cleanup limitador resource", "status", "error", "error", err)
-			state.Store("resilienceError", true)
+			state.Store(ResilienceError, true)
 			return nil
 		}
 
@@ -182,14 +184,14 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 		err := r.configureLimitador(ctx, logger, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to configure limitador deployment", "status", "error", "error", err)
-			state.Store("resilienceError", true)
+			state.Store(ResilienceError, true)
 			return nil
 		}
 
 		err = r.configureLimitadorDeployment(ctx, topology, logger)
 		if err != nil {
 			logger.V(level).Info("failed to configure limitador deployment", "status", "error", "error", err)
-			state.Store("resilienceError", true)
+			state.Store(ResilienceError, true)
 			return nil
 		}
 	}
@@ -460,7 +462,7 @@ func (r *ResilienceCounterStorageReconciler) reconcile(ctx context.Context, _ []
 		err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
-			state.Store("resilienceError", true)
+			state.Store(ResilienceError, true)
 			return nil
 		}
 	}

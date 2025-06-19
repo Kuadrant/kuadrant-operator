@@ -98,6 +98,21 @@ metadata:
           }
         },
         {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "PlanPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "kuadrant-operator",
+              "app.kubernetes.io/instance": "planpolicy-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "planpolicy",
+              "app.kubernetes.io/part-of": "kuadrant-operator"
+            },
+            "name": "planpolicy-sample"
+          },
+          "spec": {}
+        },
+        {
           "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
@@ -109,7 +124,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-04-23T14:42:57Z"
+    createdAt: "2025-06-19T15:36:20Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -139,6 +154,9 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
+    - kind: PlanPolicy
+      name: planpolicies.kuadrant.io
+      version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
       displayName: RateLimitPolicy
@@ -325,7 +343,7 @@ spec:
           - authpolicies
           - dnspolicies
           - kuadrants
-          - ratelimitpolicies
+          - planpolicies
           - tlspolicies
           verbs:
           - get
@@ -339,6 +357,7 @@ spec:
           - authpolicies/finalizers
           - dnspolicies/finalizers
           - kuadrants/finalizers
+          - planpolicies/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
           verbs:
@@ -349,6 +368,7 @@ spec:
           - authpolicies/status
           - dnspolicies/status
           - kuadrants/status
+          - planpolicies/status
           - ratelimitpolicies/status
           - tlspolicies/status
           verbs:
@@ -359,6 +379,7 @@ spec:
           - kuadrant.io
           resources:
           - dnsrecords
+          - ratelimitpolicies
           verbs:
           - create
           - delete

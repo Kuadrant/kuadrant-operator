@@ -53,13 +53,64 @@ type OIDCPolicySpec struct {
 type OIDCPolicySpecProper struct {
 	// Provider holds the information for the OIDC provider
 	Provider *Provider `json:"provider,omitempty"`
+	// Auth holds the information regarding AuthN/AuthZ
+	// +optional
+	Auth *Auth `json:"auth,omitempty"`
+}
+
+type Auth struct {
+	// TokenSource informs where the JWT token will be found
+	// +optional
+	// +kubebuilder:default:=cookie
+	// +kubebuilder:validation:Enum:=cookie;custom_header;authorization_header;query
+	TokenSource string `json:"tokenSource,omitempty"`
 	// Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
+	// +optional
 	Claims map[string]string `json:"claims,omitempty"`
 }
 
+// Provider defines the settings related to the Identity Provider (IDP)
+//
+//	+kubebuilder:validation:XValidation:rule="!(has(self.jwksURL) && self.jwksURL != '' && has(self.issuerURL) && self.issuerURL != '')",message="Use one of: jwksURL, issuerURL"
 type Provider struct {
+	// URL of the OpenID Connect (OIDC) token issuer endpoint.
+	// Use it for automatically discovering the JWKS URL from an OpenID Connect Discovery endpoint (https://openid.net/specs/openid-connect-discovery-1_0.html).
+	// The Well-Known Discovery path (i.e. "/.well-known/openid-configuration") is appended to this URL to fetch the OIDC configuration.
+	// One of: jwksURL, issuerURL
+	// +optional
 	IssuerURL string `json:"issuerURL"`
-	ClientID  string `json:"clientID"`
+	// URL of the JSON Web Key Set (JWKS) endpoint.
+	// Use it for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
+	// The JSON Web Keys (JWK) obtained from this endpoint are automatically cached and the caching updated whenever the kid of a JWT does not match any of the cached JWKs (https://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys).
+	// One of: jwksURL, issuerURL
+	// +optional
+	JWKSURL string `json:"jwksURL,omitempty"`
+	// OAuth2 Client ID.
+	ClientID string `json:"clientID"`
+	// OAuth2 Client Secret.
+	// +optional
+	ClientSecret string `json:"clientSecret,omitempty"`
+
+	// DiscoveryEndpoint is Currently not supported by Authorino.
+	// The DiscoveryEndpoint path (i.e. "/.well-known/openid-configuration") is appended to the IssuerURL to fetch the OIDC configuration.
+	// +optional
+	// DiscoveryEndpoint string `json:"discoveryEndpoint,omitempty"`
+
+	// The full URL of the Authorization endpoints
+	// AuthorizationEndpoint performs Authentication of the End-User. Default value is the IssuerURL + "/oauth/authorize"
+	// +optional
+	AuthorizationEndpoint string `json:"authorizationEndpoint,omitempty"`
+
+	// OIDC OAuth 2.0 request parameters, such as `scope`, `response_type`, `client_id`, `redirect_uri`, `state`, etc.
+	// +optional
+	// AuthorizationEndpointQuery map[string]string `json:"authorizationEndpointQuery,omitempty"`
+
+	// The RedirectURI defines the URL that is part of the authentication request to the AuthorizationEndpoint and the one defined in the IDP. Default value is the IssuerURL + "/auth/callback"
+	// +optional
+	RedirectURI string `json:"redirectURI,omitempty"`
+	// TokenEndpoint defines the URL to obtain an Access Token, an ID Token, and optionally a Refresh Token. Default value is the IssuerURL + "/oauth/token"
+	// +optional
+	TokenEndpoint string `json:"tokenEndpoint,omitempty"`
 }
 
 // OIDCPolicyStatus defines the observed state of OIDCPolicy
@@ -139,11 +190,10 @@ func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {
 }
 
 func (p *OIDCPolicy) GetClaims() map[string]string {
-	claims := make(map[string]string, len(p.Spec.Claims))
-	for k, v := range p.Spec.Claims {
-		claims[k] = v
+	if p.Spec.Auth != nil && len(p.Spec.Auth.Claims) > 0 {
+		return p.Spec.Auth.Claims
 	}
-	return claims
+	return make(map[string]string)
 }
 
 // +kubebuilder:object:root=true

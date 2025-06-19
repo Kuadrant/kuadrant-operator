@@ -152,7 +152,7 @@ var _ = Describe("Resilience counterStorage", Serial, func() {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: testNamespace}
 			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}
 
-			By("Apply kurdrant resouce with counterStorage configured")
+			By("Apply kuadrant resource with counterStorage configured")
 			tests.ApplyKuadrantCRWithName(ctx, testClient(), testNamespace, kuatrantResource, func(k *kuadrantv1beta1.Kuadrant) {
 				k.Annotations = map[string]string{ResilienceFeatureAnnotation: "true"}
 				k.Spec = kuadrantv1beta1.KuadrantSpec{

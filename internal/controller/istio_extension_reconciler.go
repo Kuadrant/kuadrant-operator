@@ -20,6 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
@@ -45,6 +46,7 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantistio.WasmPluginGroupKind},
 		},
@@ -144,6 +146,46 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
+func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
+	keyValueMap := make(map[string]string)
+
+	for i := 0; i < len(actions); i++ {
+		for j := i + 1; j < len(actions); j++ {
+			if actions[i].Scope == actions[j].Scope && actions[i].ServiceName == actions[j].ServiceName {
+				actions[i].ConditionalData = append(actions[i].ConditionalData, actions[j].ConditionalData...)
+				actions = append(actions[:j], actions[j+1:]...)
+				j--
+			}
+		}
+
+		clear(keyValueMap)
+		for _, conditionalData := range actions[i].ConditionalData {
+			for _, data := range conditionalData.Data {
+				var key, value string
+
+				switch val := data.Value.(type) {
+				case *wasm.Static:
+					key = val.Static.Key
+					value = val.Static.Value
+				case *wasm.Expression:
+					key = val.ExpressionItem.Key
+					value = val.ExpressionItem.Value
+				}
+
+				if existingValue, exists := keyValueMap[key]; exists {
+					if existingValue != value {
+						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
+					}
+				} else {
+					keyValueMap[key] = value
+				}
+			}
+		}
+	}
+
+	return actions, nil
+}
+
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
 func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
@@ -162,12 +204,26 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	}
 	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 
-	logger.V(1).Info("building wasm configs for istio extension", "effectiveRateLimitPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
+	var effectiveTokenRateLimitPoliciesMap EffectiveTokenRateLimitPolicies
+	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
+		effectiveTokenRateLimitPoliciesMap = effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)
+	}
 
-	paths := lo.UniqBy(append(
-		lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path })),
-		lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))...,
-	), func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
+	logger.V(1).Info("building wasm configs for istio extension", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveTokenRateLimitPolicies", len(effectiveTokenRateLimitPoliciesMap))
+
+	// unique paths from different policy types
+	var allPaths []lo.Entry[string, []machinery.Targetable]
+
+	// paths from auth ratelimit and tokenratelimit policies
+	authPaths := lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path }))
+	allPaths = append(allPaths, authPaths...)
+	rateLimitPaths := lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))
+	allPaths = append(allPaths, rateLimitPaths...)
+	tokenRateLimitPaths := lo.Entries(lo.MapValues(effectiveTokenRateLimitPoliciesMap, func(p EffectiveTokenRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))
+	allPaths = append(allPaths, tokenRateLimitPaths...)
+
+	// unique paths by key
+	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 
@@ -192,12 +248,32 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForRateLimit(effectivePolicy, state)
-			if hasAuthAccess(rlAction) {
-				actions = append(actions, rlAction...)
+			rlAction := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			mergedRlActions, err := mergeAndVerify(rlAction)
+			if err != nil {
+				logger.Error(err, "failed to merge/verify rate limit actions", "pathID", pathID)
+				return nil, fmt.Errorf("failed to merge/verify token rate limit actions for path %s: %w", pathID, err)
+			}
+			if hasAuthAccess(mergedRlActions) {
+				actions = append(actions, mergedRlActions...)
 			} else {
 				// pre auth rate limiting
-				actions = append(rlAction, actions...)
+				actions = append(mergedRlActions, actions...)
+			}
+		}
+
+		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
+			rlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			mergedTrlActions, err := mergeAndVerify(rlAction)
+			if err != nil {
+				logger.Error(err, "failed to merge/verify rate limit actions", "pathID", pathID)
+				return nil, fmt.Errorf("failed to merge/verify token rate limit actions for path %s: %w", pathID, err)
+			}
+			if hasAuthAccess(mergedTrlActions) {
+				actions = append(actions, mergedTrlActions...)
+			} else {
+				// pre auth rate limiting
+				actions = append(mergedTrlActions, actions...)
 			}
 		}
 

@@ -31,9 +31,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	CallbackPath      = "/auth/callback"
-	TokenExchangePath = "/oauth/token" //nolint:gosec
-	AuthorizePath     = "/oauth/authorize"
+	DefaultCallbackPath      = "/auth/callback"
+	DefaultTokenExchangePath = "/oauth/token" //nolint:gosec
+	DefaultAuthorizePath     = "/oauth/authorize"
 
 	StatusConditionReady string = "Ready"
 )
@@ -155,35 +155,67 @@ func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 	}
 }
 
-func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) string {
-	redirectURL := *igwURL
-	redirectURL.Path = path.Join(redirectURL.Path, CallbackPath)
-	return redirectURL.String()
+func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) (string, error) {
+	redirectURL, err := p.redirectURL(igwURL)
+	if err != nil {
+		return "", err
+	}
+
+	return redirectURL.String(), nil
 }
 
 func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
-	u, err := url.Parse(p.Spec.Provider.IssuerURL)
-	if err != nil {
-		return "", err
+	var tokenURL *url.URL
+	var err error
+	if p.Spec.Provider.TokenEndpoint != "" {
+		tokenURL, err = url.Parse(p.Spec.Provider.TokenEndpoint)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		tokenURL, err = url.Parse(p.Spec.Provider.IssuerURL)
+		if err != nil {
+			return "", err
+		}
+		tokenURL.Path = path.Join(tokenURL.Path, DefaultTokenExchangePath)
 	}
-	u.Path = path.Join(u.Path, TokenExchangePath)
-	return u.String(), nil
+
+	return tokenURL.String(), nil
 }
 
 func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {
-	authorizeURL, err := url.Parse(p.Spec.Provider.IssuerURL)
+	var authorizeURL, redirectURL *url.URL
+	var err error
+
+	if p.Spec.Provider.AuthorizationEndpoint != "" {
+		authorizeURL, err = url.Parse(p.Spec.Provider.AuthorizationEndpoint)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		authorizeURL, err = url.Parse(p.Spec.Provider.IssuerURL)
+		if err != nil {
+			return "", err
+		}
+		authorizeURL.Path = authorizeURL.Path + DefaultAuthorizePath
+	}
+	redirectURL, err = p.redirectURL(igwURL)
 	if err != nil {
 		return "", err
 	}
-	authorizeURL.Path = authorizeURL.Path + AuthorizePath
-	redirectURL := *igwURL
-	redirectURL.Path = path.Join(redirectURL.Path, CallbackPath)
 
-	query := url.Values{}
-	query.Set("client_id", p.Spec.Provider.ClientID)
-	query.Set("redirect_uri", redirectURL.String())
-	query.Set("response_type", "code")
-	query.Set("scope", "openid")
+	query := authorizeURL.Query()
+	defaultQueryValuesMap := map[string]string{
+		"client_id":     p.Spec.Provider.ClientID,
+		"redirect_uri":  redirectURL.String(),
+		"response_type": "code",
+		"scope":         "openid",
+	}
+	for k, v := range defaultQueryValuesMap {
+		if query.Get(k) == "" {
+			query.Set(k, v)
+		}
+	}
 	authorizeURL.RawQuery = query.Encode()
 
 	return authorizeURL.String(), nil
@@ -194,6 +226,24 @@ func (p *OIDCPolicy) GetClaims() map[string]string {
 		return p.Spec.Auth.Claims
 	}
 	return make(map[string]string)
+}
+
+func (p *OIDCPolicy) redirectURL(igwURL *url.URL) (*url.URL, error) {
+	var redirectURL *url.URL
+	var err error
+	if p.Spec.Provider.RedirectURI != "" {
+		redirectURL, err = url.Parse(p.Spec.Provider.RedirectURI)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		redirectURL, err = url.Parse(igwURL.String())
+		if err != nil {
+			return nil, err
+		}
+		redirectURL.Path = path.Join(redirectURL.Path, DefaultCallbackPath)
+	}
+	return redirectURL, nil
 }
 
 // +kubebuilder:object:root=true

@@ -84,7 +84,9 @@ func (r *OIDCPolicyReconciler) WithLogger(logger logr.Logger) *OIDCPolicyReconci
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
-// TODO: Current OIDC Workflow works only for Browser apps, needs implementation for Native apps
+// TODO: Current OIDC Workflow works only for Browser apps and Native apps that manage the Auth via browser
+// TODO: It only implements Authentication using the Authorization Code Flow (Recommended). Missing Implicit and Hybrid Flow
+// TODO: Implement TokenSource other than cookie
 
 func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler"))
@@ -405,7 +407,7 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayIn
 
 func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *gatewayapiv1.HTTPRoute {
 	pathMatch := gatewayapiv1.PathMatchPathPrefix
-	path := kuadrantv1alpha1.CallbackPath
+	path := kuadrantv1alpha1.DefaultCallbackPath
 	gwName := gatewayapiv1.ObjectName(igw.Name)
 	gwNamespace := gatewayapiv1.Namespace(igw.Namespace)
 
@@ -454,7 +456,10 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatew
 	if err != nil {
 		return nil, err
 	}
-	redirectURI := pol.GetRedirectURL(igwURL)
+	redirectURI, err := pol.GetRedirectURL(igwURL)
+	if err != nil {
+		return nil, err
+	}
 
 	setCookie := fmt.Sprintf(`
 "jwt=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"

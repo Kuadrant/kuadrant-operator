@@ -319,9 +319,10 @@ func (x *Event) GetMetadata() *Metadata {
 
 type RegisterMutatorRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
-	Binding       string                 `protobuf:"bytes,2,opt,name=binding,proto3" json:"binding,omitempty"`
-	Expression    string                 `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
+	Requester     *Policy                `protobuf:"bytes,1,opt,name=requester,proto3" json:"requester,omitempty"`
+	Target        *Policy                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Binding       string                 `protobuf:"bytes,3,opt,name=binding,proto3" json:"binding,omitempty"`
+	Expression    string                 `protobuf:"bytes,4,opt,name=expression,proto3" json:"expression,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -356,9 +357,16 @@ func (*RegisterMutatorRequest) Descriptor() ([]byte, []int) {
 	return file_v1_kuadrant_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *RegisterMutatorRequest) GetPolicy() *Policy {
+func (x *RegisterMutatorRequest) GetRequester() *Policy {
 	if x != nil {
-		return x.Policy
+		return x.Requester
+	}
+	return nil
+}
+
+func (x *RegisterMutatorRequest) GetTarget() *Policy {
+	if x != nil {
+		return x.Target
 	}
 	return nil
 }
@@ -399,12 +407,13 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x12.kuadrant.v1.EventR\x05event\x12(\n" +
 	"\x05error\x18\x02 \x01(\v2\x12.google.rpc.StatusR\x05error\":\n" +
 	"\x05Event\x121\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v1.MetadataR\bmetadata\"\x7f\n" +
-	"\x16RegisterMutatorRequest\x12+\n" +
-	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x12\x18\n" +
-	"\abinding\x18\x02 \x01(\tR\abinding\x12\x1e\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v1.MetadataR\bmetadata\"\xb2\x01\n" +
+	"\x16RegisterMutatorRequest\x121\n" +
+	"\trequester\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\trequester\x12+\n" +
+	"\x06target\x18\x02 \x01(\v2\x13.kuadrant.v1.PolicyR\x06target\x12\x18\n" +
+	"\abinding\x18\x03 \x01(\tR\abinding\x12\x1e\n" +
 	"\n" +
-	"expression\x18\x03 \x01(\tR\n" +
+	"expression\x18\x04 \x01(\tR\n" +
 	"expression2\xb4\x02\n" +
 	"\x10ExtensionService\x12=\n" +
 	"\x04Ping\x12\x18.kuadrant.v1.PingRequest\x1a\x19.kuadrant.v1.PongResponse\"\x00\x12G\n" +
@@ -448,20 +457,21 @@ var file_v1_kuadrant_proto_depIdxs = []int32{
 	5,  // 4: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
 	10, // 5: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
 	11, // 6: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
-	8,  // 7: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
-	0,  // 8: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
-	12, // 9: kuadrant.v1.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
-	2,  // 10: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
-	6,  // 11: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
-	1,  // 12: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
-	4,  // 13: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
-	3,  // 14: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
-	12, // 15: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
-	12, // [12:16] is the sub-list for method output_type
-	8,  // [8:12] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	8,  // 7: kuadrant.v1.RegisterMutatorRequest.requester:type_name -> kuadrant.v1.Policy
+	8,  // 8: kuadrant.v1.RegisterMutatorRequest.target:type_name -> kuadrant.v1.Policy
+	0,  // 9: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
+	12, // 10: kuadrant.v1.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
+	2,  // 11: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
+	6,  // 12: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
+	1,  // 13: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
+	4,  // 14: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
+	3,  // 15: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
+	12, // 16: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
+	13, // [13:17] is the sub-list for method output_type
+	9,  // [9:13] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_v1_kuadrant_proto_init() }

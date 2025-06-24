@@ -50,14 +50,37 @@ spec:
                     description: Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
                     type: object
                   tokenSource:
-                    default: cookie
-                    description: TokenSource informs where the JWT token will be found
-                    enum:
-                    - cookie
-                    - custom_header
-                    - authorization_header
-                    - query
-                    type: string
+                    description: |-
+                      TokenSource informs where the JWT token will be found in the request for authentication
+                      If omitted, it defaults to credentials passed in cookies.
+                    properties:
+                      authorizationHeader:
+                        properties:
+                          prefix:
+                            type: string
+                        type: object
+                      cookie:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      customHeader:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      queryString:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
                 type: object
               provider:
                 description: Provider holds the information for the OIDC provider

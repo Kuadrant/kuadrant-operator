@@ -20,6 +20,8 @@ import (
 	"net/url"
 	"path"
 
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
+
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/limitador-operator/pkg/helpers"
@@ -34,6 +36,7 @@ const (
 	DefaultCallbackPath      = "/auth/callback"
 	DefaultTokenExchangePath = "/oauth/token" //nolint:gosec
 	DefaultAuthorizePath     = "/oauth/authorize"
+	DefaultTokenSourceName   = "jwt"
 
 	StatusConditionReady string = "Ready"
 )
@@ -59,11 +62,10 @@ type OIDCPolicySpecProper struct {
 }
 
 type Auth struct {
-	// TokenSource informs where the JWT token will be found
+	// TokenSource informs where the JWT token will be found in the request for authentication
+	// If omitted, it defaults to credentials passed in cookies.
 	// +optional
-	// +kubebuilder:default:=cookie
-	// +kubebuilder:validation:Enum:=cookie;custom_header;authorization_header;query
-	TokenSource string `json:"tokenSource,omitempty"`
+	TokenSource *authorinov1beta3.Credentials `json:"tokenSource,omitempty"`
 	// Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
 	// +optional
 	Claims map[string]string `json:"claims,omitempty"`
@@ -226,6 +228,13 @@ func (p *OIDCPolicy) GetClaims() map[string]string {
 		return p.Spec.Auth.Claims
 	}
 	return make(map[string]string)
+}
+
+func (p *OIDCPolicy) GetTokenSource() *authorinov1beta3.Credentials {
+	if p.Spec.Auth != nil && p.Spec.Auth.TokenSource != nil {
+		return p.Spec.Auth.TokenSource
+	}
+	return &authorinov1beta3.Credentials{Cookie: &authorinov1beta3.Named{Name: DefaultTokenSourceName}}
 }
 
 func (p *OIDCPolicy) redirectURL(igwURL *url.URL) (*url.URL, error) {

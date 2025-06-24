@@ -86,7 +86,7 @@ func (r *OIDCPolicyReconciler) WithLogger(logger logr.Logger) *OIDCPolicyReconci
 
 // TODO: Current OIDC Workflow works only for Browser apps and Native apps that manage the Auth via browser
 // TODO: It only implements Authentication using the Authorization Code Flow (Recommended). Missing Implicit and Hybrid Flow
-// TODO: Implement TokenSource other than cookie
+// TODO: Expand TokenSource to work with credentials other than cookie
 
 func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("OIDCPolicyReconciler"))
@@ -374,9 +374,7 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayIn
 											IssuerUrl: pol.Spec.Provider.IssuerURL,
 										},
 									},
-									Credentials: authorinov1beta3.Credentials{
-										Cookie: &authorinov1beta3.Named{Name: "jwt"},
-									},
+									Credentials: credentialsSource(pol.GetTokenSource()),
 								},
 							},
 						},
@@ -447,7 +445,6 @@ func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewa
 
 func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
-	igwHostname := igw.Hostname
 	tokenExchangeURL, err := pol.GetIssuerTokenExchangeURL()
 	if err != nil {
 		return nil, err
@@ -461,9 +458,6 @@ func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatew
 		return nil, err
 	}
 
-	setCookie := fmt.Sprintf(`
-"jwt=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
-`, igwHostname, getSecureFlag(igw.Protocol))
 	callBodyCelExpression := fmt.Sprintf(`
 "code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0] + "&redirect_uri=%s&client_id=%s&grant_type=authorization_code"
 `, redirectURI, pol.Spec.Provider.ClientID)
@@ -555,15 +549,8 @@ allow = true`, igwURL, igwURL, authorizeURL)
 						Response: &kuadrantv1.MergeableResponseSpec{
 							Unauthorized: &kuadrantv1.MergeableDenyWithSpec{
 								DenyWithSpec: authorinov1beta3.DenyWithSpec{
-									Code: 302,
-									Headers: map[string]authorinov1beta3.ValueOrSelector{
-										"location": {
-											Expression: "auth.authorization.location.location",
-										},
-										"set-cookie": {
-											Expression: authorinov1beta3.CelExpression(setCookie),
-										},
-									},
+									Code:    302,
+									Headers: credentialsHeader(pol.GetTokenSource(), igw),
 								},
 							},
 						},
@@ -630,6 +617,43 @@ func mainAuthPolicyAuthorizationMutator(desired, existing *kuadrantv1.AuthPolicy
 	}
 
 	return update
+}
+
+func credentialsSource(tokenSource *authorinov1beta3.Credentials) authorinov1beta3.Credentials {
+	switch tokenSource.GetType() {
+	case authorinov1beta3.AuthorizationHeaderCredentials:
+		return authorinov1beta3.Credentials{AuthorizationHeader: &authorinov1beta3.Prefixed{Prefix: tokenSource.AuthorizationHeader.Prefix}}
+	case authorinov1beta3.CustomHeaderCredentials:
+		return authorinov1beta3.Credentials{CustomHeader: &authorinov1beta3.CustomHeader{Named: authorinov1beta3.Named{Name: tokenSource.CustomHeader.Name}}}
+	case authorinov1beta3.QueryStringCredentials:
+		return authorinov1beta3.Credentials{QueryString: &authorinov1beta3.Named{Name: tokenSource.QueryString.Name}}
+	case authorinov1beta3.CookieCredentials:
+		return authorinov1beta3.Credentials{Cookie: &authorinov1beta3.Named{Name: tokenSource.Cookie.Name}}
+	default:
+		return authorinov1beta3.Credentials{Cookie: &authorinov1beta3.Named{Name: kuadrantv1alpha1.DefaultTokenSourceName}}
+	}
+}
+
+func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGatewayInfo) map[string]authorinov1beta3.ValueOrSelector {
+	headers := make(map[string]authorinov1beta3.ValueOrSelector)
+	headers["location"] = authorinov1beta3.ValueOrSelector{Expression: "auth.authorization.location.location"}
+	switch tokenSource.GetType() {
+	case authorinov1beta3.AuthorizationHeaderCredentials:
+		headers["Authorization"] = authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`"%s " + auth.metadata.token.id_token`, tokenSource.AuthorizationHeader.Prefix))}
+	case authorinov1beta3.CustomHeaderCredentials:
+		headers[tokenSource.CustomHeader.Name] = authorinov1beta3.ValueOrSelector{Expression: "auth.metadata.token.id_token"}
+	case authorinov1beta3.CookieCredentials:
+		headers["set-cookie"] = cookieHeader(tokenSource.Cookie.Name, igw)
+	default:
+		headers["set-cookie"] = cookieHeader(kuadrantv1alpha1.DefaultTokenSourceName, igw)
+	}
+	return headers
+}
+
+func cookieHeader(cookieName string, igw *ingressGatewayInfo) authorinov1beta3.ValueOrSelector {
+	return authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`
+"%s=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
+`, cookieName, igw.Hostname, getSecureFlag(igw.Protocol)))}
 }
 
 func getSecureFlag(protocol gatewayapiv1.ProtocolType) string {

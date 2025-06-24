@@ -2,10 +2,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -72,14 +75,14 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		r.logger.Error(err, "failed to set controller reference")
 		return reconcile.Result{}, err
 	}
-	if err := r.ReconcileResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, reconcilers.CreateOnlyMutator); err != nil {
+	if err := r.ReconcileResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
 		r.logger.Error(err, "failed to reconcile desired ratelimitpolicy")
 		return reconcile.Result{}, err
 	}
 
 	r.logger.Info("cel expression", "expression", planPolicy.BuildCelExpression())
 
-	err = kuadrantCtx.AddDataTo(ctx, authPolicy, "plan", planPolicy.BuildCelExpression())
+	err = kuadrantCtx.AddDataTo(ctx, planPolicy, authPolicy, "plan", planPolicy.BuildCelExpression())
 	if err != nil {
 		r.logger.Error(err, "failed to add data to policy", "policy", authPolicy)
 		return reconcile.Result{}, err
@@ -101,4 +104,25 @@ func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *kuadrantv
 			},
 		},
 	}
+}
+
+func rlpSpecMutator(existingObj, desiredObj client.Object) (bool, error) {
+	var update bool
+	existing, ok := existingObj.(*kuadrantv1.RateLimitPolicy)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *kuadrantv1.RateLimitPolicy", existingObj)
+	}
+	desired, ok := desiredObj.(*kuadrantv1.RateLimitPolicy)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *kuadrantv1.RateLimitPolicy", desiredObj)
+	}
+	if !reflect.DeepEqual(desired.Spec.TargetRef, existing.Spec.TargetRef) {
+		existing.Spec.TargetRef = desired.Spec.TargetRef
+		update = true
+	}
+	if !reflect.DeepEqual(desired.Spec.RateLimitPolicySpecProper, existing.Spec.RateLimitPolicySpecProper) {
+		existing.Spec.RateLimitPolicySpecProper = desired.Spec.RateLimitPolicySpecProper
+		update = true
+	}
+	return update, nil
 }

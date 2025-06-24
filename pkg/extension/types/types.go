@@ -19,7 +19,7 @@ type Policy interface {
 type KuadrantCtx interface {
 	Resolve(context.Context, Policy, string, bool) (celref.Val, error)
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
-	AddDataTo(context.Context, Policy, string, string) error
+	AddDataTo(context.Context, Policy, Policy, string, string) error
 }
 
 type ReconcileFn func(ctx context.Context, request reconcile.Request, kuadrant KuadrantCtx) (reconcile.Result, error)

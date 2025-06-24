@@ -26,7 +26,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -129,7 +128,6 @@ func (m *Manager) HasSynced() bool {
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
 	mutex          sync.Mutex
-	subscriptions  map[string]subscription
 	registeredData *RegisteredDataStore
 	extpb.UnimplementedExtensionServiceServer
 }
@@ -143,7 +141,6 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
 	service := &extensionService{
 		dag:            dag,
-		subscriptions:  make(map[string]subscription),
 		registeredData: NewRegisteredDataStore(),
 	}
 
@@ -163,14 +160,14 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 
 		s.mutex.Lock()
 		if env, err := cel.NewEnv(opts...); err == nil {
-			for key, sub := range s.subscriptions {
-				if prg, err := env.Program(sub.cAst); err == nil {
-					if newVal, _, err := prg.Eval(sub.input); err == nil {
-						if newVal != sub.val {
-							sub.val = newVal
-							s.subscriptions[key] = sub
+			subscriptions := s.registeredData.GetAllSubscriptions()
+			for key, sub := range subscriptions {
+				if prg, err := env.Program(sub.CAst); err == nil {
+					if newVal, _, err := prg.Eval(sub.Input); err == nil {
+						if newVal != sub.Val {
+							s.registeredData.UpdateSubscriptionValue(key, newVal)
 							if err := stream.Send(&extpb.SubscribeResponse{Event: &extpb.Event{
-								Metadata: sub.input["self"].(*extpb.Policy).Metadata,
+								Metadata: sub.Input["self"].(*extpb.Policy).Metadata,
 							}}); err != nil {
 								s.mutex.Unlock()
 								return err
@@ -222,13 +219,11 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 			key += fmt.Sprintf("[%s/%s]%s/%s#%s\n", targetRef.Group, targetRef.Kind, targetRef.Namespace, targetRef.Name, targetRef.SectionName)
 		}
 		key += request.Expression
-		s.mutex.Lock()
-		s.subscriptions[key] = subscription{
-			cAst,
-			input,
-			val,
-		}
-		s.mutex.Unlock()
+		s.registeredData.SetSubscription(key, Subscription{
+			CAst:  cAst,
+			Input: input,
+			Val:   val,
+		})
 	}
 
 	if err != nil {
@@ -242,12 +237,6 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	return &extpb.ResolveResponse{
 		CelResult: value,
 	}, nil
-}
-
-type subscription struct {
-	cAst  *cel.Ast
-	input map[string]any
-	val   ref.Val
 }
 
 func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.RegisterMutatorRequest) (*emptypb.Empty, error) {

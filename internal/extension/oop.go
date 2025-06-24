@@ -27,12 +27,16 @@ import (
 	"time"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"k8s.io/utils/env"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 )
 
-const defaultUnixSocket = ".grpc.sock"
+var (
+	extensionConnType = env.GetString("EXTENSION_CONN_TYPE", "unix")
+	extensionConnAddr = env.GetString("EXTENSION_CONN_ADDRESS", ".grpc.sock")
+)
 
 type OOPExtension struct {
 	name       string
@@ -56,9 +60,14 @@ func NewOOPExtension(name string, location string, service extpb.ExtensionServic
 		}
 	}
 
+	socket := extensionConnAddr
+	if extensionConnType == "unix" {
+		socket = fmt.Sprintf("%s/%s/%s", location, name, extensionConnAddr)
+	}
+
 	return OOPExtension{
 		name:       name,
-		socket:     fmt.Sprintf("%s/%s/%s", location, name, defaultUnixSocket),
+		socket:     socket,
 		executable: executable,
 		service:    service,
 		logger:     logger.WithName(name),
@@ -151,7 +160,7 @@ func (p *OOPExtension) Stop() error {
 
 func (p *OOPExtension) startServer() error {
 	if p.server == nil {
-		ln, err := net.Listen("unix", p.socket)
+		ln, err := net.Listen(extensionConnType, p.socket)
 		if err != nil {
 			return err
 		}

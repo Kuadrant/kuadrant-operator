@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
+
 	"os"
 	"reflect"
 	"time"
@@ -207,16 +209,21 @@ type extensionClient struct {
 	client extpb.ExtensionServiceClient
 }
 
-func newExtensionClient(socketPath string) (*extensionClient, error) {
-	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+func newExtensionClient(targetAddr string) (*extensionClient, error) {
+	isUnixSocket := strings.HasPrefix(targetAddr, "/") || !strings.Contains(targetAddr, ":")
+
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	
+	if isUnixSocket {
+		targetAddr = fmt.Sprintf("unix://%s", targetAddr)
+		dialer := func(ctx context.Context, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", targetAddr)
+			}
+		
+		opts = append(opts, grpc.WithContextDialer(dialer))
 	}
 
-	conn, err := grpc.NewClient(
-		"unix://"+socketPath,
-		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	conn, err :=  grpc.NewClient(targetAddr, opts...)
 	if err != nil {
 		return nil, err
 	}

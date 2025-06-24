@@ -18,9 +18,11 @@ package extension
 
 import (
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 
@@ -69,14 +71,22 @@ type RegisteredDataEntry struct {
 	CAst       *cel.Ast
 }
 
+type Subscription struct {
+	CAst  *cel.Ast
+	Input map[string]any
+	Val   ref.Val
+}
+
 type RegisteredDataStore struct {
-	data  map[string]map[string]RegisteredDataEntry
-	mutex sync.RWMutex
+	data          map[string]map[string]RegisteredDataEntry
+	subscriptions map[string]Subscription
+	mutex         sync.RWMutex
 }
 
 func NewRegisteredDataStore() *RegisteredDataStore {
 	return &RegisteredDataStore{
-		data: make(map[string]map[string]RegisteredDataEntry),
+		data:          make(map[string]map[string]RegisteredDataEntry),
+		subscriptions: make(map[string]Subscription),
 	}
 }
 
@@ -156,6 +166,52 @@ func (r *RegisteredDataStore) ClearTarget(target string) int {
 		return count
 	}
 	return 0
+}
+
+func (r *RegisteredDataStore) SetSubscription(key string, subscription Subscription) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.subscriptions[key] = subscription
+}
+
+func (r *RegisteredDataStore) GetSubscription(key string) (Subscription, bool) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	sub, exists := r.subscriptions[key]
+	return sub, exists
+}
+
+func (r *RegisteredDataStore) GetAllSubscriptions() map[string]Subscription {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	result := make(map[string]Subscription, len(r.subscriptions))
+	maps.Copy(result, r.subscriptions)
+
+	return result
+}
+
+func (r *RegisteredDataStore) UpdateSubscriptionValue(key string, newVal ref.Val) bool {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if sub, exists := r.subscriptions[key]; exists {
+		sub.Val = newVal
+		r.subscriptions[key] = sub
+		return true
+	}
+	return false
+}
+
+func (r *RegisteredDataStore) DeleteSubscription(key string) bool {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if _, exists := r.subscriptions[key]; exists {
+		delete(r.subscriptions, key)
+		return true
+	}
+	return false
 }
 
 type RegisteredDataMutator struct {

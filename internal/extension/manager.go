@@ -164,11 +164,69 @@ func (m *Manager) HasSynced() bool {
 	return true
 }
 
+type RegisteredDataStore struct {
+	data  map[string]map[string]RegisteredDataEntry
+	mutex sync.RWMutex
+}
+
+func NewRegisteredDataStore() *RegisteredDataStore {
+	return &RegisteredDataStore{
+		data: make(map[string]map[string]RegisteredDataEntry),
+	}
+}
+
+func (r *RegisteredDataStore) Set(target, requester, binding string, entry RegisteredDataEntry) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	entryKey := fmt.Sprintf("%s#%s", requester, binding)
+
+	if _, exists := r.data[target]; !exists {
+		r.data[target] = make(map[string]RegisteredDataEntry)
+	}
+
+	r.data[target][entryKey] = entry
+}
+
+func (r *RegisteredDataStore) GetAllForTarget(target string) []RegisteredDataEntry {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	entries, exists := r.data[target]
+	if !exists || len(entries) == 0 {
+		return nil
+	}
+
+	result := make([]RegisteredDataEntry, 0, len(entries))
+	for _, entry := range entries {
+		result = append(result, entry)
+	}
+	return result
+}
+
+func (r *RegisteredDataStore) Delete(target, requester, binding string) bool {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	entryKey := fmt.Sprintf("%s#%s", requester, binding)
+
+	if targetMap, exists := r.data[target]; exists {
+		if _, entryExists := targetMap[entryKey]; entryExists {
+			delete(targetMap, entryKey)
+			if len(targetMap) == 0 {
+				delete(r.data, target)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
 	mutex          sync.Mutex
 	subscriptions  map[string]subscription
-	registeredData map[string][]registeredDataEntry
+	registeredData *RegisteredDataStore
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -182,12 +240,11 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 	service := &extensionService{
 		dag:            dag,
 		subscriptions:  make(map[string]subscription),
-		registeredData: make(map[string][]registeredDataEntry),
+		registeredData: NewRegisteredDataStore(),
 	}
 
 	mutator := &RegisteredDataMutator{
 		registeredData: service.registeredData,
-		mutex:          &service.mutex,
 	}
 	GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
 
@@ -292,18 +349,14 @@ type subscription struct {
 }
 
 type RegisteredDataMutator struct {
-	registeredData map[string][]registeredDataEntry
-	mutex          *sync.Mutex
+	registeredData *RegisteredDataStore
 }
 
 func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
 	policyKey := fmt.Sprintf("%s/%s/%s", policy.GetObjectKind().GroupVersionKind().Kind, policy.GetNamespace(), policy.GetName())
 
-	registeredEntries, exists := m.registeredData[policyKey]
-	if !exists || len(registeredEntries) == 0 {
+	registeredEntries := m.registeredData.GetAllForTarget(policyKey)
+	if len(registeredEntries) == 0 {
 		return nil
 	}
 
@@ -317,46 +370,46 @@ func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, 
 		authConfig.Spec.Response.Success.DynamicMetadata = make(map[string]authorinov1beta3.SuccessResponseSpec)
 	}
 
+	// Collect all properties from all entries
+	properties := make(map[string]authorinov1beta3.ValueOrSelector)
 	for _, entry := range registeredEntries {
-		authConfig.Spec.Response.Success.DynamicMetadata["kuadrant"] = authorinov1beta3.SuccessResponseSpec{
-			AuthResponseMethodSpec: authorinov1beta3.AuthResponseMethodSpec{
-				Json: &authorinov1beta3.JsonAuthResponseSpec{
-					Properties: map[string]authorinov1beta3.ValueOrSelector{
-						entry.binding: {
-							Expression: authorinov1beta3.CelExpression(entry.expression),
-						},
-					},
-				},
-			},
+		properties[entry.Binding] = authorinov1beta3.ValueOrSelector{
+			Expression: authorinov1beta3.CelExpression(entry.Expression),
 		}
+	}
+
+	// Set all properties at once
+	authConfig.Spec.Response.Success.DynamicMetadata["kuadrant"] = authorinov1beta3.SuccessResponseSpec{
+		AuthResponseMethodSpec: authorinov1beta3.AuthResponseMethodSpec{
+			Json: &authorinov1beta3.JsonAuthResponseSpec{
+				Properties: properties,
+			},
+		},
 	}
 
 	return nil
 }
 
-type registeredDataEntry struct {
-	binding    string
-	expression string
-	cAst       *cel.Ast
+type RegisteredDataEntry struct {
+	Requester  string
+	Binding    string
+	Expression string
+	CAst       *cel.Ast
 }
 
 func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.RegisterMutatorRequest) (*emptypb.Empty, error) {
 	// we should probably parse / check the cel expression here
-	policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+	targetKey := fmt.Sprintf("%s/%s/%s", request.Target.Metadata.Kind, request.Target.Metadata.Namespace, request.Target.Metadata.Name)
+	requesterKey := fmt.Sprintf("%s/%s/%s", request.Requester.Metadata.Kind, request.Requester.Metadata.Namespace, request.Requester.Metadata.Name)
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	entry := registeredDataEntry{
-		binding:    request.Binding,
-		expression: request.Expression,
-		cAst:       nil, //todo
+	entry := RegisteredDataEntry{
+		Requester:  requesterKey,
+		Binding:    request.Binding,
+		Expression: request.Expression,
+		CAst:       nil, //todo
 	}
 
-	if _, exists := s.registeredData[policyKey]; !exists {
-		s.registeredData[policyKey] = make([]registeredDataEntry, 0)
-	}
-	s.registeredData[policyKey] = append(s.registeredData[policyKey], entry)
+	s.registeredData.Set(targetKey, requesterKey, request.Binding, entry)
 
 	return &emptypb.Empty{}, nil
 }

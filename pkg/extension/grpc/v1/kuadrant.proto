@@ -56,7 +56,8 @@ message Event {
 }
 
 message RegisterMutatorRequest {
-  kuadrant.v1.Policy policy = 1;
-  string binding = 2;
-  string expression = 3;
+  kuadrant.v1.Policy requester = 1;
+  kuadrant.v1.Policy target = 2;
+  string binding = 3;
+  string expression = 4;
 }

@@ -196,6 +196,17 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes
 	return err
 }
 
+func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
+	resp, err := ec.extensionClient.client.ClearPolicy(ctx, &extpb.ClearPolicyRequest{
+		Policy: pbPolicy,
+	})
+
+	ec.logger.Info("cleared policy", "subscriptions", resp.GetClearedSubscriptions(), "mutators", resp.GetClearedMutators())
+	return err
+}
+
 func (ec *ExtensionController) Manager() ctrlruntime.Manager {
 	return ec.manager
 }

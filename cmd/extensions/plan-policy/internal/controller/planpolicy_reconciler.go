@@ -59,7 +59,11 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	if planPolicy.GetDeletionTimestamp() != nil {
 		r.logger.Info("planpolicy marked for deletion")
-		// todo(adam-cattermole): handle deletion case
+		err := kuadrantCtx.ClearPolicy(ctx, planPolicy)
+		if err != nil {
+			r.logger.Error(err, "failed to clear policy")
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{}, nil
 	}
 

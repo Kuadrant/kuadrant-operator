@@ -18,6 +18,7 @@ package extension
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -214,12 +215,9 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	val, _, err := prg.Eval(input)
 
 	if request.Subscribe {
-		key := ""
-		for _, targetRef := range request.Policy.TargetRefs {
-			key += fmt.Sprintf("[%s/%s]%s/%s#%s\n", targetRef.Group, targetRef.Kind, targetRef.Namespace, targetRef.Name, targetRef.SectionName)
-		}
-		key += request.Expression
-		s.registeredData.SetSubscription(key, Subscription{
+		policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+		subscriptionKey := fmt.Sprintf("%s#%s", policyKey, request.Expression)
+		s.registeredData.SetSubscription(subscriptionKey, Subscription{
 			CAst:  cAst,
 			Input: input,
 			Val:   val,
@@ -241,6 +239,19 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 
 func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.RegisterMutatorRequest) (*emptypb.Empty, error) {
 	// we should probably parse / check the cel expression here
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if request.Requester == nil || request.Target == nil {
+		return nil, errors.New("policy cannot be nil")
+	}
+	if request.Requester.Metadata == nil || request.Target.Metadata == nil {
+		return nil, errors.New("policy metadata cannot be nil")
+	}
+	if request.Requester.Metadata.Kind == "" || request.Requester.Metadata.Namespace == "" || request.Requester.Metadata.Name == "" ||
+		request.Target.Metadata.Kind == "" || request.Target.Metadata.Namespace == "" || request.Target.Metadata.Name == "" {
+		return nil, errors.New("policy kind, namespace, and name must be specified")
+	}
 	targetKey := fmt.Sprintf("%s/%s/%s", request.Target.Metadata.Kind, request.Target.Metadata.Namespace, request.Target.Metadata.Name)
 	requesterKey := fmt.Sprintf("%s/%s/%s", request.Requester.Metadata.Kind, request.Requester.Metadata.Namespace, request.Requester.Metadata.Name)
 
@@ -254,4 +265,28 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 	s.registeredData.Set(targetKey, requesterKey, request.Binding, entry)
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPolicyRequest) (*extpb.ClearPolicyResponse, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if request.Policy == nil {
+		return nil, errors.New("policy cannot be nil")
+	}
+	if request.Policy.Metadata == nil {
+		return nil, errors.New("policy metadata cannot be nil")
+	}
+	if request.Policy.Metadata.Kind == "" || request.Policy.Metadata.Namespace == "" || request.Policy.Metadata.Name == "" {
+		return nil, errors.New("policy kind, namespace, and name must be specified")
+	}
+
+	policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+
+	clearedMutators, clearedSubscriptions := s.registeredData.ClearPolicyData(policyKey)
+
+	return &extpb.ClearPolicyResponse{
+		ClearedMutators:      int32(clearedMutators),      // #nosec G115
+		ClearedSubscriptions: int32(clearedSubscriptions), // #nosec G115
+	}, nil
 }

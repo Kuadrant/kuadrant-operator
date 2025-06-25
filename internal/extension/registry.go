@@ -19,6 +19,7 @@ package extension
 import (
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 
 	"github.com/google/cel-go/cel"
@@ -212,6 +213,45 @@ func (r *RegisteredDataStore) DeleteSubscription(key string) bool {
 		return true
 	}
 	return false
+}
+
+func (r *RegisteredDataStore) ClearPolicyData(policyKey string) (clearedMutators int, clearedSubscriptions int) {
+	clearedMutators = r.ClearTarget(policyKey)
+	clearedSubscriptions = r.ClearPolicySubscriptions(policyKey)
+	return clearedMutators, clearedSubscriptions
+}
+
+func (r *RegisteredDataStore) ClearPolicySubscriptions(policyKey string) int {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	keysToDelete := make([]string, 0)
+	keyPrefix := policyKey + "#"
+	for key := range r.subscriptions {
+		if strings.HasPrefix(key, keyPrefix) {
+			keysToDelete = append(keysToDelete, key)
+		}
+	}
+
+	for _, key := range keysToDelete {
+		delete(r.subscriptions, key)
+	}
+
+	return len(keysToDelete)
+}
+
+func (r *RegisteredDataStore) GetPolicySubscriptions(policyKey string) []string {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	var subscriptionKeys []string
+	keyPrefix := policyKey + "#"
+	for key := range r.subscriptions {
+		if strings.HasPrefix(key, keyPrefix) {
+			subscriptionKeys = append(subscriptionKeys, key)
+		}
+	}
+	return subscriptionKeys
 }
 
 type RegisteredDataMutator struct {

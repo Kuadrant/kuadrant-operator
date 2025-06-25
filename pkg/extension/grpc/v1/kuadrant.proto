@@ -22,6 +22,8 @@ service ExtensionService {
   rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
   // Add data to an existing policy
   rpc RegisterMutator(RegisterMutatorRequest) returns (google.protobuf.Empty) {}
+  // Clear all subscriptions and registered mutators for a policy
+  rpc ClearPolicy(ClearPolicyRequest) returns (ClearPolicyResponse) {}
 }
 
 // The request message containing the time the request was dispatched.
@@ -60,4 +62,13 @@ message RegisterMutatorRequest {
   kuadrant.v1.Policy target = 2;
   string binding = 3;
   string expression = 4;
+}
+
+message ClearPolicyRequest {
+  kuadrant.v1.Policy policy = 1;
+}
+
+message ClearPolicyResponse {
+  int32 cleared_subscriptions = 1;
+  int32 cleared_mutators = 2;
 }

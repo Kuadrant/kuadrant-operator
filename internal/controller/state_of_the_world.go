@@ -770,7 +770,8 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			&certmanagerv1.Certificate{},
 			CertManagerCertificatesResource,
 			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*certmanagerv1.Certificate](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue))),
+			controller.FilterResourcesByLabel[*certmanagerv1.Certificate](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)),
+			controller.WithTransformerFunc[*certmanagerv1.Certificate](controller.TransformFunc[*certmanagerv1.Certificate](managedFieldsNilTransFunc))),
 		),
 		controller.WithRunnable("issuers watcher", controller.Watch(
 			&certmanagerv1.Issuer{},

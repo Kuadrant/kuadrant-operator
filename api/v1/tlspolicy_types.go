@@ -57,6 +57,7 @@ type CertificateSpec struct {
 	// If the `kind` field is set to `ClusterIssuer`, a ClusterIssuer with the
 	// provided name will be used.
 	// The `name` field in this stanza is required at all times.
+	// +kubebuilder:validation:XValidation:rule="!has(self.kind) || self.kind in ['Issuer', 'ClusterIssuer']",message="Invalid issuerRef.kind. The only supported values are blank, 'Issuer' and 'ClusterIssuer'"
 	IssuerRef certmanmetav1.ObjectReference `json:"issuerRef"`
 
 	// CommonName is a common name to be used on the Certificate.

@@ -109,6 +109,10 @@ spec:
                 required:
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: Invalid issuerRef.kind. The only supported values are blank,
+                    'Issuer' and 'ClusterIssuer'
+                  rule: '!has(self.kind) || self.kind in [''Issuer'', ''ClusterIssuer'']'
               privateKey:
                 description: Options to control private keys used for the Certificate.
                 properties:

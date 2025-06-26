@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"sync"
 
@@ -67,11 +66,6 @@ func (r *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 			return p.GetLocator(), err
 		}
 
-		// Validate IssuerRef kind is correct
-		if err := r.isValidIssuerKind(policy); err != nil {
-			return p.GetLocator(), err
-		}
-
 		// Validate Issuer is present on cluster through the topology
 		if err := r.isIssuerFound(topology, policy); err != nil {
 			return p.GetLocator(), err
@@ -125,16 +119,6 @@ func (r *TLSPoliciesValidator) isConflict(policies []machinery.Policy, p *kuadra
 
 	if ok {
 		return kuadrant.NewErrConflict(kuadrantv1.TLSPolicyGroupKind.Kind, client.ObjectKeyFromObject(conflictingP.(*kuadrantv1.TLSPolicy)).String(), errors.New("conflicting policy"))
-	}
-
-	return nil
-}
-
-// isValidIssuerKind Validates that the Issuer Ref kind is either empty, Issuer or ClusterIssuer
-func (r *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1.TLSPolicy) error {
-	if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
-		return kuadrant.NewErrInvalid(kuadrantv1.TLSPolicyGroupKind.Kind, fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
-			p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
 	}
 
 	return nil

@@ -72,15 +72,19 @@ func TestConfigEqual(t *testing.T) {
 							{
 								ServiceName: "ratelimit-service",
 								Scope:       "default/other",
-								Predicates: []string{
-									"source.address != '127.0.0.1'",
-								},
-								Data: []DataType{
+								ConditionalData: []ConditionalData{
 									{
-										Value: &Static{
-											Static: StaticSpec{
-												Key:   "limit.global__f63bec56",
-												Value: "1",
+										Predicates: []string{
+											"source.address != '127.0.0.1'",
+										},
+										Data: []DataType{
+											{
+												Value: &Static{
+													Static: StaticSpec{
+														Key:   "limit.global__f63bec56",
+														Value: "1",
+													},
+												},
 											},
 										},
 									},
@@ -95,15 +99,19 @@ func TestConfigEqual(t *testing.T) {
 					{
 						Actions: []Action{
 							{
-								Predicates: []string{
-									"source.address != '127.0.0.1'",
-								},
-								Data: []DataType{
+								ConditionalData: []ConditionalData{
 									{
-										Value: &Static{
-											Static: StaticSpec{
-												Key:   "limit.global__f63bec56",
-												Value: "1",
+										Predicates: []string{
+											"source.address != '127.0.0.1'",
+										},
+										Data: []DataType{
+											{
+												Value: &Static{
+													Static: StaticSpec{
+														Key:   "limit.global__f63bec56",
+														Value: "1",
+													},
+												},
 											},
 										},
 									},
@@ -179,7 +187,6 @@ func TestValidAction(t *testing.T) {
 			expectedAction: &Action{
 				ServiceName: "ratelimit-service",
 				Scope:       "some-scope",
-				Data:        nil,
 			},
 			yaml: `
 service: ratelimit-service
@@ -212,9 +219,10 @@ func TestInvalidAction(t *testing.T) {
 			yaml: `
 service: ratelimit-service
 scope: some-scope
-data:
-- other:
-    key: keyA
+conditionalData:
+  - data:
+    - other:
+        key: keyA
 `,
 		},
 		{
@@ -222,11 +230,12 @@ data:
 			yaml: `
 service: ratelimit-service
 scope: some-scope
-data:
-- static:
-    key: keyA
-  selector:
-    selector: selectorA
+conditionalData:
+  - data:
+    - static:
+        key: keyA
+      selector:
+        selector: selectorA
 `,
 		},
 	}
@@ -245,15 +254,19 @@ func TestAuthAccesses(t *testing.T) {
 	action := Action{
 		ServiceName: "ratelimit-service",
 		Scope:       "default/other",
-		Predicates: []string{
-			"source.address != '127.0.0.1'",
-		},
-		Data: []DataType{
+		ConditionalData: []ConditionalData{
 			{
-				Value: &Static{
-					Static: StaticSpec{
-						Key:   "limit.global__f63bec56",
-						Value: "1",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
 					},
 				},
 			},
@@ -267,15 +280,19 @@ func TestAuthAccesses(t *testing.T) {
 	action = Action{
 		ServiceName: "ratelimit-service",
 		Scope:       "default/other",
-		Predicates: []string{
-			"auth.something != '127.0.0.1'",
-		},
-		Data: []DataType{
+		ConditionalData: []ConditionalData{
 			{
-				Value: &Static{
-					Static: StaticSpec{
-						Key:   "limit.global__f63bec56",
-						Value: "1",
+				Predicates: []string{
+					"auth.something != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
 					},
 				},
 			},
@@ -289,15 +306,19 @@ func TestAuthAccesses(t *testing.T) {
 	action = Action{
 		ServiceName: "ratelimit-service",
 		Scope:       "default/other",
-		Predicates: []string{
-			"source.address != '127.0.0.1'",
-		},
-		Data: []DataType{
+		ConditionalData: []ConditionalData{
 			{
-				Value: &Expression{
-					ExpressionItem: ExpressionItem{
-						Key:   "limit.global__f63bec56",
-						Value: "auth.identity.anonymous",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.global__f63bec56",
+								Value: "auth.identity.anonymous",
+							},
+						},
 					},
 				},
 			},
@@ -311,15 +332,19 @@ func TestAuthAccesses(t *testing.T) {
 	action = Action{
 		ServiceName: "ratelimit-service",
 		Scope:       "default/other",
-		Predicates: []string{
-			"source.address != '127.0.0.1'",
-		},
-		Data: []DataType{
+		ConditionalData: []ConditionalData{
 			{
-				Value: &Static{
-					Static: StaticSpec{
-						Key:   "auth.global__f63bec56",
-						Value: "auth",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "auth.global__f63bec56",
+								Value: "auth",
+							},
+						},
 					},
 				},
 			},

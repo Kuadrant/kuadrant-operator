@@ -17,6 +17,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
 type GatewayPolicyDiscoverabilityReconciler struct {
@@ -33,6 +34,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) Subscription() *controller.Subs
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1.TLSPolicyGroupKind},
 			{Kind: &kuadrantv1.DNSPolicyGroupKind},
 		},

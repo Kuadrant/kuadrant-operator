@@ -29,7 +29,7 @@ spec:
             - /manager
           env:
             - name: RELATED_IMAGE_WASMSHIM
-              value: "oci://quay.io/kuadrant/wasm-shim:latest"
+              value: "oci://quay.io/kuadrant/wasm-shim:179-wasm-shim-call-out-to-limitador-to-check-token-usage-limits"
             - name: RELATED_IMAGE_CONSOLEPLUGIN
               value: "quay.io/kuadrant/console-plugin:latest"
             - name: OPERATOR_NAMESPACE

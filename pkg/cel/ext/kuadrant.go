@@ -3,11 +3,13 @@ package kuadrant
 import (
 	"math"
 
-	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
-
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"github.com/kuadrant/policy-machinery/machinery"
+
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 func CelExt(dag DAG) cel.EnvOption {
@@ -21,6 +23,7 @@ func CelExt(dag DAG) cel.EnvOption {
 
 type DAG interface {
 	FindGatewaysFor([]*v1.TargetRef) ([]*v1.Gateway, error)
+	FindPoliciesFor([]*v1.TargetRef, machinery.Policy) ([]*v1.Policy, error)
 }
 
 type kuadrantLib struct {
@@ -84,6 +87,28 @@ func (l kuadrantLib) CompileOptions() []cel.EnvOption {
 							gateway :=
 								registry.NativeToValue(gw)
 							list = append(list, gateway)
+						}
+						return registry.NativeToValue(list)
+					})),
+			),
+			cel.Function("findAuthPolicies",
+				cel.MemberOverload("authpolicies_for_policy",
+					[]*cel.Type{
+						cel.ObjectType("kuadrant.v1.Policy"),
+					}, cel.ListType(cel.ObjectType("kuadrant.v1.Policy")),
+					cel.UnaryBinding(func(arg ref.Val) ref.Val {
+						policy, err := refToProto[*v1.Policy](arg)
+						if err != nil {
+							return types.NewErr("pbError: %w", err)
+						}
+						policies, err := l.dag.FindPoliciesFor(policy.TargetRefs, &kuadrantv1.AuthPolicy{})
+						if err != nil {
+							return types.NewErr("cel-kuadrant(authpolicies_for_policy): %w", err)
+						}
+						list := make([]ref.Val, 0, len(policies))
+						for _, pol := range policies {
+							outPolicy := registry.NativeToValue(pol)
+							list = append(list, outPolicy)
 						}
 						return registry.NativeToValue(list)
 					})),

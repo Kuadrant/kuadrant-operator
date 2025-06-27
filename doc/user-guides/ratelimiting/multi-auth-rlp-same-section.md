@@ -19,7 +19,7 @@ We will define 2 users of the API, which can send requests to the API at differe
 
 ## Prerequisites
 
-- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/getting-started) guide for more information.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide for more information.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Setup environment variables

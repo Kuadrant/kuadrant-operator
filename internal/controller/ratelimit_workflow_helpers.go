@@ -265,7 +265,7 @@ func rateLimitPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err 
 }
 
 // TokenRateLimitPolicy helpers
-func TokenLimitNameToLimitadorIdentifier(tlrpKey k8stypes.NamespacedName, uniqueLimitName string) string {
+func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, uniqueLimitName string) string {
 	identifier := "tokenlimit."
 
 	for _, c := range uniqueLimitName {
@@ -276,7 +276,7 @@ func TokenLimitNameToLimitadorIdentifier(tlrpKey k8stypes.NamespacedName, unique
 		}
 	}
 
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", tlrpKey.String(), uniqueLimitName)))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", trlpKey.String(), uniqueLimitName)))
 	identifier += "__" + hex.EncodeToString(hash[:4])
 
 	return identifier

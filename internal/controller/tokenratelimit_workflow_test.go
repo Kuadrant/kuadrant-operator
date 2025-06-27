@@ -17,25 +17,25 @@ import (
 func TestTokenLimitNameToLimitadorIdentifier(t *testing.T) {
 	testCases := []struct {
 		name            string
-		tlrpKey         k8stypes.NamespacedName
+		trlpKey         k8stypes.NamespacedName
 		uniqueLimitName string
 		expected        *regexp.Regexp
 	}{
 		{
 			name:            "prepends the token limitador limit identifier prefix",
-			tlrpKey:         k8stypes.NamespacedName{Namespace: "testNS", Name: "tlrpA"},
+			trlpKey:         k8stypes.NamespacedName{Namespace: "testNS", Name: "trlpA"},
 			uniqueLimitName: "foo",
 			expected:        regexp.MustCompile(`^tokenlimit\.foo.+`),
 		},
 		{
 			name:            "creates deterministic identifier",
-			tlrpKey:         k8stypes.NamespacedName{Namespace: "testNS", Name: "tlrpA"},
+			trlpKey:         k8stypes.NamespacedName{Namespace: "testNS", Name: "trlpA"},
 			uniqueLimitName: "foo",
-			expected:        regexp.MustCompile(`^tokenlimit\.foo__5b761c62`),
+			expected:        regexp.MustCompile(`^tokenlimit\.foo__13adad8e`),
 		},
 		{
 			name:            "identifier includes unique limit name",
-			tlrpKey:         k8stypes.NamespacedName{Namespace: "testNS", Name: "tlrpA"},
+			trlpKey:         k8stypes.NamespacedName{Namespace: "testNS", Name: "trlpA"},
 			uniqueLimitName: "myUniqueLimit",
 			expected:        regexp.MustCompile(`tokenlimit\.myUniqueLimit.+`),
 		},
@@ -43,7 +43,7 @@ func TestTokenLimitNameToLimitadorIdentifier(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			identifier := TokenLimitNameToLimitadorIdentifier(tc.tlrpKey, tc.uniqueLimitName)
+			identifier := TokenLimitNameToLimitadorIdentifier(tc.trlpKey, tc.uniqueLimitName)
 			if !tc.expected.MatchString(identifier) {
 				subT.Errorf("identifier does not match, expected(%s), got (%s)", tc.expected, identifier)
 			}

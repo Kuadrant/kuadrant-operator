@@ -29,7 +29,7 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 	)
 	var (
 		testNamespace string
-		tlrpName      = "toystore-tlrp"
+		trlpName      = "toystore-trlp"
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
@@ -51,7 +51,7 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	Context("TLRP targeting Gateway", func() {
+	Context("TRLP targeting Gateway", func() {
 
 		// kuadrant mTLS is off
 		BeforeEach(func(ctx SpecContext) {
@@ -63,15 +63,15 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 		})
 
-		It("EnvoyFilter only created if TLRP is in the path to a route", func(ctx SpecContext) {
+		It("EnvoyFilter only created if TRLP is in the path to a route", func(ctx SpecContext) {
 			// create tokenratelimitpolicy
-			tlrp := &kuadrantv1alpha1.TokenRateLimitPolicy{
+			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "TokenRateLimitPolicy",
 					APIVersion: kuadrantv1alpha1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      tlrpName,
+					Name:      trlpName,
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
@@ -101,14 +101,14 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 					},
 				},
 			}
-			err := testClient().Create(ctx, tlrp)
+			err := testClient().Create(ctx, trlp)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Check TLRP status is available
-			tlrpKey := client.ObjectKey{Name: tlrpName, Namespace: testNamespace}
-			Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), tlrpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), tlrpKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.TokenRateLimitPolicyEnforcedCondition(ctx, testClient(), tlrpKey, kuadrant.PolicyReasonUnknown, "TokenRateLimitPolicy is not in the path to any existing routes"))
+			// Check TRLP status is available
+			trlpKey := client.ObjectKey{Name: trlpName, Namespace: testNamespace}
+			Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeFalse())
+			Expect(tests.TokenRateLimitPolicyEnforcedCondition(ctx, testClient(), trlpKey, kuadrant.PolicyReasonUnknown, "TokenRateLimitPolicy is not in the path to any existing routes"))
 
 			// no httproute and no filter
 			efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
@@ -143,15 +143,15 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 			Expect(patchValue["name"]).To(Equal("kuadrant-ratelimit-service"))
 		})
 
-		It("EnvoyFilter removed when TLRP is deleted", func(ctx SpecContext) {
+		It("EnvoyFilter removed when TRLP is deleted", func(ctx SpecContext) {
 			// create tokenratelimitpolicy
-			tlrp := &kuadrantv1alpha1.TokenRateLimitPolicy{
+			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "TokenRateLimitPolicy",
 					APIVersion: kuadrantv1alpha1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      tlrpName,
+					Name:      trlpName,
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
@@ -181,7 +181,7 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 					},
 				},
 			}
-			err := testClient().Create(ctx, tlrp)
+			err := testClient().Create(ctx, trlp)
 			Expect(err).ToNot(HaveOccurred())
 
 			// create httproute
@@ -190,9 +190,9 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
-			// TLRP is ready
-			tlrpKey := client.ObjectKey{Name: tlrpName, Namespace: testNamespace}
-			Eventually(tests.TokenRateLimitPolicyIsReady(ctx, testClient(), tlrpKey)).WithContext(ctx).Should(Succeed())
+			// TRLP is ready
+			trlpKey := client.ObjectKey{Name: trlpName, Namespace: testNamespace}
+			Eventually(tests.TokenRateLimitPolicyIsReady(ctx, testClient(), trlpKey)).WithContext(ctx).Should(Succeed())
 
 			// filter created
 			efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
@@ -202,8 +202,8 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
 
-			// delete TLRP
-			err = testClient().Delete(ctx, tlrp)
+			// delete TRLP
+			err = testClient().Delete(ctx, trlp)
 			Expect(err).ToNot(HaveOccurred())
 
 			// filter should be removed
@@ -215,8 +215,8 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 		})
 	})
 
-	Context("TLRP targeting HTTPRoute", func() {
-		It("EnvoyFilter created when TLRP targets HTTPRoute", func(ctx SpecContext) {
+	Context("TRLP targeting HTTPRoute", func() {
+		It("EnvoyFilter created when TRLP targets HTTPRoute", func(ctx SpecContext) {
 			// create httproute first
 			httpRoute := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			err := testClient().Create(ctx, httpRoute)
@@ -224,13 +224,13 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
 			// create tokenratelimitpolicy targeting HTTPRoute
-			tlrp := &kuadrantv1alpha1.TokenRateLimitPolicy{
+			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "TokenRateLimitPolicy",
 					APIVersion: kuadrantv1alpha1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      tlrpName,
+					Name:      trlpName,
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
@@ -260,12 +260,12 @@ var _ = Describe("TokenRateLimitPolicy Limitador Cluster EnvoyFilter controller"
 					},
 				},
 			}
-			err = testClient().Create(ctx, tlrp)
+			err = testClient().Create(ctx, trlp)
 			Expect(err).ToNot(HaveOccurred())
 
-			// TLRP ready
-			tlrpKey := client.ObjectKey{Name: tlrpName, Namespace: testNamespace}
-			Eventually(tests.TokenRateLimitPolicyIsReady(ctx, testClient(), tlrpKey)).WithContext(ctx).Should(Succeed())
+			// TRLP ready
+			trlpKey := client.ObjectKey{Name: trlpName, Namespace: testNamespace}
+			Eventually(tests.TokenRateLimitPolicyIsReady(ctx, testClient(), trlpKey)).WithContext(ctx).Should(Succeed())
 
 			// filter should be created
 			efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}

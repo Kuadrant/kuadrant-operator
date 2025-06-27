@@ -3,11 +3,11 @@ name: Test
 on:
   workflow_dispatch:
   push:
-    branches: ['main', 'release-v*']
+    branches: ['main']
   pull_request:
     branches: ['*']
   merge_group:
-    types: [ checks_requested ]
+    types: [checks_requested]
   schedule:
     - cron: "15 1 * * *"
 
@@ -287,6 +287,56 @@ jobs:
         uses: actions/checkout@v4
       - name: Check bundles and manifests
         run: make verify-prepare-release
+
+  verify-controller-manifests:
+    name: Validate set of controller-gen manifests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Checkout code at git ref
+        uses: actions/checkout@v4
+      - name: Check bundles and manifests
+        run: make verify-controller-manifests
+
+  verify-bundle:
+    name: Verify bundle
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Run make verify-bundle
+        run: |
+          make verify-bundle
+
+  verify-helm-charts:
+    name: Verify helm charts
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.22.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.22.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Run make verify-helm-charts
+        run: |
+          make verify-helm-charts
 
   verify-fmt:
     name: Verify fmt

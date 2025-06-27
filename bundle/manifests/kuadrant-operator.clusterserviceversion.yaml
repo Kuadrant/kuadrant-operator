@@ -98,6 +98,59 @@ metadata:
           }
         },
         {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "TokenRateLimitPolicy",
+          "metadata": {
+            "name": "token-limit-free",
+            "namespace": "gateway-system"
+          },
+          "spec": {
+            "limits": {
+              "free": {
+                "counters": [
+                  {
+                    "expression": "auth.identity.userid"
+                  }
+                ],
+                "rates": [
+                  {
+                    "limit": 20000,
+                    "window": "1d"
+                  }
+                ],
+                "when": [
+                  {
+                    "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"free\")"
+                  }
+                ]
+              },
+              "gold": {
+                "counters": [
+                  {
+                    "expression": "auth.identity.userid"
+                  }
+                ],
+                "rates": [
+                  {
+                    "limit": 200000,
+                    "window": "1d"
+                  }
+                ],
+                "when": [
+                  {
+                    "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"gold\")"
+                  }
+                ]
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "Gateway",
+              "name": "my-llm-gateway"
+            }
+          }
+        },
+        {
           "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
@@ -151,6 +204,9 @@ spec:
       kind: TLSPolicy
       name: tlspolicies.kuadrant.io
       version: v1
+    - kind: TokenRateLimitPolicy
+      name: tokenratelimitpolicies.kuadrant.io
+      version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:
@@ -327,6 +383,7 @@ spec:
           - kuadrants
           - ratelimitpolicies
           - tlspolicies
+          - tokenratelimitpolicies
           verbs:
           - get
           - list
@@ -341,6 +398,7 @@ spec:
           - kuadrants/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
+          - tokenratelimitpolicies/finalizers
           verbs:
           - update
         - apiGroups:
@@ -351,6 +409,7 @@ spec:
           - kuadrants/status
           - ratelimitpolicies/status
           - tlspolicies/status
+          - tokenratelimitpolicies/status
           verbs:
           - get
           - patch

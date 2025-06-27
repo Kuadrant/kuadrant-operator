@@ -672,7 +672,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
 		}, testTimeOut)
 	})
 

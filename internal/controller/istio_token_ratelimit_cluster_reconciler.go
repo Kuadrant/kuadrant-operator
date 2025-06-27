@@ -18,7 +18,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -26,13 +26,13 @@ import (
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
-// IstioRateLimitClusterReconciler reconciles Istio EnvoyFilter custom resources for rate limiting
-type IstioRateLimitClusterReconciler struct {
+// IstioTokenRateLimitClusterReconciler reconciles Istio EnvoyFilter custom resources for token rate limiting
+type IstioTokenRateLimitClusterReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-// IstioRateLimitClusterReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources for rate limiting
-func (r *IstioRateLimitClusterReconciler) Subscription() controller.Subscription {
+// IstioTokenRateLimitClusterReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources for token rate limiting
+func (r *IstioTokenRateLimitClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
@@ -40,17 +40,17 @@ func (r *IstioRateLimitClusterReconciler) Subscription() controller.Subscription
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		},
 	}
 }
 
-func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("IstioRateLimitClusterReconciler")
+func (r *IstioTokenRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("IstioTokenRateLimitClusterReconciler")
 
-	logger.V(1).Info("building istio rate limit clusters")
-	defer logger.V(1).Info("finished building istio rate limit clusters")
+	logger.V(1).Info("building istio token rate limit clusters")
+	defer logger.V(1).Info("finished building istio token rate limit clusters")
 
 	kuadrant := GetKuadrantFromTopology(topology)
 	if kuadrant == nil {
@@ -63,13 +63,13 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		return nil
 	}
 
-	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	effectivePolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies)
 	if !ok {
-		logger.Error(ErrMissingStateEffectiveRateLimitPolicies, "failed to get effective rate limit policies from state")
+		logger.Error(ErrMissingStateEffectiveTokenRateLimitPolicies, "failed to get effective token rate limit policies from state")
 		return nil
 	}
 
-	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
+	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveTokenRateLimitPolicies)), func(effectivePolicy EffectiveTokenRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
 	}), func(gateway *machinery.Gateway) string {
@@ -138,13 +138,13 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		}
 	}
 
-	state.Store(StateIstioRateLimitClustersModified, modifiedGateways)
+	state.Store(StateIstioTokenRateLimitClustersModified, modifiedGateways)
 
 	// cleanup istio clusters for gateways that are not in the effective policies
 	staleEnvoyFilters := topology.Objects().Items(func(o machinery.Object) bool {
 		_, desired := desiredEnvoyFilters[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
 		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind &&
-			labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) &&
+			labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(TokenRateLimitObjectLabels()) &&
 			!desired
 	})
 	for _, envoyFilter := range staleEnvoyFilters {
@@ -157,7 +157,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway, mtls bool) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+func (r *IstioTokenRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway, mtls bool) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
@@ -166,7 +166,7 @@ func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RateLimitClusterName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
-			Labels:    RateLimitObjectLabels(),
+			Labels:    TokenRateLimitObjectLabels(),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),

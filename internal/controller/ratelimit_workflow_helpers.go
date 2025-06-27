@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"unicode"
 
@@ -203,12 +204,19 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, stat
 // The only action of the rule is the ratelimit service, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
 func wasmActionFromLimit(limit *kuadrantv1.Limit, limitIdentifier, scope string, topLevelPredicates kuadrantv1.WhenPredicates) wasm.Action {
-	return wasm.Action{
+	action := wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
 		Predicates:  topLevelPredicates.Extend(limit.When).Into(),
 		Data:        wasmDataFromLimit(limitIdentifier, limit),
 	}
+
+	for idx := range action.Predicates {
+		action.Predicates[idx] = strings.Replace(action.Predicates[idx], "request.mcp.tool", "requestBodyJSON('params.name')", 1)
+
+	}
+
+	return action
 }
 
 func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1.Limit) []wasm.DataType {
@@ -229,7 +237,7 @@ func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1.Limit) []wasm.D
 				Value: &wasm.Expression{
 					ExpressionItem: wasm.ExpressionItem{
 						Key:   string(counter.Expression),
-						Value: string(counter.Expression),
+						Value: strings.Replace(string(counter.Expression), "request.mcp.tool", "requestBodyJSON('params.name')", 1),
 					},
 				},
 			},

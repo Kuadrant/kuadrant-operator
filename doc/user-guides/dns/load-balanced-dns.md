@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document will show you how to setup a load balanced DNS configuration using the (DNSPolicy)[https://docs.kuadrant.io/latest/kuadrant-operator/doc/reference/dnspolicy/] API. When we say "load balanced", this means we configure the DNS provider (AWS, GCP etc) to return different gateway/loadbalancer addresses to queries from DNS clients based on specific weighting and geo location configuration.
+This document will show you how to setup a load balanced DNS configuration using the [DNSPolicy](https://docs.kuadrant.io/latest/kuadrant-operator/doc/reference/dnspolicy/) API. When we say "load balanced", this means we configure the DNS provider (AWS, GCP etc) to return different gateway/loadbalancer addresses to queries from DNS clients based on specific weighting and geo location configuration.
 
 
 ### When should I use a load balanced DNS policy?
@@ -20,7 +20,7 @@ It is most useful to use the load balancing options when targeting multiple gate
 
 A DNSPolicy acts against a target Gateway or a target listener within a gateway by processing the hostnames on the targeted listeners. Using these it can create dns records using the address exposed in the Gateway's status block. In order for Kuadrant's DNS component to do this, it must be able to access and know which DNS provider to use. This is done through the creation of a dns provider secret containing the needed credentials and the provider identifier.
 
-(Learn more about how to setup a DNS Provider)[https://docs.kuadrant.io/latest/dns-operator/docs/provider/]
+[Learn more about how to setup a DNS Provider](https://docs.kuadrant.io/latest/dns-operator/docs/provider/)
 
 
 ## LoadBalanced DNSPolicy creation and attachment
@@ -69,15 +69,15 @@ To read more detail about each of the fields in the loadbalanced section take a 
 
 :**Note:** :exclamation: For more information please the official AWS documentation 
 
-To see all regions supported by AWS Route 53, please see the official (documentation)[https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html]. With Route 53 when setting a continent code use a "GEO-" prefix otherwise it will be considered a country code. 
+To see all regions supported by AWS Route 53, please see the official [documentation](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html). With Route 53 when setting a continent code use a "GEO-" prefix otherwise it will be considered a country code. 
 
 ##### Regions supported by GCP Cloud DNS
 
-To see all regions supported by GCP Cloud DNS, please see the official (documentation)[https://cloud.google.com/compute/docs/regions-zones]
+To see all regions supported by GCP Cloud DNS, please see the official [documentation](https://cloud.google.com/compute/docs/regions-zones)
 
 ##### Regions and Countries supported by Azure Cloud DNS
 
-To see the different values you can use for the geo based DNS with Azure take a look at the following (documentation)[https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions]
+To see the different values you can use for the geo based DNS with Azure take a look at the following [documentation](https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions)
 
 ### Moving from non load balanced to load balanced or vice versa
 

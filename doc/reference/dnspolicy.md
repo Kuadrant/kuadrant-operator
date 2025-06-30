@@ -32,7 +32,7 @@
 
 | **Field**          | **Type**                          | **Required** | **Description**                                                                                           |
 |--------------------|-----------------------------------|:------------:|-----------------------------------------------------------------------------------------------------------|
-| `providerRefs`     | (ProviderRef)[#providerref]     |     Yes      | max 1 reference. This is an array of providerRef that points to a local secret(s) that contains the required provider auth values
+| `providerRefs`     | [][ProviderRef](#providerref)     |     Yes      | max 1 reference. This is an array of providerRef that points to a local secret(s) that contains the required provider auth values
 
 ## ProviderRef
 

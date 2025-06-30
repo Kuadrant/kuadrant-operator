@@ -215,34 +215,30 @@ func (r *ResilienceRateLimitingReconciler) configureLimitador(ctx context.Contex
 
 	if !limitadorResourceRequestsIsConfigured(lObj) {
 		logger.Info("setting the Resource Request", "status", "working")
-		cpu, err := resource.ParseQuantity(Resource10m)
-		if err != nil {
-			logger.Error(err, "failed to parse resurce cpu string", "status", "error")
-		}
-		memory, err := resource.ParseQuantity(Resource10Mi)
-		if err != nil {
-			logger.Error(err, "failed to parse resurce memory string", "status", "error")
-		}
 
 		if lObj.Spec.ResourceRequirements == nil {
 			lObj.Spec.ResourceRequirements = &corev1.ResourceRequirements{}
 		}
 
+		if lObj.Spec.ResourceRequirements.Requests == nil {
+			lObj.Spec.ResourceRequirements.Requests = make(corev1.ResourceList)
+		}
+
 		if lObj.Spec.ResourceRequirements.Requests.Cpu().Value() == 0 {
-			if lObj.Spec.ResourceRequirements.Requests == nil {
-				lObj.Spec.ResourceRequirements.Requests = corev1.ResourceList{corev1.ResourceCPU: cpu}
-			} else {
-				lObj.Spec.ResourceRequirements.Requests[corev1.ResourceCPU] = cpu
+			cpu, err := resource.ParseQuantity(Resource10m)
+			if err != nil {
+				logger.Error(err, "failed to parse resurce cpu string", "status", "error")
 			}
+			lObj.Spec.ResourceRequirements.Requests[corev1.ResourceCPU] = cpu
 			update = true
 		}
 
 		if lObj.Spec.ResourceRequirements.Requests.Memory().Value() == 0 {
-			if lObj.Spec.ResourceRequirements.Requests == nil {
-				lObj.Spec.ResourceRequirements.Requests = corev1.ResourceList{corev1.ResourceMemory: memory}
-			} else {
-				lObj.Spec.ResourceRequirements.Requests[corev1.ResourceMemory] = memory
+			memory, err := resource.ParseQuantity(Resource10Mi)
+			if err != nil {
+				logger.Error(err, "failed to parse resurce memory string", "status", "error")
 			}
+			lObj.Spec.ResourceRequirements.Requests[corev1.ResourceMemory] = memory
 			update = true
 		}
 	}

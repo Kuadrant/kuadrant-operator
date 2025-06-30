@@ -2,8 +2,8 @@
 
 - [DNSPolicy](#DNSPolicy)
 - [DNSPolicySpec](#dnspolicyspec)
-  - [excludeAddresses]()
-  - [ProviderRefs](#providerRefs)
+  - [excludeAddresses](#excludeaddresses)
+  - [ProviderRefs](#providerrefs)
   - [HealthCheckSpec](#healthcheckspec)
   - [LoadBalancingSpec](#loadbalancingspec)
     - [LoadBalancingWeighted](#loadbalancingweighted)

@@ -115,11 +115,11 @@ spec:
     weight: 100
     # This is the actual GEO location to set for records created by this policy. This can and should be different if you have multiple gateways across multiple geographic areas.
 
-    # AWS: To see all regions supported by AWS Route 53, please see the official (documentation)[https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html]. With Route 53 when setting a continent code use a "GEO-" prefix otherwise it will be considered a country code.
+    # AWS: To see all regions supported by AWS Route 53, please see the official [documentation](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html). With Route 53 when setting a continent code use a "GEO-" prefix otherwise it will be considered a country code.
 
-    # GCP: To see all regions supported by GCP Cloud DNS, please see the official (documentation)[https://cloud.google.com/compute/docs/regions-zones]
+    # GCP: To see all regions supported by GCP Cloud DNS, please see the official [documentation](https://cloud.google.com/compute/docs/regions-zones)
 
-    #To see the different values you can use for the geo based DNS with Azure take a look at the following (documentation)[https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions]
+    #To see the different values you can use for the geo based DNS with Azure take a look at the following [documentation](https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions)
     geo: IE
 
   # (optional) health check specification

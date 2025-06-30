@@ -32,7 +32,7 @@
 
 | **Field**          | **Type**                          | **Required** | **Description**                                                                                           |
 |--------------------|-----------------------------------|:------------:|-----------------------------------------------------------------------------------------------------------|
-| `providerRefs`     | [][ProviderRef](#providerref)     |     Yes      | max 1 reference. This is an array of providerRef that points to a local secret(s) that contains the required provider auth values
+| `providerRefs`     | (ProviderRef)[#providerref]     |     Yes      | max 1 reference. This is an array of providerRef that points to a local secret(s) that contains the required provider auth values
 
 ## ProviderRef
 
@@ -51,7 +51,6 @@
 | **Field**  | **Type** | **Required** | **Description**                                                                        |
 |------------|----------|:------------:|----------------------------------------------------------------------------------------|
 | `name`     | String   |     Yes      | Name of the secret in the same namespace that contains the provider credentials
-|--------------------|------------|:------------:|-----------------------------------------------------------------------------------------------------------|
 | `path`         | String     |     Yes      | Path is the path to append to the host to reach the expected health check. Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common              | 
 | `port`             | Number     |     Yes      | Port to connect to the host on. Must be either 80, 443 or 1024-49151                          | 
 | `protocol`         | String     |     Yes      | Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"                           | 
@@ -73,7 +72,7 @@
 | **Field**            | **Type**                                                                                                    | **Description**                                                                                                                     |
 |----------------------|-------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `observedGeneration` | String                                                                                                      | Number of the last observed generation of the resource. Use it to check if the status info is up to date with latest resource spec. |
-| `conditions`         | [][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition)         | List of conditions that define that status of the resource.                                                                         |
+| `conditions`         | [](Kubernetes meta/v1.Condition)[https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition]         | List of conditions that define that status of the resource.                                                                         |
 | `healthCheck`        | [HealthCheckStatus](#healthcheckstatus)                                                                     | HealthCheck status.                                                                                                                 |
 | `recordConditions`   | [String][][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition) | Status of individual DNSRecords owned by this policy.                                                                               |
 

@@ -171,6 +171,7 @@ rules:
   - kuadrants
   - ratelimitpolicies
   - tlspolicies
+  - tokenratelimitpolicies
   verbs:
   - get
   - list
@@ -185,6 +186,7 @@ rules:
   - kuadrants/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
+  - tokenratelimitpolicies/finalizers
   verbs:
   - update
 - apiGroups:
@@ -195,6 +197,7 @@ rules:
   - kuadrants/status
   - ratelimitpolicies/status
   - tlspolicies/status
+  - tokenratelimitpolicies/status
   verbs:
   - get
   - patch

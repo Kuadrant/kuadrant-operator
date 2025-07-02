@@ -15,6 +15,7 @@ import (
 	"k8s.io/utils/env"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
@@ -44,6 +45,7 @@ var (
 		{Kind: &machinery.GatewayGroupKind},
 		{Kind: &machinery.HTTPRouteGroupKind},
 		{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+		{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 		{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		{Kind: &kuadrantauthorino.AuthConfigGroupKind},
@@ -65,12 +67,17 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 
+//+kubebuilder:rbac:groups=kuadrant.io,resources=tokenratelimitpolicies,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=tokenratelimitpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=tokenratelimitpolicies/finalizers,verbs=update
+
 func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
 	isGatewayProviderInstalled := isIstioInstalled || isEnvoyGatewayInstalled
 	dataPlanePoliciesValidation := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
 			(&AuthPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile,
 			(&RateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile,
+			(&TokenRateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile,
 		},
 	}
 
@@ -79,6 +86,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 			Tasks: []controller.ReconcileFunc{
 				(&EffectiveAuthPolicyReconciler{client: client}).Subscription().Reconcile,
 				(&EffectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
+				(&EffectiveTokenRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
 			},
 		}).Run,
 		Tasks: []controller.ReconcileFunc{
@@ -111,6 +119,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 		Tasks: []controller.ReconcileFunc{
 			(&AuthPolicyStatusUpdater{client: client}).Subscription().Reconcile,
 			(&RateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
+			(&TokenRateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
 		},
 	}
 

@@ -1,28 +1,29 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
+  creationTimestamp: null
   labels:
+    app: kuadrant
     gateway.networking.k8s.io/policy: inherited
-  name: ratelimitpolicies.kuadrant.io
+  name: tokenratelimitpolicies.kuadrant.io
 spec:
   group: kuadrant.io
   names:
-    kind: RateLimitPolicy
-    listKind: RateLimitPolicyList
-    plural: ratelimitpolicies
-    singular: ratelimitpolicy
+    kind: TokenRateLimitPolicy
+    listKind: TokenRateLimitPolicyList
+    plural: tokenratelimitpolicies
+    singular: tokenratelimitpolicy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: RateLimitPolicy Accepted
+    - description: TokenRateLimitPolicy Accepted
       jsonPath: .status.conditions[?(@.type=="Accepted")].status
       name: Accepted
       priority: 2
       type: string
-    - description: RateLimitPolicy Enforced
+    - description: TokenRateLimitPolicy Enforced
       jsonPath: .status.conditions[?(@.type=="Enforced")].status
       name: Enforced
       priority: 2
@@ -45,11 +46,11 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1
+    name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: RateLimitPolicy enables rate limiting for service workloads in
-          a Gateway API network
+        description: TokenRateLimitPolicy enables token-based rate limiting for service
+          workloads in a Gateway API network
         properties:
           apiVersion:
             description: |-
@@ -72,12 +73,13 @@ spec:
             properties:
               defaults:
                 description: |-
-                  Rules to apply as defaults. Can be overridden by more specific policiy rules lower in the hierarchy and by less specific policy overrides.
+                  Rules to apply as defaults. Can be overridden by more specific policy rules lower in the hierarchy and by less specific policy overrides.
                   Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
                   limits:
                     additionalProperties:
-                      description: Limit represents a complete rate limit configuration
+                      description: TokenLimit represents a complete token-based rate
+                        limit configuration
                       properties:
                         counters:
                           description: Counters defines additional rate limit counters
@@ -100,7 +102,8 @@ spec:
                             type: object
                           type: array
                         rates:
-                          description: Rates holds the list of limit rates
+                          description: Rates holds the list of limit rates for token-based
+                            limiting
                           items:
                             description: Rate defines the actual rate limit that will
                               be used when there is a match
@@ -121,7 +124,7 @@ spec:
                           type: array
                         when:
                           description: |-
-                            When holds a list of "limit-level" `Predicate`s
+                            When holds a list of "limit-level" `Predicate`s for token-based conditions
                             Called also "soft" conditions as route selectors must also match
                           items:
                             description: Predicate defines one CEL expression that
@@ -135,8 +138,8 @@ spec:
                             type: object
                           type: array
                       type: object
-                    description: Limits holds the struct of limits indexed by a unique
-                      name
+                    description: Limits holds the struct of token-based limits indexed
+                      by a unique name
                     type: object
                   strategy:
                     default: atomic
@@ -165,7 +168,8 @@ spec:
                 type: object
               limits:
                 additionalProperties:
-                  description: Limit represents a complete rate limit configuration
+                  description: TokenLimit represents a complete token-based rate limit
+                    configuration
                   properties:
                     counters:
                       description: Counters defines additional rate limit counters
@@ -187,7 +191,8 @@ spec:
                         type: object
                       type: array
                     rates:
-                      description: Rates holds the list of limit rates
+                      description: Rates holds the list of limit rates for token-based
+                        limiting
                       items:
                         description: Rate defines the actual rate limit that will
                           be used when there is a match
@@ -208,7 +213,7 @@ spec:
                       type: array
                     when:
                       description: |-
-                        When holds a list of "limit-level" `Predicate`s
+                        When holds a list of "limit-level" `Predicate`s for token-based conditions
                         Called also "soft" conditions as route selectors must also match
                       items:
                         description: Predicate defines one CEL expression that must
@@ -222,8 +227,8 @@ spec:
                         type: object
                       type: array
                   type: object
-                description: Limits holds the struct of limits indexed by a unique
-                  name
+                description: Limits holds the struct of token-based limits indexed
+                  by a unique name
                 type: object
               overrides:
                 description: |-
@@ -232,7 +237,8 @@ spec:
                 properties:
                   limits:
                     additionalProperties:
-                      description: Limit represents a complete rate limit configuration
+                      description: TokenLimit represents a complete token-based rate
+                        limit configuration
                       properties:
                         counters:
                           description: Counters defines additional rate limit counters
@@ -255,7 +261,8 @@ spec:
                             type: object
                           type: array
                         rates:
-                          description: Rates holds the list of limit rates
+                          description: Rates holds the list of limit rates for token-based
+                            limiting
                           items:
                             description: Rate defines the actual rate limit that will
                               be used when there is a match
@@ -276,7 +283,7 @@ spec:
                           type: array
                         when:
                           description: |-
-                            When holds a list of "limit-level" `Predicate`s
+                            When holds a list of "limit-level" `Predicate`s for token-based conditions
                             Called also "soft" conditions as route selectors must also match
                           items:
                             description: Predicate defines one CEL expression that
@@ -290,8 +297,8 @@ spec:
                             type: object
                           type: array
                       type: object
-                    description: Limits holds the struct of limits indexed by a unique
-                      name
+                    description: Limits holds the struct of token-based limits indexed
+                      by a unique name
                     type: object
                   strategy:
                     default: atomic
@@ -475,3 +482,9 @@ spec:
     storage: true
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

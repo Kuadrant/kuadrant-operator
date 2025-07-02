@@ -7,6 +7,7 @@ resources:
   - bases/kuadrant.io_kuadrants.yaml
   - bases/kuadrant.io_dnspolicies.yaml
   - bases/kuadrant.io_tlspolicies.yaml
+  - bases/kuadrant.io_tokenratelimitpolicies.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

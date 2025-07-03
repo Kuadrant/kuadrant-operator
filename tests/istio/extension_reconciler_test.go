@@ -394,48 +394,46 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-											Value: "1",
-										},
+			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+				[]wasm.ConditionalData{
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+										Value: "1",
 									},
 								},
 							},
 						},
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-								"auth.identity.group != 'admin'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-											Value: "1",
-										},
+					},
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+							"auth.identity.group != 'admin'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+										Value: "1",
 									},
 								},
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "auth.identity.username",
-											Value: "auth.identity.username",
-										},
+							},
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
 									},
 								},
 							},
@@ -454,48 +452,46 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-											Value: "1",
-										},
+			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+				[]wasm.ConditionalData{
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+										Value: "1",
 									},
 								},
 							},
 						},
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-								"auth.identity.group != 'admin'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-											Value: "1",
-										},
+					},
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+							"auth.identity.group != 'admin'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+										Value: "1",
 									},
 								},
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "auth.identity.username",
-											Value: "auth.identity.username",
-										},
+							},
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
 									},
 								},
 							},
@@ -514,48 +510,46 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-											Value: "1",
-										},
+			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+				[]wasm.ConditionalData{
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+										Value: "1",
 									},
 								},
 							},
 						},
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-								"auth.identity.group != 'admin'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-											Value: "1",
-										},
+					},
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+							"auth.identity.group != 'admin'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+										Value: "1",
 									},
 								},
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "auth.identity.username",
-											Value: "auth.identity.username",
-										},
+							},
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
 									},
 								},
 							},
@@ -573,48 +567,46 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-											Value: "1",
-										},
+			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+				[]wasm.ConditionalData{
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+										Value: "1",
 									},
 								},
 							},
 						},
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-								"auth.identity.group != 'admin'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-											Value: "1",
-										},
+					},
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+							"auth.identity.group != 'admin'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+										Value: "1",
 									},
 								},
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "auth.identity.username",
-											Value: "auth.identity.username",
-										},
+							},
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
 									},
 								},
 							},
@@ -633,48 +625,46 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-											Value: "1",
-										},
+			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+				[]wasm.ConditionalData{
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+										Value: "1",
 									},
 								},
 							},
 						},
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-								"auth.identity.group != 'admin'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-											Value: "1",
-										},
+					},
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+							"auth.identity.group != 'admin'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+										Value: "1",
 									},
 								},
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "auth.identity.username",
-											Value: "auth.identity.username",
-										},
+							},
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
 									},
 								},
 							},
@@ -693,48 +683,46 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-											Value: "1",
-										},
+			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+				[]wasm.ConditionalData{
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+										Value: "1",
 									},
 								},
 							},
 						},
-						{
-							Predicates: []string{
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-								"auth.identity.group != 'admin'",
-							},
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-											Value: "1",
-										},
+					},
+					{
+						Predicates: []string{
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+							"auth.identity.group != 'admin'",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+										Value: "1",
 									},
 								},
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "auth.identity.username",
-											Value: "auth.identity.username",
-										},
+							},
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
 									},
 								},
 							},

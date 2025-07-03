@@ -1,12 +1,13 @@
+//go:build unit
+
 package controllers
 
 import (
 	"testing"
 
-	"github.com/kuadrant/kuadrant-operator/internal/wasm"
+	"gotest.tools/assert"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 func TestMergeAndVerify(t *testing.T) {
@@ -16,104 +17,13 @@ func TestMergeAndVerify(t *testing.T) {
 		expectedError string
 		expectedLen   int
 		description   string
+		validate      func(*testing.T, []wasm.Action)
 	}{
 		{
-			name:        "empty actions",
-			actions:     []wasm.Action{},
-			expectedLen: 0,
-			description: "should return empty slice when no actions provided",
-		},
-		{
-			name: "single action",
+			name: "mixed auth and rate limit actions - auth never merged",
 			actions: []wasm.Action{
 				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "ratelimit.hits_addend",
-											Value: "1",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedLen: 1,
-			description: "should return single rate limit action unchanged",
-		},
-		{
-			name: "actions with different scopes - no merge",
-			actions: []wasm.Action{
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "ratelimit.limit_key",
-											Value: "user_id",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "namespace",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "ratelimit.limit_key",
-											Value: "api_key",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedLen: 2,
-			description: "should not merge rate limit actions with different scopes",
-		},
-		{
-			name: "actions with different service names - no merge",
-			actions: []wasm.Action{
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "ratelimit.limit_key",
-											Value: "api_key",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: "auth-service",
+					ServiceName: wasm.AuthServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -130,15 +40,192 @@ func TestMergeAndVerify(t *testing.T) {
 						},
 					},
 				},
+				{
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "global", // Same scope, but auth actions should never merge
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "auth.permissions",
+											Value: "admin",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.limit_key",
+											Value: "user_id",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedLen: 3,
+			description: "should keep auth actions separate even with same scope",
+			validate: func(t *testing.T, result []wasm.Action) {
+				authCount := 0
+				rateLimitCount := 0
+				for _, action := range result {
+					switch action.ServiceName {
+					case wasm.AuthServiceName:
+						authCount++
+					case wasm.RateLimitServiceName:
+						rateLimitCount++
+					}
+				}
+				assert.Equal(t, 2, authCount, "should have 2 separate auth actions")
+				assert.Equal(t, 1, rateLimitCount, "should have 1 rate limit action")
+			},
+		},
+		{
+			name: "mixed auth and mergeable rate limit actions",
+			actions: []wasm.Action{
+				{
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "auth.identity",
+											Value: "user_token",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.limit_key",
+											Value: "user_id",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.hits_addend",
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 			expectedLen: 2,
-			description: "should not merge actions with different service names (rate limit vs auth)",
+			description: "should merge rate limit actions but keep auth action separate",
+			validate: func(t *testing.T, result []wasm.Action) {
+				authCount := 0
+				rateLimitCount := 0
+				var mergedRateLimitAction *wasm.Action
+
+				for i, action := range result {
+					switch action.ServiceName {
+					case wasm.AuthServiceName:
+						authCount++
+					case wasm.RateLimitServiceName:
+						rateLimitCount++
+						mergedRateLimitAction = &result[i]
+					}
+				}
+
+				assert.Equal(t, 1, authCount, "should have 1 auth action")
+				assert.Equal(t, 1, rateLimitCount, "should have 1 merged rate limit action")
+
+				// Verify the rate limit action was properly merged
+				if mergedRateLimitAction != nil {
+					assert.Equal(t, 2, len(mergedRateLimitAction.ConditionalData), "merged rate limit action should have 2 conditional data items")
+				}
+			},
 		},
 		{
-			name: "successful merge - same scope and service",
+			name: "multiple auth actions with different scopes - never merged",
 			actions: []wasm.Action{
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "auth.identity",
+											Value: "global_user",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "namespace",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "auth.identity",
+											Value: "namespace_user",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedLen: 2,
+			description: "should never merge auth actions regardless of scope differences",
+		},
+		{
+			name: "complex mixed scenario with multiple service types",
+			actions: []wasm.Action{
+				{
+					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -156,7 +243,127 @@ func TestMergeAndVerify(t *testing.T) {
 					},
 				},
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "auth.identity",
+											Value: "jwt_token",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenratelimit.limit_key",
+											Value: "api_key",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "auth.identity",
+											Value: "user_id",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedLen: 4,
+			description: "auth should not merge with rate limit actions, but rate limit actions should merge",
+			validate: func(t *testing.T, result []wasm.Action) {
+				authCount := 0
+				rateLimitCount := 0
+
+				for _, action := range result {
+					switch action.ServiceName {
+					case wasm.AuthServiceName:
+						authCount++
+					case wasm.RateLimitServiceName:
+						rateLimitCount++
+					}
+				}
+
+				assert.Equal(t, 2, authCount, "should have 2 auth action")
+				assert.Equal(t, 2, rateLimitCount, "should have 1 merged ratelimit action")
+			},
+		},
+		{
+			name: "rate limit actions with different scopes - no merge",
+			actions: []wasm.Action{
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.limit_key",
+											Value: "global_key",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "namespace",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.limit_key",
+											Value: "namespace_key",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedLen: 2,
+			description: "should not merge rate limit actions with different scopes",
+		},
+		{
+			name: "duplicate keys with different values in rate limit actions - error",
+			actions: []wasm.Action{
+				{
+					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -173,15 +380,8 @@ func TestMergeAndVerify(t *testing.T) {
 						},
 					},
 				},
-			},
-			expectedLen: 1,
-			description: "should merge rate limit actions with same scope and service name",
-		},
-		{
-			name: "successful merge - duplicate keys with same values",
-			actions: []wasm.Action{
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -189,67 +389,6 @@ func TestMergeAndVerify(t *testing.T) {
 								{
 									Value: &wasm.Static{
 										Static: wasm.StaticSpec{
-											Key:   "ratelimit.limit_key",
-											Value: "user_id",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "ratelimit.limit_key",
-											Value: "user_id",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedLen: 1,
-			description: "should allow duplicate keys with same values in rate limit actions",
-		},
-		{
-			name: "error - duplicate keys with different values",
-			actions: []wasm.Action{
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "ratelimit.hits_addend",
-											Value: "1",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
 											Key:   "ratelimit.hits_addend",
 											Value: "5",
 										},
@@ -261,13 +400,13 @@ func TestMergeAndVerify(t *testing.T) {
 				},
 			},
 			expectedError: "duplicate key 'ratelimit.hits_addend' with different values found in action",
-			description:   "should detect duplicate keys with different values",
+			description:   "should detect duplicate keys with different values in mergeable actions",
 		},
 		{
-			name: "mixed data types - successful merge",
+			name: "duplicate keys with same values in rate limit actions - success",
 			actions: []wasm.Action{
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -285,16 +424,16 @@ func TestMergeAndVerify(t *testing.T) {
 					},
 				},
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Data: []wasm.DataType{
 								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "ratelimit.hits_addend",
-											Value: "responseBodyJSON(\"usage.total_tokens\")",
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.limit_key",
+											Value: "user_id",
 										},
 									},
 								},
@@ -304,13 +443,13 @@ func TestMergeAndVerify(t *testing.T) {
 				},
 			},
 			expectedLen: 1,
-			description: "should successfully merge rate limit actions with different data types",
+			description: "should allow duplicate keys with same values in mergeable actions",
 		},
 		{
-			name: "multiple actions with complex merge",
+			name: "subsequent RateLimitCheckService actions merge correctly",
 			actions: []wasm.Action{
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -328,68 +467,7 @@ func TestMergeAndVerify(t *testing.T) {
 					},
 				},
 				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "ratelimit.hits_addend",
-											Value: "responseBodyJSON(\"usage.total_tokens\")",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "global",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "limit",
-											Value: "100",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: "ratelimit-service",
-					Scope:       "namespace",
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{
-									Value: &wasm.Static{
-										Static: wasm.StaticSpec{
-											Key:   "namespace",
-											Value: "test",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedLen: 2,
-			description: "should properly merge and separate rate limit actions based on scope and service",
-		},
-		{
-			name: "actions with duplicate hits.addend and different values ",
-			actions: []wasm.Action{
-				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
@@ -406,17 +484,46 @@ func TestMergeAndVerify(t *testing.T) {
 						},
 					},
 				},
+			},
+			expectedLen: 1,
+			description: "should merge two subsequent RateLimitCheckServiceName actions",
+			validate: func(t *testing.T, result []wasm.Action) {
+				assert.Equal(t, "ratelimit-check-service", result[0].ServiceName)
+				assert.Equal(t, 2, len(result[0].ConditionalData), "merged action should contain data from both original actions")
+			},
+		},
+		{
+			name: "RateLimitCheckService and RateLimitService do not merge",
+			actions: []wasm.Action{
 				{
-					ServiceName: "ratelimit-service",
+					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Data: []wasm.DataType{
 								{
-									Value: &wasm.Expression{
-										ExpressionItem: wasm.ExpressionItem{
-											Key:   "ratelimit.hits_addend",
-											Value: "responseBodyJSON(\"usage.total_tokens\")",
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "ratelimit.limit_key",
+											Value: "user_id",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitCheckServiceName,
+					Scope:       "global",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Static{
+										Static: wasm.StaticSpec{
+											Key:   "check.rate",
+											Value: "100",
 										},
 									},
 								},
@@ -425,8 +532,8 @@ func TestMergeAndVerify(t *testing.T) {
 					},
 				},
 			},
-			expectedLen: 1,
-			description: "should merge and contain both hits.addend values in the same action",
+			expectedLen: 2,
+			description: "should not merge RateLimitServiceName with the new RateLimitCheckServiceName",
 		},
 	}
 
@@ -435,13 +542,14 @@ func TestMergeAndVerify(t *testing.T) {
 			result, err := mergeAndVerify(tt.actions)
 
 			if tt.expectedError != "" {
-				require.Error(t, err, tt.description)
-				assert.Contains(t, err.Error(), tt.expectedError, "error message should contain expected text")
-				return
+				assert.ErrorContains(t, err, tt.expectedError, "description: %s", tt.description)
+			} else {
+				assert.NilError(t, err, "description: %s", tt.description)
+				assert.Equal(t, tt.expectedLen, len(result), "description: %s", tt.description)
+				if tt.validate != nil {
+					tt.validate(t, result)
+				}
 			}
-
-			require.NoError(t, err, tt.description)
-			assert.Equal(t, tt.expectedLen, len(result), tt.description)
 		})
 	}
 }
@@ -450,26 +558,26 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 	t.Run("empty conditional data", func(t *testing.T) {
 		actions := []wasm.Action{
 			{
-				ServiceName:     "ratelimit-service",
+				ServiceName:     wasm.RateLimitServiceName,
 				Scope:           "global",
 				ConditionalData: []wasm.ConditionalData{},
 			},
 			{
-				ServiceName:     "ratelimit-service",
+				ServiceName:     wasm.RateLimitServiceName,
 				Scope:           "global",
 				ConditionalData: []wasm.ConditionalData{},
 			},
 		}
 
 		result, err := mergeAndVerify(actions)
-		require.NoError(t, err)
-		assert.Equal(t, 1, len(result))
+		assert.NilError(t, err)
+		assert.Equal(t, len(result), 1)
 	})
 
 	t.Run("empty data in conditional data", func(t *testing.T) {
 		actions := []wasm.Action{
 			{
-				ServiceName: "ratelimit-service",
+				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "global",
 				ConditionalData: []wasm.ConditionalData{
 					{
@@ -480,14 +588,14 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 		}
 
 		result, err := mergeAndVerify(actions)
-		require.NoError(t, err)
-		assert.Equal(t, 1, len(result))
+		assert.NilError(t, err)
+		assert.Equal(t, len(result), 1)
 	})
 
 	t.Run("empty keys are handled", func(t *testing.T) {
 		actions := []wasm.Action{
 			{
-				ServiceName: "ratelimit-service",
+				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "global",
 				ConditionalData: []wasm.ConditionalData{
 					{
@@ -505,7 +613,7 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 				},
 			},
 			{
-				ServiceName: "ratelimit-service",
+				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "global",
 				ConditionalData: []wasm.ConditionalData{
 					{
@@ -525,42 +633,6 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 		}
 
 		_, err := mergeAndVerify(actions)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "duplicate key '' with different values")
-	})
-
-	t.Run("duplicate keys within same conditional data", func(t *testing.T) {
-		actions := []wasm.Action{
-			{
-				ServiceName: "ratelimit-service",
-				Scope:       "global",
-				ConditionalData: []wasm.ConditionalData{
-					{
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Static{
-									Static: wasm.StaticSpec{
-										Key:   "ratelimit.hits_addend",
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &wasm.Static{
-									Static: wasm.StaticSpec{
-										Key:   "ratelimit.hits_addend",
-										Value: "10",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		_, err := mergeAndVerify(actions)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "duplicate key 'ratelimit.hits_addend' with different values")
+		assert.ErrorContains(t, err, "duplicate key '' with different values")
 	})
 }

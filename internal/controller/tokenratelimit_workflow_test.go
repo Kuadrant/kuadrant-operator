@@ -109,6 +109,8 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 											Value: "1",
 										},
 									},
+								},
+								{
 									Value: &wasm.Expression{
 										ExpressionItem: wasm.ExpressionItem{
 											Key:   "ratelimit.hits_addend",

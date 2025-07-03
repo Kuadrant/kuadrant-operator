@@ -147,19 +147,25 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 }
 
 func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
-	keyValueMap := make(map[string]string)
+	if len(actions) == 0 {
+		return nil, nil
+	}
 
-	for i := 0; i < len(actions); i++ {
-		for j := i + 1; j < len(actions); j++ {
-			if actions[i].Scope == actions[j].Scope && actions[i].ServiceName == actions[j].ServiceName {
-				actions[i].ConditionalData = append(actions[i].ConditionalData, actions[j].ConditionalData...)
-				actions = append(actions[:j], actions[j+1:]...)
-				j--
-			}
+	result := []wasm.Action{actions[0]}
+	for _, currentAction := range actions[1:] {
+		lastAction := &result[len(result)-1]
+
+		if lastAction.Scope == currentAction.Scope &&
+			lastAction.ServiceName == currentAction.ServiceName && lastAction.ServiceName != wasm.AuthServiceName {
+			lastAction.ConditionalData = append(lastAction.ConditionalData, currentAction.ConditionalData...)
+		} else {
+			result = append(result, currentAction)
 		}
+	}
 
-		clear(keyValueMap)
-		for _, conditionalData := range actions[i].ConditionalData {
+	for i := range result {
+		keyValueMap := make(map[string]string)
+		for _, conditionalData := range result[i].ConditionalData {
 			for _, data := range conditionalData.Data {
 				var key, value string
 
@@ -174,12 +180,6 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 
 				if existingValue, exists := keyValueMap[key]; exists {
 					if existingValue != value {
-						//TODO: remove once https://github.com/Kuadrant/limitador/pull/430 is merged
-						// if the key is hits_addend and one value is parsing the body and the other is not we ignore this
-						// for the time being as one is assumed to be for request phase and the other for response phase
-						if key == "ratelimit.hits_addend" && (strings.Contains(value, "responseBodyJSON(") || strings.Contains(existingValue, "responseBodyJSON(")) {
-							continue
-						}
 						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
 					}
 				} else {
@@ -189,7 +189,7 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 		}
 	}
 
-	return actions, nil
+	return result, nil
 }
 
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
@@ -258,30 +258,27 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
 			rlAction := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			mergedRlActions, err := mergeAndVerify(rlAction)
-			if err != nil {
-				return nil, fmt.Errorf("failed to merge/verify rate limit actions for path %s: %w", pathID, err)
-			}
-			if hasAuthAccess(mergedRlActions) {
-				actions = append(actions, mergedRlActions...)
+			if hasAuthAccess(rlAction) {
+				actions = append(actions, rlAction...)
 			} else {
 				// pre auth rate limiting
-				actions = append(mergedRlActions, actions...)
+				actions = append(rlAction, actions...)
 			}
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			mergedTrlActions, err := mergeAndVerify(rlAction)
-			if err != nil {
-				return nil, fmt.Errorf("failed to merge/verify token rate limit actions for path %s: %w", pathID, err)
-			}
-			if hasAuthAccess(mergedTrlActions) {
-				actions = append(actions, mergedTrlActions...)
+			trlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if hasAuthAccess(trlAction) {
+				actions = append(actions, trlAction...)
 			} else {
 				// pre auth rate limiting
-				actions = append(mergedTrlActions, actions...)
+				actions = append(trlAction, actions...)
 			}
+		}
+
+		actions, err := mergeAndVerify(actions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
 
 		if len(actions) == 0 {

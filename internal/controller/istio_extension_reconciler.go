@@ -146,6 +146,52 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
+func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
+	keyValueMap := make(map[string]string)
+
+	for i := 0; i < len(actions); i++ {
+		for j := i + 1; j < len(actions); j++ {
+			if actions[i].Scope == actions[j].Scope && actions[i].ServiceName == actions[j].ServiceName {
+				actions[i].ConditionalData = append(actions[i].ConditionalData, actions[j].ConditionalData...)
+				actions = append(actions[:j], actions[j+1:]...)
+				j--
+			}
+		}
+
+		clear(keyValueMap)
+		for _, conditionalData := range actions[i].ConditionalData {
+			for _, data := range conditionalData.Data {
+				var key, value string
+
+				switch val := data.Value.(type) {
+				case *wasm.Static:
+					key = val.Static.Key
+					value = val.Static.Value
+				case *wasm.Expression:
+					key = val.ExpressionItem.Key
+					value = val.ExpressionItem.Value
+				}
+
+				if existingValue, exists := keyValueMap[key]; exists {
+					if existingValue != value {
+						//TODO: remove once https://github.com/Kuadrant/limitador/pull/430 is merged
+						// if the key is hits_addend and one value is parsing the body and the other is not we ignore this
+						// for the time being as one is assumed to be for request phase and the other for response phase
+						if key == "ratelimit.hits_addend" && (strings.Contains(value, "responseBodyJSON(") || strings.Contains(existingValue, "responseBodyJSON(")) {
+							continue
+						}
+						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
+					}
+				} else {
+					keyValueMap[key] = value
+				}
+			}
+		}
+	}
+
+	return actions, nil
+}
+
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
 func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
@@ -212,21 +258,29 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
 			rlAction := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			if hasAuthAccess(rlAction) {
-				actions = append(actions, rlAction...)
+			mergedRlActions, err := mergeAndVerify(rlAction)
+			if err != nil {
+				return nil, fmt.Errorf("failed to merge/verify rate limit actions for path %s: %w", pathID, err)
+			}
+			if hasAuthAccess(mergedRlActions) {
+				actions = append(actions, mergedRlActions...)
 			} else {
 				// pre auth rate limiting
-				actions = append(rlAction, actions...)
+				actions = append(mergedRlActions, actions...)
 			}
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
 			rlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			if hasAuthAccess(rlAction) {
-				actions = append(actions, rlAction...)
+			mergedTrlActions, err := mergeAndVerify(rlAction)
+			if err != nil {
+				return nil, fmt.Errorf("failed to merge/verify token rate limit actions for path %s: %w", pathID, err)
+			}
+			if hasAuthAccess(mergedTrlActions) {
+				actions = append(actions, mergedTrlActions...)
 			} else {
 				// pre auth rate limiting
-				actions = append(rlAction, actions...)
+				actions = append(mergedTrlActions, actions...)
 			}
 		}
 

@@ -70,21 +70,25 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: "0",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: "0",
+										},
+									},
 								},
 							},
 						},
@@ -94,21 +98,23 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
-								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("/usage/total_tokens")`,
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: `responseBodyJSON("/usage/total_tokens")`,
+										},
+									},
 								},
 							},
 						},
@@ -130,29 +136,33 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "auth.identity.userid",
-									Value: "auth.identity.userid",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "auth.identity.userid",
+											Value: "auth.identity.userid",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: "0",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: "0",
+										},
+									},
 								},
 							},
 						},
@@ -162,29 +172,33 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "auth.identity.userid",
-									Value: "auth.identity.userid",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "auth.identity.userid",
+											Value: "auth.identity.userid",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("/usage/total_tokens")`,
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: `responseBodyJSON("/usage/total_tokens")`,
+										},
+									},
 								},
 							},
 						},
@@ -209,29 +223,33 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "auth.identity.userid",
-									Value: "auth.identity.userid",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "auth.identity.userid",
+											Value: "auth.identity.userid",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: "0",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: "0",
+										},
+									},
 								},
 							},
 						},
@@ -241,29 +259,33 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "auth.identity.userid",
-									Value: "auth.identity.userid",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "auth.identity.userid",
+											Value: "auth.identity.userid",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("/usage/total_tokens")`,
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: `responseBodyJSON("/usage/total_tokens")`,
+										},
+									},
 								},
 							},
 						},
@@ -286,21 +308,25 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: "0",
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: "0",
+										},
+									},
 								},
 							},
 						},
@@ -310,21 +336,25 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
-					Predicates:  []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
-					Data: []wasm.DataType{
+					ConditionalData: []wasm.ConditionalData{
 						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "tokenlimit.myTokenLimit__d681f6c3",
-									Value: "1",
+							Predicates: []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
+							Data: []wasm.DataType{
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "tokenlimit.myTokenLimit__d681f6c3",
+											Value: "1",
+										},
+									},
 								},
-							},
-						},
-						{
-							Value: &wasm.Expression{
-								ExpressionItem: wasm.ExpressionItem{
-									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("/usage/total_tokens")`,
+								{
+									Value: &wasm.Expression{
+										ExpressionItem: wasm.ExpressionItem{
+											Key:   "ratelimit.hits_addend",
+											Value: `responseBodyJSON("/usage/total_tokens")`,
+										},
+									},
 								},
 							},
 						},

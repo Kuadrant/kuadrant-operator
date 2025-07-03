@@ -158,14 +158,12 @@ func AuthConfigNameForPath(pathID string) string {
 }
 
 func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.Action {
+	spec := effectivePolicy.Spec.Spec.Proper()
+
 	action := wasm.Action{
 		ServiceName: wasm.AuthServiceName,
 		Scope:       AuthConfigNameForPath(pathID),
-	}
-	spec := effectivePolicy.Spec.Spec.Proper()
-
-	if whenPredicates := spec.Predicates; len(whenPredicates) > 0 {
-		action.Predicates = whenPredicates.Into()
+		Predicates:  spec.Predicates.Into(),
 	}
 
 	return []wasm.Action{action}

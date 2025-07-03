@@ -57,15 +57,19 @@ var (
 					{
 						ServiceName: "ratelimit-service",
 						Scope:       "default/other",
-						Predicates: []string{
-							`source.address != "127.0.0.1"`,
-						},
-						Data: []DataType{
+						ConditionalData: []ConditionalData{
 							{
-								Value: &Static{
-									Static: StaticSpec{
-										Key:   "limit.global__f63bec56",
-										Value: "1",
+								Predicates: []string{
+									`source.address != "127.0.0.1"`,
+								},
+								Data: []DataType{
+									{
+										Value: &Static{
+											Static: StaticSpec{
+												Key:   "limit.global__f63bec56",
+												Value: "1",
+											},
+										},
 									},
 								},
 							},
@@ -90,12 +94,16 @@ var (
 					{
 						ServiceName: "ratelimit-service",
 						Scope:       "default/toystore",
-						Data: []DataType{
+						ConditionalData: []ConditionalData{
 							{
-								Value: &Static{
-									Static: StaticSpec{
-										Key:   "limit.specific__69ea4d2d",
-										Value: "1",
+								Data: []DataType{
+									{
+										Value: &Static{
+											Static: StaticSpec{
+												Key:   "limit.specific__69ea4d2d",
+												Value: "1",
+											},
+										},
 									},
 								},
 							},
@@ -104,15 +112,19 @@ var (
 					{
 						ServiceName: "ratelimit-service",
 						Scope:       "default/toystore",
-						Predicates: []string{
-							`source.address != "127.0.0.1"`,
-						},
-						Data: []DataType{
+						ConditionalData: []ConditionalData{
 							{
-								Value: &Static{
-									Static: StaticSpec{
-										Key:   "limit.global__f63bec56",
-										Value: "1",
+								Predicates: []string{
+									`source.address != "127.0.0.1"`,
+								},
+								Data: []DataType{
+									{
+										Value: &Static{
+											Static: StaticSpec{
+												Key:   "limit.global__f63bec56",
+												Value: "1",
+											},
+										},
 									},
 								},
 							},
@@ -155,12 +167,13 @@ actionSets:
     actions:
       - service: ratelimit-service
         scope: default/other
-        predicates:
-          - source.address != "127.0.0.1"
-        data:
-          - static:
-              key: limit.global__f63bec56
-              value: "1"
+        conditionalData:
+          - predicates:
+              - source.address != "127.0.0.1"
+            data:
+              - static:
+                  key: limit.global__f63bec56
+                  value: "1"
   - name: 21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8
     routeRuleConditions:
       hostnames:
@@ -173,18 +186,20 @@ actionSets:
         scope: e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138
       - service: ratelimit-service
         scope: default/toystore
-        data:
-          - static:
-              key: limit.specific__69ea4d2d
-              value: "1"
+        conditionalData:
+          - data:
+              - static:
+                  key: limit.specific__69ea4d2d
+                  value: "1"
       - service: ratelimit-service
         scope: default/toystore
-        predicates:
-          - source.address != "127.0.0.1"
-        data:
-          - static:
-              key: limit.global__f63bec56
-              value: "1"
+        conditionalData:
+          - predicates:
+              - source.address != "127.0.0.1"
+            data:
+              - static:
+                  key: limit.global__f63bec56
+                  value: "1"
 `
 )
 

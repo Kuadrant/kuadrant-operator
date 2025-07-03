@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"sort"
 
+	configv1 "github.com/openshift/api/config/v1"
+
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -400,6 +402,10 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
 		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+
+		controller.WithRunnable("clusterversion watcher", controller.Watch(
+			&configv1.ClusterVersion{}, openshift.ClusterVersionResource, metav1.NamespaceAll)),
+		controller.WithObjectKinds(openshift.ClusterVersionGroupKind),
 	)
 
 	return opts, nil

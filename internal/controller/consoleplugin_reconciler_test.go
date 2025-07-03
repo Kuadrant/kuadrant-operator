@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	configv1 "github.com/openshift/api/config/v1"
+
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	consolev1 "github.com/openshift/api/console/v1"
@@ -66,10 +68,23 @@ func TestConsolePluginReconciler(t *testing.T) {
 	_ = appsv1.AddToScheme(scheme)
 	_ = gatewayapiv1.AddToScheme(scheme)
 	_ = consolev1.AddToScheme(scheme)
+	_ = configv1.AddToScheme(scheme)
+
+	// Create a mock ClusterVersion object for the test
+	clusterVersion := &configv1.ClusterVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "version",
+		},
+		Status: configv1.ClusterVersionStatus{
+			Desired: configv1.Release{
+				Version: "4.20.0",
+			},
+		},
+	}
 
 	manager := controllersfake.
 		NewManagerBuilder().
-		WithClient(fake.NewClientBuilder().WithScheme(scheme).Build()).
+		WithClient(fake.NewClientBuilder().WithScheme(scheme).WithObjects(clusterVersion).Build()).
 		WithScheme(scheme).
 		Build()
 
@@ -80,16 +95,18 @@ func TestConsolePluginReconciler(t *testing.T) {
 		subscription := reconciler.Subscription()
 		assert.Assert(subT, subscription != nil)
 		events := subscription.Events
-		assert.Assert(subT, is.Len(events, 3))
+		assert.Assert(subT, is.Len(events, 4))
 		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ConsolePluginGVK.GroupKind()))
-		assert.DeepEqual(subT, events[1].Kind, ptr.To(ConfigMapGroupKind))
-		assert.DeepEqual(subT, events[1].ObjectName, TopologyConfigMapName)
-		assert.DeepEqual(subT, events[1].ObjectNamespace, TestNamespace)
-		assert.DeepEqual(subT, events[1].EventType, ptr.To(controller.CreateEvent))
+		assert.DeepEqual(subT, events[1].Kind, ptr.To(openshift.ClusterVersionGroupKind))
+		assert.DeepEqual(subT, events[1].ObjectName, "version")
 		assert.DeepEqual(subT, events[2].Kind, ptr.To(ConfigMapGroupKind))
 		assert.DeepEqual(subT, events[2].ObjectName, TopologyConfigMapName)
 		assert.DeepEqual(subT, events[2].ObjectNamespace, TestNamespace)
-		assert.DeepEqual(subT, events[2].EventType, ptr.To(controller.DeleteEvent))
+		assert.DeepEqual(subT, events[2].EventType, ptr.To(controller.CreateEvent))
+		assert.DeepEqual(subT, events[3].Kind, ptr.To(ConfigMapGroupKind))
+		assert.DeepEqual(subT, events[3].ObjectName, TopologyConfigMapName)
+		assert.DeepEqual(subT, events[3].ObjectNamespace, TestNamespace)
+		assert.DeepEqual(subT, events[3].EventType, ptr.To(controller.DeleteEvent))
 	})
 
 	t.Run("Create service", func(subT *testing.T) {
@@ -129,7 +146,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.DeepEqual(subT, deployment.Spec.Selector, consoleplugin.DeploymentSelector())
 		assert.DeepEqual(subT, deployment.Spec.Strategy, consoleplugin.DeploymentStrategy())
 		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Containers, 1))
-		assert.Assert(subT, deployment.Spec.Template.Spec.Containers[0].Image == ConsolePluginImageURL)
+		assert.Assert(subT, deployment.Spec.Template.Spec.Containers[0].Image == openshift.ConsolePluginImageURL)
 	})
 
 	t.Run("Delete deployment", func(subT *testing.T) {

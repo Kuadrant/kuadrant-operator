@@ -103,13 +103,11 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 			return
 		}
 		trigger := &unstructured.Unstructured{}
-		if response.Event != nil {
-			if response.Event.Metadata == nil {
-				trigger.SetName(response.Event.Metadata.Name)
-				trigger.SetNamespace(response.Event.Metadata.Namespace)
-				trigger.SetKind(response.Event.Metadata.Kind)
-				reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
-			}
+		if response.Event != nil && response.Event.Metadata != nil {
+			trigger.SetName(response.Event.Metadata.Name)
+			trigger.SetNamespace(response.Event.Metadata.Namespace)
+			trigger.SetKind(response.Event.Metadata.Kind)
+			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
 		}
 	})
 	if err != nil {

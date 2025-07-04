@@ -75,12 +75,13 @@ func (s Service) EqualTo(other Service) bool {
 	return true
 }
 
-// +kubebuilder:validation:Enum:=ratelimit;auth
+// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check
 type ServiceType string
 
 const (
-	RateLimitServiceType ServiceType = "ratelimit"
-	AuthServiceType      ServiceType = "auth"
+	RateLimitServiceType      ServiceType = "ratelimit"
+	RateLimitCheckServiceType ServiceType = "ratelimit-check"
+	AuthServiceType           ServiceType = "auth"
 )
 
 // +kubebuilder:validation:Enum:=deny;allow

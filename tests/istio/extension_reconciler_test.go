@@ -157,6 +157,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
+					wasm.RateLimitCheckServiceName: {
+						Type:        wasm.RateLimitCheckServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -790,6 +796,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
+					wasm.RateLimitCheckServiceName: {
+						Type:        wasm.RateLimitCheckServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -1015,6 +1027,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -1227,6 +1245,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -1356,6 +1380,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
@@ -1561,6 +1591,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -1653,6 +1689,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
@@ -1833,6 +1875,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -1943,6 +1991,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
@@ -2159,6 +2213,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -2266,6 +2326,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Endpoint:    kuadrant.KuadrantAuthClusterName,
 							FailureMode: wasm.AuthServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						},
+						wasm.RateLimitCheckServiceName: {
+							Type:        wasm.RateLimitCheckServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
 							Type:        wasm.RateLimitServiceType,
@@ -2436,6 +2502,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
+					wasm.RateLimitCheckServiceName: {
+						Type:        wasm.RateLimitCheckServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
+					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -2515,6 +2587,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+					},
+					wasm.RateLimitCheckServiceName: {
+						Type:        wasm.RateLimitCheckServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,

@@ -162,6 +162,9 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 		if l.Hostname != nil {
 			listener.Hostname = string(*l.Hostname)
 		}
+		if l.Protocol != "" {
+			listener.Protocol = string(l.Protocol)
+		}
 		ls[i] = &listener
 	}
 	return ls

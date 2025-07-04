@@ -150,6 +150,10 @@ func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Poli
 	return val, nil
 }
 
+func (ec *ExtensionController) Manager() ctrlruntime.Manager {
+	return ec.manager
+}
+
 type extensionClient struct {
 	conn   *grpc.ClientConn
 	client extpb.ExtensionServiceClient

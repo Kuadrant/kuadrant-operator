@@ -2,6 +2,7 @@
 
 - [AuthPolicy](#authpolicy)
 - [AuthPolicySpec](#authpolicyspec)
+- [AuthPolicyCommonSpec](#authpolicycommonspec)
   - [AuthScheme](#authscheme)
     - [AuthRuleCommon](#authrulecommon)
     - [AuthenticationRule](#authenticationrule)
@@ -12,7 +13,6 @@
         - [SuccessResponseItem](#successresponseitem)
     - [CallbackRule](#callbackrule)
   - [NamedPattern](#namedpattern)
-  - [AuthPolicyCommonSpec](#authPolicyCommonSpec)
 - [AuthPolicyStatus](#authpolicystatus)
   - [ConditionSpec](#conditionspec)
 

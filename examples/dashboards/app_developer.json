@@ -26,7 +26,6 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": 7,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -44,8 +43,6 @@
       },
       "id": 155,
       "options": {
-        "includeVars": false,
-        "keepTime": false,
         "maxItems": 10,
         "query": "",
         "showHeadings": false,
@@ -56,7 +53,7 @@
           "kuadrant"
         ]
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "title": "Kuadrant Dashboards",
       "type": "dashlist"
     },
@@ -82,7 +79,7 @@
         "content": "#### Overview of API/HTTPRoute Metrics\n\nThe row of panels below is repeated for each HTTPRoute resource in your cluster.\nThey provide real-time & historical insights into the performance and health of each API.\nMetrics displayed include request rates, success/error breakdown, and latency percentiles, giving a snapshot of API efficiency and reliability.\nUse this dashboard to monitor traffic patterns, identify potential issues, and ensure optimal performance of your services.\n\n*Important: HTTPRoutes must include a \"service\" and \"deployment\" label with a value that matches the name of the service & deployment being routed to. eg. \"service=myapp, deployment=myapp\"*",
         "mode": "markdown"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "title": "App Developer Dashboard",
       "type": "text"
     },
@@ -150,7 +147,7 @@
         },
         "showHeader": true
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -339,7 +336,6 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -354,7 +350,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 1,
@@ -525,11 +520,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -595,11 +588,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -631,7 +622,6 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -646,7 +636,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineStyle": {
               "fill": "solid"
@@ -830,11 +819,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -900,11 +887,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -970,11 +955,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -1039,11 +1022,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -1109,11 +1090,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -1179,11 +1158,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -1248,11 +1225,9 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "textMode": "auto"
       },
-      "pluginVersion": "10.4.3",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -1283,7 +1258,6 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -1298,7 +1272,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 1,
@@ -1435,7 +1408,6 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
@@ -1450,7 +1422,6 @@
               "tooltip": false,
               "viz": false
             },
-            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineStyle": {
               "fill": "solid"
@@ -1591,7 +1562,8 @@
     }
   ],
   "refresh": "30s",
-  "schemaVersion": 39,
+  "schemaVersion": 38,
+  "style": "dark",
   "tags": [
     "kuadrant"
   ],
@@ -1600,8 +1572,8 @@
       {
         "current": {
           "selected": false,
-          "text": "thanos-query-ds",
-          "value": "e4ecb7ba-2aa7-4f09-a3d9-df01c4133318"
+          "text": "Kuadrant-Thanos-Hub",
+          "value": "Kuadrant-Thanos-Hub"
         },
         "hide": 0,
         "includeAll": false,
@@ -1647,7 +1619,7 @@
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -1673,8 +1645,8 @@
     ]
   },
   "timezone": "",
-  "title": "App Developer Dashboard orla",
-  "uid": "J_sdY4-Ikff",
-  "version": 2,
+  "title": "App Developer Dashboard",
+  "uid": "J_sdY4-Ik",
+  "version": 1,
   "weekStart": ""
 }

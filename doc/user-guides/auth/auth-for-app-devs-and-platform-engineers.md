@@ -193,7 +193,7 @@ spec:
       authentication:
         "api-key-authn":
           apiKey:
-            allNamespaces:true
+            allNamespaces: true
             selector:
               matchLabels:
                 app: toystore

@@ -553,7 +553,7 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 
 func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
-	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", false)
+	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", true)
 	if b.isUsingExtensions {
 		opts = append(opts, controller.WithRunnable(
 			"extension manager",

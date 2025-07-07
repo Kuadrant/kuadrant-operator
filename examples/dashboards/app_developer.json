@@ -1,48 +1,4 @@
 {
-  "__requires": [
-    {
-      "type": "panel",
-      "id": "dashlist",
-      "name": "Dashboard list",
-      "version": ""
-    },
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "9.5.3"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "stat",
-      "name": "Stat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "text",
-      "name": "Text",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -70,7 +26,6 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -457,15 +412,15 @@
           },
           {
             "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
+              "id": "byName",
+              "options": "200"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "light-green",
-                  "mode": "fixed"
+                  "mode": "thresholds",
+                  "seriesBy": "last"
                 }
               }
             ]
@@ -1379,14 +1334,14 @@
           },
           {
             "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
+              "id": "byName",
+              "options": "\"\" 200"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "light-green",
+                  "fixedColor": "green",
                   "mode": "fixed"
                 }
               }
@@ -1421,7 +1376,7 @@
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{}[5m])) by (cluster_id, destination_service_name) * on(cluster_id, destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "legendFormat": "\"{{cluster_id}}\" total",
+          "legendFormat": " total",
           "range": true,
           "refId": "A"
         },
@@ -1433,7 +1388,7 @@
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{}[5m])) by (cluster_id, destination_service_name, response_code) * on(cluster_id, destination_service_name) group_left(name) (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "\"{{cluster_id}}\" {{response_code}}",
+          "legendFormat": "{{response_code}}",
           "range": true,
           "refId": "B"
         }
@@ -1574,7 +1529,7 @@
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name, cluster_id)) * on(destination_service_name, cluster_id) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "\"{{cluster_id}}\" P95",
+          "legendFormat": " P95",
           "range": true,
           "refId": "C"
         },
@@ -1585,7 +1540,7 @@
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name, cluster_id)) * on(destination_service_name, cluster_id) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "legendFormat": "\"{{cluster_id}}\" P90",
+          "legendFormat": "P90",
           "range": true,
           "refId": "A"
         },
@@ -1597,7 +1552,7 @@
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name, cluster_id)) * on(destination_service_name, cluster_id) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "\"{{cluster_id}}\" P99",
+          "legendFormat": "P99",
           "range": true,
           "refId": "B"
         }
@@ -1634,7 +1589,11 @@
         "type": "datasource"
       },
       {
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"

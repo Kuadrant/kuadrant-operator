@@ -359,19 +359,6 @@ docker-build: ## Build docker image with the manager.
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 
-docker-build-with-extensions: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
-docker-build-with-extensions: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
-docker-build-with-extensions: ## Build docker image with the manager.
-		$(CONTAINER_ENGINE) build \
-		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
-		--build-arg GIT_SHA=$(GIT_SHA) \
-		--build-arg DIRTY=$(DIRTY) \
-		--build-arg VERSION=v$(VERSION) \
-		--build-arg IMG=$(IMG) \
-		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
-		-t $(IMG) \
-		-f extension.Dockerfile .
-
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_ENGINE) push $(IMG)
 

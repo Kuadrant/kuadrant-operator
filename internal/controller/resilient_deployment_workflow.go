@@ -201,7 +201,10 @@ func (r *ResilienceRateLimitingReconciler) reconcile(ctx context.Context, _ []co
 
 func (r *ResilienceRateLimitingReconciler) configureLimitador(ctx context.Context, logger logr.Logger, lObj *limitadorv1alpha1.Limitador) error {
 	update := false
-	lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
+	if !limitadorReplicasIsConfigured(lObj) {
+		lObj.Spec.Replicas = ptr.To(LimitadorReplicas)
+		update = true
+	}
 
 	if !limitadorPDBIsConfigured(lObj) {
 		if lObj.Spec.PodDisruptionBudget == nil {
@@ -351,11 +354,15 @@ func (r *ResilienceRateLimitingReconciler) startCleanup(kObj *kuadrantv1beta1.Ku
 		return false
 	}
 
-	if kObj.Spec.Resilience == nil {
+	if kObj.Status.Resilience == nil {
 		return false
 	}
 
-	if kObj.Status.Resilience == nil {
+	if kObj.Spec.Resilience == nil && *kObj.Status.Resilience.RateLimiting == kuadrantv1beta1.KuadrantDefined {
+		return true
+	}
+
+	if kObj.Spec.Resilience == nil {
 		return false
 	}
 
@@ -536,6 +543,18 @@ func experimentalFeatureEnabledSate(state *sync.Map) bool {
 		return value.(bool)
 	}
 	return false
+}
+
+func limitadorReplicasIsConfigured(lObj *limitadorv1alpha1.Limitador) bool {
+	if lObj == nil {
+		return false
+	}
+
+	if lObj.Spec.Replicas == nil {
+		return false
+	}
+
+	return true
 }
 
 func limitadorPDBIsConfigured(lObj *limitadorv1alpha1.Limitador) bool {

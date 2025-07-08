@@ -7,16 +7,20 @@ import (
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 const (
-	TopologyConfigMapName = "topology"
+	TopologyConfigMapName  = "topology"
+	OperatorDeploymentName = "kuadrant-operator"
 )
 
 type TopologyReconciler struct {
@@ -44,6 +48,14 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 			"topology": topology.ToDot(),
 		},
 	}
+
+	// Attach owner ref to configmap from kuadrant-operator to link their lifecycles
+	if ownerRef, err := getOwnerRef(ctx, r.Namespace, OperatorDeploymentName); err == nil {
+		cm.OwnerReferences = []metav1.OwnerReference{*ownerRef}
+	} else {
+		logger.Error(err, "failed to set owner reference on topology configmap")
+	}
+
 	unstructuredCM, err := controller.Destruct(cm)
 	if err != nil {
 		logger.Error(err, "failed to destruct topology configmap")
@@ -79,4 +91,32 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 	}
 
 	return nil
+}
+
+// Helper function for controller of owner ref
+func pointerBool(b bool) *bool {
+	return &b
+}
+
+// Returns an owner reference based on kuadrant-operator deployment
+func getOwnerRef(ctx context.Context, namespace, name string) (*metav1.OwnerReference, error) {
+	cfg, err := config.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	deploy, err := clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return &metav1.OwnerReference{
+		APIVersion: appsv1.SchemeGroupVersion.String(),
+		Kind:       "Deployment",
+		Name:       deploy.Name,
+		UID:        deploy.UID,
+		Controller: pointerBool(true),
+	}, nil
 }

@@ -99,6 +99,18 @@ metadata:
         },
         {
           "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "OIDCPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "kuadrant-operator"
+            },
+            "name": "oidcpolicy-sample"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "kuadrant.io/v1alpha1",
           "kind": "TokenRateLimitPolicy",
           "metadata": {
             "name": "token-limit-free",
@@ -162,7 +174,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-06-23T14:58:26Z"
+    createdAt: "2025-07-03T14:57:07Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -192,6 +204,9 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
+    - kind: OIDCPolicy
+      name: oidcpolicies.kuadrant.io
+      version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
       displayName: RateLimitPolicy
@@ -353,7 +368,6 @@ spec:
           - gateway.networking.k8s.io
           resources:
           - gateways
-          - httproutes
           verbs:
           - get
           - list
@@ -376,15 +390,22 @@ spec:
           - patch
           - update
         - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - kuadrant.io
           resources:
           - authpolicies
-          - dnspolicies
-          - kuadrants
-          - ratelimitpolicies
-          - tlspolicies
-          - tokenratelimitpolicies
           verbs:
+          - create
           - get
           - list
           - patch
@@ -396,6 +417,7 @@ spec:
           - authpolicies/finalizers
           - dnspolicies/finalizers
           - kuadrants/finalizers
+          - oidcpolicies/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
           - tokenratelimitpolicies/finalizers
@@ -407,6 +429,7 @@ spec:
           - authpolicies/status
           - dnspolicies/status
           - kuadrants/status
+          - oidcpolicies/status
           - ratelimitpolicies/status
           - tlspolicies/status
           - tokenratelimitpolicies/status
@@ -414,6 +437,21 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies
+          - kuadrants
+          - oidcpolicies
+          - ratelimitpolicies
+          - tlspolicies
+          - tokenratelimitpolicies
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - kuadrant.io
           resources:

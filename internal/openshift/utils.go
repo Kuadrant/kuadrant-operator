@@ -1,22 +1,75 @@
 package openshift
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/Masterminds/semver/v3"
+	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 var (
-	ConsolePluginGVK schema.GroupVersionKind = schema.GroupVersionKind{
+	ConsolePluginGVK = schema.GroupVersionKind{
 		Group:   consolev1.GroupName,
 		Version: consolev1.GroupVersion.Version,
 		Kind:    "ConsolePlugin",
 	}
 	ConsolePluginsResource = consolev1.SchemeGroupVersion.WithResource("consoleplugins")
+
+	ClusterVersionGroupKind = schema.GroupVersionKind{
+		Group:   configv1.GroupName,
+		Version: configv1.GroupVersion.Version,
+		Kind:    "ClusterVersion",
+	}
+	ClusterVersionResource = configv1.SchemeGroupVersion.WithResource("clusterversions")
 )
 
 func IsConsolePluginInstalled(restMapper meta.RESTMapper) (bool, error) {
 	return utils.IsCRDInstalled(restMapper, ConsolePluginGVK.Group, ConsolePluginGVK.Kind, ConsolePluginGVK.Version)
+}
+
+func IsClusterVersionInstalled(restMapper meta.RESTMapper) (bool, error) {
+	return utils.IsCRDInstalled(restMapper, ClusterVersionGroupKind.Group, ClusterVersionGroupKind.Kind, ClusterVersionGroupKind.Version)
+}
+
+// GetConsolePluginImageFromConfigMap returns the appropriate console plugin image from ConfigMap based on OpenShift version
+func GetConsolePluginImageFromConfigMap(configMap *corev1.ConfigMap, openshiftVersion string) (string, error) {
+	if configMap == nil || configMap.Data == nil {
+		return "", fmt.Errorf("console plugin ConfigMap is nil or has no data")
+	}
+
+	var majorMinorVersion string
+	if openshiftVersion != "" {
+		version, err := semver.NewVersion(openshiftVersion)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse OpenShift version %q: %w", openshiftVersion, err)
+		}
+		majorMinorVersion = fmt.Sprintf("%d.%d", version.Major(), version.Minor())
+
+		if image, exists := configMap.Data[majorMinorVersion]; exists {
+			return image, nil
+		}
+	}
+
+	return "", fmt.Errorf("no console plugin image found for OpenShift version %q (major.minor: %q)", openshiftVersion, majorMinorVersion)
+}
+
+// GetConsolePluginImageForVersion returns the appropriate console plugin image based on OpenShift version using ConfigMap
+func GetConsolePluginImageForVersion(ctx context.Context, k8sClient client.Client, configMap *corev1.ConfigMap) (string, error) {
+	clusterVersion := &configv1.ClusterVersion{}
+
+	if err := k8sClient.Get(ctx, types.NamespacedName{Name: "version"}, clusterVersion); err != nil {
+		return "", fmt.Errorf("failed to get cluster version: %w", err)
+	}
+
+	versionStr := clusterVersion.Status.Desired.Version
+	return GetConsolePluginImageFromConfigMap(configMap, versionStr)
 }

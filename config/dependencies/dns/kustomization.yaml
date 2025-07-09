@@ -1,5 +1,5 @@
 resources:
-- github.com/kuadrant/dns-operator/config/default?ref=main
+- github.com/kuadrant/dns-operator/config/default?ref=v0.14.0
 
 patches:
   - path: deployment_patch.yaml

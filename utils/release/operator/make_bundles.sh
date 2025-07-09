@@ -21,11 +21,6 @@ wasm_shim=$(mod_version $WASM_SHIM_VERSION)
 V="oci://quay.io/kuadrant/wasm-shim:$wasm_shim" \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' --inplace config/manager/manager.yaml
 
-# Set desired ConsolePlugin image
-console_plugin=$(mod_version $CONSOLEPLUGIN_VERSION)
-V="quay.io/kuadrant/console-plugin:$console_plugin" \
-yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' --inplace config/manager/manager.yaml
-
 # Set desired operator image
 cd $env/config/manager
 # FIX: for the minute the values for the org and registry are hardcoded into the operator image.

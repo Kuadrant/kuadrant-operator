@@ -31,9 +31,9 @@ spec:
             - name: WITH_EXTENSIONS
               value: "true"
             - name: RELATED_IMAGE_WASMSHIM
-              value: "oci://quay.io/kuadrant/wasm-shim:latest"
+              value: "oci://quay.io/kuadrant/wasm-shim:v0.9.0"
             - name: RELATED_IMAGE_CONSOLEPLUGIN
-              value: "quay.io/kuadrant/console-plugin:latest"
+              value: "quay.io/kuadrant/console-plugin:v0.1.5"
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:

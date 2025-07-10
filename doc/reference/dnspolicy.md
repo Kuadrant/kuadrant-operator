@@ -1,17 +1,5 @@
 # The DNSPolicy Custom Resource Definition (CRD)
 
-- [DNSPolicy](#DNSPolicy)
-- [DNSPolicySpec](#dnspolicyspec)
-  - [excludeAddresses]()
-  - [ProviderRefs](#providerRefs)
-  - [HealthCheckSpec](#healthcheckspec)
-  - [LoadBalancingSpec](#loadbalancingspec)
-    - [LoadBalancingWeighted](#loadbalancingweighted)
-      - [CustomWeight](#customweight)
-    - [LoadBalancingGeo](#loadbalancinggeo)
-- [DNSPolicyStatus](#dnspolicystatus)
-  - [HealthCheckStatus](#healthcheckstatus)
-
 ## DNSPolicy
 
 | **Field** | **Type**                                       | **Required** | **Description**                                |

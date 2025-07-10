@@ -1,17 +1,5 @@
 # The RateLimitPolicy Custom Resource Definition (CRD)
 
-- [RateLimitPolicy](#ratelimitpolicy)
-- [RateLimitPolicySpec](#ratelimitpolicyspec)
-  - [LocalPolicyTargetReferenceWithSectionName](#localpolicytargetreferencewithsectionname)
-  - [LocalPolicyTargetReference](#localpolicytargetreference)
-  - [SectionName](#sectionname)
-  - [Predicate](#predicate)
-  - [Counter](#counter)
-  - [Limit](#limit)
-    - [RateLimit](#ratelimit)
-- [RateLimitPolicyStatus](#ratelimitpolicystatus)
-  - [ConditionSpec](#conditionspec)
-    - [High-level example](#high-level-example)
 
 ## RateLimitPolicy
 

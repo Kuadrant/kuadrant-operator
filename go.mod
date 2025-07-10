@@ -3,6 +3,7 @@ module github.com/kuadrant/kuadrant-operator
 go 1.23.6
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cert-manager/cert-manager v1.16.2
 	github.com/elliotchance/orderedmap/v2 v2.2.0
 	github.com/envoyproxy/gateway v1.2.6
@@ -43,7 +44,6 @@ require (
 )
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

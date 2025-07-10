@@ -60,7 +60,7 @@ catalog: $(OPM) ## Generate catalog content and validate.
 .PHONY: catalog-build
 catalog-build: ## Build a catalog image.
 	# Build the Catalog
-	$(CONTAINER_ENGINE) build $(PROJECT_PATH)/catalog -f $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfile -t $(CATALOG_IMG)
+	$(CONTAINER_ENGINE) build --platform $(BUILD_PLATFORM) $(PROJECT_PATH)/catalog -f $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfile -t $(CATALOG_IMG)
 
 # Push the catalog image.
 .PHONY: catalog-push

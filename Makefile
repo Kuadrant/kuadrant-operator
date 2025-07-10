@@ -14,6 +14,9 @@ ifeq (podman,$(CONTAINER_ENGINE))
 	CONTAINER_ENGINE_EXTRA_FLAGS ?= --load
 endif
 
+# Build platform for container images (defaults to linux/amd64 for cross-platform compatibility)
+BUILD_PLATFORM ?= linux/amd64
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -351,6 +354,7 @@ docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 docker-build: ## Build docker image with the manager.
 		$(CONTAINER_ENGINE) build \
+		--platform $(BUILD_PLATFORM) \
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
 		--build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg DIRTY=$(DIRTY) \
@@ -435,7 +439,7 @@ bundle-ignore-createdAt:
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
-	$(CONTAINER_ENGINE) build --build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	$(CONTAINER_ENGINE) build --platform $(BUILD_PLATFORM) --build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.

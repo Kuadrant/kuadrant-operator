@@ -215,7 +215,7 @@ make catalog-build [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:lates
 * Push the catalog image to a registry
 
 ```sh
-make catalog-push [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
+make catalog-push [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:latest]
 ```
 
 You can try out your custom catalog image following the steps of the

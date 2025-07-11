@@ -156,7 +156,6 @@ jobs:
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            RELATED_IMAGE_CONSOLEPLUGIN=${{ inputs.consolePluginImageURL }} \
             DEFAULT_CHANNEL=${{ inputs.defaultChannel }} \
             CHANNELS=${{ inputs.channels }}
       - name: Set up Docker Buildx
@@ -205,7 +204,6 @@ jobs:
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            RELATED_IMAGE_CONSOLEPLUGIN=${{ inputs.consolePluginImageURL }} \
             CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

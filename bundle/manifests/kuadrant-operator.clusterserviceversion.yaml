@@ -307,6 +307,14 @@ spec:
           - list
           - watch
         - apiGroups:
+          - config.openshift.io
+          resources:
+          - clusterversions
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
           - console.openshift.io
           resources:
           - consoleplugins
@@ -560,8 +568,6 @@ spec:
                   value: "true"
                 - name: RELATED_IMAGE_WASMSHIM
                   value: oci://quay.io/kuadrant/wasm-shim:latest
-                - name: RELATED_IMAGE_CONSOLEPLUGIN
-                  value: quay.io/kuadrant/console-plugin:latest
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -670,6 +676,4 @@ spec:
   relatedImages:
   - image: oci://quay.io/kuadrant/wasm-shim:latest
     name: wasmshim
-  - image: quay.io/kuadrant/console-plugin:latest
-    name: consoleplugin
   version: 0.0.0

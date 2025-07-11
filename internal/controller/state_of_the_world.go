@@ -17,6 +17,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
@@ -126,6 +127,13 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		controller.WithRunnable("console plugin images configmap watcher", controller.Watch(
+			&corev1.ConfigMap{},
+			controller.ConfigMapsResource,
+			operatorNamespace,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
+			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", consoleplugin.KuadrantConsolePluginImagesLabel)),
+		)),
 		controller.WithRunnable("limitador deployment watcher", controller.Watch(
 			&appsv1.Deployment{},
 			kuadrantv1beta1.DeploymentsResource,
@@ -188,6 +196,7 @@ type BootOptionsBuilder struct {
 	isIstioInstalled              bool
 	isCertManagerInstalled        bool
 	isConsolePluginInstalled      bool
+	isClusterVersionInstalled     bool
 	isDNSOperatorInstalled        bool
 	isLimitadorOperatorInstalled  bool
 	isAuthorinoOperatorInstalled  bool
@@ -398,8 +407,14 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 	if err != nil {
 		return nil, err
 	}
-	if !b.isConsolePluginInstalled {
-		b.logger.Info("console plugin is not installed, skipping related watches and reconcilers")
+
+	b.isClusterVersionInstalled, err = openshift.IsClusterVersionInstalled(b.manager.GetRESTMapper())
+	if err != nil {
+		return nil, err
+	}
+
+	if !b.isConsolePluginInstalled || !b.isClusterVersionInstalled {
+		b.logger.Info("console plugin or openshift cluster version is not installed, skipping related watches and reconcilers")
 		return opts, nil
 	}
 
@@ -407,7 +422,11 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		controller.WithRunnable("consoleplugin watcher", controller.Watch(
 			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
-		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+		controller.WithRunnable("clusterversion watcher", controller.Watch(
+			&configv1.ClusterVersion{},
+			openshift.ClusterVersionResource,
+			metav1.NamespaceAll)),
+		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
 	)
 
 	return opts, nil
@@ -587,7 +606,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		Postcondition: b.finalStepsWorkflow().Run,
 	}
 
-	if b.isConsolePluginInstalled {
+	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
 			NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile,
 		)

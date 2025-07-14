@@ -173,7 +173,7 @@ endif
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
-WITH_EXTENSIONS ?= false
+WITH_EXTENSIONS ?= true
 
 all: build
 

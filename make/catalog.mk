@@ -34,7 +34,7 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo LIMITADOR_OPERATOR_BUNDLE_IMG  = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
 	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	@echo DNS_OPERATOR_BUNDLE_IMG        = $(DNS_OPERATOR_BUNDLE_IMG)
-	@echo CHANNELS                        = $(CHANNELS)
+	@echo CHANNEL                        = $(CHANNEL)
 	@echo CATALOG_FILE                   = $@
 	@echo "************************************************************"
 	@echo
@@ -42,7 +42,7 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo
 	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) \
 			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-			$(DNS_OPERATOR_BUNDLE_IMG) $(CHANNELS) $@
+			$(DNS_OPERATOR_BUNDLE_IMG) $(CHANNEL) $@
 
 .PHONY: catalog
 catalog: $(OPM) ## Generate catalog content and validate.

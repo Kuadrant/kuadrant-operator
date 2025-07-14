@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -58,7 +59,7 @@ func NewOOPExtension(name string, location string, service extpb.ExtensionServic
 
 	return OOPExtension{
 		name:       name,
-		socket:     fmt.Sprintf("%s/%s/%s", location, name, defaultUnixSocket),
+		socket:     fmt.Sprintf("/tmp/kuadrant/%s/%s", name, defaultUnixSocket),
 		executable: executable,
 		service:    service,
 		logger:     logger.WithName(name),
@@ -151,6 +152,10 @@ func (p *OOPExtension) Stop() error {
 
 func (p *OOPExtension) startServer() error {
 	if p.server == nil {
+		if err := os.MkdirAll(filepath.Dir(p.socket), 0755); err != nil {
+			return fmt.Errorf("failed to create socket directory: %w", err)
+		}
+
 		ln, err := net.Listen("unix", p.socket)
 		if err != nil {
 			return err

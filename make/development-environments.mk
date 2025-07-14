@@ -52,7 +52,7 @@ namespace: ## Creates a namespace where to deploy Kuadrant Operator
 
 .PHONY: local-deploy
 local-deploy: ## Deploy Kuadrant Operator from the current code
-	$(MAKE) $(DOCKER_BUILD) IMG=$(IMAGE_TAG_BASE):dev
+	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
 	$(MAKE) kind-load-image IMG=$(IMAGE_TAG_BASE):dev
 
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev

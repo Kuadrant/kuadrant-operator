@@ -40,8 +40,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/oidc
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
-COPY --from=builder --chown=65532:65532 /workspace/extensions /extensions
-USER 65532:65532
+COPY --from=builder /workspace/extensions /extensions
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

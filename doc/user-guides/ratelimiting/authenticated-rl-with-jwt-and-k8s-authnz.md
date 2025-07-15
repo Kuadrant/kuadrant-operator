@@ -25,7 +25,7 @@ Each user will be entitled to a maximum of 5rp10s (5 requests every 10 seconds).
 
 ## Prerequisites
 
-- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/1.2.x/getting-started) guide for more information.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide for more information.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Setup environment variables

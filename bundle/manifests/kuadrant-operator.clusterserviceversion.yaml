@@ -98,6 +98,71 @@ metadata:
           }
         },
         {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "OIDCPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "kuadrant-operator"
+            },
+            "name": "oidcpolicy-sample"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "TokenRateLimitPolicy",
+          "metadata": {
+            "name": "token-limit-free",
+            "namespace": "gateway-system"
+          },
+          "spec": {
+            "limits": {
+              "free": {
+                "counters": [
+                  {
+                    "expression": "auth.identity.userid"
+                  }
+                ],
+                "rates": [
+                  {
+                    "limit": 20000,
+                    "window": "1d"
+                  }
+                ],
+                "when": [
+                  {
+                    "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"free\")"
+                  }
+                ]
+              },
+              "gold": {
+                "counters": [
+                  {
+                    "expression": "auth.identity.userid"
+                  }
+                ],
+                "rates": [
+                  {
+                    "limit": 200000,
+                    "window": "1d"
+                  }
+                ],
+                "when": [
+                  {
+                    "predicate": "request.auth.claims[\"kuadrant.io/groups\"].split(\",\").exists(g, g == \"gold\")"
+                  }
+                ]
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "Gateway",
+              "name": "my-llm-gateway"
+            }
+          }
+        },
+        {
           "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
@@ -109,7 +174,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-04-23T14:42:57Z"
+    createdAt: "2025-07-07T09:13:43Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -139,6 +204,9 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
+    - kind: OIDCPolicy
+      name: oidcpolicies.kuadrant.io
+      version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
       displayName: RateLimitPolicy
@@ -151,6 +219,9 @@ spec:
       kind: TLSPolicy
       name: tlspolicies.kuadrant.io
       version: v1
+    - kind: TokenRateLimitPolicy
+      name: tokenratelimitpolicies.kuadrant.io
+      version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:
@@ -297,7 +368,6 @@ spec:
           - gateway.networking.k8s.io
           resources:
           - gateways
-          - httproutes
           verbs:
           - get
           - list
@@ -320,14 +390,22 @@ spec:
           - patch
           - update
         - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - kuadrant.io
           resources:
           - authpolicies
-          - dnspolicies
-          - kuadrants
-          - ratelimitpolicies
-          - tlspolicies
           verbs:
+          - create
           - get
           - list
           - patch
@@ -339,8 +417,10 @@ spec:
           - authpolicies/finalizers
           - dnspolicies/finalizers
           - kuadrants/finalizers
+          - oidcpolicies/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
+          - tokenratelimitpolicies/finalizers
           verbs:
           - update
         - apiGroups:
@@ -349,12 +429,29 @@ spec:
           - authpolicies/status
           - dnspolicies/status
           - kuadrants/status
+          - oidcpolicies/status
           - ratelimitpolicies/status
           - tlspolicies/status
+          - tokenratelimitpolicies/status
           verbs:
           - get
           - patch
           - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies
+          - kuadrants
+          - oidcpolicies
+          - ratelimitpolicies
+          - tlspolicies
+          - tokenratelimitpolicies
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - kuadrant.io
           resources:
@@ -459,6 +556,8 @@ spec:
                 command:
                 - /manager
                 env:
+                - name: WITH_EXTENSIONS
+                  value: "true"
                 - name: RELATED_IMAGE_WASMSHIM
                   value: oci://quay.io/kuadrant/wasm-shim:latest
                 - name: RELATED_IMAGE_CONSOLEPLUGIN

@@ -153,31 +153,6 @@ var _ = Describe("TLSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 		})
 
-		It("invalid kind - should have accepted condition with status false and correct reason", func(ctx SpecContext) {
-			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
-				WithTargetGateway(gateway.Name).
-				WithIssuerRef(certmanmetav1.ObjectReference{Kind: "NotIssuer"})
-			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(tlsPolicy.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonInvalid)),
-						"Message": Equal("TLSPolicy target is invalid: invalid value \"NotIssuer\" for issuerRef.kind. Must be empty, \"Issuer\" or \"ClusterIssuer\""),
-					})),
-				)
-				g.Expect(tlsPolicy.Status.Conditions).ToNot(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
-					})),
-				)
-			}, tests.TimeoutLong, time.Second).Should(Succeed())
-		}, testTimeOut)
-
 		It("unable to find issuer - should have accepted condition with status false and correct reason", func(ctx SpecContext) {
 			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
@@ -700,6 +675,26 @@ var _ = Describe("TLSPolicy controller", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Invalid targetRef.kind. The only supported values are 'Gateway'"))
 		}, testTimeOut)
+
+		It("should error with invalid issuerRef.kind", func(ctx SpecContext) {
+			p := kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway("gateway").
+				WithIssuerRef(certmanmetav1.ObjectReference{Kind: "NotAValidIssuer"})
+
+			err := k8sClient.Create(ctx, p)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Invalid issuerRef.kind. The only supported values are blank, 'Issuer' and 'ClusterIssuer"))
+		})
+
+		// The existing tests already cover "Issuer" / "ClusterIssuer" specified in issuerRef.kind
+
+		It("should pass with empty issuerRef.kind", func(ctx SpecContext) {
+			p := kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway("gateway").
+				WithIssuerRef(certmanmetav1.ObjectReference{})
+
+			Expect(k8sClient.Create(ctx, p)).To(Succeed())
+		})
 	})
 
 	Context("section name", func() {

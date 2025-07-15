@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/ratelimit"
@@ -34,6 +35,7 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		},
 	}
@@ -50,11 +52,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		return nil
 	}
 
-	desiredLimits, err := r.buildLimitadorLimits(ctx, state)
-	if err != nil {
-		logger.Error(err, "failed to build limitador limits", "status", "error")
-		return nil
-	}
+	desiredLimits := r.buildLimitadorLimits(ctx, state)
 
 	if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
 		logger.Info("limitador object is up to date, nothing to do", "status", "skipping")
@@ -83,41 +81,69 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	return nil
 }
 
-func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, error) {
+func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) []limitadorv1alpha1.RateLimit {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("buildLimitadorLimits")
-
-	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
-	if !ok {
-		return nil, ErrMissingStateEffectiveRateLimitPolicies
-	}
-	effectivePoliciesMap := effectivePolicies.(EffectiveRateLimitPolicies)
-
-	logger.V(1).Info("building limitador limits", "effectivePolicies", len(effectivePoliciesMap))
 
 	rateLimitIndex := ratelimit.NewIndex()
 
-	for pathID, effectivePolicy := range effectivePoliciesMap {
-		_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+	// both RateLimitPolicies and TokenRateLimitPolicies together
+	r.processEffectivePolicies(ctx, state, rateLimitIndex)
 
-		limitRules := lo.Filter(lo.Entries(effectivePolicy.Spec.Rules()),
-			func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
-				return r.Key != kuadrantv1.RulesKeyTopLevelPredicates
-			},
-		)
+	logger.V(1).Info("finished building limitador limits", "limits", rateLimitIndex.Len())
 
-		for _, limitRule := range limitRules {
-			limitKey := limitRule.Key
-			mergeableLimit := limitRule.Value
-			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
-				return p.GetLocator() == mergeableLimit.GetSource()
-			})
-			if !found { // should never happen
-				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.GetSource(), pathID), "failed to build limitador limit definition")
-				continue
-			}
+	return rateLimitIndex.ToRateLimits()
+}
+
+func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index) {
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processEffectivePolicies")
+	// RateLimitPolicies
+	if effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
+		effectivePoliciesMap := effectivePolicies.(EffectiveRateLimitPolicies)
+		logger.V(1).Info("processing rate limit policies", "count", len(effectivePoliciesMap))
+		for pathID, effectivePolicy := range effectivePoliciesMap {
+			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex)
+		}
+	}
+
+	// TokenRateLimitPolicies
+	if effectivePolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
+		effectivePoliciesMap := effectivePolicies.(EffectiveTokenRateLimitPolicies)
+		logger.V(1).Info("processing token rate limit policies", "count", len(effectivePoliciesMap))
+		for pathID, effectivePolicy := range effectivePoliciesMap {
+			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex)
+		}
+	}
+}
+
+func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index) {
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processPolicyRules")
+	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+
+	limitRules := lo.Filter(lo.Entries(rules),
+		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
+			return r.Key != kuadrantv1.RulesKeyTopLevelPredicates
+		},
+	)
+
+	for _, limitRule := range limitRules {
+		limitKey := limitRule.Key
+		mergeableLimit := limitRule.Value
+
+		// Find policy using combined predicate that checks both RateLimitPolicy and TokenRateLimitPolicy
+		policy, found := lo.Find(kuadrantv1.PoliciesInPath(path, isRateLimitingPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
+			return p.GetLocator() == mergeableLimit.GetSource()
+		})
+
+		if !found { // should never happen
+			logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.GetSource(), pathID), "failed to build limitador limit definition")
+			continue
+		}
+
+		limitSpec := mergeableLimit.GetSpec()
+		switch limit := limitSpec.(type) {
+		case *kuadrantv1.Limit:
 			limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-			limit := mergeableLimit.GetSpec().(*kuadrantv1.Limit)
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
@@ -129,10 +155,36 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 				}
 			})
 			rateLimitIndex.Set(fmt.Sprintf("%s/%s", limitsNamespace, limitIdentifier), rateLimits)
+
+		case *kuadrantv1alpha1.TokenLimit:
+			limitIdentifier := TokenLimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
+			rateLimits := utils.Map(limit.Rates, func(rate kuadrantv1.Rate) limitadorv1alpha1.RateLimit {
+				maxValue, seconds := rate.ToSeconds()
+				return limitadorv1alpha1.RateLimit{
+					Namespace:  limitsNamespace,
+					MaxValue:   maxValue,
+					Seconds:    seconds,
+					Conditions: []string{fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", limitIdentifier)},
+					Variables:  utils.GetEmptySliceIfNil(limit.CountersAsStringList()),
+				}
+			})
+			rateLimitIndex.Set(fmt.Sprintf("%s/%s", limitsNamespace, limitIdentifier), rateLimits)
+
+		default:
+			logger.Error(fmt.Errorf("unknown limit type: %T", limitSpec), "failed to process limit")
+			continue
 		}
 	}
+}
 
-	logger.V(1).Info("finished building limitador limits", "limits", rateLimitIndex.Len())
+// isRateLimitingPolicyAcceptedAndNotDeletedFunc returns a predicate that checks if a policy is either
+// a RateLimitPolicy or TokenRateLimitPolicy that is accepted and not deleted
+func isRateLimitingPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.Policy) bool {
+	rlpPredicate := isRateLimitPolicyAcceptedAndNotDeletedFunc(state)
+	trlpPredicate := isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state)
 
-	return rateLimitIndex.ToRateLimits(), nil
+	return func(policy machinery.Policy) bool {
+		// Check if it's a RateLimitPolicy or TokenRateLimitPolicy
+		return rlpPredicate(policy) || trlpPredicate(policy)
+	}
 }

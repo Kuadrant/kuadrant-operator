@@ -11,7 +11,7 @@
 
 | **Field**        | **Type**                                                                                                                          |     **Required**      | **Description**                                            |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------|:---------------------:|------------------------------------------------------------|
-| `targetRef`      | [Gateway API LocalPolicyTargetReferenceWithSectionName ](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.LocalPolicyTargetReferenceWithSectionName)   |          Yes          | Reference to a Kubernetes resource that the policy attaches to |
+| `targetRef`      | [Gateway API LocalPolicyTargetReferenceWithSectionName](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname)   |          Yes          | Reference to a Kubernetes resource that the policy attaches to |
 | `healthCheck`    | [HealthCheckSpec](#healthcheckspec)                                                                                               |          No           | HealthCheck spec                                           |
 | `loadBalancing`  | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | No | LoadBalancing Spec       |
 | `providerRefs`   | [ProviderRefs](#providerrefs)                                                                                                         |          Yes          | array of references to providers. (currently limited to max 1) |
@@ -39,7 +39,6 @@
 | **Field**  | **Type** | **Required** | **Description**                                                                        |
 |------------|----------|:------------:|----------------------------------------------------------------------------------------|
 | `name`     | String   |     Yes      | Name of the secret in the same namespace that contains the provider credentials
-|--------------------|------------|:------------:|-----------------------------------------------------------------------------------------------------------|
 | `path`         | String     |     Yes      | Path is the path to append to the host to reach the expected health check. Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common              | 
 | `port`             | Number     |     Yes      | Port to connect to the host on. Must be either 80, 443 or 1024-49151                          | 
 | `protocol`         | String     |     Yes      | Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"                           | 

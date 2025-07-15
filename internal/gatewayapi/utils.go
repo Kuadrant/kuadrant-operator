@@ -50,7 +50,7 @@ func GetRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.Pa
 	}
 
 	return utils.Filter(route.Spec.ParentRefs, func(p gatewayapiv1.ParentReference) bool {
-		for _, parentStatus := range route.Status.RouteStatus.Parents {
+		for _, parentStatus := range route.Status.Parents {
 			if reflect.DeepEqual(parentStatus.ParentRef, p) && meta.IsStatusConditionTrue(parentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
 				return true
 			}

@@ -145,12 +145,12 @@ func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb
 func toGw(gw machinery.Gateway) *extpb.Gateway {
 	return &extpb.Gateway{
 		Metadata: &extpb.Metadata{
-			Name:      gw.Gateway.Name,
-			Namespace: gw.Gateway.Namespace,
+			Name:      gw.Name,
+			Namespace: gw.Namespace,
 		},
 		Spec: &extpb.GatewaySpec{
-			GatewayClassName: string(gw.Gateway.Spec.GatewayClassName),
-			Listeners:        toListeners(gw.Gateway.Spec.Listeners),
+			GatewayClassName: string(gw.Spec.GatewayClassName),
+			Listeners:        toListeners(gw.Spec.Listeners),
 		},
 	}
 }
@@ -161,6 +161,9 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 		listener := extpb.Listener{}
 		if l.Hostname != nil {
 			listener.Hostname = string(*l.Hostname)
+		}
+		if l.Protocol != "" {
+			listener.Protocol = string(l.Protocol)
 		}
 		ls[i] = &listener
 	}

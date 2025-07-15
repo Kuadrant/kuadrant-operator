@@ -48,6 +48,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
@@ -95,6 +96,7 @@ func BootstrapScheme() *runtime.Scheme {
 		scheme.AddToScheme,
 		kuadrantdnsv1alpha1.AddToScheme,
 		kuadrantv1.AddToScheme,
+		kuadrantv1alpha1.AddToScheme,
 		kuadrantv1beta1.AddToScheme,
 		gatewayapiv1.Install,
 		authorinoopapi.AddToScheme,

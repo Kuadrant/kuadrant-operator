@@ -91,5 +91,7 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 	_ = oopErrorLog.Stop() // gracefully kill the process/server
 	assert.Assert(t, lo.Contains(writer.messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
 	logAsString := strings.Join(writer.messages, "\n")
-	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "usage:"))
+	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "usage:") ||
+		strings.Contains(strings.ToLower(logAsString), "illegal option"),
+		"Expected ps error output to be captured")
 }

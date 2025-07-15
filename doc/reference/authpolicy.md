@@ -1,21 +1,5 @@
 # The AuthPolicy Custom Resource Definition (CRD)
 
-- [AuthPolicy](#authpolicy)
-- [AuthPolicySpec](#authpolicyspec)
-- [AuthPolicyCommonSpec](#authpolicycommonspec)
-  - [AuthScheme](#authscheme)
-    - [AuthRuleCommon](#authrulecommon)
-    - [AuthenticationRule](#authenticationrule)
-    - [MetadataRule](#metadatarule)
-    - [AuthorizationRule](#authorizationrule)
-    - [ResponseSpec](#responsespec)
-      - [SuccessResponseSpec](#successresponsespec)
-        - [SuccessResponseItem](#successresponseitem)
-    - [CallbackRule](#callbackrule)
-  - [NamedPattern](#namedpattern)
-- [AuthPolicyStatus](#authpolicystatus)
-  - [ConditionSpec](#conditionspec)
-
 ## AuthPolicy
 
 | **Field** | **Type**                              | **Required** | **Description**                                 |

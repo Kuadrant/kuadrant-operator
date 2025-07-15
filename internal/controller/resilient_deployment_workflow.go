@@ -5,6 +5,7 @@ package controllers
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -246,7 +247,7 @@ func (r *ResilienceRateLimitingReconciler) configureLimitador(ctx context.Contex
 		}
 	}
 	if update {
-		err := r.updateLimitador(ctx, lObj)
+		_, err := r.updateLimitador(ctx, lObj)
 		if err != nil {
 			logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
 			return err
@@ -318,11 +319,22 @@ func (r *ResilienceRateLimitingReconciler) cleanupLimitador(ctx context.Context,
 	lObj.Spec.Replicas = ptr.To(1)
 	lObj.Spec.PodDisruptionBudget = nil
 	lObj.Spec.ResourceRequirements = nil
-	err := r.updateLimitador(ctx, lObj)
+	newLObj, err := r.updateLimitador(ctx, lObj)
 	if err != nil {
 		logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
 		return err
 	}
+
+	newLObj.Spec.Replicas = nil
+	// Sleep is required to allow limitador-operator to pick up initail changes before apply the second set.
+	// Delay of 3 seconds was a random time. Could be short, but seems to work reliably.
+	time.Sleep(3 * time.Second)
+	_, err = r.updateLimitador(ctx, newLObj)
+	if err != nil {
+		logger.V(level).Info("failed to update limitador resource", "status", "error", "error", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -393,13 +405,20 @@ func (r *ResilienceRateLimitingReconciler) startReconcile(kObj *kuadrantv1beta1.
 	return false
 }
 
-func (r *ResilienceRateLimitingReconciler) updateLimitador(ctx context.Context, lObj *limitadorv1alpha1.Limitador) error {
+func (r *ResilienceRateLimitingReconciler) updateLimitador(ctx context.Context, lObj *limitadorv1alpha1.Limitador) (*limitadorv1alpha1.Limitador, error) {
 	obj, err := controller.Destruct(lObj)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = r.Client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(lObj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
-	return err
+	rObj, err := r.Client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(lObj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	restructObj, err := controller.Restructure[limitadorv1alpha1.Limitador](rObj)
+	if err != nil {
+		return nil, err
+	}
+	return ptr.To(restructObj.(limitadorv1alpha1.Limitador)), err
 }
 
 func (r *ResilienceRateLimitingReconciler) updateDeployment(ctx context.Context, deployment *appsv1.Deployment) error {

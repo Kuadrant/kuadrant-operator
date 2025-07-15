@@ -20,8 +20,7 @@ import (
 )
 
 const (
-	TopologyConfigMapName  = "topology"
-	OperatorDeploymentName = "kuadrant-operator"
+	TopologyConfigMapName = "topology"
 )
 
 type TopologyReconciler struct {
@@ -51,7 +50,7 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 	}
 
 	// Attach owner ref to configmap from kuadrant-operator to link their lifecycles
-	if ownerRef, err := getOwnerRef(ctx, r.Namespace, OperatorDeploymentName); err == nil {
+	if ownerRef, err := getOwnerRef(ctx, r.Namespace, kuadrant.OperatorDeploymentName); err == nil {
 		cm.OwnerReferences = []metav1.OwnerReference{*ownerRef}
 	} else {
 		logger.Error(err, "failed to set owner reference on topology configmap")

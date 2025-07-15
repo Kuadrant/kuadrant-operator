@@ -13,6 +13,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 const (
@@ -29,7 +30,7 @@ func CommonLabels() map[string]string {
 	return map[string]string{
 		AppLabelKey:                    AppLabelValue,
 		"app.kubernetes.io/component":  KuadrantAppName,
-		"app.kubernetes.io/managed-by": "kuadrant-operator",
+		"app.kubernetes.io/managed-by": kuadrant.OperatorDeploymentName,
 		"app.kubernetes.io/instance":   KuadrantAppName,
 		"app.kubernetes.io/name":       KuadrantAppName,
 		"app.kubernetes.io/part-of":    KuadrantAppName,

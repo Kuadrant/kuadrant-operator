@@ -126,11 +126,24 @@ func TestPolicyWithNotYetKnownPolicyBinding(t *testing.T) {
 func TestPolicyWithAnyKnownPolicyBinding(t *testing.T) {
 	builder := NewValidatorBuilder()
 	builder.AddBinding("nope", cel.StringType)
-	builder, _ = builder.AddPolicyBindingAfter(nil, "foo", "first", cel.AnyType)
+	first := "foo"
+	second := "bar"
+	builder, _ = builder.AddPolicyBindingAfter(nil, first, "first", cel.AnyType)
+	builder, _ = builder.AddPolicyBindingAfter(&first, second, "second", cel.AnyType)
 	if validator, err := builder.Build(); err != nil {
 		t.Fatal(err)
 	} else {
-		if ast, err := validator.Validate("foo", "!first.randomField"); err != nil {
+		if ast, err := validator.Validate(first, "!first.randomField"); err != nil {
+			t.Fatalf("Should have not returned an error: %v", err)
+		} else if ast == nil {
+			t.Fatal("Ast should have returned for known policy binding")
+		}
+		if ast, err := validator.Validate(second, "!first.randomField"); err != nil {
+			t.Fatalf("Should have not returned an error: %v", err)
+		} else if ast == nil {
+			t.Fatal("Ast should have returned for known policy binding")
+		}
+		if ast, err := validator.Validate(second, "!second.randomField"); err != nil {
 			t.Fatalf("Should have not returned an error: %v", err)
 		} else if ast == nil {
 			t.Fatal("Ast should have returned for known policy binding")

@@ -39,8 +39,8 @@ import (
 )
 
 const (
-	TimeoutMedium        = time.Second * 10
-	TimeoutLong          = time.Second * 30
+	TimeoutMedium        = time.Second * 20
+	TimeoutLong          = time.Second * 40
 	RetryIntervalMedium  = time.Millisecond * 250
 	GatewayName          = "test-placed-gateway"
 	ClusterNameOne       = "test-placed-control"

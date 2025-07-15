@@ -233,6 +233,16 @@ spec:
                   rule: self.group == 'gateway.networking.k8s.io'
                 - message: Invalid targetRef.kind. The only supported values are 'Gateway'
                   rule: self.kind == 'Gateway'
+              useRouteHosts:
+                description: UseRouteHosts defines whether DNSPolicy should generate
+                  DNSRecods based on the targeted gateways listener hosts or instead
+                  use the hosts defined in attached Route. It defaults to false as
+                  this keeps the behaviour the same. If set to true, the policy controller
+                  will look at the attached HTTPRoute or GRCPRoute and create a DNSRecord
+                  for each hostname it finds. This flag is something that would be
+                  used when targeting a wildcard listener host to avoid a wildcard
+                  DNS entry.
+                type: boolean
             required:
             - targetRef
             type: object

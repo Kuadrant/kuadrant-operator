@@ -68,8 +68,12 @@ func LinkListenerToDNSRecord(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.FilterMap(listeners, func(l *machinery.Listener, _ int) (machinery.Object, bool) {
 				if dnsRecord, ok := child.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord); ok {
+					// if a policy dictates that hosts from the HTTPRoute should be used, there can now be multiple records per listener so we check for the label and for back compat we also do the old dns record name check
+					lv, hasListenerLabel := dnsRecord.Labels[LabelListenerReference]
+					gv, hasGatewayLabel := dnsRecord.Labels[LabelGatewayReference]
 					return l, l.GetNamespace() == dnsRecord.GetNamespace() &&
-						dnsRecord.GetName() == dnsRecordName(l.Gateway.Name, string(l.Name))
+						(dnsRecord.GetName() == dnsRecordName(l.Gateway.Name, string(l.Name)) ||
+							(hasListenerLabel && lv == string(l.Name)) && (hasGatewayLabel && gv == l.Gateway.Name))
 				}
 				return nil, false
 			})

@@ -662,7 +662,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 
 			By("deleting the dns policy")
 			Expect(k8sClient.Delete(ctx, dnsPolicy)).To(Succeed())

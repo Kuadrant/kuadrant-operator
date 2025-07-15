@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/samber/lo"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
@@ -50,6 +53,94 @@ func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription 
 	}
 }
 
+func isWildCardListener(l *machinery.Listener) bool {
+	return l != nil && (l.Hostname == nil || *l.Hostname == "" || strings.HasPrefix(string(*l.Hostname), "*."))
+}
+
+// DNSNamesForGateway returns a set of dnstargets to create records for keyed against a listener location
+func dnsNamesForGatewayFromRoutes(ctx context.Context, topology *machinery.Topology, gateway *machinery.Gateway) map[string][]dnsTarget {
+	logger := controller.LoggerFromContext(ctx).WithName("DNSNamesForGateway")
+	// this will give us all routes targeting the sectionName + any targeting the gateway directly
+	gatewayListeners := lo.FilterMap(topology.All().Children(gateway), func(item machinery.Object, _ int) (*machinery.Listener, bool) {
+		v, ok := item.(*machinery.Listener)
+		return v, ok
+	})
+	//TODO is there a better way to do this?
+	var gatewayHTTPRoutes = []*machinery.HTTPRoute{}
+	for _, gl := range gatewayListeners {
+		// duplicated TODO clean up
+		hasAttachedRoute := false
+		for _, statusListener := range gateway.Status.Listeners {
+			if string(gl.Name) == string(statusListener.Name) {
+				hasAttachedRoute = statusListener.AttachedRoutes > 0
+				break
+			}
+		}
+		if !hasAttachedRoute {
+			continue
+		}
+
+		listenerRoutes := lo.FilterMap(topology.All().Children(gl), func(item machinery.Object, _ int) (*machinery.HTTPRoute, bool) {
+			v, ok := item.(*machinery.HTTPRoute)
+			if ok {
+				if !slices.Contains(gatewayHTTPRoutes, v) {
+					return v, ok
+				}
+				return v, false
+			}
+			return v, ok
+		})
+		gatewayHTTPRoutes = append(gatewayHTTPRoutes, listenerRoutes...)
+	}
+
+	names := map[string][]dnsTarget{}
+	for _, route := range gatewayHTTPRoutes {
+		for _, routeHost := range route.Spec.Hostnames {
+			logger.V(1).Info(route.GetLocator(), "with hostname", routeHost)
+			var hostMatch, listernerID, listenerName string
+			for _, listener := range gatewayListeners {
+				if !isWildCardListener(listener) {
+					//exact match were done
+					if *listener.Hostname == routeHost {
+						logger.V(1).Info("exact listener host match found", "listener:", listener.GetLocator(), "route host", routeHost)
+						listernerID = listener.GetLocator()
+						listenerName = string(listener.Listener.Name)
+						break
+					}
+				}
+				if isWildCardListener(listener) {
+					logger.V(1).Info("wildcard:", "listener:", listener.GetLocator())
+					if hostMatch == "" && (listener.Hostname == nil || *listener.Hostname == "") {
+						hostMatch = ".*" // shortest possible match
+						listernerID = listener.GetLocator()
+						listenerName = string(listener.Listener.Name)
+						logger.V(1).Info("set listener as match", "listener host", "default wildcard listener", "route host", routeHost)
+					}
+					if listener.Hostname != nil {
+						subDomain := strings.ReplaceAll(string(*listener.Hostname), "*.", "")
+						if strings.HasSuffix(string(routeHost), subDomain) {
+							if len(hostMatch) < len(subDomain) {
+								hostMatch = subDomain
+								listernerID = listener.GetLocator()
+								listenerName = string(listener.Listener.Name)
+								logger.V(1).Info("set listener as match", "listener host", *listener.Hostname, "route host", routeHost)
+							}
+						}
+					}
+				}
+			}
+
+			if listernerID != "" && listenerName != "" {
+				t := dnsTarget{hostname: routeHost, listenerName: listenerName, isHTTPRouteHost: true}
+				if !slices.Contains(names[listernerID], t) {
+					names[listernerID] = append(names[listernerID], t)
+				}
+			}
+		}
+	}
+	return names
+}
+
 func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler")
 
@@ -66,7 +157,6 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 	if err != nil {
 		return fmt.Errorf("failed to generate cluster ID: %w", err)
 	}
-
 	for _, policy := range policies {
 		pLogger := logger.WithValues("policy", policy.GetLocator())
 
@@ -96,10 +186,6 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 			lLogger := pLogger.WithValues("listener", listener.GetLocator())
 
 			gateway := listener.Gateway
-			if listener.Hostname == nil || *listener.Hostname == "" {
-				lLogger.Info("listener has no hostname assigned, skipping")
-				continue
-			}
 
 			if len(gateway.Status.Addresses) > 0 {
 				gatewayHasAddresses = true
@@ -116,89 +202,147 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				gatewayHasAttachedRoutes = true
 			}
 
-			desiredRecord, err := desiredDNSRecord(gateway.Gateway, clusterID, policy, *listener.Listener)
-			if err != nil {
-				lLogger.Error(err, "failed to build desired dns record")
+			listenerHasHost := listener.Hostname != nil && *listener.Hostname != ""
+
+			if !policy.UseHTTPRouteHosts() && !listenerHasHost {
+				lLogger.Info("listener has no hostname and not using httproute hosts, skipping")
 				continue
 			}
-			if err = controllerutil.SetControllerReference(policy, desiredRecord, r.scheme); err != nil {
-				lLogger.Error(err, "failed to set owner reference on desired record")
-				continue
+			// dns targets for this specific listener
+			listenerDNSTargets := []dnsTarget{}
+
+			if policy.UseHTTPRouteHosts() {
+				lLogger.V(1).Info("policy targeting listener uses routes for dns names")
+				listenerToDNSTargets := dnsNamesForGatewayFromRoutes(ctx, topology, listener.Gateway)
+				targets, ok := listenerToDNSTargets[listener.GetLocator()]
+				if !ok {
+					continue
+				}
+
+				listenerDNSTargets = targets
+			}
+			if listenerHasHost && !policy.UseHTTPRouteHosts() {
+				listenerDNSTargets = append(listenerDNSTargets, dnsTarget{
+					hostname:     *listener.Hostname,
+					listenerName: string(listener.Name),
+				})
 			}
 
-			resource := r.client.Resource(DNSRecordResource).Namespace(desiredRecord.GetNamespace())
-
-			existingRecordObj, recordExists := lo.Find(topology.Objects().Children(listener), func(o machinery.Object) bool {
-				_, ok := o.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
-				return ok && o.GetNamespace() == listener.GetNamespace() && o.GetName() == dnsRecordName(listener.Gateway.Name, string(listener.Name))
+			//isolate any existing records that are not part of the calculated dns targets ready for removal
+			staleListenerRecords := lo.FilterMap(topology.Objects().Children(listener), func(o machinery.Object, _ int) (*kuadrantdnsv1alpha1.DNSRecord, bool) {
+				dns, ok := o.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
+				if !ok {
+					return dns, ok
+				}
+				stale := !slices.ContainsFunc(listenerDNSTargets, func(t dnsTarget) bool {
+					return dns.Spec.RootHost == string(t.hostname)
+				})
+				return dns, stale
 			})
 
-			if len(desiredRecord.Spec.Endpoints) == 0 {
-				policyErrors[policy.GetLocator()] = ErrNoAddresses
-			}
+			allListenerTargetsReady := true
 
-			//Update
-			if recordExists {
-				rLogger := lLogger.WithValues("record", existingRecordObj.GetLocator())
+			for _, target := range listenerDNSTargets {
+				desiredRecord, err := desiredDNSRecord(gateway.Gateway, clusterID, policy, target)
+				if err != nil {
+					lLogger.Error(err, "failed to build desired dns record")
+					continue
+				}
+				if err = controllerutil.SetControllerReference(policy, desiredRecord, r.scheme); err != nil {
+					lLogger.Error(err, "failed to set owner reference on desired record")
+					continue
+				}
 
-				existingRecord := existingRecordObj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
+				resource := r.client.Resource(DNSRecordResource).Namespace(desiredRecord.GetNamespace())
 
-				// Deal with the potential deletion of a record first
-				if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
-					if !hasAttachedRoute {
-						rLogger.V(1).Info("listener has no attached routes, deleting record for listener")
-					} else {
-						rLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting record for listener")
+				existingRecordObj, recordExists := lo.Find(topology.Objects().Children(listener), func(o machinery.Object) bool {
+					dns, ok := o.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
+					return ok && o.GetNamespace() == listener.GetNamespace() && dns.Spec.RootHost == string(target.hostname)
+				})
+
+				if len(desiredRecord.Spec.Endpoints) == 0 {
+					policyErrors[policy.GetLocator()] = ErrNoAddresses
+				}
+
+				//Update
+				if recordExists {
+					rLogger := lLogger.WithValues("record exists:", existingRecordObj.GetLocator())
+
+					existingRecord := existingRecordObj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
+					if !meta.IsStatusConditionTrue(existingRecord.Status.Conditions, "Ready") {
+						allListenerTargetsReady = false
 					}
-					r.deleteRecord(ctx, existingRecordObj)
+
+					// Deal with the potential deletion of a record first
+					if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
+						if !hasAttachedRoute {
+							rLogger.V(1).Info("listener has no attached routes, deleting record for listener")
+						} else {
+							rLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting record for listener")
+						}
+						// remove the new record and any stale records
+						r.deleteRecord(ctx, existingRecord)
+						for _, stale := range staleListenerRecords {
+							r.deleteRecord(ctx, stale)
+						}
+						continue
+					}
+
+					if !canUpdateDNSRecord(ctx, existingRecord, desiredRecord) {
+						rLogger.V(1).Info("unable to update record, deleting record for listener and re-creating")
+						r.deleteRecord(ctx, existingRecord)
+						break
+					}
+
+					if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) {
+						rLogger.V(1).Info("dns record is up to date, nothing to do")
+						continue
+					}
+					existingRecord.Spec = desiredRecord.Spec
+
+					un, err := controller.Destruct(existingRecord)
+					if err != nil {
+						lLogger.Error(err, "unable to destruct dns record")
+						continue
+					}
+
+					rLogger.V(1).Info("updating record for listener")
+					if _, uErr := resource.Update(ctx, un, metav1.UpdateOptions{}); uErr != nil {
+						rLogger.Error(uErr, "unable to update dns record")
+					}
 					continue
 				}
 
-				if !canUpdateDNSRecord(ctx, existingRecord, desiredRecord) {
-					rLogger.V(1).Info("unable to update record, deleting record for listener and re-creating")
-					r.deleteRecord(ctx, existingRecordObj)
-					break
-				}
-
-				if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) {
-					rLogger.V(1).Info("dns record is up to date, nothing to do")
+				if !hasAttachedRoute {
+					lLogger.V(1).Info("listener has no attached routes, skipping record create for listener")
 					continue
 				}
-				existingRecord.Spec = desiredRecord.Spec
 
-				un, err := controller.Destruct(existingRecord)
+				if len(desiredRecord.Spec.Endpoints) == 0 {
+					lLogger.V(1).Info("record for listener has no addresses, skipping record create for listener")
+					continue
+				}
+
+				un, err := controller.Destruct(desiredRecord)
 				if err != nil {
 					lLogger.Error(err, "unable to destruct dns record")
 					continue
 				}
 
-				rLogger.V(1).Info("updating record for listener")
-				if _, uErr := resource.Update(ctx, un, metav1.UpdateOptions{}); uErr != nil {
-					rLogger.Error(uErr, "unable to update dns record")
+				//Create
+				lLogger.V(1).Info("creating DNS record for listener")
+				if _, cErr := resource.Create(ctx, un, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+					lLogger.Error(cErr, "unable to create dns record")
 				}
-				continue
 			}
+			// if all the targets are ready remove any stale records
 
-			if !hasAttachedRoute {
-				lLogger.V(1).Info("listener has no attached routes, skipping record create for listener")
-				continue
-			}
-
-			if len(desiredRecord.Spec.Endpoints) == 0 {
-				lLogger.V(1).Info("record for listener has no addresses, skipping record create for listener")
-				continue
-			}
-
-			un, err := controller.Destruct(desiredRecord)
-			if err != nil {
-				lLogger.Error(err, "unable to destruct dns record")
-				continue
-			}
-
-			//Create
-			lLogger.V(1).Info("creating DNS record for listener")
-			if _, cErr := resource.Create(ctx, un, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
-				lLogger.Error(cErr, "unable to create dns record")
+			if allListenerTargetsReady {
+				lLogger.Info("stale: all listener dns records are ready, ")
+				for _, stale := range staleListenerRecords {
+					lLogger.Info("stale: all listener targets are ready deleting any stale records ")
+					r.deleteRecord(ctx, stale)
+				}
 			}
 		}
 
@@ -220,8 +364,9 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology) error {
 	logger := controller.LoggerFromContext(ctx).WithName("deleteOrphanDNSRecords")
 
-	orphanRecords := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
-		if item.GroupVersionKind().GroupKind() == DNSRecordGroupKind {
+	orphanRecords := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (*kuadrantdnsv1alpha1.DNSRecord, bool) {
+		dns, ok := item.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
+		if ok {
 			rLogger := logger.WithValues("record", item.GetLocator())
 
 			pTargettables := topology.Targetables().Parents(item)
@@ -239,25 +384,25 @@ func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Cont
 
 			//Target removed from topology
 			if len(pTargettables) == 0 {
-				rLogger.Info("dns record has not parent targetable, deleting")
-				return true
+				rLogger.Info("dns record has no parent targetable, deleting")
+				return dns, true
 			}
 
 			//Policy removed from topology
 			if len(pPolicies) == 0 {
-				rLogger.Info("dns record has not parent policy, deleting")
-				return true
+				rLogger.Info("dns record has no parent policy, deleting")
+				return dns, true
 			}
 
 			//Policy target ref changes
 			if len(topology.All().Paths(pPolicies[0], item)) == 1 { //There will always be at least one DNSPolicy -> DNSRecord
 				rLogger.Info("dns record has no path through a targetable to the policy, deleting", "policy", pPolicies[0])
-				return true
+				return dns, true
 			}
 
-			return false
+			return dns, false
 		}
-		return false
+		return dns, false
 	})
 
 	for _, obj := range orphanRecords {
@@ -267,18 +412,18 @@ func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Cont
 	return nil
 }
 
-func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj machinery.Object) {
+func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, record *kuadrantdnsv1alpha1.DNSRecord) {
 	logger := controller.LoggerFromContext(ctx)
 
-	record := obj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
+	//record := obj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
 	if record.GetDeletionTimestamp() != nil {
 		return
 	}
-	logger.Info("deleting dns record", "record", obj.GetLocator())
+	logger.Info("deleting dns record", "record", record.Name)
 
 	resource := r.client.Resource(DNSRecordResource).Namespace(record.GetNamespace())
 	if err := resource.Delete(ctx, record.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-		logger.Error(err, "failed to delete DNSRecord", "record", obj.GetLocator())
+		logger.Error(err, "failed to delete DNSRecord", "record", record.Name)
 	}
 }
 
@@ -309,7 +454,7 @@ func canUpdateDNSRecord(ctx context.Context, current, desired *kuadrantdnsv1alph
 
 	// DNSRecord doesn't currently support rootHost changes
 	if current.Spec.RootHost != desired.Spec.RootHost {
-		logger.V(1).Info("root host for existing record has changed")
+		logger.V(1).Info("root host for existing record has changed", "from", current.Spec.RootHost, "to", desired.Spec.RootHost)
 		return false
 	}
 

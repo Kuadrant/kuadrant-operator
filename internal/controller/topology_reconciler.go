@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -93,11 +94,6 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 	return nil
 }
 
-// Helper function for controller of owner ref
-func pointerBool(b bool) *bool {
-	return &b
-}
-
 // Returns an owner reference based on kuadrant-operator deployment
 func getOwnerRef(ctx context.Context, namespace, name string) (*metav1.OwnerReference, error) {
 	cfg, err := config.GetConfig()
@@ -117,6 +113,6 @@ func getOwnerRef(ctx context.Context, namespace, name string) (*metav1.OwnerRefe
 		Kind:       "Deployment",
 		Name:       deploy.Name,
 		UID:        deploy.UID,
-		Controller: pointerBool(true),
+		Controller: ptr.To(true),
 	}, nil
 }

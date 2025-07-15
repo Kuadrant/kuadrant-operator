@@ -54,7 +54,7 @@ func (b *ValidatorBuilder) AddPolicyBindingAfter(after *string, policy string, n
 			return nil, fmt.Errorf("policy %s not found", *after)
 		}
 		suffix := append([]policyBinding{p}, b.policies[idx+1:]...)
-		b.policies = append(b.policies[:idx], suffix...)
+		b.policies = append(b.policies[:idx+1], suffix...)
 	}
 	return b, nil
 }

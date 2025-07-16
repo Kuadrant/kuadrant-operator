@@ -180,7 +180,7 @@ var _ = Describe("wasm controller", func() {
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitCheckServiceName: {
-						Type:        wasm.RateLimitCheckServiceType,
+						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
@@ -352,7 +352,7 @@ var _ = Describe("wasm controller", func() {
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
 					},
 					wasm.RateLimitCheckServiceName: {
-						Type:        wasm.RateLimitCheckServiceType,
+						Type:        wasm.RateLimitServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitCheckServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),

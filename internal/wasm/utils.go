@@ -89,7 +89,7 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config
 				Timeout:     ptr.To(RatelimitServiceTimeout()),
 			},
 			RateLimitCheckServiceName: {
-				Type:        RateLimitCheckServiceType,
+				Type:        RateLimitServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: RatelimitCheckServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitCheckServiceTimeout()),

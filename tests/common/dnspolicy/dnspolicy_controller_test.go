@@ -146,16 +146,18 @@ var _ = Describe("DNSPolicy controller", func() {
 			WithHTTPListener(tests.ListenerNameOne, "").
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
-		// should not allow an empty providerRef list
+		// should allow an empty providerRef list
 		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
-			WithTargetGateway("test-gateway")
-		Expect(k8sClient.Create(ctx, dnsPolicy)).To(MatchError(ContainSubstring("spec.providerRefs: Required value")))
-
-		// should create with a single providerRef
-		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
-			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+		// should allow a single providerRef
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+			g.Expect(err).NotTo(HaveOccurred())
+			dnsPolicy.WithProviderSecret(*dnsProviderSecret)
+			g.Expect(k8sClient.Update(ctx, dnsPolicy)).To(Succeed())
+		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 		// should not allow adding another providerRef
 		Eventually(func(g Gomega) {

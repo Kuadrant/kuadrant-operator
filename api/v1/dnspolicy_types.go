@@ -60,7 +60,7 @@ type DNSPolicySpec struct {
 
 	// providerRefs is a list of references to provider secrets. Max is one but intention is to allow this to be more in the future
 	// +kubebuilder:validation:MaxItems=1
-	// +kubebuilder:validation:MinItems=1
+	// +optional
 	ProviderRefs []dnsv1alpha1.ProviderRef `json:"providerRefs"`
 
 	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting

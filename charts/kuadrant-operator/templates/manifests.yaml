@@ -7721,7 +7721,6 @@ spec:
                   - name
                   type: object
                 maxItems: 1
-                minItems: 1
                 type: array
               targetRef:
                 description: targetRef identifies an API object to apply policy to.
@@ -7770,7 +7769,6 @@ spec:
                 - message: Invalid targetRef.kind. The only supported values are 'Gateway'
                   rule: self.kind == 'Gateway'
             required:
-            - providerRefs
             - targetRef
             type: object
           status:

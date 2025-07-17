@@ -2,6 +2,8 @@
 ##@ Verify
 
 ## Targets to verify actions that generate/modify code have been executed and output committed
+.PHONY: verify-all
+verify-all: verify-fmt verify-generate verify-go-mod verify-manifests
 
 .PHONY: verify-fmt
 verify-fmt: fmt ## Verify fmt update.

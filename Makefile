@@ -390,17 +390,12 @@ rm -rf $$TMP_DIR ;\
 }
 endef
 
-RELATED_IMAGE_CONSOLEPLUGIN ?= quay.io/kuadrant/console-plugin:latest
-
 .PHONY: bundle
 bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
-	# Set desired ConsolePlugin image
-	V="$(RELATED_IMAGE_CONSOLEPLUGIN)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV

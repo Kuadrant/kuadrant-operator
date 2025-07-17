@@ -21,12 +21,12 @@
 
 ## DNSPolicySpec
 
-| **Field**        | **Type**                                                                                                                          |     **Required**      | **Description**                                            |
-|------------------|-----------------------------------------------------------------------------------------------------------------------------------|:---------------------:|------------------------------------------------------------|
-| `targetRef`      | [Gateway API LocalPolicyTargetReferenceWithSectionName](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname)   |          Yes          | Reference to a Kubernetes resource that the policy attaches to |
-| `healthCheck`    | [HealthCheckSpec](#healthcheckspec)                                                                                               |          No           | HealthCheck spec                                           |
-| `loadBalancing`  | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | No | LoadBalancing Spec       |
-| `providerRefs`   | [ProviderRefs](#providerrefs)                                                                                                         |          Yes          | array of references to providers. (currently limited to max 1) |
+| **Field**        | **Type**                                                                                                                          | **Required** | **Description**                                            |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------|:------------:|------------------------------------------------------------|
+| `targetRef`      | [Gateway API LocalPolicyTargetReferenceWithSectionName](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname)   |     Yes      | Reference to a Kubernetes resource that the policy attaches to |
+| `healthCheck`    | [HealthCheckSpec](#healthcheckspec)                                                                                               |      No      | HealthCheck spec                                           |
+| `loadBalancing`  | [LoadBalancingSpec](#loadbalancingspec)                                                                                           |      No      | LoadBalancing Spec       |
+| `providerRefs`   | [ProviderRefs](#providerrefs)                                                                                                         |      No      | array of references to providers. (currently limited to max 1) |
 
 ## ProviderRefs
 

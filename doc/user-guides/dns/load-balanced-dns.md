@@ -18,7 +18,7 @@ It is most useful to use the load balancing options when targeting multiple gate
 
 ## DNS Provider Setup
 
-A DNSPolicy acts against a target Gateway or a target listener within a gateway by processing the hostnames on the targeted listeners. Using these it can create dns records using the address exposed in the Gateway's status block. In order for Kuadrant's DNS component to do this, it must be able to access and know which DNS provider to use. This is done through the creation of a dns provider secret containing the needed credentials and the provider identifier.
+A DNSPolicy acts against a target Gateway or a target listener within a gateway by processing the hostnames on the targeted listeners. Using these it can create dns records using the address exposed in the Gateway's status block. In order for Kuadrant's DNS component to do this, it must be able to access and know which DNS provider to use. This is done through the creation of a dns provider secret containing the needed credentials and the provider identifier and either adding the secret in `spec.providerRef` array or labeling the secret with `kuadrant.io/default-provider=true` label.
 
 [Learn more about how to setup a DNS Provider](https://docs.kuadrant.io/latest/dns-operator/docs/provider/)
 

@@ -37,6 +37,11 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 			AdditionalHeadersRef: dnsPolicy.Spec.HealthCheck.AdditionalHeadersRef,
 		}
 	}
+	var providerRef *kuadrantdnsv1alpha1.ProviderRef
+	// Currently we only allow a single providerRef to be added. When that changes, we will need to update this to deal with multiple records.
+	if len(dnsPolicy.Spec.ProviderRefs) > 0 {
+		providerRef = &dnsPolicy.Spec.ProviderRefs[0]
+	}
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
@@ -48,11 +53,8 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 			APIVersion: kuadrantdnsv1alpha1.GroupVersion.String(),
 		},
 		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
-			RootHost: rootHost,
-			ProviderRef: kuadrantdnsv1alpha1.ProviderRef{
-				// Currently we only allow a single providerRef to be added. When that changes, we will need to update this to deal with multiple records.
-				Name: dnsPolicy.Spec.ProviderRefs[0].Name,
-			},
+			RootHost:    rootHost,
+			ProviderRef: providerRef,
 			HealthCheck: healthCheckSpec,
 		},
 	}

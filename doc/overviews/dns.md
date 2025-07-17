@@ -29,6 +29,8 @@ A DNSPolicy acts against a target Gateway by processing its listeners for hostna
 In order for it to do this, it must know about the dns provider.
 This is done through the creation of dns provider secrets containing the credentials and configuration for the dns provider account.
 
+The policy can use a specific provider secret by referencing it in the `ProviderRefs`. Alternatively, if no reference is provided, the secret with `kuadrant.io/default-provider=true` label will be chosen as a default option.
+
 If for example a Gateway is created with a listener with a hostname of `echo.apps.hcpapps.net`:
 
 ```yaml

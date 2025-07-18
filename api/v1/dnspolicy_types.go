@@ -66,6 +66,9 @@ type DNSPolicySpec struct {
 	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting
 	// +optional
 	ExcludeAddresses ExcludeAddresses `json:"excludeAddresses,omitempty"`
+	// UseHTTPRouteHosts defines whether DNSPolicy should generate DNSRecods based on the targeted gateways listener hosts or instead use the hosts defined in attached HTTPRoutes. It defaults to false as this keeps the behaviour the same. If set to true, the policy controller will look at the attached HTTPRoutes and create a DNSRecord for each hostname it finds. This flag is something that would be used when targeting a wildcard listener host to avoid a wildcard DNS entry.
+	// +optional
+	UseHTTPRouteHosts *bool `json:"useHTTPRouteHosts,omitempty"`
 }
 
 // +kubebuilder:validation:MaxItems=20
@@ -210,6 +213,10 @@ func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 
 func (p *DNSPolicy) Kind() string {
 	return DNSPolicyGroupKind.Kind
+}
+
+func (p *DNSPolicy) UseHTTPRouteHosts() bool {
+	return p.Spec.UseHTTPRouteHosts != nil && *p.Spec.UseHTTPRouteHosts
 }
 
 //+kubebuilder:object:root=true

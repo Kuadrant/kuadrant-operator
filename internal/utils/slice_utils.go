@@ -47,3 +47,13 @@ func Filter[T any](slice []T, f func(T) bool) []T {
 	}
 	return arr
 }
+
+// Associate converts a slice into a map through a transformation function that returns keys and values.
+func Associate[T, V any, K comparable](collection []T, transform func(T) (K, V)) map[K]V {
+	result := make(map[K]V, len(collection))
+	for _, element := range collection {
+		key, value := transform(element)
+		result[key] = value
+	}
+	return result
+}

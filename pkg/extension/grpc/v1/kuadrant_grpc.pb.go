@@ -20,9 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ExtensionService_Ping_FullMethodName      = "/kuadrant.v1.ExtensionService/Ping"
-	ExtensionService_Subscribe_FullMethodName = "/kuadrant.v1.ExtensionService/Subscribe"
-	ExtensionService_Resolve_FullMethodName   = "/kuadrant.v1.ExtensionService/Resolve"
+	ExtensionService_Ping_FullMethodName            = "/kuadrant.v1.ExtensionService/Ping"
+	ExtensionService_Subscribe_FullMethodName       = "/kuadrant.v1.ExtensionService/Subscribe"
+	ExtensionService_Resolve_FullMethodName         = "/kuadrant.v1.ExtensionService/Resolve"
+	ExtensionService_RegisterMutator_FullMethodName = "/kuadrant.v1.ExtensionService/RegisterMutator"
+	ExtensionService_ClearPolicy_FullMethodName     = "/kuadrant.v1.ExtensionService/ClearPolicy"
 )
 
 // ExtensionServiceClient is the client API for ExtensionService service.
@@ -37,6 +39,10 @@ type ExtensionServiceClient interface {
 	Subscribe(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SubscribeResponse], error)
 	// Resolve the expression for context and subscribe (or not)
 	Resolve(ctx context.Context, in *ResolveRequest, opts ...grpc.CallOption) (*ResolveResponse, error)
+	// Add data to an existing policy
+	RegisterMutator(ctx context.Context, in *RegisterMutatorRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Clear all subscriptions and registered mutators for a policy
+	ClearPolicy(ctx context.Context, in *ClearPolicyRequest, opts ...grpc.CallOption) (*ClearPolicyResponse, error)
 }
 
 type extensionServiceClient struct {
@@ -86,6 +92,26 @@ func (c *extensionServiceClient) Resolve(ctx context.Context, in *ResolveRequest
 	return out, nil
 }
 
+func (c *extensionServiceClient) RegisterMutator(ctx context.Context, in *RegisterMutatorRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, ExtensionService_RegisterMutator_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *extensionServiceClient) ClearPolicy(ctx context.Context, in *ClearPolicyRequest, opts ...grpc.CallOption) (*ClearPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearPolicyResponse)
+	err := c.cc.Invoke(ctx, ExtensionService_ClearPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExtensionServiceServer is the server API for ExtensionService service.
 // All implementations must embed UnimplementedExtensionServiceServer
 // for forward compatibility.
@@ -98,6 +124,10 @@ type ExtensionServiceServer interface {
 	Subscribe(*empty.Empty, grpc.ServerStreamingServer[SubscribeResponse]) error
 	// Resolve the expression for context and subscribe (or not)
 	Resolve(context.Context, *ResolveRequest) (*ResolveResponse, error)
+	// Add data to an existing policy
+	RegisterMutator(context.Context, *RegisterMutatorRequest) (*empty.Empty, error)
+	// Clear all subscriptions and registered mutators for a policy
+	ClearPolicy(context.Context, *ClearPolicyRequest) (*ClearPolicyResponse, error)
 	mustEmbedUnimplementedExtensionServiceServer()
 }
 
@@ -116,6 +146,12 @@ func (UnimplementedExtensionServiceServer) Subscribe(*empty.Empty, grpc.ServerSt
 }
 func (UnimplementedExtensionServiceServer) Resolve(context.Context, *ResolveRequest) (*ResolveResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Resolve not implemented")
+}
+func (UnimplementedExtensionServiceServer) RegisterMutator(context.Context, *RegisterMutatorRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterMutator not implemented")
+}
+func (UnimplementedExtensionServiceServer) ClearPolicy(context.Context, *ClearPolicyRequest) (*ClearPolicyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClearPolicy not implemented")
 }
 func (UnimplementedExtensionServiceServer) mustEmbedUnimplementedExtensionServiceServer() {}
 func (UnimplementedExtensionServiceServer) testEmbeddedByValue()                          {}
@@ -185,6 +221,42 @@ func _ExtensionService_Resolve_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExtensionService_RegisterMutator_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterMutatorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExtensionServiceServer).RegisterMutator(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExtensionService_RegisterMutator_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExtensionServiceServer).RegisterMutator(ctx, req.(*RegisterMutatorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExtensionService_ClearPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExtensionServiceServer).ClearPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExtensionService_ClearPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExtensionServiceServer).ClearPolicy(ctx, req.(*ClearPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ExtensionService_ServiceDesc is the grpc.ServiceDesc for ExtensionService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -199,6 +271,14 @@ var ExtensionService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Resolve",
 			Handler:    _ExtensionService_Resolve_Handler,
+		},
+		{
+			MethodName: "RegisterMutator",
+			Handler:    _ExtensionService_RegisterMutator_Handler,
+		},
+		{
+			MethodName: "ClearPolicy",
+			Handler:    _ExtensionService_ClearPolicy_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

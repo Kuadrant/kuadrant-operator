@@ -90,3 +90,29 @@ func TestMap(t *testing.T) {
 		}
 	})
 }
+
+func TestAssociate(t *testing.T) {
+	t.Run("when associating non-empty slice then return correct map", func(t *testing.T) {
+		slice := []string{"hello", "world", "test"}
+		transform := func(s string) (string, int) { return s, len(s) }
+		expected := map[string]int{"hello": 5, "world": 5, "test": 4}
+
+		result := Associate(slice, transform)
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+
+	t.Run("when associating empty slice then return empty map", func(t *testing.T) {
+		slice := []string{}
+		transform := func(s string) (string, int) { return s, len(s) }
+		expected := map[string]int{}
+
+		result := Associate(slice, transform)
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+}

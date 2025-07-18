@@ -129,25 +129,82 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	return ec.reconcile(ctx, request, ec)
 }
 
-func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+func (ec *ExtensionController) resolveExpression(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (*extpb.ResolveResponse, error) {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
 	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
-		Policy:     extutils.MapToExtPolicy(policy),
+		Policy:     pbPolicy,
 		Expression: expression,
 		Subscribe:  subscribe,
 	})
 	if err != nil {
-		return ref.Val(nil), fmt.Errorf("error resolving expression: %w", err)
+		return nil, fmt.Errorf("error resolving expression: %w", err)
 	}
 
 	if resp == nil || resp.GetCelResult() == nil {
-		return celtypes.NullValue, nil
+		return nil, fmt.Errorf("empty response from extension service")
 	}
+
+	return resp, nil
+}
+
+func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
+	if err != nil {
+		return ref.Val(nil), err
+	}
+
 	val, err := cel.ValueToRefValue(celtypes.DefaultTypeAdapter, resp.GetCelResult())
 	if err != nil {
 		return ref.Val(nil), fmt.Errorf("error converting cel result: %w", err)
 	}
 
 	return val, nil
+}
+
+func (ec *ExtensionController) ResolvePolicy(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error) {
+	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
+	if err != nil {
+		return nil, err
+	}
+
+	celResult := resp.GetCelResult()
+
+	// Handle object values that should be protobuf policies
+	if celResult.GetObjectValue() != nil {
+		// Unmarshal the protobuf object directly
+		pbPolicyResult := &extpb.Policy{}
+		if err := celResult.GetObjectValue().UnmarshalTo(pbPolicyResult); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal CEL object result to protobuf Policy: %w", err)
+		}
+		return extpb.NewPolicyAdapter(pbPolicyResult), nil
+	}
+
+	return nil, fmt.Errorf("CEL result is not an object value that can be converted to Policy")
+}
+
+func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error {
+	pbRequester := convertPolicyToProtobuf(requester)
+	pbTarget := convertPolicyToProtobuf(target)
+
+	_, err := ec.extensionClient.client.RegisterMutator(ctx, &extpb.RegisterMutatorRequest{
+		Requester:  pbRequester,
+		Target:     pbTarget,
+		Binding:    binding,
+		Expression: expression,
+	})
+	return err
+}
+
+func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
+	resp, err := ec.extensionClient.client.ClearPolicy(ctx, &extpb.ClearPolicyRequest{
+		Policy: pbPolicy,
+	})
+
+	ec.logger.Info("cleared policy", "subscriptions", resp.GetClearedSubscriptions(), "mutators", resp.GetClearedMutators())
+	return err
 }
 
 func (ec *ExtensionController) Manager() ctrlruntime.Manager {
@@ -303,6 +360,32 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		watchSources:    watchSources,
 		extensionClient: extClient,
 	}, nil
+}
+
+func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
+	pbPolicy := &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Group:     policy.GetObjectKind().GroupVersionKind().Group,
+			Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
+			Namespace: policy.GetNamespace(),
+			Name:      policy.GetName(),
+		},
+		TargetRefs: make([]*extpb.TargetRef, len(policy.GetTargetRefs())),
+	}
+
+	for i, ref := range policy.GetTargetRefs() {
+		pbPolicy.TargetRefs[i] = &extpb.TargetRef{
+			Group:     string(ref.Group),
+			Kind:      string(ref.Kind),
+			Name:      string(ref.Name),
+			Namespace: policy.GetNamespace(), // Use policy namespace for target refs
+		}
+		if ref.SectionName != nil {
+			pbPolicy.TargetRefs[i].SectionName = string(*ref.SectionName)
+		}
+	}
+
+	return pbPolicy
 }
 
 func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, policy exttypes.Policy, expression string, subscribe bool) (T, error) {

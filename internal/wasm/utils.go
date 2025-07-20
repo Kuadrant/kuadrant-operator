@@ -25,9 +25,10 @@ import (
 )
 
 const (
-	RateLimitServiceName      = "ratelimit-service"
-	RateLimitCheckServiceName = "ratelimit-check-service"
-	AuthServiceName           = "auth-service"
+	RateLimitServiceName       = "ratelimit-service"
+	RateLimitCheckServiceName  = "ratelimit-check-service"
+	RateLimitReportServiceName = "ratelimit-report-service"
+	AuthServiceName            = "auth-service"
 )
 
 func AuthServiceTimeout() string {
@@ -52,6 +53,14 @@ func RatelimitCheckServiceTimeout() string {
 
 func RatelimitCheckServiceFailureMode(logger *logr.Logger) FailureModeType {
 	return parseFailureModeValue("RATELIMIT_CHECK_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
+}
+
+func RatelimitReportServiceTimeout() string {
+	return env.GetString("RATELIMIT_REPORT_SERVICE_TIMEOUT", "100ms")
+}
+
+func RatelimitReportServiceFailureMode(logger *logr.Logger) FailureModeType {
+	return parseFailureModeValue("RATELIMIT_REPORT_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
 }
 
 func parseFailureModeValue(envVarName string, defaultValue FailureModeType, logger *logr.Logger) FailureModeType {
@@ -93,6 +102,12 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: RatelimitCheckServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
+			},
+			RateLimitReportServiceName: {
+				Type:        RateLimitReportServiceType,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				FailureMode: RatelimitReportServiceFailureMode(logger),
+				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
 			},
 		},
 		ActionSets: actionSets,

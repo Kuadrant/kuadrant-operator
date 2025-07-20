@@ -279,7 +279,13 @@ func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
-func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier, scope string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.Action {
+// wasmActionsFromTokenLimit returns a request phase action and a response phase action
+func wasmActionsFromTokenLimit(
+	tokenLimit *kuadrantv1alpha1.TokenLimit,
+	limitIdentifier,
+	scope string,
+	topLevelPredicates kuadrantv1.WhenPredicates) (wasm.Action, wasm.Action) {
+
 	predicates := make([]string, 0, len(topLevelPredicates)+1)
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
@@ -354,7 +360,7 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 		Data:        responsePhaseData,
 	}
 
-	return []wasm.Action{requestAction, responseAction}
+	return requestAction, responseAction
 }
 
 func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
@@ -395,7 +401,8 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
 	}
 
-	var allActions []wasm.Action
+	var requestActions []wasm.Action
+	var responseActions []wasm.Action
 	for _, r := range limitRules {
 		uniquePolicyRuleKey := r.Key
 		policyRule := r.Value
@@ -410,11 +417,12 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 		scope := limitsNamespace
 
 		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
-		tokenActions := wasmActionsFromTokenLimit(limitSpec, limitIdentifier, scope, topLevelWhenPredicates)
-		allActions = append(allActions, tokenActions...)
+		requestAction, responseAction := wasmActionsFromTokenLimit(limitSpec, limitIdentifier, scope, topLevelWhenPredicates)
+		requestActions = append(requestActions, requestAction)
+		responseActions = append(responseActions, responseAction)
 	}
 
-	return allActions
+	return append(requestActions, responseActions...)
 }
 
 // buildWasmActionsForAnyRateLimit is the generic implementation used by both rate limit policy types

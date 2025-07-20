@@ -92,7 +92,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName: wasm.RateLimitServiceName,
+					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
 					Predicates:  []string{},
 					Data: []wasm.DataType{
@@ -160,7 +160,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName: wasm.RateLimitServiceName,
+					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
 					Predicates:  []string{},
 					Data: []wasm.DataType{
@@ -239,7 +239,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName: wasm.RateLimitServiceName,
+					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
 					Predicates:  []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
 					Data: []wasm.DataType{
@@ -308,7 +308,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName: wasm.RateLimitServiceName,
+					ServiceName: wasm.RateLimitReportServiceName,
 					Scope:       "my-ns/my-route",
 					Predicates:  []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
 					Data: []wasm.DataType{

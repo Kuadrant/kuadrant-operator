@@ -17,7 +17,7 @@ service ExtensionService {
   // Sends a greeting
   rpc Ping (PingRequest) returns (PongResponse) {}
   // Subscribe to a set of Events
-  rpc Subscribe(google.protobuf.Empty) returns (stream SubscribeResponse) {}
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
   // Resolve the expression for context and subscribe (or not)
   rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
   // Add data to an existing policy
@@ -51,6 +51,10 @@ message ResolveResponse {
 message SubscribeResponse {
   Event event = 1;
   google.rpc.Status error = 2;
+}
+
+message SubscribeRequest {
+  string policy_kind = 1;
 }
 
 message Event {

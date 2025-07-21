@@ -151,7 +151,11 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 	return service
 }
 
-func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
+func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
+	if request.PolicyKind == "" {
+		return fmt.Errorf("policy_kind is required for subscription")
+	}
+
 	channel := BlockingDAG.newUpdateChannel()
 	for {
 		dag := <-channel

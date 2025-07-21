@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -96,7 +95,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 }
 
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
-	err := ec.extensionClient.subscribe(ctx, func(response *extpb.SubscribeResponse) {
+	err := ec.extensionClient.subscribe(ctx, ec.policyKind, func(response *extpb.SubscribeResponse) {
 		ec.logger.Info("received response", "response", response)
 		// todo(adam-cattermole): how might we inform of an error from subscribe responses?
 		if response.Error != nil && response.Error.Code != 0 {
@@ -244,8 +243,10 @@ func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error
 	})
 }
 
-func (ec *extensionClient) subscribe(ctx context.Context, callback func(response *extpb.SubscribeResponse)) error {
-	stream, err := ec.client.Subscribe(ctx, &emptypb.Empty{})
+func (ec *extensionClient) subscribe(ctx context.Context, policyKind string, callback func(response *extpb.SubscribeResponse)) error {
+	stream, err := ec.client.Subscribe(ctx, &extpb.SubscribeRequest{
+		PolicyKind: policyKind,
+	})
 	if err != nil {
 		return err
 	}

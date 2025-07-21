@@ -28,7 +28,7 @@ func main() {
 	controller, err := builder.
 		WithScheme(scheme).
 		WithReconciler(planPolicyReconciler.Reconcile).
-		Watches(&kuadrantv1alpha1.PlanPolicy{}).
+		For(&kuadrantv1alpha1.PlanPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")

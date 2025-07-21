@@ -250,13 +250,13 @@ func TestBuilderBuildMissingReconcile(t *testing.T) {
 	assert.ErrorContains(t, err, "reconcile function must be set")
 }
 
-func TestBuilderMissingWatchTypes(t *testing.T) {
+func TestBuilderMissingForType(t *testing.T) {
 	builder, _ := NewBuilder("test-controller")
 	_, err := builder.
 		WithScheme(runtime.NewScheme()).
 		WithReconciler(mockReconcile).
 		Build()
-	assert.ErrorContains(t, err, "watch sources must be set")
+	assert.ErrorContains(t, err, "for type must be set")
 }
 
 func TestBuilderMissingSocketPath(t *testing.T) {
@@ -268,7 +268,7 @@ func TestBuilderMissingSocketPath(t *testing.T) {
 	_, err := builder.
 		WithScheme(runtime.NewScheme()).
 		WithReconciler(mockReconcile).
-		Watches(&corev1.Pod{}).
+		For(&corev1.Pod{}).
 		Build()
 
 	assert.ErrorContains(t, err, "missing socket path")

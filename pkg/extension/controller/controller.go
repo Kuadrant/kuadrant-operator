@@ -53,6 +53,7 @@ type ExtensionController struct {
 	reconcile       exttypes.ReconcileFn
 	watchSources    []ctrlruntimesrc.Source
 	extensionClient *extensionClient
+	policyKind      string
 }
 
 func (ec *ExtensionController) Start(ctx context.Context) error {
@@ -271,6 +272,7 @@ type Builder struct {
 	scheme     *runtime.Scheme
 	logger     logr.Logger
 	reconcile  exttypes.ReconcileFn
+	forType    client.Object
 	watchTypes []client.Object
 }
 
@@ -300,6 +302,14 @@ func (b *Builder) WithReconciler(fn exttypes.ReconcileFn) *Builder {
 	return b
 }
 
+func (b *Builder) For(obj client.Object) *Builder {
+	if b.forType != nil {
+		panic("For() can only be called once")
+	}
+	b.forType = obj
+	return b
+}
+
 func (b *Builder) Watches(obj client.Object) *Builder {
 	b.watchTypes = append(b.watchTypes, obj)
 	return b
@@ -315,8 +325,8 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	if b.reconcile == nil {
 		return nil, fmt.Errorf("reconcile function must be set")
 	}
-	if len(b.watchTypes) == 0 {
-		return nil, fmt.Errorf("watch sources must be set")
+	if b.forType == nil {
+		return nil, fmt.Errorf("for type must be set")
 	}
 
 	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
@@ -346,10 +356,19 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	}
 
 	watchSources := make([]ctrlruntimesrc.Source, 0)
+	forSource := ctrlruntimesrc.Kind(mgr.GetCache(), b.forType, &ctrlruntimehandler.EnqueueRequestForObject{})
+	watchSources = append(watchSources, forSource)
+
 	for _, obj := range b.watchTypes {
 		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
 		watchSources = append(watchSources, source)
 	}
+
+	objType := reflect.TypeOf(b.forType)
+	if objType.Kind() == reflect.Ptr {
+		objType = objType.Elem()
+	}
+	policyKind := objType.Name()
 
 	return &ExtensionController{
 		name:            b.name,
@@ -359,6 +378,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,
 		extensionClient: extClient,
+		policyKind:      policyKind,
 	}, nil
 }
 

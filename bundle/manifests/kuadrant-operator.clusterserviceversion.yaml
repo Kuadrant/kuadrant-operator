@@ -111,6 +111,21 @@ metadata:
         },
         {
           "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "PlanPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "kuadrant-operator",
+              "app.kubernetes.io/instance": "planpolicy-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "planpolicy",
+              "app.kubernetes.io/part-of": "kuadrant-operator"
+            },
+            "name": "planpolicy-sample"
+          },
+          "spec": {}
+        },
+        {
+          "apiVersion": "kuadrant.io/v1alpha1",
           "kind": "TokenRateLimitPolicy",
           "metadata": {
             "name": "token-limit-free",
@@ -174,7 +189,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-07-07T09:13:43Z"
+    createdAt: "2025-07-15T15:05:41Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -206,6 +221,9 @@ spec:
       version: v1beta1
     - kind: OIDCPolicy
       name: oidcpolicies.kuadrant.io
+      version: v1alpha1
+    - kind: PlanPolicy
+      name: planpolicies.kuadrant.io
       version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
@@ -418,6 +436,7 @@ spec:
           - dnspolicies/finalizers
           - kuadrants/finalizers
           - oidcpolicies/finalizers
+          - planpolicies/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
           - tokenratelimitpolicies/finalizers
@@ -430,6 +449,7 @@ spec:
           - dnspolicies/status
           - kuadrants/status
           - oidcpolicies/status
+          - planpolicies/status
           - ratelimitpolicies/status
           - tlspolicies/status
           - tokenratelimitpolicies/status
@@ -443,7 +463,7 @@ spec:
           - dnspolicies
           - kuadrants
           - oidcpolicies
-          - ratelimitpolicies
+          - planpolicies
           - tlspolicies
           - tokenratelimitpolicies
           verbs:
@@ -456,6 +476,7 @@ spec:
           - kuadrant.io
           resources:
           - dnsrecords
+          - ratelimitpolicies
           verbs:
           - create
           - delete

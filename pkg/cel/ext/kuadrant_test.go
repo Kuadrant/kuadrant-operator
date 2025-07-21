@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
-
 	"github.com/google/cel-go/cel"
+	"github.com/kuadrant/policy-machinery/machinery"
+
+	v1 "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 var tests = []struct {
@@ -20,6 +21,13 @@ var tests = []struct {
 	{expr: `self.findGateways()[0].spec.listeners.size() == 1`},
 	{expr: `self.findGateways()[0].spec.listeners[0].hostname == "kuadrant.io"`},
 	{expr: `self.findGateways()[0].metadata.name == self.targetRefs[0].findGateways()[0].metadata.name`},
+	{expr: `self.findAuthPolicies().size() == 1`},
+	{expr: `self.findAuthPolicies()[0].metadata.name == "kuadrant-auth"`},
+	{expr: `self.findAuthPolicies()[0].metadata.namespace == "some-ns"`},
+	{expr: `self.findAuthPolicies()[0].targetRefs[0].kind == "Gateway"`},
+	{expr: `self.findAuthPolicies()[0].targetRefs[0].group == "gateway.networking.k8s.io"`},
+	{expr: `self.findAuthPolicies()[0].targetRefs[0].name == "kuadrant-gw"`},
+	{expr: `self.findAuthPolicies()[0].targetRefs[0].namespace == "some-ns"`},
 }
 
 func TestKuadrantExt(t *testing.T) {
@@ -96,6 +104,28 @@ func (d *TestDAG) FindGatewaysFor(targets []*v1.TargetRef) ([]*v1.Gateway, error
 						{
 							Hostname: "kuadrant.io",
 						},
+					},
+				},
+			},
+		}, nil
+	}
+	return nil, nil
+}
+
+func (d *TestDAG) FindPoliciesFor(targets []*v1.TargetRef, _ machinery.Policy) ([]*v1.Policy, error) {
+	if targets[0].Name == "foo" && targets[0].Group == "bar" && targets[0].Kind == "baz" {
+		return []*v1.Policy{
+			{
+				Metadata: &v1.Metadata{
+					Name:      "kuadrant-auth",
+					Namespace: "some-ns",
+				},
+				TargetRefs: []*v1.TargetRef{
+					{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "Gateway",
+						Name:      "kuadrant-gw",
+						Namespace: "some-ns",
 					},
 				},
 			},

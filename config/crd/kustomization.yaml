@@ -9,18 +9,21 @@ resources:
   - bases/kuadrant.io_tlspolicies.yaml
   - bases/kuadrant.io_tokenratelimitpolicies.yaml
   - bases/kuadrant.io_oidcpolicies.yaml
+  - bases/kuadrant.io_planpolicies.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 #- patches/webhook_in_ratelimitpolicies.yaml
+#- patches/webhook_in_planpolicies.yaml
 #+kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [CERTMANAGER] To enable webhook, uncomment all the sections with [CERTMANAGER] prefix.
 # patches here are for enabling the CA injection for each CRD
 #- patches/cainjection_in_ratelimitpolicies.yaml
 #- path: patches/cainjection_in_oidcpolicies.yaml
+#- patches/cainjection_in_planpolicies.yaml
 #+kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 patchesJson6902:

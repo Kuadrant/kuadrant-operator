@@ -24,6 +24,9 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
+      volumes:
+        - name: extensions-socket-volume
+          emptyDir: {}
       containers:
         - command:
             - /manager
@@ -41,6 +44,10 @@ spec:
           image: controller:latest
           name: manager
           securityContext:
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
           ports:
             - name: metrics
@@ -64,5 +71,8 @@ spec:
             requests:
               cpu: 200m
               memory: 200Mi
+          volumeMounts:
+          - mountPath: /tmp/kuadrant
+            name: extensions-socket-volume
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

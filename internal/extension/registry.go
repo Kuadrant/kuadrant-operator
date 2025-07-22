@@ -26,6 +26,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
@@ -73,9 +74,10 @@ type RegisteredDataEntry struct {
 }
 
 type Subscription struct {
-	CAst  *cel.Ast
-	Input map[string]any
-	Val   ref.Val
+	CAst       *cel.Ast
+	Input      map[string]any
+	Val        ref.Val
+	PolicyKind string
 }
 
 type RegisteredDataStore struct {
@@ -173,6 +175,15 @@ func (r *RegisteredDataStore) SetSubscription(key string, subscription Subscript
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.subscriptions[key] = subscription
+}
+
+func (r *RegisteredDataStore) GetSubscriptionsForPolicyKind(policyKind string) map[string]Subscription {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	return lo.PickBy(r.subscriptions, func(_ string, value Subscription) bool {
+		return value.PolicyKind == policyKind
+	})
 }
 
 func (r *RegisteredDataStore) GetSubscription(key string) (Subscription, bool) {

@@ -249,7 +249,12 @@ spec:
           requests:
             cpu: 10m
             memory: 190Mi
-        securityContext: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
         ports:
         - containerPort: 8081
           name: https-main

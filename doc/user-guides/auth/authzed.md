@@ -4,7 +4,8 @@ This guide explains how to configure permission requests for a Google Zanzibar-b
 
 ## Prerequisites
 
-Kubernetes cluster with Kuadrant installed.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide for more information.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 ### Create Gateway
 Create a `Gateway` resource for this guide:

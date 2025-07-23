@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"strings"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -11,10 +10,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
@@ -24,15 +22,16 @@ const (
 )
 
 type TopologyReconciler struct {
-	Client    *dynamic.DynamicClient
+	Client    client.Client
+	Scheme    *runtime.Scheme
 	Namespace string
 }
 
-func NewTopologyReconciler(client *dynamic.DynamicClient, namespace string) *TopologyReconciler {
+func NewTopologyReconciler(client client.Client, scheme *runtime.Scheme, namespace string) *TopologyReconciler {
 	if namespace == "" {
 		panic("namespace must be specified and can not be a blank string")
 	}
-	return &TopologyReconciler{Client: client, Namespace: namespace}
+	return &TopologyReconciler{Client: client, Scheme: scheme, Namespace: namespace}
 }
 
 func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
@@ -42,23 +41,27 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TopologyConfigMapName,
 			Namespace: r.Namespace,
-			Labels:    map[string]string{kuadrant.TopologyLabel: "true"},
+			Labels: map[string]string{
+				kuadrant.TopologyLabel: "true",
+			},
 		},
 		Data: map[string]string{
 			"topology": topology.ToDot(),
 		},
 	}
 
-	// Attach owner ref to configmap from kuadrant-operator to link their lifecycles
-	if ownerRef, err := getOwnerRef(ctx, r.Namespace, kuadrant.OperatorDeploymentName); err == nil {
-		cm.OwnerReferences = []metav1.OwnerReference{*ownerRef}
-	} else {
-		logger.Error(err, "failed to set owner reference on topology configmap")
+	// Fetch kuadrant-operator deployment for ownership
+	var operator appsv1.Deployment
+	if err := r.Client.Get(ctx, client.ObjectKey{
+		Name:      kuadrant.OperatorDeploymentName,
+		Namespace: r.Namespace,
+	}, &operator); err != nil {
+		logger.Error(err, "could not fetch kuadrant-operator deployment for owner reference")
+		return err
 	}
 
-	unstructuredCM, err := controller.Destruct(cm)
-	if err != nil {
-		logger.Error(err, "failed to destruct topology configmap")
+	if err := controllerutil.SetControllerReference(&operator, cm, r.Scheme); err != nil {
+		logger.Error(err, "failed to set controller reference on topology configmap")
 		return err
 	}
 
@@ -67,51 +70,27 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 	})
 
 	if len(existingTopologyConfigMaps) == 0 {
-		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
-		if errors.IsAlreadyExists(err) {
-			// This error can happen when the operator is starting, and the create event for the topology has not being processed.
-			logger.Info("already created topology configmap, must not be in topology yet")
+		if err := r.Client.Create(ctx, cm); err != nil {
+			if errors.IsAlreadyExists(err) {
+				logger.Info("topology configmap already exists but not in topology index")
+				return err
+			}
 			return err
 		}
-		return err
-	}
-
-	if len(existingTopologyConfigMaps) > 1 {
-		logger.Info("multiple topology configmaps found, continuing but unexpected behaviour may occur")
-	}
-	existingTopologyConfigMap := existingTopologyConfigMaps[0].(controller.Object).(*controller.RuntimeObject)
-	cmTopology := existingTopologyConfigMap.Object.(*corev1.ConfigMap)
-
-	if d, found := cmTopology.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
-		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
-		if err != nil {
-			logger.Error(err, "failed to update topology configmap")
+	} else {
+		if len(existingTopologyConfigMaps) > 1 {
+			logger.Info("multiple topology configmap found; continuing but unexpected behavior may occur")
 		}
-		return err
+
+		existingCM := existingTopologyConfigMaps[0].(controller.Object).(*controller.RuntimeObject).Object.(*corev1.ConfigMap)
+
+		if d, found := existingCM.Data["topology"]; !found || d != cm.Data["topology"] {
+			if err := r.Client.Update(ctx, cm); err != nil {
+				logger.Error(err, "failed to update topology configmap")
+				return err
+			}
+		}
 	}
 
 	return nil
-}
-
-// Returns an owner reference based on kuadrant-operator deployment
-func getOwnerRef(ctx context.Context, namespace, name string) (*metav1.OwnerReference, error) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return nil, err
-	}
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	deploy, err := clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return &metav1.OwnerReference{
-		APIVersion: appsv1.SchemeGroupVersion.String(),
-		Kind:       "Deployment",
-		Name:       deploy.Name,
-		UID:        deploy.UID,
-		Controller: ptr.To(true),
-	}, nil
 }

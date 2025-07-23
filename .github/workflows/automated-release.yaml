@@ -43,16 +43,17 @@ jobs:
     name: Release operator
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.22.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.22.x
-        id: go
       - name: Checkout code at git ref
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.gitRef }}
           token: ${{ secrets.KUADRANT_WORKFLOWS_PAT }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
 
       - name: Install gettext-base
         run: |
@@ -106,7 +107,7 @@ jobs:
           echo "Running prepare-release script"
 
           GITHUB_TOKEN=${{ secrets.KUADRANT_WORKFLOWS_PAT }} make prepare-release
-          
+
       - name: Create Pull Request
         id: cpr
         if: ${{ !env.ACT }}

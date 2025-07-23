@@ -255,11 +255,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			err = testClient().Update(ctx, existingWasmPlugin)
 			Expect(err).ToNot(HaveOccurred())
 			// update the RLP to trigger reconcile
-			err = testClient().Get(ctx, rlpKey, rlp)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
+			original := rlp.DeepCopy()
+			if rlp.Annotations == nil {
+				rlp.Annotations = map[string]string{}
+			}
 			rlp.Annotations["test"] = "2"
-			err = testClient().Update(ctx, rlp)
-			Expect(err).ToNot(HaveOccurred())
+			patch := client.MergeFrom(original)
+			Expect(testClient().Patch(ctx, rlp, patch)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())

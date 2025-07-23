@@ -130,7 +130,7 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return ctrl.Result{}, statusErr
 	}
 
-	if statusResult.Requeue {
+	if statusResult.RequeueAfter > 0 {
 		r.logger.Info("Reconciling status not finished. Requeueing.")
 		return statusResult, nil
 	}

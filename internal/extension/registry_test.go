@@ -70,7 +70,8 @@ func TestRegisteredDataStore_SetSubscription(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 
 	subscriptionKey := "AuthPolicy/test-ns/test-policy#some.expression"
@@ -142,7 +143,8 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 	subscription2 := Subscription{
 		CAst: &cel.Ast{},
@@ -155,7 +157,8 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 
 	store.SetSubscription("AuthPolicy/test-ns/test-policy#expression1", subscription1)
@@ -259,7 +262,8 @@ func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 	store.SetSubscription("AuthPolicy/test-ns/test-policy#user.data", subscription)
 
@@ -283,7 +287,8 @@ func TestRegisteredDataStore_UpdateSubscriptionValue(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 
 	subscriptionKey := "AuthPolicy/test-ns/test-policy#some.expression"
@@ -315,7 +320,8 @@ func TestRegisteredDataStore_GetPolicySubscriptions(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 	subscription2 := Subscription{
 		CAst: &cel.Ast{},
@@ -328,7 +334,8 @@ func TestRegisteredDataStore_GetPolicySubscriptions(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 	subscription3 := Subscription{
 		CAst: &cel.Ast{},
@@ -341,7 +348,8 @@ func TestRegisteredDataStore_GetPolicySubscriptions(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 
 	store.SetSubscription("AuthPolicy/test-ns/test-policy#expression1", subscription1)
@@ -378,7 +386,8 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 	subscription2 := Subscription{
 		CAst: &cel.Ast{},
@@ -391,7 +400,8 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 	subscription3 := Subscription{
 		CAst: &cel.Ast{},
@@ -404,7 +414,8 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 				},
 			},
 		},
-		Val: nil,
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
 	}
 
 	store.SetSubscription("AuthPolicy/test-ns/test-policy#expression1", subscription1)
@@ -429,6 +440,67 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 	cleared = store.ClearPolicySubscriptions("AuthPolicy/non-existent/policy")
 	if cleared != 0 {
 		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", cleared)
+	}
+}
+
+func TestRegisteredDataStore_GetSubscriptionsForPolicyKind(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	authPolicySubscription := Subscription{
+		CAst: &cel.Ast{},
+		Input: map[string]any{
+			"self": &extpb.Policy{
+				Metadata: &extpb.Metadata{
+					Kind:      "AuthPolicy",
+					Namespace: "test-ns",
+					Name:      "test-policy",
+				},
+			},
+		},
+		Val:        nil,
+		PolicyKind: "AuthPolicy",
+	}
+
+	rateLimitPolicySubscription := Subscription{
+		CAst: &cel.Ast{},
+		Input: map[string]any{
+			"self": &extpb.Policy{
+				Metadata: &extpb.Metadata{
+					Kind:      "RateLimitPolicy",
+					Namespace: "test-ns",
+					Name:      "test-policy",
+				},
+			},
+		},
+		Val:        nil,
+		PolicyKind: "RateLimitPolicy",
+	}
+
+	store.SetSubscription("AuthPolicy/test-ns/test-policy#expression1", authPolicySubscription)
+	store.SetSubscription("RateLimitPolicy/test-ns/test-policy#expression1", rateLimitPolicySubscription)
+
+	authSubscriptions := store.GetSubscriptionsForPolicyKind("AuthPolicy")
+	if len(authSubscriptions) != 1 {
+		t.Errorf("Expected 1 AuthPolicy subscription, got %d", len(authSubscriptions))
+	}
+
+	rateLimitSubscriptions := store.GetSubscriptionsForPolicyKind("RateLimitPolicy")
+	if len(rateLimitSubscriptions) != 1 {
+		t.Errorf("Expected 1 RateLimitPolicy subscription, got %d", len(rateLimitSubscriptions))
+	}
+
+	nonExistentSubscriptions := store.GetSubscriptionsForPolicyKind("NonExistentPolicy")
+	if len(nonExistentSubscriptions) != 0 {
+		t.Errorf("Expected 0 NonExistentPolicy subscriptions, got %d", len(nonExistentSubscriptions))
+	}
+
+	for key, sub := range authSubscriptions {
+		if sub.PolicyKind != "AuthPolicy" {
+			t.Errorf("Expected AuthPolicy subscription, got %s", sub.PolicyKind)
+		}
+		if key != "AuthPolicy/test-ns/test-policy#expression1" {
+			t.Errorf("Expected key 'AuthPolicy/test-ns/test-policy#expression1', got %s", key)
+		}
 	}
 }
 

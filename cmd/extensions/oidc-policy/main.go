@@ -34,7 +34,7 @@ func main() {
 	extController, err := builder.
 		WithScheme(scheme).
 		WithReconciler(oidcPolicyReconciler.Reconcile).
-		Watches(&kuadrantv1alpha1.OIDCPolicy{}).
+		For(&kuadrantv1alpha1.OIDCPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")

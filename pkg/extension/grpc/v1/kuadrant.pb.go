@@ -273,6 +273,50 @@ func (x *SubscribeResponse) GetError() *status.Status {
 	return nil
 }
 
+type SubscribeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PolicyKind    string                 `protobuf:"bytes,1,opt,name=policy_kind,json=policyKind,proto3" json:"policy_kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscribeRequest) Reset() {
+	*x = SubscribeRequest{}
+	mi := &file_v1_kuadrant_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscribeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeRequest) ProtoMessage() {}
+
+func (x *SubscribeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_kuadrant_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeRequest) Descriptor() ([]byte, []int) {
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SubscribeRequest) GetPolicyKind() string {
+	if x != nil {
+		return x.PolicyKind
+	}
+	return ""
+}
+
 type Event struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metadata      *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -282,7 +326,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_v1_kuadrant_proto_msgTypes[5]
+	mi := &file_v1_kuadrant_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -294,7 +338,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_kuadrant_proto_msgTypes[5]
+	mi := &file_v1_kuadrant_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -307,7 +351,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{5}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Event) GetMetadata() *Metadata {
@@ -329,7 +373,7 @@ type RegisterMutatorRequest struct {
 
 func (x *RegisterMutatorRequest) Reset() {
 	*x = RegisterMutatorRequest{}
-	mi := &file_v1_kuadrant_proto_msgTypes[6]
+	mi := &file_v1_kuadrant_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -341,7 +385,7 @@ func (x *RegisterMutatorRequest) String() string {
 func (*RegisterMutatorRequest) ProtoMessage() {}
 
 func (x *RegisterMutatorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_kuadrant_proto_msgTypes[6]
+	mi := &file_v1_kuadrant_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -354,7 +398,7 @@ func (x *RegisterMutatorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterMutatorRequest.ProtoReflect.Descriptor instead.
 func (*RegisterMutatorRequest) Descriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{6}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RegisterMutatorRequest) GetRequester() *Policy {
@@ -394,7 +438,7 @@ type ClearPolicyRequest struct {
 
 func (x *ClearPolicyRequest) Reset() {
 	*x = ClearPolicyRequest{}
-	mi := &file_v1_kuadrant_proto_msgTypes[7]
+	mi := &file_v1_kuadrant_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -406,7 +450,7 @@ func (x *ClearPolicyRequest) String() string {
 func (*ClearPolicyRequest) ProtoMessage() {}
 
 func (x *ClearPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_kuadrant_proto_msgTypes[7]
+	mi := &file_v1_kuadrant_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -419,7 +463,7 @@ func (x *ClearPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearPolicyRequest.ProtoReflect.Descriptor instead.
 func (*ClearPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{7}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ClearPolicyRequest) GetPolicy() *Policy {
@@ -439,7 +483,7 @@ type ClearPolicyResponse struct {
 
 func (x *ClearPolicyResponse) Reset() {
 	*x = ClearPolicyResponse{}
-	mi := &file_v1_kuadrant_proto_msgTypes[8]
+	mi := &file_v1_kuadrant_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +495,7 @@ func (x *ClearPolicyResponse) String() string {
 func (*ClearPolicyResponse) ProtoMessage() {}
 
 func (x *ClearPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_kuadrant_proto_msgTypes[8]
+	mi := &file_v1_kuadrant_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +508,7 @@ func (x *ClearPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearPolicyResponse.ProtoReflect.Descriptor instead.
 func (*ClearPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{8}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ClearPolicyResponse) GetClearedSubscriptions() int32 {
@@ -501,7 +545,10 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"cel_result\x18\x01 \x01(\v2\x1f.google.api.expr.v1alpha1.ValueR\tcelResult\"g\n" +
 	"\x11SubscribeResponse\x12(\n" +
 	"\x05event\x18\x01 \x01(\v2\x12.kuadrant.v1.EventR\x05event\x12(\n" +
-	"\x05error\x18\x02 \x01(\v2\x12.google.rpc.StatusR\x05error\":\n" +
+	"\x05error\x18\x02 \x01(\v2\x12.google.rpc.StatusR\x05error\"3\n" +
+	"\x10SubscribeRequest\x12\x1f\n" +
+	"\vpolicy_kind\x18\x01 \x01(\tR\n" +
+	"policyKind\":\n" +
 	"\x05Event\x121\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.kuadrant.v1.MetadataR\bmetadata\"\xb2\x01\n" +
 	"\x16RegisterMutatorRequest\x121\n" +
@@ -515,10 +562,10 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\"u\n" +
 	"\x13ClearPolicyResponse\x123\n" +
 	"\x15cleared_subscriptions\x18\x01 \x01(\x05R\x14clearedSubscriptions\x12)\n" +
-	"\x10cleared_mutators\x18\x02 \x01(\x05R\x0fclearedMutators2\x88\x03\n" +
+	"\x10cleared_mutators\x18\x02 \x01(\x05R\x0fclearedMutators2\x8f\x03\n" +
 	"\x10ExtensionService\x12=\n" +
-	"\x04Ping\x12\x18.kuadrant.v1.PingRequest\x1a\x19.kuadrant.v1.PongResponse\"\x00\x12G\n" +
-	"\tSubscribe\x12\x16.google.protobuf.Empty\x1a\x1e.kuadrant.v1.SubscribeResponse\"\x000\x01\x12F\n" +
+	"\x04Ping\x12\x18.kuadrant.v1.PingRequest\x1a\x19.kuadrant.v1.PongResponse\"\x00\x12N\n" +
+	"\tSubscribe\x12\x1d.kuadrant.v1.SubscribeRequest\x1a\x1e.kuadrant.v1.SubscribeResponse\"\x000\x01\x12F\n" +
 	"\aResolve\x12\x1b.kuadrant.v1.ResolveRequest\x1a\x1c.kuadrant.v1.ResolveResponse\"\x00\x12P\n" +
 	"\x0fRegisterMutator\x12#.kuadrant.v1.RegisterMutatorRequest\x1a\x16.google.protobuf.Empty\"\x00\x12R\n" +
 	"\vClearPolicy\x12\x1f.kuadrant.v1.ClearPolicyRequest\x1a .kuadrant.v1.ClearPolicyResponse\"\x00B\x05Z\x03/v1b\x06proto3"
@@ -535,45 +582,46 @@ func file_v1_kuadrant_proto_rawDescGZIP() []byte {
 	return file_v1_kuadrant_proto_rawDescData
 }
 
-var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_v1_kuadrant_proto_goTypes = []any{
 	(*PingRequest)(nil),            // 0: kuadrant.v1.PingRequest
 	(*PongResponse)(nil),           // 1: kuadrant.v1.PongResponse
 	(*ResolveRequest)(nil),         // 2: kuadrant.v1.ResolveRequest
 	(*ResolveResponse)(nil),        // 3: kuadrant.v1.ResolveResponse
 	(*SubscribeResponse)(nil),      // 4: kuadrant.v1.SubscribeResponse
-	(*Event)(nil),                  // 5: kuadrant.v1.Event
-	(*RegisterMutatorRequest)(nil), // 6: kuadrant.v1.RegisterMutatorRequest
-	(*ClearPolicyRequest)(nil),     // 7: kuadrant.v1.ClearPolicyRequest
-	(*ClearPolicyResponse)(nil),    // 8: kuadrant.v1.ClearPolicyResponse
-	(*timestamp.Timestamp)(nil),    // 9: google.protobuf.Timestamp
-	(*Policy)(nil),                 // 10: kuadrant.v1.Policy
-	(*v1alpha1.Value)(nil),         // 11: google.api.expr.v1alpha1.Value
-	(*status.Status)(nil),          // 12: google.rpc.Status
-	(*Metadata)(nil),               // 13: kuadrant.v1.Metadata
-	(*empty.Empty)(nil),            // 14: google.protobuf.Empty
+	(*SubscribeRequest)(nil),       // 5: kuadrant.v1.SubscribeRequest
+	(*Event)(nil),                  // 6: kuadrant.v1.Event
+	(*RegisterMutatorRequest)(nil), // 7: kuadrant.v1.RegisterMutatorRequest
+	(*ClearPolicyRequest)(nil),     // 8: kuadrant.v1.ClearPolicyRequest
+	(*ClearPolicyResponse)(nil),    // 9: kuadrant.v1.ClearPolicyResponse
+	(*timestamp.Timestamp)(nil),    // 10: google.protobuf.Timestamp
+	(*Policy)(nil),                 // 11: kuadrant.v1.Policy
+	(*v1alpha1.Value)(nil),         // 12: google.api.expr.v1alpha1.Value
+	(*status.Status)(nil),          // 13: google.rpc.Status
+	(*Metadata)(nil),               // 14: kuadrant.v1.Metadata
+	(*empty.Empty)(nil),            // 15: google.protobuf.Empty
 }
 var file_v1_kuadrant_proto_depIdxs = []int32{
-	9,  // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
-	9,  // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
-	10, // 2: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
-	11, // 3: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
-	5,  // 4: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
-	12, // 5: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
-	13, // 6: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
-	10, // 7: kuadrant.v1.RegisterMutatorRequest.requester:type_name -> kuadrant.v1.Policy
-	10, // 8: kuadrant.v1.RegisterMutatorRequest.target:type_name -> kuadrant.v1.Policy
-	10, // 9: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
+	10, // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
+	10, // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
+	11, // 2: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
+	12, // 3: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
+	6,  // 4: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
+	13, // 5: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
+	14, // 6: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
+	11, // 7: kuadrant.v1.RegisterMutatorRequest.requester:type_name -> kuadrant.v1.Policy
+	11, // 8: kuadrant.v1.RegisterMutatorRequest.target:type_name -> kuadrant.v1.Policy
+	11, // 9: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
 	0,  // 10: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
-	14, // 11: kuadrant.v1.ExtensionService.Subscribe:input_type -> google.protobuf.Empty
+	5,  // 11: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
 	2,  // 12: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
-	6,  // 13: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
-	7,  // 14: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
+	7,  // 13: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
+	8,  // 14: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
 	1,  // 15: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
 	4,  // 16: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
 	3,  // 17: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
-	14, // 18: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
-	8,  // 19: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
+	15, // 18: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
+	9,  // 19: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
 	15, // [15:20] is the sub-list for method output_type
 	10, // [10:15] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
@@ -594,7 +642,7 @@ func file_v1_kuadrant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_kuadrant_proto_rawDesc), len(file_v1_kuadrant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

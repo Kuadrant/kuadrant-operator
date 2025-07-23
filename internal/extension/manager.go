@@ -151,7 +151,11 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 	return service
 }
 
-func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
+func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
+	if request.PolicyKind == "" {
+		return fmt.Errorf("policy_kind is required for subscription")
+	}
+
 	channel := BlockingDAG.newUpdateChannel()
 	for {
 		dag := <-channel
@@ -161,7 +165,7 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 
 		s.mutex.Lock()
 		if env, err := cel.NewEnv(opts...); err == nil {
-			subscriptions := s.registeredData.GetAllSubscriptions()
+			subscriptions := s.registeredData.GetSubscriptionsForPolicyKind(request.PolicyKind)
 			for key, sub := range subscriptions {
 				if prg, err := env.Program(sub.CAst); err == nil {
 					if newVal, _, err := prg.Eval(sub.Input); err == nil {
@@ -218,9 +222,10 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 		policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
 		subscriptionKey := fmt.Sprintf("%s#%s", policyKey, request.Expression)
 		s.registeredData.SetSubscription(subscriptionKey, Subscription{
-			CAst:  cAst,
-			Input: input,
-			Val:   val,
+			CAst:       cAst,
+			Input:      input,
+			Val:        val,
+			PolicyKind: request.Policy.Metadata.Kind,
 		})
 	}
 

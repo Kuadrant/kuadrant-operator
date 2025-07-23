@@ -14,6 +14,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
 const (
@@ -60,6 +61,8 @@ func IsPolicyAccepted(ctx context.Context, p machinery.Policy, s *sync.Map) bool
 		return isAuthPolicyAcceptedFunc(s)(p)
 	case *kuadrantv1.RateLimitPolicy:
 		return isRateLimitPolicyAcceptedFunc(s)(p)
+	case *kuadrantv1alpha1.TokenRateLimitPolicy:
+		return isTokenRateLimitPolicyAcceptedFunc(s)(p)
 	case *kuadrantv1.TLSPolicy:
 		isValid, _ := IsTLSPolicyValid(ctx, s, t)
 		return isValid
@@ -75,6 +78,7 @@ func policyGroupKinds() []*schema.GroupKind {
 	return []*schema.GroupKind{
 		&kuadrantv1.AuthPolicyGroupKind,
 		&kuadrantv1.RateLimitPolicyGroupKind,
+		&kuadrantv1alpha1.TokenRateLimitPolicyGroupKind,
 		&kuadrantv1.TLSPolicyGroupKind,
 		&kuadrantv1.DNSPolicyGroupKind,
 	}

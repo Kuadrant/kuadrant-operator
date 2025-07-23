@@ -6,7 +6,7 @@ This tutorial walks you through using Kuadrant to secure, protect, and connect a
 
 ## Prerequisites
 
-- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/1.2.x/getting-started) guide for more information.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide for more information.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 - AWS/Azure or GCP with DNS capabilities.
 

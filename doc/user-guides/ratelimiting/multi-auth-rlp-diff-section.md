@@ -4,7 +4,7 @@ This tutorial walks you through an example of how to configure multiple rate lim
 
 ## Prerequisites
 
-- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/1.2.x/getting-started) guide for more information.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide for more information.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 
 

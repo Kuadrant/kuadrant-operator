@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,6 +52,7 @@ type ExtensionController struct {
 	reconcile       exttypes.ReconcileFn
 	watchSources    []ctrlruntimesrc.Source
 	extensionClient *extensionClient
+	policyKind      string
 }
 
 func (ec *ExtensionController) Start(ctx context.Context) error {
@@ -95,7 +95,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 }
 
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
-	err := ec.extensionClient.subscribe(ctx, func(response *extpb.SubscribeResponse) {
+	err := ec.extensionClient.subscribe(ctx, ec.policyKind, func(response *extpb.SubscribeResponse) {
 		ec.logger.Info("received response", "response", response)
 		// todo(adam-cattermole): how might we inform of an error from subscribe responses?
 		if response.Error != nil && response.Error.Code != 0 {
@@ -103,13 +103,11 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 			return
 		}
 		trigger := &unstructured.Unstructured{}
-		if response.Event != nil {
-			if response.Event.Metadata == nil {
-				trigger.SetName(response.Event.Metadata.Name)
-				trigger.SetNamespace(response.Event.Metadata.Namespace)
-				trigger.SetKind(response.Event.Metadata.Kind)
-				reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
-			}
+		if response.Event != nil && response.Event.Metadata != nil {
+			trigger.SetName(response.Event.Metadata.Name)
+			trigger.SetNamespace(response.Event.Metadata.Namespace)
+			trigger.SetKind(response.Event.Metadata.Kind)
+			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
 		}
 	})
 	if err != nil {
@@ -131,25 +129,86 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	return ec.reconcile(ctx, request, ec)
 }
 
-func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+func (ec *ExtensionController) resolveExpression(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (*extpb.ResolveResponse, error) {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
 	resp, err := ec.extensionClient.client.Resolve(ctx, &extpb.ResolveRequest{
-		Policy:     extutils.MapToExtPolicy(policy),
+		Policy:     pbPolicy,
 		Expression: expression,
 		Subscribe:  subscribe,
 	})
 	if err != nil {
-		return ref.Val(nil), fmt.Errorf("error resolving expression: %w", err)
+		return nil, fmt.Errorf("error resolving expression: %w", err)
 	}
 
 	if resp == nil || resp.GetCelResult() == nil {
-		return celtypes.NullValue, nil
+		return nil, fmt.Errorf("empty response from extension service")
 	}
+
+	return resp, nil
+}
+
+func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
+	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
+	if err != nil {
+		return ref.Val(nil), err
+	}
+
 	val, err := cel.ValueToRefValue(celtypes.DefaultTypeAdapter, resp.GetCelResult())
 	if err != nil {
 		return ref.Val(nil), fmt.Errorf("error converting cel result: %w", err)
 	}
 
 	return val, nil
+}
+
+func (ec *ExtensionController) ResolvePolicy(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error) {
+	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
+	if err != nil {
+		return nil, err
+	}
+
+	celResult := resp.GetCelResult()
+
+	// Handle object values that should be protobuf policies
+	if celResult.GetObjectValue() != nil {
+		// Unmarshal the protobuf object directly
+		pbPolicyResult := &extpb.Policy{}
+		if err := celResult.GetObjectValue().UnmarshalTo(pbPolicyResult); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal CEL object result to protobuf Policy: %w", err)
+		}
+		return extpb.NewPolicyAdapter(pbPolicyResult), nil
+	}
+
+	return nil, fmt.Errorf("CEL result is not an object value that can be converted to Policy")
+}
+
+func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error {
+	pbRequester := convertPolicyToProtobuf(requester)
+	pbTarget := convertPolicyToProtobuf(target)
+
+	_, err := ec.extensionClient.client.RegisterMutator(ctx, &extpb.RegisterMutatorRequest{
+		Requester:  pbRequester,
+		Target:     pbTarget,
+		Binding:    binding,
+		Expression: expression,
+	})
+	return err
+}
+
+func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
+	resp, err := ec.extensionClient.client.ClearPolicy(ctx, &extpb.ClearPolicyRequest{
+		Policy: pbPolicy,
+	})
+
+	ec.logger.Info("cleared policy", "subscriptions", resp.GetClearedSubscriptions(), "mutators", resp.GetClearedMutators())
+	return err
+}
+
+func (ec *ExtensionController) Manager() ctrlruntime.Manager {
+	return ec.manager
 }
 
 type extensionClient struct {
@@ -184,8 +243,10 @@ func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error
 	})
 }
 
-func (ec *extensionClient) subscribe(ctx context.Context, callback func(response *extpb.SubscribeResponse)) error {
-	stream, err := ec.client.Subscribe(ctx, &emptypb.Empty{})
+func (ec *extensionClient) subscribe(ctx context.Context, policyKind string, callback func(response *extpb.SubscribeResponse)) error {
+	stream, err := ec.client.Subscribe(ctx, &extpb.SubscribeRequest{
+		PolicyKind: policyKind,
+	})
 	if err != nil {
 		return err
 	}
@@ -212,6 +273,7 @@ type Builder struct {
 	scheme     *runtime.Scheme
 	logger     logr.Logger
 	reconcile  exttypes.ReconcileFn
+	forType    client.Object
 	watchTypes []client.Object
 }
 
@@ -241,6 +303,14 @@ func (b *Builder) WithReconciler(fn exttypes.ReconcileFn) *Builder {
 	return b
 }
 
+func (b *Builder) For(obj client.Object) *Builder {
+	if b.forType != nil {
+		panic("For() can only be called once")
+	}
+	b.forType = obj
+	return b
+}
+
 func (b *Builder) Watches(obj client.Object) *Builder {
 	b.watchTypes = append(b.watchTypes, obj)
 	return b
@@ -256,8 +326,8 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	if b.reconcile == nil {
 		return nil, fmt.Errorf("reconcile function must be set")
 	}
-	if len(b.watchTypes) == 0 {
-		return nil, fmt.Errorf("watch sources must be set")
+	if b.forType == nil {
+		return nil, fmt.Errorf("for type must be set")
 	}
 
 	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
@@ -287,10 +357,19 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	}
 
 	watchSources := make([]ctrlruntimesrc.Source, 0)
+	forSource := ctrlruntimesrc.Kind(mgr.GetCache(), b.forType, &ctrlruntimehandler.EnqueueRequestForObject{})
+	watchSources = append(watchSources, forSource)
+
 	for _, obj := range b.watchTypes {
 		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
 		watchSources = append(watchSources, source)
 	}
+
+	objType := reflect.TypeOf(b.forType)
+	if objType.Kind() == reflect.Ptr {
+		objType = objType.Elem()
+	}
+	policyKind := objType.Name()
 
 	return &ExtensionController{
 		name:            b.name,
@@ -300,7 +379,34 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,
 		extensionClient: extClient,
+		policyKind:      policyKind,
 	}, nil
+}
+
+func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
+	pbPolicy := &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Group:     policy.GetObjectKind().GroupVersionKind().Group,
+			Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
+			Namespace: policy.GetNamespace(),
+			Name:      policy.GetName(),
+		},
+		TargetRefs: make([]*extpb.TargetRef, len(policy.GetTargetRefs())),
+	}
+
+	for i, ref := range policy.GetTargetRefs() {
+		pbPolicy.TargetRefs[i] = &extpb.TargetRef{
+			Group:     string(ref.Group),
+			Kind:      string(ref.Kind),
+			Name:      string(ref.Name),
+			Namespace: policy.GetNamespace(), // Use policy namespace for target refs
+		}
+		if ref.SectionName != nil {
+			pbPolicy.TargetRefs[i].SectionName = string(*ref.SectionName)
+		}
+	}
+
+	return pbPolicy
 }
 
 func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, policy exttypes.Policy, expression string, subscribe bool) (T, error) {

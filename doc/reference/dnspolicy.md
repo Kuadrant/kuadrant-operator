@@ -2,8 +2,8 @@
 
 - [DNSPolicy](#DNSPolicy)
 - [DNSPolicySpec](#dnspolicyspec)
-  - [excludeAddresses]()
-  - [ProviderRefs](#providerRefs)
+  - [ExcludeAddresses](#excludeaddresses)
+  - [ProviderRefs](#providerrefs)
   - [HealthCheckSpec](#healthcheckspec)
   - [LoadBalancingSpec](#loadbalancingspec)
     - [LoadBalancingWeighted](#loadbalancingweighted)
@@ -51,7 +51,6 @@
 | **Field**  | **Type** | **Required** | **Description**                                                                        |
 |------------|----------|:------------:|----------------------------------------------------------------------------------------|
 | `name`     | String   |     Yes      | Name of the secret in the same namespace that contains the provider credentials
-|--------------------|------------|:------------:|-----------------------------------------------------------------------------------------------------------|
 | `path`         | String     |     Yes      | Path is the path to append to the host to reach the expected health check. Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common              | 
 | `port`             | Number     |     Yes      | Port to connect to the host on. Must be either 80, 443 or 1024-49151                          | 
 | `protocol`         | String     |     Yes      | Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"                           | 

@@ -20,13 +20,17 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
-const rateLimitObjectLabelKey = "kuadrant.io/ratelimit"
+const (
+	rateLimitObjectLabelKey      = "kuadrant.io/ratelimit"
+	tokenRateLimitObjectLabelKey = "kuadrant.io/tokenratelimit" //nolint:gosec
+)
 
 var (
 	StateRateLimitPolicyValid                  = "RateLimitPolicyValid"
@@ -35,9 +39,10 @@ var (
 	StateIstioRateLimitClustersModified        = "IstioRateLimitClustersModified"
 	StateEnvoyGatewayRateLimitClustersModified = "EnvoyGatewayRateLimitClustersModified"
 
-	ErrMissingLimitador                       = fmt.Errorf("missing limitador object in the topology")
-	ErrMissingLimitadorServiceInfo            = fmt.Errorf("missing limitador service info in the limitador object")
-	ErrMissingStateEffectiveRateLimitPolicies = fmt.Errorf("missing rate limit effective policies stored in the reconciliation state")
+	ErrMissingLimitador                            = fmt.Errorf("missing limitador object in the topology")
+	ErrMissingLimitadorServiceInfo                 = fmt.Errorf("missing limitador service info in the limitador object")
+	ErrMissingStateEffectiveRateLimitPolicies      = fmt.Errorf("missing rate limit effective policies stored in the reconciliation state")
+	ErrMissingStateEffectiveTokenRateLimitPolicies = fmt.Errorf("missing token rate limit effective policies stored in the reconciliation state")
 )
 
 func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.Limitador {
@@ -83,6 +88,12 @@ func LimitNameToLimitadorIdentifier(rlpKey k8stypes.NamespacedName, uniqueLimitN
 func RateLimitObjectLabels() labels.Set {
 	m := KuadrantManagedObjectLabels()
 	m[rateLimitObjectLabelKey] = "true"
+	return m
+}
+
+func TokenRateLimitObjectLabels() labels.Set {
+	m := KuadrantManagedObjectLabels()
+	m[tokenRateLimitObjectLabelKey] = "true"
 	return m
 }
 
@@ -160,41 +171,6 @@ func rateLimitClusterPatch(host string, port int, mTLS bool) map[string]any {
 		}
 	}
 	return base
-}
-
-func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) []wasm.Action {
-	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-
-	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-
-	topLevelRules, limitRules := lo.FilterReject(lo.Entries(effectivePolicy.Spec.Rules()),
-		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
-			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates
-		},
-	)
-
-	var topLevelWhenPredicates kuadrantv1.WhenPredicates
-	if len(topLevelRules) > 0 {
-		if len(topLevelRules) > 1 {
-			panic("rate limit policy with multiple top level 'when' predicate lists")
-		}
-		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
-	}
-
-	return lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.Action, bool) {
-		uniquePolicyRuleKey := r.Key
-		policyRule := r.Value
-		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
-			return p.GetLocator() == policyRule.GetSource()
-		})
-		if !found { // should never happen
-			return wasm.Action{}, false
-		}
-		limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
-		limit := policyRule.GetSpec().(*kuadrantv1.Limit)
-		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace, topLevelWhenPredicates), true
-	})
 }
 
 // wasmActionFromLimit builds a wasm rate-limit action for a given limit.
@@ -283,4 +259,205 @@ func rateLimitPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err 
 		return
 	}
 	return
+}
+
+// TokenLimitNameToLimitadorIdentifier converts a token rate limit policy and limit name to a unique Limitador ident
+func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, uniqueLimitName string) string {
+	identifier := "tokenlimit."
+
+	for _, c := range uniqueLimitName {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_' {
+			identifier += string(c)
+		} else {
+			identifier += "_"
+		}
+	}
+
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", trlpKey.String(), uniqueLimitName)))
+	identifier += "__" + hex.EncodeToString(hash[:4])
+
+	return identifier
+}
+
+func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier, scope string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.Action {
+	predicates := make([]string, 0, len(topLevelPredicates)+1)
+	for _, pred := range topLevelPredicates {
+		predicates = append(predicates, pred.Predicate)
+	}
+	for _, pred := range tokenLimit.When {
+		predicates = append(predicates, pred.Predicate)
+	}
+
+	// common both actions
+	commonData := []wasm.DataType{
+		{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   limitIdentifier,
+					Value: "1",
+				},
+			},
+		},
+	}
+
+	// add counters if specified
+	for _, counter := range tokenLimit.Counters {
+		counterExpr := string(counter.Expression)
+		commonData = append(commonData, wasm.DataType{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   counterExpr,
+					Value: counterExpr,
+				},
+			},
+		})
+	}
+
+	// Create separate data slices for request and response phases
+	// We need independent copies because each phase has different hits_addend values
+
+	// Request phase - check limit without consuming tokens
+	requestPhaseData := make([]wasm.DataType, 0, len(commonData)+1)
+	requestPhaseData = append(requestPhaseData, commonData...)
+	requestPhaseData = append(requestPhaseData, wasm.DataType{
+		Value: &wasm.Expression{
+			ExpressionItem: wasm.ExpressionItem{
+				Key:   "ratelimit.hits_addend",
+				Value: "0",
+			},
+		},
+	})
+
+	requestAction := wasm.Action{
+		ServiceName: wasm.RateLimitCheckServiceName,
+		Scope:       scope,
+		Predicates:  predicates,
+		Data:        requestPhaseData,
+	}
+
+	// Response phase - increment counter with actual token usage
+	responsePhaseData := make([]wasm.DataType, 0, len(commonData)+1)
+	responsePhaseData = append(responsePhaseData, commonData...)
+	responsePhaseData = append(responsePhaseData, wasm.DataType{
+		Value: &wasm.Expression{
+			ExpressionItem: wasm.ExpressionItem{
+				Key:   "ratelimit.hits_addend",
+				Value: "responseBodyJSON(\"usage.total_tokens\")",
+			},
+		},
+	})
+
+	responseAction := wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       scope,
+		Predicates:  predicates,
+		Data:        responsePhaseData,
+	}
+
+	return []wasm.Action{requestAction, responseAction}
+}
+
+func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
+	return buildWasmActionsForAnyRateLimit(
+		effectivePolicy.Path,
+		effectivePolicy.Spec.Rules(),
+		kuadrantv1.RulesKeyTopLevelPredicates,
+		policyPredicate,
+		func(key k8stypes.NamespacedName, limitName string) string {
+			return LimitNameToLimitadorIdentifier(key, limitName)
+		},
+		func(spec interface{}, limitIdentifier, scope string, predicates kuadrantv1.WhenPredicates) wasm.Action {
+			limit := spec.(*kuadrantv1.Limit)
+			return wasmActionFromLimit(limit, limitIdentifier, scope, predicates)
+		},
+	)
+}
+
+func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
+	path := effectivePolicy.Path
+	rules := effectivePolicy.Spec.Rules()
+	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
+
+	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+
+	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
+			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates
+		},
+	)
+
+	var topLevelWhenPredicates kuadrantv1.WhenPredicates
+	if len(topLevelRules) > 0 {
+		if len(topLevelRules) > 1 {
+			panic("token rate limit policy with multiple top level 'when' predicate lists")
+		}
+		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
+	}
+
+	var allActions []wasm.Action
+	for _, r := range limitRules {
+		uniquePolicyRuleKey := r.Key
+		policyRule := r.Value
+		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
+			return p.GetLocator() == policyRule.GetSource()
+		})
+		if !found { // should never happen
+			continue
+		}
+		limitIdentifier := TokenLimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
+		limitSpec := policyRule.GetSpec().(*kuadrantv1alpha1.TokenLimit)
+		scope := limitsNamespace
+
+		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
+		tokenActions := wasmActionsFromTokenLimit(limitSpec, limitIdentifier, scope, topLevelWhenPredicates)
+		allActions = append(allActions, tokenActions...)
+	}
+
+	return allActions
+}
+
+// buildWasmActionsForAnyRateLimit is the generic implementation used by both rate limit policy types
+func buildWasmActionsForAnyRateLimit(
+	path []machinery.Targetable,
+	rules map[string]kuadrantv1.MergeableRule,
+	topLevelPredicatesKey string,
+	policyPredicate func(machinery.Policy) bool,
+	identifierFunc func(k8stypes.NamespacedName, string) string,
+	actionFunc func(interface{}, string, string, kuadrantv1.WhenPredicates) wasm.Action,
+) []wasm.Action {
+	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
+
+	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+
+	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
+			return r.Key == topLevelPredicatesKey
+		},
+	)
+
+	var topLevelWhenPredicates kuadrantv1.WhenPredicates
+	if len(topLevelRules) > 0 {
+		if len(topLevelRules) > 1 {
+			panic("rate limit policy with multiple top level 'when' predicate lists")
+		}
+		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
+	}
+
+	return lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.Action, bool) {
+		uniquePolicyRuleKey := r.Key
+		policyRule := r.Value
+		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
+			return p.GetLocator() == policyRule.GetSource()
+		})
+		if !found { // should never happen
+			return wasm.Action{}, false
+		}
+		limitIdentifier := identifierFunc(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
+		limitSpec := policyRule.GetSpec()
+		scope := limitsNamespace
+
+		return actionFunc(limitSpec, limitIdentifier, scope, topLevelWhenPredicates), true
+	})
 }

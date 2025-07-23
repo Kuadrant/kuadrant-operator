@@ -21,6 +21,7 @@ import (
 	gwapiv1b1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
@@ -47,6 +48,7 @@ func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 		},
 	}
@@ -151,18 +153,35 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	}
 	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
 
-	effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
-	if !ok {
-		return nil, ErrMissingStateEffectiveRateLimitPolicies
+	var effectiveRateLimitPoliciesMap EffectiveRateLimitPolicies
+	if effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
+		effectiveRateLimitPoliciesMap = effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
+	} else {
+		logger.V(1).Info("no effective rate limit policies found in state, continuing with empty map")
 	}
-	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 
-	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectiveRateLimitPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
+	var effectiveTokenRateLimitPoliciesMap EffectiveTokenRateLimitPolicies
+	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
+		effectiveTokenRateLimitPoliciesMap = effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)
+	} else {
+		logger.V(1).Info("no effective token rate limit policies found in state, continuing with empty map")
+	}
 
-	paths := lo.UniqBy(append(
-		lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path })),
-		lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))...,
-	), func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
+	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveTokenRateLimitPolicies", len(effectiveTokenRateLimitPoliciesMap))
+
+	// unique paths from different policy types
+	var allPaths []lo.Entry[string, []machinery.Targetable]
+
+	// paths from auth ratelimit and tokenratelimit policies
+	authPaths := lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path }))
+	allPaths = append(allPaths, authPaths...)
+	rateLimitPaths := lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))
+	allPaths = append(allPaths, rateLimitPaths...)
+	tokenRateLimitPaths := lo.Entries(lo.MapValues(effectiveTokenRateLimitPoliciesMap, func(p EffectiveTokenRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))
+	allPaths = append(allPaths, tokenRateLimitPaths...)
+
+	// unique paths by key
+	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 
@@ -187,7 +206,17 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForRateLimit(effectivePolicy, state)
+			rlAction := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if hasAuthAccess(rlAction) {
+				actions = append(actions, rlAction...)
+			} else {
+				// pre auth rate limiting
+				actions = append(rlAction, actions...)
+			}
+		}
+
+		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
+			rlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
 			if hasAuthAccess(rlAction) {
 				actions = append(actions, rlAction...)
 			} else {

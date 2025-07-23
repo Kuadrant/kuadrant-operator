@@ -10,6 +10,45 @@
 * [kubectl] version v1.19+
 * [helm]
 
+## Pre-commit checks
+
+The `make pre-commit` target provides a comprehensive suite of checks that should be run before committing code. 
+It automatically runs verification, linting, and unit tests. Integration tests are optional and controlled by the `INTEGRATION_TEST_ENV` variable.
+
+### Basic usage
+
+```sh
+# Run pre-commit checks (verification, linting, and unit tests only - no integration tests)
+make pre-commit
+
+# Run pre-commit checks including ALL integration tests
+make pre-commit INTEGRATION_TEST_ENV=all
+```
+
+This will execute the following steps:
+1.  **Verification checks** (`make verify-all`) - ensures generated code is up to date
+2.  **Lint checks** (`make run-lint`) - code style and quality checks
+3.  **Unit tests** (`make test-unit`) - fast unit test suite
+4.  **Integration tests** - only if `INTEGRATION_TEST_ENV` is set
+
+### Integration testing options
+
+You can control which integration tests to run:
+
+```sh
+# Skip integration tests (default behavior)
+make pre-commit
+
+# Run all integration tests
+make pre-commit INTEGRATION_TEST_ENV=all
+
+# Run pre-commit checks with only istio integration tests
+make pre-commit INTEGRATION_TEST_ENV=istio
+
+# Run pre-commit checks with multiple specific integration tests
+make pre-commit INTEGRATION_TEST_ENV="bare-k8s gatewayapi integration-istio"
+```
+
 ## Build
 
 ```sh

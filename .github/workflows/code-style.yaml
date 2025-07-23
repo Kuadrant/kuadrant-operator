@@ -21,7 +21,7 @@ on:
   pull_request:
     branches: [ 'main', 'release-*' ]
   merge_group:
-    types: [checks_requested]
+    types: [ checks_requested ]
   workflow_dispatch:
 
 jobs:
@@ -42,14 +42,14 @@ jobs:
             importpath: golang.org/x/tools/cmd/goimports@latest
 
     steps:
-      - name: Set up Go 1.24.x
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.24.x
+          go-version-file: go.mod
         id: go
-
-      - name: Check out code
-        uses: actions/checkout@v3
 
       - name: Install Dependencies
         if: ${{ matrix.importpath != '' }}
@@ -92,14 +92,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set up Go 1.24.x
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.24.x
+          go-version-file: go.mod
         id: go
-
-      - name: Check out code
-        uses: actions/checkout@v3
 
       - name: Install Tools
         env:

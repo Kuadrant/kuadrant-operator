@@ -35,16 +35,16 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Run Promql tests
         run: |
-            make test-alerts
+          make test-alerts
   required-checks:
     name: Alerts Promql tests Required Checks
     # This check adds a list of checks to one job to simplify adding settings to the repo.

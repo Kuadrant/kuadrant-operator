@@ -3,9 +3,9 @@ name: Test
 on:
   workflow_dispatch:
   push:
-    branches: ['main', 'release-v*']
+    branches: [ 'main', 'release-v*' ]
   pull_request:
-    branches: ['*']
+    branches: [ '*' ]
   merge_group:
     types: [ checks_requested ]
   schedule:
@@ -30,20 +30,19 @@ jobs:
     needs: pre-job
     strategy:
       matrix:
-        go-version: [1.24.x]
-        platform: [ubuntu-latest]
+        platform: [ ubuntu-latest ]
     runs-on: ${{ matrix.platform }}
     defaults:
       run:
         shell: bash
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go-version }}
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Run make test
         run: |
           make test-unit
@@ -80,13 +79,13 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
@@ -131,13 +130,13 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
@@ -178,13 +177,13 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
@@ -234,13 +233,13 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
@@ -278,13 +277,13 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.24.x
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.24.x
+          go-version-file: go.mod
         id: go
-      - name: Checkout code at git ref
-        uses: actions/checkout@v4
       - name: Check bundles and manifests
         run: make verify-prepare-release
 
@@ -294,13 +293,13 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Run make verify-fmt
         run: |
           make verify-fmt
@@ -311,20 +310,19 @@ jobs:
     needs: pre-job
     strategy:
       matrix:
-        go-version: [1.24.x]
-        platform: [ubuntu-latest, macos-latest]
+        platform: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.platform }}
     defaults:
       run:
         shell: bash
     steps:
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go-version }}
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Run make operator-sdk
         run: |
           make operator-sdk
@@ -335,13 +333,13 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Verify generate command
         run: |
           make verify-generate
@@ -352,13 +350,13 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.24.x
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.x
-        id: go
       - name: Check out code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+        id: go
       - name: Verify generate command
         run: |
           make verify-go-mod

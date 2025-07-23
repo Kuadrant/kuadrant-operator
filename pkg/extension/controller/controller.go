@@ -198,6 +198,24 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes
 	return err
 }
 
+func (ec *ExtensionController) GetClient() client.Client {
+	return ec.manager.GetClient()
+}
+
+func (ec *ExtensionController) GetScheme() *runtime.Scheme {
+	return ec.manager.GetScheme()
+}
+
+func (ec *ExtensionController) ReconcileKuadrantResource(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
+	// reconcile
+	err := ec.ReconcileResource(ctx, obj, desired, basereconciler.MutateFn(mutateFn)) // TODO(didierofrivia): Next iteration, use policy machinery
+	if err != nil {
+		return err
+	}
+	return nil
+	// TODO(didierofrivia): Subscribe
+}
+
 func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
 	pbPolicy := convertPolicyToProtobuf(policy)
 

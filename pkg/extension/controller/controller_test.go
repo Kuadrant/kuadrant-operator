@@ -9,6 +9,8 @@ import (
 	"os"
 	"testing"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"reflect"
 
 	celtypes "github.com/google/cel-go/common/types"
@@ -84,6 +86,18 @@ func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, requester exttypes.Poli
 
 func (m *mockKuadrantCtx) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
 	return m.clearPolicyFn(ctx, policy)
+}
+
+func (m *mockKuadrantCtx) GetClient() client.Client {
+	return nil
+}
+
+func (m *mockKuadrantCtx) GetScheme() *runtime.Scheme {
+	return &runtime.Scheme{}
+}
+
+func (m *mockKuadrantCtx) ReconcileKuadrantResource(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
+	return nil
 }
 
 func TestGenericResolveSuccess(t *testing.T) {

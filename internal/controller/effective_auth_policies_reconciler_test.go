@@ -276,8 +276,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 		t.Fatalf("failed to create topology: %v", err)
 	}
 
-	r := &EffectiveAuthPolicyReconciler{}
-	effectiveAuthPolicies := r.calculateEffectivePolicies(context.TODO(), topology, kuadrant, &sync.Map{})
+	effectiveAuthPolicies := CalculateEffectiveAuthPolicies(context.TODO(), topology, kuadrant, &sync.Map{})
 
 	if len(effectiveAuthPolicies) != 2 {
 		t.Fatalf("expected 2 effective auth policies, got %d", len(effectiveAuthPolicies))

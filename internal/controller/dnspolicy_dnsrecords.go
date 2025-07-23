@@ -90,7 +90,7 @@ func (g *GatewayWrapper) GetAddresses() []builder.TargetAddress {
 func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *kuadrantv1.DNSPolicy) error {
 	g.excludedAddresses = p.Spec.ExcludeAddresses
 	newAddresses := []gatewayapiv1.GatewayStatusAddress{}
-	for _, address := range g.Gateway.Status.Addresses {
+	for _, address := range g.Status.Addresses {
 		found := false
 		for _, exclude := range p.Spec.ExcludeAddresses {
 			//Only a CIDR will have  / in the address so attempt to parse fail if not valid

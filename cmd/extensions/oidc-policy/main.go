@@ -41,8 +41,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	oidcPolicyReconciler.SetupWithManager(extController.Manager())
-
 	if err = extController.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")
 		os.Exit(1)

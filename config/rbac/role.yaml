@@ -141,7 +141,6 @@ rules:
   - gateway.networking.k8s.io
   resources:
   - gateways
-  - httproutes
   verbs:
   - get
   - list
@@ -164,14 +163,22 @@ rules:
   - patch
   - update
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - kuadrant.io
   resources:
   - authpolicies
-  - dnspolicies
-  - kuadrants
-  - ratelimitpolicies
-  - tlspolicies
   verbs:
+  - create
   - get
   - list
   - patch
@@ -183,8 +190,11 @@ rules:
   - authpolicies/finalizers
   - dnspolicies/finalizers
   - kuadrants/finalizers
+  - oidcpolicies/finalizers
+  - planpolicies/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
+  - tokenratelimitpolicies/finalizers
   verbs:
   - update
 - apiGroups:
@@ -193,8 +203,11 @@ rules:
   - authpolicies/status
   - dnspolicies/status
   - kuadrants/status
+  - oidcpolicies/status
+  - planpolicies/status
   - ratelimitpolicies/status
   - tlspolicies/status
+  - tokenratelimitpolicies/status
   verbs:
   - get
   - patch
@@ -202,7 +215,23 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
+  - dnspolicies
+  - kuadrants
+  - oidcpolicies
+  - planpolicies
+  - tlspolicies
+  - tokenratelimitpolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
   - dnsrecords
+  - ratelimitpolicies
   verbs:
   - create
   - delete

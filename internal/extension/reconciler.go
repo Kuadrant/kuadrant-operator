@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,11 +57,15 @@ func (ngp *nilGuardedPointer[T]) newUpdateChannel() chan T {
 }
 
 // get returns the current value of the pointer without blocking.
+//
+//lint:ignore U1000
 func (ngp *nilGuardedPointer[T]) get() *T {
 	return ngp.ptr.Load()
 }
 
 // getWait blocks until the pointer is set to a non-nil value and then returns that value.
+//
+//lint:ignore U1000
 func (ngp *nilGuardedPointer[T]) getWait() T {
 	// First try a quick non-blocking check
 	if val := ngp.ptr.Load(); val != nil {
@@ -141,18 +146,88 @@ func (d *StateAwareDAG) FindGatewaysFor(targetRefs []*extpb.TargetRef) ([]*extpb
 		return gw.GetMetadata().GetNamespace() + "/" + gw.GetMetadata().GetName()
 	}), nil
 }
+func (d *StateAwareDAG) FindPoliciesFor(targetRefs []*extpb.TargetRef, policyType machinery.Policy) ([]*extpb.Policy, error) {
+	initialTargets := d.topology.All().Items(func(o machinery.Object) bool {
+		return len(lo.Filter(targetRefs, func(t *extpb.TargetRef, _ int) bool {
+			return t.Name == o.GetName() && t.Kind == o.GroupVersionKind().Kind
+		})) > 0
+	})
+
+	chain := make([]machinery.Object, 0)
+	for _, target := range initialTargets {
+		if policy, ok := target.(machinery.Policy); ok {
+			// If the target is a policy, check its children
+			children := d.topology.Targetables().Children(policy)
+			for _, child := range children {
+				chain = append(chain, child)
+			}
+		} else {
+			// If the target is not a policy, use it directly
+			chain = append(chain, target)
+		}
+	}
+
+	policies := make([]*extpb.Policy, 0)
+	chainSize := len(chain)
+
+	for i := 0; i < chainSize; i++ {
+		object := chain[i]
+		parents := d.topology.All().Parents(object)
+		chain = append(chain, parents...)
+		chainSize = len(chain)
+
+		// Check if this object is a targetable and has policies
+		if targetable, ok := object.(machinery.Targetable); ok {
+			for _, policy := range targetable.Policies() {
+				if reflect.TypeOf(policy) == reflect.TypeOf(policyType) {
+					policies = append(policies, toPolicy(policy))
+				}
+			}
+		}
+	}
+
+	return lo.UniqBy(policies, func(p *extpb.Policy) string {
+		return p.GetMetadata().GetNamespace() + "/" + p.GetMetadata().GetName()
+	}), nil
+}
 
 func toGw(gw machinery.Gateway) *extpb.Gateway {
 	return &extpb.Gateway{
 		Metadata: &extpb.Metadata{
-			Name:      gw.Gateway.Name,
-			Namespace: gw.Gateway.Namespace,
+			Name:      gw.Name,
+			Namespace: gw.Namespace,
 		},
 		Spec: &extpb.GatewaySpec{
-			GatewayClassName: string(gw.Gateway.Spec.GatewayClassName),
-			Listeners:        toListeners(gw.Gateway.Spec.Listeners),
+			GatewayClassName: string(gw.Spec.GatewayClassName),
+			Listeners:        toListeners(gw.Spec.Listeners),
 		},
 	}
+}
+
+func toPolicy(policy machinery.Policy) *extpb.Policy {
+	return &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Group:     policy.GroupVersionKind().Group,
+			Kind:      policy.GroupVersionKind().Kind,
+			Namespace: policy.GetNamespace(),
+			Name:      policy.GetName(),
+		},
+		TargetRefs: toTargetRefs(policy.GetTargetRefs()),
+	}
+}
+
+func toTargetRefs(targetRefs []machinery.PolicyTargetReference) []*extpb.TargetRef {
+	trs := make([]*extpb.TargetRef, len(targetRefs))
+	for i, tr := range targetRefs {
+		targetRef := extpb.TargetRef{
+			Name:      tr.GetName(),
+			Namespace: tr.GetNamespace(),
+			Kind:      tr.GroupVersionKind().GroupKind().Kind,
+			Group:     tr.GroupVersionKind().Group,
+		}
+		trs[i] = &targetRef
+	}
+	return trs
 }
 
 func toListeners(listeners []v1.Listener) []*extpb.Listener {
@@ -161,6 +236,9 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 		listener := extpb.Listener{}
 		if l.Hostname != nil {
 			listener.Hostname = string(*l.Hostname)
+		}
+		if l.Protocol != "" {
+			listener.Protocol = string(l.Protocol)
 		}
 		ls[i] = &listener
 	}

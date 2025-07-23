@@ -18,6 +18,7 @@ package extension
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -127,9 +127,9 @@ func (m *Manager) HasSynced() bool {
 }
 
 type extensionService struct {
-	dag           *nilGuardedPointer[StateAwareDAG]
-	mutex         sync.Mutex
-	subscriptions map[string]subscription
+	dag            *nilGuardedPointer[StateAwareDAG]
+	mutex          sync.Mutex
+	registeredData *RegisteredDataStore
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -140,11 +140,22 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 }
 
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
-	return &extensionService{dag: dag,
-		subscriptions: make(map[string]subscription)}
+	service := &extensionService{
+		dag:            dag,
+		registeredData: NewRegisteredDataStore(),
+	}
+
+	mutator := NewRegisteredDataMutator(service.registeredData)
+	GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
+
+	return service
 }
 
-func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
+func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grpc.ServerStreamingServer[extpb.SubscribeResponse]) error {
+	if request.PolicyKind == "" {
+		return fmt.Errorf("policy_kind is required for subscription")
+	}
+
 	channel := BlockingDAG.newUpdateChannel()
 	for {
 		dag := <-channel
@@ -154,14 +165,14 @@ func (s *extensionService) Subscribe(_ *emptypb.Empty, stream grpc.ServerStreami
 
 		s.mutex.Lock()
 		if env, err := cel.NewEnv(opts...); err == nil {
-			for key, sub := range s.subscriptions {
-				if prg, err := env.Program(sub.cAst); err == nil {
-					if newVal, _, err := prg.Eval(sub.input); err == nil {
-						if newVal != sub.val {
-							sub.val = newVal
-							s.subscriptions[key] = sub
+			subscriptions := s.registeredData.GetSubscriptionsForPolicyKind(request.PolicyKind)
+			for key, sub := range subscriptions {
+				if prg, err := env.Program(sub.CAst); err == nil {
+					if newVal, _, err := prg.Eval(sub.Input); err == nil {
+						if newVal != sub.Val {
+							s.registeredData.UpdateSubscriptionValue(key, newVal)
 							if err := stream.Send(&extpb.SubscribeResponse{Event: &extpb.Event{
-								Metadata: sub.input["self"].(*extpb.Policy).Metadata,
+								Metadata: sub.Input["self"].(*extpb.Policy).Metadata,
 							}}); err != nil {
 								s.mutex.Unlock()
 								return err
@@ -208,18 +219,14 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	val, _, err := prg.Eval(input)
 
 	if request.Subscribe {
-		key := ""
-		for _, targetRef := range request.Policy.TargetRefs {
-			key += fmt.Sprintf("[%s/%s]%s/%s#%s\n", targetRef.Group, targetRef.Kind, targetRef.Namespace, targetRef.Name, targetRef.SectionName)
-		}
-		key += request.Expression
-		s.mutex.Lock()
-		s.subscriptions[key] = subscription{
-			cAst,
-			input,
-			val,
-		}
-		s.mutex.Unlock()
+		policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+		subscriptionKey := fmt.Sprintf("%s#%s", policyKey, request.Expression)
+		s.registeredData.SetSubscription(subscriptionKey, Subscription{
+			CAst:       cAst,
+			Input:      input,
+			Val:        val,
+			PolicyKind: request.Policy.Metadata.Kind,
+		})
 	}
 
 	if err != nil {
@@ -235,8 +242,56 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	}, nil
 }
 
-type subscription struct {
-	cAst  *cel.Ast
-	input map[string]any
-	val   ref.Val
+func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.RegisterMutatorRequest) (*emptypb.Empty, error) {
+	// we should probably parse / check the cel expression here
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if request.Requester == nil || request.Target == nil {
+		return nil, errors.New("policy cannot be nil")
+	}
+	if request.Requester.Metadata == nil || request.Target.Metadata == nil {
+		return nil, errors.New("policy metadata cannot be nil")
+	}
+	if request.Requester.Metadata.Kind == "" || request.Requester.Metadata.Namespace == "" || request.Requester.Metadata.Name == "" ||
+		request.Target.Metadata.Kind == "" || request.Target.Metadata.Namespace == "" || request.Target.Metadata.Name == "" {
+		return nil, errors.New("policy kind, namespace, and name must be specified")
+	}
+	targetKey := fmt.Sprintf("%s/%s/%s", request.Target.Metadata.Kind, request.Target.Metadata.Namespace, request.Target.Metadata.Name)
+	requesterKey := fmt.Sprintf("%s/%s/%s", request.Requester.Metadata.Kind, request.Requester.Metadata.Namespace, request.Requester.Metadata.Name)
+
+	entry := RegisteredDataEntry{
+		Requester:  requesterKey,
+		Binding:    request.Binding,
+		Expression: request.Expression,
+		CAst:       nil, //todo
+	}
+
+	s.registeredData.Set(targetKey, requesterKey, request.Binding, entry)
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPolicyRequest) (*extpb.ClearPolicyResponse, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if request.Policy == nil {
+		return nil, errors.New("policy cannot be nil")
+	}
+	if request.Policy.Metadata == nil {
+		return nil, errors.New("policy metadata cannot be nil")
+	}
+	if request.Policy.Metadata.Kind == "" || request.Policy.Metadata.Namespace == "" || request.Policy.Metadata.Name == "" {
+		return nil, errors.New("policy kind, namespace, and name must be specified")
+	}
+
+	policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+
+	clearedMutators, clearedSubscriptions := s.registeredData.ClearPolicyData(policyKey)
+
+	return &extpb.ClearPolicyResponse{
+		ClearedMutators:      int32(clearedMutators),      // #nosec G115
+		ClearedSubscriptions: int32(clearedSubscriptions), // #nosec G115
+	}, nil
 }

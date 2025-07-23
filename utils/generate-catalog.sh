@@ -13,8 +13,8 @@ DNS_OPERATOR_BUNDLE_IMG="${6?:Error \$DNS_OPERATOR_BUNDLE_IMG not set. Bye}"
 CHANNEL="${7?:Error \$CHANNEL not set. Bye}"
 CATALOG_FILE="${8?:Error \$CATALOG_FILE not set. Bye}"
 
-CATALOG_FILE_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE})" )" && pwd )"
-CATALOG_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE_BASEDIR})" )" && pwd )"
+CATALOG_FILE_BASEDIR="$(realpath "$(dirname "${CATALOG_FILE}")")"
+CATALOG_BASEDIR="$(realpath "$(dirname "${CATALOG_FILE_BASEDIR}")")"
 
 TMP_DIR=$(mktemp -d)
 

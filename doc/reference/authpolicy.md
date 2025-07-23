@@ -2,6 +2,7 @@
 
 - [AuthPolicy](#authpolicy)
 - [AuthPolicySpec](#authpolicyspec)
+- [AuthPolicyCommonSpec](#authpolicycommonspec)
   - [AuthScheme](#authscheme)
     - [AuthRuleCommon](#authrulecommon)
     - [AuthenticationRule](#authenticationrule)
@@ -12,7 +13,6 @@
         - [SuccessResponseItem](#successresponseitem)
     - [CallbackRule](#callbackrule)
   - [NamedPattern](#namedpattern)
-  - [AuthPolicyCommonSpec](#authPolicyCommonSpec)
 - [AuthPolicyStatus](#authpolicystatus)
   - [ConditionSpec](#conditionspec)
 
@@ -27,7 +27,7 @@
 
 | **Field**        | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                                                                                                                                 |
 |------------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `targetRef`      | [LocalPolicyTargetReference](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.LocalPolicyTargetReference) | Yes          | Reference to a Kubernetes resource that the policy attaches to                                                                                                                                                                                                                                  |
+| `targetRef`      | [Gateway API LocalPolicyTargetReferenceWithSectionName](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname) | Yes          | Reference to a Kubernetes resource that the policy attaches to                                                                                                                                                                                                                                  |
 | `rules`          | [AuthScheme](#authscheme)                                                                                                                   | No           | Implicit default authentication/authorization rules                                                                                                                                                                                                                                             |
 | `patterns`       | Map<String: [NamedPattern](#namedpattern)>                                                                                                  | No           | Implicit default named patterns of lists of `selector`, `operator` and `value` tuples, to be reused in `when` conditions and pattern-matching authorization rules.                                                                                                                              |
 | `when`           | [][PatternExpressionOrRef](https://docs.kuadrant.io/latest/authorino/docs/features/#common-feature-conditions-when)                                | No           | List of implicit default additional dynamic conditions (expressions) to activate the policy. Use it for filtering attributes that cannot be expressed in the targeted HTTPRoute's `spec.hostnames` and `spec.rules.matches` fields, or when targeting a Gateway.                                |

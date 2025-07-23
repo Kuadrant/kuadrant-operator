@@ -357,7 +357,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
 
 			// check limits
 			Eventually(func(g Gomega) {
@@ -451,7 +451,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
 		}, testTimeOut)
 
 		It("Implicit defaults - no underlying routes to enforce policy", func(ctx SpecContext) {
@@ -465,7 +465,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
 		}, testTimeOut)
 	})
 

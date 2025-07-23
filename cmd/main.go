@@ -50,6 +50,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -77,6 +78,7 @@ func init() {
 	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(certmanv1.AddToScheme(scheme))

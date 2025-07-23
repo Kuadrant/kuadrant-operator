@@ -72,7 +72,8 @@ func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		return ErrMissingStateEffectiveAuthPolicies
+		logger.V(1).Info("generating effective auth policies due to state error", "status", "processing", "error", ErrMissingStateEffectiveAuthPolicies)
+		effectiveAuthPolicies = CalculateEffectiveAuthPolicies(ctx, topology, kObj, state)
 	}
 	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
 

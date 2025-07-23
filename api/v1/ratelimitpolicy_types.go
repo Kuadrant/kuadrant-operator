@@ -19,7 +19,7 @@ package v1
 import (
 	"time"
 
-	transformer "github.com/kuadrant/kuadrant-operator/internal/cel"
+	"github.com/kuadrant/kuadrant-operator/internal/cel"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,7 +43,7 @@ var (
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 // +kubebuilder:printcolumn:name="Accepted",type=string,JSONPath=`.status.conditions[?(@.type=="Accepted")].status`,description="RateLimitPolicy Accepted",priority=2
 // +kubebuilder:printcolumn:name="Enforced",type=string,JSONPath=`.status.conditions[?(@.type=="Enforced")].status`,description="RateLimitPolicy Enforced",priority=2
-// +kubebuilder:printcolumn:name="TargetKind",type="string",JSONPath=".spec.targetRef.kind",description="Kind of the object to which the policy aaplies",priority=2
+// +kubebuilder:printcolumn:name="TargetKind",type="string",JSONPath=".spec.targetRef.kind",description="Kind of the object to which the policy applies",priority=2
 // +kubebuilder:printcolumn:name="TargetName",type="string",JSONPath=".spec.targetRef.name",description="Name of the object to which the policy applies",priority=2
 // +kubebuilder:printcolumn:name="TargetSection",type="string",JSONPath=".spec.targetRef.sectionName",description="Name of the section within the object to which the policy applies ",priority=2
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
@@ -241,7 +241,7 @@ func (l Limit) CountersAsStringList() []string {
 	}
 	return utils.Map(l.Counters, func(counter Counter) string {
 		str := string(counter.Expression)
-		if exp, err := transformer.TransformCounterVariable(str, false); err == nil {
+		if exp, err := cel.TransformCounterVariable(str, false); err == nil {
 			return *exp
 		}
 		return str

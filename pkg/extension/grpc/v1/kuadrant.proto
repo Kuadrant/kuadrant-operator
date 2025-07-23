@@ -17,9 +17,13 @@ service ExtensionService {
   // Sends a greeting
   rpc Ping (PingRequest) returns (PongResponse) {}
   // Subscribe to a set of Events
-  rpc Subscribe(google.protobuf.Empty) returns (stream SubscribeResponse) {}
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
   // Resolve the expression for context and subscribe (or not)
   rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
+  // Add data to an existing policy
+  rpc RegisterMutator(RegisterMutatorRequest) returns (google.protobuf.Empty) {}
+  // Clear all subscriptions and registered mutators for a policy
+  rpc ClearPolicy(ClearPolicyRequest) returns (ClearPolicyResponse) {}
 }
 
 // The request message containing the time the request was dispatched.
@@ -49,6 +53,26 @@ message SubscribeResponse {
   google.rpc.Status error = 2;
 }
 
+message SubscribeRequest {
+  string policy_kind = 1;
+}
+
 message Event {
   Metadata metadata = 1;
+}
+
+message RegisterMutatorRequest {
+  kuadrant.v1.Policy requester = 1;
+  kuadrant.v1.Policy target = 2;
+  string binding = 3;
+  string expression = 4;
+}
+
+message ClearPolicyRequest {
+  kuadrant.v1.Policy policy = 1;
+}
+
+message ClearPolicyResponse {
+  int32 cleared_subscriptions = 1;
+  int32 cleared_mutators = 2;
 }

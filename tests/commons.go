@@ -32,6 +32,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/authorino"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
@@ -707,4 +708,53 @@ func AuthorinoIsReady(cl client.Client, key client.ObjectKey) func(g Gomega, ctx
 		g.Expect(readyCondition).ToNot(BeNil())
 		g.Expect(readyCondition.Status).To(Equal(corev1.ConditionTrue))
 	}
+}
+
+func TokenRateLimitPolicyIsReady(ctx context.Context, cl client.Client, key client.ObjectKey) func(g Gomega) {
+	return func(g Gomega) {
+		policy := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+		g.Expect(cl.Get(ctx, key, policy)).To(Succeed())
+		g.Expect(meta.IsStatusConditionTrue(policy.Status.Conditions, "Accepted")).To(BeTrue())
+		g.Expect(meta.IsStatusConditionTrue(policy.Status.Conditions, "Enforced")).To(BeTrue())
+	}
+}
+
+func TokenRateLimitPolicyIsAccepted(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {
+	return TokenRateLimitPolicyIsConditionTrue(ctx, cl, key, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+}
+
+func TokenRateLimitPolicyIsEnforced(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {
+	return TokenRateLimitPolicyIsConditionTrue(ctx, cl, key, string(kuadrant.PolicyConditionEnforced))
+}
+
+func TokenRateLimitPolicyIsConditionTrue(ctx context.Context, cl client.Client, key client.ObjectKey, condition string) func() bool {
+	return func() bool {
+		policy := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+		err := cl.Get(ctx, key, policy)
+		if err != nil {
+			logf.Log.V(1).Error(err, "tokenratelimitpolicy not read", "policy", key)
+			return false
+		}
+
+		return meta.IsStatusConditionTrue(policy.Status.Conditions, condition)
+	}
+}
+
+func TokenRateLimitPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
+	p := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+	if err := cl.Get(ctx, key, p); err != nil {
+		return false
+	}
+
+	cond := meta.FindStatusCondition(p.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+	if cond == nil {
+		return false
+	}
+
+	success := cond.Reason == string(reason) && cond.Message == message
+	if !success {
+		fmt.Println("expected condition reason:", cond.Reason, "message:", cond.Message)
+		fmt.Println("  actual condition reason:", string(reason), "message:", message)
+	}
+	return success
 }

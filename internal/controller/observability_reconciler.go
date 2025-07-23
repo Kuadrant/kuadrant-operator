@@ -350,13 +350,13 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 	for _, gatewayClass := range gatewayClasses {
 		gateways := topology.All().Children(gatewayClass)
 		gwClass := gatewayClass.(*machinery.GatewayClass)
-		if lo.Contains(istioGatewayControllerNames, gwClass.GatewayClass.Spec.ControllerName) {
+		if lo.Contains(istioGatewayControllerNames, gwClass.Spec.ControllerName) {
 			for _, gateway := range gateways {
 				istioPodMonitor := istioPodMonitorBuild(gateway.GetNamespace())
 				r.createPodMonitor(ctx, istioPodMonitor, logger)
 				wantedPMs = append(wantedPMs, *istioPodMonitor)
 			}
-		} else if lo.Contains(envoyGatewayGatewayControllerNames, gwClass.GatewayClass.Spec.ControllerName) {
+		} else if lo.Contains(envoyGatewayGatewayControllerNames, gwClass.Spec.ControllerName) {
 			for _, gateway := range gateways {
 				envoyStatsMonitor := envoyStatsMonitorBuild(gateway.GetNamespace())
 				r.createPodMonitor(ctx, envoyStatsMonitor, logger)

@@ -26,11 +26,9 @@ spec:
     enable: true
 ```
 
-When enabled, Kuadrant creates ServiceMonitors and PodMonitors for its own components in the same namespae as the Kuadrant operator.
-A single set of monitors are also created in each gateway namespace (Envoy Gateway or Istio) to scrape metrics from all gateways in the gateway namespace, and in the corresponding gateway "system" namespace:
+When enabled, Kuadrant creates ServiceMonitors and PodMonitors for its own components in the same namespace as the Kuadrant operator.
+Pod monitors are also created in each gateway namespace (Envoy Gateway or Istio) to scrape metrics from all gateways in the gateway namespace.
 
-- Istio: `istio-system` namespace for the istiod pod
-- Envoy Gateway:  `envoy-gateway-system` namespace for the envoy gateway pod
 
 You can check all created monitors using this command:
 

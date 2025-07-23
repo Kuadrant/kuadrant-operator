@@ -21,6 +21,11 @@ endif
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.0
 
+# CHANNEL define the catalog channel used in the catalog.
+# - use the CHANNEL as arg of the catalog target (e.g make catalog CHANNEL=stable)
+# - use environment variables to overwrite this value (e.g export CHANNEL="stable")
+CHANNEL ?= alpha
+
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
@@ -173,7 +178,7 @@ endif
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
-WITH_EXTENSIONS ?= false
+WITH_EXTENSIONS ?= true
 
 all: build
 
@@ -296,7 +301,7 @@ endef
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd paths="./api/v1alpha1;./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 
 .PHONY: dependencies-manifests
@@ -358,19 +363,6 @@ docker-build: ## Build docker image with the manager.
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
-
-docker-build-with-extensions: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
-docker-build-with-extensions: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
-docker-build-with-extensions: ## Build docker image with the manager.
-		$(CONTAINER_ENGINE) build \
-		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
-		--build-arg GIT_SHA=$(GIT_SHA) \
-		--build-arg DIRTY=$(DIRTY) \
-		--build-arg VERSION=v$(VERSION) \
-		--build-arg IMG=$(IMG) \
-		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
-		-t $(IMG) \
-		-f extension.Dockerfile .
 
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_ENGINE) push $(IMG)
@@ -496,7 +488,7 @@ run-lint: $(GOLANGCI-LINT) ## Run lint tests
 	$(GOLANGCI-LINT) run
 
 $(GOLANGCI-LINT):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v1.62.0
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v2.1.6
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI-LINT) ## Download golangci-lint locally if necessary.

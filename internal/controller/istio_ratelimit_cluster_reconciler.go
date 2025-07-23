@@ -19,6 +19,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -41,6 +42,7 @@ func (r *IstioRateLimitClusterReconciler) Subscription() controller.Subscription
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		},
 	}
@@ -57,30 +59,46 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		return nil
 	}
 
-	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
-		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
-	})
-	if !found {
+	limitador := GetLimitadorFromTopology(topology)
+	if limitador == nil {
 		logger.V(1).Info(ErrMissingLimitador.Error())
 		return nil
 	}
-	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
 
-	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
-	if !ok {
-		logger.Error(ErrMissingStateEffectiveRateLimitPolicies, "failed to get effective rate limit policies from state")
-		return nil
+	// Collect gateways from both RateLimitPolicies and TokenRateLimitPolicies
+	var gateways []*machinery.Gateway
+
+	// Get gateways from RateLimitPolicies
+	effectiveRateLimitPolicies, rlpOk := state.Load(StateEffectiveRateLimitPolicies)
+	if rlpOk && effectiveRateLimitPolicies != nil {
+		rlpGateways := lo.FilterMap(lo.Values(effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
+			gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+			return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
+		})
+		gateways = append(gateways, rlpGateways...)
 	}
 
-	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
-	}), func(gateway *machinery.Gateway) string {
+	// Get gateways from TokenRateLimitPolicies
+	effectiveTokenRateLimitPolicies, trlpOk := state.Load(StateEffectiveTokenRateLimitPolicies)
+	if trlpOk && effectiveTokenRateLimitPolicies != nil {
+		trlpGateways := lo.FilterMap(lo.Values(effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)), func(effectivePolicy EffectiveTokenRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
+			gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+			return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
+		})
+		gateways = append(gateways, trlpGateways...)
+	}
+
+	// Remove duplicates
+	gateways = lo.UniqBy(gateways, func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
 	var modifiedGateways []string
+
+	if len(gateways) == 0 {
+		logger.V(1).Info("no gateways with rate limiting policies found")
+	}
 
 	// reconcile istio cluster for gateway
 	for _, gateway := range gateways {

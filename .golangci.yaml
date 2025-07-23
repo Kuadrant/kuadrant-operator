@@ -1,32 +1,47 @@
-run:
-  timeout: 5m
-
+version: "2"
 linters:
   enable:
     - asciicheck
     - errorlint
-    - revive
     - gosec
-    - stylecheck
     - prealloc
+    - revive
+    - staticcheck
     - tparallel
     - unconvert
     - unparam
     - whitespace
-    - goimports
   disable:
     - errcheck
-
-issues:
-  exclude-rules:
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - staticcheck
+        text: 'ST1000: at least one file in a package should have a package comment'
+      - linters:
+          - revive
+        text: 'var-naming: don''t use leading k in Go names'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - goimports
+  settings:
     # This check has quite a few false positives where there isn't much value in the package comment.
-    - text: "ST1000: at least one file in a package should have a package comment"
-      linters:
-        - stylecheck
-    - text: "var-naming: don't use leading k in Go names"
-      linters:
-        - revive
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/kuadrant/kuadrant-operator
+    goimports:
+      local-prefixes:
+        - github.com/kuadrant/kuadrant-operator
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

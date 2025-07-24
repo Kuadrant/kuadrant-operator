@@ -14,7 +14,6 @@ import (
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
@@ -116,12 +115,15 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, fmt.Errorf("unable to create client for manager: %w", err)
 	}
 
+	eventCache := newEventTypeCache()
+	eventHandler := newEventCachingHandler(eventCache)
+
 	watchSources := make([]ctrlruntimesrc.Source, 0)
-	forSource := ctrlruntimesrc.Kind(mgr.GetCache(), b.forType, &ctrlruntimehandler.EnqueueRequestForObject{})
+	forSource := ctrlruntimesrc.Kind(mgr.GetCache(), b.forType, eventHandler)
 	watchSources = append(watchSources, forSource)
 
 	for _, obj := range b.watchTypes {
-		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
+		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, eventHandler)
 		watchSources = append(watchSources, source)
 	}
 
@@ -139,7 +141,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,
 		extensionClient: extClient,
-		eventCache:      newEventCache(),
+		eventCache:      eventCache,
 		policyKind:      policyKind,
 		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil

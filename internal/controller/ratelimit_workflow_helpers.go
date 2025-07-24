@@ -59,7 +59,7 @@ func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.L
 	}
 
 	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
-	return limitador
+	return limitador.DeepCopy()
 }
 
 func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {

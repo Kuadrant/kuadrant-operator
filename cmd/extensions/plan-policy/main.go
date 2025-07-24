@@ -35,8 +35,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	planPolicyReconciler.SetupWithManager(controller.Manager())
-
 	if err = controller.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extension controller")
 		os.Exit(1)

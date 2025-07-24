@@ -84,7 +84,7 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		t.Errorf("Should have started: %v", err)
 	}
 
-	for oopErrorLog.cmd.ProcessState == nil {
+	for oopErrorLog.cmd == nil || oopErrorLog.cmd.ProcessState == nil {
 		time.Sleep(5 * time.Millisecond) // wait for the command to return
 	}
 

@@ -346,6 +346,7 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
+run: export WITH_EXTENSIONS = false
 run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")

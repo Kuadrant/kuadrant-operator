@@ -35,6 +35,7 @@ type ExtensionController struct {
 	reconcile                      exttypes.ReconcileFn
 	watchSources                   []ctrlruntimesrc.Source
 	extensionClient                *extensionClient
+	eventCache                     *EventTypeCache
 	policyKind                     string
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }

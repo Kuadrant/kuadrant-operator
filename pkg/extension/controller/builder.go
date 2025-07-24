@@ -138,6 +138,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,
 		extensionClient: extClient,
+		eventCache:      newEventCache(),
 		policyKind:      policyKind,
 	}, nil
 }

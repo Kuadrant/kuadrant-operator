@@ -101,6 +101,11 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 }
 
 func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	eventType, exists := ec.eventCache.popEvent(request.Namespace, request.Name)
+	if !exists {
+		eventType = EventTypeUnknown
+	}
+
 	// todo(adam-cattermole): the ctx passed here is a different one created by ctrlruntime for each reconcile so we
 	//  have to inject here instead of in Start(). Is there any benefit to us storing this in the context for it be
 	//  retrieved by the user in their Reconcile method, or should it just pass them as parameters?
@@ -110,7 +115,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	ctx = context.WithValue(ctx, extutils.ClientKey, ec.manager.GetClient())
 
 	// overrides reconcile method
-	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
+	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "eventType", eventType)
 	return ec.reconcile(ctx, request, ec)
 }
 

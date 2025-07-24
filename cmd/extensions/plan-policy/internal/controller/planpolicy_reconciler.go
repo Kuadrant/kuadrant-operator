@@ -15,7 +15,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
@@ -27,18 +26,21 @@ import (
 // +kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=create;delete
 
 type PlanPolicyReconciler struct {
-	*reconcilers.BaseReconciler
+	kCtx   types.KuadrantCtx
 	logger logr.Logger
 }
 
 func NewPlanPolicyReconciler() *PlanPolicyReconciler {
-	return &PlanPolicyReconciler{
-		BaseReconciler: reconcilers.NewLazyBaseReconciler(),
-	}
+	return &PlanPolicyReconciler{}
 }
 
 func (r *PlanPolicyReconciler) WithLogger(logger logr.Logger) *PlanPolicyReconciler {
 	r.logger = logger
+	return r
+}
+
+func (r *PlanPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *PlanPolicyReconciler {
+	r.kCtx = kCtx
 	return r
 }
 
@@ -48,7 +50,7 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	defer r.logger.Info("reconciling planpolicies completed")
 
 	planPolicy := &kuadrantv1alpha1.PlanPolicy{}
-	if err := r.Client().Get(ctx, request.NamespacedName, planPolicy); err != nil {
+	if err := r.kCtx.GetClient().Get(ctx, request.NamespacedName, planPolicy); err != nil {
 		if errors.IsNotFound(err) {
 			r.logger.Error(err, "planpolicy not found")
 			return reconcile.Result{}, nil
@@ -75,11 +77,11 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy, authPolicy.GetTargetRefs()[0])
-	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.Scheme()); err != nil {
+	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.kCtx.GetScheme()); err != nil {
 		r.logger.Error(err, "failed to set controller reference")
 		return reconcile.Result{}, err
 	}
-	if err := r.ReconcileResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
+	if err := r.kCtx.ReconcileKuadrantResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
 		r.logger.Error(err, "failed to reconcile desired ratelimitpolicy")
 		return reconcile.Result{}, err
 	}

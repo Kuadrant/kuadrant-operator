@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 
+	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
@@ -45,14 +46,15 @@ var (
 )
 
 type ExtensionController struct {
-	name            string
-	logger          logr.Logger
-	manager         ctrlruntime.Manager
-	client          *dynamic.DynamicClient
-	reconcile       exttypes.ReconcileFn
-	watchSources    []ctrlruntimesrc.Source
-	extensionClient *extensionClient
-	policyKind      string
+	name                           string
+	logger                         logr.Logger
+	manager                        ctrlruntime.Manager
+	client                         *dynamic.DynamicClient
+	reconcile                      exttypes.ReconcileFn
+	watchSources                   []ctrlruntimesrc.Source
+	extensionClient                *extensionClient
+	policyKind                     string
+	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
 func (ec *ExtensionController) Start(ctx context.Context) error {
@@ -194,6 +196,24 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes
 		Expression: expression,
 	})
 	return err
+}
+
+func (ec *ExtensionController) GetClient() client.Client {
+	return ec.manager.GetClient()
+}
+
+func (ec *ExtensionController) GetScheme() *runtime.Scheme {
+	return ec.manager.GetScheme()
+}
+
+func (ec *ExtensionController) ReconcileKuadrantResource(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
+	// reconcile
+	err := ec.ReconcileResource(ctx, obj, desired, basereconciler.MutateFn(mutateFn)) // TODO(didierofrivia): Next iteration, use policy machinery
+	if err != nil {
+		return err
+	}
+	return nil
+	// TODO(didierofrivia): Subscribe
 }
 
 func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
@@ -380,6 +400,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		watchSources:    watchSources,
 		extensionClient: extClient,
 		policyKind:      policyKind,
+		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil
 }
 

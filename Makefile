@@ -493,6 +493,77 @@ $(GOLANGCI-LINT):
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI-LINT) ## Download golangci-lint locally if necessary.
 
+##@ Pre-commit
+
+# Set to specify which integration test environment to run:
+# - bare-k8s: Basic Kubernetes without gateway provider
+# - gatewayapi: GatewayAPI CRDs without gateway provider
+# - integration-istio: General integration tests with istio provider only
+# - integration-envoygateway: General integration tests with envoygateway provider only
+# - istio: Full Istio environment
+# - envoygateway: Full EnvoyGateway environment
+# - all: Run all integration tests sequentially
+# - (empty): Skip all integration tests
+INTEGRATION_TEST_ENV ?=
+
+# Integration test configurations using colon delimiters  
+INTEGRATION_CONFIGS := \
+	bare-k8s:local-k8s-env-setup:test-bare-k8s-integration: \
+	gatewayapi:local-gatewayapi-env-setup:test-gatewayapi-env-integration: \
+	istio:local-env-setup:test-istio-env-integration:GATEWAYAPI_PROVIDER=istio \
+	envoygateway:local-env-setup:test-envoygateway-env-integration:GATEWAYAPI_PROVIDER=envoygateway \
+	integration-istio:local-env-setup:test-integration:GATEWAYAPI_PROVIDER=istio \
+	integration-envoygateway:local-env-setup:test-integration:GATEWAYAPI_PROVIDER=envoygateway
+
+# Extract valid environment names
+VALID_INTEGRATION_ENVS := $(foreach config,$(INTEGRATION_CONFIGS),$(word 1,$(subst :, ,$(config))))
+
+# Function to get config value for an environment
+# Usage: $(call get_config,env_name,field_number)
+get_config = $(word $(2),$(subst :, ,$(filter $(1):%,$(INTEGRATION_CONFIGS))))
+
+
+define run_integration_test
+$(if $(call get_config,$(1),2),
+	@echo "  🔧 Running $(1) integration tests..."
+	$(MAKE) $(call get_config,$(1),2) $(call get_config,$(1),4)
+	$(MAKE) $(call get_config,$(1),3) $(call get_config,$(1),4)
+	$(MAKE) local-cleanup
+	@echo "  ✅ $(1) integration tests completed!"
+,
+	$(error Invalid INTEGRATION_TEST_ENV=$(1). Valid values: $(VALID_INTEGRATION_ENVS), "all" for all tests, or leave empty to skip integration tests)
+)
+endef
+
+.PHONY: pre-commit
+pre-commit: ## Run pre-commit checks including verification, linting, unit tests, and integration tests
+	@echo "🚀 Running pre-commit checks..."
+	@echo "1️⃣ Running verification checks..."
+	$(MAKE) verify-all
+	@echo "2️⃣ Running lint checks..."
+	$(MAKE) run-lint  
+	@echo "3️⃣ Running unit tests..."
+	$(MAKE) test-unit
+ifeq ($(INTEGRATION_TEST_ENV),)
+	@echo "4️⃣	Skipping integration tests (set INTEGRATION_TEST_ENV to run tests)..."
+else ifeq ($(INTEGRATION_TEST_ENV),all)
+	@echo "4️⃣	Running all integration tests sequentially..."
+	@for env in $(VALID_INTEGRATION_ENVS); do \
+		echo "📦	Testing $$env environment..."; \
+		$(MAKE) pre-commit-single ENV=$$env; \
+	done
+else
+	@echo "4️⃣	Running integration tests for environment(s): $(INTEGRATION_TEST_ENV)..."
+	@for env in $(INTEGRATION_TEST_ENV); do \
+		echo "📦	Testing $$env environment..."; \
+		$(MAKE) pre-commit-single ENV=$$env; \
+	done
+endif
+	@echo "🎉	All pre-commit checks completed successfully!"
+
+.PHONY: pre-commit-single
+pre-commit-single:
+	$(call run_integration_test,$(ENV))
 
 # Include last to avoid changing MAKEFILE_LIST used above
 include ./make/*.mk

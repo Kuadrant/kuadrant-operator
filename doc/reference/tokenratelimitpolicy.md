@@ -6,6 +6,8 @@ TokenRateLimitPolicy enables token-based rate limiting for service workloads in 
 
 **Note**: While this policy uses "token" in the name referring to AI/LLM usage tokens, it can also utilise authentication tokens and claims for counter definitions and predicates.
 
+**Important**: Currently, `TokenRateLimitPolicy` only supports non-streaming responses (where `stream: false` or is omitted in the request). Support for streaming responses is planned for future releases.
+
 ## Key Features
 
 - **Token-based Rate Limiting**: Create rate limits based on actual token usage from AI/LLM responses, not request count
@@ -52,7 +54,7 @@ TokenRateLimitPolicy provides automatic token counting with sensible defaults:
 
 ### Automatic Token Counting
 - **No configuration needed**: Automatically extracts token usage from OpenAI-compatible API responses
-- **Parses `usage.total_tokens`**: Works with any service that returns token usage in this standard format
+- **Parses `usage.total_tokens`**: Works with any service that returns token usage in this standard format (non-streaming responses only)
 - **Graceful fallback**: If token parsing fails, rate limiting still works (falls back to request counting)
 
 ### Global vs User-Specific Limiting

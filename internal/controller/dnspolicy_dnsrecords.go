@@ -17,14 +17,21 @@ import (
 
 const (
 	LabelListenerReference = "kuadrant.io/listener-name"
+	LabelGatewayReference  = "kuadrant.io/gateway-name"
 )
 
 func dnsRecordName(gatewayName, listenerName string) string {
 	return fmt.Sprintf("%s-%s", gatewayName, listenerName)
 }
 
-func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *kuadrantv1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
-	rootHost := string(*targetListener.Hostname)
+type dnsTarget struct {
+	hostname        gatewayapiv1.Hostname
+	listenerName    string
+	isHTTPRouteHost bool
+}
+
+func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *kuadrantv1.DNSPolicy, target dnsTarget) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+	rootHost := string(target.hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
 	if dnsPolicy.Spec.HealthCheck != nil {
@@ -44,7 +51,7 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 	}
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
+			Name:      dnsRecordName(gateway.Name, target.listenerName),
 			Namespace: dnsPolicy.Namespace,
 			Labels:    CommonLabels(),
 		},
@@ -58,9 +65,15 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 			HealthCheck: healthCheckSpec,
 		},
 	}
-	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)
+	// as a route host can have many hostnames, we need to generate a unique name for each record
+	if target.isHTTPRouteHost {
+		dnsRecord.GenerateName = fmt.Sprintf("%s-", dnsRecord.Name)
+		dnsRecord.Name = ""
+	}
+	dnsRecord.Labels[LabelListenerReference] = target.listenerName
+	dnsRecord.Labels[LabelGatewayReference] = gateway.Name
 
-	endpoints, err := buildEndpoints(clusterID, string(*targetListener.Hostname), gateway, dnsPolicy)
+	endpoints, err := buildEndpoints(clusterID, rootHost, gateway, dnsPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate dns record for a gateway %s in %s ns: %w", gateway.Name, gateway.Namespace, err)
 	}

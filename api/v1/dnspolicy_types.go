@@ -66,6 +66,10 @@ type DNSPolicySpec struct {
 	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting
 	// +optional
 	ExcludeAddresses ExcludeAddresses `json:"excludeAddresses,omitempty"`
+
+	// UseRouteHosts defines whether DNSPolicy should generate DNSRecods based on the targeted gateways listener hosts or instead use the hosts defined in attached Route. It defaults to false as this keeps the behaviour the same. If set to true, the policy controller will look at the attached HTTPRoute or GRCPRoute and create a DNSRecord for each hostname it finds. This flag is something that would be used when targeting a wildcard listener host to avoid a wildcard DNS entry.
+	// +optional
+	UseRouteHosts *bool `json:"useRouteHosts,omitempty"`
 }
 
 // +kubebuilder:validation:MaxItems=20
@@ -212,6 +216,10 @@ func (p *DNSPolicy) Kind() string {
 	return DNSPolicyGroupKind.Kind
 }
 
+func (p *DNSPolicy) UseRouteHosts() bool {
+	return p.Spec.UseRouteHosts != nil && *p.Spec.UseRouteHosts
+}
+
 //+kubebuilder:object:root=true
 
 // DNSPolicyList contains a list of DNSPolicy
@@ -287,6 +295,11 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 		},
 		SectionName: nil,
 	})
+}
+
+func (p *DNSPolicy) WithUseRouteHosts(use bool) *DNSPolicy {
+	p.Spec.UseRouteHosts = ptr.To(use)
+	return p
 }
 
 func (p *DNSPolicy) WithTargetGatewayListener(gwName string, lName string) *DNSPolicy {

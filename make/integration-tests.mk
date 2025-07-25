@@ -6,6 +6,23 @@ INTEGRATION_TEST_PACKAGES ?= tests/common/...
 
 ##@ Integration tests
 
+
+.PHONY: test-integration-custom
+test-integration-custom: generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI installed.
+#	Check `ginkgo help run` for command line options. For example to filtering tests.
+	OPERATOR_NAMESPACE=kuadrant-system WITH_EXTENSIONS=false $(GINKGO) \
+		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
+		--race \
+		--output-interceptor-mode=none \
+		$(INTEGRATION_TESTS_EXTRA_ARGS) ${INTEGRATION_TEST_PACKAGES}
+
 .PHONY: test-bare-k8s-integration
 test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only bare kubernetes cluster.
 	mkdir -p $(PROJECT_PATH)/coverage/bare-k8s-integration

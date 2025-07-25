@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/util/rand"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 
@@ -46,9 +47,102 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 	var dnsProviderSecret *corev1.Secret
 	var testNamespace string
 	var gateway *gatewayapiv1.Gateway
+	var httpRoute *gatewayapiv1.HTTPRoute
 	var dnsPolicy *kuadrantv1.DNSPolicy
 	var clusterHash, gwHash, recordName, wildcardRecordName string
 	var domain = fmt.Sprintf("example-%s.com", rand.String(6))
+	var gatewayHostnames = []string{fmt.Sprintf("foo.%s", domain), tests.HostOne(domain), tests.HostWildcard(domain)}
+	var httpRouteHostnames = []string{tests.HostOne(domain), fmt.Sprintf("%s.%s", "route", domain)}
+
+	var checkListenerRecords = func(g Gomega, ctx context.Context) {
+		recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
+		err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(recordList.Items).To(HaveLen(2))
+
+		for _, record := range recordList.Items {
+			GinkgoWriter.Println("checkListenerRecords ", record.Name)
+			GinkgoWriter.Println("checkListenerRecord status ", meta.FindStatusCondition(record.Status.Conditions, "Ready"))
+		}
+
+		dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+		err = k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Expect(dnsRecord.Name).To(Equal(recordName))
+		g.Expect(dnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
+		g.Expect(dnsRecord.Spec.Endpoints).To(ConsistOf(
+			PointTo(MatchFields(IgnoreExtras, Fields{
+				"DNSName":       Equal(tests.HostOne(domain)),
+				"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
+				"RecordType":    Equal("A"),
+				"SetIdentifier": Equal(""),
+				"RecordTTL":     Equal(externaldns.TTL(60)),
+			})),
+		))
+		g.Expect(dnsRecord.Status.OwnerID).ToNot(BeEmpty())
+		g.Expect(meta.IsStatusConditionTrue(dnsRecord.Status.Conditions, "Ready")).To(BeTrue())
+		g.Expect(dnsRecord.Status.OwnerID).To(Equal(dnsRecord.GetUIDHash()))
+		g.Expect(tests.EndpointsTraversable(dnsRecord.Spec.Endpoints, tests.HostOne(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
+
+		g.Expect(wildcardDnsRecord.Name).To(Equal(wildcardRecordName))
+		g.Expect(wildcardDnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
+		g.Expect(wildcardDnsRecord.Spec.Endpoints).To(ConsistOf(
+			PointTo(MatchFields(IgnoreExtras, Fields{
+				"DNSName":       Equal(tests.HostWildcard(domain)),
+				"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
+				"RecordType":    Equal("A"),
+				"SetIdentifier": Equal(""),
+				"RecordTTL":     Equal(externaldns.TTL(60)),
+			})),
+		))
+		g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
+		g.Expect(wildcardDnsRecord.Status.OwnerID).To(Equal(wildcardDnsRecord.GetUIDHash()))
+		g.Expect(meta.IsStatusConditionTrue(wildcardDnsRecord.Status.Conditions, "Ready")).To(BeTrue())
+		g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
+	}
+
+	var checkRouteRecords = func(g Gomega, ctx context.Context) {
+		recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
+		err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
+		g.Expect(err).NotTo(HaveOccurred())
+
+		for _, record := range recordList.Items {
+			GinkgoWriter.Println("checkRouteRecords ", record.Name)
+			GinkgoWriter.Println("checkRouteRecords status ", meta.FindStatusCondition(record.Status.Conditions, "Ready"))
+		}
+		g.Expect(recordList.Items).To(HaveLen(len(httpRouteHostnames)))
+		foundRecordHosts := []string{}
+
+		for _, hn := range httpRouteHostnames {
+			for _, record := range recordList.Items {
+				g.Expect(meta.IsStatusConditionTrue(record.Status.Conditions, "Ready")).To(BeTrue())
+				if hn == record.Spec.RootHost {
+					foundRecordHosts = append(foundRecordHosts, record.Spec.RootHost)
+					g.Expect(record.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
+
+					g.Expect(record.Spec.Endpoints).To(ConsistOf(
+						PointTo(MatchFields(IgnoreExtras, Fields{
+							"DNSName":       Equal(hn),
+							"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
+							"RecordType":    Equal("A"),
+							"SetIdentifier": Equal(""),
+							"RecordTTL":     Equal(externaldns.TTL(60)),
+						})),
+					))
+					g.Expect(record.Status.OwnerID).ToNot(BeEmpty())
+					g.Expect(record.Status.OwnerID).To(Equal(record.GetUIDHash()))
+					g.Expect(tests.EndpointsTraversable(record.Spec.Endpoints, hn, []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
+				}
+			}
+		}
+
+		g.Expect(foundRecordHosts).To(ContainElements(httpRouteHostnames))
+	}
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
@@ -64,11 +158,14 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
 
 		gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
-			WithHTTPListener("foo", fmt.Sprintf("foo.%s", domain)).
-			WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
-			WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
+			WithHTTPListener("foo", gatewayHostnames[0]).
+			WithHTTPListener(tests.ListenerNameOne, gatewayHostnames[1]).
+			WithHTTPListener(tests.ListenerNameWildcard, gatewayHostnames[2]).
 			Gateway
 		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+
+		httpRoute = tests.BuildBasicHttpRoute("test-route", gateway.Name, testNamespace, httpRouteHostnames)
+		Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
 
 		clusterHash = utils.ToBase36HashLen(clusterUID, utils.ClusterIDLength)
 
@@ -125,6 +222,10 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 			err := k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
+		if httpRoute != nil {
+			err := k8sClient.Delete(ctx, httpRoute)
+			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+		}
 
 		//Ensure all dns records in the test namespace are deleted
 		dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
@@ -163,50 +264,38 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		})
 
 		It("should create dns records", func(ctx SpecContext) {
+			Eventually(checkListenerRecords, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
+		}, testTimeOut)
+
+	})
+
+	Context("use route hosts", func() {
+		BeforeEach(func(ctx SpecContext) {
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(tests.GatewayName)
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+		})
+		It("should create dns records with listener hosts and httproute hosts based on policy", func(ctx SpecContext) {
+
 			Eventually(func(g Gomega, ctx context.Context) {
-				recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
-				err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(recordList.Items).To(HaveLen(2))
+				By("setting use route hosts to true we should get dns records with route hosts")
+				patch := client.MergeFrom(dnsPolicy.DeepCopy())
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)).To(Succeed())
+				dnsPolicy.Spec.UseRouteHosts = ptr.To(true)
+				Expect(k8sClient.Patch(ctx, dnsPolicy, patch, &client.PatchOptions{})).To(Succeed())
+				Eventually(checkRouteRecords, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 
-				dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
-				g.Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega, ctx context.Context) {
+				By("setting use route hosts to false we should get dns records only with listener hosts")
+				Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)).To(Succeed())
+				patch := client.MergeFrom(dnsPolicy.DeepCopy())
+				dnsPolicy.Spec.UseRouteHosts = ptr.To(false)
+				Expect(k8sClient.Patch(ctx, dnsPolicy, patch, &client.PatchOptions{})).To(Succeed())
+				Eventually(checkListenerRecords, 60*time.Second, tests.RetryIntervalMedium, ctx).Should(Succeed())
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 
-				wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(dnsRecord.Name).To(Equal(recordName))
-				g.Expect(dnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
-				g.Expect(dnsRecord.Spec.Endpoints).To(ConsistOf(
-					PointTo(MatchFields(IgnoreExtras, Fields{
-						"DNSName":       Equal(tests.HostOne(domain)),
-						"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
-						"RecordType":    Equal("A"),
-						"SetIdentifier": Equal(""),
-						"RecordTTL":     Equal(externaldns.TTL(60)),
-					})),
-				))
-				g.Expect(dnsRecord.Status.OwnerID).ToNot(BeEmpty())
-				g.Expect(dnsRecord.Status.OwnerID).To(Equal(dnsRecord.GetUIDHash()))
-				g.Expect(tests.EndpointsTraversable(dnsRecord.Spec.Endpoints, tests.HostOne(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
-
-				g.Expect(wildcardDnsRecord.Name).To(Equal(wildcardRecordName))
-				g.Expect(wildcardDnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
-				g.Expect(wildcardDnsRecord.Spec.Endpoints).To(ConsistOf(
-					PointTo(MatchFields(IgnoreExtras, Fields{
-						"DNSName":       Equal(tests.HostWildcard(domain)),
-						"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
-						"RecordType":    Equal("A"),
-						"SetIdentifier": Equal(""),
-						"RecordTTL":     Equal(externaldns.TTL(60)),
-					})),
-				))
-				g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
-				g.Expect(wildcardDnsRecord.Status.OwnerID).To(Equal(wildcardDnsRecord.GetUIDHash()))
-				g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
-			}, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
 		}, testTimeOut)
 
 	})

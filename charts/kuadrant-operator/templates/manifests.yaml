@@ -10096,6 +10096,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - config.openshift.io
+  resources:
+  - clusterversions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - console.openshift.io
   resources:
   - consoleplugins
@@ -10410,6 +10418,23 @@ subjects:
   namespace: '{{ .Release.Namespace }}'
 ---
 apiVersion: v1
+data:
+  "4.16": quay.io/kuadrant/console-plugin:v0.1.5
+  "4.17": quay.io/kuadrant/console-plugin:v0.1.5
+  "4.18": quay.io/kuadrant/console-plugin:v0.1.5
+  "4.19": quay.io/kuadrant/console-plugin:v0.1.5
+  "4.20": quay.io/kuadrant/console-plugin:latest
+  default: quay.io/kuadrant/console-plugin:latest
+kind: ConfigMap
+metadata:
+  labels:
+    app: kuadrant
+    app.kubernetes.io/managed-by: helm
+    kuadrant-operator-console-plugin-images: "true"
+  name: kuadrant-operator-console-plugin-images
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -10459,8 +10484,6 @@ spec:
           value: "true"
         - name: RELATED_IMAGE_WASMSHIM
           value: oci://quay.io/kuadrant/wasm-shim:latest
-        - name: RELATED_IMAGE_CONSOLEPLUGIN
-          value: quay.io/kuadrant/console-plugin:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

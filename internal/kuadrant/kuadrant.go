@@ -11,6 +11,7 @@ const (
 	KuadrantRateLimitClusterName = "kuadrant-ratelimit-service"
 	KuadrantAuthClusterName      = "kuadrant-auth-service"
 	LimitadorName                = "limitador"
+	OperatorDeploymentName       = "kuadrant-operator"
 )
 
 type Policy interface {

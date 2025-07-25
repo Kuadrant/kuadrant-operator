@@ -53,6 +53,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
 	//+kubebuilder:scaffold:imports
 )
@@ -93,7 +94,7 @@ func init() {
 		log.SetLevel(log.ToLevel(logLevel)),
 		log.SetMode(log.ToMode(logMode)),
 		log.WriteTo(sync),
-	).WithName("kuadrant-operator")
+	).WithName(kuadrant.OperatorDeploymentName)
 	log.SetLogger(logger)
 	log.SetSync(sync)
 }

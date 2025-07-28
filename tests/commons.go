@@ -40,6 +40,7 @@ import (
 
 const (
 	TimeoutMedium        = time.Second * 10
+	TimeoutLongerMedium  = time.Second * 15
 	TimeoutLong          = time.Second * 30
 	RetryIntervalMedium  = time.Millisecond * 250
 	GatewayName          = "test-placed-gateway"

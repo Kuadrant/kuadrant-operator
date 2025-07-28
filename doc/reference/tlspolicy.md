@@ -1,8 +1,5 @@
 # The TLSPolicy Custom Resource Definition (CRD)
 
-- [TLSPolicy](#TLSPolicy)
-- [TLSPolicySpec](#tlspolicyspec)
-- [TLSPolicyStatus](#tlspolicystatus)
 
 ## TLSPolicy
 

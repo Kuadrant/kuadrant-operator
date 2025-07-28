@@ -46,6 +46,7 @@ func (r *PlanPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *PlanPoli
 
 func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("PlanPolicyReconciler"))
+	r.WithKuadrantCtx(kuadrantCtx)
 	r.logger.Info("reconciling planpolicies started")
 	defer r.logger.Info("reconciling planpolicies completed")
 

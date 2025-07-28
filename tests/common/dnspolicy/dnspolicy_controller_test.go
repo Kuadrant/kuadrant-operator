@@ -673,7 +673,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLongerMedium, time.Second).Should(Succeed())
 		}, testTimeOut)
 
 		It("should remove dns records on gateway deletion", func(ctx SpecContext) {

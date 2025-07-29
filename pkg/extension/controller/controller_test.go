@@ -31,7 +31,6 @@ type mockKuadrantCtx struct {
 	resolveFn       func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error)
 	resolvePolicyFn func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error)
 	addDataToFn     func(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error
-	clearPolicyFn   func(ctx context.Context, policy exttypes.Policy) error
 }
 
 type mockPolicy struct {
@@ -82,10 +81,6 @@ func (m *mockKuadrantCtx) ResolvePolicy(ctx context.Context, policy exttypes.Pol
 
 func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error {
 	return m.addDataToFn(ctx, requester, target, binding, expression)
-}
-
-func (m *mockKuadrantCtx) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
-	return m.clearPolicyFn(ctx, policy)
 }
 
 func (m *mockKuadrantCtx) GetClient() client.Client {

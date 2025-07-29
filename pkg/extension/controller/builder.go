@@ -143,6 +143,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		extensionClient: extClient,
 		eventCache:      eventCache,
 		policyKind:      policyKind,
+		forType:         b.forType,
 		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil
 }

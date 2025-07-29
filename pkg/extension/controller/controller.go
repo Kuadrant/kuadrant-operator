@@ -11,6 +11,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
@@ -27,6 +28,10 @@ import (
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
 
+const (
+	ExtensionFinalizer = "kuadrant.io/extensions"
+)
+
 type ExtensionController struct {
 	name                           string
 	logger                         logr.Logger
@@ -37,6 +42,7 @@ type ExtensionController struct {
 	extensionClient                *extensionClient
 	eventCache                     *EventTypeCache
 	policyKind                     string
+	forType                        client.Object
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
@@ -106,17 +112,61 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 		eventType = EventTypeUnknown
 	}
 
+	ctx = ec.setupContext(ctx)
+
+	// Ensure finalizer exists for both create and updates
+	if eventType == EventTypeCreate || eventType == EventTypeUpdate {
+		if err := ec.ensureFinalizer(ctx, request); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Call user reconcile function
+	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "event", eventType)
+	result, err := ec.reconcile(ctx, request, ec)
+	if err != nil {
+		return result, err
+	}
+
+	if eventType == EventTypeUpdate {
+		if err := ec.cleanupFinalizer(ctx, request); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	return result, nil
+}
+
+func (ec *ExtensionController) setupContext(ctx context.Context) context.Context {
 	// todo(adam-cattermole): the ctx passed here is a different one created by ctrlruntime for each reconcile so we
 	//  have to inject here instead of in Start(). Is there any benefit to us storing this in the context for it be
 	//  retrieved by the user in their Reconcile method, or should it just pass them as parameters?
-	// update ctx to hold our logger and client
 	ctx = context.WithValue(ctx, logr.Logger{}, ec.logger)
 	ctx = context.WithValue(ctx, extutils.SchemeKey, ec.manager.GetScheme())
 	ctx = context.WithValue(ctx, extutils.ClientKey, ec.manager.GetClient())
+	return ctx
+}
 
-	// overrides reconcile method
-	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "eventType", eventType)
-	return ec.reconcile(ctx, request, ec)
+func (ec *ExtensionController) ensureFinalizer(ctx context.Context, request reconcile.Request) error {
+	obj := ec.forType.DeepCopyObject().(client.Object)
+	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
+		return err
+	}
+	return ec.AddFinalizer(ctx, obj, ExtensionFinalizer)
+}
+
+func (ec *ExtensionController) cleanupFinalizer(ctx context.Context, request reconcile.Request) error {
+	obj := ec.forType.DeepCopyObject().(client.Object)
+	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
+		return err
+	}
+	if obj.GetDeletionTimestamp() != nil {
+		if err := ec.ClearPolicy(ctx, request.Namespace, request.Name, ec.policyKind); err != nil {
+			return err
+		}
+		return ec.RemoveFinalizer(ctx, obj, ExtensionFinalizer)
+	}
+	return nil
 }
 
 func (ec *ExtensionController) resolveExpression(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (*extpb.ResolveResponse, error) {
@@ -204,8 +254,14 @@ func (ec *ExtensionController) ReconcileKuadrantResource(ctx context.Context, ob
 	// TODO(didierofrivia): Subscribe
 }
 
-func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
-	pbPolicy := convertPolicyToProtobuf(policy)
+func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name, kind string) error {
+	pbPolicy := &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Kind:      kind,
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
 
 	resp, err := ec.extensionClient.client.ClearPolicy(ctx, &extpb.ClearPolicyRequest{
 		Policy: pbPolicy,

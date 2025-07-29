@@ -127,16 +127,20 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	}
 	policyKind := objType.Name()
 
+	config := ExtensionConfig{
+		Name:         b.name,
+		PolicyKind:   policyKind,
+		ForType:      b.forType,
+		Reconcile:    b.reconcile,
+		WatchSources: watchSources,
+	}
+
 	return &ExtensionController{
-		name:            b.name,
+		config:          config,
 		manager:         mgr,
 		logger:          b.logger,
-		reconcile:       b.reconcile,
-		watchSources:    watchSources,
 		extensionClient: extClient,
 		eventCache:      eventCache,
-		policyKind:      policyKind,
-		forType:         b.forType,
 		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil
 }

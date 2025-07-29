@@ -31,16 +31,22 @@ const (
 	ExtensionFinalizer = "kuadrant.io/extensions"
 )
 
+type ExtensionConfig struct {
+	Name         string
+	PolicyKind   string
+	ForType      client.Object
+	Reconcile    exttypes.ReconcileFn
+	WatchSources []ctrlruntimesrc.Source
+}
+
 type ExtensionController struct {
-	name                           string
-	logger                         logr.Logger
-	manager                        ctrlruntime.Manager
-	reconcile                      exttypes.ReconcileFn
-	watchSources                   []ctrlruntimesrc.Source
-	extensionClient                *extensionClient
-	eventCache                     *EventTypeCache
-	policyKind                     string
-	forType                        client.Object
+	config ExtensionConfig
+
+	logger          logr.Logger
+	manager         ctrlruntime.Manager
+	extensionClient *extensionClient
+	eventCache      *EventTypeCache
+
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
@@ -49,15 +55,18 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	// todo(adam-cattermole): how big do we make the reconcile event channel?
 	//	 how many should we queue before we block?
 	reconcileChan := make(chan ctrlruntimeevent.GenericEvent, 50)
-	ec.watchSources = append(ec.watchSources, ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{}))
+
+	// Add the channel source to our watch sources
+	channelSource := ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{})
+	watchSources := append(ec.config.WatchSources, channelSource)
 
 	if ec.manager != nil {
-		ctrl, err := ctrlruntimectrl.New(ec.name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
+		ctrl, err := ctrlruntimectrl.New(ec.config.Name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
 		if err != nil {
 			return fmt.Errorf("error creating controller: %w", err)
 		}
 
-		for _, source := range ec.watchSources {
+		for _, source := range watchSources {
 			err := ctrl.Watch(source)
 			if err != nil {
 				return fmt.Errorf("error watching resource: %w", err)
@@ -84,7 +93,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 }
 
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
-	err := ec.extensionClient.subscribe(ctx, ec.policyKind, func(response *extpb.SubscribeResponse) {
+	err := ec.extensionClient.subscribe(ctx, ec.config.PolicyKind, func(response *extpb.SubscribeResponse) {
 		ec.logger.Info("received response", "response", response)
 		// todo(adam-cattermole): how might we inform of an error from subscribe responses?
 		if response.Error != nil && response.Error.Code != 0 {
@@ -121,7 +130,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 
 	// Call user reconcile function
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "event", eventType)
-	result, err := ec.reconcile(ctx, request, ec)
+	result, err := ec.config.Reconcile(ctx, request, ec)
 	if err != nil {
 		return result, err
 	}
@@ -146,7 +155,7 @@ func (ec *ExtensionController) setupContext(ctx context.Context) context.Context
 }
 
 func (ec *ExtensionController) ensureFinalizer(ctx context.Context, request reconcile.Request) error {
-	obj := ec.forType.DeepCopyObject().(client.Object)
+	obj := ec.config.ForType.DeepCopyObject().(client.Object)
 	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
 		return err
 	}
@@ -154,12 +163,12 @@ func (ec *ExtensionController) ensureFinalizer(ctx context.Context, request reco
 }
 
 func (ec *ExtensionController) cleanupFinalizer(ctx context.Context, request reconcile.Request) error {
-	obj := ec.forType.DeepCopyObject().(client.Object)
+	obj := ec.config.ForType.DeepCopyObject().(client.Object)
 	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
 		return err
 	}
 	if obj.GetDeletionTimestamp() != nil {
-		if err := ec.ClearPolicy(ctx, request.Namespace, request.Name, ec.policyKind); err != nil {
+		if err := ec.ClearPolicy(ctx, request.Namespace, request.Name, ec.config.PolicyKind); err != nil {
 			return err
 		}
 		return ec.RemoveFinalizer(ctx, obj, ExtensionFinalizer)

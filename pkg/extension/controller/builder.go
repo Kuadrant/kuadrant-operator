@@ -9,7 +9,6 @@ import (
 	"github.com/go-logr/logr"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
@@ -110,11 +109,6 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, fmt.Errorf("unable to construct manager: %w", err)
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return nil, fmt.Errorf("unable to create client for manager: %w", err)
-	}
-
 	eventCache := newEventTypeCache()
 	eventHandler := newEventCachingHandler(eventCache)
 
@@ -136,7 +130,6 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	return &ExtensionController{
 		name:            b.name,
 		manager:         mgr,
-		client:          dynamicClient,
 		logger:          b.logger,
 		reconcile:       b.reconcile,
 		watchSources:    watchSources,

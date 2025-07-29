@@ -35,10 +35,10 @@ uninstall-olm:
 
 deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(MAKE) namespace
-	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
+	$(KUSTOMIZE) build config/dependencies | kubectl apply --server-side -f -
 	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
 
-deploy: manifests dependencies-manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/deploy | kubectl apply --server-side -f -
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMAGE_TAG_BASE):latest

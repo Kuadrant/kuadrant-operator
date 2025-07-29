@@ -15,12 +15,6 @@ wasm_shim_image="oci://quay.io/kuadrant/wasm-shim:$wasm_shim_version"
 V=$wasm_shim_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
-# Set desired ConsolePlugin image
-consoleplugin_version=$(mod_version $(yq '.dependencies.console-plugin' $env/release.yaml))
-consoleplugin_image="quay.io/kuadrant/console-plugin:$consoleplugin_version"
-V=$consoleplugin_image \
-yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
-
 # Set desired operator image
 cd $env/config/manager
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))

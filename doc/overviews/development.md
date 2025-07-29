@@ -159,9 +159,11 @@ The `make bundle` target accepts the following variables:
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` | `AUTHORINO_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL       | `quay.io/kuadrant/dns-operator-bundle:latest`       | `DNS_OPERATOR_BUNDLE_IMG` var could be used to build this, defaults to _latest_ if not provided    |
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `oci://quay.io/kuadrant/wasm-shim:latest`           | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
-| `RELATED_IMAGE_CONSOLEPLUGIN`   | ConsolePlugin image URL       | `quay.io/kuadrant/console-plugin:latest`            |                                                                                                  |
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`           |                                                                                                               |
 | `DEFAULT_CHANNEL`               | The default channel used in the bundle               | `alpha`           |                                                                                                               |
+
+*Note:* The `RELATED_IMAGE_CONSOLEPLUGIN` variable is not used anymore. The console plugin now relies on a `kuadrant-operator-console-plugin-images` configmap that stores the images to be used for different openshift versions. 
+This configmap is only created during OLM or Helm installation. To manually override the consoleplugin image edit the configmap manually.
 
 * Build the bundle manifests
 
@@ -173,7 +175,6 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
             [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
             [RELATED_IMAGE_WASMSHIM=oci://quay.io/kuadrant/wasm-shim:latest] \
-            [RELATED_IMAGE_CONSOLEPLUGIN=quay.io/kuadrant/console-plugin:latest] \
             [CHANNELS=alpha] \
             [DEFAULT_CHANNEL=alpha]
 ```

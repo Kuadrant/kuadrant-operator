@@ -23,7 +23,6 @@ type KuadrantCtx interface {
 	Resolve(context.Context, Policy, string, bool) (celref.Val, error)
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
 	AddDataTo(context.Context, Policy, Policy, string, string) error
-	ClearPolicy(context.Context, Policy) error
 	GetClient() client.Client
 	GetScheme() *runtime.Scheme
 	ReconcileKuadrantResource(context.Context, client.Object, client.Object, MutateFn) error

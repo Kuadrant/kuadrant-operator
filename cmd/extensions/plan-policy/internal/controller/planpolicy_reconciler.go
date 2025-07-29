@@ -46,6 +46,7 @@ func (r *PlanPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *PlanPoli
 
 func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
 	r.WithLogger(utils.LoggerFromContext(ctx).WithName("PlanPolicyReconciler"))
+	r.WithKuadrantCtx(kuadrantCtx)
 	r.logger.Info("reconciling planpolicies started")
 	defer r.logger.Info("reconciling planpolicies completed")
 
@@ -61,11 +62,6 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	if planPolicy.GetDeletionTimestamp() != nil {
 		r.logger.Info("planpolicy marked for deletion")
-		err := kuadrantCtx.ClearPolicy(ctx, planPolicy)
-		if err != nil {
-			r.logger.Error(err, "failed to clear policy")
-			return reconcile.Result{}, err
-		}
 		return reconcile.Result{}, nil
 	}
 

@@ -2,35 +2,23 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
-	"net"
-	"os"
-	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	celtypes "github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
-	"go.uber.org/zap/zapcore"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/klog/v2"
-	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	ctrlruntimesrc "sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -40,9 +28,8 @@ import (
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
 
-var (
-	logLevel, _ = zapcore.ParseLevel(env.GetString("LOG_LEVEL", "info"))
-	logMode     = env.GetString("LOG_MODE", "production") != "production"
+const (
+	ExtensionFinalizer = "kuadrant.io/extensions"
 )
 
 type ExtensionController struct {
@@ -53,7 +40,9 @@ type ExtensionController struct {
 	reconcile                      exttypes.ReconcileFn
 	watchSources                   []ctrlruntimesrc.Source
 	extensionClient                *extensionClient
+	eventCache                     *EventTypeCache
 	policyKind                     string
+	forType                        client.Object
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
@@ -118,17 +107,66 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 }
 
 func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	eventType, exists := ec.eventCache.popEvent(request.Namespace, request.Name)
+	if !exists {
+		eventType = EventTypeUnknown
+	}
+
+	ctx = ec.setupContext(ctx)
+
+	// Ensure finalizer exists for both create and updates
+	if eventType == EventTypeCreate || eventType == EventTypeUpdate {
+		if err := ec.ensureFinalizer(ctx, request); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Call user reconcile function
+	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "event", eventType)
+	result, err := ec.reconcile(ctx, request, ec)
+	if err != nil {
+		return result, err
+	}
+
+	if eventType == EventTypeUpdate {
+		if err := ec.cleanupFinalizer(ctx, request); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	return result, nil
+}
+
+func (ec *ExtensionController) setupContext(ctx context.Context) context.Context {
 	// todo(adam-cattermole): the ctx passed here is a different one created by ctrlruntime for each reconcile so we
 	//  have to inject here instead of in Start(). Is there any benefit to us storing this in the context for it be
 	//  retrieved by the user in their Reconcile method, or should it just pass them as parameters?
-	// update ctx to hold our logger and client
 	ctx = context.WithValue(ctx, logr.Logger{}, ec.logger)
 	ctx = context.WithValue(ctx, extutils.SchemeKey, ec.manager.GetScheme())
 	ctx = context.WithValue(ctx, extutils.ClientKey, ec.manager.GetClient())
+	return ctx
+}
 
-	// overrides reconcile method
-	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name)
-	return ec.reconcile(ctx, request, ec)
+func (ec *ExtensionController) ensureFinalizer(ctx context.Context, request reconcile.Request) error {
+	obj := ec.forType.DeepCopyObject().(client.Object)
+	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
+		return err
+	}
+	return ec.AddFinalizer(ctx, obj, ExtensionFinalizer)
+}
+
+func (ec *ExtensionController) cleanupFinalizer(ctx context.Context, request reconcile.Request) error {
+	obj := ec.forType.DeepCopyObject().(client.Object)
+	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
+		return err
+	}
+	if obj.GetDeletionTimestamp() != nil {
+		if err := ec.ClearPolicy(ctx, request.Namespace, request.Name, ec.policyKind); err != nil {
+			return err
+		}
+		return ec.RemoveFinalizer(ctx, obj, ExtensionFinalizer)
+	}
+	return nil
 }
 
 func (ec *ExtensionController) resolveExpression(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (*extpb.ResolveResponse, error) {
@@ -216,8 +254,14 @@ func (ec *ExtensionController) ReconcileKuadrantResource(ctx context.Context, ob
 	// TODO(didierofrivia): Subscribe
 }
 
-func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.Policy) error {
-	pbPolicy := convertPolicyToProtobuf(policy)
+func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name, kind string) error {
+	pbPolicy := &extpb.Policy{
+		Metadata: &extpb.Metadata{
+			Kind:      kind,
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
 
 	resp, err := ec.extensionClient.client.ClearPolicy(ctx, &extpb.ClearPolicyRequest{
 		Policy: pbPolicy,
@@ -229,223 +273,4 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, policy exttypes.
 
 func (ec *ExtensionController) Manager() ctrlruntime.Manager {
 	return ec.manager
-}
-
-type extensionClient struct {
-	conn   *grpc.ClientConn
-	client extpb.ExtensionServiceClient
-}
-
-func newExtensionClient(socketPath string) (*extensionClient, error) {
-	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
-	}
-
-	conn, err := grpc.NewClient(
-		"unix://"+socketPath,
-		grpc.WithContextDialer(dialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &extensionClient{
-		conn:   conn,
-		client: extpb.NewExtensionServiceClient(conn),
-	}, nil
-}
-
-//lint:ignore U1000
-func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error) {
-	return ec.client.Ping(ctx, &extpb.PingRequest{
-		Out: timestamppb.New(time.Now()),
-	})
-}
-
-func (ec *extensionClient) subscribe(ctx context.Context, policyKind string, callback func(response *extpb.SubscribeResponse)) error {
-	stream, err := ec.client.Subscribe(ctx, &extpb.SubscribeRequest{
-		PolicyKind: policyKind,
-	})
-	if err != nil {
-		return err
-	}
-	for {
-		response, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		callback(response)
-	}
-	return nil
-}
-
-//lint:ignore U1000
-func (ec *extensionClient) close() error {
-	return ec.conn.Close()
-}
-
-type Builder struct {
-	name       string
-	scheme     *runtime.Scheme
-	logger     logr.Logger
-	reconcile  exttypes.ReconcileFn
-	forType    client.Object
-	watchTypes []client.Object
-}
-
-func NewBuilder(name string) (*Builder, logr.Logger) {
-	logger := zap.New(
-		zap.Level(logLevel),
-		zap.UseDevMode(logMode),
-		zap.WriteTo(os.Stderr),
-	).WithName(name)
-	ctrlruntime.SetLogger(logger)
-	klog.SetLogger(logger)
-
-	return &Builder{
-		name:       name,
-		logger:     logger,
-		watchTypes: make([]client.Object, 0),
-	}, logger
-}
-
-func (b *Builder) WithScheme(scheme *runtime.Scheme) *Builder {
-	b.scheme = scheme
-	return b
-}
-
-func (b *Builder) WithReconciler(fn exttypes.ReconcileFn) *Builder {
-	b.reconcile = fn
-	return b
-}
-
-func (b *Builder) For(obj client.Object) *Builder {
-	if b.forType != nil {
-		panic("For() can only be called once")
-	}
-	b.forType = obj
-	return b
-}
-
-func (b *Builder) Watches(obj client.Object) *Builder {
-	b.watchTypes = append(b.watchTypes, obj)
-	return b
-}
-
-func (b *Builder) Build() (*ExtensionController, error) {
-	if b.name == "" {
-		return nil, fmt.Errorf("controller name must be set")
-	}
-	if b.scheme == nil {
-		return nil, fmt.Errorf("scheme must be set")
-	}
-	if b.reconcile == nil {
-		return nil, fmt.Errorf("reconcile function must be set")
-	}
-	if b.forType == nil {
-		return nil, fmt.Errorf("for type must be set")
-	}
-
-	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
-	if len(os.Args) < 2 {
-		return nil, errors.New("missing socket path argument")
-	}
-	socketPath := os.Args[1]
-
-	extClient, err := newExtensionClient(socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create extension client: %w", err)
-	}
-
-	options := ctrlruntime.Options{
-		Scheme:  b.scheme,
-		Metrics: metricsserver.Options{BindAddress: "0"},
-	}
-
-	mgr, err := ctrlruntime.NewManager(ctrlruntime.GetConfigOrDie(), options)
-	if err != nil {
-		return nil, fmt.Errorf("unable to construct manager: %w", err)
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return nil, fmt.Errorf("unable to create client for manager: %w", err)
-	}
-
-	watchSources := make([]ctrlruntimesrc.Source, 0)
-	forSource := ctrlruntimesrc.Kind(mgr.GetCache(), b.forType, &ctrlruntimehandler.EnqueueRequestForObject{})
-	watchSources = append(watchSources, forSource)
-
-	for _, obj := range b.watchTypes {
-		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, &ctrlruntimehandler.EnqueueRequestForObject{})
-		watchSources = append(watchSources, source)
-	}
-
-	objType := reflect.TypeOf(b.forType)
-	if objType.Kind() == reflect.Ptr {
-		objType = objType.Elem()
-	}
-	policyKind := objType.Name()
-
-	return &ExtensionController{
-		name:            b.name,
-		manager:         mgr,
-		client:          dynamicClient,
-		logger:          b.logger,
-		reconcile:       b.reconcile,
-		watchSources:    watchSources,
-		extensionClient: extClient,
-		policyKind:      policyKind,
-		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
-	}, nil
-}
-
-func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
-	pbPolicy := &extpb.Policy{
-		Metadata: &extpb.Metadata{
-			Group:     policy.GetObjectKind().GroupVersionKind().Group,
-			Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
-			Namespace: policy.GetNamespace(),
-			Name:      policy.GetName(),
-		},
-		TargetRefs: make([]*extpb.TargetRef, len(policy.GetTargetRefs())),
-	}
-
-	for i, ref := range policy.GetTargetRefs() {
-		pbPolicy.TargetRefs[i] = &extpb.TargetRef{
-			Group:     string(ref.Group),
-			Kind:      string(ref.Kind),
-			Name:      string(ref.Name),
-			Namespace: policy.GetNamespace(), // Use policy namespace for target refs
-		}
-		if ref.SectionName != nil {
-			pbPolicy.TargetRefs[i].SectionName = string(*ref.SectionName)
-		}
-	}
-
-	return pbPolicy
-}
-
-func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, policy exttypes.Policy, expression string, subscribe bool) (T, error) {
-	var zero T
-
-	celValue, err := kuadrantCtx.Resolve(ctx, policy, expression, subscribe)
-	if err != nil {
-		return zero, err
-	}
-
-	nativeValue, err := celValue.ConvertToNative(reflect.TypeOf(zero))
-	if err != nil {
-		return zero, err
-	}
-
-	result, ok := nativeValue.(T)
-	if !ok {
-		return zero, fmt.Errorf("value is not type: %T", zero)
-	}
-	return result, nil
 }

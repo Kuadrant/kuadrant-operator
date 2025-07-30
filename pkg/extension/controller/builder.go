@@ -6,6 +6,8 @@ import (
 	"os"
 	"reflect"
 
+	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
+
 	"github.com/go-logr/logr"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,6 +35,7 @@ type Builder struct {
 	reconcile  exttypes.ReconcileFn
 	forType    client.Object
 	watchTypes []client.Object
+	ownTypes   []client.Object
 }
 
 func NewBuilder(name string) (*Builder, logr.Logger) {
@@ -71,6 +74,11 @@ func (b *Builder) For(obj client.Object) *Builder {
 
 func (b *Builder) Watches(obj client.Object) *Builder {
 	b.watchTypes = append(b.watchTypes, obj)
+	return b
+}
+
+func (b *Builder) Owns(obj client.Object) *Builder {
+	b.ownTypes = append(b.ownTypes, obj)
 	return b
 }
 
@@ -118,6 +126,16 @@ func (b *Builder) Build() (*ExtensionController, error) {
 
 	for _, obj := range b.watchTypes {
 		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, eventHandler)
+		watchSources = append(watchSources, source)
+	}
+
+	for _, obj := range b.ownTypes {
+		var hdler ctrlruntimehandler.EventHandler
+		reflect.ValueOf(&hdler).Elem().Set(reflect.ValueOf(ctrlruntimehandler.EnqueueRequestForOwner(
+			mgr.GetScheme(), mgr.GetRESTMapper(),
+			b.forType,
+		)))
+		source := ctrlruntimesrc.Kind(mgr.GetCache(), obj, hdler)
 		watchSources = append(watchSources, source)
 	}
 

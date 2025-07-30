@@ -65,7 +65,7 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		r.Logger.Error(err, "failed to set controller reference")
 		return reconcile.Result{}, err
 	}
-	if err := kuadrantCtx.ReconcileKuadrantResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
+	if err := kuadrantCtx.ReconcileObject(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
 		r.Logger.Error(err, "failed to reconcile desired ratelimitpolicy")
 		return reconcile.Result{}, err
 	}

@@ -290,11 +290,11 @@ func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, p
 }
 
 func (r *OIDCPolicyReconciler) reconcileAuthPolicy(ctx context.Context, desired *kuadrantv1.AuthPolicy, mutatefn types.MutateFn) error {
-	return r.kCtx.ReconcileKuadrantResource(ctx, &kuadrantv1.AuthPolicy{}, desired, mutatefn)
+	return r.kCtx.ReconcileObject(ctx, &kuadrantv1.AuthPolicy{}, desired, mutatefn)
 }
 
 func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *gatewayapiv1.HTTPRoute, mutatefn types.MutateFn) error {
-	return r.kCtx.ReconcileKuadrantResource(ctx, &gatewayapiv1.HTTPRoute{}, desired, mutatefn)
+	return r.kCtx.ReconcileObject(ctx, &gatewayapiv1.HTTPRoute{}, desired, mutatefn)
 }
 
 func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {

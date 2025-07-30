@@ -348,7 +348,7 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	})
 
 	responseAction := wasm.Action{
-		ServiceName: wasm.RateLimitServiceName,
+		ServiceName: wasm.RateLimitReportServiceName,
 		Scope:       scope,
 		Predicates:  predicates,
 		Data:        responsePhaseData,

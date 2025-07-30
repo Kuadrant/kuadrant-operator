@@ -191,6 +191,12 @@ var _ = Describe("wasm controller", func() {
 						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 					},
+					wasm.RateLimitReportServiceName: {
+						Type:        wasm.RateLimitReportServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReportServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
+					},
 				},
 				ActionSets: []wasm.ActionSet{
 					{
@@ -362,6 +368,12 @@ var _ = Describe("wasm controller", func() {
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
+					},
+					wasm.RateLimitReportServiceName: {
+						Type:        wasm.RateLimitReportServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReportServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 					},
 				},
 				ActionSets: []wasm.ActionSet{

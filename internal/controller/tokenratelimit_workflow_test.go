@@ -108,7 +108,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							Value: &wasm.Expression{
 								ExpressionItem: wasm.ExpressionItem{
 									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("usage.total_tokens")`,
+									Value: `responseBodyJSON("/usage/total_tokens")`,
 								},
 							},
 						},
@@ -184,7 +184,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							Value: &wasm.Expression{
 								ExpressionItem: wasm.ExpressionItem{
 									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("usage.total_tokens")`,
+									Value: `responseBodyJSON("/usage/total_tokens")`,
 								},
 							},
 						},
@@ -263,7 +263,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							Value: &wasm.Expression{
 								ExpressionItem: wasm.ExpressionItem{
 									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("usage.total_tokens")`,
+									Value: `responseBodyJSON("/usage/total_tokens")`,
 								},
 							},
 						},
@@ -324,7 +324,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							Value: &wasm.Expression{
 								ExpressionItem: wasm.ExpressionItem{
 									Key:   "ratelimit.hits_addend",
-									Value: `responseBodyJSON("usage.total_tokens")`,
+									Value: `responseBodyJSON("/usage/total_tokens")`,
 								},
 							},
 						},

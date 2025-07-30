@@ -342,7 +342,7 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 		Value: &wasm.Expression{
 			ExpressionItem: wasm.ExpressionItem{
 				Key:   "ratelimit.hits_addend",
-				Value: "responseBodyJSON(\"usage.total_tokens\")",
+				Value: "responseBodyJSON(\"/usage/total_tokens\")",
 			},
 		},
 	})

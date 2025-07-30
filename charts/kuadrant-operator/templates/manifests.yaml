@@ -10514,7 +10514,17 @@ spec:
             memory: 200Mi
         securityContext:
           allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp/kuadrant
+          name: extensions-socket-volume
       securityContext:
         runAsNonRoot: true
       serviceAccountName: kuadrant-operator-controller-manager
       terminationGracePeriodSeconds: 10
+      volumes:
+      - emptyDir: {}
+        name: extensions-socket-volume

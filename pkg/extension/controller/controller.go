@@ -10,7 +10,6 @@ import (
 	celtypes "github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -234,14 +233,6 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes
 		Expression: expression,
 	})
 	return err
-}
-
-func (ec *ExtensionController) GetClient() client.Client {
-	return ec.manager.GetClient()
-}
-
-func (ec *ExtensionController) GetScheme() *runtime.Scheme {
-	return ec.manager.GetScheme()
 }
 
 func (ec *ExtensionController) ReconcileKuadrantResource(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {

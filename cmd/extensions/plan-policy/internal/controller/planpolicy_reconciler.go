@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,7 +15,6 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
-	"github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
 
 // +kubebuilder:rbac:groups=kuadrant.io,resources=planpolicies,verbs=get;list;watch;update;patch
@@ -26,67 +24,57 @@ import (
 // +kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=create;delete
 
 type PlanPolicyReconciler struct {
-	kCtx   types.KuadrantCtx
-	logger logr.Logger
+	types.ExtensionBase
 }
 
 func NewPlanPolicyReconciler() *PlanPolicyReconciler {
 	return &PlanPolicyReconciler{}
 }
 
-func (r *PlanPolicyReconciler) WithLogger(logger logr.Logger) *PlanPolicyReconciler {
-	r.logger = logger
-	return r
-}
-
-func (r *PlanPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *PlanPolicyReconciler {
-	r.kCtx = kCtx
-	return r
-}
-
 func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
-	r.WithLogger(utils.LoggerFromContext(ctx).WithName("PlanPolicyReconciler"))
-	r.WithKuadrantCtx(kuadrantCtx)
-	r.logger.Info("reconciling planpolicies started")
-	defer r.logger.Info("reconciling planpolicies completed")
+	if err := r.Configure(ctx); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to configure extension: %w", err)
+	}
+	r.Logger.Info("reconciling planpolicies started")
+	defer r.Logger.Info("reconciling planpolicies completed")
 
 	planPolicy := &kuadrantv1alpha1.PlanPolicy{}
-	if err := r.kCtx.GetClient().Get(ctx, request.NamespacedName, planPolicy); err != nil {
+	if err := r.Client.Get(ctx, request.NamespacedName, planPolicy); err != nil {
 		if errors.IsNotFound(err) {
-			r.logger.Error(err, "planpolicy not found")
+			r.Logger.Error(err, "planpolicy not found")
 			return reconcile.Result{}, nil
 		}
-		r.logger.Error(err, "failed to retrieve planpolicy")
+		r.Logger.Error(err, "failed to retrieve planpolicy")
 		return reconcile.Result{}, err
 	}
 
 	if planPolicy.GetDeletionTimestamp() != nil {
-		r.logger.Info("planpolicy marked for deletion")
+		r.Logger.Info("planpolicy marked for deletion")
 		return reconcile.Result{}, nil
 	}
 
 	authPolicy, err := kuadrantCtx.ResolvePolicy(ctx, planPolicy,
 		`self.findAuthPolicies()[0]`, true)
 	if err != nil {
-		r.logger.Error(err, "failed to resolve policy")
+		r.Logger.Error(err, "failed to resolve policy")
 		return reconcile.Result{}, err
 	}
 
 	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy, authPolicy.GetTargetRefs()[0])
-	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.kCtx.GetScheme()); err != nil {
-		r.logger.Error(err, "failed to set controller reference")
+	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.Scheme); err != nil {
+		r.Logger.Error(err, "failed to set controller reference")
 		return reconcile.Result{}, err
 	}
-	if err := r.kCtx.ReconcileKuadrantResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
-		r.logger.Error(err, "failed to reconcile desired ratelimitpolicy")
+	if err := kuadrantCtx.ReconcileKuadrantResource(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
+		r.Logger.Error(err, "failed to reconcile desired ratelimitpolicy")
 		return reconcile.Result{}, err
 	}
 
-	r.logger.Info("cel expression", "expression", planPolicy.BuildCelExpression())
+	r.Logger.Info("cel expression", "expression", planPolicy.BuildCelExpression())
 
 	err = kuadrantCtx.AddDataTo(ctx, planPolicy, authPolicy, "plan", planPolicy.BuildCelExpression())
 	if err != nil {
-		r.logger.Error(err, "failed to add data to policy", "policy", authPolicy)
+		r.Logger.Error(err, "failed to add data to policy", "policy", authPolicy)
 		return reconcile.Result{}, err
 	}
 

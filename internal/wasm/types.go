@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
@@ -149,6 +150,14 @@ type Action struct {
 	ServiceName string `json:"service"`
 	Scope       string `json:"scope"`
 
+	Predicates []string `json:"predicates,omitempty"`
+
+	// ConditionalData data contains the predicates and data that will be sent to the service
+	// +optional
+	ConditionalData []ConditionalData `json:"conditionalData,omitempty"`
+}
+
+type ConditionalData struct {
 	// Predicates holds a list of CEL predicates
 	// +optional
 	Predicates []string `json:"predicates,omitempty"`
@@ -159,41 +168,58 @@ type Action struct {
 }
 
 func (a *Action) HasAuthAccess() bool {
-	for _, predicate := range a.Predicates {
-		if strings.Contains(predicate, "auth.") {
-			return true
-		}
-	}
-	for _, data := range a.Data {
-		switch val := data.Value.(type) {
-		case *Static:
-
-			continue
-		case *Expression:
-			if strings.Contains(val.ExpressionItem.Value, "auth.") {
+	for _, conditional := range a.ConditionalData {
+		for _, predicate := range conditional.Predicates {
+			if strings.Contains(predicate, "auth.") {
 				return true
+			}
+		}
+		for _, data := range conditional.Data {
+			switch val := data.Value.(type) {
+			case *Static:
+
+				continue
+			case *Expression:
+				if strings.Contains(val.ExpressionItem.Value, "auth.") {
+					return true
+				}
 			}
 		}
 	}
 	return false
 }
 
-func (a *Action) EqualTo(other Action) bool {
-	if a.Scope != other.Scope ||
-		a.ServiceName != other.ServiceName ||
-		len(a.Predicates) != len(other.Predicates) ||
-		len(a.Data) != len(other.Data) {
+func (c *ConditionalData) EqualTo(other ConditionalData) bool {
+	if len(c.Predicates) != len(other.Predicates) || len(c.Data) != len(other.Data) {
 		return false
 	}
 
-	for i := range a.Predicates {
-		if a.Predicates[i] != other.Predicates[i] {
+	if !reflect.DeepEqual(c.Predicates, other.Predicates) {
+		return false
+	}
+
+	for i := range c.Data {
+		if !c.Data[i].EqualTo(other.Data[i]) {
 			return false
 		}
 	}
 
-	for i := range a.Data {
-		if !a.Data[i].EqualTo(other.Data[i]) {
+	return true
+}
+
+func (a *Action) EqualTo(other Action) bool {
+	if a.Scope != other.Scope ||
+		a.ServiceName != other.ServiceName ||
+		len(a.ConditionalData) != len(other.ConditionalData) {
+		return false
+	}
+
+	if !reflect.DeepEqual(a.Predicates, other.Predicates) {
+		return false
+	}
+
+	for i := range a.ConditionalData {
+		if !a.ConditionalData[i].EqualTo(other.ConditionalData[i]) {
 			return false
 		}
 	}

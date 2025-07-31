@@ -146,6 +146,52 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
+func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
+	if len(actions) == 0 {
+		return nil, nil
+	}
+
+	result := []wasm.Action{actions[0]}
+	for _, currentAction := range actions[1:] {
+		lastAction := &result[len(result)-1]
+
+		if lastAction.Scope == currentAction.Scope &&
+			lastAction.ServiceName == currentAction.ServiceName && lastAction.ServiceName != wasm.AuthServiceName {
+			lastAction.ConditionalData = append(lastAction.ConditionalData, currentAction.ConditionalData...)
+		} else {
+			result = append(result, currentAction)
+		}
+	}
+
+	for i := range result {
+		keyValueMap := make(map[string]string)
+		for _, conditionalData := range result[i].ConditionalData {
+			for _, data := range conditionalData.Data {
+				var key, value string
+
+				switch val := data.Value.(type) {
+				case *wasm.Static:
+					key = val.Static.Key
+					value = val.Static.Value
+				case *wasm.Expression:
+					key = val.ExpressionItem.Key
+					value = val.ExpressionItem.Value
+				}
+
+				if existingValue, exists := keyValueMap[key]; exists {
+					if existingValue != value {
+						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
+					}
+				} else {
+					keyValueMap[key] = value
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
 func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
@@ -221,13 +267,18 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			if hasAuthAccess(rlAction) {
-				actions = append(actions, rlAction...)
+			trlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if hasAuthAccess(trlAction) {
+				actions = append(actions, trlAction...)
 			} else {
 				// pre auth rate limiting
-				actions = append(rlAction, actions...)
+				actions = append(trlAction, actions...)
 			}
+		}
+
+		actions, err := mergeAndVerify(actions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
 
 		if len(actions) == 0 {

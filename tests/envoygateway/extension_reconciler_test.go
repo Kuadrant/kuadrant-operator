@@ -212,12 +212,16 @@ var _ = Describe("wasm controller", func() {
 							{
 								ServiceName: wasm.RateLimitServiceName,
 								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
-								Data: []wasm.DataType{
+								ConditionalData: []wasm.ConditionalData{
 									{
-										Value: &wasm.Expression{
-											ExpressionItem: wasm.ExpressionItem{
-												Key:   controllers.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
-												Value: "1",
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Expression{
+													ExpressionItem: wasm.ExpressionItem{
+														Key:   controllers.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
+														Value: "1",
+													},
+												},
 											},
 										},
 									},
@@ -390,12 +394,16 @@ var _ = Describe("wasm controller", func() {
 							{
 								ServiceName: wasm.RateLimitServiceName,
 								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
-								Data: []wasm.DataType{
+								ConditionalData: []wasm.ConditionalData{
 									{
-										Value: &wasm.Expression{
-											ExpressionItem: wasm.ExpressionItem{
-												Key:   controllers.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
-												Value: "1",
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Expression{
+													ExpressionItem: wasm.ExpressionItem{
+														Key:   controllers.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
+														Value: "1",
+													},
+												},
 											},
 										},
 									},

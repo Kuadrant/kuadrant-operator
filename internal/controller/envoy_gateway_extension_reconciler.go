@@ -216,13 +216,18 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			if hasAuthAccess(rlAction) {
-				actions = append(actions, rlAction...)
+			trlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if hasAuthAccess(trlAction) {
+				actions = append(actions, trlAction...)
 			} else {
 				// pre auth rate limiting
-				actions = append(rlAction, actions...)
+				actions = append(trlAction, actions...)
 			}
+		}
+
+		actions, err := mergeAndVerify(actions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
 
 		if len(actions) == 0 {

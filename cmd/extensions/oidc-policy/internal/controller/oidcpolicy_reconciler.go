@@ -194,19 +194,19 @@ func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy,
 		Conditions: slices.Clone(pol.Status.Conditions),
 	}
 
-	availableCond := r.readyCondition(specErr)
+	availableCond := r.acceptedCondition(specErr)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
 	return newStatus
 }
 
-func (r *OIDCPolicyReconciler) readyCondition(specErr error) *metav1.Condition {
+func (r *OIDCPolicyReconciler) acceptedCondition(specErr error) *metav1.Condition {
 	cond := &metav1.Condition{
-		Type:    kuadrantv1alpha1.StatusConditionReady,
+		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  "Ready",
-		Message: "OIDCPolicy is ready",
+		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Message: "OIDCPolicy has been accepted",
 	}
 
 	if specErr != nil {

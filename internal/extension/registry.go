@@ -17,19 +17,18 @@ limitations under the License.
 package extension
 
 import (
-	"fmt"
 	"maps"
-	"strings"
 	"sync"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
+
+const KuadrantDataNamespace string = "kuadrant"
 
 type ResourceMutator[TResource any, TPolicy machinery.Policy] interface {
 	Mutate(resource TResource, policy TPolicy) error
@@ -66,8 +65,14 @@ func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, policy *ku
 	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, policy)
 }
 
-type RegisteredDataEntry struct {
-	Requester  string
+type PolicyID struct {
+	Kind      string
+	Namespace string
+	Name      string
+}
+
+type DataProviderEntry struct {
+	Requester  PolicyID
 	Binding    string
 	Expression string
 	CAst       *cel.Ast
@@ -80,132 +85,157 @@ type Subscription struct {
 	PolicyKind string
 }
 
+type DataProviderKey struct {
+	Target    PolicyID
+	Requester PolicyID
+	Binding   string
+}
+
+type SubscriptionKey struct {
+	Policy     PolicyID
+	Expression string
+}
+
 type RegisteredDataStore struct {
-	data          map[string]map[string]RegisteredDataEntry
-	subscriptions map[string]Subscription
-	mutex         sync.RWMutex
+	dataProviders map[DataProviderKey]DataProviderEntry
+	dataMutex     sync.RWMutex
+
+	subscriptions map[SubscriptionKey]Subscription
+	subsMutex     sync.RWMutex
 }
 
 func NewRegisteredDataStore() *RegisteredDataStore {
 	return &RegisteredDataStore{
-		data:          make(map[string]map[string]RegisteredDataEntry),
-		subscriptions: make(map[string]Subscription),
+		dataProviders: make(map[DataProviderKey]DataProviderEntry),
+		subscriptions: make(map[SubscriptionKey]Subscription),
 	}
 }
 
-func (r *RegisteredDataStore) Set(target, requester, binding string, entry RegisteredDataEntry) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	entryKey := fmt.Sprintf("%s#%s", requester, binding)
-
-	if _, exists := r.data[target]; !exists {
-		r.data[target] = make(map[string]RegisteredDataEntry)
+func (r *RegisteredDataStore) Set(target, requester PolicyID, binding string, entry DataProviderEntry) {
+	key := DataProviderKey{
+		Target:    target,
+		Requester: requester,
+		Binding:   binding,
 	}
 
-	r.data[target][entryKey] = entry
+	r.dataMutex.Lock()
+	defer r.dataMutex.Unlock()
+	r.dataProviders[key] = entry
 }
 
-func (r *RegisteredDataStore) GetAllForTarget(target string) []RegisteredDataEntry {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
+func (r *RegisteredDataStore) GetAllForTarget(target PolicyID) []DataProviderEntry {
+	r.dataMutex.RLock()
+	defer r.dataMutex.RUnlock()
 
-	entries, exists := r.data[target]
-	if !exists || len(entries) == 0 {
-		return nil
-	}
-
-	result := make([]RegisteredDataEntry, 0, len(entries))
-	for _, entry := range entries {
-		result = append(result, entry)
+	var result []DataProviderEntry
+	for key, entry := range r.dataProviders {
+		if key.Target == target {
+			result = append(result, entry)
+		}
 	}
 	return result
 }
 
-func (r *RegisteredDataStore) Get(target, requester, binding string) (RegisteredDataEntry, bool) {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
-
-	entryKey := fmt.Sprintf("%s#%s", requester, binding)
-
-	if targetMap, exists := r.data[target]; exists {
-		if entry, entryExists := targetMap[entryKey]; entryExists {
-			return entry, true
-		}
+func (r *RegisteredDataStore) Get(target, requester PolicyID, binding string) (DataProviderEntry, bool) {
+	key := DataProviderKey{
+		Target:    target,
+		Requester: requester,
+		Binding:   binding,
 	}
-	return RegisteredDataEntry{}, false
+
+	r.dataMutex.RLock()
+	defer r.dataMutex.RUnlock()
+
+	entry, exists := r.dataProviders[key]
+	return entry, exists
 }
 
-func (r *RegisteredDataStore) Exists(target, requester, binding string) bool {
-	_, exists := r.Get(target, requester, binding)
+func (r *RegisteredDataStore) Exists(target, requester PolicyID, binding string) bool {
+	key := DataProviderKey{
+		Target:    target,
+		Requester: requester,
+		Binding:   binding,
+	}
+
+	r.dataMutex.RLock()
+	defer r.dataMutex.RUnlock()
+
+	_, exists := r.dataProviders[key]
 	return exists
 }
 
-func (r *RegisteredDataStore) Delete(target, requester, binding string) bool {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	entryKey := fmt.Sprintf("%s#%s", requester, binding)
-
-	if targetMap, exists := r.data[target]; exists {
-		if _, entryExists := targetMap[entryKey]; entryExists {
-			delete(targetMap, entryKey)
-			if len(targetMap) == 0 {
-				delete(r.data, target)
-			}
-			return true
-		}
+func (r *RegisteredDataStore) Delete(target, requester PolicyID, binding string) bool {
+	key := DataProviderKey{
+		Target:    target,
+		Requester: requester,
+		Binding:   binding,
 	}
-	return false
+
+	r.dataMutex.Lock()
+	defer r.dataMutex.Unlock()
+
+	_, existed := r.dataProviders[key]
+	if existed {
+		delete(r.dataProviders, key)
+	}
+	return existed
 }
 
-func (r *RegisteredDataStore) ClearTarget(target string) int {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	if targetMap, exists := r.data[target]; exists {
-		count := len(targetMap)
-		delete(r.data, target)
-		return count
+func (r *RegisteredDataStore) SetSubscription(policy PolicyID, expression string, subscription Subscription) {
+	key := SubscriptionKey{
+		Policy:     policy,
+		Expression: expression,
 	}
-	return 0
-}
 
-func (r *RegisteredDataStore) SetSubscription(key string, subscription Subscription) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+	r.subsMutex.Lock()
+	defer r.subsMutex.Unlock()
 	r.subscriptions[key] = subscription
 }
 
-func (r *RegisteredDataStore) GetSubscriptionsForPolicyKind(policyKind string) map[string]Subscription {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
+func (r *RegisteredDataStore) GetSubscriptionsForPolicyKind(policyKind string) map[SubscriptionKey]Subscription {
+	r.subsMutex.RLock()
+	defer r.subsMutex.RUnlock()
 
-	return lo.PickBy(r.subscriptions, func(_ string, value Subscription) bool {
-		return value.PolicyKind == policyKind
-	})
+	result := make(map[SubscriptionKey]Subscription)
+	for key, sub := range r.subscriptions {
+		if sub.PolicyKind == policyKind {
+			result[key] = sub
+		}
+	}
+	return result
 }
 
-func (r *RegisteredDataStore) GetSubscription(key string) (Subscription, bool) {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
+func (r *RegisteredDataStore) GetSubscription(policy PolicyID, expression string) (Subscription, bool) {
+	key := SubscriptionKey{
+		Policy:     policy,
+		Expression: expression,
+	}
+
+	r.subsMutex.RLock()
+	defer r.subsMutex.RUnlock()
+
 	sub, exists := r.subscriptions[key]
 	return sub, exists
 }
 
-func (r *RegisteredDataStore) GetAllSubscriptions() map[string]Subscription {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
+func (r *RegisteredDataStore) GetAllSubscriptions() map[SubscriptionKey]Subscription {
+	r.subsMutex.RLock()
+	defer r.subsMutex.RUnlock()
 
-	result := make(map[string]Subscription, len(r.subscriptions))
+	result := make(map[SubscriptionKey]Subscription, len(r.subscriptions))
 	maps.Copy(result, r.subscriptions)
 
 	return result
 }
 
-func (r *RegisteredDataStore) UpdateSubscriptionValue(key string, newVal ref.Val) bool {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+func (r *RegisteredDataStore) UpdateSubscriptionValue(policy PolicyID, expression string, newVal ref.Val) bool {
+	key := SubscriptionKey{
+		Policy:     policy,
+		Expression: expression,
+	}
+
+	r.subsMutex.Lock()
+	defer r.subsMutex.Unlock()
 
 	if sub, exists := r.subscriptions[key]; exists {
 		sub.Val = newVal
@@ -215,50 +245,53 @@ func (r *RegisteredDataStore) UpdateSubscriptionValue(key string, newVal ref.Val
 	return false
 }
 
-func (r *RegisteredDataStore) DeleteSubscription(key string) bool {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	if _, exists := r.subscriptions[key]; exists {
-		delete(r.subscriptions, key)
-		return true
+func (r *RegisteredDataStore) DeleteSubscription(policy PolicyID, expression string) bool {
+	key := SubscriptionKey{
+		Policy:     policy,
+		Expression: expression,
 	}
-	return false
+
+	r.subsMutex.Lock()
+	defer r.subsMutex.Unlock()
+
+	_, existed := r.subscriptions[key]
+	if existed {
+		delete(r.subscriptions, key)
+	}
+	return existed
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policyKey string) (clearedMutators int, clearedSubscriptions int) {
-	clearedMutators = r.ClearTarget(policyKey)
-	clearedSubscriptions = r.ClearPolicySubscriptions(policyKey)
-	return clearedMutators, clearedSubscriptions
-}
+func (r *RegisteredDataStore) ClearPolicyData(policy PolicyID) (clearedMutators int, clearedSubscriptions int) {
+	r.dataMutex.Lock()
+	r.subsMutex.Lock()
+	defer r.dataMutex.Unlock()
+	defer r.subsMutex.Unlock()
 
-func (r *RegisteredDataStore) ClearPolicySubscriptions(policyKey string) int {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	keysToDelete := make([]string, 0)
-	keyPrefix := policyKey + "#"
-	for key := range r.subscriptions {
-		if strings.HasPrefix(key, keyPrefix) {
-			keysToDelete = append(keysToDelete, key)
+	// clear data providers
+	for key := range r.dataProviders {
+		if key.Target == policy {
+			delete(r.dataProviders, key)
+			clearedMutators++
 		}
 	}
 
-	for _, key := range keysToDelete {
-		delete(r.subscriptions, key)
+	// clear subscriptions
+	for key := range r.subscriptions {
+		if key.Policy == policy {
+			delete(r.subscriptions, key)
+			clearedSubscriptions++
+		}
 	}
-
-	return len(keysToDelete)
+	return clearedMutators, clearedSubscriptions
 }
 
-func (r *RegisteredDataStore) GetPolicySubscriptions(policyKey string) []string {
-	r.mutex.RLock()
-	defer r.mutex.RUnlock()
+func (r *RegisteredDataStore) GetPolicySubscriptions(policy PolicyID) []SubscriptionKey {
+	r.subsMutex.RLock()
+	defer r.subsMutex.RUnlock()
 
-	var subscriptionKeys []string
-	keyPrefix := policyKey + "#"
+	var subscriptionKeys []SubscriptionKey
 	for key := range r.subscriptions {
-		if strings.HasPrefix(key, keyPrefix) {
+		if key.Policy == policy {
 			subscriptionKeys = append(subscriptionKeys, key)
 		}
 	}
@@ -277,10 +310,14 @@ func NewRegisteredDataMutator(store *RegisteredDataStore) *RegisteredDataMutator
 
 // Currently this is bespoke, adding data items to the success metadata
 func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
-	policyKey := fmt.Sprintf("%s/%s/%s", policy.GetObjectKind().GroupVersionKind().Kind, policy.GetNamespace(), policy.GetName())
+	policyID := PolicyID{
+		Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
+		Namespace: policy.GetNamespace(),
+		Name:      policy.GetName(),
+	}
 
-	registeredEntries := m.store.GetAllForTarget(policyKey)
-	if len(registeredEntries) == 0 {
+	providerEntries := m.store.GetAllForTarget(policyID)
+	if len(providerEntries) == 0 {
 		return nil
 	}
 
@@ -295,19 +332,18 @@ func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, 
 	}
 
 	properties := make(map[string]authorinov1beta3.ValueOrSelector)
-	for _, entry := range registeredEntries {
+	for _, entry := range providerEntries {
 		properties[entry.Binding] = authorinov1beta3.ValueOrSelector{
 			Expression: authorinov1beta3.CelExpression(entry.Expression),
 		}
 	}
 
-	authConfig.Spec.Response.Success.DynamicMetadata["kuadrant"] = authorinov1beta3.SuccessResponseSpec{
+	authConfig.Spec.Response.Success.DynamicMetadata[KuadrantDataNamespace] = authorinov1beta3.SuccessResponseSpec{
 		AuthResponseMethodSpec: authorinov1beta3.AuthResponseMethodSpec{
 			Json: &authorinov1beta3.JsonAuthResponseSpec{
 				Properties: properties,
 			},
 		},
 	}
-
 	return nil
 }

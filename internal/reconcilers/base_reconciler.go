@@ -114,44 +114,45 @@ func (b *BaseReconciler) Scheme() *runtime.Scheme {
 //
 // desired: Object representing the desired state
 //
-// It returns an error.
-func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired client.Object, mutateFn MutateFn) error {
+// It returns the object applied to the cluster in the case of updates or an error.
+func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired client.Object, mutateFn MutateFn) (client.Object, error) {
 	key := client.ObjectKeyFromObject(desired)
 
 	if err := b.Client().Get(ctx, key, obj); err != nil {
 		if !errors.IsNotFound(err) {
-			return err
+			return nil, err
 		}
 
 		// Not found
 		if !utils.IsObjectTaggedToDelete(desired) {
-			return b.CreateResource(ctx, desired)
+			return nil, b.CreateResource(ctx, desired)
 		}
 
 		// Marked for deletion and not found. Nothing to do.
-		return nil
+		return nil, nil
 	}
 
 	// item found successfully
 	if utils.IsObjectTaggedToDelete(desired) {
-		return b.DeleteResource(ctx, desired)
+		return nil, b.DeleteResource(ctx, desired)
 	}
 
 	desired.SetResourceVersion(obj.GetResourceVersion())
 	if err := b.Client().Update(ctx, desired, client.DryRunAll); err != nil {
-		return err
+		return nil, err
 	}
 
 	update, err := mutateFn(obj, desired)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if update {
-		return b.UpdateResource(ctx, obj)
+		if err = b.UpdateResource(ctx, obj); err != nil {
+			return nil, err
+		}
 	}
-
-	return nil
+	return obj, nil
 }
 
 func (b *BaseReconciler) ReconcileResourceStatus(ctx context.Context, objKey client.ObjectKey, obj client.Object, mutator StatusMutator) error {

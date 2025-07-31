@@ -118,7 +118,7 @@ func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controll
 		return err
 	}
 
-	err := p.ReconcileResource(ctx, &istiosecurityv1.PeerAuthentication{}, peerAuth, reconcilers.CreateOnlyMutator)
+	_, err := p.ReconcileResource(ctx, &istiosecurityv1.PeerAuthentication{}, peerAuth, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "failed to create peer authentication resource", "status", "error")
 		return err

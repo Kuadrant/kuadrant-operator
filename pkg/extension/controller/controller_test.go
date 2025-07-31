@@ -91,8 +91,8 @@ func (m *mockKuadrantCtx) GetScheme() *runtime.Scheme {
 	return &runtime.Scheme{}
 }
 
-func (m *mockKuadrantCtx) ReconcileObject(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
-	return nil
+func (m *mockKuadrantCtx) ReconcileObject(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) (client.Object, error) {
+	return nil, nil
 }
 
 func TestGenericResolveSuccess(t *testing.T) {

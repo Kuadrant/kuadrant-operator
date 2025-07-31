@@ -91,7 +91,7 @@ func (m *mockKuadrantCtx) GetScheme() *runtime.Scheme {
 	return &runtime.Scheme{}
 }
 
-func (m *mockKuadrantCtx) ReconcileKuadrantResource(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
+func (m *mockKuadrantCtx) ReconcileObject(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
 	return nil
 }
 

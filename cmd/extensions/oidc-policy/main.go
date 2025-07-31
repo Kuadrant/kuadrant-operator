@@ -35,6 +35,8 @@ func main() {
 		WithScheme(scheme).
 		WithReconciler(oidcPolicyReconciler.Reconcile).
 		For(&kuadrantv1alpha1.OIDCPolicy{}).
+		Owns(&kuadrantv1.AuthPolicy{}).
+		Owns(&gatewayapiv1.HTTPRoute{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")

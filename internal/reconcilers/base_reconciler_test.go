@@ -93,7 +93,7 @@ func TestBaseReconcilerCreate(t *testing.T) {
 		},
 	}
 
-	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, CreateOnlyMutator)
+	_, err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, CreateOnlyMutator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestBaseReconcilerUpdateNeeded(t *testing.T) {
 		return true, nil
 	}
 
-	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, customMutator)
+	_, err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, customMutator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestBaseReconcilerDelete(t *testing.T) {
 	}
 	utils.TagObjectToDelete(desired)
 
-	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desired, CreateOnlyMutator)
+	_, err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desired, CreateOnlyMutator)
 	if err != nil {
 		t.Fatal(err)
 	}

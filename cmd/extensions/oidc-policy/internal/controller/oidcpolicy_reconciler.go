@@ -194,29 +194,11 @@ func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy,
 		Conditions: slices.Clone(pol.Status.Conditions),
 	}
 
-	availableCond := r.readyCondition(specErr)
+	acceptedCond := extcontroller.AcceptedCondition(pol, specErr)
 
-	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	return newStatus
-}
-
-func (r *OIDCPolicyReconciler) readyCondition(specErr error) *metav1.Condition {
-	cond := &metav1.Condition{
-		Type:    kuadrantv1alpha1.StatusConditionReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  "Ready",
-		Message: "OIDCPolicy is ready",
-	}
-
-	if specErr != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconciliationError"
-		cond.Message = specErr.Error()
-		return cond
-	}
-
-	return cond
 }
 
 func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {

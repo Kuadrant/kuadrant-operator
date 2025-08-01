@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -128,7 +127,6 @@ func (m *Manager) HasSynced() bool {
 
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
-	mutex          sync.Mutex
 	registeredData *RegisteredDataStore
 	extpb.UnimplementedExtensionServiceServer
 }
@@ -163,18 +161,16 @@ func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grp
 			kuadrant.CelExt(&dag),
 		}
 
-		s.mutex.Lock()
 		if env, err := cel.NewEnv(opts...); err == nil {
 			subscriptions := s.registeredData.GetSubscriptionsForPolicyKind(request.PolicyKind)
 			for key, sub := range subscriptions {
 				if prg, err := env.Program(sub.CAst); err == nil {
 					if newVal, _, err := prg.Eval(sub.Input); err == nil {
 						if newVal != sub.Val {
-							s.registeredData.UpdateSubscriptionValue(key, newVal)
+							s.registeredData.UpdateSubscriptionValue(key.Policy, key.Expression, newVal)
 							if err := stream.Send(&extpb.SubscribeResponse{Event: &extpb.Event{
 								Metadata: sub.Input["self"].(*extpb.Policy).Metadata,
 							}}); err != nil {
-								s.mutex.Unlock()
 								return err
 							}
 						}
@@ -182,7 +178,6 @@ func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grp
 				}
 			}
 		}
-		s.mutex.Unlock()
 	}
 }
 
@@ -219,9 +214,12 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	val, _, err := prg.Eval(input)
 
 	if request.Subscribe {
-		policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
-		subscriptionKey := fmt.Sprintf("%s#%s", policyKey, request.Expression)
-		s.registeredData.SetSubscription(subscriptionKey, Subscription{
+		policyID := PolicyID{
+			Kind:      request.Policy.Metadata.Kind,
+			Namespace: request.Policy.Metadata.Namespace,
+			Name:      request.Policy.Metadata.Name,
+		}
+		s.registeredData.SetSubscription(policyID, request.Expression, Subscription{
 			CAst:       cAst,
 			Input:      input,
 			Val:        val,
@@ -257,17 +255,25 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 		request.Target.Metadata.Kind == "" || request.Target.Metadata.Namespace == "" || request.Target.Metadata.Name == "" {
 		return nil, errors.New("policy kind, namespace, and name must be specified")
 	}
-	targetKey := fmt.Sprintf("%s/%s/%s", request.Target.Metadata.Kind, request.Target.Metadata.Namespace, request.Target.Metadata.Name)
-	requesterKey := fmt.Sprintf("%s/%s/%s", request.Requester.Metadata.Kind, request.Requester.Metadata.Namespace, request.Requester.Metadata.Name)
+	targetID := PolicyID{
+		Kind:      request.Target.Metadata.Kind,
+		Namespace: request.Target.Metadata.Namespace,
+		Name:      request.Target.Metadata.Name,
+	}
+	requesterID := PolicyID{
+		Kind:      request.Requester.Metadata.Kind,
+		Namespace: request.Requester.Metadata.Namespace,
+		Name:      request.Requester.Metadata.Name,
+	}
 
-	entry := RegisteredDataEntry{
-		Requester:  requesterKey,
+	entry := DataProviderEntry{
+		Requester:  requesterID,
 		Binding:    request.Binding,
 		Expression: request.Expression,
 		CAst:       nil, //todo
 	}
 
-	s.registeredData.Set(targetKey, requesterKey, request.Binding, entry)
+	s.registeredData.Set(targetID, requesterID, request.Binding, entry)
 
 	return &emptypb.Empty{}, nil
 }
@@ -286,9 +292,13 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		return nil, errors.New("policy kind, namespace, and name must be specified")
 	}
 
-	policyKey := fmt.Sprintf("%s/%s/%s", request.Policy.Metadata.Kind, request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+	policyID := PolicyID{
+		Kind:      request.Policy.Metadata.Kind,
+		Namespace: request.Policy.Metadata.Namespace,
+		Name:      request.Policy.Metadata.Name,
+	}
 
-	clearedMutators, clearedSubscriptions := s.registeredData.ClearPolicyData(policyKey)
+	clearedMutators, clearedSubscriptions := s.registeredData.ClearPolicyData(policyID)
 
 	return &extpb.ClearPolicyResponse{
 		ClearedMutators:      int32(clearedMutators),      // #nosec G115

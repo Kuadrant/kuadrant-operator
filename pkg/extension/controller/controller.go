@@ -9,6 +9,7 @@ import (
 	"github.com/google/cel-go/cel"
 	celtypes "github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -123,7 +124,10 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	// Ensure finalizer exists for both create and updates
 	if eventType == EventTypeCreate || eventType == EventTypeUpdate {
 		if err := ec.ensureFinalizer(ctx, request); err != nil {
-			return reconcile.Result{}, err
+			if errors.IsNotFound(err) {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{RequeueAfter: time.Second}, err
 		}
 	}
 
@@ -136,7 +140,10 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 
 	if eventType == EventTypeUpdate {
 		if err := ec.cleanupFinalizer(ctx, request); err != nil {
-			return reconcile.Result{}, err
+			if errors.IsNotFound(err) {
+				return reconcile.Result{}, nil
+			}
+			return reconcile.Result{RequeueAfter: time.Second}, err
 		}
 	}
 

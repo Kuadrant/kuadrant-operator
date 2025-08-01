@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/samber/lo"
+
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -117,13 +119,13 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	r.Logger.V(1).Info("Resolving ingress gateway info", "ingressGatewayData", ingressGatewayData)
 
-	specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
-
-	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, specErr)
+	mainAuthPol, specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
 
 	if specErr != nil {
 		return reconcile.Result{}, specErr
 	}
+
+	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, mainAuthPol, specErr)
 
 	if statusErr != nil {
 		return ctrl.Result{}, statusErr
@@ -138,29 +140,31 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {
+func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	// Reconcile AuthPolicy for the oidc policy http route
-	if err := r.reconcileMainAuthPolicy(ctx, pol, igw); err != nil {
+	mainAuthPol, err := r.reconcileMainAuthPolicy(ctx, pol, igw)
+	if err != nil {
 		r.Logger.Error(err, "Failed to reconcile main AuthPolicy")
-		return err
+		return nil, err
 	}
 
 	// Reconcile HTTPRoute for the callback for exchanging code/token
-	if err := r.reconcileCallbackHTTPRoute(ctx, pol, igw); err != nil {
+	if err = r.reconcileCallbackHTTPRoute(ctx, pol, igw); err != nil {
 		r.Logger.Error(err, "Failed to reconcile callback HTTPRoute")
-		return err
+		return nil, err
 	}
 	// Reconcile AuthPolicy for the Token exchange flow with metadata http call
-	if err := r.reconcileCallbackAuthPolicy(ctx, pol, igw); err != nil {
+
+	if err = r.reconcileCallbackAuthPolicy(ctx, pol, igw); err != nil {
 		r.Logger.Error(err, "Failed to reconcile callback AuthPolicy")
-		return err
+		return nil, err
 	}
 
-	return nil
+	return mainAuthPol, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, specErr error) (ctrl.Result, error) {
-	newStatus := r.calculateStatus(pol, specErr)
+func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, authPol *kuadrantv1.AuthPolicy, specErr error) (ctrl.Result, error) {
+	newStatus := r.calculateStatus(pol, authPol, specErr)
 
 	equalStatus := pol.Status.Equals(newStatus, r.Logger)
 	r.Logger.Info("Status", "status is different", !equalStatus)
@@ -187,7 +191,7 @@ func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadran
 	return ctrl.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
+func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy, authPol *kuadrantv1.AuthPolicy, specErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
 	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		// Copy initial conditions. Otherwise, status will always be updated
@@ -195,34 +199,46 @@ func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy,
 	}
 
 	acceptedCond := extcontroller.AcceptedCondition(pol, specErr)
+	var enforcedCondition metav1.Condition
+
+	cond, found := lo.Find(authPol.Status.GetConditions(), func(c metav1.Condition) bool {
+		return c.Type == string(types.PolicyConditionEnforced)
+	})
+	if !found || cond.Status == metav1.ConditionFalse {
+		enforcedCondition = *extcontroller.EnforcedCondition(pol, fmt.Errorf("%s AuthPolicy has not been enforced", authPol.Name), false)
+	} else {
+		enforcedCondition = *extcontroller.EnforcedCondition(pol, specErr, true)
+	}
 
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
+	meta.SetStatusCondition(&newStatus.Conditions, enforcedCondition)
 
 	return newStatus
 }
 
-func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {
+func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	desiredAuthPol, err := buildMainAuthPolicy(pol, igw)
 	if err != nil {
 		r.Logger.Error(err, "Failed to build main AuthPolicy")
-		return err
+		return nil, err
 	}
 	err = controllerutil.SetControllerReference(pol, desiredAuthPol, r.Scheme)
 	if err != nil {
 		r.Logger.Error(err, "Error setting OwnerReference on AuthPolicy")
-		return err
+		return nil, err
 	}
 	authPolicyMutators := make([]authPolicyMutateFn, 0)
 	authPolicyMutators = append(authPolicyMutators, authPolicySpecMutator)
 	policyMutator := authPolicyMutator(authPolicyMutators...)
 
-	if err = r.reconcileAuthPolicy(ctx, desiredAuthPol, policyMutator); err != nil {
+	reconciledPol, err := r.reconcileAuthPolicy(ctx, desiredAuthPol, policyMutator)
+	if err != nil {
 		r.Logger.Error(err, "Error reconciling OIDC Main AuthPolicy")
-		return err
+		return nil, err
 	}
 
 	r.Logger.Info("Successfully reconciled OIDC Main AuthPolicy")
-	return nil
+	return reconciledPol, nil
 }
 
 func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {
@@ -240,7 +256,8 @@ func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, 
 	authPolicyMutators = append(authPolicyMutators, authPolicySpecMutator)
 	policyMutator := authPolicyMutator(authPolicyMutators...)
 
-	if err = r.reconcileAuthPolicy(ctx, desiredAuthPol, policyMutator); err != nil {
+	_, err = r.reconcileAuthPolicy(ctx, desiredAuthPol, policyMutator)
+	if err != nil {
 		r.Logger.Error(err, "Error reconciling OIDC Callback AuthPolicy")
 		return err
 	}
@@ -271,9 +288,9 @@ func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, p
 	return nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileAuthPolicy(ctx context.Context, desired *kuadrantv1.AuthPolicy, mutatefn types.MutateFn) error {
-	_, err := r.kCtx.ReconcileObject(ctx, &kuadrantv1.AuthPolicy{}, desired, mutatefn)
-	return err
+func (r *OIDCPolicyReconciler) reconcileAuthPolicy(ctx context.Context, desired *kuadrantv1.AuthPolicy, mutatefn types.MutateFn) (*kuadrantv1.AuthPolicy, error) {
+	obj, err := r.kCtx.ReconcileObject(ctx, &kuadrantv1.AuthPolicy{}, desired, mutatefn)
+	return obj.(*kuadrantv1.AuthPolicy), err
 }
 
 func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *gatewayapiv1.HTTPRoute, mutatefn types.MutateFn) error {

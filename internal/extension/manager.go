@@ -26,6 +26,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
+	celtypes "github.com/google/cel-go/common/types"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -166,7 +167,7 @@ func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grp
 			for key, sub := range subscriptions {
 				if prg, err := env.Program(sub.CAst); err == nil {
 					if newVal, _, err := prg.Eval(sub.Input); err == nil {
-						if newVal != sub.Val {
+						if equalResult := celtypes.Equal(newVal, sub.Val); !celtypes.IsBool(equalResult) || equalResult != celtypes.True {
 							s.registeredData.UpdateSubscriptionValue(key.Policy, key.Expression, newVal)
 							if err := stream.Send(&extpb.SubscribeResponse{Event: &extpb.Event{
 								Metadata: sub.Input["self"].(*extpb.Policy).Metadata,

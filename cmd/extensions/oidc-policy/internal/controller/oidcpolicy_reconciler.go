@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
-	"github.com/kuadrant/limitador-operator/pkg/helpers"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -191,7 +191,7 @@ func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy,
 	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions: helpers.DeepCopyConditions(pol.Status.Conditions),
+		Conditions: slices.Clone(pol.Status.Conditions),
 	}
 
 	availableCond := r.readyCondition(specErr)
@@ -290,11 +290,13 @@ func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, p
 }
 
 func (r *OIDCPolicyReconciler) reconcileAuthPolicy(ctx context.Context, desired *kuadrantv1.AuthPolicy, mutatefn types.MutateFn) error {
-	return r.kCtx.ReconcileObject(ctx, &kuadrantv1.AuthPolicy{}, desired, mutatefn)
+	_, err := r.kCtx.ReconcileObject(ctx, &kuadrantv1.AuthPolicy{}, desired, mutatefn)
+	return err
 }
 
 func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *gatewayapiv1.HTTPRoute, mutatefn types.MutateFn) error {
-	return r.kCtx.ReconcileObject(ctx, &gatewayapiv1.HTTPRoute{}, desired, mutatefn)
+	_, err := r.kCtx.ReconcileObject(ctx, &gatewayapiv1.HTTPRoute{}, desired, mutatefn)
+	return err
 }
 
 func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {

@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
@@ -71,14 +72,42 @@ func AcceptedCondition(p exttypes.Policy, err error) *metav1.Condition {
 		return cond
 	}
 
-	var policyErr kuadrant.PolicyError
-	if !errors.As(err, &policyErr) {
-		policyErr = kuadrant.NewErrUnknown(policyKind, err)
-	}
+	policyErr := intoPolicyError(err, policyKind)
 
 	cond.Status = metav1.ConditionFalse
 	cond.Message = policyErr.Error()
 	cond.Reason = string(policyErr.Reason())
 
 	return cond
+}
+
+func EnforcedCondition(p exttypes.Policy, err error, fully bool) *metav1.Condition {
+	policyKind := fmt.Sprintf("%s", p.GetObjectKind())
+	message := fmt.Sprintf("%s has been successfully enforced", policyKind)
+	if !fully {
+		message = fmt.Sprintf("%s has been partially enforced", policyKind)
+	}
+	cond := &metav1.Condition{
+		Type:    string(kuadrant.PolicyConditionEnforced),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(kuadrant.PolicyReasonEnforced),
+		Message: message,
+	}
+	if err == nil {
+		return cond
+	}
+	policyErr := intoPolicyError(err, policyKind)
+	cond.Status = metav1.ConditionFalse
+	cond.Message = err.Error()
+	cond.Reason = string(policyErr.Reason())
+
+	return cond
+}
+
+func intoPolicyError(err error, policyKind string) kuadrant.PolicyError {
+	var policyErr kuadrant.PolicyError
+	if !errors.As(err, &policyErr) {
+		policyErr = kuadrant.NewErrUnknown(policyKind, err)
+	}
+	return policyErr
 }

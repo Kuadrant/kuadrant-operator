@@ -107,7 +107,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
 		utils.TagObjectToDelete(service)
 	}
-	err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
+	_, err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling service")
 		return err
@@ -131,7 +131,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
 		utils.TagObjectToDelete(deployment)
 	}
-	err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
+	_, err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
 	if err != nil {
 		logger.Error(err, "reconciling deployment")
 		return err
@@ -142,7 +142,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
 		utils.TagObjectToDelete(nginxConfigMap)
 	}
-	err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
+	_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling nginx configmap")
 		return err
@@ -154,7 +154,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 		utils.TagObjectToDelete(consolePlugin)
 	}
 	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.ServiceMutator)
-	err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, consolePluginMutator)
+	_, err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, consolePluginMutator)
 	if err != nil {
 		logger.Error(err, "reconciling consoleplugin")
 		return err

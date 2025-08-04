@@ -399,7 +399,7 @@ func (r *ObservabilityReconciler) createServiceMonitor(ctx context.Context, moni
 
 	// Only create, do not mutate if exists.
 	// Effectively the controlller does not revert back external changes
-	err := r.ReconcileResource(ctx, &monitoringv1.ServiceMonitor{}, monitor, reconcilers.CreateOnlyMutator)
+	_, err := r.ReconcileResource(ctx, &monitoringv1.ServiceMonitor{}, monitor, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling service monitor", "key", client.ObjectKeyFromObject(monitor))
 		return err
@@ -417,7 +417,7 @@ func (r *ObservabilityReconciler) createPodMonitor(ctx context.Context, monitor 
 
 	// Only create, do not mutate if exists.
 	// Effectively the controlller does not revert back external changes
-	err := r.ReconcileResource(ctx, &monitoringv1.PodMonitor{}, monitor, reconcilers.CreateOnlyMutator)
+	_, err := r.ReconcileResource(ctx, &monitoringv1.PodMonitor{}, monitor, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling pod monitor", "key", client.ObjectKeyFromObject(monitor))
 		return err

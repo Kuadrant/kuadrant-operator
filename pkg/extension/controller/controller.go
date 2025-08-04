@@ -249,12 +249,12 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes
 	return err
 }
 
-func (ec *ExtensionController) ReconcileObject(ctx context.Context, obj, desired client.Object, mutateFn exttypes.MutateFn) error {
-	err := ec.ReconcileResource(ctx, obj, desired, basereconciler.MutateFn(mutateFn)) // TODO(didierofrivia): Next iteration, use policy machinery
+func (ec *ExtensionController) ReconcileObject(ctx context.Context, obj client.Object, desired client.Object, mutateFn exttypes.MutateFn) (client.Object, error) {
+	obj, err := ec.ReconcileResource(ctx, obj, desired, basereconciler.MutateFn(mutateFn)) // TODO(didierofrivia): Next iteration, use policy machinery
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return obj, nil
 }
 
 func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name, kind string) error {

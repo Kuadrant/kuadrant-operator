@@ -16,23 +16,23 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
-func testPolicyID(kind, namespace, name string) PolicyID {
-	return PolicyID{Kind: kind, Namespace: namespace, Name: name}
+func testResourceID(kind, namespace, name string) ResourceID {
+	return ResourceID{Kind: kind, Namespace: namespace, Name: name}
 }
 
 func TestRegisteredDataStore_Set_Get_Delete(t *testing.T) {
 	store := NewRegisteredDataStore()
 
 	entry := DataProviderEntry{
-		Requester:  testPolicyID("Extension", "ns1", "ext1"),
+		Requester:  testResourceID("Extension", "ns1", "ext1"),
 		Binding:    "user",
 		Expression: "user.id",
 		CAst:       nil,
 	}
 
-	store.Set(testPolicyID("AuthPolicy", "ns1", "policy1"), testPolicyID("Extension", "ns1", "ext1"), "user", entry)
+	store.Set(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user", entry)
 
-	retrieved, exists := store.Get(testPolicyID("AuthPolicy", "ns1", "policy1"), testPolicyID("Extension", "ns1", "ext1"), "user")
+	retrieved, exists := store.Get(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user")
 	if !exists {
 		t.Fatal("Expected entry to exist")
 	}
@@ -45,17 +45,17 @@ func TestRegisteredDataStore_Set_Get_Delete(t *testing.T) {
 		t.Errorf("Expected binding %s, got %s", entry.Binding, retrieved.Binding)
 	}
 
-	entries := store.GetAllForTarget(testPolicyID("AuthPolicy", "ns1", "policy1"))
+	entries := store.GetAllForTarget(testResourceID("AuthPolicy", "ns1", "policy1"))
 	if len(entries) != 1 {
 		t.Errorf("Expected 1 entry, got %d", len(entries))
 	}
 
-	deleted := store.Delete(testPolicyID("AuthPolicy", "ns1", "policy1"), testPolicyID("Extension", "ns1", "ext1"), "user")
+	deleted := store.Delete(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user")
 	if !deleted {
 		t.Error("Expected entry to be deleted")
 	}
 
-	_, exists = store.Get(testPolicyID("AuthPolicy", "ns1", "policy1"), testPolicyID("Extension", "ns1", "ext1"), "user")
+	_, exists = store.Get(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user")
 	if exists {
 		t.Error("Expected entry to not exist after deletion")
 	}
@@ -79,7 +79,7 @@ func TestRegisteredDataStore_SetSubscription(t *testing.T) {
 		PolicyKind: "AuthPolicy",
 	}
 
-	policyID := testPolicyID("AuthPolicy", "test-ns", "test-policy")
+	policyID := testResourceID("AuthPolicy", "test-ns", "test-policy")
 	expression := "some.expression"
 	store.SetSubscription(policyID, expression, subscription)
 
@@ -122,21 +122,21 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 	store := NewRegisteredDataStore()
 
 	entry1 := DataProviderEntry{
-		Requester:  testPolicyID("Extension", "ns1", "ext1"),
+		Requester:  testResourceID("Extension", "ns1", "ext1"),
 		Binding:    "user_id",
 		Expression: "user.id",
 		CAst:       nil,
 	}
 	entry2 := DataProviderEntry{
-		Requester:  testPolicyID("Extension", "ns1", "ext2"),
+		Requester:  testResourceID("Extension", "ns1", "ext2"),
 		Binding:    "user_email",
 		Expression: "user.email",
 		CAst:       nil,
 	}
 
-	store.Set(testPolicyID("AuthPolicy", "test-ns", "test-policy"), testPolicyID("Extension", "ns1", "ext1"), "user_id", entry1)
-	store.Set(testPolicyID("AuthPolicy", "test-ns", "test-policy"), testPolicyID("Extension", "ns1", "ext2"), "user_email", entry2)
-	store.Set(testPolicyID("AuthPolicy", "other-ns", "other-policy"), testPolicyID("Extension", "ns1", "ext1"), "user_id", entry1)
+	store.Set(testResourceID("AuthPolicy", "test-ns", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry1)
+	store.Set(testResourceID("AuthPolicy", "test-ns", "test-policy"), testResourceID("Extension", "ns1", "ext2"), "user_email", entry2)
+	store.Set(testResourceID("AuthPolicy", "other-ns", "other-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry1)
 
 	subscription1 := Subscription{
 		CAst: &cel.Ast{},
@@ -167,24 +167,24 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		PolicyKind: "AuthPolicy",
 	}
 
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
-	store.SetSubscription(testPolicyID("AuthPolicy", "other-ns", "other-policy"), "expression2", subscription2)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
+	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression2", subscription2)
 
 	allSubs := store.GetAllSubscriptions()
 	if len(allSubs) != 2 {
 		t.Errorf("Expected 2 subscriptions, got %d", len(allSubs))
 	}
 
-	testEntries := store.GetAllForTarget(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	testEntries := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(testEntries) == 0 {
 		t.Error("Expected test policy to have data")
 	}
-	otherEntries := store.GetAllForTarget(testPolicyID("AuthPolicy", "other-ns", "other-policy"))
+	otherEntries := store.GetAllForTarget(testResourceID("AuthPolicy", "other-ns", "other-policy"))
 	if len(otherEntries) == 0 {
 		t.Error("Expected other policy to have data")
 	}
 
-	clearedMutators, clearedSubscriptions := store.ClearPolicyData(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	clearedMutators, clearedSubscriptions := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 
 	if clearedMutators != 2 {
 		t.Errorf("Expected 2 cleared mutators, got %d", clearedMutators)
@@ -193,22 +193,22 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 1 cleared subscription, got %d", clearedSubscriptions)
 	}
 
-	entries := store.GetAllForTarget(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	entries := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(entries) != 0 {
 		t.Errorf("Expected 0 entries after clear, got %d", len(entries))
 	}
 
-	_, exists := store.GetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression1")
+	_, exists := store.GetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1")
 	if exists {
 		t.Error("Expected subscription1 to be cleared")
 	}
 
-	otherEntriesAfterClear := store.GetAllForTarget(testPolicyID("AuthPolicy", "other-ns", "other-policy"))
+	otherEntriesAfterClear := store.GetAllForTarget(testResourceID("AuthPolicy", "other-ns", "other-policy"))
 	if len(otherEntriesAfterClear) != 1 {
 		t.Errorf("Expected 1 entry for other policy, got %d", len(otherEntriesAfterClear))
 	}
 
-	_, exists = store.GetSubscription(testPolicyID("AuthPolicy", "other-ns", "other-policy"), "expression2")
+	_, exists = store.GetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression2")
 	if !exists {
 		t.Error("Expected subscription2 to still exist")
 	}
@@ -218,16 +218,16 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 1 subscription after clear, got %d", len(finalSubs))
 	}
 
-	testEntriesAfter := store.GetAllForTarget(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	testEntriesAfter := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(testEntriesAfter) != 0 {
 		t.Error("Expected test policy to have no data after clear")
 	}
-	testSubsAfter := store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	testSubsAfter := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(testSubsAfter) != 0 {
 		t.Error("Expected test policy to have no subscriptions after clear")
 	}
 
-	otherEntriesAfter := store.GetAllForTarget(testPolicyID("AuthPolicy", "other-ns", "other-policy"))
+	otherEntriesAfter := store.GetAllForTarget(testResourceID("AuthPolicy", "other-ns", "other-policy"))
 	if len(otherEntriesAfter) == 0 {
 		t.Error("Expected other policy to still have data after clear")
 	}
@@ -236,26 +236,26 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 	store := NewRegisteredDataStore()
 
-	entries := store.GetAllForTarget(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
-	subscriptions := store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	entries := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	subscriptions := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(entries) != 0 || len(subscriptions) != 0 {
 		t.Error("Expected no policy data initially")
 	}
 
 	entry := DataProviderEntry{
-		Requester:  testPolicyID("Extension", "ns1", "ext1"),
+		Requester:  testResourceID("Extension", "ns1", "ext1"),
 		Binding:    "user_id",
 		Expression: "user.id",
 		CAst:       nil,
 	}
-	store.Set(testPolicyID("AuthPolicy", "test-ns", "test-policy"), testPolicyID("Extension", "ns1", "ext1"), "user_id", entry)
+	store.Set(testResourceID("AuthPolicy", "test-ns", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry)
 
-	entries = store.GetAllForTarget(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	entries = store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(entries) == 0 {
 		t.Error("Expected policy data after adding entry")
 	}
 
-	store.ClearPolicyData(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 
 	subscription := Subscription{
 		CAst: &cel.Ast{},
@@ -271,9 +271,9 @@ func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 		Val:        nil,
 		PolicyKind: "AuthPolicy",
 	}
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "user.data", subscription)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "user.data", subscription)
 
-	subscriptions = store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	subscriptions = store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(subscriptions) == 0 {
 		t.Error("Expected policy subscription after adding subscription")
 	}
@@ -297,15 +297,15 @@ func TestRegisteredDataStore_UpdateSubscriptionValue(t *testing.T) {
 		PolicyKind: "AuthPolicy",
 	}
 
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "some.expression", subscription)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "some.expression", subscription)
 
 	newVal := ref.Val(nil)
-	updated := store.UpdateSubscriptionValue(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "some.expression", newVal)
+	updated := store.UpdateSubscriptionValue(testResourceID("AuthPolicy", "test-ns", "test-policy"), "some.expression", newVal)
 	if !updated {
 		t.Error("Expected subscription value to be updated")
 	}
 
-	updated = store.UpdateSubscriptionValue(testPolicyID("non-existent", "ns", "name"), "expression", newVal)
+	updated = store.UpdateSubscriptionValue(testResourceID("non-existent", "ns", "name"), "expression", newVal)
 	if updated {
 		t.Error("Expected update to fail for non-existent subscription")
 	}
@@ -357,21 +357,21 @@ func TestRegisteredDataStore_GetPolicySubscriptions(t *testing.T) {
 		PolicyKind: "AuthPolicy",
 	}
 
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
-	store.SetSubscription(testPolicyID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
+	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
 
-	subscriptions := store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	subscriptions := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(subscriptions) != 2 {
 		t.Errorf("Expected 2 subscriptions for test policy, got %d", len(subscriptions))
 	}
 
-	subscriptions = store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "other-ns", "other-policy"))
+	subscriptions = store.GetPolicySubscriptions(testResourceID("AuthPolicy", "other-ns", "other-policy"))
 	if len(subscriptions) != 1 {
 		t.Errorf("Expected 1 subscription for other policy, got %d", len(subscriptions))
 	}
 
-	subscriptions = store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "non-existent", "policy"))
+	subscriptions = store.GetPolicySubscriptions(testResourceID("AuthPolicy", "non-existent", "policy"))
 	if len(subscriptions) != 0 {
 		t.Errorf("Expected 0 subscriptions for non-existent policy, got %d", len(subscriptions))
 	}
@@ -423,26 +423,26 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 		PolicyKind: "AuthPolicy",
 	}
 
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
-	store.SetSubscription(testPolicyID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
+	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
 
-	_, cleared := store.ClearPolicyData(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	_, cleared := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if cleared != 2 {
 		t.Errorf("Expected 2 cleared subscriptions, got %d", cleared)
 	}
 
-	subscriptions := store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "test-ns", "test-policy"))
+	subscriptions := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(subscriptions) != 0 {
 		t.Errorf("Expected 0 subscriptions after clear, got %d", len(subscriptions))
 	}
 
-	subscriptions = store.GetPolicySubscriptions(testPolicyID("AuthPolicy", "other-ns", "other-policy"))
+	subscriptions = store.GetPolicySubscriptions(testResourceID("AuthPolicy", "other-ns", "other-policy"))
 	if len(subscriptions) != 1 {
 		t.Errorf("Expected 1 subscription for other policy, got %d", len(subscriptions))
 	}
 
-	_, cleared = store.ClearPolicyData(testPolicyID("AuthPolicy", "non-existent", "policy"))
+	_, cleared = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
 	if cleared != 0 {
 		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", cleared)
 	}
@@ -481,8 +481,8 @@ func TestRegisteredDataStore_GetSubscriptionsForPolicyKind(t *testing.T) {
 		PolicyKind: "RateLimitPolicy",
 	}
 
-	store.SetSubscription(testPolicyID("AuthPolicy", "test-ns", "test-policy"), "expression1", authPolicySubscription)
-	store.SetSubscription(testPolicyID("RateLimitPolicy", "test-ns", "test-policy"), "expression1", rateLimitPolicySubscription)
+	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1", authPolicySubscription)
+	store.SetSubscription(testResourceID("RateLimitPolicy", "test-ns", "test-policy"), "expression1", rateLimitPolicySubscription)
 
 	authSubscriptions := store.GetSubscriptionsForPolicyKind("AuthPolicy")
 	if len(authSubscriptions) != 1 {
@@ -503,7 +503,7 @@ func TestRegisteredDataStore_GetSubscriptionsForPolicyKind(t *testing.T) {
 		if sub.PolicyKind != "AuthPolicy" {
 			t.Errorf("Expected AuthPolicy subscription, got %s", sub.PolicyKind)
 		}
-		expectedKey := SubscriptionKey{Policy: testPolicyID("AuthPolicy", "test-ns", "test-policy"), Expression: "expression1"}
+		expectedKey := SubscriptionKey{Policy: testResourceID("AuthPolicy", "test-ns", "test-policy"), Expression: "expression1"}
 		if key != expectedKey {
 			t.Errorf("Expected key %+v, got %+v", expectedKey, key)
 		}
@@ -542,20 +542,20 @@ func TestRegisteredDataMutator(t *testing.T) {
 		mutator := NewRegisteredDataMutator(store)
 
 		entry1 := DataProviderEntry{
-			Requester:  testPolicyID("Extension", "ns1", "ext1"),
+			Requester:  testResourceID("Extension", "ns1", "ext1"),
 			Binding:    "user_id",
 			Expression: "user.id",
 			CAst:       nil,
 		}
 		entry2 := DataProviderEntry{
-			Requester:  testPolicyID("Extension", "ns1", "ext2"),
+			Requester:  testResourceID("Extension", "ns1", "ext2"),
 			Binding:    "user_email",
 			Expression: "user.email",
 			CAst:       nil,
 		}
 
-		store.Set(testPolicyID("AuthPolicy", "test-namespace", "test-policy"), testPolicyID("Extension", "ns1", "ext1"), "user_id", entry1)
-		store.Set(testPolicyID("AuthPolicy", "test-namespace", "test-policy"), testPolicyID("Extension", "ns1", "ext2"), "user_email", entry2)
+		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry1)
+		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), testResourceID("Extension", "ns1", "ext2"), "user_email", entry2)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
 		policy := &kuadrantv1.AuthPolicy{
@@ -614,12 +614,12 @@ func TestRegisteredDataMutator(t *testing.T) {
 		mutator := NewRegisteredDataMutator(store)
 
 		entry := DataProviderEntry{
-			Requester:  testPolicyID("Extension", "ns1", "ext1"),
+			Requester:  testResourceID("Extension", "ns1", "ext1"),
 			Binding:    "custom_data",
 			Expression: "custom.expression",
 			CAst:       nil,
 		}
-		store.Set(testPolicyID("AuthPolicy", "test-namespace", "test-policy"), testPolicyID("Extension", "ns1", "ext1"), "custom_data", entry)
+		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "custom_data", entry)
 
 		// AuthConfig with existing response configuration
 		authConfig := &authorinov1beta3.AuthConfig{
@@ -764,18 +764,18 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 			go func(index int) {
 				defer wg.Done()
 				entry := DataProviderEntry{
-					Requester:  testPolicyID("Extension", "ns1", fmt.Sprintf("ext%d", index)),
+					Requester:  testResourceID("Extension", "ns1", fmt.Sprintf("ext%d", index)),
 					Binding:    fmt.Sprintf("binding%d", index),
 					Expression: fmt.Sprintf("expression%d", index),
 					CAst:       nil,
 				}
-				store.Set(testPolicyID("TestPolicy", "ns", "policy"), testPolicyID("Extension", "ns1", fmt.Sprintf("ext%d", index)), fmt.Sprintf("binding%d", index), entry)
+				store.Set(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", fmt.Sprintf("ext%d", index)), fmt.Sprintf("binding%d", index), entry)
 			}(i)
 		}
 
 		wg.Wait()
 
-		entries := store.GetAllForTarget(testPolicyID("TestPolicy", "ns", "policy"))
+		entries := store.GetAllForTarget(testResourceID("TestPolicy", "ns", "policy"))
 		if len(entries) != 10 {
 			t.Errorf("Expected 10 entries, got %d", len(entries))
 		}
@@ -784,7 +784,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("delete from empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		deleted := store.Delete(testPolicyID("non-existent", "ns", "name"), testPolicyID("non-existent", "ns", "name"), "non-existent")
+		deleted := store.Delete(testResourceID("non-existent", "ns", "name"), testResourceID("non-existent", "ns", "name"), "non-existent")
 		if deleted {
 			t.Error("Expected delete to return false for non-existent entry")
 		}
@@ -793,12 +793,12 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("get from empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		_, exists := store.Get(testPolicyID("non-existent", "ns", "name"), testPolicyID("non-existent", "ns", "name"), "non-existent")
+		_, exists := store.Get(testResourceID("non-existent", "ns", "name"), testResourceID("non-existent", "ns", "name"), "non-existent")
 		if exists {
 			t.Error("Expected get to return false for non-existent entry")
 		}
 
-		exists = store.Exists(testPolicyID("non-existent", "ns", "name"), testPolicyID("non-existent", "ns", "name"), "non-existent")
+		exists = store.Exists(testResourceID("non-existent", "ns", "name"), testResourceID("non-existent", "ns", "name"), "non-existent")
 		if exists {
 			t.Error("Expected exists to return false for non-existent entry")
 		}
@@ -807,7 +807,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("clear empty target", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		cleared, _ := store.ClearPolicyData(testPolicyID("non-existent", "ns", "name"))
+		cleared, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
 		if cleared != 0 {
 			t.Errorf("Expected 0 cleared entries, got %d", cleared)
 		}
@@ -817,28 +817,28 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 		store := NewRegisteredDataStore()
 
 		entry := DataProviderEntry{
-			Requester:  testPolicyID("Extension", "ns1", "ext1"),
+			Requester:  testResourceID("Extension", "ns1", "ext1"),
 			Binding:    "binding1",
 			Expression: "expression1",
 			CAst:       nil,
 		}
 
-		store.Set(testPolicyID("TestPolicy", "ns", "policy"), testPolicyID("Extension", "ns1", "ext1"), "binding1", entry)
+		store.Set(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1", entry)
 
-		if !store.Exists(testPolicyID("TestPolicy", "ns", "policy"), testPolicyID("Extension", "ns1", "ext1"), "binding1") {
+		if !store.Exists(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1") {
 			t.Error("Expected entry to exist after setting")
 		}
 
-		deleted := store.Delete(testPolicyID("TestPolicy", "ns", "policy"), testPolicyID("Extension", "ns1", "ext1"), "binding1")
+		deleted := store.Delete(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1")
 		if !deleted {
 			t.Error("Expected delete to return true")
 		}
 
-		if store.Exists(testPolicyID("TestPolicy", "ns", "policy"), testPolicyID("Extension", "ns1", "ext1"), "binding1") {
+		if store.Exists(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1") {
 			t.Error("Expected entry to not exist after deleting")
 		}
 
-		entries := store.GetAllForTarget(testPolicyID("TestPolicy", "ns", "policy"))
+		entries := store.GetAllForTarget(testResourceID("TestPolicy", "ns", "policy"))
 		if entries != nil {
 			t.Error("Expected nil entries for cleaned up target")
 		}

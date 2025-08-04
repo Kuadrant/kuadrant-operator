@@ -214,7 +214,7 @@ func (s *extensionService) Resolve(_ context.Context, request *extpb.ResolveRequ
 	val, _, err := prg.Eval(input)
 
 	if request.Subscribe {
-		policyID := PolicyID{
+		policyID := ResourceID{
 			Kind:      request.Policy.Metadata.Kind,
 			Namespace: request.Policy.Metadata.Namespace,
 			Name:      request.Policy.Metadata.Name,
@@ -255,12 +255,12 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 		request.Target.Metadata.Kind == "" || request.Target.Metadata.Namespace == "" || request.Target.Metadata.Name == "" {
 		return nil, errors.New("policy kind, namespace, and name must be specified")
 	}
-	targetID := PolicyID{
+	targetID := ResourceID{
 		Kind:      request.Target.Metadata.Kind,
 		Namespace: request.Target.Metadata.Namespace,
 		Name:      request.Target.Metadata.Name,
 	}
-	requesterID := PolicyID{
+	requesterID := ResourceID{
 		Kind:      request.Requester.Metadata.Kind,
 		Namespace: request.Requester.Metadata.Namespace,
 		Name:      request.Requester.Metadata.Name,
@@ -292,7 +292,7 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		return nil, errors.New("policy kind, namespace, and name must be specified")
 	}
 
-	policyID := PolicyID{
+	policyID := ResourceID{
 		Kind:      request.Policy.Metadata.Kind,
 		Namespace: request.Policy.Metadata.Namespace,
 		Name:      request.Policy.Metadata.Name,

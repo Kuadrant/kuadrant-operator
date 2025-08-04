@@ -65,14 +65,14 @@ func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, policy *ku
 	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, policy)
 }
 
-type PolicyID struct {
+type ResourceID struct {
 	Kind      string
 	Namespace string
 	Name      string
 }
 
 type DataProviderEntry struct {
-	Requester  PolicyID
+	Requester  ResourceID
 	Binding    string
 	Expression string
 	CAst       *cel.Ast
@@ -86,13 +86,13 @@ type Subscription struct {
 }
 
 type DataProviderKey struct {
-	Target    PolicyID
-	Requester PolicyID
+	Target    ResourceID
+	Requester ResourceID
 	Binding   string
 }
 
 type SubscriptionKey struct {
-	Policy     PolicyID
+	Policy     ResourceID
 	Expression string
 }
 
@@ -111,7 +111,7 @@ func NewRegisteredDataStore() *RegisteredDataStore {
 	}
 }
 
-func (r *RegisteredDataStore) Set(target, requester PolicyID, binding string, entry DataProviderEntry) {
+func (r *RegisteredDataStore) Set(target, requester ResourceID, binding string, entry DataProviderEntry) {
 	key := DataProviderKey{
 		Target:    target,
 		Requester: requester,
@@ -123,7 +123,7 @@ func (r *RegisteredDataStore) Set(target, requester PolicyID, binding string, en
 	r.dataProviders[key] = entry
 }
 
-func (r *RegisteredDataStore) GetAllForTarget(target PolicyID) []DataProviderEntry {
+func (r *RegisteredDataStore) GetAllForTarget(target ResourceID) []DataProviderEntry {
 	r.dataMutex.RLock()
 	defer r.dataMutex.RUnlock()
 
@@ -136,7 +136,7 @@ func (r *RegisteredDataStore) GetAllForTarget(target PolicyID) []DataProviderEnt
 	return result
 }
 
-func (r *RegisteredDataStore) Get(target, requester PolicyID, binding string) (DataProviderEntry, bool) {
+func (r *RegisteredDataStore) Get(target, requester ResourceID, binding string) (DataProviderEntry, bool) {
 	key := DataProviderKey{
 		Target:    target,
 		Requester: requester,
@@ -150,7 +150,7 @@ func (r *RegisteredDataStore) Get(target, requester PolicyID, binding string) (D
 	return entry, exists
 }
 
-func (r *RegisteredDataStore) Exists(target, requester PolicyID, binding string) bool {
+func (r *RegisteredDataStore) Exists(target, requester ResourceID, binding string) bool {
 	key := DataProviderKey{
 		Target:    target,
 		Requester: requester,
@@ -164,7 +164,7 @@ func (r *RegisteredDataStore) Exists(target, requester PolicyID, binding string)
 	return exists
 }
 
-func (r *RegisteredDataStore) Delete(target, requester PolicyID, binding string) bool {
+func (r *RegisteredDataStore) Delete(target, requester ResourceID, binding string) bool {
 	key := DataProviderKey{
 		Target:    target,
 		Requester: requester,
@@ -181,7 +181,7 @@ func (r *RegisteredDataStore) Delete(target, requester PolicyID, binding string)
 	return existed
 }
 
-func (r *RegisteredDataStore) SetSubscription(policy PolicyID, expression string, subscription Subscription) {
+func (r *RegisteredDataStore) SetSubscription(policy ResourceID, expression string, subscription Subscription) {
 	key := SubscriptionKey{
 		Policy:     policy,
 		Expression: expression,
@@ -205,7 +205,7 @@ func (r *RegisteredDataStore) GetSubscriptionsForPolicyKind(policyKind string) m
 	return result
 }
 
-func (r *RegisteredDataStore) GetSubscription(policy PolicyID, expression string) (Subscription, bool) {
+func (r *RegisteredDataStore) GetSubscription(policy ResourceID, expression string) (Subscription, bool) {
 	key := SubscriptionKey{
 		Policy:     policy,
 		Expression: expression,
@@ -228,7 +228,7 @@ func (r *RegisteredDataStore) GetAllSubscriptions() map[SubscriptionKey]Subscrip
 	return result
 }
 
-func (r *RegisteredDataStore) UpdateSubscriptionValue(policy PolicyID, expression string, newVal ref.Val) bool {
+func (r *RegisteredDataStore) UpdateSubscriptionValue(policy ResourceID, expression string, newVal ref.Val) bool {
 	key := SubscriptionKey{
 		Policy:     policy,
 		Expression: expression,
@@ -245,7 +245,7 @@ func (r *RegisteredDataStore) UpdateSubscriptionValue(policy PolicyID, expressio
 	return false
 }
 
-func (r *RegisteredDataStore) DeleteSubscription(policy PolicyID, expression string) bool {
+func (r *RegisteredDataStore) DeleteSubscription(policy ResourceID, expression string) bool {
 	key := SubscriptionKey{
 		Policy:     policy,
 		Expression: expression,
@@ -261,7 +261,7 @@ func (r *RegisteredDataStore) DeleteSubscription(policy PolicyID, expression str
 	return existed
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy PolicyID) (clearedMutators int, clearedSubscriptions int) {
+func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	defer r.dataMutex.Unlock()
@@ -285,7 +285,7 @@ func (r *RegisteredDataStore) ClearPolicyData(policy PolicyID) (clearedMutators 
 	return clearedMutators, clearedSubscriptions
 }
 
-func (r *RegisteredDataStore) GetPolicySubscriptions(policy PolicyID) []SubscriptionKey {
+func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {
 	r.subsMutex.RLock()
 	defer r.subsMutex.RUnlock()
 
@@ -310,7 +310,7 @@ func NewRegisteredDataMutator(store *RegisteredDataStore) *RegisteredDataMutator
 
 // Currently this is bespoke, adding data items to the success metadata
 func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
-	policyID := PolicyID{
+	policyID := ResourceID{
 		Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
 		Namespace: policy.GetNamespace(),
 		Name:      policy.GetName(),

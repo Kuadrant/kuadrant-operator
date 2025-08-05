@@ -1,7 +1,5 @@
 INTEGRATION_COVER_PKGS = ./pkg/...,./internal/...,./api/...
 INTEGRATION_TESTS_EXTRA_ARGS ?=
-INTEGRATION_TEST_NUM_CORES ?= 4
-INTEGRATION_TEST_NUM_PROCESSES ?= 10
 INTEGRATION_TEST_PACKAGES ?= tests/common/...
 
 ##@ Integration tests
@@ -16,8 +14,7 @@ test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only ba
 		--output-dir $(PROJECT_PATH)/coverage/bare-k8s-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
-		--procs=1 \
+		-p \
 		--randomize-all \
 		--randomize-suites \
 		--fail-on-pending \
@@ -36,8 +33,7 @@ test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires k
 		--output-dir $(PROJECT_PATH)/coverage/gatewayapi-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
-		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		-p \
 		--randomize-all \
 		--randomize-suites \
 		--fail-on-pending \
@@ -56,8 +52,7 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 		--output-dir $(PROJECT_PATH)/coverage/istio-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
-		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		-p \
 		--randomize-all \
 		--randomize-suites \
 		--fail-on-pending \
@@ -75,8 +70,7 @@ test-envoygateway-env-integration: clean-cov generate fmt vet ginkgo ## Requires
 		--output-dir $(PROJECT_PATH)/coverage/envoygateway-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
-		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		-p \
 		--randomize-all \
 		--randomize-suites \
 		--fail-on-pending \
@@ -95,8 +89,7 @@ test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes clust
 		--output-dir $(PROJECT_PATH)/coverage/integration \
 		--coverprofile cover.out \
 		-tags integration \
-		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
-		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		-p \
 		--randomize-all \
 		--randomize-suites \
 		--fail-on-pending \

@@ -55,7 +55,7 @@ type OIDCPolicySpec struct {
 // OIDCPolicySpecProper contains common shared fields for the future inclusion of defaults and overrides
 type OIDCPolicySpecProper struct {
 	// Provider holds the information for the OIDC provider
-	Provider *Provider `json:"provider,omitempty"`
+	Provider *Provider `json:"provider"`
 	// Auth holds the information regarding AuthN/AuthZ
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`

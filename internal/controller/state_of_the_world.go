@@ -88,7 +88,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			&kuadrantv1beta1.Kuadrant{},
 			kuadrantv1beta1.KuadrantsResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta1.Kuadrant]{}),
 		)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(
 			&kuadrantv1.DNSPolicy{},
@@ -602,6 +601,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
+			NewResilienceDeploymentWorkflow(b.client).Run,
 		},
 		Postcondition: b.finalStepsWorkflow().Run,
 	}
@@ -718,4 +718,20 @@ func KuadrantManagedObjectLabels() labels.Set {
 	return labels.Set(map[string]string{
 		kuadrantManagedLabelKey: "true",
 	})
+}
+
+func GetMachineryObjectFromTopology(topology *machinery.Topology, groupkind schema.GroupKind) machinery.Object {
+	kuadrant := GetKuadrantFromTopology(topology)
+	if kuadrant == nil {
+		return nil
+	}
+
+	object, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
+		return child.GroupVersionKind().GroupKind() == groupkind
+	})
+	if !found {
+		return nil
+	}
+
+	return object
 }

@@ -119,8 +119,12 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	r.Logger.V(1).Info("Resolving ingress gateway info", "ingressGatewayData", ingressGatewayData)
 
-	createdPolicies, specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
-	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, createdPolicies, specErr)
+	oidcPolicyStatus, specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
+	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, oidcPolicyStatus, specErr)
+
+	if specErr != nil {
+		return ctrl.Result{}, specErr
+	}
 
 	if statusErr != nil {
 		return ctrl.Result{}, statusErr
@@ -135,39 +139,48 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) ([]*kuadrantv1.AuthPolicy, error) {
+func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1alpha1.OIDCPolicyStatus, error) {
 	// Reconcile AuthPolicy for the oidc policy http route
 	mainAuthPol, err := r.reconcileMainAuthPolicy(ctx, pol, igw)
 	if err != nil {
 		r.Logger.Error(err, "Failed to reconcile main AuthPolicy")
-		return nil, err
+		return calculateStatus(pol, err, nil), err
 	}
 
 	// Reconcile HTTPRoute for the callback for exchanging code/token
 	if err = r.reconcileCallbackHTTPRoute(ctx, pol, igw); err != nil {
 		r.Logger.Error(err, "Failed to reconcile callback HTTPRoute")
-		return nil, err
+		return calculateStatus(pol, err, nil), err
 	}
 	// Reconcile AuthPolicy for the Token exchange flow with metadata http call
 	callbackPol, err := r.reconcileCallbackAuthPolicy(ctx, pol, igw)
 	if err != nil {
 		r.Logger.Error(err, "Failed to reconcile callback AuthPolicy")
-		return nil, err
+		return calculateStatus(pol, err, nil), err
 	}
 
-	return []*kuadrantv1.AuthPolicy{mainAuthPol, callbackPol}, nil
+	// Check if AuthPolicies are enforced
+	for _, enforcedErr := range []error{
+		isAuthPolicyEnforced(mainAuthPol),
+		isAuthPolicyEnforced(callbackPol),
+	} {
+		if enforcedErr != nil {
+			return calculateStatus(pol, nil, enforcedErr), nil
+		}
+	}
+
+	return calculateStatus(pol, nil, nil),
+		nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, authPolicies []*kuadrantv1.AuthPolicy, specErr error) (ctrl.Result, error) {
-	newStatus := r.calculateStatus(pol, authPolicies, specErr)
-
+func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, newStatus *kuadrantv1alpha1.OIDCPolicyStatus, specErr error) (ctrl.Result, error) {
 	equalStatus := pol.Status.Equals(newStatus, r.Logger)
 	r.Logger.Info("Status", "status is different", !equalStatus)
 	r.Logger.Info("Status", "generation is different", pol.Generation != pol.Status.ObservedGeneration)
 	if equalStatus && pol.Generation == pol.Status.ObservedGeneration {
 		// Steady state
 		r.Logger.Info("Status was not updated")
-		return reconcile.Result{}, specErr
+		return reconcile.Result{}, nil
 	}
 
 	r.Logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", pol.Status.ObservedGeneration, newStatus.ObservedGeneration))
@@ -184,30 +197,6 @@ func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadran
 		return reconcile.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
 	}
 	return ctrl.Result{}, specErr
-}
-
-func (r *OIDCPolicyReconciler) calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy, authPolicies []*kuadrantv1.AuthPolicy, specErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
-	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
-		ObservedGeneration: pol.Generation,
-		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions: slices.Clone(pol.Status.Conditions),
-	}
-	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
-
-	if specErr != nil {
-		for _, authPolicy := range authPolicies {
-			cond, found := lo.Find(authPolicy.Status.GetConditions(), func(c metav1.Condition) bool {
-				return c.Type == string(types.PolicyConditionEnforced)
-			})
-			if !found || cond.Status == metav1.ConditionFalse {
-				meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.EnforcedCondition(pol, fmt.Errorf("%s AuthPolicy has not been enforced", authPolicy.Name), false))
-				return newStatus
-			}
-		}
-	}
-
-	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.EnforcedCondition(pol, specErr, true))
-	return newStatus
 }
 
 func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
@@ -671,4 +660,27 @@ func getSecureFlag(protocol gatewayapiv1.ProtocolType) string {
 		flag = "Secure;"
 	}
 	return flag
+}
+
+func isAuthPolicyEnforced(authPolicy *kuadrantv1.AuthPolicy) error {
+	cond, found := lo.Find(authPolicy.Status.GetConditions(), func(c metav1.Condition) bool {
+		return c.Type == string(types.PolicyConditionEnforced)
+	})
+	if !found || cond.Status == metav1.ConditionFalse {
+		return fmt.Errorf("AuthPolicy %s is not enforced", authPolicy.Name)
+	}
+	return nil
+}
+func calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error, enforcedErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
+	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
+		ObservedGeneration: pol.Generation,
+		// Copy initial conditions. Otherwise, status will always be updated
+		Conditions: slices.Clone(pol.Status.Conditions),
+	}
+
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
+	if meta.IsStatusConditionTrue(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
+		meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.EnforcedCondition(pol, enforcedErr, true))
+	}
+	return newStatus
 }

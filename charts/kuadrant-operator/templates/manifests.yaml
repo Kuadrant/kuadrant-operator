@@ -8325,6 +8325,7 @@ spec:
                       value is the IssuerURL + "/oauth/token"
                     type: string
                 required:
+                - clientID
                 - issuerURL
                 type: object
               targetRef:

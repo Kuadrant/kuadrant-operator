@@ -161,6 +161,7 @@ spec:
                     and 'Gateway'
                   rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
             required:
+            - provider
             - targetRef
             type: object
           status:

@@ -55,7 +55,7 @@ type OIDCPolicySpec struct {
 // OIDCPolicySpecProper contains common shared fields for the future inclusion of defaults and overrides
 type OIDCPolicySpecProper struct {
 	// Provider holds the information for the OIDC provider
-	Provider *Provider `json:"provider,omitempty"`
+	Provider *Provider `json:"provider"`
 	// Auth holds the information regarding AuthN/AuthZ
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
@@ -78,33 +78,16 @@ type Provider struct {
 	// The Well-Known Discovery path (i.e. "/.well-known/openid-configuration") is appended to this URL to fetch the OIDC configuration.
 	IssuerURL string `json:"issuerURL"`
 
-	// Not implemented in AuthPolicy yet
-	// URL of the JSON Web Key Set (JWKS) endpoint.
-	// Use it for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
-	// The JSON Web Keys (JWK) obtained from this endpoint are automatically cached and the caching updated whenever the kid of a JWT does not match any of the cached JWKs (https://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys).
-	// One of: jwksURL, issuerURL
-	// +optional
-	//JWKSURL string `json:"jwksURL,omitempty"`
-
 	// OAuth2 Client ID.
 	ClientID string `json:"clientID"`
 	// OAuth2 Client Secret.
 	// +optional
 	ClientSecret string `json:"clientSecret,omitempty"`
 
-	// DiscoveryEndpoint is Currently not supported by Authorino.
-	// The DiscoveryEndpoint path (i.e. "/.well-known/openid-configuration") is appended to the IssuerURL to fetch the OIDC configuration.
-	// +optional
-	// DiscoveryEndpoint string `json:"discoveryEndpoint,omitempty"`
-
 	// The full URL of the Authorization endpoints
 	// AuthorizationEndpoint performs Authentication of the End-User. Default value is the IssuerURL + "/oauth/authorize"
 	// +optional
 	AuthorizationEndpoint string `json:"authorizationEndpoint,omitempty"`
-
-	// OIDC OAuth 2.0 request parameters, such as `scope`, `response_type`, `client_id`, `redirect_uri`, `state`, etc.
-	// +optional
-	// AuthorizationEndpointQuery map[string]string `json:"authorizationEndpointQuery,omitempty"`
 
 	// The RedirectURI defines the URL that is part of the authentication request to the AuthorizationEndpoint and the one defined in the IDP. Default value is the IssuerURL + "/auth/callback"
 	// +optional

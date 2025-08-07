@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+
 	"github.com/go-logr/logr"
 	celref "github.com/google/cel-go/common/types/ref"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -13,6 +15,10 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
+)
+
+const (
+	PolicyConditionEnforced = kuadrant.PolicyConditionEnforced
 )
 
 type Policy interface {

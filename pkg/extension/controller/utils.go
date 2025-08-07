@@ -61,7 +61,7 @@ func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, polic
 }
 
 func AcceptedCondition(p exttypes.Policy, err error) *metav1.Condition {
-	policyKind := fmt.Sprintf("%s", p.GetObjectKind())
+	policyKind := p.GetObjectKind().GroupVersionKind().Kind
 	cond := &metav1.Condition{
 		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
@@ -82,7 +82,7 @@ func AcceptedCondition(p exttypes.Policy, err error) *metav1.Condition {
 }
 
 func EnforcedCondition(p exttypes.Policy, err error, fully bool) *metav1.Condition {
-	policyKind := fmt.Sprintf("%s", p.GetObjectKind())
+	policyKind := p.GetObjectKind().GroupVersionKind().Kind
 	message := fmt.Sprintf("%s has been successfully enforced", policyKind)
 	if !fully {
 		message = fmt.Sprintf("%s has been partially enforced", policyKind)

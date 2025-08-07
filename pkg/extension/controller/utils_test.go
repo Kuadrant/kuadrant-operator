@@ -107,7 +107,7 @@ func TestAcceptedCondition(t *testing.T) {
 
 			if tc.errorInput == nil {
 				expectedMessage := fmt.Sprintf("%s has been accepted",
-					tc.policy.GetObjectKind())
+					tc.policy.GetObjectKind().GroupVersionKind().Kind)
 				if condition.Message != expectedMessage {
 					t.Errorf("message mismatch: got %q, want %q",
 						condition.Message, expectedMessage)

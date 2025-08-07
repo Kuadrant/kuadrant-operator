@@ -120,7 +120,7 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.Logger.V(1).Info("Resolving ingress gateway info", "ingressGatewayData", ingressGatewayData)
 
 	oidcPolicyStatus, specErr := r.reconcileSpec(ctx, oidcPolicy, &ingressGatewayData)
-	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, oidcPolicyStatus, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, oidcPolicy, oidcPolicyStatus)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr
@@ -144,19 +144,19 @@ func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv
 	mainAuthPol, err := r.reconcileMainAuthPolicy(ctx, pol, igw)
 	if err != nil {
 		r.Logger.Error(err, "Failed to reconcile main AuthPolicy")
-		return calculateStatus(pol, err, nil), err
+		return calculateErrorStatus(pol, err), err
 	}
 
 	// Reconcile HTTPRoute for the callback for exchanging code/token
 	if err = r.reconcileCallbackHTTPRoute(ctx, pol, igw); err != nil {
 		r.Logger.Error(err, "Failed to reconcile callback HTTPRoute")
-		return calculateStatus(pol, err, nil), err
+		return calculateErrorStatus(pol, err), err
 	}
 	// Reconcile AuthPolicy for the Token exchange flow with metadata http call
 	callbackPol, err := r.reconcileCallbackAuthPolicy(ctx, pol, igw)
 	if err != nil {
 		r.Logger.Error(err, "Failed to reconcile callback AuthPolicy")
-		return calculateStatus(pol, err, nil), err
+		return calculateErrorStatus(pol, err), err
 	}
 
 	// Check if AuthPolicies are enforced
@@ -165,15 +165,15 @@ func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv
 		isAuthPolicyEnforced(callbackPol),
 	} {
 		if enforcedErr != nil {
-			return calculateStatus(pol, nil, enforcedErr), nil
+			return calculateEnforcedStatus(pol, enforcedErr), nil
 		}
 	}
 
-	return calculateStatus(pol, nil, nil),
+	return calculateEnforcedStatus(pol, nil),
 		nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, newStatus *kuadrantv1alpha1.OIDCPolicyStatus, specErr error) (ctrl.Result, error) {
+func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, newStatus *kuadrantv1alpha1.OIDCPolicyStatus) (ctrl.Result, error) {
 	equalStatus := pol.Status.Equals(newStatus, r.Logger)
 	r.Logger.Info("Status", "status is different", !equalStatus)
 	r.Logger.Info("Status", "generation is different", pol.Generation != pol.Status.ObservedGeneration)
@@ -196,7 +196,7 @@ func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadran
 
 		return reconcile.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
 	}
-	return ctrl.Result{}, specErr
+	return ctrl.Result{}, nil
 }
 
 func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
@@ -671,16 +671,25 @@ func isAuthPolicyEnforced(authPolicy *kuadrantv1.AuthPolicy) error {
 	}
 	return nil
 }
-func calculateStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error, enforcedErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
+
+func calculateErrorStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
+	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
+		ObservedGeneration: pol.Generation,
+		// Copy initial conditions. Otherwise, status will always be updated
+		Conditions: slices.Clone(pol.Status.Conditions),
+	}
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
+	return newStatus
+}
+
+func calculateEnforcedStatus(pol *kuadrantv1alpha1.OIDCPolicy, enforcedErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
 	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions: slices.Clone(pol.Status.Conditions),
 	}
 
-	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
-	if meta.IsStatusConditionTrue(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
-		meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.EnforcedCondition(pol, enforcedErr, true))
-	}
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, nil))
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.EnforcedCondition(pol, enforcedErr, true))
 	return newStatus
 }

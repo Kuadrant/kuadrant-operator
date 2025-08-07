@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 
@@ -570,15 +571,19 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 	return opts, nil
 }
 
+// getExtensionsOptions configures controller options for Kuadrant extensions.
+// Extensions are dynamically discovered from the EXTENSIONS_DIR (default: "/extensions").
 func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
-	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", true)
-	if b.isUsingExtensions {
+	extensionsDir := env.GetString("EXTENSIONS_DIR", "/extensions")
+	extensionNames := b.discoverExtensions(extensionsDir)
+
+	if len(extensionNames) > 0 {
 		opts = append(opts, controller.WithRunnable(
 			"extension manager",
 			func(*controller.Controller) controller.Runnable {
 				// start extension manager
-				extManager, err := extension.NewManager([]string{"oidc-policy", "plan-policy"}, "/extensions", b.logger.WithName("extensions"), log.Sync)
+				extManager, err := extension.NewManager(extensionNames, extensionsDir, b.logger.WithName("extensions"), log.Sync)
 				if err != nil {
 					b.logger.Error(err, "unable to create extension manager")
 					os.Exit(1)
@@ -586,8 +591,47 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 				return &extManager
 			},
 		))
+	} else {
+		b.logger.Info("No extensions found in directory", "directory", extensionsDir)
 	}
 	return opts
+}
+
+// discoverExtensions scans the given directory for valid extensions.
+// An extension is considered valid if it has its own subdirectory under the extensions directory
+// with an executable file of the same name.
+func (b *BootOptionsBuilder) discoverExtensions(extensionsDir string) []string {
+	extensionNames := []string{}
+
+	if _, err := os.Stat(extensionsDir); os.IsNotExist(err) {
+		b.logger.Info("Extensions directory does not exist", "directory", extensionsDir)
+		return extensionNames
+	}
+
+	entries, err := os.ReadDir(extensionsDir)
+	if err != nil {
+		b.logger.Error(err, "unable to read extensions directory", "directory", extensionsDir)
+		return extensionNames
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			extensionName := entry.Name()
+			executablePath := filepath.Join(extensionsDir, extensionName, extensionName)
+			if stat, err := os.Stat(executablePath); err == nil {
+				if !stat.IsDir() && stat.Mode()&0111 != 0 {
+					extensionNames = append(extensionNames, extensionName)
+					b.logger.Info("Discovered extension", "name", extensionName, "path", executablePath)
+				} else {
+					b.logger.Info("Extension found but not executable", "name", extensionName, "path", executablePath)
+				}
+			} else {
+				b.logger.Info("Extension directory found but no executable", "name", extensionName, "expectedPath", executablePath)
+			}
+		}
+	}
+
+	return extensionNames
 }
 
 func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {

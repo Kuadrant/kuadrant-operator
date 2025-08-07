@@ -189,7 +189,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-08-06T14:43:04Z"
+    createdAt: "2025-08-08T11:54:09Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -585,8 +585,8 @@ spec:
                 command:
                 - /manager
                 env:
-                - name: WITH_EXTENSIONS
-                  value: "true"
+                - name: EXTENSIONS_DIR
+                  value: /extensions
                 - name: RELATED_IMAGE_WASMSHIM
                   value: oci://quay.io/kuadrant/wasm-shim:latest
                 - name: OPERATOR_NAMESPACE

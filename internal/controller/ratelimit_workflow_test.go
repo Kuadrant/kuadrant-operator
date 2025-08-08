@@ -84,12 +84,16 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Data: []wasm.DataType{
+				ConditionalData: []wasm.ConditionalData{
 					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "limit.myLimit__d681f6c3",
-								Value: "1",
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
+								},
 							},
 						},
 					},
@@ -106,20 +110,24 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Data: []wasm.DataType{
+				ConditionalData: []wasm.ConditionalData{
 					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "limit.myLimit__d681f6c3",
-								Value: "1",
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
+								},
 							},
-						},
-					},
-					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "auth.identity.username",
-								Value: "auth.identity.username",
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
+									},
+								},
 							},
 						},
 					},
@@ -137,21 +145,25 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Predicates:  []string{"auth.identity.group != admin"},
-				Data: []wasm.DataType{
+				ConditionalData: []wasm.ConditionalData{
 					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "limit.myLimit__d681f6c3",
-								Value: "1",
+						Predicates: []string{"auth.identity.group != admin"},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
+								},
 							},
-						},
-					},
-					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "auth.identity.username",
-								Value: "auth.identity.username",
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "auth.identity.username",
+										Value: "auth.identity.username",
+									},
+								},
 							},
 						},
 					},
@@ -167,13 +179,17 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Predicates:  []string{"auth.identity.group != admin"},
-				Data: []wasm.DataType{
+				ConditionalData: []wasm.ConditionalData{
 					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "limit.myLimit__d681f6c3",
-								Value: "1",
+						Predicates: []string{"auth.identity.group != admin"},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
+								},
 							},
 						},
 					},
@@ -191,16 +207,20 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Predicates: []string{
-					"auth.identity.from-top-level",
-					"auth.identity.from-limit",
-				},
-				Data: []wasm.DataType{
+				ConditionalData: []wasm.ConditionalData{
 					{
-						Value: &wasm.Expression{
-							ExpressionItem: wasm.ExpressionItem{
-								Key:   "limit.myLimit__d681f6c3",
-								Value: "1",
+						Predicates: []string{
+							"auth.identity.from-top-level",
+							"auth.identity.from-limit",
+						},
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Expression{
+									ExpressionItem: wasm.ExpressionItem{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
+								},
 							},
 						},
 					},

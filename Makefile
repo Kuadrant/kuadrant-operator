@@ -179,6 +179,7 @@ endif
 GATEWAYAPI_PROVIDER ?= istio
 
 EXTENSIONS_DIR ?= /extensions
+EXTENSIONS_IMG ?= quay.io/kuadrant/extensions:dev
 
 all: build
 
@@ -374,6 +375,14 @@ kind-load-image: ## Load image to local cluster
 	   EXITVAL=$$? ; \
 	   rm -rf $(TMP_DIR) ;\
 	   exit $${EXITVAL}
+
+.PHONY: extensions-build
+extensions-build: ## Build extensions docker image
+	$(CONTAINER_ENGINE) build \
+		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
+		-f extension.Dockerfile \
+		-t $(EXTENSIONS_IMG) .
 
 
 # go-install-tool will 'go install' any package $2 and install it to $1.

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -34,6 +35,8 @@ import (
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
+
+var ErrNoExtensionsFound = errors.New("no extensions found")
 
 type Manager struct {
 	extensions []Extension
@@ -49,7 +52,12 @@ type Extension interface {
 	Name() string
 }
 
-func NewManager(names []string, location string, logger logr.Logger, sync io.Writer) (Manager, error) {
+func NewManager(location string, logger logr.Logger, sync io.Writer) (Manager, error) {
+	names := discoverExtensions(logger, location)
+	if len(names) == 0 {
+		return Manager{}, ErrNoExtensionsFound
+	}
+
 	var extensions []Extension
 	var err error
 
@@ -120,6 +128,43 @@ func (m *Manager) Run(stopCh <-chan struct{}) {
 			m.logger.Error(err, "unable to stop extension manager")
 		}
 	}()
+}
+
+// discoverExtensions scans the given directory for valid extensions.
+// An extension is considered valid if it has its own subdirectory under the extensions directory
+// with an executable file of the same name.
+func discoverExtensions(logger logr.Logger, extensionsDir string) []string {
+	extensionNames := []string{}
+
+	if _, err := os.Stat(extensionsDir); os.IsNotExist(err) {
+		logger.Info("Extensions directory does not exist", "directory", extensionsDir)
+		return extensionNames
+	}
+
+	entries, err := os.ReadDir(extensionsDir)
+	if err != nil {
+		logger.Error(err, "unable to read extensions directory", "directory", extensionsDir)
+		return extensionNames
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			extensionName := entry.Name()
+			executablePath := filepath.Join(extensionsDir, extensionName, extensionName)
+			if stat, err := os.Stat(executablePath); err == nil {
+				if !stat.IsDir() && stat.Mode()&0111 != 0 {
+					extensionNames = append(extensionNames, extensionName)
+					logger.Info("Discovered extension", "name", extensionName, "path", executablePath)
+				} else {
+					logger.Info("Extension found but not executable", "name", extensionName, "path", executablePath)
+				}
+			} else {
+				logger.Info("Extension directory found but no executable", "name", extensionName, "expectedPath", executablePath)
+			}
+		}
+	}
+
+	return extensionNames
 }
 
 func (m *Manager) HasSynced() bool {

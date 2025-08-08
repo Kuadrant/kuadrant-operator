@@ -46,6 +46,23 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
 
+.PHONY: apply-extensions
+apply-extensions: export EXTENSIONS_IMG := $(EXTENSIONS_IMG)
+apply-extensions: kustomize ## Apply extensions to existing deployment
+	kubectl patch deployment kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --type=strategic --patch-file=<(envsubst < config/extensions/extensions-patch.yaml)
+	kubectl rollout status deployment/kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --timeout=300s
+
+.PHONY: remove-extensions
+remove-extensions: kustomize ## Remove extensions from existing deployment
+	kubectl patch deployment kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --type=strategic --patch-file=config/extensions/remove-extensions-patch.yaml
+	kubectl rollout status deployment/kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --timeout=300s
+
+.PHONY: local-apply-extensions
+local-apply-extensions: ## Build, load, and apply extensions locally
+	$(MAKE) extensions-build
+	$(MAKE) kind-load-image IMG=$(EXTENSIONS_IMG)
+	$(MAKE) apply-extensions
+
 .PHONY: namespace
 namespace: ## Creates a namespace where to deploy Kuadrant Operator
 	kubectl create namespace $(KUADRANT_NAMESPACE)

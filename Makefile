@@ -178,7 +178,8 @@ endif
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
-WITH_EXTENSIONS ?= true
+EXTENSIONS_DIR ?= /extensions
+EXTENSIONS_IMG ?= quay.io/kuadrant/extensions:dev
 
 all: build
 
@@ -346,7 +347,6 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: export WITH_EXTENSIONS = false
 run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
@@ -375,6 +375,14 @@ kind-load-image: ## Load image to local cluster
 	   EXITVAL=$$? ; \
 	   rm -rf $(TMP_DIR) ;\
 	   exit $${EXITVAL}
+
+.PHONY: extensions-build
+extensions-build: ## Build extensions docker image
+	$(CONTAINER_ENGINE) build \
+		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
+		-f extension.Dockerfile \
+		-t $(EXTENSIONS_IMG) .
 
 
 # go-install-tool will 'go install' any package $2 and install it to $1.
@@ -502,7 +510,7 @@ golangci-lint: $(GOLANGCI-LINT) ## Download golangci-lint locally if necessary.
 # - (empty): Skip all integration tests
 INTEGRATION_TEST_ENV ?=
 
-# Integration test configurations using colon delimiters  
+# Integration test configurations using colon delimiters
 INTEGRATION_CONFIGS := \
 	bare-k8s:local-k8s-env-setup:test-bare-k8s-integration: \
 	gatewayapi:local-gatewayapi-env-setup:test-gatewayapi-env-integration: \
@@ -537,7 +545,7 @@ pre-commit: ## Run pre-commit checks including verification, linting, unit tests
 	@echo "1️⃣ Running verification checks..."
 	$(MAKE) verify-all
 	@echo "2️⃣ Running lint checks..."
-	$(MAKE) run-lint  
+	$(MAKE) run-lint
 	@echo "3️⃣ Running unit tests..."
 	$(MAKE) test-unit
 ifeq ($(INTEGRATION_TEST_ENV),)

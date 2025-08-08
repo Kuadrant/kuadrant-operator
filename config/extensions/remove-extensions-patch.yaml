@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuadrant-operator-controller-manager
+spec:
+  template:
+    spec:
+      initContainers: null
+      containers:
+        - name: manager
+          volumeMounts:
+            - mountPath: /tmp/kuadrant
+              name: extensions-socket-volume
+      volumes:
+        - name: extensions-socket-volume
+          emptyDir: {}

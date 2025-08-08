@@ -1,8 +1,8 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"sort"
 
@@ -570,23 +570,28 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 	return opts, nil
 }
 
+// getExtensionsOptions configures controller options for Kuadrant extensions.
+// Extensions are dynamically discovered from the EXTENSIONS_DIR (default: "/extensions").
 func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
-	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", true)
-	if b.isUsingExtensions {
-		opts = append(opts, controller.WithRunnable(
-			"extension manager",
-			func(*controller.Controller) controller.Runnable {
-				// start extension manager
-				extManager, err := extension.NewManager([]string{"oidc-policy", "plan-policy"}, "/extensions", b.logger.WithName("extensions"), log.Sync)
-				if err != nil {
-					b.logger.Error(err, "unable to create extension manager")
-					os.Exit(1)
-				}
-				return &extManager
-			},
-		))
+	extensionsDir := env.GetString("EXTENSIONS_DIR", "/extensions")
+
+	extManager, err := extension.NewManager(extensionsDir, b.logger.WithName("extensions"), log.Sync)
+	if err != nil {
+		if errors.Is(err, extension.ErrNoExtensionsFound) {
+			b.logger.Info("No extensions found, skipping extension manager", "directory", extensionsDir)
+			return opts
+		}
+		b.logger.Error(err, "failed to create extension manager")
+		return opts
 	}
+
+	opts = append(opts, controller.WithRunnable(
+		"extension manager",
+		func(*controller.Controller) controller.Runnable {
+			return &extManager
+		},
+	))
 	return opts
 }
 

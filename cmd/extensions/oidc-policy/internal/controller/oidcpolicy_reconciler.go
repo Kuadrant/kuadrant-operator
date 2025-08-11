@@ -26,7 +26,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/api/v1alpha1"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
@@ -63,10 +63,12 @@ func (r *OIDCPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *OIDCPoli
 	return r
 }
 
+// extension permissions
+//+kubebuilder:rbac:groups=extensions.kuadrant.io,resources=oidcpolicies,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=extensions.kuadrant.io,resources=oidcpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=extensions.kuadrant.io,resources=oidcpolicies/finalizers,verbs=update
+
 // kuadrant permissions
-//+kubebuilder:rbac:groups=kuadrant.io,resources=oidcpolicies,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=oidcpolicies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=oidcpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies/finalizers,verbs=update
@@ -87,7 +89,7 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	r.Logger.Info("Reconciling OIDCPolicy")
 
-	oidcPolicy := &kuadrantv1alpha1.OIDCPolicy{}
+	oidcPolicy := &v1alpha1.OIDCPolicy{}
 	if err := r.Client.Get(ctx, request.NamespacedName, oidcPolicy); err != nil {
 		if errors.IsNotFound(err) {
 			r.Logger.Error(err, "OIDCPolicy not found")
@@ -139,7 +141,7 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1alpha1.OIDCPolicyStatus, error) {
+func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*v1alpha1.OIDCPolicyStatus, error) {
 	// Reconcile AuthPolicy for the oidc policy http route
 	mainAuthPol, err := r.reconcileMainAuthPolicy(ctx, pol, igw)
 	if err != nil {
@@ -173,7 +175,7 @@ func (r *OIDCPolicyReconciler) reconcileSpec(ctx context.Context, pol *kuadrantv
 		nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, newStatus *kuadrantv1alpha1.OIDCPolicyStatus) (ctrl.Result, error) {
+func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.OIDCPolicy, newStatus *v1alpha1.OIDCPolicyStatus) (ctrl.Result, error) {
 	equalStatus := pol.Status.Equals(newStatus, r.Logger)
 	r.Logger.Info("Status", "status is different", !equalStatus)
 	r.Logger.Info("Status", "generation is different", pol.Generation != pol.Status.ObservedGeneration)
@@ -199,7 +201,7 @@ func (r *OIDCPolicyReconciler) reconcileStatus(ctx context.Context, pol *kuadran
 	return ctrl.Result{}, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	desiredAuthPol, err := buildMainAuthPolicy(pol, igw)
 	if err != nil {
 		r.Logger.Error(err, "Failed to build main AuthPolicy")
@@ -224,7 +226,7 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 	return reconciledPol, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw)
 	if err != nil {
 		return nil, err
@@ -249,7 +251,7 @@ func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, 
 	return reconciledPol, nil
 }
 
-func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {
+func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) error {
 	desiredHTTPRoute := buildCallbackHTTPRoute(pol, igw)
 
 	err := controllerutil.SetControllerReference(pol, desiredHTTPRoute, r.Scheme)
@@ -281,7 +283,7 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 	return err
 }
 
-func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	authorizeURL, err := pol.GetAuthorizeURL(igw.GetURL())
 	if err != nil {
 		return nil, err
@@ -380,9 +382,9 @@ func buildMainAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayIn
 	}, nil
 }
 
-func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *gatewayapiv1.HTTPRoute {
+func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *gatewayapiv1.HTTPRoute {
 	pathMatch := gatewayapiv1.PathMatchPathPrefix
-	path := kuadrantv1alpha1.DefaultCallbackPath
+	path := v1alpha1.DefaultCallbackPath
 	gwName := gatewayapiv1.ObjectName(igw.Name)
 	gwNamespace := gatewayapiv1.Namespace(igw.Namespace)
 
@@ -420,7 +422,7 @@ func buildCallbackHTTPRoute(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewa
 	}
 }
 
-func buildCallbackAuthPolicy(pol *kuadrantv1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
 	tokenExchangeURL, err := pol.GetIssuerTokenExchangeURL()
 	if err != nil {
@@ -628,7 +630,7 @@ func credentialsSource(tokenSource *authorinov1beta3.Credentials) authorinov1bet
 	case authorinov1beta3.CookieCredentials:
 		return authorinov1beta3.Credentials{Cookie: &authorinov1beta3.Named{Name: tokenSource.Cookie.Name}}
 	default:
-		return authorinov1beta3.Credentials{Cookie: &authorinov1beta3.Named{Name: kuadrantv1alpha1.DefaultTokenSourceName}}
+		return authorinov1beta3.Credentials{Cookie: &authorinov1beta3.Named{Name: v1alpha1.DefaultTokenSourceName}}
 	}
 }
 
@@ -643,7 +645,7 @@ func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGa
 	case authorinov1beta3.CookieCredentials:
 		headers["set-cookie"] = cookieHeader(tokenSource.Cookie.Name, igw)
 	default:
-		headers["set-cookie"] = cookieHeader(kuadrantv1alpha1.DefaultTokenSourceName, igw)
+		headers["set-cookie"] = cookieHeader(v1alpha1.DefaultTokenSourceName, igw)
 	}
 	return headers
 }
@@ -672,8 +674,8 @@ func isAuthPolicyEnforced(authPolicy *kuadrantv1.AuthPolicy) error {
 	return nil
 }
 
-func calculateErrorStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
-	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
+func calculateErrorStatus(pol *v1alpha1.OIDCPolicy, specErr error) *v1alpha1.OIDCPolicyStatus {
+	newStatus := &v1alpha1.OIDCPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions: slices.Clone(pol.Status.Conditions),
@@ -682,8 +684,8 @@ func calculateErrorStatus(pol *kuadrantv1alpha1.OIDCPolicy, specErr error) *kuad
 	return newStatus
 }
 
-func calculateEnforcedStatus(pol *kuadrantv1alpha1.OIDCPolicy, enforcedErr error) *kuadrantv1alpha1.OIDCPolicyStatus {
-	newStatus := &kuadrantv1alpha1.OIDCPolicyStatus{
+func calculateEnforcedStatus(pol *v1alpha1.OIDCPolicy, enforcedErr error) *v1alpha1.OIDCPolicyStatus {
+	newStatus := &v1alpha1.OIDCPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions: slices.Clone(pol.Status.Conditions),

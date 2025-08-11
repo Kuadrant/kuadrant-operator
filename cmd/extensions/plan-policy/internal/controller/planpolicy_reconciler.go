@@ -13,13 +13,13 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/plan-policy/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
-// +kubebuilder:rbac:groups=kuadrant.io,resources=planpolicies,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=kuadrant.io,resources=planpolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=kuadrant.io,resources=planpolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=planpolicies,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=planpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=planpolicies/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=create;delete
 
@@ -38,7 +38,7 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	r.Logger.Info("reconciling planpolicies started")
 	defer r.Logger.Info("reconciling planpolicies completed")
 
-	planPolicy := &kuadrantv1alpha1.PlanPolicy{}
+	planPolicy := &v1alpha1.PlanPolicy{}
 	if err := r.Client.Get(ctx, request.NamespacedName, planPolicy); err != nil {
 		if errors.IsNotFound(err) {
 			r.Logger.Error(err, "planpolicy not found")
@@ -81,7 +81,7 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *kuadrantv1alpha1.PlanPolicy, targetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) *kuadrantv1.RateLimitPolicy {
+func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *v1alpha1.PlanPolicy, targetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) *kuadrantv1.RateLimitPolicy {
 	return &kuadrantv1.RateLimitPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      planPolicy.GetName(),

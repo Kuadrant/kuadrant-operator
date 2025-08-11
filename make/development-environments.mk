@@ -53,8 +53,8 @@ apply-extensions: kustomize ## Apply extensions to existing deployment
 	kubectl rollout status deployment/kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --timeout=300s
 
 .PHONY: remove-extensions
-remove-extensions: kustomize ## Remove extensions from existing deployment
-	kubectl patch deployment kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --type=strategic --patch-file=config/extensions/remove-extensions-patch.yaml
+remove-extensions: ## Remove extensions from existing deployment
+	kubectl patch deployment kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --type=json --patch='[{"op": "remove", "path": "/spec/template/spec/initContainers"}]' || true
 	kubectl rollout status deployment/kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --timeout=300s
 
 .PHONY: local-apply-extensions

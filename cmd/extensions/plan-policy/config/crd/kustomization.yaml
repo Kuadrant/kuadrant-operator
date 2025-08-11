@@ -1,0 +1,4 @@
+resources:
+  - bases/extensions.kuadrant.io_planpolicies.yaml
+#+kubebuilder:scaffold:crdkustomizeresource
+

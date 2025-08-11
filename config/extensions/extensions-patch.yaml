@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuadrant-operator-controller-manager
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: copy-extensions
+          command:
+            - cp
+            - -r
+            - /extensions/.
+            - /export
+          image: ${EXTENSIONS_IMG}
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /export
+              name: extensions-binary-volume
+      containers:
+        - name: manager
+          volumeMounts:
+            - mountPath: /extensions
+              name: extensions-binary-volume
+      volumes:
+        - name: extensions-binary-volume
+          emptyDir: {}

@@ -31,8 +31,8 @@ spec:
         - command:
             - /manager
           env:
-            - name: WITH_EXTENSIONS
-              value: "true"
+            - name: EXTENSIONS_DIR
+              value: "/extensions"
             - name: RELATED_IMAGE_WASMSHIM
               value: "oci://quay.io/kuadrant/wasm-shim:latest"
             - name: OPERATOR_NAMESPACE

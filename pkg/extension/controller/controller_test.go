@@ -30,7 +30,7 @@ import (
 type mockKuadrantCtx struct {
 	resolveFn       func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error)
 	resolvePolicyFn func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error)
-	addDataToFn     func(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error
+	addDataToFn     func(ctx context.Context, policy exttypes.Policy, domain exttypes.Domain, binding string, expression string) error
 }
 
 type mockPolicy struct {
@@ -79,8 +79,8 @@ func (m *mockKuadrantCtx) ResolvePolicy(ctx context.Context, policy exttypes.Pol
 	return nil, fmt.Errorf("resolvePolicyFn not implemented in mock")
 }
 
-func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error {
-	return m.addDataToFn(ctx, requester, target, binding, expression)
+func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, policy exttypes.Policy, domain exttypes.Domain, binding string, expression string) error {
+	return m.addDataToFn(ctx, policy, domain, binding, expression)
 }
 
 func (m *mockKuadrantCtx) GetClient() client.Client {

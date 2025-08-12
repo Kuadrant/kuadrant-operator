@@ -72,9 +72,9 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 
 	r.Logger.Info("cel expression", "expression", planPolicy.BuildCelExpression())
 
-	err = kuadrantCtx.AddDataTo(ctx, planPolicy, authPolicy, "plan", planPolicy.BuildCelExpression())
+	err = kuadrantCtx.AddDataTo(ctx, planPolicy, types.DomainAuth, "plan", planPolicy.BuildCelExpression())
 	if err != nil {
-		r.Logger.Error(err, "failed to add data to policy", "policy", authPolicy)
+		r.Logger.Error(err, "failed to add data to auth domain")
 		return reconcile.Result{}, err
 	}
 

@@ -106,6 +106,12 @@ endif
 KUADRANT_NAMESPACE ?= kuadrant-system
 OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
 
+# Kuadrant Service Account
+KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
+
+#Kuadrant Extensions
+EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
+
 # Kuadrant component versions
 ## authorino
 #ToDo Pin this version once we have an initial release of authorino
@@ -305,10 +311,9 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) crd paths="./api/v1alpha1;./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./internal/..."
 
-EXTENSIONS ?= $(shell ls -d cmd/extensions/*/)
 .PHONY: extensions-manifests
 extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects for extensions.
-	@for ext_dir in $(EXTENSIONS); do \
+	@for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
 		ext_name=$$(echo "$$ext_dir" | sed 's/.*\/\([^\/]*\)\/$$/\1/') ; \
 		role_name="$$ext_name-manager-role" ;\
 		echo "Generating manifests for extension $$ext_name"; \

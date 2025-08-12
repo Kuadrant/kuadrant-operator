@@ -21,6 +21,13 @@ const (
 	PolicyConditionEnforced = kuadrant.PolicyConditionEnforced
 )
 
+type Domain int
+
+const (
+	DomainUnspecified Domain = iota
+	DomainAuth
+)
+
 type Policy interface {
 	GetName() string
 	GetNamespace() string
@@ -31,7 +38,7 @@ type Policy interface {
 type KuadrantCtx interface {
 	Resolve(context.Context, Policy, string, bool) (celref.Val, error)
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
-	AddDataTo(context.Context, Policy, Policy, string, string) error
+	AddDataTo(context.Context, Policy, Domain, string, string) error
 	ReconcileObject(context.Context, client.Object, client.Object, MutateFn) (client.Object, error)
 }
 

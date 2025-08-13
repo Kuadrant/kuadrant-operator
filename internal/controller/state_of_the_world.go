@@ -586,6 +586,7 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 		return opts
 	}
 
+	b.isUsingExtensions = true
 	opts = append(opts, controller.WithRunnable(
 		"extension manager",
 		func(*controller.Controller) controller.Runnable {

@@ -189,8 +189,8 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 		registeredData: NewRegisteredDataStore(),
 	}
 
-	mutator := NewRegisteredDataMutator(service.registeredData)
-	GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
+	// mutator := NewRegisteredDataMutator(service.registeredData)
+	// GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
 
 	return service
 }
@@ -291,35 +291,45 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 	if request == nil {
 		return nil, errors.New("request cannot be nil")
 	}
-	if request.Requester == nil || request.Target == nil {
+	if request.Policy == nil {
 		return nil, errors.New("policy cannot be nil")
 	}
-	if request.Requester.Metadata == nil || request.Target.Metadata == nil {
+	if request.Policy.Metadata == nil {
 		return nil, errors.New("policy metadata cannot be nil")
 	}
-	if request.Requester.Metadata.Kind == "" || request.Requester.Metadata.Namespace == "" || request.Requester.Metadata.Name == "" ||
-		request.Target.Metadata.Kind == "" || request.Target.Metadata.Namespace == "" || request.Target.Metadata.Name == "" {
+	if request.Policy.Metadata.Kind == "" || request.Policy.Metadata.Namespace == "" || request.Policy.Metadata.Name == "" {
 		return nil, errors.New("policy kind, namespace, and name must be specified")
 	}
-	targetID := ResourceID{
-		Kind:      request.Target.Metadata.Kind,
-		Namespace: request.Target.Metadata.Namespace,
-		Name:      request.Target.Metadata.Name,
+	if request.Domain == extpb.Domain_DOMAIN_UNSPECIFIED {
+		return nil, errors.New("domain must be specified")
 	}
-	requesterID := ResourceID{
-		Kind:      request.Requester.Metadata.Kind,
-		Namespace: request.Requester.Metadata.Namespace,
-		Name:      request.Requester.Metadata.Name,
+	if len(request.Policy.TargetRefs) == 0 {
+		return nil, errors.New("policy must have target references")
+	}
+
+	policyID := ResourceID{
+		Kind:      request.Policy.Metadata.Kind,
+		Namespace: request.Policy.Metadata.Namespace,
+		Name:      request.Policy.Metadata.Name,
 	}
 
 	entry := DataProviderEntry{
-		Requester:  requesterID,
+		Policy:     policyID,
 		Binding:    request.Binding,
 		Expression: request.Expression,
 		CAst:       nil, //todo
 	}
 
-	s.registeredData.Set(targetID, requesterID, request.Binding, entry)
+	for _, pbTargetRef := range request.Policy.TargetRefs {
+		targetRef := TargetRef{
+			Group:       pbTargetRef.Group,
+			Kind:        pbTargetRef.Kind,
+			Name:        pbTargetRef.Name,
+			Namespace:   pbTargetRef.Namespace,
+			SectionName: pbTargetRef.SectionName,
+		}
+		s.registeredData.Set(policyID, targetRef, request.Domain, request.Binding, entry)
+	}
 
 	return &emptypb.Empty{}, nil
 }

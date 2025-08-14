@@ -2,10 +2,50 @@
 
 set -euo pipefail
 
-# Get absolute path for this script
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+process_manifest() {
+  if [ $# -eq 0 ]; then
+    echo "🚨 Error: No manifest provided"
+    cleanup
+    exit 1
+  fi
+  # Process input
+  local temp_file="extension-manifest.yaml"
+  local manifest_source="$1"
 
-source "$SCRIPT_DIR/shared.sh"
+  if [[ $manifest_source =~ ^https?:// ]]; then
+      curl -sf "$manifest_source" > "$temp_file" || {
+        echo "🚨 Failed to download YAML file"
+        rm -f "$temp_file"
+        return 1
+      }
+  else
+      if [ ! -f "$manifest_source" ]; then
+        echo "🚨 Error: Local YAML file '$manifest_source' not found"
+        return 1
+      fi
+      if [ "$manifest_source" != "$temp_file" ]; then
+        cp "$manifest_source" "$temp_file" || {
+          echo "🚨 Failed to copy local YAML file"
+          rm -f "$temp_file"
+          return 1
+        }
+      fi
+  fi
+
+  # Extract role name
+  local role_name=$(yq e 'select(.kind == "ClusterRole") | .metadata.name' "$temp_file")
+  if [ -z "$role_name" ]; then
+    echo "🚨 Failed to extract Role name from YAML"
+    rm -f "$temp_file"
+    return 1
+  fi
+
+  echo "$role_name"
+}
+
+cleanup() {
+  rm -f extension-manifest.yaml
+}
 
 # Install extension manifests
 
@@ -15,11 +55,23 @@ KUADRANT_NAMESPACE=${KUADRANT_NAMESPACE:-kuadrant-system}
 
 # Process extension manifest
 if [ -t 0 ]; then
-  # Input is from argument
-  CLUSTER_ROLE_NAME=$(process_manifest "$1")
+  # Prompt for the path of the manifests.yaml file
+  read -p "Please enter the path to the manifest yaml file (local or remote URL): " manifest_source
+  # Check if the input is empty
+  if [ -z "$manifest_source" ]; then
+    echo "🚨 Error: No path provided."
+    exit 1
+  fi
+  CLUSTER_ROLE_NAME=$(process_manifest "$manifest_source")
 else
+  echo "Reading from stdin"
   # Input is from stdin
-  CLUSTER_ROLE_NAME=$(process_manifest)
+  cat > extension-manifest.yaml || {
+    echo "🚨 Failed to read from stdin"
+    rm -f extension-manifest.yaml
+    exit 1
+  }
+  CLUSTER_ROLE_NAME=$(process_manifest "extension-manifest.yaml")
 fi
 
 echo "Found CLUSTER_ROLE_NAME: $CLUSTER_ROLE_NAME"

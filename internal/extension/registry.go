@@ -25,16 +25,16 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 const KuadrantDataNamespace string = "kuadrant"
 
-type ResourceMutator[TResource any, TPolicy machinery.Policy] interface {
-	Mutate(resource TResource, policy TPolicy) error
+type ResourceMutator[TResource any, TTargetRefs []machinery.PolicyTargetReference] interface {
+	Mutate(resource TResource, targetRefs TTargetRefs) error
 }
 
-type AuthConfigMutator = ResourceMutator[*authorinov1beta3.AuthConfig, *kuadrantv1.AuthPolicy]
+type AuthConfigMutator = ResourceMutator[*authorinov1beta3.AuthConfig, []machinery.PolicyTargetReference]
 
 type MutatorRegistry struct {
 	authConfigMutators []AuthConfigMutator
@@ -49,20 +49,21 @@ func (r *MutatorRegistry) RegisterAuthConfigMutator(mutator AuthConfigMutator) {
 	r.authConfigMutators = append(r.authConfigMutators, mutator)
 }
 
-func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
 	for _, mutator := range r.authConfigMutators {
-		if err := mutator.Mutate(authConfig, policy); err != nil {
+		if err := mutator.Mutate(authConfig, targetRefs); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
-	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, policy)
+// ApplyAuthConfigMutators applies all registered auth config mutators to an auth config
+func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
+	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, targetRefs)
 }
 
 type ResourceID struct {
@@ -72,7 +73,7 @@ type ResourceID struct {
 }
 
 type DataProviderEntry struct {
-	Requester  ResourceID
+	Policy     ResourceID
 	Binding    string
 	Expression string
 	CAst       *cel.Ast
@@ -86,9 +87,10 @@ type Subscription struct {
 }
 
 type DataProviderKey struct {
-	Target    ResourceID
-	Requester ResourceID
-	Binding   string
+	Policy           ResourceID
+	TargetRefLocator string
+	Domain           extpb.Domain
+	Binding          string
 }
 
 type SubscriptionKey struct {
@@ -111,11 +113,12 @@ func NewRegisteredDataStore() *RegisteredDataStore {
 	}
 }
 
-func (r *RegisteredDataStore) Set(target, requester ResourceID, binding string, entry DataProviderEntry) {
+func (r *RegisteredDataStore) Set(policy ResourceID, targetRefLocator string, domain extpb.Domain, binding string, entry DataProviderEntry) {
 	key := DataProviderKey{
-		Target:    target,
-		Requester: requester,
-		Binding:   binding,
+		Policy:           policy,
+		TargetRefLocator: targetRefLocator,
+		Domain:           domain,
+		Binding:          binding,
 	}
 
 	r.dataMutex.Lock()
@@ -123,24 +126,25 @@ func (r *RegisteredDataStore) Set(target, requester ResourceID, binding string, 
 	r.dataProviders[key] = entry
 }
 
-func (r *RegisteredDataStore) GetAllForTarget(target ResourceID) []DataProviderEntry {
+func (r *RegisteredDataStore) GetAllForTargetRef(targetRefLocator string, domain extpb.Domain) []DataProviderEntry {
 	r.dataMutex.RLock()
 	defer r.dataMutex.RUnlock()
 
 	var result []DataProviderEntry
 	for key, entry := range r.dataProviders {
-		if key.Target == target {
+		if key.TargetRefLocator == targetRefLocator && key.Domain == domain {
 			result = append(result, entry)
 		}
 	}
 	return result
 }
 
-func (r *RegisteredDataStore) Get(target, requester ResourceID, binding string) (DataProviderEntry, bool) {
+func (r *RegisteredDataStore) Get(policy ResourceID, targetRefLocator string, domain extpb.Domain, binding string) (DataProviderEntry, bool) {
 	key := DataProviderKey{
-		Target:    target,
-		Requester: requester,
-		Binding:   binding,
+		Policy:           policy,
+		TargetRefLocator: targetRefLocator,
+		Domain:           domain,
+		Binding:          binding,
 	}
 
 	r.dataMutex.RLock()
@@ -150,11 +154,12 @@ func (r *RegisteredDataStore) Get(target, requester ResourceID, binding string) 
 	return entry, exists
 }
 
-func (r *RegisteredDataStore) Exists(target, requester ResourceID, binding string) bool {
+func (r *RegisteredDataStore) Exists(policy ResourceID, targetRefLocator string, domain extpb.Domain, binding string) bool {
 	key := DataProviderKey{
-		Target:    target,
-		Requester: requester,
-		Binding:   binding,
+		Policy:           policy,
+		TargetRefLocator: targetRefLocator,
+		Domain:           domain,
+		Binding:          binding,
 	}
 
 	r.dataMutex.RLock()
@@ -164,11 +169,12 @@ func (r *RegisteredDataStore) Exists(target, requester ResourceID, binding strin
 	return exists
 }
 
-func (r *RegisteredDataStore) Delete(target, requester ResourceID, binding string) bool {
+func (r *RegisteredDataStore) Delete(policy ResourceID, targetRefLocator string, domain extpb.Domain, binding string) bool {
 	key := DataProviderKey{
-		Target:    target,
-		Requester: requester,
-		Binding:   binding,
+		Policy:           policy,
+		TargetRefLocator: targetRefLocator,
+		Domain:           domain,
+		Binding:          binding,
 	}
 
 	r.dataMutex.Lock()
@@ -269,7 +275,7 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 
 	// clear data providers
 	for key := range r.dataProviders {
-		if key.Target == policy {
+		if key.Policy == policy {
 			delete(r.dataProviders, key)
 			clearedMutators++
 		}
@@ -309,15 +315,16 @@ func NewRegisteredDataMutator(store *RegisteredDataStore) *RegisteredDataMutator
 }
 
 // Currently this is bespoke, adding data items to the success metadata
-func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
-	policyID := ResourceID{
-		Kind:      policy.GetObjectKind().GroupVersionKind().Kind,
-		Namespace: policy.GetNamespace(),
-		Name:      policy.GetName(),
+func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
+	var allProviderEntries []DataProviderEntry
+
+	// Find mutations for each target reference
+	for _, targetRef := range targetRefs {
+		providerEntries := m.store.GetAllForTargetRef(targetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
+		allProviderEntries = append(allProviderEntries, providerEntries...)
 	}
 
-	providerEntries := m.store.GetAllForTarget(policyID)
-	if len(providerEntries) == 0 {
+	if len(allProviderEntries) == 0 {
 		return nil
 	}
 
@@ -332,7 +339,7 @@ func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, 
 	}
 
 	properties := make(map[string]authorinov1beta3.ValueOrSelector)
-	for _, entry := range providerEntries {
+	for _, entry := range allProviderEntries {
 		properties[entry.Binding] = authorinov1beta3.ValueOrSelector{
 			Expression: authorinov1beta3.CelExpression(entry.Expression),
 		}

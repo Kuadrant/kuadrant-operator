@@ -14,6 +14,15 @@ import (
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
+func convertDomainToProtobuf(domain exttypes.Domain) extpb.Domain {
+	switch domain {
+	case exttypes.DomainAuth:
+		return extpb.Domain_DOMAIN_AUTH
+	default:
+		return extpb.Domain_DOMAIN_UNSPECIFIED
+	}
+}
+
 func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
 	pbPolicy := &extpb.Policy{
 		Metadata: &extpb.Metadata{

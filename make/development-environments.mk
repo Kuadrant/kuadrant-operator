@@ -46,6 +46,27 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
 
+.PHONY: apply-extensions-manifests
+apply-extensions-manifests: export KUADRANT_SA_NAME := $(KUADRANT_SA_NAME)
+apply-extensions-manifests: export KUADRANT_NAMESPACE := $(KUADRANT_NAMESPACE)
+apply-extensions-manifests: kustomize ## Apply extensions manifests to current cluster
+	@for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
+		ext_name=$$(echo "$$ext_dir" | sed 's/.*\/\([^\/]*\)\/$$/\1/') ; \
+		echo "Applying manifests for extension $$ext_name" ; \
+		$(KUSTOMIZE) build "$$ext_dir/config/deploy" | $(PROJECT_PATH)/utils/extensions/compose_extension_manifest.sh | kubectl apply --server-side -f - ; \
+	done
+
+.PHONY: remove-extensions-manifests
+remove-extensions-manifests: export KUADRANT_SA_NAME := $(KUADRANT_SA_NAME)
+remove-extensions-manifests: export KUADRANT_NAMESPACE := $(KUADRANT_NAMESPACE)
+remove-extensions-manifests: kustomize ## Remove extensions manifests from the current cluster
+	@for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
+		ext_name=$$(echo "$$ext_dir" | sed 's/.*\/\([^\/]*\)\/$$/\1/') ; \
+		echo "Removing manifests for extension $$ext_name" ; \
+		$(KUSTOMIZE) build "$$ext_dir/config/deploy" | $(PROJECT_PATH)/utils/extensions/compose_extension_manifest.sh | kubectl delete -f - ; \
+	done
+
+
 .PHONY: apply-extensions
 apply-extensions: export EXTENSIONS_IMG := $(EXTENSIONS_IMG)
 apply-extensions: kustomize ## Apply extensions to existing deployment

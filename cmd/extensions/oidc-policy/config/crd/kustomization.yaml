@@ -1,0 +1,4 @@
+resources:
+  - bases/extensions.kuadrant.io_oidcpolicies.yaml
+#+kubebuilder:scaffold:crdkustomizeresource
+

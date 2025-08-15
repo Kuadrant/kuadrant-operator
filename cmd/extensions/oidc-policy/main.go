@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/api/v1alpha1"
+
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/internal/controller"
@@ -13,7 +15,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
 
@@ -25,7 +26,7 @@ func init() {
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1.Install(scheme))
 	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
-	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -34,7 +35,7 @@ func main() {
 	extController, err := builder.
 		WithScheme(scheme).
 		WithReconciler(oidcPolicyReconciler.Reconcile).
-		For(&kuadrantv1alpha1.OIDCPolicy{}).
+		For(&v1alpha1.OIDCPolicy{}).
 		Owns(&kuadrantv1.AuthPolicy{}).
 		Owns(&gatewayapiv1.HTTPRoute{}).
 		Build()

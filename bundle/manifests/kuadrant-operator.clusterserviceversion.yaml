@@ -99,33 +99,6 @@ metadata:
         },
         {
           "apiVersion": "kuadrant.io/v1alpha1",
-          "kind": "OIDCPolicy",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "kuadrant-operator"
-            },
-            "name": "oidcpolicy-sample"
-          },
-          "spec": {}
-        },
-        {
-          "apiVersion": "kuadrant.io/v1alpha1",
-          "kind": "PlanPolicy",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/created-by": "kuadrant-operator",
-              "app.kubernetes.io/instance": "planpolicy-sample",
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "planpolicy",
-              "app.kubernetes.io/part-of": "kuadrant-operator"
-            },
-            "name": "planpolicy-sample"
-          },
-          "spec": {}
-        },
-        {
-          "apiVersion": "kuadrant.io/v1alpha1",
           "kind": "TokenRateLimitPolicy",
           "metadata": {
             "name": "token-limit-free",
@@ -189,7 +162,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-08-08T11:54:09Z"
+    createdAt: "2025-08-12T14:46:55Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -219,12 +192,6 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - kind: OIDCPolicy
-      name: oidcpolicies.kuadrant.io
-      version: v1alpha1
-    - kind: PlanPolicy
-      name: planpolicies.kuadrant.io
-      version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
       displayName: RateLimitPolicy
@@ -394,6 +361,7 @@ spec:
           - gateway.networking.k8s.io
           resources:
           - gateways
+          - httproutes
           verbs:
           - get
           - list
@@ -416,62 +384,12 @@ spec:
           - patch
           - update
         - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - httproutes
-          verbs:
-          - create
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
           - kuadrant.io
           resources:
           - authpolicies
-          verbs:
-          - create
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - kuadrant.io
-          resources:
-          - authpolicies/finalizers
-          - dnspolicies/finalizers
-          - kuadrants/finalizers
-          - oidcpolicies/finalizers
-          - planpolicies/finalizers
-          - ratelimitpolicies/finalizers
-          - tlspolicies/finalizers
-          - tokenratelimitpolicies/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - kuadrant.io
-          resources:
-          - authpolicies/status
-          - dnspolicies/status
-          - kuadrants/status
-          - oidcpolicies/status
-          - planpolicies/status
-          - ratelimitpolicies/status
-          - tlspolicies/status
-          - tokenratelimitpolicies/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - kuadrant.io
-          resources:
           - dnspolicies
           - kuadrants
-          - oidcpolicies
-          - planpolicies
+          - ratelimitpolicies
           - tlspolicies
           - tokenratelimitpolicies
           verbs:
@@ -483,8 +401,31 @@ spec:
         - apiGroups:
           - kuadrant.io
           resources:
+          - authpolicies/finalizers
+          - dnspolicies/finalizers
+          - kuadrants/finalizers
+          - ratelimitpolicies/finalizers
+          - tlspolicies/finalizers
+          - tokenratelimitpolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - authpolicies/status
+          - dnspolicies/status
+          - kuadrants/status
+          - ratelimitpolicies/status
+          - tlspolicies/status
+          - tokenratelimitpolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
           - dnsrecords
-          - ratelimitpolicies
           verbs:
           - create
           - delete

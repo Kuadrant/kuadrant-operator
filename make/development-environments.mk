@@ -53,7 +53,7 @@ apply-extensions-manifests: kustomize ## Apply extensions manifests to current c
 	@for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
 		ext_name=$$(echo "$$ext_dir" | sed 's/.*\/\([^\/]*\)\/$$/\1/') ; \
 		echo "Applying manifests for extension $$ext_name" ; \
-		$(KUSTOMIZE) build "$$ext_dir/config/deploy" | $(PROJECT_PATH)/utils/extensions/install-extension-manifests.sh ; \
+		$(KUSTOMIZE) build "$$ext_dir/config/deploy" | $(PROJECT_PATH)/utils/extensions/compose_extension_manifest.sh | kubectl apply --server-side -f - ; \
 	done
 
 .PHONY: remove-extensions-manifests
@@ -63,7 +63,7 @@ remove-extensions-manifests: kustomize ## Remove extensions manifests from the c
 	@for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
 		ext_name=$$(echo "$$ext_dir" | sed 's/.*\/\([^\/]*\)\/$$/\1/') ; \
 		echo "Removing manifests for extension $$ext_name" ; \
-		$(KUSTOMIZE) build "$$ext_dir/config/deploy" | $(PROJECT_PATH)/utils/extensions/uninstall-extension-manifests.sh ; \
+		$(KUSTOMIZE) build "$$ext_dir/config/deploy" | $(PROJECT_PATH)/utils/extensions/compose_extension_manifest.sh | kubectl delete -f - ; \
 	done
 
 

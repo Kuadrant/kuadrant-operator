@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -189,8 +190,8 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionS
 		registeredData: NewRegisteredDataStore(),
 	}
 
-	// mutator := NewRegisteredDataMutator(service.registeredData)
-	// GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
+	mutator := NewRegisteredDataMutator(service.registeredData)
+	GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
 
 	return service
 }
@@ -321,14 +322,8 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 	}
 
 	for _, pbTargetRef := range request.Policy.TargetRefs {
-		targetRef := TargetRef{
-			Group:       pbTargetRef.Group,
-			Kind:        pbTargetRef.Kind,
-			Name:        pbTargetRef.Name,
-			Namespace:   pbTargetRef.Namespace,
-			SectionName: pbTargetRef.SectionName,
-		}
-		s.registeredData.Set(policyID, targetRef, request.Domain, request.Binding, entry)
+		targetRefLocator := createLocatorFromProtobuf(pbTargetRef)
+		s.registeredData.Set(policyID, targetRefLocator, request.Domain, request.Binding, entry)
 	}
 
 	return &emptypb.Empty{}, nil
@@ -360,4 +355,17 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		ClearedMutators:      int32(clearedMutators),      // #nosec G115
 		ClearedSubscriptions: int32(clearedSubscriptions), // #nosec G115
 	}, nil
+}
+
+// Creates a locator matching the definition in policy-machinery
+func createLocatorFromProtobuf(pbTargetRef *extpb.TargetRef) string {
+	groupKind := pbTargetRef.Kind
+	if pbTargetRef.Group != "" {
+		groupKind = pbTargetRef.Kind + "." + pbTargetRef.Group
+	}
+	name := pbTargetRef.Name
+	if pbTargetRef.Namespace != "" {
+		name = pbTargetRef.Namespace + "/" + pbTargetRef.Name
+	}
+	return fmt.Sprintf("%s:%s", strings.ToLower(groupKind), name)
 }

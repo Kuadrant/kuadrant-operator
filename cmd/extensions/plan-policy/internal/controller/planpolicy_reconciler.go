@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/plan-policy/api/v1alpha1"
@@ -53,14 +52,7 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	authPolicy, err := kuadrantCtx.ResolvePolicy(ctx, planPolicy,
-		`self.findAuthPolicies()[0]`, true)
-	if err != nil {
-		r.Logger.Error(err, "failed to resolve policy")
-		return reconcile.Result{}, err
-	}
-
-	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy, authPolicy.GetTargetRefs()[0])
+	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy)
 	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.Scheme); err != nil {
 		r.Logger.Error(err, "failed to set controller reference")
 		return reconcile.Result{}, err
@@ -70,10 +62,7 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	r.Logger.Info("cel expression", "expression", planPolicy.BuildCelExpression())
-
-	err = kuadrantCtx.AddDataTo(ctx, planPolicy, types.DomainAuth, "plan", planPolicy.BuildCelExpression())
-	if err != nil {
+	if err := kuadrantCtx.AddDataTo(ctx, planPolicy, types.DomainAuth, "plan", planPolicy.BuildCelExpression()); err != nil {
 		r.Logger.Error(err, "failed to add data to auth domain")
 		return reconcile.Result{}, err
 	}
@@ -81,14 +70,14 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
-func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *v1alpha1.PlanPolicy, targetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) *kuadrantv1.RateLimitPolicy {
+func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *v1alpha1.PlanPolicy) *kuadrantv1.RateLimitPolicy {
 	return &kuadrantv1.RateLimitPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      planPolicy.GetName(),
 			Namespace: planPolicy.GetNamespace(),
 		},
 		Spec: kuadrantv1.RateLimitPolicySpec{
-			TargetRef: targetRef,
+			TargetRef: planPolicy.Spec.TargetRef,
 			RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
 				Limits: planPolicy.ToRateLimits(),
 			},

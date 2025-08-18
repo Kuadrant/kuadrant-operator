@@ -94,9 +94,8 @@ func (p *PlanPolicy) BuildCelExpression() string {
 // PlanPolicySpec defines the desired state of PlanPolicy
 type PlanPolicySpec struct {
 	// Reference to the object to which this policy applies.
-	// todo(adam-cattermole): This doesn't have to be tied to a particular IdentityPolicy, but could be updated to support other resources
-	// +kubebuilder:validation:XValidation:rule="self.group == 'kuadrant.io'",message="Invalid targetRef.group. The only supported value is 'kuadrant.io'"
-	// +kubebuilder:validation:XValidation:rule="self.kind == 'AuthPolicy'",message="Invalid targetRef.kind. The only supported value is 'AuthPolicy'"
+	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
+	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Plans defines the list of plans for the policy. The identity is categorised by the first matching plan in the list.

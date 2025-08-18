@@ -103,8 +103,8 @@ func DeleteNamespace(ctx context.Context, cl client.Client, namespace string) {
 	desiredTestNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	Eventually(func(g Gomega) {
 		err := cl.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		g.Expect(err).ToNot(BeNil())
-		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err).To(MatchError(apierrors.IsNotFound, "IsNotFound"))
 	}).WithContext(ctx).Should(Succeed())
 }
 

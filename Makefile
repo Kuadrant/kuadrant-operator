@@ -106,6 +106,12 @@ endif
 KUADRANT_NAMESPACE ?= kuadrant-system
 OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
 
+# Kuadrant Service Account
+KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
+
+#Kuadrant Extensions
+EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
+
 # Kuadrant component versions
 ## authorino
 #ToDo Pin this version once we have an initial release of authorino
@@ -303,7 +309,18 @@ endef
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./api/v1alpha1;./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
-	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
+	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./internal/..."
+
+.PHONY: extensions-manifests
+extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects for extensions.
+	@for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
+		ext_name=$$(echo "$$ext_dir" | sed 's/.*\/\([^\/]*\)\/$$/\1/') ; \
+		role_name="$$ext_name-manager-role" ;\
+		echo "Generating manifests for extension $$ext_name"; \
+		$(CONTROLLER_GEN) crd paths="$$ext_dir/api/..." output:crd:artifacts:config="$$ext_dir/config/crd/bases"; \
+		$(CONTROLLER_GEN) rbac:roleName="$$role_name" webhook paths="$$ext_dir/..." output:rbac:artifacts:config="$$ext_dir/config/rbac"; \
+	done
+
 
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)

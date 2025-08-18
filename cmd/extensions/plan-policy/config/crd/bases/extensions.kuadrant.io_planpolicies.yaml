@@ -1,14 +1,12 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  creationTimestamp: null
-  labels:
-    app: kuadrant
-  name: planpolicies.kuadrant.io
+  name: planpolicies.extensions.kuadrant.io
 spec:
-  group: kuadrant.io
+  group: extensions.kuadrant.io
   names:
     kind: PlanPolicy
     listKind: PlanPolicyList
@@ -158,9 +156,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
-  storedVersions: null

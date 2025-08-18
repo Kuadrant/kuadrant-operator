@@ -1,0 +1,37 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: plan-policy-manager-role
+rules:
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - planpolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - planpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - planpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - ratelimitpolicies
+  verbs:
+  - create
+  - delete

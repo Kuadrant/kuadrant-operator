@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -79,6 +80,10 @@ type KuadrantSpec struct {
 	// will add the configuration required to enable mTLS between an Istio provided
 	// gateway and the Kuadrant components.
 	MTLS *MTLS `json:"mtls,omitempty"`
+
+	// +optional
+	// Resilience is an optional entry which enables different control plane resilience features.
+	Resilience *Resilience `json:"resilience,omitempty"`
 }
 
 type Observability struct {
@@ -111,6 +116,32 @@ func (m *MTLS) IsAuthorinoEnabled() bool {
 	return m.Enable && ptr.Deref(m.Authorino, m.Enable)
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.rateLimiting) ? (self.rateLimiting == true && has(self.counterStorage)) || (self.rateLimiting == false && has(self.counterStorage)) || (self.rateLimiting == false && !has(self.counterStorage)) : true",message="resilience.counterStorage needs to be explicitly configured when using resilience.rateLimiting."
+type Resilience struct {
+	RateLimiting   bool                       `json:"rateLimiting,omitempty"`
+	CounterStorage *limitadorv1alpha1.Storage `json:"counterStorage,omitempty"`
+}
+
+func (r *Resilience) IsRateLimitingConfigured() bool {
+	if r == nil {
+		return false
+	}
+	return r.RateLimiting
+}
+
+type Reason string
+
+const (
+	KuadrantDefined Reason = "kuadrant defined"
+	UserDefined     Reason = "user defined"
+	Undefined       Reason = "undefined"
+)
+
+type ResilienceStatus struct {
+	RateLimiting   *Reason `json:"rateLimiting,omitempty"`
+	CounterStorage *Reason `json:"counterStorage,omitempty"`
+}
+
 // KuadrantStatus defines the observed state of Kuadrant
 type KuadrantStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed spec.
@@ -132,6 +163,10 @@ type KuadrantStatus struct {
 	// Mtls Limitador reflects the mtls feature state regarding comms with limitador.
 	// +optional
 	MtlsLimitador *bool `json:"mtlsLimitador,omitempty"`
+
+	// Resilience reflects the resilience deployment state
+	// +optional
+	Resilience *ResilienceStatus `json:"resilience,omitempty"`
 }
 
 func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool {
@@ -150,6 +185,12 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 	if !reflect.DeepEqual(r.MtlsLimitador, other.MtlsLimitador) {
 		diff := cmp.Diff(r.MtlsLimitador, other.MtlsLimitador)
 		logger.V(1).Info("MtlsAuthorino not equal", "difference", diff)
+		return false
+	}
+
+	if !reflect.DeepEqual(r.Resilience, other.Resilience) {
+		diff := cmp.Diff(r.Resilience, other.Resilience)
+		logger.V(1).Info("Resilience not equal", "difference", diff)
 		return false
 	}
 

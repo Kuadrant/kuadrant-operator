@@ -147,6 +147,7 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
+					Name:       limitKey,
 					Namespace:  limitsNamespace,
 					MaxValue:   maxValue,
 					Seconds:    seconds,
@@ -161,6 +162,7 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 			rateLimits := utils.Map(limit.Rates, func(rate kuadrantv1.Rate) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
+					Name:       limitKey,
 					Namespace:  limitsNamespace,
 					MaxValue:   maxValue,
 					Seconds:    seconds,

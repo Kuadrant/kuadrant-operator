@@ -24,7 +24,9 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantmachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
@@ -49,7 +51,41 @@ func (r *MutatorRegistry) RegisterAuthConfigMutator(mutator AuthConfigMutator) {
 	r.authConfigMutators = append(r.authConfigMutators, mutator)
 }
 
-func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
+func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, path []machinery.Targetable) error {
+	_, gateway, _, httpRoute, _, err := kuadrantmachinery.ObjectsInRequestPath(path)
+	if err != nil {
+		return err
+	}
+
+	targetRefs := []machinery.PolicyTargetReference{
+		// HTTPRoute - for extension policies targeting this specific route
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+					Kind:  gatewayapiv1alpha2.Kind("HTTPRoute"),
+					Name:  gatewayapiv1alpha2.ObjectName(httpRoute.GetName()),
+				},
+			},
+			PolicyNamespace: httpRoute.GetNamespace(),
+		},
+		// Gateway - for extension policies targeting the parent gateway
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+					Kind:  gatewayapiv1alpha2.Kind("Gateway"),
+					Name:  gatewayapiv1alpha2.ObjectName(gateway.GetName()),
+				},
+			},
+			PolicyNamespace: gateway.GetNamespace(),
+		},
+	}
+
+	return r.applyMutatorsWithTargetRefs(authConfig, targetRefs)
+}
+
+func (r *MutatorRegistry) applyMutatorsWithTargetRefs(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
@@ -62,8 +98,8 @@ func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.A
 }
 
 // ApplyAuthConfigMutators applies all registered auth config mutators to an auth config
-func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
-	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, targetRefs)
+func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, path []machinery.Targetable) error {
+	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, path)
 }
 
 type ResourceID struct {

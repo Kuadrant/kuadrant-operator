@@ -30,7 +30,7 @@ func TestRegisteredDataStore_Set_Get_Delete(t *testing.T) {
 		CAst:       nil,
 	}
 
-	mockTargetRef := createMockMachineryTargetRef()
+	mockTargetRef := createMockGatewayTargetRef()
 	store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry)
 
 	retrieved, exists := store.Get(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user")
@@ -139,7 +139,7 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		CAst:       nil,
 	}
 
-	mockTargetRef := createMockMachineryTargetRef()
+	mockTargetRef := createMockGatewayTargetRef()
 	store.Set(testPolicy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1", entry1)
 	store.Set(testPolicy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding2", entry2)
 	store.Set(otherPolicy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding3", entry3)
@@ -229,7 +229,7 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 	store := NewRegisteredDataStore()
 
-	mockTargetRef := createMockMachineryTargetRef()
+	mockTargetRef := createMockGatewayTargetRef()
 	entries := store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
 	subscriptions := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(entries) != 0 || len(subscriptions) != 0 {
@@ -511,7 +511,7 @@ func TestRegisteredDataMutator(t *testing.T) {
 
 		authConfig := &authorinov1beta3.AuthConfig{}
 
-		targetRefs := []machinery.PolicyTargetReference{createMockMachineryTargetRef()}
+		targetRefs := []machinery.PolicyTargetReference{createMockGatewayTargetRef()}
 		err := mutator.Mutate(authConfig, targetRefs)
 		if err != nil {
 			t.Errorf("Expected no error with empty store: %v", err)
@@ -539,13 +539,13 @@ func TestRegisteredDataMutator(t *testing.T) {
 			CAst:       nil,
 		}
 
-		mockTargetRef := createMockMachineryTargetRef()
+		mockTargetRef := createMockGatewayTargetRef()
 		store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "user", entry1)
 		store.Set(testResourceID("Extension", "ns1", "ext2"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "role", entry2)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
 
-		err := mutator.Mutate(authConfig, []machinery.PolicyTargetReference{createMockMachineryTargetRef()})
+		err := mutator.Mutate(authConfig, []machinery.PolicyTargetReference{createMockGatewayTargetRef()})
 		if err != nil {
 			t.Errorf("Expected no error: %v", err)
 		}
@@ -595,7 +595,7 @@ func TestRegisteredDataMutator(t *testing.T) {
 			Expression: "custom.expression",
 			CAst:       nil,
 		}
-		mockTargetRef := createMockMachineryTargetRef()
+		mockTargetRef := createMockGatewayTargetRef()
 		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "custom_data", entry)
 
 		// AuthConfig with existing response configuration
@@ -621,7 +621,7 @@ func TestRegisteredDataMutator(t *testing.T) {
 			},
 		}
 
-		err := mutator.Mutate(authConfig, []machinery.PolicyTargetReference{createMockMachineryTargetRef()})
+		err := mutator.Mutate(authConfig, []machinery.PolicyTargetReference{createMockGatewayTargetRef()})
 		if err != nil {
 			t.Errorf("Expected no error: %v", err)
 		}
@@ -671,9 +671,9 @@ func TestMutatorRegistry(t *testing.T) {
 		registry.RegisterAuthConfigMutator(mutator2)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
-		targetRefs := []machinery.PolicyTargetReference{createMockMachineryTargetRef()}
+		targetRefs := []machinery.PolicyTargetReference{createMockGatewayTargetRef()}
 
-		err := registry.ApplyAuthConfigMutators(authConfig, targetRefs)
+		err := registry.applyMutatorsWithTargetRefs(authConfig, targetRefs)
 		if err != nil {
 			t.Errorf("Expected no error: %v", err)
 		}
@@ -698,24 +698,14 @@ func TestMutatorRegistry(t *testing.T) {
 		registry.RegisterAuthConfigMutator(errorMutator)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
-		targetRefs := []machinery.PolicyTargetReference{createMockMachineryTargetRef()}
+		targetRefs := []machinery.PolicyTargetReference{createMockGatewayTargetRef()}
 
-		err := registry.ApplyAuthConfigMutators(authConfig, targetRefs)
+		err := registry.applyMutatorsWithTargetRefs(authConfig, targetRefs)
 		if err == nil {
 			t.Error("Expected error from failing mutator")
 		}
 		if err.Error() != "mutator error" {
 			t.Errorf("Expected 'mutator error', got '%s'", err.Error())
-		}
-	})
-
-	t.Run("global mutator registry", func(t *testing.T) {
-		authConfig := &authorinov1beta3.AuthConfig{}
-		targetRefs := []machinery.PolicyTargetReference{createMockMachineryTargetRef()}
-
-		err := ApplyAuthConfigMutators(authConfig, targetRefs)
-		if err != nil {
-			t.Errorf("Expected no error from global registry: %v", err)
 		}
 	})
 }
@@ -725,7 +715,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 		store := NewRegisteredDataStore()
 
 		var wg sync.WaitGroup
-		mockTargetRef := createMockMachineryTargetRef()
+		mockTargetRef := createMockGatewayTargetRef()
 
 		for i := range 10 {
 			wg.Add(1)
@@ -752,7 +742,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("delete from empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		mockTargetRef := createMockMachineryTargetRef()
+		mockTargetRef := createMockGatewayTargetRef()
 		deleted := store.Delete(testResourceID("non-existent", "ns", "name"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "non-existent")
 		if deleted {
 			t.Error("Expected delete to return false for non-existent entry")
@@ -762,7 +752,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("get from empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		mockTargetRef := createMockMachineryTargetRef()
+		mockTargetRef := createMockGatewayTargetRef()
 		_, exists := store.Get(testResourceID("non-existent", "ns", "name"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "non-existent")
 		if exists {
 			t.Error("Expected get to return false for non-existent entry")
@@ -793,7 +783,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 			CAst:       nil,
 		}
 
-		mockTargetRef := createMockMachineryTargetRef()
+		mockTargetRef := createMockGatewayTargetRef()
 		store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1", entry)
 
 		if !store.Exists(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1") {
@@ -816,6 +806,62 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	})
 }
 
+func TestRegisteredDataMutatorLookup(t *testing.T) {
+	t.Run("mutator lookup with HTTPRoute and Gateway", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		mutator := NewRegisteredDataMutator(store)
+
+		httpRouteEntry := DataProviderEntry{
+			Policy:     testResourceID("PlanPolicy", "ns1", "plan1"),
+			Binding:    "plan",
+			Expression: `"premium"`,
+			CAst:       nil,
+		}
+		httpRouteTargetRef := createMockHTTPRouteTargetRef()
+		store.Set(httpRouteEntry.Policy, httpRouteTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "plan", httpRouteEntry)
+
+		gatewayEntry := DataProviderEntry{
+			Policy:     testResourceID("GlobalPolicy", "ns1", "global1"),
+			Binding:    "global",
+			Expression: `"enterprise"`,
+			CAst:       nil,
+		}
+		gatewayTargetRef := createMockGatewayTargetRef()
+		store.Set(gatewayEntry.Policy, gatewayTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "global", gatewayEntry)
+
+		authConfig := &authorinov1beta3.AuthConfig{}
+		targetRefs := []machinery.PolicyTargetReference{
+			httpRouteTargetRef,
+			gatewayTargetRef,
+		}
+
+		err := mutator.Mutate(authConfig, targetRefs)
+		if err != nil {
+			t.Errorf("Expected no error with mutator lookup: %v", err)
+		}
+
+		if authConfig.Spec.Response == nil {
+			t.Error("Expected response spec to be set")
+		}
+		if authConfig.Spec.Response.Success.DynamicMetadata == nil {
+			t.Error("Expected dynamic metadata to be set")
+		}
+		kuadrantData, exists := authConfig.Spec.Response.Success.DynamicMetadata[KuadrantDataNamespace]
+		if !exists {
+			t.Error("Expected kuadrant data namespace to exist")
+		}
+		if kuadrantData.Json == nil || kuadrantData.Json.Properties == nil {
+			t.Error("Expected JSON properties to be set")
+		}
+		if _, exists := kuadrantData.Json.Properties["plan"]; !exists {
+			t.Error("Expected 'plan' property from HTTPRoute-level policy")
+		}
+		if _, exists := kuadrantData.Json.Properties["global"]; !exists {
+			t.Error("Expected 'global' property from Gateway-level policy")
+		}
+	})
+}
+
 // Mock mutator
 type mockAuthConfigMutator struct {
 	mutateFn func(*authorinov1beta3.AuthConfig, []machinery.PolicyTargetReference) error
@@ -825,13 +871,26 @@ func (m *mockAuthConfigMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, 
 	return m.mutateFn(authConfig, targetRefs)
 }
 
-func createMockMachineryTargetRef() machinery.PolicyTargetReference {
+func createMockGatewayTargetRef() machinery.PolicyTargetReference {
 	return machinery.LocalPolicyTargetReferenceWithSectionName{
 		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 				Group: "gateway.networking.k8s.io",
 				Kind:  "Gateway",
 				Name:  "test-gateway",
+			},
+		},
+		PolicyNamespace: "test-namespace",
+	}
+}
+
+func createMockHTTPRouteTargetRef() machinery.PolicyTargetReference {
+	return machinery.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: "gateway.networking.k8s.io",
+				Kind:  "HTTPRoute",
+				Name:  "test-route",
 			},
 		},
 		PolicyNamespace: "test-namespace",

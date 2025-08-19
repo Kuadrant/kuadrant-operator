@@ -249,7 +249,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 		})
 	}
 
-	if err := extensionmanager.ApplyAuthConfigMutators(authConfig, effectivePolicy.Spec.GetTargetRefs()); err != nil {
+	if err := extensionmanager.ApplyAuthConfigMutators(authConfig, effectivePolicy.Path); err != nil {
 		// Log error but don't fail the reconciliation?
 		logger := controller.LoggerFromContext(context.TODO()).WithName("AuthConfigsReconciler")
 		logger.Error(err, "failed to apply AuthConfig mutators")

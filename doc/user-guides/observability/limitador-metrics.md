@@ -105,7 +105,6 @@ metadata:
   name: limitador-metrics
   namespace: kuadrant-system
   labels:
-    kuadrant.io/observability: "true"
     app: limitador
 spec:
   podMetricsEndpoints:

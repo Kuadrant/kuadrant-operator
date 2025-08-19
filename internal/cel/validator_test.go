@@ -150,3 +150,41 @@ func TestPolicyWithAnyKnownPolicyBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestPushPolicyBinding(t *testing.T) {
+	builder := NewValidatorBuilder()
+	builder.AddBinding("root", cel.StringType)
+	first := "foo"
+	second := "bar"
+	builder = builder.PushPolicyBinding(first, "first", cel.AnyType)
+	builder = builder.PushPolicyBinding(second, "second", cel.AnyType)
+	if validator, err := builder.Build(); err != nil {
+		t.Fatal(err)
+	} else {
+		if ast, err := validator.Validate(first, "!first.randomField"); err != nil {
+			t.Fatalf("Should have not returned an error: %v", err)
+		} else if ast == nil {
+			t.Fatal("Ast should have returned for known policy binding")
+		}
+		if ast, err := validator.Validate(second, "!first.randomField"); err != nil {
+			t.Fatalf("Should have not returned an error: %v", err)
+		} else if ast == nil {
+			t.Fatal("Ast should have returned for known policy binding")
+		}
+		if ast, err := validator.Validate(second, "!second.randomField"); err != nil {
+			t.Fatalf("Should have not returned an error: %v", err)
+		} else if ast == nil {
+			t.Fatal("Ast should have returned for known policy binding")
+		}
+		if ast, err := validator.Validate(first, "!second.randomField"); err == nil {
+			t.Fatalf("Should have returned an error")
+		} else if ast != nil {
+			t.Fatalf("Should have not returned an ast: %v", ast)
+		}
+		if ast, err := validator.Validate("baz", "!second.randomField"); err == nil {
+			t.Fatalf("Should have returned an error")
+		} else if ast != nil {
+			t.Fatal("Ast should have not returned for unknown policy binding")
+		}
+	}
+}

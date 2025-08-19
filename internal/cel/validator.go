@@ -59,6 +59,19 @@ func (b *ValidatorBuilder) AddPolicyBindingAfter(after *string, policy string, n
 	return b, nil
 }
 
+func (b *ValidatorBuilder) PushPolicyBinding(policy string, name string, t *cel.Type) *ValidatorBuilder {
+	p := policyBinding{
+		policy: policy,
+		binding: binding{
+			name: name,
+			t:    t,
+		},
+	}
+
+	b.policies = append(b.policies, p)
+	return b
+}
+
 func (b *ValidatorBuilder) Build() (*Validator, error) {
 	var envs = make(map[string]*cel.Env)
 

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/google/cel-go/cel"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -23,6 +24,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	celvalidator "github.com/kuadrant/kuadrant-operator/internal/cel"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -184,6 +186,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
+	validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an envoy gateway gateway
 	for i := range paths {
@@ -202,6 +205,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		// auth
 		if effectivePolicy, ok := effectiveAuthPoliciesMap[pathID]; ok {
 			actions = append(actions, buildWasmActionsForAuth(pathID, effectivePolicy)...)
+			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
 
 		// rate limit
@@ -213,6 +217,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 				// pre auth rate limiting
 				actions = append(rlAction, actions...)
 			}
+			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
@@ -223,6 +228,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 				// pre auth rate limiting
 				actions = append(trlAction, actions...)
 			}
+			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
 		actions, err := mergeAndVerify(actions)
@@ -234,7 +240,26 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, path, actions)
+		validator, err := validatorBuilder.Build()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
+		}
+		var validatedActions []wasm.Action
+
+		for _, action := range actions {
+			if err = celvalidator.ValidateWasmAction(action, validator); err != nil {
+				logger.V(1).Info("WASM action is invalid", "action", action, "path", pathID, "error", err)
+				// Dag set a state information
+			} else {
+				validatedActions = append(validatedActions, action)
+			}
+		}
+
+		if len(validatedActions) == 0 {
+			continue
+		}
+
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, path, validatedActions)
 		if err != nil {
 			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
 			continue

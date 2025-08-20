@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/cel-go/cel"
@@ -87,4 +88,51 @@ func TestValidateWasmActionValid(t *testing.T) {
 	}
 
 	assert.NilError(t, ValidateWasmAction(wasmAction, validator))
+}
+
+func TestNewIssue(t *testing.T) {
+	action := wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       "scope",
+		Predicates:  []string{"auth.identity == 'anonymous'"},
+	}
+	issue := NewIssue(action, "/test/pathID", fmt.Errorf("auth not there"))
+
+	assert.ErrorContains(t, issue.GetError(), "auth not there")
+	assert.Equal(t, issue.policyKind, RateLimitPolicyKind)
+	assert.Equal(t, issue.pathID, "/test/pathID")
+}
+
+func TestIssueCollectionIsEmpty(t *testing.T) {
+	collection := NewIssueCollection()
+	assert.Equal(t, collection.IsEmpty(), true)
+
+	action := wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       "scope",
+		Predicates:  []string{"auth.identity == 'anonymous'"},
+	}
+	issue := NewIssue(action, "/test/path", nil)
+
+	collection.Add(issue)
+	assert.Equal(t, collection.IsEmpty(), false)
+}
+
+func TestIssueCollectionGetByPolicyKind(t *testing.T) {
+	collection := NewIssueCollection()
+	action := wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       "scope",
+		Predicates:  []string{"auth.identity == 'anonymous'"},
+	}
+	issue := NewIssue(action, "/test/path", nil)
+	collection.Add(issue)
+
+	issues, found := collection.GetByPolicyKind(RateLimitPolicyKind)
+	assert.Equal(t, found, true)
+	assert.Equal(t, len(issues), 1)
+
+	// Test non-existent policy kind
+	_, found = collection.GetByPolicyKind("non-existent")
+	assert.Equal(t, found, false)
 }

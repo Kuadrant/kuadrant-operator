@@ -14,11 +14,12 @@ import (
 const (
 	PolicyConditionEnforced gatewayapiv1alpha2.PolicyConditionType = "Enforced"
 
-	PolicyReasonEnforced          gatewayapiv1alpha2.PolicyConditionReason = "Enforced"
-	PolicyReasonOverridden        gatewayapiv1alpha2.PolicyConditionReason = "Overridden"
-	PolicyReasonUnknown           gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
-	PolicyReasonMissingDependency gatewayapiv1alpha2.PolicyConditionReason = "MissingDependency"
-	PolicyReasonMissingResource   gatewayapiv1alpha2.PolicyConditionReason = "MissingResource"
+	PolicyReasonEnforced             gatewayapiv1alpha2.PolicyConditionReason = "Enforced"
+	PolicyReasonOverridden           gatewayapiv1alpha2.PolicyConditionReason = "Overridden"
+	PolicyReasonUnknown              gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
+	PolicyReasonMissingDependency    gatewayapiv1alpha2.PolicyConditionReason = "MissingDependency"
+	PolicyReasonMissingResource      gatewayapiv1alpha2.PolicyConditionReason = "MissingResource"
+	PolicyReasonInvalidCelExpression gatewayapiv1alpha2.PolicyConditionReason = "InvalidCelExpression"
 )
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.

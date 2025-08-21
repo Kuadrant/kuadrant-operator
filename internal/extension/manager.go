@@ -39,6 +39,8 @@ import (
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
 
+type ChangeNotifier func(reason string) error
+
 type Manager struct {
 	extensions []Extension
 	service    extpb.ExtensionServiceServer
@@ -62,7 +64,7 @@ func NewManager(location string, logger logr.Logger, sync io.Writer) (Manager, e
 	var extensions []Extension
 	var err error
 
-	service := newExtensionService(BlockingDAG)
+	service := newExtensionService(BlockingDAG, logger)
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
@@ -116,6 +118,12 @@ func (m *Manager) Stop() error {
 	}
 
 	return err
+}
+
+func (m *Manager) SetChangeNotifier(notifier ChangeNotifier) {
+	if service, ok := m.service.(*extensionService); ok {
+		service.changeNotifier = notifier
+	}
 }
 
 func (m *Manager) Run(stopCh <-chan struct{}) {
@@ -175,6 +183,8 @@ func (m *Manager) HasSynced() bool {
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
 	registeredData *RegisteredDataStore
+	changeNotifier ChangeNotifier
+	logger         logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -184,10 +194,11 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
+func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
 	service := &extensionService{
 		dag:            dag,
 		registeredData: NewRegisteredDataStore(),
+		logger:         logger.WithName("extensionService"),
 	}
 
 	mutator := NewRegisteredDataMutator(service.registeredData)
@@ -326,6 +337,15 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 		s.registeredData.Set(policyID, targetRefLocator, request.Domain, request.Binding, entry)
 	}
 
+	// Trigger notifier when mutators are registered
+	if s.changeNotifier != nil {
+		reason := fmt.Sprintf("mutator registered for policy %s/%s", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+		if err := s.changeNotifier(reason); err != nil {
+			// Do not fail if triggering fails - mutator is registered
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
+
 	return &emptypb.Empty{}, nil
 }
 
@@ -350,6 +370,14 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 	}
 
 	clearedMutators, clearedSubscriptions := s.registeredData.ClearPolicyData(policyID)
+
+	// Trigger notifier when mutators are cleared
+	if clearedMutators > 0 && s.changeNotifier != nil {
+		reason := fmt.Sprintf("mutators cleared for policy %s/%s", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+		if err := s.changeNotifier(reason); err != nil {
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
 
 	return &extpb.ClearPolicyResponse{
 		ClearedMutators:      int32(clearedMutators),      // #nosec G115

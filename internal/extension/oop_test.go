@@ -33,7 +33,7 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 		name:       "test",
 		executable: "/bin/sleep",
 		socket:     "1d",
-		service:    newExtensionService(nil),
+		service:    newExtensionService(nil, logr.Discard()),
 		logger:     logr.Discard(),
 		sync:       nil,
 	}
@@ -75,7 +75,7 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		name:       "testErrorLog",
 		executable: "/bin/ps",
 		socket:     "--foobar",
-		service:    newExtensionService(nil),
+		service:    newExtensionService(nil, logger),
 		logger:     logger,
 		sync:       writer,
 	}

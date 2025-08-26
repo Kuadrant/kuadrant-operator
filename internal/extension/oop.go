@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -44,6 +45,7 @@ type OOPExtension struct {
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
 	sync       io.Writer
+	serverMu   sync.Mutex
 }
 
 func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
@@ -151,6 +153,9 @@ func (p *OOPExtension) Stop() error {
 }
 
 func (p *OOPExtension) startServer() error {
+	p.serverMu.Lock()
+	defer p.serverMu.Unlock()
+
 	if p.server == nil {
 		if err := os.MkdirAll(filepath.Dir(p.socket), 0755); err != nil {
 			return fmt.Errorf("failed to create socket directory: %w", err)
@@ -161,11 +166,12 @@ func (p *OOPExtension) startServer() error {
 			return err
 		}
 
-		p.server = grpc.NewServer()
-		extpb.RegisterExtensionServiceServer(p.server, p.service)
+		server := grpc.NewServer()
+		extpb.RegisterExtensionServiceServer(server, p.service)
+		p.server = server
 
 		go func() {
-			if err := p.server.Serve(ln); err != nil {
+			if err := server.Serve(ln); err != nil {
 				// FIXME: Make this fail synchronously somehow
 				p.logger.Error(err, "failed to start server")
 			}
@@ -175,9 +181,13 @@ func (p *OOPExtension) startServer() error {
 }
 
 func (p *OOPExtension) stopServer() error {
-	if p.server != nil {
-		p.server.Stop()
-		p.server = nil
+	p.serverMu.Lock()
+	server := p.server
+	p.server = nil
+	p.serverMu.Unlock()
+
+	if server != nil {
+		server.Stop()
 		if _, err := os.Stat(p.socket); err == nil {
 			return os.Remove(p.socket)
 		}

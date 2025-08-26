@@ -14,7 +14,7 @@ Traditional rate limiting counts requests, but LLM APIs have varying computation
 
 ## Prerequisites
 
-- Kubernetes cluster with Kuadrant operator installed. See our [development](doc/overviews/development.md) guide for more information.
+- Kubernetes cluster with Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide for more information.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command line tool.
 - Basic understanding of [Gateway API](https://gateway-api.sigs.k8s.io/).
 

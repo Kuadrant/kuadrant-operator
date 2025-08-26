@@ -10,10 +10,10 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/policy-machinery/machinery"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func testResourceID(kind, namespace, name string) ResourceID {
@@ -24,40 +24,36 @@ func TestRegisteredDataStore_Set_Get_Delete(t *testing.T) {
 	store := NewRegisteredDataStore()
 
 	entry := DataProviderEntry{
-		Requester:  testResourceID("Extension", "ns1", "ext1"),
+		Policy:     testResourceID("Extension", "ns1", "ext1"),
 		Binding:    "user",
 		Expression: "user.id",
 		CAst:       nil,
 	}
 
-	store.Set(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user", entry)
+	mockTargetRef := createMockGatewayTargetRef()
+	store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry)
 
-	retrieved, exists := store.Get(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user")
+	retrieved, exists := store.Get(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user")
 	if !exists {
 		t.Fatal("Expected entry to exist")
 	}
 
-	if retrieved.Requester != entry.Requester {
-		t.Errorf("Expected requester %+v, got %+v", entry.Requester, retrieved.Requester)
+	if retrieved.Policy != entry.Policy {
+		t.Errorf("Expected policy %+v, got %+v", entry.Policy, retrieved.Policy)
 	}
 
 	if retrieved.Binding != entry.Binding {
 		t.Errorf("Expected binding %s, got %s", entry.Binding, retrieved.Binding)
 	}
 
-	entries := store.GetAllForTarget(testResourceID("AuthPolicy", "ns1", "policy1"))
+	entries := store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED)
 	if len(entries) != 1 {
 		t.Errorf("Expected 1 entry, got %d", len(entries))
 	}
 
-	deleted := store.Delete(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user")
+	deleted := store.Delete(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user")
 	if !deleted {
 		t.Error("Expected entry to be deleted")
-	}
-
-	_, exists = store.Get(testResourceID("AuthPolicy", "ns1", "policy1"), testResourceID("Extension", "ns1", "ext1"), "user")
-	if exists {
-		t.Error("Expected entry to not exist after deletion")
 	}
 }
 
@@ -121,22 +117,32 @@ func TestRegisteredDataStore_SetSubscription(t *testing.T) {
 func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 	store := NewRegisteredDataStore()
 
+	testPolicy := testResourceID("AuthPolicy", "test-ns", "test-policy")
+	otherPolicy := testResourceID("AuthPolicy", "other-ns", "other-policy")
+
 	entry1 := DataProviderEntry{
-		Requester:  testResourceID("Extension", "ns1", "ext1"),
+		Policy:     testPolicy,
 		Binding:    "user_id",
 		Expression: "user.id",
 		CAst:       nil,
 	}
 	entry2 := DataProviderEntry{
-		Requester:  testResourceID("Extension", "ns1", "ext2"),
+		Policy:     testPolicy,
 		Binding:    "user_email",
 		Expression: "user.email",
 		CAst:       nil,
 	}
+	entry3 := DataProviderEntry{
+		Policy:     otherPolicy,
+		Binding:    "role",
+		Expression: "user.role",
+		CAst:       nil,
+	}
 
-	store.Set(testResourceID("AuthPolicy", "test-ns", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry1)
-	store.Set(testResourceID("AuthPolicy", "test-ns", "test-policy"), testResourceID("Extension", "ns1", "ext2"), "user_email", entry2)
-	store.Set(testResourceID("AuthPolicy", "other-ns", "other-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry1)
+	mockTargetRef := createMockGatewayTargetRef()
+	store.Set(testPolicy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1", entry1)
+	store.Set(testPolicy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding2", entry2)
+	store.Set(otherPolicy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding3", entry3)
 
 	subscription1 := Subscription{
 		CAst: &cel.Ast{},
@@ -167,24 +173,20 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		PolicyKind: "AuthPolicy",
 	}
 
-	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1", subscription1)
-	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression2", subscription2)
+	store.SetSubscription(testPolicy, "expression1", subscription1)
+	store.SetSubscription(otherPolicy, "expression2", subscription2)
 
 	allSubs := store.GetAllSubscriptions()
 	if len(allSubs) != 2 {
 		t.Errorf("Expected 2 subscriptions, got %d", len(allSubs))
 	}
 
-	testEntries := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
-	if len(testEntries) == 0 {
-		t.Error("Expected test policy to have data")
-	}
-	otherEntries := store.GetAllForTarget(testResourceID("AuthPolicy", "other-ns", "other-policy"))
-	if len(otherEntries) == 0 {
-		t.Error("Expected other policy to have data")
+	entries := store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
+	if len(entries) != 3 {
+		t.Errorf("Expected 3 entries for target ref, got %d", len(entries))
 	}
 
-	clearedMutators, clearedSubscriptions := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	clearedMutators, clearedSubscriptions := store.ClearPolicyData(testPolicy)
 
 	if clearedMutators != 2 {
 		t.Errorf("Expected 2 cleared mutators, got %d", clearedMutators)
@@ -193,22 +195,17 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 1 cleared subscription, got %d", clearedSubscriptions)
 	}
 
-	entries := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
-	if len(entries) != 0 {
-		t.Errorf("Expected 0 entries after clear, got %d", len(entries))
+	entries = store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
+	if len(entries) != 1 {
+		t.Errorf("Expected 1 entry after clear (other policy), got %d", len(entries))
 	}
 
-	_, exists := store.GetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression1")
+	_, exists := store.GetSubscription(testPolicy, "expression1")
 	if exists {
 		t.Error("Expected subscription1 to be cleared")
 	}
 
-	otherEntriesAfterClear := store.GetAllForTarget(testResourceID("AuthPolicy", "other-ns", "other-policy"))
-	if len(otherEntriesAfterClear) != 1 {
-		t.Errorf("Expected 1 entry for other policy, got %d", len(otherEntriesAfterClear))
-	}
-
-	_, exists = store.GetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression2")
+	_, exists = store.GetSubscription(otherPolicy, "expression2")
 	if !exists {
 		t.Error("Expected subscription2 to still exist")
 	}
@@ -218,44 +215,41 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 1 subscription after clear, got %d", len(finalSubs))
 	}
 
-	testEntriesAfter := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
-	if len(testEntriesAfter) != 0 {
-		t.Error("Expected test policy to have no data after clear")
-	}
-	testSubsAfter := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	testSubsAfter := store.GetPolicySubscriptions(testPolicy)
 	if len(testSubsAfter) != 0 {
 		t.Error("Expected test policy to have no subscriptions after clear")
 	}
 
-	otherEntriesAfter := store.GetAllForTarget(testResourceID("AuthPolicy", "other-ns", "other-policy"))
-	if len(otherEntriesAfter) == 0 {
-		t.Error("Expected other policy to still have data after clear")
+	otherSubsAfter := store.GetPolicySubscriptions(otherPolicy)
+	if len(otherSubsAfter) != 1 {
+		t.Errorf("Expected other policy to have 1 subscription after clear, got %d", len(otherSubsAfter))
 	}
 }
 
 func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 	store := NewRegisteredDataStore()
 
-	entries := store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	mockTargetRef := createMockGatewayTargetRef()
+	entries := store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
 	subscriptions := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if len(entries) != 0 || len(subscriptions) != 0 {
 		t.Error("Expected no policy data initially")
 	}
 
 	entry := DataProviderEntry{
-		Requester:  testResourceID("Extension", "ns1", "ext1"),
+		Policy:     testResourceID("Extension", "ns1", "ext1"),
 		Binding:    "user_id",
 		Expression: "user.id",
 		CAst:       nil,
 	}
-	store.Set(testResourceID("AuthPolicy", "test-ns", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry)
+	store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "user_id", entry)
 
-	entries = store.GetAllForTarget(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	entries = store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
 	if len(entries) == 0 {
 		t.Error("Expected policy data after adding entry")
 	}
 
-	store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1"))
 
 	subscription := Subscription{
 		CAst: &cel.Ast{},
@@ -516,18 +510,9 @@ func TestRegisteredDataMutator(t *testing.T) {
 		mutator := NewRegisteredDataMutator(store)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
-		policy := &kuadrantv1.AuthPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "AuthPolicy",
-				APIVersion: "kuadrant.io/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-policy",
-				Namespace: "test-namespace",
-			},
-		}
 
-		err := mutator.Mutate(authConfig, policy)
+		targetRefs := []machinery.PolicyTargetReference{createMockGatewayTargetRef()}
+		err := mutator.Mutate(authConfig, targetRefs)
 		if err != nil {
 			t.Errorf("Expected no error with empty store: %v", err)
 		}
@@ -542,34 +527,25 @@ func TestRegisteredDataMutator(t *testing.T) {
 		mutator := NewRegisteredDataMutator(store)
 
 		entry1 := DataProviderEntry{
-			Requester:  testResourceID("Extension", "ns1", "ext1"),
-			Binding:    "user_id",
+			Policy:     testResourceID("Extension", "ns1", "ext1"),
+			Binding:    "user",
 			Expression: "user.id",
 			CAst:       nil,
 		}
 		entry2 := DataProviderEntry{
-			Requester:  testResourceID("Extension", "ns1", "ext2"),
-			Binding:    "user_email",
-			Expression: "user.email",
+			Policy:     testResourceID("Extension", "ns1", "ext2"),
+			Binding:    "role",
+			Expression: "user.role",
 			CAst:       nil,
 		}
 
-		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "user_id", entry1)
-		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), testResourceID("Extension", "ns1", "ext2"), "user_email", entry2)
+		mockTargetRef := createMockGatewayTargetRef()
+		store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "user", entry1)
+		store.Set(testResourceID("Extension", "ns1", "ext2"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "role", entry2)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
-		policy := &kuadrantv1.AuthPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "AuthPolicy",
-				APIVersion: "kuadrant.io/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-policy",
-				Namespace: "test-namespace",
-			},
-		}
 
-		err := mutator.Mutate(authConfig, policy)
+		err := mutator.Mutate(authConfig, []machinery.PolicyTargetReference{createMockGatewayTargetRef()})
 		if err != nil {
 			t.Errorf("Expected no error: %v", err)
 		}
@@ -594,18 +570,18 @@ func TestRegisteredDataMutator(t *testing.T) {
 			t.Errorf("Expected 2 properties, got %d", len(kuadrantMetadata.Json.Properties))
 		}
 
-		userIdProp, exists := kuadrantMetadata.Json.Properties["user_id"]
+		userProp, exists := kuadrantMetadata.Json.Properties["user"]
 		if !exists {
-			t.Error("Expected 'user_id' property to exist")
-		} else if string(userIdProp.Expression) != "user.id" {
-			t.Errorf("Expected expression 'user.id', got '%s'", userIdProp.Expression)
+			t.Error("Expected 'user' property to exist")
+		} else if string(userProp.Expression) != "user.id" {
+			t.Errorf("Expected expression 'user.id', got '%s'", userProp.Expression)
 		}
 
-		userEmailProp, exists := kuadrantMetadata.Json.Properties["user_email"]
+		roleProp, exists := kuadrantMetadata.Json.Properties["role"]
 		if !exists {
-			t.Error("Expected 'user_email' property to exist")
-		} else if string(userEmailProp.Expression) != "user.email" {
-			t.Errorf("Expected expression 'user.email', got '%s'", userEmailProp.Expression)
+			t.Error("Expected 'role' property to exist")
+		} else if string(roleProp.Expression) != "user.role" {
+			t.Errorf("Expected expression 'user.role', got '%s'", roleProp.Expression)
 		}
 	})
 
@@ -614,12 +590,13 @@ func TestRegisteredDataMutator(t *testing.T) {
 		mutator := NewRegisteredDataMutator(store)
 
 		entry := DataProviderEntry{
-			Requester:  testResourceID("Extension", "ns1", "ext1"),
+			Policy:     testResourceID("Extension", "ns1", "ext1"),
 			Binding:    "custom_data",
 			Expression: "custom.expression",
 			CAst:       nil,
 		}
-		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), testResourceID("Extension", "ns1", "ext1"), "custom_data", entry)
+		mockTargetRef := createMockGatewayTargetRef()
+		store.Set(testResourceID("AuthPolicy", "test-namespace", "test-policy"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "custom_data", entry)
 
 		// AuthConfig with existing response configuration
 		authConfig := &authorinov1beta3.AuthConfig{
@@ -644,18 +621,7 @@ func TestRegisteredDataMutator(t *testing.T) {
 			},
 		}
 
-		policy := &kuadrantv1.AuthPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "AuthPolicy",
-				APIVersion: "kuadrant.io/v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-policy",
-				Namespace: "test-namespace",
-			},
-		}
-
-		err := mutator.Mutate(authConfig, policy)
+		err := mutator.Mutate(authConfig, []machinery.PolicyTargetReference{createMockGatewayTargetRef()})
 		if err != nil {
 			t.Errorf("Expected no error: %v", err)
 		}
@@ -688,14 +654,14 @@ func TestMutatorRegistry(t *testing.T) {
 		mutator2Called := false
 
 		mutator1 := &mockAuthConfigMutator{
-			mutateFn: func(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+			mutateFn: func(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
 				mutator1Called = true
 				return nil
 			},
 		}
 
 		mutator2 := &mockAuthConfigMutator{
-			mutateFn: func(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+			mutateFn: func(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
 				mutator2Called = true
 				return nil
 			},
@@ -705,9 +671,9 @@ func TestMutatorRegistry(t *testing.T) {
 		registry.RegisterAuthConfigMutator(mutator2)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
-		policy := &kuadrantv1.AuthPolicy{}
+		targetRefs := []machinery.PolicyTargetReference{createMockGatewayTargetRef()}
 
-		err := registry.ApplyAuthConfigMutators(authConfig, policy)
+		err := registry.applyMutatorsWithTargetRefs(authConfig, targetRefs)
 		if err != nil {
 			t.Errorf("Expected no error: %v", err)
 		}
@@ -724,7 +690,7 @@ func TestMutatorRegistry(t *testing.T) {
 		registry := &MutatorRegistry{}
 
 		errorMutator := &mockAuthConfigMutator{
-			mutateFn: func(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
+			mutateFn: func(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
 				return fmt.Errorf("mutator error")
 			},
 		}
@@ -732,24 +698,14 @@ func TestMutatorRegistry(t *testing.T) {
 		registry.RegisterAuthConfigMutator(errorMutator)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
-		policy := &kuadrantv1.AuthPolicy{}
+		targetRefs := []machinery.PolicyTargetReference{createMockGatewayTargetRef()}
 
-		err := registry.ApplyAuthConfigMutators(authConfig, policy)
+		err := registry.applyMutatorsWithTargetRefs(authConfig, targetRefs)
 		if err == nil {
 			t.Error("Expected error from failing mutator")
 		}
 		if err.Error() != "mutator error" {
 			t.Errorf("Expected 'mutator error', got '%s'", err.Error())
-		}
-	})
-
-	t.Run("global mutator registry", func(t *testing.T) {
-		authConfig := &authorinov1beta3.AuthConfig{}
-		policy := &kuadrantv1.AuthPolicy{}
-
-		err := ApplyAuthConfigMutators(authConfig, policy)
-		if err != nil {
-			t.Errorf("Expected no error from global registry: %v", err)
 		}
 	})
 }
@@ -759,23 +715,25 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 		store := NewRegisteredDataStore()
 
 		var wg sync.WaitGroup
+		mockTargetRef := createMockGatewayTargetRef()
+
 		for i := range 10 {
 			wg.Add(1)
 			go func(index int) {
 				defer wg.Done()
 				entry := DataProviderEntry{
-					Requester:  testResourceID("Extension", "ns1", fmt.Sprintf("ext%d", index)),
+					Policy:     testResourceID("TestPolicy", "ns", "policy"),
 					Binding:    fmt.Sprintf("binding%d", index),
 					Expression: fmt.Sprintf("expression%d", index),
 					CAst:       nil,
 				}
-				store.Set(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", fmt.Sprintf("ext%d", index)), fmt.Sprintf("binding%d", index), entry)
+				store.Set(testResourceID("TestPolicy", "ns", "policy"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, fmt.Sprintf("binding%d", index), entry)
 			}(i)
 		}
 
 		wg.Wait()
 
-		entries := store.GetAllForTarget(testResourceID("TestPolicy", "ns", "policy"))
+		entries := store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
 		if len(entries) != 10 {
 			t.Errorf("Expected 10 entries, got %d", len(entries))
 		}
@@ -784,7 +742,8 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("delete from empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		deleted := store.Delete(testResourceID("non-existent", "ns", "name"), testResourceID("non-existent", "ns", "name"), "non-existent")
+		mockTargetRef := createMockGatewayTargetRef()
+		deleted := store.Delete(testResourceID("non-existent", "ns", "name"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "non-existent")
 		if deleted {
 			t.Error("Expected delete to return false for non-existent entry")
 		}
@@ -793,12 +752,13 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("get from empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		_, exists := store.Get(testResourceID("non-existent", "ns", "name"), testResourceID("non-existent", "ns", "name"), "non-existent")
+		mockTargetRef := createMockGatewayTargetRef()
+		_, exists := store.Get(testResourceID("non-existent", "ns", "name"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "non-existent")
 		if exists {
 			t.Error("Expected get to return false for non-existent entry")
 		}
 
-		exists = store.Exists(testResourceID("non-existent", "ns", "name"), testResourceID("non-existent", "ns", "name"), "non-existent")
+		exists = store.Exists(testResourceID("non-existent", "ns", "name"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "non-existent")
 		if exists {
 			t.Error("Expected exists to return false for non-existent entry")
 		}
@@ -817,39 +777,122 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 		store := NewRegisteredDataStore()
 
 		entry := DataProviderEntry{
-			Requester:  testResourceID("Extension", "ns1", "ext1"),
+			Policy:     testResourceID("Extension", "ns1", "ext1"),
 			Binding:    "binding1",
 			Expression: "expression1",
 			CAst:       nil,
 		}
 
-		store.Set(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1", entry)
+		mockTargetRef := createMockGatewayTargetRef()
+		store.Set(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1", entry)
 
-		if !store.Exists(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1") {
+		if !store.Exists(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1") {
 			t.Error("Expected entry to exist after setting")
 		}
 
-		deleted := store.Delete(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1")
+		deleted := store.Delete(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1")
 		if !deleted {
 			t.Error("Expected delete to return true")
 		}
 
-		if store.Exists(testResourceID("TestPolicy", "ns", "policy"), testResourceID("Extension", "ns1", "ext1"), "binding1") {
+		if store.Exists(testResourceID("Extension", "ns1", "ext1"), mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "binding1") {
 			t.Error("Expected entry to not exist after deleting")
 		}
 
-		entries := store.GetAllForTarget(testResourceID("TestPolicy", "ns", "policy"))
-		if entries != nil {
-			t.Error("Expected nil entries for cleaned up target")
+		entries := store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
+		if len(entries) != 0 {
+			t.Error("Expected no entries for cleaned up target")
+		}
+	})
+}
+
+func TestRegisteredDataMutatorLookup(t *testing.T) {
+	t.Run("mutator lookup with HTTPRoute and Gateway", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		mutator := NewRegisteredDataMutator(store)
+
+		httpRouteEntry := DataProviderEntry{
+			Policy:     testResourceID("PlanPolicy", "ns1", "plan1"),
+			Binding:    "plan",
+			Expression: `"premium"`,
+			CAst:       nil,
+		}
+		httpRouteTargetRef := createMockHTTPRouteTargetRef()
+		store.Set(httpRouteEntry.Policy, httpRouteTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "plan", httpRouteEntry)
+
+		gatewayEntry := DataProviderEntry{
+			Policy:     testResourceID("GlobalPolicy", "ns1", "global1"),
+			Binding:    "global",
+			Expression: `"enterprise"`,
+			CAst:       nil,
+		}
+		gatewayTargetRef := createMockGatewayTargetRef()
+		store.Set(gatewayEntry.Policy, gatewayTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "global", gatewayEntry)
+
+		authConfig := &authorinov1beta3.AuthConfig{}
+		targetRefs := []machinery.PolicyTargetReference{
+			httpRouteTargetRef,
+			gatewayTargetRef,
+		}
+
+		err := mutator.Mutate(authConfig, targetRefs)
+		if err != nil {
+			t.Errorf("Expected no error with mutator lookup: %v", err)
+		}
+
+		if authConfig.Spec.Response == nil {
+			t.Error("Expected response spec to be set")
+		}
+		if authConfig.Spec.Response.Success.DynamicMetadata == nil {
+			t.Error("Expected dynamic metadata to be set")
+		}
+		kuadrantData, exists := authConfig.Spec.Response.Success.DynamicMetadata[KuadrantDataNamespace]
+		if !exists {
+			t.Error("Expected kuadrant data namespace to exist")
+		}
+		if kuadrantData.Json == nil || kuadrantData.Json.Properties == nil {
+			t.Error("Expected JSON properties to be set")
+		}
+		if _, exists := kuadrantData.Json.Properties["plan"]; !exists {
+			t.Error("Expected 'plan' property from HTTPRoute-level policy")
+		}
+		if _, exists := kuadrantData.Json.Properties["global"]; !exists {
+			t.Error("Expected 'global' property from Gateway-level policy")
 		}
 	})
 }
 
 // Mock mutator
 type mockAuthConfigMutator struct {
-	mutateFn func(*authorinov1beta3.AuthConfig, *kuadrantv1.AuthPolicy) error
+	mutateFn func(*authorinov1beta3.AuthConfig, []machinery.PolicyTargetReference) error
 }
 
-func (m *mockAuthConfigMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, policy *kuadrantv1.AuthPolicy) error {
-	return m.mutateFn(authConfig, policy)
+func (m *mockAuthConfigMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
+	return m.mutateFn(authConfig, targetRefs)
+}
+
+func createMockGatewayTargetRef() machinery.PolicyTargetReference {
+	return machinery.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: "gateway.networking.k8s.io",
+				Kind:  "Gateway",
+				Name:  "test-gateway",
+			},
+		},
+		PolicyNamespace: "test-namespace",
+	}
+}
+
+func createMockHTTPRouteTargetRef() machinery.PolicyTargetReference {
+	return machinery.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: "gateway.networking.k8s.io",
+				Kind:  "HTTPRoute",
+				Name:  "test-route",
+			},
+		},
+		PolicyNamespace: "test-namespace",
+	}
 }

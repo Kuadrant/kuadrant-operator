@@ -97,9 +97,7 @@ spec:
                   type: object
                 type: array
               targetRef:
-                description: |-
-                  Reference to the object to which this policy applies.
-                  todo(adam-cattermole): This doesn't have to be tied to a particular IdentityPolicy, but could be updated to support other resources
+                description: Reference to the object to which this policy applies.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -140,10 +138,11 @@ spec:
                 - name
                 type: object
                 x-kubernetes-validations:
-                - message: Invalid targetRef.group. The only supported value is 'kuadrant.io'
-                  rule: self.group == 'kuadrant.io'
-                - message: Invalid targetRef.kind. The only supported value is 'AuthPolicy'
-                  rule: self.kind == 'AuthPolicy'
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
+                    and 'Gateway'
+                  rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
             required:
             - plans
             - targetRef

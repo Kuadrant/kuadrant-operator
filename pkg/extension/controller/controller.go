@@ -236,13 +236,13 @@ func (ec *ExtensionController) ResolvePolicy(ctx context.Context, policy exttype
 	return nil, fmt.Errorf("CEL result is not an object value that can be converted to Policy")
 }
 
-func (ec *ExtensionController) AddDataTo(ctx context.Context, requester exttypes.Policy, target exttypes.Policy, binding string, expression string) error {
-	pbRequester := convertPolicyToProtobuf(requester)
-	pbTarget := convertPolicyToProtobuf(target)
+func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Policy, domain exttypes.Domain, binding string, expression string) error {
+	pbPolicy := convertPolicyToProtobuf(policy)
+	pbDomain := convertDomainToProtobuf(domain)
 
 	_, err := ec.extensionClient.client.RegisterMutator(ctx, &extpb.RegisterMutatorRequest{
-		Requester:  pbRequester,
-		Target:     pbTarget,
+		Policy:     pbPolicy,
+		Domain:     pbDomain,
 		Binding:    binding,
 		Expression: expression,
 	})

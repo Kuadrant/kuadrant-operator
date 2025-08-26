@@ -61,9 +61,14 @@ message Event {
   Metadata metadata = 1;
 }
 
+enum Domain {
+  DOMAIN_UNSPECIFIED = 0;
+  DOMAIN_AUTH = 1;
+}
+
 message RegisterMutatorRequest {
-  kuadrant.v1.Policy requester = 1;
-  kuadrant.v1.Policy target = 2;
+  kuadrant.v1.Policy policy = 1;
+  Domain domain = 2;
   string binding = 3;
   string expression = 4;
 }

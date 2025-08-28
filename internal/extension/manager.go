@@ -32,12 +32,17 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
+
+type ChangeNotifier func(reason string) error
 
 type Manager struct {
 	extensions []Extension
@@ -45,6 +50,7 @@ type Manager struct {
 	dag        *nilGuardedPointer[StateAwareDAG]
 	logger     logr.Logger
 	sync       io.Writer
+	client     dynamic.Interface
 }
 
 type Extension interface {
@@ -53,7 +59,7 @@ type Extension interface {
 	Name() string
 }
 
-func NewManager(location string, logger logr.Logger, sync io.Writer) (Manager, error) {
+func NewManager(location string, logger logr.Logger, sync io.Writer, client dynamic.Interface) (Manager, error) {
 	names := discoverExtensions(logger, location)
 	if len(names) == 0 {
 		return Manager{}, ErrNoExtensionsFound
@@ -62,7 +68,7 @@ func NewManager(location string, logger logr.Logger, sync io.Writer) (Manager, e
 	var extensions []Extension
 	var err error
 
-	service := newExtensionService(BlockingDAG)
+	service := newExtensionService(BlockingDAG, logger)
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
@@ -83,6 +89,7 @@ func NewManager(location string, logger logr.Logger, sync io.Writer) (Manager, e
 		BlockingDAG,
 		logger,
 		sync,
+		client,
 	}, err
 }
 
@@ -116,6 +123,59 @@ func (m *Manager) Stop() error {
 	}
 
 	return err
+}
+
+func (m *Manager) SetChangeNotifier(notifier ChangeNotifier) {
+	if service, ok := m.service.(*extensionService); ok {
+		service.changeNotifier = notifier
+	}
+}
+
+func (m *Manager) TriggerReconciliation(reason string) error {
+	logger := m.logger.WithName("TriggerReconciliation")
+	logger.V(1).Info("triggering reconciliation", "reason", reason)
+
+	kuadrantResource := m.client.Resource(kuadrantv1beta1.KuadrantsResource)
+	kuadrantList, err := kuadrantResource.List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list Kuadrant resources: %w", err)
+	}
+	if len(kuadrantList.Items) == 0 {
+		return fmt.Errorf("no Kuadrant resources found in cluster")
+	}
+
+	for _, kuadrant := range kuadrantList.Items {
+		if kuadrant.GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		annotations := kuadrant.GetAnnotations()
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		annotations["kuadrant.io/extension-trigger"] = time.Now().Format(time.RFC3339Nano)
+		annotations["kuadrant.io/extension-trigger-reason"] = reason
+		kuadrant.SetAnnotations(annotations)
+
+		_, err := kuadrantResource.Namespace(kuadrant.GetNamespace()).Update(
+			context.TODO(),
+			&kuadrant,
+			metav1.UpdateOptions{},
+		)
+		if err != nil {
+			logger.Error(err, "failed to update Kuadrant resource",
+				"namespace", kuadrant.GetNamespace(),
+				"name", kuadrant.GetName())
+			continue
+		}
+
+		logger.V(1).Info("successfully triggered reconciliation",
+			"namespace", kuadrant.GetNamespace(),
+			"name", kuadrant.GetName(),
+			"reason", reason)
+		return nil
+	}
+	return fmt.Errorf("failed to update any Kuadrant resource")
 }
 
 func (m *Manager) Run(stopCh <-chan struct{}) {
@@ -175,6 +235,8 @@ func (m *Manager) HasSynced() bool {
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
 	registeredData *RegisteredDataStore
+	changeNotifier ChangeNotifier
+	logger         logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -184,10 +246,11 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func newExtensionService(dag *nilGuardedPointer[StateAwareDAG]) extpb.ExtensionServiceServer {
+func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
 	service := &extensionService{
 		dag:            dag,
 		registeredData: NewRegisteredDataStore(),
+		logger:         logger.WithName("extensionService"),
 	}
 
 	mutator := NewRegisteredDataMutator(service.registeredData)
@@ -326,6 +389,15 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 		s.registeredData.Set(policyID, targetRefLocator, request.Domain, request.Binding, entry)
 	}
 
+	// Trigger notifier when mutators are registered
+	if s.changeNotifier != nil {
+		reason := fmt.Sprintf("mutator registered for policy %s/%s", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+		if err := s.changeNotifier(reason); err != nil {
+			// Do not fail if triggering fails - mutator is registered
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
+
 	return &emptypb.Empty{}, nil
 }
 
@@ -350,6 +422,14 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 	}
 
 	clearedMutators, clearedSubscriptions := s.registeredData.ClearPolicyData(policyID)
+
+	// Trigger notifier when mutators are cleared
+	if clearedMutators > 0 && s.changeNotifier != nil {
+		reason := fmt.Sprintf("mutators cleared for policy %s/%s", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name)
+		if err := s.changeNotifier(reason); err != nil {
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
 
 	return &extpb.ClearPolicyResponse{
 		ClearedMutators:      int32(clearedMutators),      // #nosec G115

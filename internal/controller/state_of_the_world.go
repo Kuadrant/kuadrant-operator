@@ -576,7 +576,7 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 	var opts []controller.ControllerOption
 	extensionsDir := env.GetString("EXTENSIONS_DIR", "/extensions")
 
-	extManager, err := extension.NewManager(extensionsDir, b.logger.WithName("extensions"), log.Sync)
+	extManager, err := extension.NewManager(extensionsDir, b.logger.WithName("extensions"), log.Sync, b.client)
 	if err != nil {
 		if errors.Is(err, extension.ErrNoExtensionsFound) {
 			b.logger.Info("No extensions found, skipping extension manager", "directory", extensionsDir)
@@ -585,6 +585,7 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 		b.logger.Error(err, "failed to create extension manager")
 		return opts
 	}
+	extManager.SetChangeNotifier(extManager.TriggerReconciliation)
 
 	b.isUsingExtensions = true
 	opts = append(opts, controller.WithRunnable(

@@ -46,6 +46,9 @@ var (
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.delegate) || has(self.delegate)", message="Delegate can't be unset if it was previously set"
+// +kubebuilder:validation:XValidation:rule="has(oldSelf.delegate) || !has(self.delegate)", message="Delegate can't be set if it was previously unset"
+// +kubebuilder:validation:XValidation:rule="!(has(self.providerRefs) && has(self.delegate) && self.delegate == true)", message="delegate=true and providerRefs are mutually exclusive"
 type DNSPolicySpec struct {
 	// targetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -66,6 +69,9 @@ type DNSPolicySpec struct {
 	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting
 	// +optional
 	ExcludeAddresses ExcludeAddresses `json:"excludeAddresses,omitempty"`
+
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="delegate is immutable"
+	Delegate bool `json:"delegate,omitempty"`
 }
 
 // +kubebuilder:validation:MaxItems=20
@@ -314,4 +320,9 @@ func (p *DNSPolicy) WithLoadBalancingFor(weight int, geo string, isDefaultGeo bo
 		Geo:        geo,
 		DefaultGeo: isDefaultGeo,
 	})
+}
+
+func (p *DNSPolicy) WithDelegation(delegate bool) *DNSPolicy {
+	p.Spec.Delegate = delegate
+	return p
 }

@@ -89,6 +89,44 @@ var _ = Describe("DNSPolicy controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
+	It("should ensure the delegate field and providerRef are mutually exclusing", func(ctx SpecContext) {
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
+			WithProviderSecret(*dnsProviderSecret).
+			WithTargetGateway("test-gateway").
+			WithDelegation(true)
+		Expect(k8sClient.Create(ctx, dnsPolicy).Error()).To(ContainSubstring("delegate=true and providerRefs are mutually exclusive"))
+	}, testTimeOut)
+
+	It("should ensure the delegate field cannot be unset if previously set", func(ctx SpecContext) {
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
+			WithTargetGateway("test-gateway").
+			WithDelegation(true)
+		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+		Expect(err).NotTo(HaveOccurred())
+
+		dnsPolicy.WithDelegation(false)
+
+		err = k8sClient.Update(ctx, dnsPolicy, &client.UpdateOptions{})
+		Expect(err.Error()).To(ContainSubstring("Delegate can't be unset if it was previously set"))
+	}, testTimeOut)
+
+	It("should ensure the delegate field cannot be set if previously unset", func(ctx SpecContext) {
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
+			WithTargetGateway("test-gateway").
+			WithDelegation(false)
+		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+		Expect(err).NotTo(HaveOccurred())
+
+		dnsPolicy.WithDelegation(true)
+
+		err = k8sClient.Update(ctx, dnsPolicy, &client.UpdateOptions{})
+		Expect(err.Error()).To(ContainSubstring("Delegate can't be set if it was previously unset"))
+	}, testTimeOut)
+
 	It("should validate loadBalancing field correctly", func(ctx SpecContext) {
 		gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 			WithHTTPListener(tests.ListenerNameOne, "").

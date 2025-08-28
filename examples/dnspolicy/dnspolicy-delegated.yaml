@@ -1,0 +1,16 @@
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: prod-web
+  namespace: ${DNSPOLICY_NAMESPACE}
+spec:
+  delegate: true
+  loadBalancing:
+    weight: 120
+    geo: GEO-EU
+    defaultGeo: true
+  targetRef:
+    name: prod-web-istio
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  

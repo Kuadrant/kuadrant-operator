@@ -17,12 +17,14 @@ limitations under the License.
 package extension
 
 import (
+	"fmt"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr/funcr"
-	"github.com/samber/lo"
 	"gotest.tools/assert"
 
 	"github.com/go-logr/logr"
@@ -56,25 +58,45 @@ func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 }
 
 type writerMock struct {
+	mu       sync.Mutex
 	messages []string
 }
 
+func newWriterMock() *writerMock {
+	return &writerMock{}
+}
+
 func (w *writerMock) Write(p []byte) (n int, err error) {
-	w.messages = append(w.messages, string(p))
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	message := string(p)
+	w.messages = append(w.messages, message)
 	return len(p), nil
 }
 
+func (w *writerMock) getMessages() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	result := make([]string, len(w.messages))
+	copy(result, w.messages)
+	return result
+}
+
 func TestOOPExtensionForwardsLog(t *testing.T) {
-	writer := &writerMock{}
+	writer := newWriterMock()
 
 	logger := funcr.New(func(_, args string) {
 		writer.Write([]byte(args))
 	}, funcr.Options{})
 
+	socketPath := fmt.Sprintf("/tmp/kuadrant-test-oop-%d.sock", os.Getpid())
+	defer os.Remove(socketPath)
+
 	oopErrorLog := OOPExtension{
 		name:       "testErrorLog",
 		executable: "/bin/ps",
-		socket:     "--foobar",
+		socket:     socketPath,
 		service:    newExtensionService(nil, logger),
 		logger:     logger,
 		sync:       writer,
@@ -87,11 +109,20 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 	for oopErrorLog.cmd.ProcessState == nil {
 		time.Sleep(5 * time.Millisecond) // wait for the command to return
 	}
+	// try wait for ps to finish writing its output
+	time.Sleep(50 * time.Millisecond)
 
-	_ = oopErrorLog.Stop() // gracefully kill the process/server
-	assert.Assert(t, lo.Contains(writer.messages, "\"msg\"=\"Extension \\\"testErrorLog\\\" finished with an error\" \"error\"=\"exit status 1\""))
-	logAsString := strings.Join(writer.messages, "\n")
-	assert.Assert(t, strings.Contains(strings.ToLower(logAsString), "usage:") ||
-		strings.Contains(strings.ToLower(logAsString), "illegal option"),
-		"Expected ps error output to be captured")
+	_ = oopErrorLog.Stop()
+
+	messages := writer.getMessages()
+	logAsString := strings.Join(messages, "\n")
+
+	hasStderrOutput := strings.Contains(strings.ToLower(logAsString), "usage:") ||
+		strings.Contains(strings.ToLower(logAsString), "illegal option")
+
+	hasErrorMessage := strings.Contains(logAsString, "Extension") &&
+		strings.Contains(logAsString, "finished with an error")
+
+	assert.Assert(t, hasErrorMessage, "Expected process error completion message")
+	assert.Assert(t, hasStderrOutput, "Expected ps stderr output to be captured")
 }

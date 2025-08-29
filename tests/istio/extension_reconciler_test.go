@@ -317,8 +317,57 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
-			//create authpolicy
+			// create ratelimitpolicy
+			rlp := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "RateLimitPolicy",
+					APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlpName,
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						MergeableWhenPredicates: kuadrantv1.MergeableWhenPredicates{
+							Predicates: kuadrantv1.NewWhenPredicates(
+								"source.remote_address != '192.168.1.1'",
+								"auth.identity.username != 'root'",
+							),
+						},
+						Limits: map[string]kuadrantv1.Limit{
+							"users": {
+								Rates: []kuadrantv1.Rate{
+									{Limit: 50, Window: kuadrantv1.Duration("1m")},
+								},
+								Counters: []kuadrantv1.Counter{{Expression: "auth.identity.username"}},
+								When:     kuadrantv1.NewWhenPredicates("auth.identity.group != 'admin'"),
+							},
+							"all": {
+								Rates: []kuadrantv1.Rate{
+									{Limit: 5, Window: kuadrantv1.Duration("1m")},
+									{Limit: 100, Window: kuadrantv1.Duration("12h")},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = testClient().Create(ctx, rlp)
+			Expect(err).ToNot(HaveOccurred())
 
+			// Check RLP status - should not be enforced yet due to dependence on auth
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			//create authpolicy
 			authp := &kuadrantv1.AuthPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "AuthPolicy",
@@ -367,54 +416,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			err = testClient().Create(ctx, authp)
 			Expect(err).ToNot(HaveOccurred())
 
-			// create ratelimitpolicy
-			rlp := &kuadrantv1.RateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-							Group: gatewayapiv1.GroupName,
-							Kind:  "HTTPRoute",
-							Name:  gatewayapiv1.ObjectName(routeName),
-						},
-					},
-					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
-						MergeableWhenPredicates: kuadrantv1.MergeableWhenPredicates{
-							Predicates: kuadrantv1.NewWhenPredicates(
-								"source.remote_address != '192.168.1.1'",
-								"auth.identity.username != 'root'",
-							),
-						},
-						Limits: map[string]kuadrantv1.Limit{
-							"users": {
-								Rates: []kuadrantv1.Rate{
-									{Limit: 50, Window: kuadrantv1.Duration("1m")},
-								},
-								Counters: []kuadrantv1.Counter{{Expression: "auth.identity.username"}},
-								When:     kuadrantv1.NewWhenPredicates("auth.identity.group != 'admin'"),
-							},
-							"all": {
-								Rates: []kuadrantv1.Rate{
-									{Limit: 5, Window: kuadrantv1.Duration("1m")},
-									{Limit: 100, Window: kuadrantv1.Duration("12h")},
-								},
-							},
-						},
-					},
-				},
-			}
-			err = testClient().Create(ctx, rlp)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Check RLP status is available
-			rlpKey := client.ObjectKeyFromObject(rlp)
+			// Check RLP status is now enforced after auth dependencies are satisfied
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin

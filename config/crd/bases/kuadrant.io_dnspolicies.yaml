@@ -76,6 +76,11 @@ spec:
           spec:
             description: DNSPolicySpec defines the desired state of DNSPolicy
             properties:
+              delegate:
+                type: boolean
+                x-kubernetes-validations:
+                - message: delegate is immutable
+                  rule: self == oldSelf
               excludeAddresses:
                 description: ExcludeAddresses is a list of addresses (either hostnames,
                   CIDR or IPAddresses) that DNSPolicy should not use as values in
@@ -236,6 +241,14 @@ spec:
             required:
             - targetRef
             type: object
+            x-kubernetes-validations:
+            - message: Delegate can't be unset if it was previously set
+              rule: '!has(oldSelf.delegate) || has(self.delegate)'
+            - message: Delegate can't be set if it was previously unset
+              rule: has(oldSelf.delegate) || !has(self.delegate)
+            - message: delegate=true and providerRefs are mutually exclusive
+              rule: '!(has(self.providerRefs) && has(self.delegate) && self.delegate
+                == true)'
           status:
             description: DNSPolicyStatus defines the observed state of DNSPolicy
             properties:

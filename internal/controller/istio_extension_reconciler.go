@@ -239,9 +239,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 	validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
-	// clear the stored wasm action errors state
-	state.Delete(celvalidator.StateCELValidationErrors)
-
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
 	for i := range paths {
 		pathID := paths[i].Key

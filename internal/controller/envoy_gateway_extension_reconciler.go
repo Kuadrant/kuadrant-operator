@@ -188,9 +188,6 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 	validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
-	// clear the stored wasm action errors state
-	state.Delete(celvalidator.StateCELValidationErrors)
-
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an envoy gateway gateway
 	for i := range paths {
 		pathID := paths[i].Key

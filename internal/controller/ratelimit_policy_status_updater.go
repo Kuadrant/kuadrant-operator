@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kuadrant/kuadrant-operator/internal/cel"
+
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -138,10 +140,28 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 	policyRuleKeys := lo.Keys(policy.Rules())
 	overridingPolicies := map[string][]string{}      // policyRuleKey → locators of policies overriding the policy rule
 	affectedGateways := map[string]affectedGateway{} // Gateway locator → {GatewayClass, Gateway}
+
+	var rateLimitCelValidationErrors []error
+	var rateLimitIssuesByPathID map[string][]*cel.Issue
+	var ratelimitIssuesFound bool
+	stateCelValErrors, stateCelValErrorsFound := state.Load(cel.StateCELValidationErrors)
+
+	if stateCelValErrorsFound {
+		celIssuesCollection := stateCelValErrors.(*cel.IssueCollection)
+		rateLimitIssuesByPathID, ratelimitIssuesFound = celIssuesCollection.GetByPolicyKind(policyKind)
+	}
+
 	for _, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
+		if ratelimitIssuesFound {
+			storedValidationIssuesForPathID, storedValidationIssuesForPathIDFound := rateLimitIssuesByPathID[kuadrantv1.PathID(effectivePolicy.Path)]
+			if storedValidationIssuesForPathIDFound {
+				rateLimitCelValidationErrors = append(rateLimitCelValidationErrors, lo.Map(storedValidationIssuesForPathID, func(i *cel.Issue, _ int) error { return i.GetError() })...)
+			}
+		}
+
 		gatewayClass, gateway, listener, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.Spec.ControllerName) {
 			continue
@@ -223,6 +243,10 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 		default:
 			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s/%s)", machinery.GatewayGroupKind.Kind, g.gateway.GetNamespace(), g.gateway.GetName()))
 		}
+	}
+
+	if len(rateLimitCelValidationErrors) > 0 {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrCelValidation(rateLimitCelValidationErrors), false)
 	}
 
 	if len(componentsToSync) > 0 {

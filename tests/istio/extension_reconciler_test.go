@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/google/go-cmp/cmp"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
@@ -362,8 +363,60 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			err = testClient().Create(ctx, rlp)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Check RLP status is available
+			// Check RLP status - should not be enforced yet due to dependence on auth
 			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			//create authpolicy
+			authp := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "AuthPolicy",
+					APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore-auth",
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: &kuadrantv1.AuthSchemeSpec{
+								Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+									"apiKey": {
+										AuthenticationSpec: authorinoapi.AuthenticationSpec{
+											AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+												ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+													Selector: &metav1.LabelSelector{
+														MatchLabels: map[string]string{
+															"app": "toystore",
+														},
+													},
+												},
+											},
+											Credentials: authorinoapi.Credentials{
+												AuthorizationHeader: &authorinoapi.Prefixed{
+													Prefix: "APIKEY",
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = testClient().Create(ctx, authp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is now enforced after auth dependencies are satisfied
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
@@ -402,10 +455,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
 				"request.url_path == '/assets'",
 			))
-			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -460,10 +513,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.method == 'GET'",
 				"request.url_path.startsWith('/toys')",
 			))
-			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -518,10 +571,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.method == 'POST'",
 				"request.url_path.startsWith('/toys')",
 			))
-			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -575,10 +628,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
 				"request.url_path == '/assets'",
 			))
-			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -633,10 +686,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.method == 'GET'",
 				"request.url_path.startsWith('/toys')",
 			))
-			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -691,10 +744,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				"request.method == 'POST'",
 				"request.url_path.startsWith('/toys')",
 			))
-			Expect(actionSet.Actions).To(HaveLen(1))
-			Expect(actionSet.Actions[0].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[0].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[0].ConditionalData).To(ContainElements(
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
+			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
 					{
 						Predicates: []string{

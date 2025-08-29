@@ -259,3 +259,21 @@ func (e ErrSystemResource) Error() string {
 func (e ErrSystemResource) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonMissingResource
 }
+
+type ErrCelValidation struct {
+	issues []error
+}
+
+func NewErrCelValidation(issues []error) ErrCelValidation {
+	return ErrCelValidation{
+		issues: issues,
+	}
+}
+
+func (e ErrCelValidation) Error() string {
+	return fmt.Sprintf("validation issues: %v", e.issues)
+}
+
+func (e ErrCelValidation) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonInvalidCelExpression
+}

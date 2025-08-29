@@ -273,7 +273,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				}
 				policy.Spec.Proper().MergeableWhenPredicates = kuadrantv1.MergeableWhenPredicates{
 					Predicates: kuadrantv1.WhenPredicates{
-						{Predicate: `source.ip.matches("^192\.168\..*")`},
+						{Predicate: `source.ip.matches("^192\\.168\\..*")`},
 					},
 				}
 				policy.Spec.Proper().AuthScheme = &kuadrantv1.AuthSchemeSpec{

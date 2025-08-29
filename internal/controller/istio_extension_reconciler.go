@@ -238,6 +238,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 	validatorBuilder := celvalidator.NewRootValidatorBuilder()
+	celValidationIssues := celvalidator.NewIssueCollection()
 
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
 	for i := range paths {
@@ -296,7 +297,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
 		var validatedActions []wasm.Action
-		celValidationIssues := celvalidator.NewIssueCollection()
 
 		for _, action := range actions {
 			if err := celvalidator.ValidateWasmAction(action, validator); err != nil {
@@ -305,10 +305,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 			} else {
 				validatedActions = append(validatedActions, action)
 			}
-		}
-
-		if !celValidationIssues.IsEmpty() {
-			state.Store(celvalidator.StateCELValidationErrors, celValidationIssues)
 		}
 
 		if len(validatedActions) == 0 {
@@ -325,6 +321,10 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 			continue
 		}
 		wasmActionSets.Add(gateway.GetLocator(), wasmActionSetsForPath...)
+	}
+
+	if !celValidationIssues.IsEmpty() {
+		state.Store(celvalidator.StateCELValidationErrors, celValidationIssues)
 	}
 
 	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {

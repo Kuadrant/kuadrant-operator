@@ -2,6 +2,7 @@ package cel
 
 import (
 	"github.com/google/cel-go/cel"
+	"github.com/samber/lo"
 
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
@@ -36,13 +37,11 @@ func (i *Issue) GetError() error {
 }
 
 type IssueCollection struct {
-	issues map[string]map[string][]*Issue
+	issues []*Issue
 }
 
 func NewIssueCollection() *IssueCollection {
-	return &IssueCollection{
-		issues: make(map[string]map[string][]*Issue),
-	}
+	return &IssueCollection{}
 }
 
 func (c *IssueCollection) IsEmpty() bool {
@@ -50,20 +49,23 @@ func (c *IssueCollection) IsEmpty() bool {
 }
 
 func (c *IssueCollection) GetByPolicyKind(policyKind string) (map[string][]*Issue, bool) {
-	issues := c.issues[policyKind]
-	return issues, len(issues) > 0
+	filteredIssues := lo.Filter(c.issues, func(issue *Issue, _ int) bool {
+		return issue.policyKind == policyKind
+	})
+
+	if len(filteredIssues) == 0 {
+		return nil, false
+	}
+
+	groupedByPathID := lo.GroupBy(filteredIssues, func(issue *Issue) string {
+		return issue.pathID
+	})
+
+	return groupedByPathID, true
 }
 
 func (c *IssueCollection) Add(issue *Issue) {
-	if _, exists := c.issues[issue.policyKind]; !exists {
-		c.issues[issue.policyKind] = make(map[string][]*Issue)
-	}
-
-	if _, exists := c.issues[issue.policyKind][issue.pathID]; !exists {
-		c.issues[issue.policyKind][issue.pathID] = make([]*Issue, 0)
-	}
-
-	c.issues[issue.policyKind][issue.pathID] = append(c.issues[issue.policyKind][issue.pathID], issue)
+	c.issues = append(c.issues, issue)
 }
 
 func NewRootValidatorBuilder() *ValidatorBuilder {

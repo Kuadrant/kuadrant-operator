@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -44,6 +45,8 @@ type OOPExtension struct {
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
 	sync       io.Writer
+	serverMu   sync.Mutex
+	monitorWg  sync.WaitGroup
 }
 
 func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
@@ -86,8 +89,10 @@ func (p *OOPExtension) Start() error {
 		return err
 	}
 
-	stopChan := make(chan struct{})
-	go p.monitorStderr(stderr, stopChan)
+	p.monitorWg.Add(1)
+	monitorReady := make(chan struct{})
+	go p.monitorStderr(stderr, monitorReady)
+	<-monitorReady
 
 	if err = cmd.Start(); err != nil {
 		if e := p.stopServer(); e != nil {
@@ -100,8 +105,9 @@ func (p *OOPExtension) Start() error {
 	go func() {
 		if e := cmd.Wait(); e != nil {
 			p.logger.Error(e, fmt.Sprintf("Extension %q finished with an error", p.name))
-			close(stopChan)
 		}
+		// wait for stderr
+		p.monitorWg.Wait()
 	}()
 
 	// only set this, if we successfully started it all
@@ -124,15 +130,11 @@ func (p *OOPExtension) Stop() error {
 				_ = p.cmd.Process.Kill() // we know this can fail, as this is racy. All that really matters is the `Wait()` below
 			})
 
-			if processState := p.cmd.ProcessState; processState != nil {
-				status := processState.Sys().(syscall.WaitStatus)
-				if !status.Signaled() || status.Signal() != syscall.SIGTERM {
-					err = fmt.Errorf("process terminated with non-SIGTERM %q", status)
-				}
-			}
-
 			timer.Stop()
 		}
+
+		// let stderr monitoring finish
+		p.monitorWg.Wait()
 
 		if e := p.stopServer(); e != nil {
 			if err == nil {
@@ -151,6 +153,9 @@ func (p *OOPExtension) Stop() error {
 }
 
 func (p *OOPExtension) startServer() error {
+	p.serverMu.Lock()
+	defer p.serverMu.Unlock()
+
 	if p.server == nil {
 		if err := os.MkdirAll(filepath.Dir(p.socket), 0755); err != nil {
 			return fmt.Errorf("failed to create socket directory: %w", err)
@@ -161,11 +166,12 @@ func (p *OOPExtension) startServer() error {
 			return err
 		}
 
-		p.server = grpc.NewServer()
-		extpb.RegisterExtensionServiceServer(p.server, p.service)
+		server := grpc.NewServer()
+		extpb.RegisterExtensionServiceServer(server, p.service)
+		p.server = server
 
 		go func() {
-			if err := p.server.Serve(ln); err != nil {
+			if err := server.Serve(ln); err != nil {
 				// FIXME: Make this fail synchronously somehow
 				p.logger.Error(err, "failed to start server")
 			}
@@ -175,9 +181,13 @@ func (p *OOPExtension) startServer() error {
 }
 
 func (p *OOPExtension) stopServer() error {
-	if p.server != nil {
-		p.server.Stop()
-		p.server = nil
+	p.serverMu.Lock()
+	server := p.server
+	p.server = nil
+	p.serverMu.Unlock()
+
+	if server != nil {
+		server.Stop()
 		if _, err := os.Stat(p.socket); err == nil {
 			return os.Remove(p.socket)
 		}
@@ -185,34 +195,24 @@ func (p *OOPExtension) stopServer() error {
 	return nil
 }
 
-func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, stopChan <-chan struct{}) {
+func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, monitorReady chan struct{}) {
+	defer p.monitorWg.Done()
+	defer stderr.Close()
+
 	scanner := bufio.NewScanner(stderr)
-	var lastReadTime time.Time
 
-	for {
-		select {
-		case <-stopChan:
-			// If the channel has been closed when the cmd has exited, we return
-			return
-		default:
-			//nolint:revive,staticcheck
-			if !lastReadTime.IsZero() && time.Since(lastReadTime) > 30*time.Second {
-				// We could check for liveness here
-			}
+	// signal readiness
+	close(monitorReady)
 
-			if scanner.Scan() {
-				// TODO (didierofrivia): Check output of scanner.Bytes() to see if it's sink compatible, otherwise log
-				// instead of directly write.
-				if _, err := p.sync.Write(append(scanner.Bytes(), []byte("\n")...)); err != nil {
-					p.logger.Error(err, "failed to write to logger")
-				}
-				lastReadTime = time.Now()
-			} else if err := scanner.Err(); err != nil {
-				p.logger.Error(err, "failed to read stderr")
-				return
-			}
-
-			// If this turns out to be causing busy-waiting/CPU spikes we could sleep for a brief time
+	for scanner.Scan() {
+		// TODO (didierofrivia): Check output of scanner.Bytes() to see if it's sink compatible, otherwise log
+		if _, err := p.sync.Write(append(scanner.Bytes(), []byte("\n")...)); err != nil {
+			p.logger.Error(err, "failed to write to logger")
 		}
+	}
+
+	// check if the scanner stopped due to error
+	if err := scanner.Err(); err != nil {
+		p.logger.Error(err, "failed to read stderr")
 	}
 }

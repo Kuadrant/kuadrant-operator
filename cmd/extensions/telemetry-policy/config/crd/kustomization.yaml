@@ -1,0 +1,3 @@
+resources:
+  - bases/extensions.kuadrant.io_telemetrypolicies.yaml
+#+kubebuilder:scaffold:crdkustomizeresource

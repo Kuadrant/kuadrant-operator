@@ -33,6 +33,8 @@ RUN mkdir -p extensions/oidc-policy
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/oidc-policy/oidc-policy cmd/extensions/oidc-policy/main.go
 RUN mkdir -p extensions/plan-policy
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/plan-policy/plan-policy cmd/extensions/plan-policy/main.go
+RUN mkdir -p extensions/telemetry-policy
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/telemetry-policy/telemetry-policy cmd/extensions/telemetry-policy/main.go
 
 FROM registry.access.redhat.com/ubi9-minimal:latest
 

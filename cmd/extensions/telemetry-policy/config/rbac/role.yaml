@@ -1,0 +1,30 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: telemetry-policy-manager-role
+rules:
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - telemetrypolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - telemetrypolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - telemetrypolicies/status
+  verbs:
+  - get
+  - patch
+  - update

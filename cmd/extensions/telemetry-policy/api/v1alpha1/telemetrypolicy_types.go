@@ -27,10 +27,10 @@ import (
 // TelemetryPolicy enables rate limiting through plans of identified requests
 type TelemetryPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TelemetryPolicySpec   `json:"spec"`
-	Status TelemetryPolicyStatus `json:"status"`
+	Spec   TelemetryPolicySpec   `json:"spec,omitempty"`
+	Status TelemetryPolicyStatus `json:"status,omitempty"`
 }
 
 type TelemetryPolicySpec struct {
@@ -91,7 +91,7 @@ type TelemetryPolicyStatus struct {
 // TelemetryPolicyList contains a list of TelemetryPolicy
 type TelemetryPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TelemetryPolicy `json:"items"`
 }
 

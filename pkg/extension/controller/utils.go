@@ -18,6 +18,8 @@ func convertDomainToProtobuf(domain exttypes.Domain) extpb.Domain {
 	switch domain {
 	case exttypes.DomainAuth:
 		return extpb.Domain_DOMAIN_AUTH
+	case exttypes.DomainRequest:
+		return extpb.Domain_DOMAIN_REQUEST
 	default:
 		return extpb.Domain_DOMAIN_UNSPECIFIED
 	}

@@ -51,6 +51,10 @@ func TestConfigEqual(t *testing.T) {
 		{
 			name: "equal configs",
 			config1: &Config{
+				RequestData: map[string]string{
+					"metrics.labels.user":  "auth.identity.user",
+					"metrics.labels.group": "auth.identity.group",
+				},
 				Services: map[string]Service{
 					"ratelimit-service": {
 						Type:        "ratelimit",
@@ -128,6 +132,10 @@ func TestConfigEqual(t *testing.T) {
 							},
 						},
 					},
+				},
+				RequestData: map[string]string{
+					"metrics.labels.group": "auth.identity.group",
+					"metrics.labels.user":  "auth.identity.user",
 				},
 				Services: map[string]Service{
 					"ratelimit-service": {

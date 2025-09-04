@@ -29,6 +29,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	celtypes "github.com/google/cel-go/common/types"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -36,6 +37,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
@@ -253,8 +255,11 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logg
 		logger:         logger.WithName("extensionService"),
 	}
 
-	mutator := NewRegisteredDataMutator(service.registeredData)
-	GlobalMutatorRegistry.RegisterAuthConfigMutator(mutator)
+	authMutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](service.registeredData)
+	GlobalMutatorRegistry.RegisterAuthConfigMutator(authMutator)
+
+	wasmMutator := NewRegisteredDataMutator[*wasm.Config](service.registeredData)
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(wasmMutator)
 
 	return service
 }

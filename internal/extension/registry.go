@@ -17,6 +17,7 @@ limitations under the License.
 package extension
 
 import (
+	"fmt"
 	"maps"
 	"sync"
 
@@ -27,6 +28,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantmachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
@@ -37,9 +39,11 @@ type ResourceMutator[TResource any, TTargetRefs []machinery.PolicyTargetReferenc
 }
 
 type AuthConfigMutator = ResourceMutator[*authorinov1beta3.AuthConfig, []machinery.PolicyTargetReference]
+type WasmConfigMutator = ResourceMutator[*wasm.Config, []machinery.PolicyTargetReference]
 
 type MutatorRegistry struct {
 	authConfigMutators []AuthConfigMutator
+	wasmConfigMutators []WasmConfigMutator
 	mutex              sync.RWMutex
 }
 
@@ -49,6 +53,12 @@ func (r *MutatorRegistry) RegisterAuthConfigMutator(mutator AuthConfigMutator) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.authConfigMutators = append(r.authConfigMutators, mutator)
+}
+
+func (r *MutatorRegistry) RegisterWasmConfigMutator(mutator WasmConfigMutator) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.wasmConfigMutators = append(r.wasmConfigMutators, mutator)
 }
 
 func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, path []machinery.Targetable) error {
@@ -95,6 +105,37 @@ func (r *MutatorRegistry) applyMutatorsWithTargetRefs(authConfig *authorinov1bet
 		}
 	}
 	return nil
+}
+
+func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway) error {
+	// Create target ref for the gateway
+	targetRefs := []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+					Kind:  gatewayapiv1alpha2.Kind("Gateway"),
+					Name:  gatewayapiv1alpha2.ObjectName(gateway.GetName()),
+				},
+			},
+			PolicyNamespace: gateway.GetNamespace(),
+		},
+	}
+
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	for _, mutator := range r.wasmConfigMutators {
+		if err := mutator.Mutate(wasmConfig, targetRefs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ApplyWasmConfigMutators applies all registered wasm config mutators for a specific gateway
+func ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway) error {
+	return GlobalMutatorRegistry.ApplyWasmConfigMutators(wasmConfig, gateway)
 }
 
 // ApplyAuthConfigMutators applies all registered auth config mutators to an auth config
@@ -340,18 +381,30 @@ func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []Subscr
 	return subscriptionKeys
 }
 
-type RegisteredDataMutator struct {
+type RegisteredDataMutator[TResource any] struct {
 	store *RegisteredDataStore
 }
 
-func NewRegisteredDataMutator(store *RegisteredDataStore) *RegisteredDataMutator {
-	return &RegisteredDataMutator{
+func NewRegisteredDataMutator[TResource any](store *RegisteredDataStore) *RegisteredDataMutator[TResource] {
+	return &RegisteredDataMutator[TResource]{
 		store: store,
 	}
 }
 
-// Currently this is bespoke, adding data items to the success metadata
-func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
+// Mutate handles registered data mutations for different resource types
+func (m *RegisteredDataMutator[TResource]) Mutate(resource TResource, targetRefs []machinery.PolicyTargetReference) error {
+	switch r := any(resource).(type) {
+	case *authorinov1beta3.AuthConfig:
+		return m.mutateAuthConfig(r, targetRefs)
+	case *wasm.Config:
+		return m.mutateWasmConfig(r, targetRefs)
+	default:
+		return fmt.Errorf("unsupported resource type: %T", resource)
+	}
+}
+
+// mutateAuthConfig handles AuthConfig-specific mutations
+func (m *RegisteredDataMutator[TResource]) mutateAuthConfig(authConfig *authorinov1beta3.AuthConfig, targetRefs []machinery.PolicyTargetReference) error {
 	var allProviderEntries []DataProviderEntry
 
 	// Find mutations for each target reference
@@ -388,5 +441,25 @@ func (m *RegisteredDataMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, 
 			},
 		},
 	}
+	return nil
+}
+
+// mutateWasmConfig handles WasmConfig-specific mutations
+func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Config, targetRefs []machinery.PolicyTargetReference) error {
+	requestData := make(map[string]string)
+
+	for _, targetRef := range targetRefs {
+		providerEntries := m.store.GetAllForTargetRef(targetRef.GetLocator(), extpb.Domain_DOMAIN_REQUEST)
+
+		for _, entry := range providerEntries {
+			// Add if it doesn't exist
+			if _, exists := requestData[entry.Binding]; !exists {
+				requestData[entry.Binding] = entry.Expression
+			}
+		}
+	}
+
+	wasmConfig.RequestData = requestData
+
 	return nil
 }

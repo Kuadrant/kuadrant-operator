@@ -26,6 +26,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	celvalidator "github.com/kuadrant/kuadrant-operator/internal/cel"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -83,7 +84,14 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfigs[gateway.GetLocator()], ProtectedRegistry, WASMFilterImageURL)
+
+		// Get the wasm config for this gateway and apply mutators
+		wasmConfig := wasmConfigs[gateway.GetLocator()]
+		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway); err != nil {
+			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
+		}
+
+		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 

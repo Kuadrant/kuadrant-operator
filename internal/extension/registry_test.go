@@ -507,7 +507,7 @@ func TestRegisteredDataStore_GetSubscriptionsForPolicyKind(t *testing.T) {
 func TestRegisteredDataMutator(t *testing.T) {
 	t.Run("mutate with empty store", func(t *testing.T) {
 		store := NewRegisteredDataStore()
-		mutator := NewRegisteredDataMutator(store)
+		mutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](store)
 
 		authConfig := &authorinov1beta3.AuthConfig{}
 
@@ -524,7 +524,7 @@ func TestRegisteredDataMutator(t *testing.T) {
 
 	t.Run("mutate with registered data", func(t *testing.T) {
 		store := NewRegisteredDataStore()
-		mutator := NewRegisteredDataMutator(store)
+		mutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](store)
 
 		entry1 := DataProviderEntry{
 			Policy:     testResourceID("Extension", "ns1", "ext1"),
@@ -587,7 +587,7 @@ func TestRegisteredDataMutator(t *testing.T) {
 
 	t.Run("mutate with existing response config", func(t *testing.T) {
 		store := NewRegisteredDataStore()
-		mutator := NewRegisteredDataMutator(store)
+		mutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](store)
 
 		entry := DataProviderEntry{
 			Policy:     testResourceID("Extension", "ns1", "ext1"),
@@ -809,7 +809,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 func TestRegisteredDataMutatorLookup(t *testing.T) {
 	t.Run("mutator lookup with HTTPRoute and Gateway", func(t *testing.T) {
 		store := NewRegisteredDataStore()
-		mutator := NewRegisteredDataMutator(store)
+		mutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](store)
 
 		httpRouteEntry := DataProviderEntry{
 			Policy:     testResourceID("PlanPolicy", "ns1", "plan1"),

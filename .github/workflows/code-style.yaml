@@ -146,8 +146,6 @@ jobs:
           # Exclude generated and vendored files, plus some legacy
           # paths until we update all .gitattributes
           git ls-files |
-          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
           grep -Ev '^(vendor/|third_party/|.git|utils/|pkg/extension/grpc/)' |
           xargs misspell -error |
           reviewdog -efm="%f:%l:%c: %m" \
@@ -204,12 +202,11 @@ jobs:
           #  - nothing in vendor/
           #  - nothing in third_party
           #  - nothing in .git/
-          #  - no *.ai (Adobe Illustrator) files.
+          #  - nothing in .gitignore
+          #  - no *.png files.
           LINT_FILES=$(git ls-files |
-          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          grep -Ev '^(vendor/|third_party/|.git|utils/|pkg/extension/grpc/)' |
-          grep -v '\.ai$' |
+          grep -Ev '^(vendor/|third_party/|.git|.gitignore|utils/|pkg/extension/grpc/)' |
+          grep -v '\.png$' |
           grep -v '\.svg$')
 
           for x in $LINT_FILES; do

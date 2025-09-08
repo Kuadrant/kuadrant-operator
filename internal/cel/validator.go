@@ -9,8 +9,9 @@ import (
 )
 
 type ValidatorBuilder struct {
-	baseBindings map[string]binding
-	policies     []policyBinding
+	baseBindings  map[string]binding
+	baseFunctions map[string]funcBinding
+	policies      []policyBinding
 }
 
 type policyBinding struct {
@@ -23,9 +24,15 @@ type binding struct {
 	t    *cel.Type
 }
 
+type funcBinding struct {
+	name    string
+	funcOpt cel.FunctionOpt
+}
+
 func NewValidatorBuilder() *ValidatorBuilder {
 	return &ValidatorBuilder{
-		baseBindings: make(map[string]binding),
+		baseBindings:  make(map[string]binding),
+		baseFunctions: make(map[string]funcBinding),
 	}
 }
 
@@ -33,6 +40,14 @@ func (b *ValidatorBuilder) AddBinding(name string, t *cel.Type) *ValidatorBuilde
 	b.baseBindings[name] = binding{
 		name: name,
 		t:    t,
+	}
+	return b
+}
+
+func (b *ValidatorBuilder) AddFunction(name string, funcOpt cel.FunctionOpt) *ValidatorBuilder {
+	b.baseFunctions[name] = funcBinding{
+		name:    name,
+		funcOpt: funcOpt,
 	}
 	return b
 }
@@ -84,6 +99,10 @@ func (b *ValidatorBuilder) Build() (*Validator, error) {
 
 		for _, binding := range b.baseBindings {
 			opts = append(opts, cel.Variable(binding.name, binding.t))
+		}
+
+		for _, binding := range b.baseFunctions {
+			opts = append(opts, cel.Function(binding.name, binding.funcOpt))
 		}
 
 		for _, p := range b.policies {

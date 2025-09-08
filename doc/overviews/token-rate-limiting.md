@@ -73,7 +73,7 @@ limits:
     - limit: 100000
       window: 24h
     when:
-    - predicate: 'requestBodyJSON("model") == "gpt-4"'
+    - predicate: 'requestBodyJSON("/model") == "gpt-4"'
     counters:
     - expression: auth.identity.userid
 ```
@@ -190,7 +190,7 @@ spec:
       - limit: 50000
         window: 24h
       when:
-      - predicate: 'requestBodyJSON("model") in ["gpt-4", "claude-3-opus"]'
+      - predicate: 'requestBodyJSON("/model") in ["gpt-4", "claude-3-opus"]'
       counters:
       - expression: auth.identity.userid
     
@@ -199,7 +199,7 @@ spec:
       - limit: 200000
         window: 24h
       when:
-      - predicate: 'requestBodyJSON("model") in ["gpt-3.5-turbo", "claude-3-haiku"]'
+      - predicate: 'requestBodyJSON("/model") in ["gpt-3.5-turbo", "claude-3-haiku"]'
       counters:
       - expression: auth.identity.userid
 ```

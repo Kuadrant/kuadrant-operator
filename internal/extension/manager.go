@@ -155,8 +155,8 @@ func (m *Manager) TriggerReconciliation(reason string) error {
 		if annotations == nil {
 			annotations = make(map[string]string)
 		}
-		annotations["kuadrant.io/extension-trigger"] = time.Now().Format(time.RFC3339Nano)
-		annotations["kuadrant.io/extension-trigger-reason"] = reason
+		annotations[TriggerTimeAnnotation] = time.Now().Format(time.RFC3339Nano)
+		annotations[TriggerReasonAnnotation] = reason
 		kuadrant.SetAnnotations(annotations)
 
 		_, err := kuadrantResource.Namespace(kuadrant.GetNamespace()).Update(

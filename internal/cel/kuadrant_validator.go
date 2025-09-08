@@ -80,7 +80,7 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	requestBodyJSON := cel.Overload("request_body_json_string",
 		[]*cel.Type{cel.StringType},
 		cel.AnyType,
-		cel.UnaryBinding(func(input ref.Val) ref.Val {
+		cel.UnaryBinding(func(_ ref.Val) ref.Val {
 			// just for parsing and checking purposes, not evaluation
 			return nil
 		},
@@ -92,7 +92,7 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	responseBodyJSON := cel.Overload("response_body_json_string",
 		[]*cel.Type{cel.StringType},
 		cel.AnyType,
-		cel.UnaryBinding(func(input ref.Val) ref.Val {
+		cel.UnaryBinding(func(_ ref.Val) ref.Val {
 			// just for parsing and checking purposes, not evaluation
 			return nil
 		},

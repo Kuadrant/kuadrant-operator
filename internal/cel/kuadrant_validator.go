@@ -2,6 +2,7 @@ package cel
 
 import (
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types/ref"
 	"github.com/samber/lo"
 
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -75,6 +76,30 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	builder.AddBinding("source", cel.AnyType)
 	builder.AddBinding("destination", cel.AnyType)
 	builder.AddBinding("connection", cel.AnyType)
+
+	requestBodyJSON := cel.Overload("request_body_json_string",
+		[]*cel.Type{cel.StringType},
+		cel.AnyType,
+		cel.UnaryBinding(func(input ref.Val) ref.Val {
+			// just for parsing and checking purposes, not evaluation
+			return nil
+		},
+		),
+	)
+
+	builder.AddFunction("requestBodyJSON", requestBodyJSON)
+
+	responseBodyJSON := cel.Overload("response_body_json_string",
+		[]*cel.Type{cel.StringType},
+		cel.AnyType,
+		cel.UnaryBinding(func(input ref.Val) ref.Val {
+			// just for parsing and checking purposes, not evaluation
+			return nil
+		},
+		),
+	)
+	builder.AddFunction("responseBodyJSON", responseBodyJSON)
+
 	return builder
 }
 

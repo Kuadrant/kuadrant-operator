@@ -263,6 +263,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				// must exist
 				Expect(err).ToNot(HaveOccurred())
 				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					Name:       "l1",
 					MaxValue:   1,
 					Seconds:    3 * 60,
 					Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
@@ -336,6 +337,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				// must exist
 				Expect(err).ToNot(HaveOccurred())
 				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					Name:       "l1",
 					MaxValue:   1,
 					Seconds:    3 * 60,
 					Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
@@ -418,6 +420,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 				// check limits
 				Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+					Name:       "l1",
 					MaxValue:   10,
 					Seconds:    5,
 					Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
@@ -517,6 +520,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// check limits - should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "l1",
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  limitsNamespace,
@@ -529,6 +533,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
 			// check limits - should be route RLP values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "route",
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  limitsNamespace,
@@ -554,6 +559,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "l1",
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  controllers.LimitsNamespaceFromRoute(httpRoute),
@@ -585,6 +591,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Should contain Route RLP values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "route",
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  limitsNamespace,
@@ -607,6 +614,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "l1",
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  limitsNamespace,
@@ -634,6 +642,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "l1",
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  limitsNamespace,
@@ -656,6 +665,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Should contain Route RLP values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
+				Name:       "route",
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  limitsNamespace,
@@ -848,6 +858,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(
 				ctx,
 				limitadorv1alpha1.RateLimit{
+					Name:       "gw-a-1000rps",
 					MaxValue:   1000,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(targetedRoute),
@@ -855,6 +866,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{
+					Name:       "gw-b-100rps",
 					MaxValue:   100,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(targetedRoute),
@@ -862,6 +874,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{ // FIXME(@guicassolato): we need to create one limit definition per gateway × route combination, not one per gateway × policy combination
+					Name:       "gw-a-1000rps",
 					MaxValue:   1000,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(untargetedRoute),
@@ -869,6 +882,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{
+					Name:       "gw-b-100rps",
 					MaxValue:   100,
 					Seconds:    1,
 					Namespace:  controllers.LimitsNamespaceFromRoute(untargetedRoute),

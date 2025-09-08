@@ -19,9 +19,9 @@ name: Code Style
 
 on:
   pull_request:
-    branches: [ 'main', 'release-*' ]
+    branches: ['main', 'release-*']
   merge_group:
-    types: [ checks_requested ]
+    types: [checks_requested]
   workflow_dispatch:
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
     name: Auto-format and Check
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # Keep running if one leg fails.
+      fail-fast: false  # Keep running if one leg fails.
       matrix:
         tool:
           - goimports
@@ -146,8 +146,6 @@ jobs:
           # Exclude generated and vendored files, plus some legacy
           # paths until we update all .gitattributes
           git ls-files |
-          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
           grep -Ev '^(vendor/|third_party/|.git|utils/|pkg/extension/grpc/)' |
           xargs misspell -error |
           reviewdog -efm="%f:%l:%c: %m" \
@@ -204,12 +202,15 @@ jobs:
           #  - nothing in vendor/
           #  - nothing in third_party
           #  - nothing in .git/
-          #  - no *.ai (Adobe Illustrator) files.
+          #  - nothing in utils/
+          #  - nothing in pkg/extension/grpc/
+          #  - no *.gitignore$
+          #  - no *.png files.
+          #  - no *.svg files.
           LINT_FILES=$(git ls-files |
-          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
-          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
           grep -Ev '^(vendor/|third_party/|.git|utils/|pkg/extension/grpc/)' |
-          grep -v '\.ai$' |
+          grep -v '\.gitignore$' |
+          grep -v '\.png$' |
           grep -v '\.svg$')
 
           for x in $LINT_FILES; do

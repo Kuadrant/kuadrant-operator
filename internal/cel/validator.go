@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/ext"
 )
 
 type ValidatorBuilder struct {
@@ -79,6 +80,7 @@ func (b *ValidatorBuilder) Build() (*Validator, error) {
 		var env *cel.Env
 		var err error
 		var opts []cel.EnvOption
+		opts = []cel.EnvOption{ext.Strings()}
 
 		for _, binding := range b.baseBindings {
 			opts = append(opts, cel.Variable(binding.name, binding.t))

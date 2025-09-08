@@ -188,3 +188,39 @@ func TestPushPolicyBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestValidatorSupportsStringExtensions(t *testing.T) {
+	builder := NewValidatorBuilder()
+	if _, err := builder.AddPolicyBindingAfter(nil, "foo", "first", cel.AnyType); err != nil {
+		t.Fatal(err)
+	}
+
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{name: "format", expr: "'Hello, %s!'.format(['World'])"},
+		{name: "lowerAscii", expr: "'ABC'.lowerAscii()"},
+		{name: "upperAscii", expr: "'abc'.upperAscii()"},
+		{name: "charAt", expr: "'abc'.charAt(1)"},
+		{name: "indexOf", expr: "'foobarbaz'.indexOf('bar')"},
+		{name: "replace", expr: "'foobarbaz'.replace('bar', 'qux')"},
+		{name: "substring", expr: "'foobarbaz'.substring(3, 6)"},
+		{name: "split", expr: "'a,b,c'.split(',')"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if ast, err := validator.Validate("foo", tc.expr); err != nil {
+				t.Fatalf("unexpected error validating expr '%s': %v", tc.expr, err)
+			} else if ast == nil {
+				t.Fatalf("expected non-nil AST for expr '%s'", tc.expr)
+			}
+		})
+	}
+}

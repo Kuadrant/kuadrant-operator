@@ -125,7 +125,7 @@ Common attributes include:
 |---------|---------------------|---------------|
 | **Request** | `request.method`, `request.url_path`, `request.headers` | `request.method == "POST"` |
 | **Authentication** | `auth.identity.*`, `request.auth.claims.*` | `auth.identity.userid`, `request.auth.claims["tier"]` |
-| **Request Body** | `requestBodyJSON(path)` | `requestBodyJSON("model")` |
+| **Request Body** | `requestBodyJSON(path)` | `requestBodyJSON("/model")` |
 | **Remote Address** | `source.address`, `source.port` | `source.address` |
 
 ## Examples
@@ -204,7 +204,7 @@ spec:
         window: 24h
       when:
       - predicate: request.path == "/v1/chat/completions"
-      - predicate: 'requestBodyJSON("model") == "gpt-4"'
+      - predicate: 'requestBodyJSON("/model") == "gpt-4"'
       counters:
       - expression: auth.identity.userid
     
@@ -214,7 +214,7 @@ spec:
         window: 24h
       when:
       - predicate: request.path == "/v1/chat/completions"
-      - predicate: 'requestBodyJSON("model") == "gpt-3.5-turbo"'
+      - predicate: 'requestBodyJSON("/model") == "gpt-3.5-turbo"'
       counters:
       - expression: auth.identity.userid
 ```

@@ -7,14 +7,13 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
 type LimitadorReconciler struct {
@@ -32,7 +31,7 @@ func (r *LimitadorReconciler) Subscription() *controller.Subscription {
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
-			{Kind: ptr.To(v1beta1.LimitadorGroupKind), EventType: ptr.To(controller.DeleteEvent)},
+			{Kind: ptr.To(v1beta1.LimitadorGroupKind)},
 		},
 	}
 }
@@ -44,18 +43,6 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 
 	kobj := GetKuadrantFromTopology(topology)
 	if kobj == nil {
-		return nil
-	}
-
-	lobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
-		if item.GroupVersionKind().Kind == v1beta1.LimitadorGroupKind.Kind {
-			return item, true
-		}
-		return nil, false
-	})
-
-	if len(lobjs) > 0 {
-		logger.Info("limitador resource already exists, no need to create", "status", "skipping")
 		return nil
 	}
 
@@ -78,7 +65,9 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				},
 			},
 		},
-		Spec: limitadorv1alpha1.LimitadorSpec{},
+		Spec: limitadorv1alpha1.LimitadorSpec{
+			MetricLabelsDefault: ptr.To("descriptors[1]"),
+		},
 	}
 
 	unstructuredLimitador, err := controller.Destruct(limitador)
@@ -86,13 +75,14 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		logger.Error(err, "failed to destruct limitador", "status", "error")
 		return err
 	}
-	logger.Info("creating limitador resource", "status", "processing")
-	_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(limitador.Namespace).Create(ctx, unstructuredLimitador, metav1.CreateOptions{})
+	logger.Info("applying limitador resource", "status", "processing")
+	_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(limitador.Namespace).Apply(ctx, unstructuredLimitador.GetName(), unstructuredLimitador, metav1.ApplyOptions{FieldManager: "kuadrant-operator"})
 	if err != nil {
-		if apiErrors.IsAlreadyExists(err) {
-			logger.Info("already created limitador resource", "status", "acceptable")
+		// conflict is acceptable, as the resource is now managed by another user/controller
+		if apiErrors.IsConflict(err) {
+			logger.Info(err.Error(), "status", "acceptable")
 		} else {
-			logger.Error(err, "failed to create limitador resource", "status", "error")
+			logger.Error(err, "failed to apply limitador resource", "status", "error")
 			return err
 		}
 	}

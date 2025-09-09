@@ -237,7 +237,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
-	validatorBuilder := celvalidator.NewRootValidatorBuilder()
 	celValidationIssues := celvalidator.NewIssueCollection()
 
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
@@ -246,6 +245,8 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		path := paths[i].Value
 
 		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+
+		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		// ignore if not an istio gateway
 		if !lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName) {

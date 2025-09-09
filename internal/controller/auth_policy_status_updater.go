@@ -27,6 +27,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
+	"github.com/kuadrant/kuadrant-operator/internal/cel"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
@@ -150,10 +151,28 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		}
 		affectedHTTPRouteRules[pathID] = httpRouteRule
 	}
+
+	var celValidationErrors []error
+	var celIssuesByPathID map[string][]*cel.Issue
+	var celIssuesFound bool
+	stateCelValErrors, stateCelValErrorsFound := state.Load(cel.StateCELValidationErrors)
+	if stateCelValErrorsFound {
+		celIssuesCollection := stateCelValErrors.(*cel.IssueCollection)
+		celIssuesByPathID, celIssuesFound = celIssuesCollection.GetByPolicyKind(policyKind)
+	}
+
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveAuthPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
+
+		if celIssuesFound {
+			storedValidationIssuesForPathID, storedValidationIssuesForPathIDFound := celIssuesByPathID[kuadrantv1.PathID(effectivePolicy.Path)]
+			if storedValidationIssuesForPathIDFound {
+				celValidationErrors = append(celValidationErrors, lo.Map(storedValidationIssuesForPathID, func(i *cel.Issue, _ int) error { return i.GetError() })...)
+			}
+		}
+
 		gatewayClass, gateway, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		if err != nil {
 			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
@@ -253,6 +272,10 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		default:
 			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s/%s)", machinery.GatewayGroupKind.Kind, g.gateway.GetNamespace(), g.gateway.GetName()))
 		}
+	}
+
+	if len(celValidationErrors) > 0 {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrCelValidation(celValidationErrors), false)
 	}
 
 	if len(componentsToSync) > 0 {

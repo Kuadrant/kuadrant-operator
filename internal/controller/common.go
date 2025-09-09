@@ -19,6 +19,7 @@ import (
 const (
 	KuadrantAppName                = "kuadrant"
 	PolicyAffectedConditionPattern = "kuadrant.io/%sAffected" // Policy kinds are expected to be named XPolicy
+	FieldManagerName               = "kuadrant-operator"
 )
 
 var (

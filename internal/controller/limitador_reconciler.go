@@ -7,7 +7,6 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -76,15 +75,11 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		return err
 	}
 	logger.Info("applying limitador resource", "status", "processing")
-	_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(limitador.Namespace).Apply(ctx, unstructuredLimitador.GetName(), unstructuredLimitador, metav1.ApplyOptions{FieldManager: "kuadrant-operator"})
+	_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(limitador.Namespace).Apply(ctx, unstructuredLimitador.GetName(), unstructuredLimitador, metav1.ApplyOptions{Force: true, FieldManager: FieldManagerName})
 	if err != nil {
-		// conflict is acceptable, as the resource is now managed by another user/controller
-		if apiErrors.IsConflict(err) {
-			logger.Info(err.Error(), "status", "acceptable")
-		} else {
-			logger.Error(err, "failed to apply limitador resource", "status", "error")
-			return err
-		}
+		logger.Error(err, "failed to apply limitador resource", "status", "error")
+		return err
 	}
+
 	return nil
 }

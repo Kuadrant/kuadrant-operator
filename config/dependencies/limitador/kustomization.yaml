@@ -1,2 +1,2 @@
 resources:
-- github.com/Kuadrant/limitador-operator/config/default?ref=main
+- github.com/Kuadrant/limitador-operator/config/default?ref=v0.15.0

@@ -5,13 +5,13 @@ metadata:
     alm-examples: '[]'
     capabilities: Basic Install
     categories: Integration & Delivery
-    containerImage: quay.io/kuadrant/kuadrant-operator:latest
+    containerImage: quay.io/kuadrant/kuadrant-operator:v1.3.0-alpha2
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.9.0
     operators.operatorframework.io/project_layout: unknown
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v0.0.0
+  name: kuadrant-operator.v1.3.0-alpha2
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -87,4 +87,4 @@ spec:
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
-  version: 0.0.0
+  version: 1.3.0-alpha2

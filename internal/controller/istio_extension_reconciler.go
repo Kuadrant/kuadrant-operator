@@ -24,6 +24,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	celvalidator "github.com/kuadrant/kuadrant-operator/internal/cel"
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -83,7 +84,13 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfigs[gateway.GetLocator()], ProtectedRegistry, WASMFilterImageURL)
+		// Get the wasm config for this gateway and apply mutators
+		wasmConfig := wasmConfigs[gateway.GetLocator()]
+		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway); err != nil {
+			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
+		}
+
+		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
 
 		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
 

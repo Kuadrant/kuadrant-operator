@@ -12,8 +12,9 @@ import (
 )
 
 type Config struct {
-	Services   map[string]Service `json:"services"`
-	ActionSets []ActionSet        `json:"actionSets"`
+	RequestData map[string]string  `json:"requestData,omitempty"`
+	Services    map[string]Service `json:"services"`
+	ActionSets  []ActionSet        `json:"actionSets"`
 }
 
 func (c *Config) ToStruct() (*_struct.Struct, error) {
@@ -39,8 +40,14 @@ func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
 }
 
 func (c *Config) EqualTo(other *Config) bool {
-	if len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
+	if len(c.RequestData) != len(other.RequestData) || len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
 		return false
+	}
+
+	for key, data := range c.RequestData {
+		if otherData, ok := other.RequestData[key]; !ok || data != otherData {
+			return false
+		}
 	}
 
 	for key, service := range c.Services {

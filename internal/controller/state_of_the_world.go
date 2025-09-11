@@ -88,7 +88,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			&kuadrantv1beta1.Kuadrant{},
 			kuadrantv1beta1.KuadrantsResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta1.Kuadrant]{}),
+			controller.WithPredicates(getKuadrantWatcherPredicate()),
 		)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(
 			&kuadrantv1.DNSPolicy{},
@@ -595,6 +595,21 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 		},
 	))
 	return opts
+}
+
+func getKuadrantWatcherPredicate() ctrlruntimepredicate.TypedPredicate[*kuadrantv1beta1.Kuadrant] {
+	return ctrlruntimepredicate.TypedFuncs[*kuadrantv1beta1.Kuadrant]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*kuadrantv1beta1.Kuadrant]) bool {
+			if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+				return true
+			}
+
+			// trigger on extension annotation changes
+			oldAnnotations := e.ObjectOld.GetAnnotations()
+			newAnnotations := e.ObjectNew.GetAnnotations()
+			return extension.AnnotationsChanged(oldAnnotations, newAnnotations)
+		},
+	}
 }
 
 func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {

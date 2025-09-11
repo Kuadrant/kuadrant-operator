@@ -19,6 +19,7 @@ import (
 
 const (
 	PolicyConditionEnforced = kuadrant.PolicyConditionEnforced
+	KuadrantMetricsPrefix   = "metrics.labels"
 )
 
 type Domain int
@@ -26,6 +27,7 @@ type Domain int
 const (
 	DomainUnspecified Domain = iota
 	DomainAuth
+	DomainRequest
 )
 
 type Policy interface {
@@ -70,4 +72,8 @@ func (eb *ExtensionBase) Configure(ctx context.Context) error {
 	eb.Client = client
 	eb.Scheme = scheme
 	return nil
+}
+
+func KuadrantMetricBinding(binding string) string {
+	return fmt.Sprintf("%s.%s", KuadrantMetricsPrefix, binding)
 }

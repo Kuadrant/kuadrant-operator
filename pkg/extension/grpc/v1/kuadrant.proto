@@ -64,6 +64,7 @@ message Event {
 enum Domain {
   DOMAIN_UNSPECIFIED = 0;
   DOMAIN_AUTH = 1;
+  DOMAIN_REQUEST = 2;
 }
 
 message RegisterMutatorRequest {

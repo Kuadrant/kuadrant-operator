@@ -22,6 +22,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
@@ -214,7 +215,7 @@ func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 	if limitadorService == nil {
 		return nil, ErrMissingLimitadorServiceInfo
 	}
-	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), mtls, rateLimitClusterPatch)
+	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(kuadrant.KuadrantRateLimitClusterName, limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), mtls, rateLimitClusterPatch)
 	if err != nil {
 		return nil, err
 	}

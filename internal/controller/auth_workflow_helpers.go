@@ -18,7 +18,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -58,89 +57,17 @@ func AuthObjectLabels() labels.Set {
 	return m
 }
 
-func AuthClusterName(gatewayName string) string {
-	return fmt.Sprintf("kuadrant-auth-%s", gatewayName)
-}
-
-func authClusterPatch(host string, port int, mTLS bool) map[string]any {
-	patch := map[string]any{
-		"name":                   kuadrant.KuadrantAuthClusterName,
-		"type":                   "STRICT_DNS",
-		"connect_timeout":        "1s",
-		"lb_policy":              "ROUND_ROBIN",
-		"http2_protocol_options": map[string]any{},
-		"load_assignment": map[string]any{
-			"cluster_name": kuadrant.KuadrantAuthClusterName,
-			"endpoints": []map[string]any{
-				{
-					"lb_endpoints": []map[string]any{
-						{
-							"endpoint": map[string]any{
-								"address": map[string]any{
-									"socket_address": map[string]any{
-										"address":    host,
-										"port_value": port,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	if mTLS {
-		patch["transport_socket"] = map[string]interface{}{
-			"name": "envoy.transport_sockets.tls",
-			"typed_config": map[string]interface{}{
-				"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
-				"common_tls_context": map[string]interface{}{
-					"tls_certificate_sds_secret_configs": []interface{}{
-						map[string]interface{}{
-							"name": "default",
-							"sds_config": map[string]interface{}{
-								"api_config_source": map[string]interface{}{
-									"api_type": "GRPC",
-									"grpc_services": []interface{}{
-										map[string]interface{}{
-											"envoy_grpc": map[string]interface{}{
-												"cluster_name": "sds-grpc",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					"validation_context_sds_secret_config": map[string]interface{}{
-						"name": "ROOTCA",
-						"sds_config": map[string]interface{}{
-							"api_config_source": map[string]interface{}{
-								"api_type": "GRPC",
-								"grpc_services": []interface{}{
-									map[string]interface{}{
-										"envoy_grpc": map[string]interface{}{
-											"cluster_name": "sds-grpc",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-	}
-	return patch
-}
-
-type authorinoServiceInfo struct {
+type AuthorinoServiceSpec struct {
 	Host string
 	Port int32
 }
 
-func authorinoServiceInfoFromAuthorino(authorino *authorinooperatorv1beta1.Authorino) authorinoServiceInfo {
-	info := authorinoServiceInfo{
+func (s *AuthorinoServiceSpec) ToClusterName() string {
+	return fmt.Sprintf("outbound|%d||%s", s.Port, s.Host)
+}
+
+func authorinoServiceSpecFromAuthorino(authorino *authorinooperatorv1beta1.Authorino) AuthorinoServiceSpec {
+	info := AuthorinoServiceSpec{
 		Host: fmt.Sprintf("%s-authorino-authorization.%s.svc.cluster.local", authorino.GetName(), authorino.GetNamespace()),
 		Port: int32(50051), // default authorino grpc authorization service port
 	}

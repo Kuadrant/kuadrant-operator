@@ -20,7 +20,6 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
-	kuadrant "github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
@@ -165,7 +164,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) buildDesiredEnvoyPatchPolicy(authori
 			APIVersion: envoygatewayv1alpha1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AuthClusterName(gateway.GetName()),
+			Name:      fmt.Sprintf("kuadrant-auth-%s", gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 			Labels:    AuthObjectLabels(),
 			OwnerReferences: []metav1.OwnerReference{
@@ -189,12 +188,84 @@ func (r *EnvoyGatewayAuthClusterReconciler) buildDesiredEnvoyPatchPolicy(authori
 		},
 	}
 
-	authorinoServiceInfo := authorinoServiceInfoFromAuthorino(authorino)
-	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(kuadrant.KuadrantAuthClusterName, authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), false, authClusterPatch)
+	authorinoServiceInfo := authorinoServiceSpecFromAuthorino(authorino)
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(authorinoServiceInfo.ToClusterName(), authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), false, authClusterPatch)
 	if err != nil {
 		return nil, err
 	}
 	envoyPatchPolicy.Spec.JSONPatches = jsonPatches
 
 	return envoyPatchPolicy, nil
+}
+
+func authClusterPatch(clusterName, host string, port int, mTLS bool) map[string]any {
+	patch := map[string]any{
+		"name":                   clusterName,
+		"type":                   "STRICT_DNS",
+		"connect_timeout":        "1s",
+		"lb_policy":              "ROUND_ROBIN",
+		"http2_protocol_options": map[string]any{},
+		"load_assignment": map[string]any{
+			"cluster_name": clusterName,
+			"endpoints": []map[string]any{
+				{
+					"lb_endpoints": []map[string]any{
+						{
+							"endpoint": map[string]any{
+								"address": map[string]any{
+									"socket_address": map[string]any{
+										"address":    host,
+										"port_value": port,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if mTLS {
+		patch["transport_socket"] = map[string]interface{}{
+			"name": "envoy.transport_sockets.tls",
+			"typed_config": map[string]interface{}{
+				"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
+				"common_tls_context": map[string]interface{}{
+					"tls_certificate_sds_secret_configs": []interface{}{
+						map[string]interface{}{
+							"name": "default",
+							"sds_config": map[string]interface{}{
+								"api_config_source": map[string]interface{}{
+									"api_type": "GRPC",
+									"grpc_services": []interface{}{
+										map[string]interface{}{
+											"envoy_grpc": map[string]interface{}{
+												"cluster_name": "sds-grpc",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					"validation_context_sds_secret_config": map[string]interface{}{
+						"name": "ROOTCA",
+						"sds_config": map[string]interface{}{
+							"api_config_source": map[string]interface{}{
+								"api_type": "GRPC",
+								"grpc_services": []interface{}{
+									map[string]interface{}{
+										"envoy_grpc": map[string]interface{}{
+											"cluster_name": "sds-grpc",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	return patch
 }

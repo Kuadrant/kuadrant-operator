@@ -40,8 +40,8 @@ func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
 }
 
 // BuildEnvoyFilterClusterPatch returns an envoy config patch that adds a cluster to the gateway.
-func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatchBuilder func(string, int, bool) map[string]any) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
-	patchRaw, _ := json.Marshal(map[string]any{"operation": "ADD", "value": clusterPatchBuilder(host, port, mtls)})
+func BuildEnvoyFilterClusterPatch(name, host string, port int, mtls bool, clusterPatchBuilder func(string, string, int, bool) map[string]any) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+	patchRaw, _ := json.Marshal(map[string]any{"operation": "ADD", "value": clusterPatchBuilder(name, host, port, mtls)})
 	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
 	if err := patch.UnmarshalJSON(patchRaw); err != nil {
 		return nil, err

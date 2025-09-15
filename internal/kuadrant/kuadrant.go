@@ -9,7 +9,6 @@ const (
 	TopologyLabel                = "kuadrant.io/topology"
 	ObservabilityLabel           = "kuadrant.io/observability"
 	KuadrantRateLimitClusterName = "kuadrant-ratelimit-service"
-	KuadrantAuthClusterName      = "kuadrant-auth-service"
 	LimitadorName                = "limitador"
 )
 

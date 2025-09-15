@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/google/cel-go/cel"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -27,6 +28,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -62,8 +64,13 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	logger.V(1).Info("building istio extension ", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building istio extension")
 
+	authorino := GetAuthorinoFromTopology(topology)
+	if authorino == nil {
+		return nil
+	}
+
 	// build wasm plugin configs for each gateway
-	wasmConfigs, err := r.buildWasmConfigs(ctx, state)
+	wasmConfigs, err := r.buildWasmConfigs(ctx, state, authorino)
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveAuthPolicies) || errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
@@ -202,7 +209,7 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 }
 
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
-func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
+func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map, authorino *authorinooperatorv1beta1.Authorino) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
 	logger.Info("build Wasm configuration", "status", "started")
 	logger.Info("build Wasm configuration", "status", "completed")
@@ -335,10 +342,12 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		state.Store(celvalidator.StateCELValidationErrors, celValidationIssues)
 	}
 
+	authorinoServiceSpec := authorinoServiceSpecFromAuthorino(authorino)
+	authClusterName := authorinoServiceSpec.ToClusterName()
 	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
 		return wasm.BuildConfigForActionSet(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
 			return c.Config.(wasm.ActionSet)
-		}), &logger)
+		}), &logger, authClusterName, kuadrant.KuadrantRateLimitClusterName)
 	})
 
 	return wasmConfigs, nil

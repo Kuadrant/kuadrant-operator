@@ -96,7 +96,6 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 	}
 
 	if isIstioInstalled {
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioAuthClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioExtensionReconciler{client: client}).Subscription().Reconcile)
 	}

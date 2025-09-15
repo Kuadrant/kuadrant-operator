@@ -20,7 +20,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
@@ -82,30 +81,30 @@ func ExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
 }
 
-func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config {
+func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, authClusterName, rateLimitClusterName string) Config {
 	return Config{
 		Services: map[string]Service{
 			AuthServiceName: {
 				Type:        AuthServiceType,
-				Endpoint:    kuadrant.KuadrantAuthClusterName,
+				Endpoint:    authClusterName,
 				FailureMode: AuthServiceFailureMode(logger),
 				Timeout:     ptr.To(AuthServiceTimeout()),
 			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,
-				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				Endpoint:    rateLimitClusterName,
 				FailureMode: RatelimitServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitServiceTimeout()),
 			},
 			RateLimitCheckServiceName: {
 				Type:        RateLimitCheckServiceType,
-				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				Endpoint:    rateLimitClusterName,
 				FailureMode: RatelimitCheckServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
 			},
 			RateLimitReportServiceName: {
 				Type:        RateLimitReportServiceType,
-				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				Endpoint:    rateLimitClusterName,
 				FailureMode: RatelimitReportServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
 			},

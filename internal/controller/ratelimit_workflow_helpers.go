@@ -22,7 +22,6 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
@@ -101,15 +100,15 @@ func RateLimitClusterName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-ratelimiting-%s", gatewayName)
 }
 
-func rateLimitClusterPatch(host string, port int, mTLS bool) map[string]any {
+func rateLimitClusterPatch(clusterName, host string, port int, mTLS bool) map[string]any {
 	base := map[string]any{
-		"name":                   kuadrant.KuadrantRateLimitClusterName,
+		"name":                   clusterName,
 		"type":                   "STRICT_DNS",
 		"connect_timeout":        "1s",
 		"lb_policy":              "ROUND_ROBIN",
 		"http2_protocol_options": map[string]any{},
 		"load_assignment": map[string]any{
-			"cluster_name": kuadrant.KuadrantRateLimitClusterName,
+			"cluster_name": clusterName,
 			"endpoints": []map[string]any{
 				{
 					"lb_endpoints": []map[string]any{

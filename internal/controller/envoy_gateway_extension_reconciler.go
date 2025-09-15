@@ -9,6 +9,7 @@ import (
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/google/cel-go/cel"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -28,6 +29,7 @@ import (
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -63,8 +65,13 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
+	authorino := GetAuthorinoFromTopology(topology)
+	if authorino == nil {
+		return nil
+	}
+
 	// build wasm plugin configs for each gateway
-	wasmConfigs, err := r.buildWasmConfigs(ctx, state)
+	wasmConfigs, err := r.buildWasmConfigs(ctx, state, authorino)
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveAuthPolicies) || errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
@@ -154,7 +161,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 }
 
 // buildWasmConfigs returns a map of envoy gateway gateway locators to an ordered list of corresponding wasm policies
-func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
+func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map, authorino *authorinooperatorv1beta1.Authorino) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("buildWasmConfigs")
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
@@ -281,10 +288,12 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		state.Store(celvalidator.StateCELValidationErrors, celValidationIssues)
 	}
 
+	authorinoServiceSpec := authorinoServiceSpecFromAuthorino(authorino)
+	authClusterName := authorinoServiceSpec.ToClusterName()
 	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
 		return wasm.BuildConfigForActionSet(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
 			return c.Config.(wasm.ActionSet)
-		}), &logger)
+		}), &logger, authClusterName, kuadrant.KuadrantRateLimitClusterName)
 	})
 
 	return wasmConfigs, nil

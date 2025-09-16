@@ -161,6 +161,10 @@ func (p *OOPExtension) startServer() error {
 			return fmt.Errorf("failed to create socket directory: %w", err)
 		}
 
+		if err := p.cleanupSocket(); err != nil {
+			return fmt.Errorf("failed to cleanup existing socket: %w", err)
+		}
+
 		ln, err := net.Listen("unix", p.socket)
 		if err != nil {
 			return err
@@ -193,6 +197,24 @@ func (p *OOPExtension) stopServer() error {
 		}
 	}
 	return nil
+}
+
+func (p *OOPExtension) cleanupSocket() error {
+	if _, err := os.Stat(p.socket); os.IsNotExist(err) {
+		// socket doesn't exist
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	conn, err := net.Dial("unix", p.socket)
+	if err != nil {
+		p.logger.Info("removing socket file", "socket", p.socket)
+		return os.Remove(p.socket)
+	}
+
+	conn.Close()
+	return fmt.Errorf("socket %s is already in use by another process", p.socket)
 }
 
 func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, monitorReady chan struct{}) {

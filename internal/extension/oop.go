@@ -34,7 +34,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-const socketTemplate = "/tmp/kuadrant/%s/.grpc-%d.sock"
+const defaultUnixSocket = ".grpc.sock"
 
 type OOPExtension struct {
 	name       string
@@ -62,7 +62,7 @@ func NewOOPExtension(name string, location string, service extpb.ExtensionServic
 
 	return OOPExtension{
 		name:       name,
-		socket:     fmt.Sprintf(socketTemplate, name, os.Getpid()),
+		socket:     fmt.Sprintf("/tmp/kuadrant/%s/%s", name, defaultUnixSocket),
 		executable: executable,
 		service:    service,
 		logger:     logger.WithName(name),

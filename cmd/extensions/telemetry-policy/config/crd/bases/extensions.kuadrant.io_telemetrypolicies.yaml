@@ -17,8 +17,9 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: TelemetryPolicy enables rate limiting through plans of identified
-          requests
+        description: |-
+          TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
+          through the use of dynamically evaluated CEL expressions.
         properties:
           apiVersion:
             description: |-

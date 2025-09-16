@@ -24,7 +24,8 @@ import (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// TelemetryPolicy enables rate limiting through plans of identified requests
+// TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
+// through the use of dynamically evaluated CEL expressions.
 type TelemetryPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -49,7 +49,6 @@ var (
 		{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		{Kind: &kuadrantauthorino.AuthConfigGroupKind},
-		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		{Kind: &kuadrantistio.WasmPluginGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
@@ -96,7 +95,6 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 	}
 
 	if isIstioInstalled {
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioExtensionReconciler{client: client}).Subscription().Reconcile)
 	}
 
@@ -161,4 +159,13 @@ func defaultGatewayControllerName(controllerName gatewayapiv1.GatewayController)
 		return defaultEnvoyGatewayGatewayControllerName
 	}
 	return "Unknown"
+}
+
+type ServiceSpec struct {
+	Host string
+	Port int32
+}
+
+func (s *ServiceSpec) ToClusterName() string {
+	return fmt.Sprintf("outbound|%d||%s", s.Port, s.Host)
 }

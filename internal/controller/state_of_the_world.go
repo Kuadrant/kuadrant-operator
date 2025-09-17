@@ -22,7 +22,6 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -343,12 +342,6 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 		return opts, nil
 	}
 	opts = append(opts,
-		controller.WithRunnable("envoyfilter watcher", controller.Watch(
-			&istioclientnetworkingv1alpha3.EnvoyFilter{},
-			istio.EnvoyFiltersResource,
-			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-		)),
 		controller.WithRunnable("peerauthentication watcher", controller.Watch(
 			&istiosecurity.PeerAuthentication{},
 			istio.PeerAuthenticationResource,
@@ -362,12 +355,10 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
 		controller.WithObjectKinds(
-			istio.EnvoyFilterGroupKind,
 			istio.WasmPluginGroupKind,
 			istio.PeerAuthenticationGroupKind,
 		),
 		controller.WithObjectLinks(
-			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkGatewayToWasmPlugin,
 			istio.LinkKuadrantToPeerAuthentication,
 		),

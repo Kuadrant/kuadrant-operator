@@ -57,17 +57,8 @@ func AuthObjectLabels() labels.Set {
 	return m
 }
 
-type AuthorinoServiceSpec struct {
-	Host string
-	Port int32
-}
-
-func (s *AuthorinoServiceSpec) ToClusterName() string {
-	return fmt.Sprintf("outbound|%d||%s", s.Port, s.Host)
-}
-
-func authorinoServiceSpecFromAuthorino(authorino *authorinooperatorv1beta1.Authorino) AuthorinoServiceSpec {
-	info := AuthorinoServiceSpec{
+func ServiceSpecFromAuthorino(authorino *authorinooperatorv1beta1.Authorino) ServiceSpec {
+	info := ServiceSpec{
 		Host: fmt.Sprintf("%s-authorino-authorization.%s.svc.cluster.local", authorino.GetName(), authorino.GetNamespace()),
 		Port: int32(50051), // default authorino grpc authorization service port
 	}

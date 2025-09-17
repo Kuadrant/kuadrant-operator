@@ -21,7 +21,6 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
-	kuadrant "github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
@@ -210,11 +209,84 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(li
 		},
 	}
 
-	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(kuadrant.KuadrantRateLimitClusterName, limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), false, rateLimitClusterPatch)
+	limitadorServiceInfo := ServiceSpecFromLimitador(limitador)
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(limitadorServiceInfo.ToClusterName(), limitadorServiceInfo.Host, int(limitadorServiceInfo.Port), false, rateLimitClusterPatch)
 	if err != nil {
 		return nil, err
 	}
 	envoyPatchPolicy.Spec.JSONPatches = jsonPatches
 
 	return envoyPatchPolicy, nil
+}
+
+func rateLimitClusterPatch(clusterName, host string, port int, mTLS bool) map[string]any {
+	base := map[string]any{
+		"name":                   clusterName,
+		"type":                   "STRICT_DNS",
+		"connect_timeout":        "1s",
+		"lb_policy":              "ROUND_ROBIN",
+		"http2_protocol_options": map[string]any{},
+		"load_assignment": map[string]any{
+			"cluster_name": clusterName,
+			"endpoints": []map[string]any{
+				{
+					"lb_endpoints": []map[string]any{
+						{
+							"endpoint": map[string]any{
+								"address": map[string]any{
+									"socket_address": map[string]any{
+										"address":    host,
+										"port_value": port,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if mTLS {
+		base["transport_socket"] = map[string]interface{}{
+			"name": "envoy.transport_sockets.tls",
+			"typed_config": map[string]interface{}{
+				"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
+				"common_tls_context": map[string]interface{}{
+					"tls_certificate_sds_secret_configs": []interface{}{
+						map[string]interface{}{
+							"name": "default",
+							"sds_config": map[string]interface{}{
+								"api_config_source": map[string]interface{}{
+									"api_type": "GRPC",
+									"grpc_services": []interface{}{
+										map[string]interface{}{
+											"envoy_grpc": map[string]interface{}{
+												"cluster_name": "sds-grpc",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					"validation_context_sds_secret_config": map[string]interface{}{
+						"name": "ROOTCA",
+						"sds_config": map[string]interface{}{
+							"api_config_source": map[string]interface{}{
+								"api_type": "GRPC",
+								"grpc_services": []interface{}{
+									map[string]interface{}{
+										"envoy_grpc": map[string]interface{}{
+											"cluster_name": "sds-grpc",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	return base
 }

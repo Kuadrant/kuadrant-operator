@@ -100,76 +100,17 @@ func RateLimitClusterName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-ratelimiting-%s", gatewayName)
 }
 
-func rateLimitClusterPatch(clusterName, host string, port int, mTLS bool) map[string]any {
-	base := map[string]any{
-		"name":                   clusterName,
-		"type":                   "STRICT_DNS",
-		"connect_timeout":        "1s",
-		"lb_policy":              "ROUND_ROBIN",
-		"http2_protocol_options": map[string]any{},
-		"load_assignment": map[string]any{
-			"cluster_name": clusterName,
-			"endpoints": []map[string]any{
-				{
-					"lb_endpoints": []map[string]any{
-						{
-							"endpoint": map[string]any{
-								"address": map[string]any{
-									"socket_address": map[string]any{
-										"address":    host,
-										"port_value": port,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+func ServiceSpecFromLimitador(limitador *limitadorv1alpha1.Limitador) ServiceSpec {
+	info := ServiceSpec{
+		Host: fmt.Sprintf("%s-limitador.%s.svc.cluster.local", limitador.GetName(), limitador.GetNamespace()),
+		Port: int32(50051), // default limitador grpc authorization service port
 	}
-	if mTLS {
-		base["transport_socket"] = map[string]interface{}{
-			"name": "envoy.transport_sockets.tls",
-			"typed_config": map[string]interface{}{
-				"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
-				"common_tls_context": map[string]interface{}{
-					"tls_certificate_sds_secret_configs": []interface{}{
-						map[string]interface{}{
-							"name": "default",
-							"sds_config": map[string]interface{}{
-								"api_config_source": map[string]interface{}{
-									"api_type": "GRPC",
-									"grpc_services": []interface{}{
-										map[string]interface{}{
-											"envoy_grpc": map[string]interface{}{
-												"cluster_name": "sds-grpc",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					"validation_context_sds_secret_config": map[string]interface{}{
-						"name": "ROOTCA",
-						"sds_config": map[string]interface{}{
-							"api_config_source": map[string]interface{}{
-								"api_type": "GRPC",
-								"grpc_services": []interface{}{
-									map[string]interface{}{
-										"envoy_grpc": map[string]interface{}{
-											"cluster_name": "sds-grpc",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
+	if limitador.Status.Service != nil {
+		info.Port = limitador.Status.Service.Ports.GRPC
+	} else if limitador.Spec.Listener != nil && limitador.Spec.Listener.GRPC != nil && limitador.Spec.Listener.GRPC.Port != nil {
+		info.Port = *limitador.Spec.Listener.GRPC.Port
 	}
-	return base
+	return info
 }
 
 // wasmActionFromLimit builds a wasm rate-limit action for a given limit.

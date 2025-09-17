@@ -47,7 +47,6 @@ func (r *TokenRateLimitPolicyStatusUpdater) Subscription() controller.Subscripti
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
-			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 			{Kind: &kuadrantistio.WasmPluginGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
@@ -236,11 +235,6 @@ func (r *TokenRateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1
 		controllerName := g.gatewayClass.Spec.ControllerName
 		switch defaultGatewayControllerName(controllerName) {
 		case defaultIstioGatewayControllerName:
-			// EnvoyFilter (shared with RateLimitPolicy)
-			istioRateLimitClustersModifiedGateways, _ := state.Load(StateIstioRateLimitClustersModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioRateLimitClustersModifiedGateways, topology, func(_ machinery.Object) bool {
-				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
-			})...)
 			// WasmPlugin
 			istioExtensionsModifiedGateways, _ := state.Load(StateIstioExtensionsModified)
 			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.WasmPluginGroupKind, istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {

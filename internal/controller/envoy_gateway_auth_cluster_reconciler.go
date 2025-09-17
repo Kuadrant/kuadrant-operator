@@ -188,7 +188,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) buildDesiredEnvoyPatchPolicy(authori
 		},
 	}
 
-	authorinoServiceInfo := authorinoServiceSpecFromAuthorino(authorino)
+	authorinoServiceInfo := ServiceSpecFromAuthorino(authorino)
 	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(authorinoServiceInfo.ToClusterName(), authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), false, authClusterPatch)
 	if err != nil {
 		return nil, err

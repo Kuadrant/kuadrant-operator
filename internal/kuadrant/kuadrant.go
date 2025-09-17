@@ -5,11 +5,10 @@ import (
 )
 
 const (
-	ControllerName               = "kuadrant.io/policy-controller"
-	TopologyLabel                = "kuadrant.io/topology"
-	ObservabilityLabel           = "kuadrant.io/observability"
-	KuadrantRateLimitClusterName = "kuadrant-ratelimit-service"
-	LimitadorName                = "limitador"
+	ControllerName     = "kuadrant.io/policy-controller"
+	TopologyLabel      = "kuadrant.io/topology"
+	ObservabilityLabel = "kuadrant.io/observability"
+	LimitadorName      = "limitador"
 )
 
 type Policy interface {

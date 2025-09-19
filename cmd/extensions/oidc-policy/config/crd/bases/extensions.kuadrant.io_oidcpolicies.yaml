@@ -124,6 +124,11 @@ spec:
                 - message: 'Use one of: jwksURL, issuerURL'
                   rule: '!(has(self.jwksURL) && self.jwksURL != '''' && has(self.issuerURL)
                     && self.issuerURL != '''')'
+                - message: When jwksURL is set, authorizationEndpoint and tokenEndpoint
+                    must also be provided
+                  rule: '!(has(self.jwksURL) && self.jwksURL != '''') || (has(self.authorizationEndpoint)
+                    && self.authorizationEndpoint != '''' && has(self.tokenEndpoint)
+                    && self.tokenEndpoint != '''')'
               targetRef:
                 description: Reference to the object to which this policy applies.
                 properties:

@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"fmt"
 	"net/url"
 	"path"
 
@@ -75,6 +74,7 @@ type Auth struct {
 // Provider defines the settings related to the Identity Provider (IDP)
 //
 //	+kubebuilder:validation:XValidation:rule="!(has(self.jwksURL) && self.jwksURL != '' && has(self.issuerURL) && self.issuerURL != '')",message="Use one of: jwksURL, issuerURL"
+//	+kubebuilder:validation:XValidation:rule="!(has(self.jwksURL) && self.jwksURL != '') || (has(self.authorizationEndpoint) && self.authorizationEndpoint != '' && has(self.tokenEndpoint) && self.tokenEndpoint != '')",message="When jwksURL is set, authorizationEndpoint and tokenEndpoint must also be provided"
 type Provider struct {
 	// URL of the JSON Web Key Set (JWKS) endpoint.
 	// Use it for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
@@ -169,11 +169,6 @@ func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
 			return "", err
 		}
 	} else {
-		// JWKs URL is used for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
-		// But token endpoint is required for OpenID Connect (OIDC) authentication.
-		if p.Spec.Provider.JwksURL != "" {
-			return "", fmt.Errorf("token endpoint is required for OpenID Connect (OIDC) authentication when using JWKS URL")
-		}
 		tokenURL, err = url.Parse(p.Spec.Provider.IssuerURL)
 		if err != nil {
 			return "", err
@@ -194,11 +189,6 @@ func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {
 			return "", err
 		}
 	} else {
-		// JWKs URL is used for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
-		// But authorization endpoint is required for OpenID Connect (OIDC) authentication.
-		if p.Spec.Provider.JwksURL != "" {
-			return "", fmt.Errorf("authorization endpoint is required for OpenID Connect (OIDC) authentication when using JWKS URL")
-		}
 		authorizeURL, err = url.Parse(p.Spec.Provider.IssuerURL)
 		if err != nil {
 			return "", err

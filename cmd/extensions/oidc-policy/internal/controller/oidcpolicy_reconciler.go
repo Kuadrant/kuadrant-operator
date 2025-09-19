@@ -329,9 +329,6 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		if pol.Spec.Provider.IssuerURL != "" {
 			authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.IssuerURL)
 		}
-		//else {
-		//	authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.JwksURL)
-		//}
 	}
 
 	p := &kuadrantv1.AuthPolicy{

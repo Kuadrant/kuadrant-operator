@@ -67,7 +67,7 @@ var (
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
 // kuadrant permissions
-//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/finalizers,verbs=update
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
 

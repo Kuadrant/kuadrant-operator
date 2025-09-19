@@ -176,7 +176,6 @@ rules:
   resources:
   - authpolicies
   - dnspolicies
-  - kuadrants
   - ratelimitpolicies
   - tlspolicies
   - tokenratelimitpolicies
@@ -228,6 +227,17 @@ rules:
   - dnsrecords/status
   verbs:
   - get
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - kuadrants
+  verbs:
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - limitador.kuadrant.io
   resources:

@@ -162,7 +162,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-08-28T10:09:55Z"
+    createdAt: "2025-09-19T09:52:37Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -388,7 +388,6 @@ spec:
           resources:
           - authpolicies
           - dnspolicies
-          - kuadrants
           - ratelimitpolicies
           - tlspolicies
           - tokenratelimitpolicies
@@ -440,6 +439,17 @@ spec:
           - dnsrecords/status
           verbs:
           - get
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - kuadrants
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - limitador.kuadrant.io
           resources:

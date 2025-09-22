@@ -106,7 +106,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoOpMonitor), authorinoOpMonitor)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
@@ -140,9 +140,9 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				g.Expect(kuadrantMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoOpMonitor), authorinoOpMonitor)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(authorinoMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
+				g.Expect(authorinoOpMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(limitadorOpMonitor), limitadorOpMonitor)
@@ -176,7 +176,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoOpMonitor), authorinoOpMonitor)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())

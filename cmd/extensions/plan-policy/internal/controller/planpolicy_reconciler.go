@@ -52,22 +52,30 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
+	_, specErr := r.reconcileSpec(ctx, planPolicy, kuadrantCtx)
+	if specErr != nil {
+		return reconcile.Result{}, specErr
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *PlanPolicyReconciler) reconcileSpec(ctx context.Context, planPolicy *v1alpha1.PlanPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.PlanPolicyStatus, error) {
 	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy)
 	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.Scheme); err != nil {
 		r.Logger.Error(err, "failed to set controller reference")
-		return reconcile.Result{}, err
+		return &v1alpha1.PlanPolicyStatus{}, err
 	}
 	if _, err := kuadrantCtx.ReconcileObject(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
 		r.Logger.Error(err, "failed to reconcile desired ratelimitpolicy")
-		return reconcile.Result{}, err
+		return &v1alpha1.PlanPolicyStatus{}, err
 	}
 
 	if err := kuadrantCtx.AddDataTo(ctx, planPolicy, types.DomainAuth, "plan", planPolicy.BuildCelExpression()); err != nil {
 		r.Logger.Error(err, "failed to add data to auth domain")
-		return reconcile.Result{}, err
+		return &v1alpha1.PlanPolicyStatus{}, err
 	}
-
-	return reconcile.Result{}, nil
+	return &v1alpha1.PlanPolicyStatus{}, nil
 }
 
 func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *v1alpha1.PlanPolicy) *kuadrantv1.RateLimitPolicy {

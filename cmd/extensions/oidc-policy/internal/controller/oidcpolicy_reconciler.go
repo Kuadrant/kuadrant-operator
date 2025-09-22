@@ -314,9 +314,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 					CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
 						Conditions: []authorinov1beta3.PatternExpressionOrRef{
 							{
-								CelPredicate: authorinov1beta3.CelPredicate{
-									Predicate: fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.IssuerURL),
-								},
+								CelPredicate: authorinov1beta3.CelPredicate{},
 							},
 						},
 					},
@@ -328,9 +326,12 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 				},
 			},
 		}
+		if pol.Spec.Provider.IssuerURL != "" {
+			authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.IssuerURL)
+		}
 	}
 
-	return &kuadrantv1.AuthPolicy{
+	p := &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthPolicy",
 			APIVersion: kuadrantv1.GroupVersion.String(),
@@ -349,9 +350,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 							"oidc": {
 								AuthenticationSpec: authorinov1beta3.AuthenticationSpec{
 									AuthenticationMethodSpec: authorinov1beta3.AuthenticationMethodSpec{
-										Jwt: &authorinov1beta3.JwtAuthenticationSpec{
-											IssuerUrl: pol.Spec.Provider.IssuerURL,
-										},
+										Jwt: &authorinov1beta3.JwtAuthenticationSpec{},
 									},
 									Credentials: credentialsSource(pol.GetTokenSource()),
 								},
@@ -379,7 +378,14 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 				},
 			},
 		},
-	}, nil
+	}
+	if pol.Spec.Provider.IssuerURL != "" {
+		p.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.IssuerUrl = pol.Spec.Provider.IssuerURL
+	} else {
+		p.Spec.Overrides.AuthScheme.Authentication["oidc"].Jwt.JwksUrl = pol.Spec.Provider.JwksURL
+	}
+
+	return p, nil
 }
 
 func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *gatewayapiv1.HTTPRoute {

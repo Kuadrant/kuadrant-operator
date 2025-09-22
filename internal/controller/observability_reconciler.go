@@ -261,10 +261,9 @@ func limitMonitorBuild(ns string) *monitoringv1.PodMonitor {
 			},
 			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
 				{
-					Path:     "/metrics",
-					Interval: "30s",
-					Port:     "http",
-					Scheme:   "http",
+					Path:   "/metrics",
+					Port:   "http",
+					Scheme: "http",
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{

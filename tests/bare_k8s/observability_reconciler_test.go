@@ -92,7 +92,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "kuadrant-limitador-monitor",
-					Namespace: kuadrantNamespace,
+					Namespace: testNamespace,
 				},
 			}
 

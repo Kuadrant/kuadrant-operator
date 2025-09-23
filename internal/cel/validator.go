@@ -94,8 +94,10 @@ func (b *ValidatorBuilder) Build() (*Validator, error) {
 	for _, policy := range b.policies {
 		var env *cel.Env
 		var err error
-		var opts []cel.EnvOption
-		opts = []cel.EnvOption{ext.Strings()}
+		opts := []cel.EnvOption{
+			ext.Strings(),
+			cel.OptionalTypes(),
+		}
 
 		for _, binding := range b.baseBindings {
 			opts = append(opts, cel.Variable(binding.name, binding.t))

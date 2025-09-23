@@ -89,39 +89,7 @@ Ensure Limitador is running in your cluster:
 kubectl get pods -n kuadrant-system -l app=limitador
 ```
 
-## Setting Up Limitador Metrics Monitoring
-
-After completing the development environment setup above, you need to create a PodMonitor specifically for Limitador application instances, as the default observability setup only monitors operators.
-
-### Create PodMonitor for Limitador Instances
-
-Create a PodMonitor to scrape metrics from actual Limitador pods:
-
-```yaml
-kubectl apply -f - <<EOF
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
-metadata:
-  name: limitador-metrics
-  namespace: kuadrant-system
-  labels:
-    app: limitador
-spec:
-  podMetricsEndpoints:
-    - path: /metrics
-      port: http
-      scheme: http
-      interval: 30s
-  selector:
-    matchLabels:
-      app: limitador
-  namespaceSelector:
-    matchNames:
-      - kuadrant-system
-EOF
-```
-
-### Accessing Prometheus and Grafana
+## Accessing Prometheus and Grafana
 
 To access the monitoring interfaces, use port forwarding as described in the [observability README](https://github.com/Kuadrant/kuadrant-operator/tree/main/doc/observability#accessing-grafana--prometheus):
 

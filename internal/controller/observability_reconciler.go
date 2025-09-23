@@ -32,6 +32,7 @@ const (
 	istioPodMonitorName   = "istio-pod-monitor"
 	kOpMonitorName        = "kuadrant-operator-monitor"
 	limitOpMonitorName    = "limitador-operator-monitor"
+	limitPodMonitorName   = "kuadrant-limitador-monitor"
 )
 
 func kOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
@@ -237,6 +238,41 @@ func istioPodMonitorBuild(ns string) *monitoringv1.PodMonitor {
 	}
 }
 
+func limitMonitorBuild(ns string) *monitoringv1.PodMonitor {
+	return &monitoringv1.PodMonitor{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       monitoringv1.PodMonitorsKind,
+			APIVersion: monitoringv1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      limitPodMonitorName,
+			Namespace: ns,
+			Labels: map[string]string{
+				kuadrant.ObservabilityLabel: "true",
+				"app":                       "limitador",
+			},
+		},
+		Spec: monitoringv1.PodMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app":                "limitador",
+					"limitador-resource": kuadrant.LimitadorName,
+				},
+			},
+			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
+				{
+					Path:   "/metrics",
+					Port:   "http",
+					Scheme: "http",
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
+			},
+		},
+	}
+}
+
 func envoyStatsMonitorBuild(ns string) *monitoringv1.PodMonitor {
 	return &monitoringv1.PodMonitor{
 		TypeMeta: metav1.TypeMeta{
@@ -325,19 +361,37 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 
 	// Kuadrant Operator monitor
 	kOpMonitor := kOpMonitorBuild(r.namespace)
-	r.createServiceMonitor(ctx, kOpMonitor, logger)
+	err := r.createServiceMonitor(ctx, kOpMonitor, logger)
+	if err != nil {
+		return err
+	}
 
 	// DNS Operator monitor
 	dnsOpMonitor := dnsOpMonitorBuild(r.namespace)
-	r.createServiceMonitor(ctx, dnsOpMonitor, logger)
+	err = r.createServiceMonitor(ctx, dnsOpMonitor, logger)
+	if err != nil {
+		return err
+	}
 
 	// Authorino operator monitor
 	authOpMonitor := authOpMonitorBuild(r.namespace)
-	r.createServiceMonitor(ctx, authOpMonitor, logger)
+	err = r.createServiceMonitor(ctx, authOpMonitor, logger)
+	if err != nil {
+		return err
+	}
 
 	// Limitador operator monitor
 	limitOpMonitor := limitOpMonitorBuild(r.namespace)
-	r.createServiceMonitor(ctx, limitOpMonitor, logger)
+	err = r.createServiceMonitor(ctx, limitOpMonitor, logger)
+	if err != nil {
+		return err
+	}
+
+	// Limitador monitor
+	limitMonitor := limitMonitorBuild(kObj.Namespace)
+	if err := r.createPodMonitor(ctx, limitMonitor, logger); err != nil {
+		return err
+	}
 
 	// Create monitors for each gateway instance of each gateway class
 	gatewayClasses := topology.Targetables().Items(func(o machinery.Object) bool {

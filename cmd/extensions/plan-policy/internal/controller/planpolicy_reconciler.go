@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -13,6 +16,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/plan-policy/api/v1alpha1"
+	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
@@ -64,18 +68,24 @@ func (r *PlanPolicyReconciler) reconcileSpec(ctx context.Context, planPolicy *v1
 	desiredRateLimitPolicy := r.buildDesiredRateLimitPolicy(planPolicy)
 	if err := controllerutil.SetControllerReference(planPolicy, desiredRateLimitPolicy, r.Scheme); err != nil {
 		r.Logger.Error(err, "failed to set controller reference")
-		return &v1alpha1.PlanPolicyStatus{}, err
+		return calculateErrorStatus(planPolicy, err), err
 	}
-	if _, err := kuadrantCtx.ReconcileObject(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator); err != nil {
+	rateLimitPolicy, err := kuadrantCtx.ReconcileObject(ctx, &kuadrantv1.RateLimitPolicy{}, desiredRateLimitPolicy, rlpSpecMutator)
+	if err != nil {
 		r.Logger.Error(err, "failed to reconcile desired ratelimitpolicy")
-		return &v1alpha1.PlanPolicyStatus{}, err
+		return calculateErrorStatus(planPolicy, err), err
 	}
 
-	if err := kuadrantCtx.AddDataTo(ctx, planPolicy, types.DomainAuth, "plan", planPolicy.BuildCelExpression()); err != nil {
+	if err = kuadrantCtx.AddDataTo(ctx, planPolicy, types.DomainAuth, "plan", planPolicy.BuildCelExpression()); err != nil {
 		r.Logger.Error(err, "failed to add data to auth domain")
-		return &v1alpha1.PlanPolicyStatus{}, err
+		return calculateErrorStatus(planPolicy, err), err
 	}
-	return &v1alpha1.PlanPolicyStatus{}, nil
+
+	if err = isRateLimitPolicyEnforced(rateLimitPolicy.(*kuadrantv1.RateLimitPolicy)); err != nil {
+		return calculateErrorStatus(planPolicy, err), err
+	}
+
+	return calculateEnforcedStatus(planPolicy, nil), nil
 }
 
 func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *v1alpha1.PlanPolicy) *kuadrantv1.RateLimitPolicy {
@@ -112,4 +122,36 @@ func rlpSpecMutator(existingObj, desiredObj client.Object) (bool, error) {
 		update = true
 	}
 	return update, nil
+}
+
+func isRateLimitPolicyEnforced(rlPolicy *kuadrantv1.RateLimitPolicy) error {
+	cond, found := lo.Find(rlPolicy.Status.GetConditions(), func(c metav1.Condition) bool {
+		return c.Type == string(types.PolicyConditionEnforced)
+	})
+	if !found || cond.Status == metav1.ConditionFalse {
+		return fmt.Errorf("RateLimitPolicy %s is not enforced", rlPolicy.Name)
+	}
+	return nil
+}
+
+func calculateErrorStatus(pol *v1alpha1.PlanPolicy, specErr error) *v1alpha1.PlanPolicyStatus {
+	newStatus := &v1alpha1.PlanPolicyStatus{
+		ObservedGeneration: pol.Generation,
+		// Copy initial conditions. Otherwise, status will always be updated
+		Conditions: slices.Clone(pol.Status.Conditions),
+	}
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
+	return newStatus
+}
+
+func calculateEnforcedStatus(pol *v1alpha1.PlanPolicy, enforcedErr error) *v1alpha1.PlanPolicyStatus {
+	newStatus := &v1alpha1.PlanPolicyStatus{
+		ObservedGeneration: pol.Generation,
+		// Copy initial conditions. Otherwise, status will always be updated
+		Conditions: slices.Clone(pol.Status.Conditions),
+	}
+
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, nil))
+	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.EnforcedCondition(pol, enforcedErr, true))
+	return newStatus
 }

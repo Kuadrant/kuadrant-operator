@@ -157,6 +157,17 @@ func (l *Limits) ToRates() []kuadrantv1.Rate {
 
 // PlanPolicyStatus defines the observed state of PlanPolicy
 type PlanPolicyStatus struct {
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Represents the observations of a PlanPolicy's current state.
+	// Known .status.conditions.type are: "Accepted", "Enforced"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 //+kubebuilder:object:root=true

@@ -177,6 +177,8 @@ func calculateErrorStatus(pol *v1alpha1.PlanPolicy, specErr error) *v1alpha1.Pla
 		Conditions: slices.Clone(pol.Status.Conditions),
 	}
 	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
+	meta.RemoveStatusCondition(&newStatus.Conditions, string(types.PolicyConditionEnforced))
+
 	return newStatus
 }
 

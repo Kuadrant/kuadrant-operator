@@ -39,6 +39,7 @@ import (
 )
 
 const (
+	TimeoutShort         = time.Second * 5
 	TimeoutMedium        = time.Second * 10
 	TimeoutLongerMedium  = time.Second * 15
 	TimeoutLong          = time.Second * 30

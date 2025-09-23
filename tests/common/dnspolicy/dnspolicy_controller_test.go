@@ -11,6 +11,10 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	"github.com/onsi/gomega/types"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/rand"
 
 	corev1 "k8s.io/api/core/v1"
@@ -95,36 +99,128 @@ var _ = Describe("DNSPolicy controller", func() {
 			WithTargetGateway("test-gateway").
 			WithDelegation(true)
 		Expect(k8sClient.Create(ctx, dnsPolicy).Error()).To(ContainSubstring("delegate=true and providerRefs are mutually exclusive"))
-	}, testTimeOut)
 
-	It("should ensure the delegate field cannot be unset if previously set", func(ctx SpecContext) {
-		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
-			WithTargetGateway("test-gateway").
-			WithDelegation(true)
-		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-
-		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
-		Expect(err).NotTo(HaveOccurred())
-
+		// make sure we can create delegate=false with provider ref.
 		dnsPolicy.WithDelegation(false)
-
-		err = k8sClient.Update(ctx, dnsPolicy, &client.UpdateOptions{})
-		Expect(err.Error()).To(ContainSubstring("Delegate can't be unset if it was previously set"))
+		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 	}, testTimeOut)
 
-	It("should ensure the delegate field cannot be set if previously unset", func(ctx SpecContext) {
+	It("prevents invalid updates of delegate field and allows valid", func(ctx SpecContext) {
+		// testing CEL validations on the `Spec.Delegate` field.
+		// possible combinations of Spec.Delegate
+		//	existing	new		error
+		// 	nil 		nil		n/a
+		// 	nil			false	no
+		// 	nil 		true	yes
+		// 	false 		nil		no
+		// 	false 		false	n/a
+		// 	false 		true	yes
+		//	true		nil		yes
+		// 	true		false	yes
+		//	true		true	n/a
+
 		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
-			WithTargetGateway("test-gateway").
-			WithDelegation(false)
-		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+			WithTargetGateway("test-gateway")
 
-		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
-		Expect(err).NotTo(HaveOccurred())
+		// Golang initializes primitives with the default value. We use unstructured for direct access to data
+		// Every field that has default value will be removed if to use go struct of a dns record
+		nilPolicy, err := runtime.DefaultUnstructuredConverter.ToUnstructured(dnsPolicy.DeepCopyObject())
+		Expect(err).ToNot(HaveOccurred())
+		// remove delegate (it will be there for go struct only if set to true)
+		unstructured.RemoveNestedField(nilPolicy, "spec", "delegate")
+		// remove provider ref - mutually exclusive with delegate = true
+		unstructured.RemoveNestedField(nilPolicy, "spec", "providerRefs")
 
-		dnsPolicy.WithDelegation(true)
+		falsePolicy := runtime.DeepCopyJSON(nilPolicy)
+		// Set delegate to false. This can only be done while manually creating CR. Go will create nil instead
+		Expect(unstructured.SetNestedField(falsePolicy, false, "spec", "delegate")).To(Succeed())
 
-		err = k8sClient.Update(ctx, dnsPolicy, &client.UpdateOptions{})
-		Expect(err.Error()).To(ContainSubstring("Delegate can't be set if it was previously unset"))
+		truePolicy := runtime.DeepCopyJSON(nilPolicy)
+		Expect(unstructured.SetNestedField(truePolicy, true, "spec", "delegate")).To(Succeed())
+
+		var mapping *meta.RESTMapping
+
+		mapping, err = k8sClient.RESTMapper().RESTMapping(schema.GroupKind{
+			Group: kuadrantv1.GroupVersion.Group,
+			Kind:  dnsPolicy.GroupVersionKind().Kind,
+		}, kuadrantv1.GroupVersion.Version)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mapping).ToNot(BeNil())
+
+		fieldManager := "kuadrant"
+
+		// create nil policy
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: nilPolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).ToNot(HaveOccurred())
+
+		// should not allow to set nil to true (nil -> true)
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: truePolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).To(MatchError(ContainSubstring("delegate can't be set to true if unset")))
+
+		// should succeed setting nil to false (nil -> false)
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: falsePolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).ToNot(HaveOccurred())
+
+		// should not allow change false to true (false -> true)
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: truePolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).To(MatchError(ContainSubstring("delegate is immutable")))
+
+		// should allow to unset if false (false -> nil)
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: nilPolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).ToNot(HaveOccurred())
+
+		// Delete existing record
+		Eventually(func(g Gomega) {
+			err = dynClient.
+				Resource(mapping.Resource).
+				Namespace(dnsPolicy.GetNamespace()).
+				Delete(ctx, dnsPolicy.GetName(), metav1.DeleteOptions{})
+			g.Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+
+			recordList, err := dynClient.
+				Resource(mapping.Resource).
+				Namespace(dnsPolicy.GetNamespace()).
+				List(ctx, metav1.ListOptions{})
+			g.Expect(recordList.Items).To(BeEmpty())
+			g.Expect(err).ToNot(HaveOccurred())
+		}, tests.TimeoutShort, time.Second).Should(Succeed())
+
+		// Create delegate = true record
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: truePolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).ToNot(HaveOccurred())
+
+		// should not allow to unset if true (true -> nil)
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: nilPolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).To(MatchError(ContainSubstring("delegate can't be unset if true")))
+
+		// should not allow to change true to false (true -> false)
+		_, err = dynClient.
+			Resource(mapping.Resource).
+			Namespace(dnsPolicy.GetNamespace()).
+			Apply(ctx, dnsPolicy.GetName(), &unstructured.Unstructured{Object: falsePolicy}, metav1.ApplyOptions{FieldManager: fieldManager})
+		Expect(err).To(MatchError(ContainSubstring("delegate is immutable")))
+
 	}, testTimeOut)
 
 	It("should validate loadBalancing field correctly", func(ctx SpecContext) {

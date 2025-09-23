@@ -27,6 +27,7 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	"github.com/onsi/gomega/types"
+	"k8s.io/client-go/dynamic"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
@@ -48,9 +49,14 @@ import (
 // This test suite will be run on k8s env with GatewayAPI CRDs, Istio and Kuadrant CRDs installed
 
 var k8sClient client.Client
+var dynClient *dynamic.DynamicClient
 var testEnv *envtest.Environment
 
 func testClient() client.Client { return k8sClient }
+
+func testDynamicClient() *dynamic.DynamicClient {
+	return dynClient
+}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -99,6 +105,10 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	dynClient, err = dynamic.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(dynClient).NotTo(BeNil())
 })
 
 var _ = SynchronizedAfterSuite(func() {}, func() {

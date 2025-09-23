@@ -7836,10 +7836,11 @@ spec:
             - targetRef
             type: object
             x-kubernetes-validations:
-            - message: Delegate can't be unset if it was previously set
-              rule: '!has(oldSelf.delegate) || has(self.delegate)'
-            - message: Delegate can't be set if it was previously unset
-              rule: has(oldSelf.delegate) || !has(self.delegate)
+            - message: delegate can't be set to true if unset
+              rule: has(oldSelf.delegate) || !has(self.delegate) || self.delegate
+                == false
+            - message: delegate can't be unset if true
+              rule: '!has(oldSelf.delegate) || oldSelf.delegate == false || has(self.delegate)'
             - message: delegate=true and providerRefs are mutually exclusive
               rule: '!(has(self.providerRefs) && has(self.delegate) && self.delegate
                 == true)'

@@ -461,7 +461,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 
 	opaAuthorizationRule := fmt.Sprintf(`cookies := { name: value | raw_cookies := input.request.headers.cookie; cookie_parts := split(raw_cookies, ";"); part := cookie_parts[_]; kv := split(trim(part, " "), "="); count(kv) == 2; name := trim(kv[0], " "); value := trim(kv[1], " ")}
 location := concat("", ["%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
-location := "%s/baker" { input.auth.metadata.token.id_token; not cookies.target }
+location := "%s" { input.auth.metadata.token.id_token; not cookies.target }
 location := "%s" { not input.auth.metadata.token.id_token }
 allow = true`, igwURL, igwURL, authorizeURL)
 

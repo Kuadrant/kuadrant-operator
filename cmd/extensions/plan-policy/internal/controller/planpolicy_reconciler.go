@@ -56,9 +56,19 @@ func (r *PlanPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	_, specErr := r.reconcileSpec(ctx, planPolicy, kuadrantCtx)
+	planPolicyStatus, specErr := r.reconcileSpec(ctx, planPolicy, kuadrantCtx)
+	statusResult, statusErr := r.reconcileStatus(ctx, planPolicy, planPolicyStatus)
+
 	if specErr != nil {
 		return reconcile.Result{}, specErr
+	}
+	if statusErr != nil {
+		return reconcile.Result{}, statusErr
+	}
+
+	if statusResult.RequeueAfter > 0 {
+		r.Logger.Info("Reconciling status not finished. Requeueing.")
+		return statusResult, nil
 	}
 
 	return reconcile.Result{}, nil
@@ -86,6 +96,32 @@ func (r *PlanPolicyReconciler) reconcileSpec(ctx context.Context, planPolicy *v1
 	}
 
 	return calculateEnforcedStatus(planPolicy, nil), nil
+}
+
+func (r *PlanPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.PlanPolicy, newStatus *v1alpha1.PlanPolicyStatus) (reconcile.Result, error) {
+	equalStatus := pol.Status.Equals(newStatus, r.Logger)
+	r.Logger.Info("Status", "status is different", !equalStatus)
+	r.Logger.Info("Status", "generation is different", pol.Generation != pol.Status.ObservedGeneration)
+	if equalStatus && pol.Generation == pol.Status.ObservedGeneration {
+		// Steady state
+		r.Logger.Info("Status was not updated")
+		return reconcile.Result{}, nil
+	}
+
+	r.Logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", pol.Status.ObservedGeneration, newStatus.ObservedGeneration))
+
+	pol.Status = *newStatus
+	updateErr := r.Client.Status().Update(ctx, pol)
+	if updateErr != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(updateErr) {
+			r.Logger.Info("Failed to update status: resource might just be outdated")
+			return reconcile.Result{Requeue: true}, nil
+		}
+
+		return reconcile.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
+	}
+	return reconcile.Result{}, nil
 }
 
 func (r *PlanPolicyReconciler) buildDesiredRateLimitPolicy(planPolicy *v1alpha1.PlanPolicy) *kuadrantv1.RateLimitPolicy {

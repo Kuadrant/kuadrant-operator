@@ -46,8 +46,8 @@ var (
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
-// +kubebuilder:validation:XValidation:rule="!has(oldSelf.delegate) || has(self.delegate)", message="Delegate can't be unset if it was previously set"
-// +kubebuilder:validation:XValidation:rule="has(oldSelf.delegate) || !has(self.delegate)", message="Delegate can't be set if it was previously unset"
+// +kubebuilder:validation:XValidation:rule="has(oldSelf.delegate) || !has(self.delegate) || self.delegate == false", message="delegate can't be set to true if unset"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.delegate) || oldSelf.delegate == false || has(self.delegate)", message="delegate can't be unset if true"
 // +kubebuilder:validation:XValidation:rule="!(has(self.providerRefs) && has(self.delegate) && self.delegate == true)", message="delegate=true and providerRefs are mutually exclusive"
 type DNSPolicySpec struct {
 	// targetRef identifies an API object to apply policy to.

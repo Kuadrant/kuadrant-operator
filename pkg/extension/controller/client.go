@@ -14,11 +14,16 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
+// extensionClient wraps the gRPC client connection to the core extension
+// service over a unix domain socket and exposes a subset of RPCs used by the
+// controller layer.
 type extensionClient struct {
 	conn   *grpc.ClientConn
 	client extpb.ExtensionServiceClient
 }
 
+// newExtensionClient dials the unix domain socket at socketPath and returns a
+// ready extensionClient.
 func newExtensionClient(socketPath string) (*extensionClient, error) {
 	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
@@ -46,6 +51,9 @@ func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error
 	})
 }
 
+// subscribe opens a streaming RPC for the given policy kind. Responses are
+// forwarded to the provided callback until the stream ends or an error
+// occurs.
 func (ec *extensionClient) subscribe(ctx context.Context, policyKind string, callback func(response *extpb.SubscribeResponse)) error {
 	stream, err := ec.client.Subscribe(ctx, &extpb.SubscribeRequest{
 		PolicyKind: policyKind,

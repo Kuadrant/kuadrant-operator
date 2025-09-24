@@ -17,6 +17,7 @@ import (
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
+// convertDomainToProtobuf maps the public Domain enum to the protobuf enum.
 func convertDomainToProtobuf(domain exttypes.Domain) extpb.Domain {
 	switch domain {
 	case exttypes.DomainAuth:
@@ -28,6 +29,8 @@ func convertDomainToProtobuf(domain exttypes.Domain) extpb.Domain {
 	}
 }
 
+// convertPolicyToProtobuf builds a protobuf Policy message from the generic
+// Policy interface collecting metadata and target references.
 func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
 	pbPolicy := &extpb.Policy{
 		Metadata: &extpb.Metadata{
@@ -54,6 +57,11 @@ func convertPolicyToProtobuf(policy exttypes.Policy) *extpb.Policy {
 	return pbPolicy
 }
 
+// Resolve is a generic helper that evaluates a CEL expression via the
+// KuadrantCtx and converts the result to the requested Go type T.
+//
+// An error is returned if evaluation fails or the type conversion cannot be
+// satisfied.
 func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, policy exttypes.Policy, expression string, subscribe bool) (T, error) {
 	var zero T
 
@@ -74,6 +82,8 @@ func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, polic
 	return result, nil
 }
 
+// AcceptedCondition returns a metav1.Condition reflecting the accepted state
+// of a policy (accepted when err == nil, otherwise rejected with reason).
 func AcceptedCondition(p exttypes.Policy, err error) *metav1.Condition {
 	policyKind := p.GetObjectKind().GroupVersionKind().Kind
 	cond := &metav1.Condition{
@@ -95,6 +105,9 @@ func AcceptedCondition(p exttypes.Policy, err error) *metav1.Condition {
 	return cond
 }
 
+// EnforcedCondition returns a metav1.Condition representing enforcement
+// success (or partial failure) for a policy. If err is non-nil the condition is
+// False with the underlying policy error reason.
 func EnforcedCondition(p exttypes.Policy, err error, fully bool) *metav1.Condition {
 	policyKind := p.GetObjectKind().GroupVersionKind().Kind
 	message := fmt.Sprintf("%s has been successfully enforced", policyKind)
@@ -127,6 +140,8 @@ func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {
 	return json.Marshal(condCopy)
 }
 
+// intoPolicyError attempts to downcast err to a PolicyError; if it fails an
+// unknown PolicyError is created.
 func intoPolicyError(err error, policyKind string) kuadrant.PolicyError {
 	var policyErr kuadrant.PolicyError
 	if !errors.As(err, &policyErr) {

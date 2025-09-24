@@ -28,6 +28,9 @@ var (
 	logMode     = env.GetString("LOG_MODE", "production") != "production"
 )
 
+// Builder constructs an ExtensionController with a fluent API similar to
+// controller-runtime's builder, adding extension specific concerns (gRPC
+// client, event cache, unix socket path).
 type Builder struct {
 	name       string
 	scheme     *runtime.Scheme
@@ -38,6 +41,8 @@ type Builder struct {
 	ownTypes   []client.Object
 }
 
+// NewBuilder creates a new Builder for a given controller name and returns it
+// alongside the configured logger.
 func NewBuilder(name string) (*Builder, logr.Logger) {
 	logger := zap.New(
 		zap.Level(logLevel),
@@ -54,16 +59,19 @@ func NewBuilder(name string) (*Builder, logr.Logger) {
 	}, logger
 }
 
+// WithScheme sets the runtime Scheme used by the manager.
 func (b *Builder) WithScheme(scheme *runtime.Scheme) *Builder {
 	b.scheme = scheme
 	return b
 }
 
+// WithReconciler sets the user reconcile function.
 func (b *Builder) WithReconciler(fn exttypes.ReconcileFn) *Builder {
 	b.reconcile = fn
 	return b
 }
 
+// For sets the primary object type (policy) reconciled by the controller.
 func (b *Builder) For(obj client.Object) *Builder {
 	if b.forType != nil {
 		panic("For() can only be called once")
@@ -72,16 +80,22 @@ func (b *Builder) For(obj client.Object) *Builder {
 	return b
 }
 
+// Watches registers additional object types whose events should enqueue the
+// primary object's reconcile requests.
 func (b *Builder) Watches(obj client.Object) *Builder {
 	b.watchTypes = append(b.watchTypes, obj)
 	return b
 }
 
+// Owns registers owned object types so that owner references are resolved and
+// reconcile requests enqueued for the owning policy kind.
 func (b *Builder) Owns(obj client.Object) *Builder {
 	b.ownTypes = append(b.ownTypes, obj)
 	return b
 }
 
+// Build validates the configuration, creates the underlying manager, gRPC
+// client and returns a ready to Start ExtensionController.
 func (b *Builder) Build() (*ExtensionController, error) {
 	if b.name == "" {
 		return nil, fmt.Errorf("controller name must be set")

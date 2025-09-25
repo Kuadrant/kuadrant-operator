@@ -2,8 +2,6 @@
 
 This tutorial walks you through configuring token-based rate limiting using Kuadrant's `TokenRateLimitPolicy` to protect Large Language Model (LLM) APIs. Unlike traditional request counting, this approach limits API usage based on actual token consumption.
 
-> **Note:** Currently, `TokenRateLimitPolicy` only supports non-streaming responses (where `stream: false` or is omitted in the request). Support for streaming responses is planned for future releases.
-
 ## Overview
 
 Traditional rate limiting counts requests, but LLM APIs have varying computational costs based on token usage. `TokenRateLimitPolicy` addresses this by:

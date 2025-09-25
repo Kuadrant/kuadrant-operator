@@ -687,6 +687,7 @@ func calculateErrorStatus(pol *v1alpha1.OIDCPolicy, specErr error) *v1alpha1.OID
 		Conditions: slices.Clone(pol.Status.Conditions),
 	}
 	meta.SetStatusCondition(&newStatus.Conditions, *extcontroller.AcceptedCondition(pol, specErr))
+	meta.RemoveStatusCondition(&newStatus.Conditions, string(types.PolicyConditionEnforced))
 	return newStatus
 }
 

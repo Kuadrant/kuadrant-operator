@@ -2,8 +2,6 @@
 
 This tutorial walks you through configuring token-based rate limiting using Kuadrant's `TokenRateLimitPolicy` to protect Large Language Model (LLM) APIs. Unlike traditional request counting, this approach limits API usage based on actual token consumption.
 
-> **Note:** Currently, `TokenRateLimitPolicy` only supports non-streaming responses (where `stream: false` or is omitted in the request). Support for streaming responses is planned for future releases.
-
 ## Overview
 
 Traditional rate limiting counts requests, but LLM APIs have varying computational costs based on token usage. `TokenRateLimitPolicy` addresses this by:
@@ -339,6 +337,30 @@ The response includes token usage information:
 
 > **Note:** The `TokenRateLimitPolicy` automatically extracts the `total_tokens` value from this response and counts it against the user's limit.
 
+### Test streaming with a free user
+
+Make a chat completion request with streaming enabled. Ensure the request includes `"stream": true` and `"stream_options": { "include_usage": true }` so that usage is emitted at the end of the stream and can be enforced by the policy:
+
+```bash
+curl -H 'Host: trlp-tutorial.example.com' \
+     -H 'Authorization: APIKEY iamafreeuser' \
+     -H 'Content-Type: application/json' \
+     -X POST http://$KUADRANT_GATEWAY_URL/v1/chat/completions \
+     -d '{
+           "model": "meta-llama/Llama-3.1-8B-Instruct",
+           "messages": [
+             { "role": "user", "content": "What is Kubernetes?" }
+           ],
+           "max_tokens": 100,
+           "stream": true,
+           "stream_options": {
+             "include_usage": true
+           }
+         }'
+```
+
+> **Note:** If `stream_options.include_usage` is omitted when `stream: true`, Kuadrant cannot extract token usage from the stream. Depending on the policy `failureMode`, the request may either be allowed without limiting or rejected.
+
 ### Test with a gold user
 
 ```bash
@@ -371,7 +393,7 @@ The `TokenRateLimitPolicy` uses several key concepts:
 - **`rates`**: Define the token limits and time windows
 - **`when`**: Conditions that determine when a limit applies (based on user groups)
 - **`counters`**: Identify what to count (user ID in this case)
-- **Token extraction**: Automatically reads `usage.total_tokens` from non-streaming JSON responses
+- **Token extraction**: Automatically reads `usage.total_tokens` from non-streaming JSON responses; for streaming requests, requires `"stream": true` and `"stream_options": { "include_usage": true }` to extract usage from the final event
 
 ## Monitoring usage
 
@@ -394,7 +416,6 @@ If requests are being rejected unexpectedly:
 1. Verify the API key is correct
 2. Check if the user has exceeded their token limit
 3. Ensure the LLM response includes `usage.total_tokens`
-4. Verify the request is not using streaming (`stream: true`) as this is not currently supported
 5. Review the `AuthPolicy` and `TokenRateLimitPolicy` status
 
 ```bash

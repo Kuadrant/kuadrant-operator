@@ -6,7 +6,7 @@ The delegation of dns polices to **primary cluster** will be possible in this mo
 
 ## Prerequisites
 
-- Kaudrant installed in multiply clusters
+- Kaudrant installed in multiple clusters
 - kubeconfig with access to all the clusters
 
 ## Terminology
@@ -19,13 +19,13 @@ The delegation of dns polices to **primary cluster** will be possible in this mo
 
 ### Secondary cluster
 
-For the **secondary cluster** the *dns-operator* needs to be in `delegation-mode = secondary`.
-This can be achieved by setting the `DELEGATION_MODE: secondary` in the `dns-operator-controller-env` configmap.
+For the **secondary cluster** the *dns-operator* needs to be in `delegation-role = secondary`.
+This can be achieved by setting the `DELEGATION_ROLE: secondary` in the `dns-operator-controller-env` configmap.
 
 ```sh
 export NAME dns-operator-controller-env
 export NAMESPACE $(kubectl get configmap --all-namespaces --no-headers | grep -w $NAME | head -1 | awk '{print $1}')
-kubectl patch configmap $NAME --namespace $NAMESPACE --type merge -p '{"data":{"DELEGATION_MODE":"secondary"}}'
+kubectl patch configmap $NAME --namespace $NAMESPACE --type merge -p '{"data":{"DELEGATION_ROLE":"secondary"}}'
 ```
 
 Once the configmap has being updated the *dns-operator* requires a restart.
@@ -47,7 +47,7 @@ The default mode for the *dns-operator* is `primary`, but for completeness this 
 ```sh
 export NAME=dns-operator-controller-env
 export NAMESPACE=$(kubectl get configmap --all-namespaces --no-headers | grep -w $NAME | head -1 | awk '{print $1}')
-kubectl patch configmap $NAME --namespace $NAMESPACE --type merge -p '{"data":{"DELEGATION_MODE":"primary"}}'
+kubectl patch configmap $NAME --namespace $NAMESPACE --type merge -p '{"data":{"DELEGATION_ROLE":"primary"}}'
 ```
 
 Once the configmap has being updated the *dns-operator* requires a restart.

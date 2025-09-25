@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
+	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/json"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -113,6 +116,15 @@ func EnforcedCondition(p exttypes.Policy, err error, fully bool) *metav1.Conditi
 	cond.Reason = string(policyErr.Reason())
 
 	return cond
+}
+
+// ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.
+func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {
+	condCopy := slices.Clone(conditions)
+	sort.Slice(condCopy, func(a, b int) bool {
+		return condCopy[a].Type < condCopy[b].Type
+	})
+	return json.Marshal(condCopy)
 }
 
 func intoPolicyError(err error, policyKind string) kuadrant.PolicyError {

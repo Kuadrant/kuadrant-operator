@@ -66,6 +66,7 @@ A **cluster secret** is a secret in the *dns-operator* namespace that has connec
 These connection details are in the form of a kubeconfig.
 
 The `kubectl-dns` plugin by the *dns-operator* provides helpful commands to create the service accounts on the **secondary cluster**, and add the **cluster secret** to the primary.
+Refer to the [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md) for more information on the `kubectl-dns`.
 
 Assuming the `kubectl-dns` plugin is in the system path.
 Ensure the current context is set to the **primary cluster**.

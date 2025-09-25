@@ -20,6 +20,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/limitador-operator/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -157,6 +160,36 @@ func (l *Limits) ToRates() []kuadrantv1.Rate {
 
 // PlanPolicyStatus defines the observed state of PlanPolicy
 type PlanPolicyStatus struct {
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Represents the observations of a PlanPolicy's current state.
+	// Known .status.conditions.type are: "Accepted", "Enforced"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
+func (s *PlanPolicyStatus) Equals(other *PlanPolicyStatus, logger logr.Logger) bool {
+	if s.ObservedGeneration != other.ObservedGeneration {
+		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
+		logger.V(1).Info("status observedGeneration not equal", "difference", diff)
+		return false
+	}
+
+	// Marshalling sorts by condition type
+	currentMarshaledJSON, _ := helpers.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := helpers.ConditionMarshal(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.V(1).Info("status conditions not equal", "difference", diff)
+		return false
+	}
+
+	return true
 }
 
 //+kubebuilder:object:root=true

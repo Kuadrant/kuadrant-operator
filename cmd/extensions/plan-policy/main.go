@@ -30,6 +30,7 @@ func main() {
 		WithScheme(scheme).
 		WithReconciler(planPolicyReconciler.Reconcile).
 		For(&v1alpha1.PlanPolicy{}).
+		Owns(&kuadrantv1.RateLimitPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")

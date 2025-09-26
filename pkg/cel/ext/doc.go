@@ -1,4 +1,4 @@
-// Package kuadrant exposes a CEL Library (CelExt) that registers Kuadrant
+// Package ext exposes a CEL Library (CelExt) that registers Kuadrant
 // specific functions and constants for use inside policy CEL expressions.
 //
 // The library introduces helper member functions on policy objects:
@@ -15,4 +15,4 @@
 // The package is imported indirectly by using CelExt(DAG) as a cel.EnvOption.
 // Extension authors generally do not need to interact with internals beyond
 // supplying a DAG implementation.
-package kuadrant
+package ext

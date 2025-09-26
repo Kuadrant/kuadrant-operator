@@ -10,6 +10,7 @@ Limitador exposes the following metrics through its `/metrics` endpoint on port 
 |-------------|------|-------------|--------------------------------------|-------|
 | `limitador_up` | Gauge | Health indicator (always 1 when running) | None                                 | Service health monitoring |
 | `authorized_calls` | Counter | Successfully processed (non-rate-limited) requests | `limitador_namespace`                | Track allowed requests |
+| `authorized_hits` | Counter | Successfully processed (non-rate-limited) hits | `limitador_namespace`                | Track allowed number of hits |
 | `limited_calls` | Counter | Rate-limited (rejected) requests | `limitador_namespace`, `limit_name`  | Track blocked requests |
 | `datastore_partitioned` | Gauge | Datastore connectivity (0=connected, 1=partitioned) | None                                 | Backend health monitoring |
 | `datastore_latency` | Histogram | Latency to underlying counter datastore | None                                 | Performance monitoring |
@@ -17,7 +18,8 @@ Limitador exposes the following metrics through its `/metrics` endpoint on port 
 **Notes:**
 - `limitador_namespace`: Format is `"{k8s_namespace}/{route_name}"` (e.g., `"toystore/toystore"`)
 - `limit_name`: Contains the actual limit name from your RateLimitPolicy (e.g., `"alice-limit"`, `"bob-limit"`) 
-- `authorized_calls` and `limited_calls` only appear after traffic is processed
+- `authorized_hits`, `authorized_calls` and `limited_calls` only appear after traffic is processed
+- For regular rate limiting, i.e., on a per-request basis, `authorized_hits` is equal to `authorized_calls`.
 
 ## Enabling `limit_name` Labels
 
@@ -150,7 +152,7 @@ curl -s "http://localhost:9090/api/v1/query?query=datastore_partitioned" | jq '.
 
 ## Generating Traffic to Populate Rate Limiting Metrics
 
-The `authorized_calls` and `limited_calls` metrics only appear after processing requests. Follow this section to generate traffic using the [authenticated rate limiting user guide](../ratelimiting/authenticated-rl-for-app-developers.md).
+The `authorized_hits`, `authorized_calls` and `limited_calls` metrics only appear after processing requests. Follow this section to generate traffic using the [authenticated rate limiting user guide](../ratelimiting/authenticated-rl-for-app-developers.md).
 
 ### Step 1: Set Up Environment
 
@@ -423,6 +425,8 @@ authorized_calls
 # Total limited calls  
 limited_calls
 
+# Total authorized hits
+authorized_hits
 ```
 
 #### Metrics by Namespace

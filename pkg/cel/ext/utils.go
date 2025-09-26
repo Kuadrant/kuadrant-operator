@@ -1,4 +1,4 @@
-package kuadrant
+package ext
 
 import (
 	"github.com/google/cel-go/cel"

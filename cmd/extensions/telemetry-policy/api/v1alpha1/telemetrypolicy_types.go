@@ -17,8 +17,13 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	extctrl "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
 
 //+kubebuilder:object:root=true
@@ -85,6 +90,25 @@ type TelemetryPolicyStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
+func (s *TelemetryPolicyStatus) Equals(other *TelemetryPolicyStatus, logger logr.Logger) bool {
+	if s.ObservedGeneration != other.ObservedGeneration {
+		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
+		logger.V(1).Info("status observedGeneration not equal", "difference", diff)
+		return false
+	}
+
+	// Marshalling sorts by condition type
+	currentMarshaledJSON, _ := extctrl.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := extctrl.ConditionMarshal(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.V(1).Info("status conditions not equal", "difference", diff)
+		return false
+	}
+
+	return true
 }
 
 //+kubebuilder:object:root=true

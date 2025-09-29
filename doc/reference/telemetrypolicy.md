@@ -42,6 +42,13 @@
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions |
 
+### TelemetryPolicyStatus
+
+| **Field**            | **Type**                                                                                     | **Description**                                                                                                                     |
+|----------------------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `observedGeneration` | String                                                                                       | Number of the last observed generation of the resource. Use it to check if the status info is up to date with latest resource spec. |
+| `conditions`         | [][ConditionSpec](https://pkg.go.dev/k8s.io/apimachinery@v0.28.4/pkg/apis/meta/v1#Condition) | List of conditions that define that status of the resource.                                                                         |
+
 ## See Also
 
 - [TelemetryPolicy Overview](../overviews/telemetrypolicy.md)

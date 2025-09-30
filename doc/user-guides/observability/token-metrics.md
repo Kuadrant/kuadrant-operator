@@ -160,7 +160,7 @@ EOF
 Test connectivity to the LLM service:
 
 ```bash
-curl --resolve $KUADRANT_LLM_DOMAIN:$INGRESS_PORT:$INGRESS_HOST http://$KUADRANT_LLM_DOMAIN:$INGRESS_PORT/v1/models
+curl --resolve $KUADRANT_LLM_DOMAIN:$KUADRANT_INGRESS_PORT:$KUADRANT_INGRESS_HOST http://$KUADRANT_LLM_DOMAIN:$KUADRANT_INGRESS_PORT/v1/models
 # HTTP/1.1 200 OK
 ```
 
@@ -194,7 +194,7 @@ kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-  name: trlp-tutorial-api-key-gold-user-1
+  name: api-key-gold-user-1
   namespace: ${KUADRANT_DEVELOPER_NS}
   labels:
     authorino.kuadrant.io/managed-by: authorino
@@ -216,7 +216,7 @@ apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: llm-api-keys
-  namespace: ${KUADRANT_LLM_DOMAIN}
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -226,6 +226,7 @@ spec:
     authentication:
       "api-key-users":
         apiKey:
+          allNamespaces: true
           selector:
             matchLabels:
               app: my-llm
@@ -262,7 +263,7 @@ apiVersion: kuadrant.io/v1alpha1
 kind: TokenRateLimitPolicy
 metadata:
   name: token-limits
-  namespace: ${KUADRANT_LLM_DOMAIN}
+  namespace: ${KUADRANT_DEVELOPER_NS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -322,13 +323,13 @@ Define a bash function to send a chat completion request on behalf of a user (th
 
 ```bash
 function call_llm {
-    curl --resolve $KUADRANT_LLM_DOMAIN:$INGRESS_PORT:$INGRESS_HOST \
+    curl --resolve $KUADRANT_LLM_DOMAIN:$KUADRANT_INGRESS_PORT:$KUADRANT_INGRESS_HOST \
 	    --write-out 'Status: %{http_code}\n' --silent --output /dev/null \
 	    -H 'Content-Type: application/json' \
         -H "Authorization: APIKEY $1" \
         -X POST \
         -d '{
-           "model": "Qwen/Qwen2.5-1.5B-Instruct",
+           "model": "meta-llama/Llama-3.1-8B-Instruct",
            "messages": [
              { "role": "user", "content": "What is Kubernetes?" }
            ],
@@ -338,7 +339,7 @@ function call_llm {
              "include_usage": true
            }
          }'  \
-        http://llm.example.com:$INGRESS_PORT/v1/chat/completions
+        http://llm.example.com:$KUADRANT_INGRESS_PORT/v1/chat/completions
 }
 ```
 
@@ -381,19 +382,19 @@ In the current context, `authorized_hits` will represent the usage of tokens per
 * `authorized_hits`
 
 ```bash
-curl -s "http://localhost:9090/api/v1/query?query=authorized_hits" | jq '.data.result'
+curl -s "http://${PROMETHEUS_HOST}:${PROMETHEUS_PORT}/api/v1/query?query=authorized_hits" | jq '.data.result'
 ```
 
 * `authorized_calls`
 
 ```bash
-curl -s "http://localhost:9090/api/v1/query?query=authorized_calls" | jq '.data.result'
+curl -s "http://${PROMETHEUS_HOST}:${PROMETHEUS_PORT}/api/v1/query?query=authorized_calls" | jq '.data.result'
 ```
 
 * `limited_calls`
 
 ```bash
-curl -s "http://localhost:9090/api/v1/query?query=limited_calls" | jq '.data.result'
+curl -s "http://${PROMETHEUS_HOST}:${PROMETHEUS_PORT}/api/v1/query?query=limited_calls" | jq '.data.result'
 ```
 
 > Note: The Prometheus installation documentation should provide the *PROMETHEUS_HOST* and *PROMETHEUS_PORT* variables.

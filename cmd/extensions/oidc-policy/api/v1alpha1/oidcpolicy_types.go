@@ -71,6 +71,15 @@ type Auth struct {
 	Claims map[string]string `json:"claims,omitempty"`
 }
 
+// SecretKeyReference Reference to a Kubernetes secret
+type SecretKeyReference struct {
+	// The name of the secret in the Kuadrant's namespace to select from.
+	Name string `json:"name"`
+
+	// The key of the secret to select from.  Must be a valid secret key.
+	Key string `json:"key"`
+}
+
 // Provider defines the settings related to the Identity Provider (IDP)
 //
 //	+kubebuilder:validation:XValidation:rule="!(has(self.jwksURL) && self.jwksURL != '' && has(self.issuerURL) && self.issuerURL != '')",message="Use one of: jwksURL, issuerURL"
@@ -91,9 +100,9 @@ type Provider struct {
 
 	// OAuth2 Client ID.
 	ClientID string `json:"clientID"`
-	// OAuth2 Client Secret.
+	// Reference to a Kubernetes Secret key that stores that OAuth2 Client Secret.
 	// +optional
-	ClientSecret string `json:"clientSecret,omitempty"`
+	ClientSecret *SecretKeyReference `json:"clientSecretRef,omitempty"`
 
 	// The full URL of the Authorization endpoints
 	// AuthorizationEndpoint performs Authentication of the End-User. Default value is the IssuerURL + "/oauth/authorize"

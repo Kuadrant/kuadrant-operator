@@ -153,7 +153,7 @@ spec:
               conditions:
                 description: |-
                   Represents the observations of a PlanPolicy's current state.
-                  Known .status.conditions.type are: "Ready"
+                  Known .status.conditions.type are: "Accepted", "Enforced"
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

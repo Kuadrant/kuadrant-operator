@@ -77,6 +77,9 @@ func (r *OIDCPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *OIDCPoli
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
+// core permissions
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;
+
 // TODO: Current OIDC Workflow works only for Browser apps and Native apps that manage the Auth via browser
 // TODO: It only implements Authentication using the Authorization Code Flow (Recommended). Missing Implicit and Hybrid Flow
 // TODO: Expand TokenSource to work with credentials other than cookie

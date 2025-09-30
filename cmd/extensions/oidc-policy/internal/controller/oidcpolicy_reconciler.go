@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	v1 "k8s.io/api/core/v1"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -230,7 +232,16 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 }
 
 func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
-	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw)
+	tokenExchangeOpts := make(map[string]string)
+	if clientSecretRef := pol.Spec.Provider.ClientSecret; clientSecretRef != nil {
+		secret := &v1.Secret{}
+		if err := r.Client.Get(ctx, apitypes.NamespacedName{Namespace: pol.Namespace, Name: clientSecretRef.Name}, secret); err != nil {
+			return nil, err // TODO: Review this error, perhaps we don't need to return an error, just reenqueue.
+		}
+		clientSecret := string(secret.Data[clientSecretRef.Key])
+		tokenExchangeOpts["client_secret"] = clientSecret
+	}
+	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw, tokenExchangeOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +442,7 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 	}
 }
 
-func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo, tokenExchangeOpts map[string]string) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
 	tokenExchangeURL, err := pol.GetIssuerTokenExchangeURL()
 	if err != nil {
@@ -441,7 +452,8 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 	if err != nil {
 		return nil, err
 	}
-	callBodyCelExpression, err := pol.GetIssuerTokenExchangeBodyCelExpression(igwURL, nil)
+
+	callBodyCelExpression, err := pol.GetIssuerTokenExchangeBodyCelExpression(igwURL, tokenExchangeOpts)
 	if err != nil {
 		return nil, err
 	}

@@ -17,14 +17,15 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"fmt"
 	"net/url"
 	"path"
 
-	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
-
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/limitador-operator/pkg/helpers"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -160,15 +161,6 @@ func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 	}
 }
 
-func (p *OIDCPolicy) GetRedirectURL(igwURL *url.URL) (string, error) {
-	redirectURL, err := p.redirectURL(igwURL)
-	if err != nil {
-		return "", err
-	}
-
-	return redirectURL.String(), nil
-}
-
 func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
 	var tokenURL *url.URL
 	var err error
@@ -186,6 +178,30 @@ func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
 	}
 
 	return tokenURL.String(), nil
+}
+
+func (p *OIDCPolicy) GetIssuerTokenExchangeBodyCelExpression(igwURL *url.URL, options map[string]string) (string, error) {
+	redirectURL, err := p.redirectURL(igwURL)
+	if err != nil {
+		return "", err
+	}
+
+	defaultOptions := map[string]string{
+		"redirect_uri": redirectURL.String(),
+		"client_id":    p.Spec.Provider.ClientID,
+		"grant_type":   "authorization_code",
+	}
+
+	opts := lo.Assign(defaultOptions, options)
+
+	optsString := lo.Reduce(lo.Map(lo.Keys(opts), func(k string, _ int) string {
+		encodedValue := url.QueryEscape(opts[k])
+		return fmt.Sprintf("&%s=%s", k, encodedValue)
+	}), func(agg, item string, _ int) string { return agg + item }, "")
+
+	return fmt.Sprintf(`
+"code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0] + "%s"
+`, optsString), nil
 }
 
 func (p *OIDCPolicy) GetAuthorizeURL(igwURL *url.URL) (string, error) {

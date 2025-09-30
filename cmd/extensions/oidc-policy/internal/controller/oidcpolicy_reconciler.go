@@ -441,14 +441,10 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 	if err != nil {
 		return nil, err
 	}
-	redirectURI, err := pol.GetRedirectURL(igwURL)
+	callBodyCelExpression, err := pol.GetIssuerTokenExchangeBodyCelExpression(igwURL, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	callBodyCelExpression := fmt.Sprintf(`
-"code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0] + "&redirect_uri=%s&client_id=%s&grant_type=authorization_code"
-`, redirectURI, pol.Spec.Provider.ClientID)
 
 	callbackRoute := gatewayapiv1alpha2.LocalPolicyTargetReference{
 		Group: gatewayapiv1alpha2.GroupName,

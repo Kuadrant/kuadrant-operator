@@ -5,130 +5,124 @@ With this guide, you will learn how to setup Kuadrant to use CoreDNS via the Kua
 
 >Note: Core DNS support is intended for evaluation and feedback only. This guide makes use of a developer preview version of the CoreDNS integration and is **not** intended for production use.
 
-The basic architecture for how the Core DNS integration works is shown in the image below:
+The basic architecture for how the CoreDNS integration works is shown in the image below:
 
 ![architecture](./core-dns.png)
 
+### Overview
 
-### Summary
+Kuadrant's DNS Operator will create an authoritative DNSRecord for any DNSRecord that reference a CoreDNS provider secret directly or via a "default" provider secret.
+The authoritative record is named and labeled in a deterministic way using the source DNSRecord root host and contains all the endpoints related to that root host which could be coming from multiple DNSRecord sources.
+The DNS Operator can be configured to read DNSRecords from multiple clusters allowing DNSRecords in the same namespace with the same root host to form a single authoritative merged record set on selected "primary" clusters. 
+Kuadrant's custom CoreDNS plugin, will read and serve the authoritative record. 
+If there is provider specific meta data for weight and GEO, the kuadrant plugin will apply GEO location filtering (assuming there is an appropriate GEO database configured) and a weighted response to any DNS queries for the dns names in those records.
 
-Kuadrant's DNS Operator will convert existing DNSRecords that reference a CoreDNS provider secret into two additional "CoreDNS" specific DNSRecords (named and labeled in a deterministic way). One of these will be the local record set with no weighting or geo provider specific data and will be served under a `kdrnt` TLD. The other record will be a merged record set of both the local `kdrnt` record and the `kdrnt` records of each other DNS nameserver for the same DNS name. The DNS Operator, via the provider secret, will be told about the set of nameservers it needs to query to form this single record set and will query these DNS nameservers directly and then merge their response into a single merged record set. This will mean each core dns will end up with the full record set for a given dns name.
+This guide shows the manual steps required to configure the kuadrant CoreDNS integration in a multi cluster setup (Two primary clusters and one secondary).  
 
-Kuadrant's custom CoreDNS plugin, will read and serve these two new records (the merged record and the kdrnt record). If there is provider specific meta data for weight and GEO, the kuadrant plugin will apply GEO location filtering (assuming there is an appropriate GEO database configured) and a weighted response to any DNS queries for the dns names in those records.
+## Prerequisites
 
-It is important to note that no code is currently implemented in our CoreDNS integration to work with health checks.
+- Kubernetes cluster(s) (Three to test all functionality described in this guide)
+- Kuadrant installed on each cluster
 
-### Environment for CoreDNS enabled
+### Local Kind clusters [Optional]
 
-It is required to have at least one kubernetes cluster to use with CoreDNS. Either locally using kind, or using regular kubernetes clusters.
+If you want to see how this works locally and are not using existing clusters, the easiest approach is to use kind to create local clusters.
 
-## Local environment with Kind
-If you simply want to see how this works locally, and are not using this against existing clusters, the easiest approach is to use kind to create a local cluster, which we will use to simulate multiple clusters (using namespaced controllers). Here is a simple guide on how to do that (see image below). For this guide, we will have two instances of core dns.  
-
-![local-setup](./local-setup.png)
-
-To try this out, clone the kuadrant-operator repo first:
-
+To try this out you can use the local-setup helper from the kuadrant-operator repo:
 ```
 git clone https://github.com/Kuadrant/kuadrant-operator.git
 ```
 
-From the root of the kuadrant-operator repo execute:
-
-```
-make local-setup && ./bin/kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/coredns-multi | kubectl apply -f -
-```
-
-This will install Kuadrant into a local kind cluster and configure the CoreDNS instances. 
-
-To show this working but keep the setup simple and in a single cluster, lets now setup 2 gateways on the same cluster that have listeners for the same hostname. Then use DNSPolicy to define one location as the EU and the other as NA.
-
-As there are multiple instances of CoreDNS running and they are namespace scoped, our gateways and policies will be created in the same namespace as each of the dns servers. For convenience there are some gateways already defined.
-
-> Note: these gateways use the k.example.com domain. This is pre-configured in the core dns corefile as a zone that uses the kuadrant CoreDns plugin.
-
+Run the following from the root of the repo:
+```shell
+CLUSTER_COUNT=3 ./hack/multicluster.sh local-setup
 ```
 
-kubectl apply -f examples/coredns/gateways.yaml
-
+This will create three local Kind clusters with Kuadrant installed, you can set the context env vars used in the rest of this guide by running the following:
+```shell
+export CTX_PRIMARY1=kind-kuadrant-local-1
+export CTX_PRIMARY2=kind-kuadrant-local-2
+export CTX_SECONDARY1=kind-kuadrant-local-3
 ```
 
-## A Kubernetes cluster
+## Setup Cluster 1 and 2 (Primary)
 
-If you have existing clusters for which you want to have the DNS automated by the DNS Operator, you will need to install CoreDNS with the kuadrant plugin on those clusters, and configure them with a GEO IP database.
-
-You will also need to have the [Kuadrant operator installed](https://artifacthub.io/packages/helm/kuadrant/kuadrant-operator) and running.
+At least one cluster must be configured as a primary. 
+A primary cluster that is intended to be used with the CoreDNS provider should have a CoreDNS instance running with the Kuadrant plugin enabled.
+A primary cluster should have cluster kubeconfig secrets added for all other clusters.
+A primary cluster should have dns provider (coredns) secrets in target namespaces.
 
 ### Install CoreDNS
-You can install CoreDNS configured with the kuadrant plugin using the follow kustomize command while kubectl is targeting the desired cluster, this will install CoreDNS into the `kuadrant-coredns` namespace:
-```
-kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/coredns | kubectl apply -f -
-```
 
-For more information on CoreDNS installations, see [here](https://coredns.io/manual/installation/).
+You can install CoreDNS configured with the kuadrant plugin using the follow kustomize command while kubectl is targeting the desired cluster, this will install CoreDNS into the `kuadrant-coredns` namespace:
+```shell
+kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/coredns | kubectl apply --context ${CTX_PRIMARY1} -f -
+kustomize build --enable-helm https://github.com/Kuadrant/dns-operator/config/coredns | kubectl apply --context ${CTX_PRIMARY2} -f -
+
+kubectl wait --timeout=90s --for=condition=Ready=True pods -A -l app.kubernetes.io/name=coredns --context ${CTX_PRIMARY1}
+kubectl wait --timeout=90s --for=condition=Ready=True pods -A -l app.kubernetes.io/name=coredns --context ${CTX_PRIMARY2}
+
+kubectl get deployments -A -l app.kubernetes.io/name=coredns --context ${CTX_PRIMARY1}
+kubectl get deployments -A -l app.kubernetes.io/name=coredns --context ${CTX_PRIMARY2}
+```
 
 #### OpenShift on AWS
 
 If you are using an OpenShift cluster on AWS you will also need to run the following commands:
 
 ```shell
-kubectl patch service kuadrant-coredns --type='json' -p='[{"op": "remove", "path": "/spec/externalTrafficPolicy"}]' -n kuadrant-coredns
-kubectl annotate service/kuadrant-coredns service.beta.kubernetes.io/aws-load-balancer-type=nlb -n kuadrant-coredns
+kubectl patch service kuadrant-coredns --type='json' -p='[{"op": "remove", "path": "/spec/externalTrafficPolicy"}]' -n kuadrant-coredns --context ${CTX_PRIMARY1}
+kubectl patch service kuadrant-coredns --type='json' -p='[{"op": "remove", "path": "/spec/externalTrafficPolicy"}]' -n kuadrant-coredns --context ${CTX_PRIMARY2}
+kubectl annotate service/kuadrant-coredns service.beta.kubernetes.io/aws-load-balancer-type=nlb -n kuadrant-coredns --context ${CTX_PRIMARY1}
+kubectl annotate service/kuadrant-coredns service.beta.kubernetes.io/aws-load-balancer-type=nlb -n kuadrant-coredns --context ${CTX_PRIMARY2}
 ```
 
->Note: OpenShift on AWS does not currently support exposing a single port on both UDP and TCP, so in this setup only UDP port 53 is exposed via the ELB.  
+>Note: OpenShift on AWS does not currently support exposing a single port on both UDP and TCP, so in this setup only UDP port 53 is exposed via the ELB.
 
-### Sample CoreDNS Configuration
-The above installation will create a sample CoreDNS Config file, in the `kuadrant-coredns` namespace, named: `kuadrant-coredns`. This will need to be modified to suit your needs, if you are not running the local sample.
+#### Verify
 
-The sample CoreDNS configuration is generated from this file: [CoreDNS Configuration](https://raw.githubusercontent.com/Kuadrant/dns-operator/refs/heads/main/config/coredns/Corefile). That domain name can be changed or duplicated to add other domains as required.
+Check that the CoreDNS instances are available and responding to queries:
+```shell
+NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq '.status.loadBalancer.ingress[0].ip'`
+NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
+echo $NS1
+echo $NS2
+dig @${NS1} -t AXFR k.example.com
+dig @${NS2} -t AXFR k.example.com
+```
+
+#### Zone Configuration
+
+A default zone (k.example.com) is created for testing purposes.
+This can be replaced, or additional zones added, as desired by modifying the "Corefile" on each primary cluster.
+
+```shell
+kubectl get configmap/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq .data
+kubectl get configmap/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq .data
+```
+
+The sample CoreDNS configuration is generated from this file: [CoreDNS Configuration](https://raw.githubusercontent.com/Kuadrant/dns-operator/refs/heads/main/config/coredns/Corefile). 
+That domain name can be changed or duplicated to add other domains as required.
+
+For more information on configuring CoreDNS please refer to their [documentation](https://coredns.io/manual/configuration/).
 
 #### Using a GEO IP database
-The CoreDNS instances will need to be configured to use a GEO IP database, in the example above, this is called: `GeoLite2-City-demo.mmdb`. This is a mock database we provide to for illustrative purposes. Change this to refer to your maxmind database file, for more information, see [here](https://www.maxmind.com/en/geoip-databases).
 
-#### Configuring your domain in CoreDNS
-Generally, it should be sufficient to change the domain `k.example.com` in the above sample, to the domain you want the DNS Operator to manage, or duplicate it, to add multiple. For more information on configuring CoreDNS Please refer to their [documentation](https://coredns.io/manual/configuration/).
+The CoreDNS instances will need to be configured to use a GEO IP database, in the example above this is called: `GeoLite2-City-demo.mmdb`. 
+This is a mock database we provide to for illustrative purposes. 
+Change this to refer to your maxmind database file, for more information see [here](https://www.maxmind.com/en/geoip-databases).
 
-## Setup the DNSProvider secrets
-To setup the DNSProvider secrets, you need to know the external IPAddress of each CoreDNS instance. This is to allow the DNS Operator to query each nameserver for its records to form a full record set for a given dns name.
+For more information on configuring the CoreDNS geoip plugin please refer to their [documentation](https://coredns.io/plugins/geoip/).
 
-### A Kubernetes cluster
+#### Delegate the zones (public cluster only)
 
-After CoreDNS is installed and configured, look in the status of the CoreDNS service, for the ´loadBalancer` section which contains an ingress defining an IP. This is the IP of this CoreDNS nameserver.
+This cannot be done when testing locally, but assuming the CoreDNS instance is running on a publicly accessible IP which permits traffic on port 53, then the zone(s) in use will need to be delegated to these nameservers.
+For testing and evaluation we would recommend creating a fresh zone.
 
-Next you need to set the nameservers in the provider secret, as follows:
-```
-kubectl create secret generic core-dns --namespace=<COREDNS NAMESPACE> --type=kuadrant.io/coredns --from-literal=NAMESERVERS="<NAMESERVER>:53,<NAMESERVER>:53,..." --from-literal=ZONES="<DOMAIN IN COREDNS CONFIGURATION>,<DOMAIN IN COREDNS CONFIGURATION>,..."
-```
+This is done by creating an NS record in the zone hosted by the authoritative nameserver.
 
-### Local setup
-In the local kind cluster, these commands will export the coreDNS IPs as envvars:
-```
-export coredns1IP=$(kubectl get service kuadrant-coredns-1 -n kuadrant-coredns-1 -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
-export coredns2IP=$(kubectl get service kuadrant-coredns-2 -n kuadrant-coredns-2 -o=jsonpath='{.status.loadBalancer.ingress[0].ip}')
-```
-
-These will set up the 2 CoreDNS provider secrets:
-```
-kubectl create secret generic core-dns --namespace=kuadrant-coredns-1 --type=kuadrant.io/coredns --from-literal=NAMESERVERS="${coredns1IP}:53,${coredns2IP}:53" --from-literal=ZONES="k.example.com"
-
-kubectl create secret generic core-dns --namespace=kuadrant-coredns-2 --type=kuadrant.io/coredns --from-literal=NAMESERVERS="${coredns2IP}:53,${coredns1IP}:53" --from-literal=ZONES="k.example.com"
-```
-
-## Enable CoreDNS in the DNS Operator
-
-The CoreDNS provider is not enabled by default in the DNS Operator, as this is only in developer preview currently, to enable it in a normal Kuadrant installation, run the following command:
-
-```
-kubectl patch deployment dns-operator-controller-manager  --type='json' -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/args", "value": ["--metrics-bind-address=:8080", "--leader-elect","--provider=aws,google,azure,coredns"]}, {"op": "replace", "path": "/spec/template/spec/containers/0/image", "value": "quay.io/kuadrant/dns-operator:v0.14.0"}]'  -n kuadrant-system
-```
-## Delegate the zones (public cluster only)
-
-This cannot be done when testing locally, but assuming the CoreDNS instance is running on a publically acessible IP which permits traffic on port 53, then the zone(s) in use will need to be delegated to these nameservers. For testing and evaluation we would recommend creating a fresh zone.
-
-This is done by creating an NS record in the zone hosted by the authoritative nameserver. 
-
-For example, if there is a domain example.com with authoritative nameservers in Route53, and 2 CoreDNS instances are configured with the zone k.example.com (on IPs 1.2.3.4 and 2.3.4.5). Then in the example.com zone in Route53 the following records need to be created:
+For example, if there is a domain example.com with authoritative nameservers in Route53, and 2 CoreDNS instances are configured with the zone k.example.com (on IPs 1.2.3.4 and 2.3.4.5).
+Then in the example.com zone in Route53 the following records need to be created:
 ```
 coredns1.example.com. IN A 60 1.2.3.4
 coredns2.example.com. IN A 60 2.3.4.5
@@ -136,43 +130,274 @@ k.example.com. IN NS 300 coredns1.example.com.
 k.example.com. IN NS 300 coredns2.example.com.
 ```
 
-If the CoreDNS instances are not publically accessible, then we will be able to verify them using the `@` modifer on a dig command.
+If the CoreDNS instances are not publicly accessible, then we will be able to verify them using the `@` modifier on a dig command.
 
-### Setup a DNSPolicy
+### DNS Operator Configuration
 
-Now that you have your gateways and providers in place, you can move on to setup the DNSPolicies.
+Clusters being configured as "primary" should have the delegation role of the running dns operator set to "primary".
+This is currently the default so nothing needs to be done here.
 
-#### Running locally
-If running locally, there is an example for this guide:
+### Add Cluster Kubeconfig Secrets
 
-```
-kubectl apply -f examples/coredns/dnspolicies.yaml
-```
+In order for each primary cluster to read DNSRecord resources from all other clusters (primary or secondary) a cluster secret containing kubeconfig data for each of the other clusters must be added.
+The `kubectl-dns` plugin provides a command to help create a valid cluster secret from the expected service account on the target cluster.
 
->Note:  2 DNSPolicies are created. In a real world scenario each of these gateways and policies would likely be on a different cluster. In the 2 DNSPolicies the main difference is the one targeting the NA gateway has a GEO set of NA while the one targeting the EU gateway has a GEO set of EU.
+Refer to the [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md) for more information on how to install the plugin.
 
-#### Kubernetes cluster
+Assuming the `kubectl-dns` plugin is in the system path, you can run the following to connect all clusters to each primary:
 
-Otherwise if you are not following the local example, create the DNS Policy suitable for your cluster setup, some more information on the DNS Policy CR is available [here](https://docs.kuadrant.io/1.1.x/kuadrant-operator/doc/reference/dnspolicy/).
-
-### Validate and test the setup
-
-You can verify that everything is as expected by checking the DNSPolicy status. It is likely to take a minute or so before the status is marked as enforced but you should see `enforced true` for each policy.
-
-```
-kubectl get dnspolicy -A -o=wide
-```
-
-#### Local testing
-Once they are all enforced. You can issue some queries against the local authoritative nameservers. 
-
-```
-dig @${coredns1IP} k.example.com
-dig @${coredns2IP} k.example.com
+```shell
+# Set current context to primary 1
+kubectl config use-context ${CTX_PRIMARY1}
+kubectl-dns secret-generation --context ${CTX_PRIMARY2} --namespace kuadrant-system
+kubectl-dns secret-generation --context ${CTX_SECONDARY1} --namespace kuadrant-system
+# Set current context to primary 2
+kubectl config use-context ${CTX_PRIMARY2}
+kubectl-dns secret-generation --context ${CTX_PRIMARY1} --namespace kuadrant-system
+kubectl-dns secret-generation --context ${CTX_SECONDARY1} --namespace kuadrant-system
 ```
 
-#### Public cluster with delegated zone
-
+If you are using Kind clusters (created via `./hack/multicluster.sh`) the above will produce invalid kubeconfig data. 
+As a temporary workaround you can run the following from the root of the kuadrant-operator repo:
+```shell
+../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY1} ${CTX_PRIMARY2}
+../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY1} ${CTX_SECONDARY1}
+../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY2} ${CTX_PRIMARY1}
+../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY2} ${CTX_SECONDARY1}
 ```
-dig k.example.com
+
+#### Verify
+
+Check the cluster secrets exist on the primary clusters:
+```shell
+kubectl get secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_PRIMARY1}
+kubectl get secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_PRIMARY2}
+kubectl get secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_SECONDARY1}
+```
+
+Check the cluster secret content is valid kubeconfig data:
+```shell
+kubectl get secret kind-kuadrant-local-2 -n kuadrant-system --context ${CTX_PRIMARY1} -o jsonpath='{.data.kubeconfig}' | base64 -d
+```
+
+### Create test namespace (dnstest)
+
+```shell
+kubectl create ns dnstest --context ${CTX_PRIMARY1}
+kubectl create ns dnstest --context ${CTX_PRIMARY2}
+```
+
+#### Add coredns provider secrets
+
+The CoreDNS provider secret should be created with the desired zones configured. In this case we create it for the test zone (k.example.com):
+```shell
+kubectl create secret generic dns-provider-coredns --namespace=dnstest --type=kuadrant.io/coredns --from-literal=ZONES="k.example.com" --context ${CTX_PRIMARY1}
+kubectl create secret generic dns-provider-coredns --namespace=dnstest --type=kuadrant.io/coredns --from-literal=ZONES="k.example.com" --context ${CTX_PRIMARY2}
+```
+
+Set the CoreDNS provider as the default allowing it to be selected when none is specified by the DNSPolicy:
+```shell
+kubectl label secret/dns-provider-coredns -n dnstest kuadrant.io/default-provider=true --context ${CTX_PRIMARY1}
+kubectl label secret/dns-provider-coredns -n dnstest kuadrant.io/default-provider=true --context ${CTX_PRIMARY2}
+```
+
+## Setup Cluster 3 (Secondary)
+
+Secondary clusters are optional.
+A secondary does not have CoreDNS installed.
+A secondary cluster does not have cluster kubeconfig secrets added.
+A secondary cluster does not have provider credentials.
+
+### DNS Operator Configuration
+
+Clusters being configured as "secondary" should have the delegation role of the running dns operator set to "secondary".
+
+This can be done by updating the dns operators configuration configmap(dns-operator-controller-env) in the kuadrant-system namespace and restarting the service:
+```shell
+kubectl patch configmap dns-operator-controller-env -n kuadrant-system --type merge -p '{"data":{"DELEGATION_ROLE":"secondary"}}' --context ${CTX_SECONDARY1}
+kubectl scale deployment/dns-operator-controller-manager -n kuadrant-system --replicas=0 --context ${CTX_SECONDARY1}
+kubectl scale deployment/dns-operator-controller-manager -n kuadrant-system --replicas=1 --context ${CTX_SECONDARY1}
+kubectl rollout status deployment/dns-operator-controller-manager -n kuadrant-system --timeout=300s --context ${CTX_SECONDARY1}
+kubectl logs deployment/dns-operator-controller-manager -n kuadrant-system --context ${CTX_SECONDARY1} | grep "delegationRole"
+```
+
+### Create test namespace (dnstest)
+
+```shell
+kubectl create ns dnstest --context ${CTX_SECONDARY1}
+```
+
+Cluster Setup complete, ready to deploy application!!
+
+## Deploy Toystore application
+
+Deploy the toystore application on all clusters:
+```shell
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n dnstest --context ${CTX_PRIMARY1}
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n dnstest --context ${CTX_PRIMARY2}
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n dnstest --context ${CTX_SECONDARY1}
+
+kubectl -n dnstest wait --for=condition=Available deployments toystore --timeout=60s --context ${CTX_PRIMARY1}
+kubectl -n dnstest wait --for=condition=Available deployments toystore --timeout=60s --context ${CTX_PRIMARY2}
+kubectl -n dnstest wait --for=condition=Available deployments toystore --timeout=60s --context ${CTX_SECONDARY1}
+```
+
+### Create an Ingress Gateway
+
+Create a gateway using the coredns zone name as part of a listener hostname on all clusters:
+
+```sh
+gateway=$(cat <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: external
+  namespace: dnstest
+  labels:
+    kuadrant.io/gateway: "true"
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+      hostname: "api.toystore.k.example.com" 
+EOF)
+
+echo "${gateway}" | kubectl apply --context ${CTX_PRIMARY1} -f -
+echo "${gateway}" | kubectl apply --context ${CTX_PRIMARY2} -f -
+echo "${gateway}" | kubectl apply --context ${CTX_SECONDARY1} -f -
+```
+
+### Setup Toystore application HTTPRoute
+
+```bash
+httproute=$(cat <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: toystore
+  namespace: dnstest
+  labels:
+    deployment: toystore
+    service: toystore
+spec:
+  parentRefs:
+  - name: external
+    namespace: dnstest
+  hostnames:
+  - "api.toystore.k.example.com"
+  rules:
+  - matches:
+    - method: GET
+      path:
+        type: PathPrefix
+        value: "/cars"
+    backendRefs:
+    - name: toystore
+      port: 80  
+EOF
+)
+
+echo "${httproute}" | kubectl apply --context ${CTX_PRIMARY1} -f -
+echo "${httproute}" | kubectl apply --context ${CTX_PRIMARY2} -f -
+echo "${httproute}" | kubectl apply --context ${CTX_SECONDARY1} -f -
+```
+
+### Verify
+
+```shell
+kubectl get gateway,httproute,service,deployment,all --context ${CTX_PRIMARY1} -n dnstest
+kubectl get gateway,httproute,service,deployment,all --context ${CTX_PRIMARY2} -n dnstest
+kubectl get gateway,httproute,service,deployment,all --context ${CTX_SECONDARY1} -n dnstest
+```
+
+### Enable DNS on the gateway
+
+Create a Kuadrant `DNSPolicy` to configure DNS on all clusters:
+
+```shell
+dnspolicyeu=$(cat <<EOF
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: external-dns
+  namespace: dnstest
+spec:
+  targetRef:
+    name: external
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  loadBalancing:
+    weight: 100
+    geo: GEO-EU
+    defaultGeo: true
+  delegate: true
+EOF
+)
+dnspolicyus=$(cat <<EOF
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: external-dns
+  namespace: dnstest
+spec:
+  targetRef:
+    name: external
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  loadBalancing:
+    weight: 125
+    geo: GEO-NA
+    defaultGeo: false
+  delegate: true
+EOF
+)
+  
+echo "${dnspolicyeu}" | kubectl apply --context ${CTX_PRIMARY1} -f -
+echo "${dnspolicyus}" | kubectl apply --context ${CTX_PRIMARY2} -f -
+echo "${dnspolicyeu}" | kubectl apply --context ${CTX_SECONDARY1} -f -
+```
+
+### Verify
+
+Check the DNSRecord resources on each cluster: 
+```shell
+kubectl get dnsrecord -n dnstest -o wide --context ${CTX_PRIMARY1}
+kubectl get dnsrecord -n dnstest -o wide --context ${CTX_PRIMARY2}
+kubectl get dnsrecord -n dnstest -o wide --context ${CTX_SECONDARY1}
+```
+
+Check the authoritative DNSRecord resources on each primary:
+```shell
+kubectl get dnsrecord/authoritative-record-oii1lttl -n dnstest -o json --context ${CTX_PRIMARY1} | jq -r '.spec.endpoints[] | "dnsName: \(.dnsName), recordType: \(.recordType), targets: \(.targets)"'
+kubectl get dnsrecord/authoritative-record-oii1lttl -n dnstest -o json --context ${CTX_PRIMARY2} | jq -r '.spec.endpoints[] | "dnsName: \(.dnsName), recordType: \(.recordType), targets: \(.targets)"'
+```
+
+Check the k.example.com zone on each CoreDNS instance contains the expected records:
+```shell
+NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq '.status.loadBalancer.ingress[0].ip'`
+NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
+echo $NS1
+echo $NS2
+dig @${NS1} -t AXFR k.example.com
+dig @${NS2} -t AXFR k.example.com
+```
+
+Check the CoreDNS instances respond as expected:
+```shell
+NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq '.status.loadBalancer.ingress[0].ip'`
+NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
+dig @${NS1} api.toystore.k.example.com +short
+dig @${NS2} api.toystore.k.example.com +short
+```
+
+Delete DNSPolicy from all clusters:
+```shell
+kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_PRIMARY1}
+kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_PRIMARY2}
+kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_SECONDARY1}
 ```

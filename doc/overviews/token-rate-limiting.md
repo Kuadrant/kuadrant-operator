@@ -4,7 +4,7 @@ A Kuadrant TokenRateLimitPolicy custom resource enables token-based rate limitin
 
 1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway)
 2. Automatically tracks actual token consumption from OpenAI-compatible API responses
-3. Supports user segmentation, model-specific limits, and sophisticated limiting strategies
+3. Supports user segmentation and sophisticated limiting strategies
 4. Integrates with AuthPolicy for user-based rate limiting using authentication claims
 5. Enables cluster operators to set defaults that govern behaviour at the lower levels of the network, until a more specific policy is applied
 
@@ -61,22 +61,6 @@ TokenRateLimitPolicy automatically extracts token usage from AI/LLM responses wi
 - **Response parsing**: Automatically extracts `usage.total_tokens` from response bodies
 - **Accurate accounting**: Tracks actual token consumption, not estimates
 - **Graceful fallback**: If token parsing fails, falls back to request counting
-
-### Model-Specific Rate Limiting
-
-Different AI models have different costs and capabilities. TokenRateLimitPolicy enables sophisticated model-based limiting:
-
-```yaml
-limits:
-  gpt-4-limit:
-    rates:
-    - limit: 100000
-      window: 24h
-    when:
-    - predicate: 'requestBodyJSON("/model") == "gpt-4"'
-    counters:
-    - expression: auth.identity.userid
-```
 
 ### User Segmentation
 
@@ -166,40 +150,6 @@ spec:
         window: 24h
       when:
       - predicate: 'auth.identity.subscription == "pro"'
-      counters:
-      - expression: auth.identity.userid
-```
-
-### Multi-Model Management
-
-Different models have different costs - set appropriate limits for each:
-
-```yaml
-apiVersion: kuadrant.io/v1alpha1
-kind: TokenRateLimitPolicy
-metadata:
-  name: model-limits
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: chat-api
-  limits:
-    expensive-models:
-      rates:
-      - limit: 50000
-        window: 24h
-      when:
-      - predicate: 'requestBodyJSON("/model") in ["gpt-4", "claude-3-opus"]'
-      counters:
-      - expression: auth.identity.userid
-    
-    standard-models:
-      rates:
-      - limit: 200000
-        window: 24h
-      when:
-      - predicate: 'requestBodyJSON("/model") in ["gpt-3.5-turbo", "claude-3-haiku"]'
       counters:
       - expression: auth.identity.userid
 ```

@@ -125,7 +125,6 @@ Common attributes include:
 |---------|---------------------|---------------|
 | **Request** | `request.method`, `request.url_path`, `request.headers` | `request.method == "POST"` |
 | **Authentication** | `auth.identity.*`, `request.auth.claims.*` | `auth.identity.userid`, `request.auth.claims["tier"]` |
-| **Request Body** | `requestBodyJSON(path)` | `requestBodyJSON("/model")` |
 | **Remote Address** | `source.address`, `source.port` | `source.address` |
 
 ## Examples
@@ -180,41 +179,6 @@ spec:
       when:
       - predicate: request.path == "/v1/chat/completions"
       - predicate: 'auth.identity.groups.split(",").exists(g, g == "gold")'
-      counters:
-      - expression: auth.identity.userid
-```
-
-### Model-Specific Limiting
-
-```yaml
-apiVersion: kuadrant.io/v1alpha1
-kind: TokenRateLimitPolicy
-metadata:
-  name: model-limits
-  namespace: gateway-system
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: ai-api
-  limits:
-    gpt-4:
-      rates:
-      - limit: 100000
-        window: 24h
-      when:
-      - predicate: request.path == "/v1/chat/completions"
-      - predicate: 'requestBodyJSON("/model") == "gpt-4"'
-      counters:
-      - expression: auth.identity.userid
-    
-    gpt-3:
-      rates:
-      - limit: 500000
-        window: 24h
-      when:
-      - predicate: request.path == "/v1/chat/completions"
-      - predicate: 'requestBodyJSON("/model") == "gpt-3.5-turbo"'
       counters:
       - expression: auth.identity.userid
 ```

@@ -110,6 +110,7 @@ OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
 KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
 
 #Kuadrant Extensions
+WITH_EXTENSIONS ?= true
 EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 
 # Kuadrant component versions
@@ -378,7 +379,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
-		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		--build-arg WITH_EXTENSIONS=$(WITH_EXTENSIONS) \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 

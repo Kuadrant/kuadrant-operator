@@ -23,6 +23,7 @@ ARG TARGETARCH
 ARG GIT_SHA
 ARG DIRTY
 ARG VERSION
+ARG WITH_EXTENSIONS=false
 
 ENV GIT_SHA=${GIT_SHA:-unknown}
 ENV DIRTY=${DIRTY:-unknown}
@@ -31,11 +32,26 @@ ENV VERSION=${VERSION:-unknown}
 # Kuadrant Operator
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.version=${VERSION} -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o manager cmd/main.go
 
+# Conditionally build extensions
+RUN mkdir -p extensions
+RUN if [ "$WITH_EXTENSIONS" = "true" ]; then \
+    echo "Building extensions..." && \
+    mkdir -p extensions/oidc-policy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/oidc-policy/oidc-policy cmd/extensions/oidc-policy/main.go && \
+    mkdir -p extensions/plan-policy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/plan-policy/plan-policy cmd/extensions/plan-policy/main.go && \
+    mkdir -p extensions/telemetry-policy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/telemetry-policy/telemetry-policy cmd/extensions/telemetry-policy/main.go; \
+    else \
+    echo "Skipping extensions build"; \
+    fi
+
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/extensions /extensions
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

@@ -1,24 +1,23 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: planpolicies.extensions.kuadrant.io
+  creationTimestamp: null
+  name: oidcpolicies.extensions.kuadrant.io
 spec:
   group: extensions.kuadrant.io
   names:
-    kind: PlanPolicy
-    listKind: PlanPolicyList
-    plural: planpolicies
-    singular: planpolicy
+    kind: OIDCPolicy
+    listKind: OIDCPolicyList
+    plural: oidcpolicies
+    singular: oidcpolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PlanPolicy enables rate limiting through plans of identified
-          requests
+        description: OIDCPolicy is the Schema for the oidcpolicies API
         properties:
           apiVersion:
             description: |-
@@ -38,64 +37,98 @@ spec:
           metadata:
             type: object
           spec:
-            description: PlanPolicySpec defines the desired state of PlanPolicy
+            description: OIDCPolicySpec defines the desired state of OIDCPolicy
             properties:
-              plans:
-                description: Plans defines the list of plans for the policy. The identity
-                  is categorised by the first matching plan in the list.
-                items:
-                  properties:
-                    limits:
-                      description: Limits contains the list of limits that the plan
-                        enforces.
-                      properties:
-                        custom:
-                          description: Custom defines any additional limits defined
-                            in terms of a RateLimitPolicy Rate.
-                          items:
-                            description: Rate defines the actual rate limit that will
-                              be used when there is a match
-                            properties:
-                              limit:
-                                description: Limit defines the max value allowed for
-                                  a given period of time
-                                type: integer
-                              window:
-                                description: Window defines the time period for which
-                                  the Limit specified above applies.
-                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                type: string
-                            required:
-                            - limit
-                            - window
-                            type: object
-                          type: array
-                        daily:
-                          description: Daily limit of requests for this plan.
-                          type: integer
-                        monthly:
-                          description: Monthly limit of requests for this plan.
-                          type: integer
-                        weekly:
-                          description: Weekly limit of requests for this plan.
-                          type: integer
-                        yearly:
-                          description: Yearly limit of requests for this plan.
-                          type: integer
-                      type: object
-                    predicate:
-                      description: Predicate is a CEL expression used to determine
-                        if the plan is applied.
-                      minLength: 1
+              auth:
+                description: Auth holds the information regarding AuthN/AuthZ
+                properties:
+                  claims:
+                    additionalProperties:
                       type: string
-                    tier:
-                      description: Tier this plan represents.
-                      type: string
-                  required:
-                  - predicate
-                  - tier
-                  type: object
-                type: array
+                    description: Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
+                    type: object
+                  tokenSource:
+                    description: |-
+                      TokenSource informs where the JWT token will be found in the request for authentication
+                      If omitted, it defaults to credentials passed in cookies.
+                    properties:
+                      authorizationHeader:
+                        properties:
+                          prefix:
+                            type: string
+                        type: object
+                      cookie:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      customHeader:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      queryString:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    type: object
+                type: object
+              provider:
+                description: Provider holds the information for the OIDC provider
+                properties:
+                  authorizationEndpoint:
+                    description: |-
+                      The full URL of the Authorization endpoints
+                      AuthorizationEndpoint performs Authentication of the End-User. Default value is the IssuerURL + "/oauth/authorize"
+                    type: string
+                  clientID:
+                    description: OAuth2 Client ID.
+                    type: string
+                  clientSecret:
+                    description: OAuth2 Client Secret.
+                    type: string
+                  issuerURL:
+                    description: |-
+                      URL of the OpenID Connect (OIDC) token issuer endpoint.
+                      Use it for automatically discovering the JWKS URL from an OpenID Connect Discovery endpoint (https://openid.net/specs/openid-connect-discovery-1_0.html).
+                      The Well-Known Discovery path (i.e. "/.well-known/openid-configuration") is appended to this URL to fetch the OIDC configuration.
+                      One of: jwksUrl, issuerUrl
+                    type: string
+                  jwksURL:
+                    description: |-
+                      URL of the JSON Web Key Set (JWKS) endpoint.
+                      Use it for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
+                      One of: jwksUrl, issuerUrl
+                    type: string
+                  redirectURI:
+                    description: The RedirectURI defines the URL that is part of the
+                      authentication request to the AuthorizationEndpoint and the
+                      one defined in the IDP. Default value is the IssuerURL + "/auth/callback"
+                    type: string
+                  tokenEndpoint:
+                    description: TokenEndpoint defines the URL to obtain an Access
+                      Token, an ID Token, and optionally a Refresh Token. Default
+                      value is the IssuerURL + "/oauth/token"
+                    type: string
+                required:
+                - clientID
+                type: object
+                x-kubernetes-validations:
+                - message: 'Use one of: jwksURL, issuerURL'
+                  rule: '!(has(self.jwksURL) && self.jwksURL != '''' && has(self.issuerURL)
+                    && self.issuerURL != '''')'
+                - message: When jwksURL is set, authorizationEndpoint and tokenEndpoint
+                    must also be provided
+                  rule: '!(has(self.jwksURL) && self.jwksURL != '''') || (has(self.authorizationEndpoint)
+                    && self.authorizationEndpoint != '''' && has(self.tokenEndpoint)
+                    && self.tokenEndpoint != '''')'
               targetRef:
                 description: Reference to the object to which this policy applies.
                 properties:
@@ -144,16 +177,16 @@ spec:
                     and 'Gateway'
                   rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
             required:
-            - plans
+            - provider
             - targetRef
             type: object
           status:
-            description: PlanPolicyStatus defines the observed state of PlanPolicy
+            description: OIDCPolicyStatus defines the observed state of OIDCPolicy
             properties:
               conditions:
                 description: |-
-                  Represents the observations of a PlanPolicy's current state.
-                  Known .status.conditions.type are: "Accepted", "Enforced"
+                  Represents the observations of a OIDCPolicy's current state.
+                  Known .status.conditions.type are: "Ready"
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -223,3 +256,9 @@ spec:
     storage: true
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

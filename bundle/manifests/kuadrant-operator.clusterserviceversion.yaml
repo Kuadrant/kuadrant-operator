@@ -162,7 +162,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-09-23T10:59:18Z"
+    createdAt: "2025-10-03T09:42:34Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -206,6 +206,15 @@ spec:
       version: v1
     - kind: TokenRateLimitPolicy
       name: tokenratelimitpolicies.kuadrant.io
+      version: v1alpha1
+    - kind: OIDCPolicy
+      name: oidcpolicies.extensions.kuadrant.io
+      version: v1alpha1
+    - kind: PlanPolicy
+      name: planpolicies.extensions.kuadrant.io
+      version: v1alpha1
+    - kind: TelemetryPolicy
+      name: telemetrypolicies.extensions.kuadrant.io
       version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
@@ -501,6 +510,30 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - telemetrypolicies
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - telemetrypolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - telemetrypolicies/status
+          verbs:
+          - get
+          - patch
+          - update
         serviceAccountName: kuadrant-operator-controller-manager
       deployments:
       - label:

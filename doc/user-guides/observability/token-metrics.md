@@ -16,7 +16,7 @@ This feature is for observability only and does not affect policy enforcement, b
 
 - A Kubernetes cluster with the Kuadrant operator installed. See our [Getting Started](/latest/getting-started) guide, which lets you quickly set up a local cluster for evaluation purposes.
 - A monitoring stack deployed, specifically the Prometheus component for this tutorial.
-  - For bare-metal Kubernetes: See our [Observability stack](../../observability/README.md) guide.
+  - For bare-metal Kubernetes: See [Installing Prometheus Operator](https://prometheus-operator.dev/docs/getting-started/installation/) guide.
   - For OpenShift: See the [Configuring user workload monitoring](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/monitoring/configuring-user-workload-monitoring#preparing-to-configure-the-monitoring-stack-uwm) guide.
 - Configure Observability for Gateway and Kuadrant components. See our [Configure Observability](monitors.md) guide for more information.
 - Activate TelemetryPolicy feature. See our [TelemetryPolicy](../../overviews/telemetrypolicy.md) overview for more information.

@@ -5,6 +5,21 @@ beyond the core policies (AuthPolicy, RateLimitPolicy, TLSPolicy, and DNSPolicy)
 specialized policy controllers that integrate seamlessly with the Kuadrant ecosystem while maintaining consistency with 
 Gateway API standards.
 
+## At a glance
+
+- Build policy-focused extensions that attach via Gateway API patterns
+- Evaluate CEL with Kuadrant topology/context and publish bindings
+- Operator wires bindings into managed resources (AuthConfig, wasm/Limitador)
+- Extensions connect to the operator over a Unix socket (first CLI arg)
+
+## Key concepts
+
+- Policy: Your CRD implementing Gateway API policy attachment (targetRefs) and the SDK `Policy` interface.
+- KuadrantCtx: Context the reconciler receives for CEL evaluation, data publishing, and reconciliation helpers.
+- Binding: A policy-scoped key/value published via `AddDataTo`. Values are literals or CEL programs evaluated at request time.
+- Domain: Logical channel for bindings: `DomainAuth` (identity/auth) and `DomainRequest` (request/topology).
+- Topology DAG: Operator-maintained view of Gateways, Routes, and attached policies; exposed to CEL via helpers like `self.findGateways()`.
+
 ## Overview
 
 The Extension SDK allows developers to build policy extensions that:
@@ -43,197 +58,11 @@ Extensions communicate with the main Kuadrant operator through a gRPC interface 
 
 ## Building an Extension
 
-### 1. Project Structure
+Looking for a step-by-step scaffold (CRD, reconciler, main)? See the Developer Guide:
 
-Create your extension with the following structure:
+- doc/extensions/extension-sdk-developer-guide.md
 
-```
-my-extension/
-├── main.go
-├── api/
-│   └── v1alpha1/
-│       ├── groupversion_info.go
-│       ├── mypolicy_types.go
-│       └── zz_generated.deepcopy.go
-├── config/
-│   ├── crd/
-│   │   ├── kustomization.yaml
-│   │   └── bases/
-│   │       └── extensions.kuadrant.io_mypolicies.yaml
-│   ├── deploy/
-│   │   └── kustomization.yaml
-│   └── rbac/
-│       ├── kustomization.yaml
-│       └── role.yaml
-└── internal/
-    └── controller/
-        └── mypolicy_reconciler.go
-```
-
-### 2. Define Your Policy Type
-
-Create your policy CRD following Gateway API policy patterns:
-
-```go
-// api/v1alpha1/mypolicy_types.go
-package v1alpha1
-
-import (
-    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-)
-
-// MyPolicySpec defines the desired state of MyPolicy
-type MyPolicySpec struct {
-    // TargetRefs identifies the Gateway API resources to apply the policy to
-    TargetRefs []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRefs"`
-    
-    // Your custom policy configuration
-    CustomConfig string `json:"customConfig,omitempty"`
-}
-
-// MyPolicyStatus defines the observed state of MyPolicy
-type MyPolicyStatus struct {
-    // Standard Gateway API policy status
-    Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
-// MyPolicy is the Schema for the mypolicies API
-type MyPolicy struct {
-    metav1.TypeMeta   `json:",inline"`
-    metav1.ObjectMeta `json:"metadata,omitempty"`
-
-    Spec   MyPolicySpec   `json:"spec,omitempty"`
-    Status MyPolicyStatus `json:"status,omitempty"`
-}
-
-// Implement the Policy interface
-func (p *MyPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-    return p.Spec.TargetRefs
-}
-```
-
-### 3. Implement the Reconciler
-
-Create a reconciler that implements the extension pattern:
-
-```go
-// internal/controller/mypolicy_reconciler.go
-package controller
-
-import (
-    "context"
-    
-    "sigs.k8s.io/controller-runtime/pkg/reconcile"
-    
-    "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
-    "your-module/api/v1alpha1"
-)
-
-type MyPolicyReconciler struct {
-    types.ExtensionBase
-}
-
-func NewMyPolicyReconciler() *MyPolicyReconciler {
-    return &MyPolicyReconciler{}
-}
-
-func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kuadrant types.KuadrantCtx) (reconcile.Result, error) {
-    // Get the policy
-    policy := &v1alpha1.MyPolicy{}
-    if err := r.Client.Get(ctx, req.NamespacedName, policy); err != nil {
-        // Handle not found and other errors
-        return reconcile.Result{}, client.IgnoreNotFound(err)
-    }
-
-    // Example: Resolve a CEL expression using Kuadrant topology functions
-    // Get all gateway addresses attached to this policy
-    addresses, err := kuadrant.Resolve(ctx, policy,
-        `self.findGateways().map(g, g.status.addresses.map(a, a.value)).flatten()`,
-        false,
-    )
-    if err != nil {
-        return reconcile.Result{}, err
-    }
-
-    // Example: Create or update related resources
-    desiredResource := r.buildDesiredResource(policy, addresses)
-    _, err = kuadrant.ReconcileObject(ctx, desiredResource, desiredResource, r.mutateFn)
-    if err != nil {
-        return reconcile.Result{}, err
-    }
-
-    // Example: Add data for other policies to consume
-    err = kuadrant.AddDataTo(ctx, policy, types.DomainAuth, "custom.binding", "value")
-    if err != nil {
-        return reconcile.Result{}, err
-    }
-
-    return reconcile.Result{}, nil
-}
-
-func (r *MyPolicyReconciler) mutateFn(existing, desired client.Object) (bool, error) {
-    // Implement mutation logic
-    return true, nil
-}
-```
-
-### 4. Create the Main Function
-
-Wire everything together in your main function:
-
-```go
-// main.go
-package main
-
-import (
-    "os"
-    
-    corev1 "k8s.io/api/core/v1"
-    k8sruntime "k8s.io/apimachinery/pkg/runtime"
-    utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-    ctrl "sigs.k8s.io/controller-runtime"
-    gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-    
-    kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-    extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
-    "your-module/api/v1alpha1"
-    "your-module/internal/controller"
-)
-
-var scheme = k8sruntime.NewScheme()
-
-func init() {
-    utilruntime.Must(corev1.AddToScheme(scheme))
-    utilruntime.Must(gatewayapiv1.Install(scheme))
-    utilruntime.Must(kuadrantv1.AddToScheme(scheme))
-    utilruntime.Must(v1alpha1.AddToScheme(scheme))
-}
-
-func main() {
-    reconciler := controller.NewMyPolicyReconciler()
-    builder, logger := extcontroller.NewBuilder("my-policy-controller")
-    
-    extController, err := builder.
-        WithScheme(scheme).
-        WithReconciler(reconciler.Reconcile).
-        For(&v1alpha1.MyPolicy{}).
-        Owns(&corev1.ConfigMap{}). // Example owned resource
-        Build()
-    if err != nil {
-        logger.Error(err, "unable to create controller")
-        os.Exit(1)
-    }
-
-    if err = extController.Start(ctrl.SetupSignalHandler()); err != nil {
-        logger.Error(err, "unable to start extension controller")
-        os.Exit(1)
-    }
-}
-```
+That guide includes concrete code and minimal wiring. This overview focuses on concepts, CEL helpers, domains, and data-plane materialization.
 
 ## Extension Features
 
@@ -255,16 +84,27 @@ firstAddress, err := kuadrant.Resolve(ctx, policy,
 )
 ```
 
-### Cross-Policy Data Sharing
+Note: `subscribe=true` registers interest in changes to referenced topology/context and can increase reconcile frequency. Use it only when the value must track live changes.
 
-Extensions can share data with other policies through the data binding system:
+### Publishing Data Bindings
+
+Extensions commonly derive values via CEL using `kuadrant.Resolve(...)` and then publish them using the Go API. Bindings are consumed by the operator to update managed resources (e.g., Authorino AuthConfig, Envoy/wasm/Limitador configuration); they do not directly modify user-authored Kuadrant policy CRs (AuthPolicy, RateLimitPolicy, TLSPolicy, DNSPolicy).
 
 ```go
-// Add authentication data for rate limiting policies
-err = kuadrant.AddDataTo(ctx, policy, types.DomainAuth, "user.tier", "premium")
+// Publish CEL-derived value
+addrs, err := kuadrant.Resolve(ctx, policy,
+    `self.findGateways().map(g, g.status.addresses.map(a, a.value)).flatten()`,
+    false,
+)
+if err == nil {
+    _ = kuadrant.AddDataTo(ctx, policy, types.DomainRequest, "gateway.addresses", addrs)
+}
 
-// Add request metadata
-err = kuadrant.AddDataTo(ctx, policy, types.DomainRequest, "custom.header", headerValue)
+// Publish a literal value
+_ = kuadrant.AddDataTo(ctx, policy, types.DomainAuth, "user.tier", "premium")
+
+// Publish a CEL program to be evaluated at request time downstream
+_ = kuadrant.AddDataTo(ctx, policy, types.DomainRequest, "labels.user", `request.headers["x-user"] ?? "anonymous"`)
 ```
 
 ### Kuadrant Topology via CEL
@@ -300,6 +140,34 @@ Notes:
 - These functions rely on Kuadrant's internal DAG of the topology and return strongly-typed proto objects (`kuadrant.v1.Gateway`, `kuadrant.v1.Policy`).
 - A special constant `__KUADRANT_VERSION` is available to CEL expressions for compatibility checks (e.g., "0_dev", "1_dev").
 - The available functions may evolve; consult the source in `pkg/cel/ext/kuadrant.go` for the current set.
+
+### Domains reference
+
+| Domain                | Typical consumers                     | Typical keys                          | Evaluated where                   |
+|-----------------------|---------------------------------------|---------------------------------------|-----------------------------------|
+| `types.DomainAuth`    | Authorino (dynamic metadata)          | `user.tier`, `plan`, `claims.sub`     | Request-time (AuthConfig)         |
+| `types.DomainRequest` | Envoy wasm/Limitador, Authorino       | `gateway.addresses`, `labels.user`, `headers.x-foo` | Request-time (wasm/ratelimiting) |
+
+Notes:
+- Keys are plain strings; dotted keys are a naming convention only.
+- Bindings are ephemeral and cleared on policy deletion.
+- See definitions in `pkg/extension/types/types.go`.
+
+### How bindings are materialized in the data plane
+
+Bindings are consumed by the operator to augment managed configurations so CEL is evaluated at request time by the data plane:
+
+- DomainAuth
+    - Consumed by the Authorino integration path.
+    - Operator effect: updates managed AuthConfig with metadata evaluators that run your CEL and expose results as dynamic metadata for subsequent policies/filters.
+
+- DomainRequest
+    - Consumed by the Envoy/wasm/Limitador path.
+    - Operator effect: updates managed Envoy wasm configuration and related resources so your CEL is evaluated per request and forwarded as request attributes/labels to Authorino/Limitador.
+
+Notes
+- `AddDataTo` publishes ephemeral, policy-scoped keys; the operator re-renders managed resources when these bindings change, and clears them on policy deletion.
+- Values can be literals (evaluated at reconcile) or CEL programs (evaluated at request time by data plane components).
 
 ### Event Subscription
 
@@ -344,7 +212,7 @@ The Kuadrant repository includes several example extensions:
 ### Telemetry Policy Extension
 - **Location**: `cmd/extensions/telemetry-policy/`
 - **Purpose**: Configures observability and metrics collection
-- **Features**: Metric definition, trace sampling, log aggregation
+- **Features**: Publishes CEL expressions for request-time metric labels
 
 ## Configuration
 
@@ -364,69 +232,27 @@ gRPC connectivity
 
 - The extension controller connects to the Kuadrant operator via a Unix domain socket.
 - The socket path is passed as the first command-line argument to your controller binary (required by the SDK builder).
-- Example invocation: `./my-policy-controller /var/run/kuadrant/extensions.sock`.
 
 In Kubernetes, pass the socket path as a container arg and mount the socket accordingly.
-
-## Deployment
-
-Extensions are typically deployed as separate controllers in the Kuadrant namespace:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-policy-controller
-  namespace: kuadrant-system
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: my-policy-controller
-  template:
-    metadata:
-      labels:
-        app: my-policy-controller
-    spec:
-      containers:
-      - name: controller
-        image: my-org/my-policy-controller:latest
-        args:
-        - /var/run/kuadrant/extensions.sock # Unix socket path provided by the operator
-        env:
-        - name: LOG_LEVEL
-          value: info
-        volumeMounts:
-        - name: kuadrant-socket
-          mountPath: /var/run/kuadrant
-        ports:
-        - containerPort: 8080
-          name: metrics
-      volumes:
-      - name: kuadrant-socket
-        hostPath:
-          path: /var/run/kuadrant
-          type: Directory
-```
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **gRPC Connection Failures**
-   - Verify the Kuadrant operator is running
-   - Check network connectivity between extension and operator
-   - Ensure correct gRPC server address configuration
+    - Verify the Kuadrant operator is running and exposing the extensions Unix socket
+    - Check the socket path, mount, and file permissions inside your controller Pod
+    - Ensure your controller is invoked with the correct socket argument (first CLI arg)
 
 2. **CEL Evaluation Errors**
-   - Validate CEL expressions syntax
-   - Check available context variables
-   - Review error logs for specific evaluation failures
+    - Validate CEL expressions syntax
+    - Check available context variables
+    - Review error logs for specific evaluation failures
 
 3. **Resource Reconciliation Issues**
-   - Verify RBAC permissions for extension controller
-   - Check owner reference configuration
-   - Review resource creation/update errors
+    - Verify RBAC permissions for extension controller
+    - Check owner reference configuration
+    - Review resource creation/update errors
 
 ### Debugging
 

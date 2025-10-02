@@ -161,7 +161,7 @@ func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 	}
 }
 
-func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
+func (p *OIDCPolicy) GetTokenRequestURL() (string, error) {
 	var tokenURL *url.URL
 	var err error
 	if p.Spec.Provider.TokenEndpoint != "" {
@@ -180,7 +180,7 @@ func (p *OIDCPolicy) GetIssuerTokenExchangeURL() (string, error) {
 	return tokenURL.String(), nil
 }
 
-func (p *OIDCPolicy) GetIssuerTokenExchangeBodyCelExpression(igwURL *url.URL, options map[string]string) (string, error) {
+func (p *OIDCPolicy) GetTokenRequestBodyCelExpression(igwURL *url.URL, options map[string]string) (string, error) {
 	redirectURL, err := p.redirectURL(igwURL)
 	if err != nil {
 		return "", err

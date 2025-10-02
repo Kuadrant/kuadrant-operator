@@ -232,16 +232,16 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 }
 
 func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
-	tokenExchangeOpts := make(map[string]string)
+	tokenRequestOpts := make(map[string]string)
 	if clientSecretRef := pol.Spec.Provider.ClientSecret; clientSecretRef != nil {
 		secret := &v1.Secret{}
 		if err := r.Client.Get(ctx, apitypes.NamespacedName{Namespace: pol.Namespace, Name: clientSecretRef.Name}, secret); err != nil {
 			return nil, err // TODO: Review this error, perhaps we don't need to return an error, just reenqueue.
 		}
 		clientSecret := string(secret.Data[clientSecretRef.Key])
-		tokenExchangeOpts["client_secret"] = clientSecret
+		tokenRequestOpts["client_secret"] = clientSecret
 	}
-	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw, tokenExchangeOpts)
+	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw, tokenRequestOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -442,9 +442,9 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 	}
 }
 
-func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo, tokenExchangeOpts map[string]string) (*kuadrantv1.AuthPolicy, error) {
+func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo, tokenRequestOpts map[string]string) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
-	tokenExchangeURL, err := pol.GetIssuerTokenExchangeURL()
+	tokenRequestURL, err := pol.GetTokenRequestURL()
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +453,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo, 
 		return nil, err
 	}
 
-	callBodyCelExpression, err := pol.GetIssuerTokenExchangeBodyCelExpression(igwURL, tokenExchangeOpts)
+	callBodyCelExpression, err := pol.GetTokenRequestBodyCelExpression(igwURL, tokenRequestOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +507,7 @@ allow = true`, igwURL, igwURL, authorizeURL)
 									},
 									MetadataMethodSpec: authorinov1beta3.MetadataMethodSpec{
 										Http: &authorinov1beta3.HttpEndpointSpec{
-											Url:    tokenExchangeURL,
+											Url:    tokenRequestURL,
 											Method: &callbackMethod,
 											Body:   &callbackBody,
 										},

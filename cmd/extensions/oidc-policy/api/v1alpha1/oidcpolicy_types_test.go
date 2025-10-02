@@ -15,7 +15,7 @@ import (
 func TestGetIssuerTokenExchangeURL(t *testing.T) {
 	policy := mockMinimalOIDCPolicy()
 
-	actual, err := policy.GetIssuerTokenExchangeURL()
+	actual, err := policy.GetTokenRequestURL()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestGetIssuerTokenExchangeURL(t *testing.T) {
 
 	policy.Spec.Provider.TokenEndpoint = "https://example.com/token?foo=bar"
 
-	actual, err = policy.GetIssuerTokenExchangeURL()
+	actual, err = policy.GetTokenRequestURL()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestGetIssuerTokenExchangeBodyCelExpression(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	celExpression, err := policy.GetIssuerTokenExchangeBodyCelExpression(gwURL, nil)
+	celExpression, err := policy.GetTokenRequestBodyCelExpression(gwURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestGetIssuerTokenExchangeBodyCelExpression(t *testing.T) {
 		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
 	}
 
-	celExpression, err = policy.GetIssuerTokenExchangeBodyCelExpression(gwURL, map[string]string{"client_secret": "secret123"})
+	celExpression, err = policy.GetTokenRequestBodyCelExpression(gwURL, map[string]string{"client_secret": "secret123"})
 	if err != nil {
 		t.Fatal(err)
 	}

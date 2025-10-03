@@ -28,3 +28,9 @@ patches:
         kind: ServiceMonitor
         name: istiod
         namespace: gateway-system
+    - patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: openshift-operators
+      target:
+        namespace: kuadrant-system

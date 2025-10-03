@@ -1,24 +1,25 @@
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  name: planpolicies.extensions.kuadrant.io
+  creationTimestamp: null
+  name: telemetrypolicies.extensions.kuadrant.io
 spec:
   group: extensions.kuadrant.io
   names:
-    kind: PlanPolicy
-    listKind: PlanPolicyList
-    plural: planpolicies
-    singular: planpolicy
+    kind: TelemetryPolicy
+    listKind: TelemetryPolicyList
+    plural: telemetrypolicies
+    singular: telemetrypolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: PlanPolicy enables rate limiting through plans of identified
-          requests
+        description: |-
+          TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
+          through the use of dynamically evaluated CEL expressions.
         properties:
           apiVersion:
             description: |-
@@ -38,64 +39,28 @@ spec:
           metadata:
             type: object
           spec:
-            description: PlanPolicySpec defines the desired state of PlanPolicy
             properties:
-              plans:
-                description: Plans defines the list of plans for the policy. The identity
-                  is categorised by the first matching plan in the list.
-                items:
-                  properties:
-                    limits:
-                      description: Limits contains the list of limits that the plan
-                        enforces.
-                      properties:
-                        custom:
-                          description: Custom defines any additional limits defined
-                            in terms of a RateLimitPolicy Rate.
-                          items:
-                            description: Rate defines the actual rate limit that will
-                              be used when there is a match
-                            properties:
-                              limit:
-                                description: Limit defines the max value allowed for
-                                  a given period of time
-                                type: integer
-                              window:
-                                description: Window defines the time period for which
-                                  the Limit specified above applies.
-                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                type: string
-                            required:
-                            - limit
-                            - window
-                            type: object
-                          type: array
-                        daily:
-                          description: Daily limit of requests for this plan.
-                          type: integer
-                        monthly:
-                          description: Monthly limit of requests for this plan.
-                          type: integer
-                        weekly:
-                          description: Weekly limit of requests for this plan.
-                          type: integer
-                        yearly:
-                          description: Yearly limit of requests for this plan.
-                          type: integer
-                      type: object
-                    predicate:
-                      description: Predicate is a CEL expression used to determine
-                        if the plan is applied.
-                      minLength: 1
-                      type: string
-                    tier:
-                      description: Tier this plan represents.
-                      type: string
-                  required:
-                  - predicate
-                  - tier
-                  type: object
-                type: array
+              metrics:
+                description: Metrics holds the telemetry metrics configuration
+                properties:
+                  default:
+                    description: Default metrics configuration that applies to all
+                      requests
+                    properties:
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Labels to add to metrics, where keys are label names and values are CEL expressions.
+                          Only labels whose CEL expressions resolve successfully will be included.
+                        minProperties: 1
+                        type: object
+                    required:
+                    - labels
+                    type: object
+                required:
+                - default
+                type: object
               targetRef:
                 description: Reference to the object to which this policy applies.
                 properties:
@@ -140,19 +105,18 @@ spec:
                 x-kubernetes-validations:
                 - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
                   rule: self.group == 'gateway.networking.k8s.io'
-                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
-                    and 'Gateway'
-                  rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
+                - message: Invalid targetRef.kind. The only supported value is 'Gateway'
+                  rule: self.kind == 'Gateway'
             required:
-            - plans
+            - metrics
             - targetRef
             type: object
           status:
-            description: PlanPolicyStatus defines the observed state of PlanPolicy
+            description: TelemetryPolicyStatus defines the observed state of TelemetryPolicy
             properties:
               conditions:
                 description: |-
-                  Represents the observations of a PlanPolicy's current state.
+                  Represents the observations of a TelemetryPolicy's current state.
                   Known .status.conditions.type are: "Accepted", "Enforced"
                 items:
                   description: Condition contains details for one aspect of the current
@@ -223,3 +187,9 @@ spec:
     storage: true
     subresources:
       status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

@@ -574,6 +574,14 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 // Extensions are dynamically discovered from the EXTENSIONS_DIR (default: "/extensions").
 func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
+
+	// Disable extensions if WITH_EXTENSIONS is set to false
+	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", true)
+	if !b.isUsingExtensions {
+		b.logger.Info("Extensions disabled via WITH_EXTENSIONS environment variable")
+		return opts
+	}
+
 	extensionsDir := env.GetString("EXTENSIONS_DIR", "/extensions")
 
 	extManager, err := extension.NewManager(extensionsDir, b.logger.WithName("extensions"), log.Sync, b.client)
@@ -587,7 +595,6 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 	}
 	extManager.SetChangeNotifier(extManager.TriggerReconciliation)
 
-	b.isUsingExtensions = true
 	opts = append(opts, controller.WithRunnable(
 		"extension manager",
 		func(*controller.Controller) controller.Runnable {

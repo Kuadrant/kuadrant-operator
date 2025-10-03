@@ -110,6 +110,7 @@ OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
 KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
 
 #Kuadrant Extensions
+WITH_EXTENSIONS ?= true
 EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 
 # Kuadrant component versions
@@ -310,6 +311,9 @@ endef
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./api/v1alpha1;./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./internal/..."
+ifeq ($(WITH_EXTENSIONS),true)
+	$(MAKE) extensions-manifests
+endif
 
 .PHONY: extensions-manifests
 extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects for extensions.
@@ -378,7 +382,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
-		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		--build-arg WITH_EXTENSIONS=$(WITH_EXTENSIONS) \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 
@@ -418,6 +422,8 @@ endef
 
 .PHONY: bundle
 bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+	@echo "Cleaning bundle manifests..."
+	rm -rf bundle/manifests
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
@@ -429,7 +435,16 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	$(call update-csv-config,$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.version)
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
+ifeq ($(WITH_EXTENSIONS),true)
+	( \
+		$(KUSTOMIZE) build config/manifests; \
+		for ext_dir in $(EXTENSIONS_DIRECTORIES); do \
+			$(KUSTOMIZE) build "$$ext_dir/config/deploy" | KUADRANT_SA_NAME=$(KUADRANT_SA_NAME) KUADRANT_NAMESPACE=$(KUADRANT_NAMESPACE) $(PROJECT_PATH)/utils/extensions/compose_extension_manifest.sh; \
+		done \
+	) | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
+else
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
+endif
 	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
 		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
 		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)

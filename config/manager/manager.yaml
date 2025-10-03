@@ -34,7 +34,7 @@ spec:
             - name: EXTENSIONS_DIR
               value: "/extensions"
             - name: RELATED_IMAGE_WASMSHIM
-              value: "oci://quay.io/kuadrant/wasm-shim:v0.10.0"
+              value: "oci://quay.io/kuadrant/wasm-shim:v0.11.0"
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:

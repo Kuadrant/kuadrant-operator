@@ -4,6 +4,8 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
   creationTimestamp: null
+  labels:
+    app: kuadrant
   name: telemetrypolicies.extensions.kuadrant.io
 spec:
   group: extensions.kuadrant.io

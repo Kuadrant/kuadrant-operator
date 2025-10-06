@@ -162,7 +162,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-10-03T09:42:34Z"
+    createdAt: "2025-10-06T14:11:12Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -192,12 +192,21 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
+    - kind: OIDCPolicy
+      name: oidcpolicies.extensions.kuadrant.io
+      version: v1alpha1
+    - kind: PlanPolicy
+      name: planpolicies.extensions.kuadrant.io
+      version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
       displayName: RateLimitPolicy
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
       version: v1
+    - kind: TelemetryPolicy
+      name: telemetrypolicies.extensions.kuadrant.io
+      version: v1alpha1
     - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
         of tls certificates
       displayName: TLSPolicy
@@ -206,15 +215,6 @@ spec:
       version: v1
     - kind: TokenRateLimitPolicy
       name: tokenratelimitpolicies.kuadrant.io
-      version: v1alpha1
-    - kind: OIDCPolicy
-      name: oidcpolicies.extensions.kuadrant.io
-      version: v1alpha1
-    - kind: PlanPolicy
-      name: planpolicies.extensions.kuadrant.io
-      version: v1alpha1
-    - kind: TelemetryPolicy
-      name: telemetrypolicies.extensions.kuadrant.io
       version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
@@ -346,6 +346,36 @@ spec:
           - update
           - watch
         - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - oidcpolicies
+          - planpolicies
+          - telemetrypolicies
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - oidcpolicies/finalizers
+          - planpolicies/finalizers
+          - telemetrypolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - oidcpolicies/status
+          - planpolicies/status
+          - telemetrypolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
           - gateway.envoyproxy.io
           resources:
           - envoyextensionpolicies
@@ -370,7 +400,6 @@ spec:
           - gateway.networking.k8s.io
           resources:
           - gateways
-          - httproutes
           verbs:
           - get
           - list
@@ -393,15 +422,22 @@ spec:
           - patch
           - update
         - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - kuadrant.io
           resources:
           - authpolicies
-          - dnspolicies
-          - kuadrants
-          - ratelimitpolicies
-          - tlspolicies
-          - tokenratelimitpolicies
           verbs:
+          - create
           - get
           - list
           - patch
@@ -434,7 +470,21 @@ spec:
         - apiGroups:
           - kuadrant.io
           resources:
+          - dnspolicies
+          - kuadrants
+          - tlspolicies
+          - tokenratelimitpolicies
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
           - dnsrecords
+          - ratelimitpolicies
           verbs:
           - create
           - delete
@@ -510,30 +560,6 @@ spec:
           - patch
           - update
           - watch
-        - apiGroups:
-          - extensions.kuadrant.io
-          resources:
-          - telemetrypolicies
-          verbs:
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - extensions.kuadrant.io
-          resources:
-          - telemetrypolicies/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - extensions.kuadrant.io
-          resources:
-          - telemetrypolicies/status
-          verbs:
-          - get
-          - patch
-          - update
         serviceAccountName: kuadrant-operator-controller-manager
       deployments:
       - label:

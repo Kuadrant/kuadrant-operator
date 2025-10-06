@@ -9,24 +9,6 @@ Using dynamically evaluated CEL expressions, you can label existing metrics with
 
 Only labels with CEL expressions that resolve successfully will be included.
 
-## How to activate
-
-The TelemetryPolicy API is not enabled by default. You must explicitly opt-in to use it.
-To activate it, you need to run the following `make` targets from the [kuadrant-operator](https://github.com/Kuadrant/kuadrant-operator) repository.
-
-First, clone the repository locally:
-
-```bash
-git clone --depth=1 https://github.com/Kuadrant/kuadrant-operator.git
-cd kuadrant-operator
-```
-
-Then, activate the Kuadrant extensions:
-
-```bash
-make local-apply-extensions apply-extensions-manifests
-```
-
 ## Examples
 
 The following example configuration adds `user` and `group` labels for authenticated traffic.

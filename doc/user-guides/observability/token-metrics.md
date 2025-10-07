@@ -19,7 +19,6 @@ This feature is for observability only and does not affect policy enforcement, b
   - For bare-metal Kubernetes: See [Installing Prometheus Operator](https://prometheus-operator.dev/docs/getting-started/installation/) guide.
   - For OpenShift: See the [Configuring user workload monitoring](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/monitoring/configuring-user-workload-monitoring#preparing-to-configure-the-monitoring-stack-uwm) guide.
 - Configure Observability for Gateway and Kuadrant components. See our [Configure Observability](monitors.md) guide for more information.
-- Activate TelemetryPolicy feature. See our [TelemetryPolicy](../../overviews/telemetrypolicy.md) overview for more information.
 - The [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) command-line tool.
 - [Optional] The [jq](https://jqlang.org/) command-line tool.
 

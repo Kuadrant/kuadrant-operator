@@ -1,25 +1,25 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
-  creationTimestamp: null
-  labels:
-    app: kuadrant
-  name: oidcpolicies.extensions.kuadrant.io
+  name: telemetrypolicies.extensions.kuadrant.io
 spec:
   group: extensions.kuadrant.io
   names:
-    kind: OIDCPolicy
-    listKind: OIDCPolicyList
-    plural: oidcpolicies
-    singular: oidcpolicy
+    kind: TelemetryPolicy
+    listKind: TelemetryPolicyList
+    plural: telemetrypolicies
+    singular: telemetrypolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: OIDCPolicy is the Schema for the oidcpolicies API
+        description: |-
+          TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
+          through the use of dynamically evaluated CEL expressions.
         properties:
           apiVersion:
             description: |-
@@ -39,98 +39,28 @@ spec:
           metadata:
             type: object
           spec:
-            description: OIDCPolicySpec defines the desired state of OIDCPolicy
             properties:
-              auth:
-                description: Auth holds the information regarding AuthN/AuthZ
+              metrics:
+                description: Metrics holds the telemetry metrics configuration
                 properties:
-                  claims:
-                    additionalProperties:
-                      type: string
-                    description: Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
-                    type: object
-                  tokenSource:
-                    description: |-
-                      TokenSource informs where the JWT token will be found in the request for authentication
-                      If omitted, it defaults to credentials passed in cookies.
+                  default:
+                    description: Default metrics configuration that applies to all
+                      requests
                     properties:
-                      authorizationHeader:
-                        properties:
-                          prefix:
-                            type: string
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Labels to add to metrics, where keys are label names and values are CEL expressions.
+                          Only labels whose CEL expressions resolve successfully will be included.
+                        minProperties: 1
                         type: object
-                      cookie:
-                        properties:
-                          name:
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      customHeader:
-                        properties:
-                          name:
-                            type: string
-                        required:
-                        - name
-                        type: object
-                      queryString:
-                        properties:
-                          name:
-                            type: string
-                        required:
-                        - name
-                        type: object
+                    required:
+                    - labels
                     type: object
-                type: object
-              provider:
-                description: Provider holds the information for the OIDC provider
-                properties:
-                  authorizationEndpoint:
-                    description: |-
-                      The full URL of the Authorization endpoints
-                      AuthorizationEndpoint performs Authentication of the End-User. Default value is the IssuerURL + "/oauth/authorize"
-                    type: string
-                  clientID:
-                    description: OAuth2 Client ID.
-                    type: string
-                  clientSecret:
-                    description: OAuth2 Client Secret.
-                    type: string
-                  issuerURL:
-                    description: |-
-                      URL of the OpenID Connect (OIDC) token issuer endpoint.
-                      Use it for automatically discovering the JWKS URL from an OpenID Connect Discovery endpoint (https://openid.net/specs/openid-connect-discovery-1_0.html).
-                      The Well-Known Discovery path (i.e. "/.well-known/openid-configuration") is appended to this URL to fetch the OIDC configuration.
-                      One of: jwksUrl, issuerUrl
-                    type: string
-                  jwksURL:
-                    description: |-
-                      URL of the JSON Web Key Set (JWKS) endpoint.
-                      Use it for non-OpenID Connect (OIDC) JWT authentication, where the JWKS URL is known beforehand.
-                      One of: jwksUrl, issuerUrl
-                    type: string
-                  redirectURI:
-                    description: The RedirectURI defines the URL that is part of the
-                      authentication request to the AuthorizationEndpoint and the
-                      one defined in the IDP. Default value is the IssuerURL + "/auth/callback"
-                    type: string
-                  tokenEndpoint:
-                    description: TokenEndpoint defines the URL to obtain an Access
-                      Token, an ID Token, and optionally a Refresh Token. Default
-                      value is the IssuerURL + "/oauth/token"
-                    type: string
                 required:
-                - clientID
+                - default
                 type: object
-                x-kubernetes-validations:
-                - message: 'Use one of: jwksURL, issuerURL'
-                  rule: '!(has(self.jwksURL) && self.jwksURL != '''' && has(self.issuerURL)
-                    && self.issuerURL != '''')'
-                - message: When jwksURL is set, authorizationEndpoint and tokenEndpoint
-                    must also be provided
-                  rule: '!(has(self.jwksURL) && self.jwksURL != '''') || (has(self.authorizationEndpoint)
-                    && self.authorizationEndpoint != '''' && has(self.tokenEndpoint)
-                    && self.tokenEndpoint != '''')'
               targetRef:
                 description: Reference to the object to which this policy applies.
                 properties:
@@ -175,20 +105,19 @@ spec:
                 x-kubernetes-validations:
                 - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
                   rule: self.group == 'gateway.networking.k8s.io'
-                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
-                    and 'Gateway'
-                  rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
+                - message: Invalid targetRef.kind. The only supported value is 'Gateway'
+                  rule: self.kind == 'Gateway'
             required:
-            - provider
+            - metrics
             - targetRef
             type: object
           status:
-            description: OIDCPolicyStatus defines the observed state of OIDCPolicy
+            description: TelemetryPolicyStatus defines the observed state of TelemetryPolicy
             properties:
               conditions:
                 description: |-
-                  Represents the observations of a OIDCPolicy's current state.
-                  Known .status.conditions.type are: "Ready"
+                  Represents the observations of a TelemetryPolicy's current state.
+                  Known .status.conditions.type are: "Accepted", "Enforced"
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -258,9 +187,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
-  storedVersions: null

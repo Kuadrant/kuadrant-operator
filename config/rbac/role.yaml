@@ -125,6 +125,36 @@ rules:
   - update
   - watch
 - apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - oidcpolicies
+  - planpolicies
+  - telemetrypolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - oidcpolicies/finalizers
+  - planpolicies/finalizers
+  - telemetrypolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - oidcpolicies/status
+  - planpolicies/status
+  - telemetrypolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - gateway.envoyproxy.io
   resources:
   - envoyextensionpolicies
@@ -149,7 +179,6 @@ rules:
   - gateway.networking.k8s.io
   resources:
   - gateways
-  - httproutes
   verbs:
   - get
   - list
@@ -172,15 +201,22 @@ rules:
   - patch
   - update
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - kuadrant.io
   resources:
   - authpolicies
-  - dnspolicies
-  - kuadrants
-  - ratelimitpolicies
-  - tlspolicies
-  - tokenratelimitpolicies
   verbs:
+  - create
   - get
   - list
   - patch
@@ -213,7 +249,21 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
+  - dnspolicies
+  - kuadrants
+  - tlspolicies
+  - tokenratelimitpolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
   - dnsrecords
+  - ratelimitpolicies
   verbs:
   - create
   - delete

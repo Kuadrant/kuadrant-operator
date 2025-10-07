@@ -346,10 +346,3 @@ kubectl delete httproute toystore -n ${KUADRANT_DEVELOPER_NS}
 kubectl delete gateway ${KUADRANT_GATEWAY_NAME} -n ${KUADRANT_GATEWAY_NS}
 kubectl delete ns ${KUADRANT_GATEWAY_NS} ${KUADRANT_DEVELOPER_NS}
 ```
-
-## Next Steps
-
-- Explore more complex predicate expressions for plan identification
-- Integrate with JWT tokens for plan information
-- Combine with other Kuadrant policies for comprehensive API management
-- Monitor rate limiting metrics and adjust plans based on usage patterns

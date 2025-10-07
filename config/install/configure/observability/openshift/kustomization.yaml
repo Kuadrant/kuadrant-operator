@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.7.0
+  - ../../../../observability/openshift/
+  - ../../../../observability/prometheus/monitors/
+
+patches:
+    - patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: openshift-ingress
+      target:
+        group: telemetry.istio.io
+        kind: Telemetry
+        name: namespace-metrics
+        namespace: gateway-system
+    - patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: openshift-ingress
+        - op: replace
+          path: /spec/namespaceSelector/matchNames/0
+          value: openshift-ingress
+      target:
+        group: monitoring.coreos.com
+        kind: ServiceMonitor
+        name: istiod
+        namespace: gateway-system
+    - patch: |-
+        - op: replace
+          path: /metadata/namespace
+          value: openshift-operators
+      target:
+        namespace: kuadrant-system

@@ -8,4 +8,24 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: kuadrant-operator
   name: planpolicy-sample
-spec: {}
+spec: 
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: example-route
+  plans:
+    - tier: gold
+      predicate: |
+        has(auth.identity) && auth.identity.metadata.annotations["secret.kuadrant.io/plan-id"] == "gold"
+      limits:
+        daily: 5
+    - tier: silver
+      predicate: |
+        has(auth.identity) && auth.identity.metadata.annotations["secret.kuadrant.io/plan-id"] == "silver"
+      limits:
+        daily: 2
+    - tier: bronze
+      predicate: |
+        has(auth.identity) && auth.identity.metadata.annotations["secret.kuadrant.io/plan-id"] == "bronze"
+      limits:
+        daily: 1

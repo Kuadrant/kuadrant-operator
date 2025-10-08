@@ -15,7 +15,7 @@ endif
 
 # istioctl tool
 ISTIOCTL=$(shell pwd)/bin/istioctl
-ISTIOVERSION = 1.22.5
+ISTIOVERSION = 1.27.1
 $(ISTIOCTL):
 	mkdir -p $(shell pwd)/bin
 	$(eval TMP := $(shell mktemp -d))
@@ -28,18 +28,13 @@ istioctl: $(ISTIOCTL) ## Download istioctl locally if necessary.
 
 .PHONY: istioctl-install
 istioctl-install: istioctl ## Install istio.
-	$(ISTIOCTL) operator init --operatorNamespace $(ISTIO_NAMESPACE) --watchedNamespaces $(ISTIO_NAMESPACE)
-	kubectl apply -f $(ISTIO_INSTALL_DIR)/istio-operator.yaml
+	$(ISTIOCTL) install -f $(ISTIO_INSTALL_DIR)/istio-operator.yaml -y
 
 .PHONY: istioctl-uninstall
 istioctl-uninstall: istioctl ## Uninstall istio.
-	$(ISTIOCTL) x uninstall -y --purge
+	$(ISTIOCTL) uninstall -y --purge
 
-.PHONY: istioctl-verify-install
-istioctl-verify-install: istioctl ## Verify istio installation.
-	$(ISTIOCTL) verify-install -i $(ISTIO_NAMESPACE)
-
-SAIL_VERSION = 0.1.0
+SAIL_VERSION = 1.27.1
 .PHONY: sail-install
 sail-install: helm
 	$(HELM) install sail-operator \

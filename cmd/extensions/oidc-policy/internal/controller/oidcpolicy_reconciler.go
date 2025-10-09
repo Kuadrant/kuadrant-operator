@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	v1 "k8s.io/api/core/v1"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,6 +78,9 @@ func (r *OIDCPolicyReconciler) WithKuadrantCtx(kCtx types.KuadrantCtx) *OIDCPoli
 // gateway-api permissions
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;create;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
+
+// core permissions
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;
 
 // TODO: Current OIDC Workflow works only for Browser apps and Native apps that manage the Auth via browser
 // TODO: It only implements Authentication using the Authorization Code Flow (Recommended). Missing Implicit and Hybrid Flow
@@ -227,7 +232,16 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 }
 
 func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
-	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw)
+	tokenRequestOpts := make(map[string]string)
+	if clientSecretRef := pol.Spec.Provider.ClientSecret; clientSecretRef != nil {
+		secret := &v1.Secret{}
+		if err := r.Client.Get(ctx, apitypes.NamespacedName{Namespace: pol.Namespace, Name: clientSecretRef.Name}, secret); err != nil {
+			return nil, err // TODO: Review this error, perhaps we don't need to return an error, just reenqueue.
+		}
+		clientSecret := string(secret.Data[clientSecretRef.Key])
+		tokenRequestOpts["client_secret"] = clientSecret
+	}
+	desiredAuthPol, err := buildCallbackAuthPolicy(pol, igw, tokenRequestOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -428,9 +442,9 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 	}
 }
 
-func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo, tokenRequestOpts map[string]string) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
-	tokenExchangeURL, err := pol.GetIssuerTokenExchangeURL()
+	tokenRequestURL, err := pol.GetTokenRequestURL()
 	if err != nil {
 		return nil, err
 	}
@@ -438,14 +452,11 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 	if err != nil {
 		return nil, err
 	}
-	redirectURI, err := pol.GetRedirectURL(igwURL)
+
+	callBodyCelExpression, err := pol.GetTokenRequestBodyCelExpression(igwURL, tokenRequestOpts)
 	if err != nil {
 		return nil, err
 	}
-
-	callBodyCelExpression := fmt.Sprintf(`
-"code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0] + "&redirect_uri=%s&client_id=%s&grant_type=authorization_code"
-`, redirectURI, pol.Spec.Provider.ClientID)
 
 	callbackRoute := gatewayapiv1alpha2.LocalPolicyTargetReference{
 		Group: gatewayapiv1alpha2.GroupName,
@@ -496,7 +507,7 @@ allow = true`, igwURL, igwURL, authorizeURL)
 									},
 									MetadataMethodSpec: authorinov1beta3.MetadataMethodSpec{
 										Http: &authorinov1beta3.HttpEndpointSpec{
-											Url:    tokenExchangeURL,
+											Url:    tokenRequestURL,
 											Method: &callbackMethod,
 											Body:   &callbackBody,
 										},

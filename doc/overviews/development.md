@@ -117,6 +117,13 @@ No need to build any image. Kuadrant engineering team provides `latest` and
 release version tagged images. They are available in
 the [Quay.io/Kuadrant](https://quay.io/organization/kuadrant) image repository.
 
+*Note*: If you want to deploy Kuadrant with a custom gateway controller name you need to update the subscription to set the `ISTIO_GATEWAY_CONTROLLER_NAMES`
+or `ENVOYGATEWAY_GATEWAY_CONTROLLER_NAMES` environment variable in the kuadrant controller manager.
+
+```
+kubectl patch subscription kuadrant -n kuadrant-system --type=json -p='[{"op":"add","path":"/spec/config","value":{"env":[{"name":"ISTIO_GATEWAY_CONTROLLER_NAMES","value":"openshift.io/gateway-controller/v1"}]}}]'
+```
+
 Create kind cluster
 
 ```sh

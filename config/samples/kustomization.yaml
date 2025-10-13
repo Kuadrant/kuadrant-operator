@@ -7,5 +7,4 @@ resources:
   - kuadrant_v1_dnspolicy.yaml
   - kuadrant_v1_tlspolicy.yaml
   - kuadrant_v1alpha1_oidcpolicy.yaml
-  - kuadrant_v1alpha1_planpolicy.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

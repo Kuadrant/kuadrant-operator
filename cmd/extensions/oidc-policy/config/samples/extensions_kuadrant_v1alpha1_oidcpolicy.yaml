@@ -1,0 +1,13 @@
+---
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: OIDCPolicy
+metadata:
+  name: oidcpolicy-sample
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: example-route
+  provider:
+    cliendID: exampleID
+    issuerURL: https://idp.example.org/

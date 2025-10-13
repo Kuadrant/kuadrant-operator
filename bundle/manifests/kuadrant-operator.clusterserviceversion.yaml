@@ -5,6 +5,50 @@ metadata:
     alm-examples: |-
       [
         {
+          "apiVersion": "extensions.kuadrant.io/v1alpha1",
+          "kind": "PlanPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "kuadrant-operator",
+              "app.kubernetes.io/instance": "planpolicy-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "planpolicy",
+              "app.kubernetes.io/part-of": "kuadrant-operator"
+            },
+            "name": "planpolicy-sample"
+          },
+          "spec": {
+            "plans": [
+              {
+                "limits": {
+                  "daily": 5
+                },
+                "predicate": "has(auth.identity) \u0026\u0026 auth.identity.metadata.annotations[\"secret.kuadrant.io/plan-id\"] == \"gold\"\n",
+                "tier": "gold"
+              },
+              {
+                "limits": {
+                  "daily": 2
+                },
+                "predicate": "has(auth.identity) \u0026\u0026 auth.identity.metadata.annotations[\"secret.kuadrant.io/plan-id\"] == \"silver\"\n",
+                "tier": "silver"
+              },
+              {
+                "limits": {
+                  "daily": 1
+                },
+                "predicate": "has(auth.identity) \u0026\u0026 auth.identity.metadata.annotations[\"secret.kuadrant.io/plan-id\"] == \"bronze\"\n",
+                "tier": "bronze"
+              }
+            ],
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "example-route"
+            }
+          }
+        },
+        {
           "apiVersion": "kuadrant.io/v1",
           "kind": "AuthPolicy",
           "metadata": {
@@ -162,7 +206,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-10-06T14:11:12Z"
+    createdAt: "2025-10-13T12:55:23Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4

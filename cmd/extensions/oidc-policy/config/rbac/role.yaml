@@ -5,6 +5,14 @@ metadata:
   name: oidc-policy-manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - extensions.kuadrant.io
   resources:
   - oidcpolicies

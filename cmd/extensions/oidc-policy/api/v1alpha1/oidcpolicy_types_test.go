@@ -15,7 +15,7 @@ import (
 func TestGetIssuerTokenExchangeURL(t *testing.T) {
 	policy := mockMinimalOIDCPolicy()
 
-	actual, err := policy.GetIssuerTokenExchangeURL()
+	actual, err := policy.GetTokenRequestURL()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestGetIssuerTokenExchangeURL(t *testing.T) {
 
 	policy.Spec.Provider.TokenEndpoint = "https://example.com/token?foo=bar"
 
-	actual, err = policy.GetIssuerTokenExchangeURL()
+	actual, err = policy.GetTokenRequestURL()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,28 +37,41 @@ func TestGetIssuerTokenExchangeURL(t *testing.T) {
 	}
 }
 
-func TestGetRedirectURL(t *testing.T) {
+func TestGetIssuerTokenExchangeBodyCelExpression(t *testing.T) {
 	policy := mockMinimalOIDCPolicy()
-
-	baseURL, err := url.Parse("https://gateway.example.com")
+	gwURL, err := url.Parse("https://gateway.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	actual, _ := policy.GetRedirectURL(baseURL)
-	expected := "https://gateway.example.com/auth/callback"
-
-	if strings.Compare(actual, expected) != 0 {
-		t.Errorf("incorrect redirect URL, expected: %s, actual: %s", expected, actual)
+	celExpression, err := policy.GetTokenRequestBodyCelExpression(gwURL, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	policy.Spec.Provider.RedirectURI = "https://myapp.com/auth?callback=true"
-	actual, _ = policy.GetRedirectURL(baseURL)
-	expected = "https://myapp.com/auth?callback=true"
-
-	if strings.Compare(actual, expected) != 0 {
-		t.Errorf("incorrect redirect URL, expected: %s, actual: %s", expected, actual)
+	if !strings.Contains(celExpression, `"code=" + request.query.split("&").map(entry, entry.split("=")).filter(pair, pair[0] == "code").map(pair, pair[1])[0] + `) {
+		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
 	}
+
+	if !strings.Contains(celExpression, "&client_id=client123") {
+		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
+	}
+	if !strings.Contains(celExpression, "&grant_type=authorization_code") {
+		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
+	}
+	if !strings.Contains(celExpression, "&redirect_uri=https%3A%2F%2Fgateway.example.com%2Fauth%2Fcallback") {
+		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
+	}
+
+	celExpression, err = policy.GetTokenRequestBodyCelExpression(gwURL, map[string]string{"client_secret": "secret123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(celExpression, "&client_secret=secret123") {
+		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
+	}
+
 }
 
 func TestGetAuthorizeURL(t *testing.T) {

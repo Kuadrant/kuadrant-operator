@@ -95,6 +95,16 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 					Namespace: testNamespace,
 				},
 			}
+			authorinoMonitor := &monitoringv1.ServiceMonitor{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       monitoringv1.ServiceMonitorsKind,
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant-authorino-monitor",
+					Namespace: testNamespace,
+				},
+			}
 
 			// Create Kuadrant CR with observability not enabled
 			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
@@ -122,6 +132,11 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(limitadorMonitor), limitadorMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
@@ -161,6 +176,13 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				g.Expect(limitadorMonitor.Spec.Selector.MatchLabels).To(HaveKeyWithValue("app", "limitador"))
 				g.Expect(limitadorMonitor.Spec.Selector.MatchLabels).To(HaveKeyWithValue("limitador-resource", "limitador"))
 			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(authorinoMonitor.Labels).To(HaveKeyWithValue("kuadrant.io/observability", "true"))
+				g.Expect(authorinoMonitor.Spec.Selector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/part-of", "authorino"))
+				g.Expect(authorinoMonitor.Spec.Selector.MatchLabels).To(HaveKeyWithValue("app.kubernetes.io/component", "metrics"))
+			}).WithContext(ctx).Should(Succeed())
 
 			// Disable observability feature
 			err = testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
@@ -192,6 +214,11 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(limitadorMonitor), limitadorMonitor)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(authorinoMonitor), authorinoMonitor)
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())

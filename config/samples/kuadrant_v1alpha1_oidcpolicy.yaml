@@ -1,9 +1,0 @@
----
-apiVersion: kuadrant.io/v1alpha1
-kind: OIDCPolicy
-metadata:
-  labels:
-    app.kubernetes.io/name: kuadrant-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: oidcpolicy-sample
-spec: {}

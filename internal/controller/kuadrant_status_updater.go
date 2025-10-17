@@ -209,7 +209,7 @@ func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *stri
 	limitadorObj := GetLimitadorFromTopology(topology)
 	if limitadorObj == nil {
 		logger.V(1).Info("failed getting Limitador resource from topology", "status", "error")
-		return ptr.To("limitador resoure not in topology")
+		return ptr.To("limitador resource not in topology")
 	}
 
 	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, limitadorv1alpha1.StatusConditionReady)
@@ -227,7 +227,7 @@ func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *
 	authorinoObj := GetAuthorinoFromTopology(topology)
 	if authorinoObj == nil {
 		logger.V(1).Info("failed getting Authorino resource from topology", "status", "error")
-		return ptr.To("authorino resoure not in topology")
+		return ptr.To("authorino resource not in topology")
 	}
 
 	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")

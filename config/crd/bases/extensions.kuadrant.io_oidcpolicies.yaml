@@ -91,9 +91,22 @@ spec:
                   clientID:
                     description: OAuth2 Client ID.
                     type: string
-                  clientSecret:
-                    description: OAuth2 Client Secret.
-                    type: string
+                  clientSecretRef:
+                    description: Reference to a Kubernetes Secret key that stores
+                      that OAuth2 Client Secret.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        description: The name of the secret in the Kuadrant's namespace
+                          to select from.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                   issuerURL:
                     description: |-
                       URL of the OpenID Connect (OIDC) token issuer endpoint.

@@ -119,7 +119,7 @@ make dependencies-manifests
 
 ### Policy System
 
-Kuadrant implements a sophisticated policy attachment system based on Gateway API's Policy Attachment (GEP-2648). The operator manages four core policies:
+Kuadrant implements a sophisticated policy attachment system based on Gateway API's Policy Attachment (GEP-713). The operator manages four core policies:
 
 - **AuthPolicy** (`api/v1/authpolicy_types.go`): Authentication and authorization via Authorino
 - **RateLimitPolicy** (`api/v1/ratelimitpolicy_types.go`): Rate limiting via Limitador

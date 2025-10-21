@@ -119,12 +119,13 @@ make dependencies-manifests
 
 ### Policy System
 
-Kuadrant implements a sophisticated policy attachment system based on Gateway API's Policy Attachment (GEP-713). The operator manages four core policies:
+Kuadrant implements a sophisticated policy attachment system based on Gateway API's Policy Attachment (GEP-713). The operator manages five core policies:
 
 - **AuthPolicy** (`api/v1/authpolicy_types.go`): Authentication and authorization via Authorino
 - **RateLimitPolicy** (`api/v1/ratelimitpolicy_types.go`): Rate limiting via Limitador
 - **DNSPolicy** (`api/v1/dnspolicy_types.go`): DNS and load balancing configuration
 - **TLSPolicy** (`api/v1/tlspolicy_types.go`): TLS certificate management via cert-manager
+- **TokenRateLimitPolicy** (`api/v1alpha1/tokenratelimitpolicy_types.go`): Token-based rate limiting for AI/LLM workloads
 
 Policies attach to Gateway API resources (Gateway, HTTPRoute) using `targetRef` fields and are reconciled through a workflow-based controller system.
 
@@ -190,7 +191,7 @@ Detection happens at startup via CRD availability checks. Controllers are only r
 ### API Versioning
 
 - **v1** (`api/v1/`): Stable APIs (AuthPolicy, RateLimitPolicy, DNSPolicy, TLSPolicy)
-- **v1beta1** (`api/v1beta1/`): Beta APIs (Kuadrant CR, Topology utilities)
+- **v1beta1** (`api/v1beta1/`): Beta APIs (Kuadrant CRD)
 - **v1alpha1** (`api/v1alpha1/`): Alpha APIs (TokenRateLimitPolicy)
 
 Extensions define their own API versions under `cmd/extensions/*/api/`.
@@ -249,9 +250,11 @@ When modifying policy types:
 1. Edit API types in `api/v1/*.go` or extension types in `cmd/extensions/*/api/`
 2. Run `make generate` to update DeepCopy methods
 3. Run `make manifests` to regenerate CRDs
-4. Update controller logic in `internal/controller/` or extension reconcilers
-5. Run `make test-unit` to verify changes
-6. Run `make pre-commit` before committing
+4. Run `make bundle` to generate the Operator Lifecycle Manager manifest bundle
+5. Run `make helm-build` to generate the Helm charts
+6. Update controller logic in `internal/controller/` or extension reconcilers
+7. Run `make test-unit` to verify changes
+8. Run `make pre-commit` before committing
 
 ### Adding New Reconcilers
 
@@ -298,8 +301,9 @@ The operator supports multiple gateway providers (Istio, Envoy Gateway). When ad
 ## Common Pitfalls
 
 1. **Forgetting to run code generation**: Always run `make generate manifests` after API changes
-2. **Testing without proper environment**: Integration tests need `make local-env-setup` first
-3. **Mixing API versions**: Policies and extensions must use compatible API versions
-4. **Not handling missing dependencies**: Controllers must gracefully handle missing CRDs
-5. **CEL expression errors**: Validate CEL syntax and available context variables carefully
-6. **Socket path configuration**: Extensions require the Unix socket path as first CLI argument
+2. **Forgetting to update the manifest bundles**: Always run `make bundle` and `make helm-build` after API changes
+3. **Testing without proper environment**: Integration tests need `make local-env-setup` first
+4. **Mixing API versions**: Policies and extensions must use compatible API versions
+5. **Not handling missing dependencies**: Controllers must gracefully handle missing CRDs
+6. **CEL expression errors**: Validate CEL syntax and available context variables carefully
+7. **Socket path configuration**: Extensions require the Unix socket path as first CLI argument

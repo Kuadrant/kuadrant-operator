@@ -101,9 +101,6 @@ type Provider struct {
 
 	// OAuth2 Client ID.
 	ClientID string `json:"clientID"`
-	// Reference to a Kubernetes Secret key that stores that OAuth2 Client Secret.
-	// +optional
-	ClientSecret *SecretKeyReference `json:"clientSecretRef,omitempty"`
 
 	// The full URL of the Authorization endpoints
 	// AuthorizationEndpoint performs Authentication of the End-User. Default value is the IssuerURL + "/oauth/authorize"

@@ -63,12 +63,12 @@ func TestGetIssuerTokenExchangeBodyCelExpression(t *testing.T) {
 		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
 	}
 
-	celExpression, err = policy.GetTokenRequestBodyCelExpression(gwURL, map[string]string{"client_secret": "secret123"})
+	celExpression, err = policy.GetTokenRequestBodyCelExpression(gwURL, map[string]string{"foo": "bar"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(celExpression, "&client_secret=secret123") {
+	if !strings.Contains(celExpression, "&foo=bar") {
 		t.Errorf("incorrect token exchange body cel expression %s", celExpression)
 	}
 

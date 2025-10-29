@@ -93,9 +93,6 @@ spec:
                   clientID:
                     description: OAuth2 Client ID.
                     type: string
-                  clientSecret:
-                    description: OAuth2 Client Secret.
-                    type: string
                   issuerURL:
                     description: |-
                       URL of the OpenID Connect (OIDC) token issuer endpoint.

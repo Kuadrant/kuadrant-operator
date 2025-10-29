@@ -2,15 +2,18 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -97,18 +100,31 @@ func (r *TokenRateLimitPolicyValidator) isMissingDependency() error {
 const StateTokenRateLimitPolicyValid = "TokenRateLimitPolicyValid"
 
 func tokenRateLimitPolicyAcceptedStatusFunc(state *sync.Map) func(policy *kuadrantv1alpha1.TokenRateLimitPolicy) (bool, error) {
-	stateMap, _ := state.Load(StateTokenRateLimitPolicyValid)
-	m, ok := stateMap.(map[string]error)
-	if !ok {
-		return func(_ *kuadrantv1alpha1.TokenRateLimitPolicy) (bool, error) {
-			return false, kuadrant.NewErrDependencyNotInstalled("token rate limit policy validation has not finished")
-		}
+	stateMap, validated := state.Load(StateTokenRateLimitPolicyValid)
+	if !validated {
+		// fallback to reading the policy's existing status conditions to avoid flapping during state initialization
+		return tokenRateLimitPolicyAcceptedStatus
 	}
+	m := stateMap.(map[string]error)
 
 	return func(policy *kuadrantv1alpha1.TokenRateLimitPolicy) (bool, error) {
-		err := m[policy.GetLocator()]
-		return err == nil || apierrors.IsNotFound(err), err
+		err, validated := m[policy.GetLocator()]
+		if validated {
+			return err == nil || apierrors.IsNotFound(err), err
+		}
+		return tokenRateLimitPolicyAcceptedStatus(policy)
 	}
+}
+
+func tokenRateLimitPolicyAcceptedStatus(policy *kuadrantv1alpha1.TokenRateLimitPolicy) (accepted bool, err error) {
+	if condition := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+		accepted = condition.Status == metav1.ConditionTrue
+		if !accepted {
+			err = errors.New(condition.Message)
+		}
+		return
+	}
+	return
 }
 
 func isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.Policy) bool {

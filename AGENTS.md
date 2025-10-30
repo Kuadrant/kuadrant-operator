@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kuadrant is a Kubernetes operator that extends Gateway API providers (Istio, Envoy Gateway) with additional policies for TLS, DNS, authentication/authorization, and rate limiting. It leverages Gateway API Policy Attachment (GEP-2648) to provide a consistent policy-driven approach to traffic management.
+Kuadrant is a Kubernetes operator that extends Gateway API providers (Istio, Envoy Gateway) with additional policies for TLS, DNS, authentication/authorization, and rate limiting. It leverages Gateway API Policy Attachment (GEP-713) to provide a consistent policy-driven approach to traffic management.
 
 ## Build and Test Commands
 

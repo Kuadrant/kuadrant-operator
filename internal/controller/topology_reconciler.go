@@ -54,7 +54,7 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 
 	resource := r.Client.Resource(controller.ConfigMapsResource)
 	_, err = resource.Namespace(cm.Namespace).Apply(
-		ctx, unstructuredCM.GetName(), unstructuredCM, metav1.ApplyOptions{FieldManager: FieldManager, Force: true},
+		ctx, unstructuredCM.GetName(), unstructuredCM, metav1.ApplyOptions{FieldManager: FieldManagerName, Force: true},
 	)
 	if err != nil {
 		logger.Error(err, "failed to apply topology configmap")

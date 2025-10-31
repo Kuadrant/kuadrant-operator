@@ -137,7 +137,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 			}
 		}
 
-		if _, err = resource.Apply(ctx, desiredEnvoyFilterUnstructured.GetName(), desiredEnvoyFilterUnstructured, metav1.ApplyOptions{FieldManager: FieldManager}); err != nil {
+		if _, err = resource.Apply(ctx, desiredEnvoyFilterUnstructured.GetName(), desiredEnvoyFilterUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName}); err != nil {
 			logger.Error(err, "failed to apply envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
 			// TODO: handle error
 		}

@@ -107,45 +107,31 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 				continue
 			}
 			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoyextensionpolicy is created, because updates won't change the status
-			desiredEnvoyExtensionPolicyUnstructured, err := controller.Destruct(desiredEnvoyExtensionPolicy)
-			if err != nil {
-				logger.Error(err, "failed to destruct envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", desiredEnvoyExtensionPolicy)
+		} else {
+			existingEnvoyExtensionPolicy := existingEnvoyExtensionPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyExtensionPolicy)
+
+			// delete
+			if utils.IsObjectTaggedToDelete(desiredEnvoyExtensionPolicy) && !utils.IsObjectTaggedToDelete(existingEnvoyExtensionPolicy) {
+				if err := resource.Delete(ctx, existingEnvoyExtensionPolicy.GetName(), metav1.DeleteOptions{}); err != nil {
+					logger.Error(err, "failed to delete envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", fmt.Sprintf("%s/%s", existingEnvoyExtensionPolicy.GetNamespace(), existingEnvoyExtensionPolicy.GetName()))
+					// TODO: handle error
+				}
 				continue
 			}
-			if _, err = resource.Create(ctx, desiredEnvoyExtensionPolicyUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", desiredEnvoyExtensionPolicyUnstructured.Object)
-				// TODO: handle error
+
+			if equalEnvoyExtensionPolicies(existingEnvoyExtensionPolicy, desiredEnvoyExtensionPolicy) {
+				logger.V(1).Info("envoyextensionpolicy object is up to date, nothing to do")
+				continue
 			}
-			continue
 		}
 
-		existingEnvoyExtensionPolicy := existingEnvoyExtensionPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyExtensionPolicy)
-
-		// delete
-		if utils.IsObjectTaggedToDelete(desiredEnvoyExtensionPolicy) && !utils.IsObjectTaggedToDelete(existingEnvoyExtensionPolicy) {
-			if err := resource.Delete(ctx, existingEnvoyExtensionPolicy.GetName(), metav1.DeleteOptions{}); err != nil {
-				logger.Error(err, "failed to delete envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", fmt.Sprintf("%s/%s", existingEnvoyExtensionPolicy.GetNamespace(), existingEnvoyExtensionPolicy.GetName()))
-				// TODO: handle error
-			}
-			continue
-		}
-
-		if equalEnvoyExtensionPolicies(existingEnvoyExtensionPolicy, desiredEnvoyExtensionPolicy) {
-			logger.V(1).Info("envoyextensionpolicy object is up to date, nothing to do")
-			continue
-		}
-
-		// update
-		existingEnvoyExtensionPolicy.Spec.TargetRefs = desiredEnvoyExtensionPolicy.Spec.TargetRefs
-		existingEnvoyExtensionPolicy.Spec.Wasm = desiredEnvoyExtensionPolicy.Spec.Wasm
-
-		existingEnvoyExtensionPolicyUnstructured, err := controller.Destruct(existingEnvoyExtensionPolicy)
+		desiredEnvoyExtensionPolicyUnstructured, err := controller.Destruct(desiredEnvoyExtensionPolicy)
 		if err != nil {
-			logger.Error(err, "failed to destruct envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", existingEnvoyExtensionPolicy)
+			logger.Error(err, "failed to destruct envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", desiredEnvoyExtensionPolicy)
 			continue
 		}
-		if _, err = resource.Update(ctx, existingEnvoyExtensionPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", existingEnvoyExtensionPolicyUnstructured.Object)
+		if _, err = resource.Apply(ctx, desiredEnvoyExtensionPolicyUnstructured.GetName(), desiredEnvoyExtensionPolicyUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName}); err != nil {
+			logger.Error(err, "failed to apply envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", desiredEnvoyExtensionPolicyUnstructured.Object)
 			// TODO: handle error
 		}
 	}

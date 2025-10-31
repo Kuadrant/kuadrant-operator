@@ -72,7 +72,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	logger.Info("updating limitador object", "status", "processing")
 
 	resource := r.client.Resource(kuadrantv1beta1.LimitadorsResource)
-	if _, err := resource.Namespace(limitador.GetNamespace()).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManager}); err != nil {
+	if _, err := resource.Namespace(limitador.GetNamespace()).Apply(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName, Force: true}); err != nil {
 		logger.Error(err, "failed to apply limitador object")
 		// TODO: handle error
 	}

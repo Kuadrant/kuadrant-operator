@@ -161,7 +161,7 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 			logger.Error(err, "unable to destruct cert")
 			continue
 		}
-		_, err = resource.Apply(ctx, un.GetName(), un, metav1.ApplyOptions{FieldManager: FieldManager})
+		_, err = resource.Apply(ctx, un.GetName(), un, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil {
 			logger.Error(err, "unable to apply certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
 		}

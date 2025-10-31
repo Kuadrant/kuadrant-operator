@@ -109,7 +109,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
 		}
 
-		_, err = resource.Apply(ctx, desiredAuthConfigUnstructured.GetName(), desiredAuthConfigUnstructured, metav1.ApplyOptions{FieldManager: FieldManager})
+		_, err = resource.Apply(ctx, desiredAuthConfigUnstructured.GetName(), desiredAuthConfigUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil {
 			logger.Error(err, "failed to apple authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
 		}

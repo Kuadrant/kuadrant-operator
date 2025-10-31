@@ -113,7 +113,9 @@ The policy automatically parses token usage from response bodies in the followin
 
 This is compatible with OpenAI-style API responses and similar AI/LLM services.
 
-**Important**: Currently only non-streaming responses are supported (where `stream: false` or is omitted in the request).
+**Streaming Support**: Both streaming and non-streaming responses are supported:
+- **Non-streaming**: Works with `stream: false` or when `stream` is omitted
+- **Streaming**: Requires `"stream": true` and `"stream_options": { "include_usage": true }` to extract usage from the final stream event
 
 ## CEL Expression Context
 

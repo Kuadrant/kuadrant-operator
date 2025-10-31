@@ -261,8 +261,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				// must exist
-				Expect(err).ToNot(HaveOccurred())
-				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 					Name:       "l1",
 					MaxValue:   1,
 					Seconds:    3 * 60,
@@ -335,8 +335,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				// must exist
-				Expect(err).ToNot(HaveOccurred())
-				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 					Name:       "l1",
 					MaxValue:   1,
 					Seconds:    3 * 60,

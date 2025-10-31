@@ -278,6 +278,7 @@ To develop a new extension:
 3. Implement reconciler in `internal/controller/`
 4. Create `main.go` using the SDK builder pattern
 5. Update `WITH_EXTENSIONS` and extension manifests
+6. Update Dockerfile to build and include the new extension binary
 
 ### Gateway Provider Support
 

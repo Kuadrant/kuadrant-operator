@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
@@ -17,6 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/rand"
 
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -26,6 +27,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -239,12 +241,13 @@ var _ = Describe("DNSPolicy controller", func() {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(dnsPolicy.Spec.LoadBalancing).To(BeNil())
+			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.Spec.LoadBalancing = &kuadrantv1.LoadBalancingSpec{
 				Weight:     100,
 				Geo:        "foo",
 				DefaultGeo: false,
 			}
-			err = k8sClient.Update(ctx, dnsPolicy)
+			err = k8sClient.Patch(ctx, dnsPolicy, patch)
 			g.Expect(err).To(Succeed())
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
@@ -256,10 +259,11 @@ var _ = Describe("DNSPolicy controller", func() {
 			g.Expect(dnsPolicy.Spec.LoadBalancing.Geo).To(Equal("foo"))
 			g.Expect(dnsPolicy.Spec.LoadBalancing.Weight).To(Equal(100))
 			g.Expect(dnsPolicy.Spec.LoadBalancing.DefaultGeo).ToNot(BeTrue())
+			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.Spec.LoadBalancing.Geo = "bar"
 			dnsPolicy.Spec.LoadBalancing.Weight = 200
 			dnsPolicy.Spec.LoadBalancing.DefaultGeo = true
-			err = k8sClient.Update(ctx, dnsPolicy)
+			err = k8sClient.Patch(ctx, dnsPolicy, patch)
 			g.Expect(err).To(Succeed())
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
@@ -267,8 +271,9 @@ var _ = Describe("DNSPolicy controller", func() {
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
+			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.Spec.LoadBalancing = nil
-			err = k8sClient.Update(ctx, dnsPolicy)
+			err = k8sClient.Patch(ctx, dnsPolicy, patch)
 			g.Expect(err).To(Succeed())
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		Expect(k8sClient.Delete(ctx, dnsPolicy)).ToNot(HaveOccurred())
@@ -320,6 +325,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		// update statuses of gateways - attach routes to the listeners and define an IP address
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway1), gateway1)).To(Succeed())
+			patch := client.MergeFrom(gateway1.DeepCopy())
 			gateway1.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
 					Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -334,9 +340,10 @@ var _ = Describe("DNSPolicy controller", func() {
 					Conditions:     []metav1.Condition{},
 				},
 			}
-			g.Expect(k8sClient.Status().Update(ctx, gateway1)).To(Succeed())
+			g.Expect(k8sClient.Status().Patch(ctx, gateway1, patch)).To(Succeed())
 
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway2), gateway2)).To(Succeed())
+			patch = client.MergeFrom(gateway2.DeepCopy())
 			gateway2.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
 					Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -351,7 +358,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					Conditions:     []metav1.Condition{},
 				},
 			}
-			g.Expect(k8sClient.Status().Update(ctx, gateway2)).To(Succeed())
+			g.Expect(k8sClient.Status().Patch(ctx, gateway2, patch)).To(Succeed())
 		}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 		// Create policy1 targeting gateway1 with simple routing strategy
@@ -507,6 +514,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			// update statuses of gateways - attach routes to the listeners and define an IP address
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway1), gateway1)).To(Succeed())
+				patch := client.MergeFrom(gateway1.DeepCopy())
 				gateway1.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -521,9 +529,10 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway1)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway1, patch)).To(Succeed())
 
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway2), gateway2)).To(Succeed())
+				patch = client.MergeFrom(gateway2.DeepCopy())
 				gateway2.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -544,7 +553,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway2)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway2, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			// Create policy1 targeting gateway1 with simple routing strategy
@@ -624,10 +633,10 @@ var _ = Describe("DNSPolicy controller", func() {
 		})
 
 		It("should not create a dns record", func(ctx SpecContext) {
-			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
+			Consistently(func(g Gomega) []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
 				dnsRecords := kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, &dnsRecords, client.InNamespace(dnsPolicy.GetNamespace()))
-				Expect(err).ToNot(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 				return dnsRecords.Items
 			}, time.Second*15, time.Second).Should(BeEmpty())
 		}, testTimeOut)
@@ -672,6 +681,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -696,7 +706,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
@@ -899,6 +909,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gateway2)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway2), gateway2)).To(Succeed())
+				patch := client.MergeFrom(gateway2.DeepCopy())
 				gateway2.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -913,7 +924,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway2)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway2, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			By("changing the policy target ref")
@@ -1097,8 +1108,9 @@ var _ = Describe("DNSPolicy controller", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
+				patch := client.MergeFrom(dnsPolicy.DeepCopy())
 				dnsPolicy.Spec.LoadBalancing = nil
-				err = k8sClient.Update(ctx, dnsPolicy)
+				err = k8sClient.Patch(ctx, dnsPolicy, patch)
 				g.Expect(err).To(Succeed())
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
@@ -1217,6 +1229,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				By("updating the gateway")
 				Eventually(func(g Gomega) {
 					g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+					patch := client.MergeFrom(gateway.DeepCopy())
 					gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 						{
 							Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -1237,7 +1250,7 @@ var _ = Describe("DNSPolicy controller", func() {
 							Conditions:     []metav1.Condition{},
 						},
 					}
-					g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+					g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 				}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 				By("verifying record is updated")
@@ -1399,6 +1412,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -1423,7 +1437,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
@@ -1554,6 +1568,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -1578,7 +1593,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 		})
@@ -1623,6 +1638,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -1647,7 +1663,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -1672,6 +1688,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -1696,7 +1713,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -1746,6 +1763,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -1770,7 +1788,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			Eventually(func(g Gomega) {

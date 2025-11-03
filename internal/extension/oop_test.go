@@ -106,11 +106,11 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		t.Fatalf("Should have started: %v", err)
 	}
 
-	for oopErrorLog.cmd.ProcessState == nil {
-		time.Sleep(5 * time.Millisecond) // wait for the command to return
-	}
-	// try wait for ps to finish writing its output
-	time.Sleep(50 * time.Millisecond)
+	// Wait for the process to finish
+	oopErrorLog.Wait()
+
+	// Give time for stderr to be fully captured and written
+	time.Sleep(100 * time.Millisecond)
 
 	_ = oopErrorLog.Stop()
 

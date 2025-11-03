@@ -87,24 +87,18 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Fetch current CR & set observability flag to enable the feature
+			// Set observability flag to enable the feature
 			kuadrantNS := getKuadrantNamespace(ctx, testClient())
-			patch := &kuadrantv1beta1.Kuadrant{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Kuadrant",
-					APIVersion: kuadrantv1beta1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "kuadrant-sample",
-					Namespace: kuadrantNS,
-				},
-				Spec: kuadrantv1beta1.KuadrantSpec{
-					Observability: kuadrantv1beta1.Observability{
-						Enable: true,
-					},
-				},
-			}
-			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantNS}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
+					Enable: true,
+				}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify all monitors are created
 			Eventually(func(g Gomega) {
@@ -114,8 +108,16 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Unset observability flag to disable the feature
-			patch.Spec.Observability.Enable = false
-			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantNS}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
+					Enable: false,
+				}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors were deleted
 			Eventually(func(g Gomega) {

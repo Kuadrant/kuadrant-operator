@@ -92,9 +92,11 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 	socketPath := fmt.Sprintf("/tmp/kuadrant-test-oop-%d.sock", os.Getpid())
 	defer os.Remove(socketPath)
 
+	// Use cat to read the socket file - this reliably produces stderr output on all platforms
+	// since cat cannot read socket files and will fail with "Operation not supported on socket"
 	oopErrorLog := OOPExtension{
 		name:       "testErrorLog",
-		executable: "/bin/ps",
+		executable: "/bin/cat",
 		socket:     socketPath,
 		service:    newExtensionService(nil, logger),
 		logger:     logger,
@@ -113,12 +115,14 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 	messages := writer.getMessages()
 	logAsString := strings.Join(messages, "\n")
 
-	hasStderrOutput := strings.Contains(strings.ToLower(logAsString), "usage:") ||
-		strings.Contains(strings.ToLower(logAsString), "illegal option")
+	// cat reading a socket file produces platform-specific errors
+	hasStderrOutput := strings.Contains(logAsString, socketPath) ||
+		strings.Contains(strings.ToLower(logAsString), "socket") ||
+		strings.Contains(strings.ToLower(logAsString), "not supported")
 
 	hasErrorMessage := strings.Contains(logAsString, "Extension") &&
 		strings.Contains(logAsString, "finished with an error")
 
 	assert.Assert(t, hasErrorMessage, "Expected process error completion message")
-	assert.Assert(t, hasStderrOutput, "Expected ps stderr output to be captured")
+	assert.Assert(t, hasStderrOutput, "Expected stderr output to be captured")
 }

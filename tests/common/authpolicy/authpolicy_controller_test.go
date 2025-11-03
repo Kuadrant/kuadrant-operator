@@ -523,6 +523,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// Update GW with 2 listeners with direct hostnames
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				patch := client.MergeFrom(gateway.DeepCopy())
 				gateway.Spec.Listeners = []gatewayapiv1.Listener{
 					{
 						Name:     "l1",
@@ -537,7 +538,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Hostname: ptr.To(gatewayapiv1.Hostname(host2)),
 					},
 				}
-				g.Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+				g.Expect(k8sClient.Patch(ctx, gateway, patch)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// Link HTTPRoute to gateway with only 1 hostname
@@ -828,11 +829,12 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
+				patch := client.MergeFrom(gatewayPolicy.DeepCopy())
 				gatewayPolicy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{}
 				gatewayPolicy.Spec.Defaults = nil
 				gatewayPolicy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-				err = k8sClient.Update(ctx, gatewayPolicy)
+				err = k8sClient.Patch(ctx, gatewayPolicy, patch)
 				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
@@ -878,10 +880,11 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
+				patch := client.MergeFrom(gatewayPolicy.DeepCopy())
 				gatewayPolicy.Spec.Overrides = nil
 				gatewayPolicy.Spec.Proper().AuthScheme = tests.BuildBasicAuthScheme()
 				gatewayPolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-				err = k8sClient.Update(ctx, gatewayPolicy)
+				err = k8sClient.Patch(ctx, gatewayPolicy, patch)
 				logf.Log.V(1).Info("Updating AuthPolicy", "key", gatewayPolicyKey.String(), "error", err)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())

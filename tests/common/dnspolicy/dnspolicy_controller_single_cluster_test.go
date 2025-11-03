@@ -80,6 +80,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		//Set single cluster gateway status
 		Eventually(func(g Gomega) {
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+			patch := client.MergeFrom(gateway.DeepCopy())
 			gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
 					Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -110,7 +111,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 					Conditions:     []metav1.Condition{},
 				},
 			}
-			g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			g.Expect(k8sClient.Status().Patch(ctx, gateway, patch)).To(Succeed())
 		}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 		recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)

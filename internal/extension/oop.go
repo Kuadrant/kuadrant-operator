@@ -41,6 +41,7 @@ type OOPExtension struct {
 	executable string
 	socket     string
 	cmd        *exec.Cmd
+	finished   chan struct{}
 	server     *grpc.Server
 	service    extpb.ExtensionServiceServer
 	logger     logr.Logger
@@ -102,21 +103,33 @@ func (p *OOPExtension) Start() error {
 	}
 	p.logger.Info("started")
 
+	// Create channel to signal process completion
+	finished := make(chan struct{})
+
 	go func() {
 		if e := cmd.Wait(); e != nil {
 			p.logger.Error(e, fmt.Sprintf("Extension %q finished with an error", p.name))
 		}
 		// wait for stderr
 		p.monitorWg.Wait()
+		// signal completion
+		close(finished)
 	}()
 
 	// only set this, if we successfully started it all
 	p.cmd = cmd
+	p.finished = finished
 	return nil
 }
 
 func (p *OOPExtension) IsAlive() bool {
 	return p.cmd != nil && p.cmd.Process.Signal(syscall.Signal(0)) == nil
+}
+
+func (p *OOPExtension) Wait() {
+	if p.finished != nil {
+		<-p.finished
+	}
 }
 
 func (p *OOPExtension) Stop() error {
@@ -145,6 +158,7 @@ func (p *OOPExtension) Stop() error {
 		}
 		p.logger.Info("stopped")
 		p.cmd = nil
+		p.finished = nil
 	} else {
 		p.logger.Info("nothing to stop")
 	}

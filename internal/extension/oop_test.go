@@ -22,7 +22,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr/funcr"
 	"gotest.tools/assert"
@@ -106,11 +105,8 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		t.Fatalf("Should have started: %v", err)
 	}
 
-	for oopErrorLog.cmd.ProcessState == nil {
-		time.Sleep(5 * time.Millisecond) // wait for the command to return
-	}
-	// try wait for ps to finish writing its output
-	time.Sleep(50 * time.Millisecond)
+	// Wait for the process to finish
+	oopErrorLog.Wait()
 
 	_ = oopErrorLog.Stop()
 

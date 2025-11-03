@@ -15,9 +15,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/tests"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 var _ = Describe("Observabiltity monitors for envoy gateway", func() {
@@ -88,7 +89,7 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 
 			// Fetch current CR & set observability flag to enable the feature
 			kuadrantNS := getKuadrantNamespace(ctx, testClient())
-			kuadrantCR := &kuadrantv1beta1.Kuadrant{
+			patch := &kuadrantv1beta1.Kuadrant{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "Kuadrant",
 					APIVersion: kuadrantv1beta1.GroupVersion.String(),
@@ -97,12 +98,13 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 					Name:      "kuadrant-sample",
 					Namespace: kuadrantNS,
 				},
+				Spec: kuadrantv1beta1.KuadrantSpec{
+					Observability: kuadrantv1beta1.Observability{
+						Enable: true,
+					},
+				},
 			}
-			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
-			kuadrantCR.Spec.Observability.Enable = true
-			err = testClient().Update(ctx, kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			// Verify all monitors are created
 			Eventually(func(g Gomega) {
@@ -112,13 +114,8 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Unset observability flag to disable the feature
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-				kuadrantCR.Spec.Observability.Enable = false
-				err = testClient().Update(ctx, kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-			}).WithContext(ctx).Should(Succeed())
+			patch.Spec.Observability.Enable = false
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			// Verify monitors were deleted
 			Eventually(func(g Gomega) {

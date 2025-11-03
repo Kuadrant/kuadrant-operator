@@ -79,11 +79,20 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is on", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			patch := &kuadrantv1beta1.Kuadrant{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+					Kind:       "Kuadrant",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant-sample",
+					Namespace: kuadrantInstallationNS,
+				},
+				Spec: kuadrantv1beta1.KuadrantSpec{
+					MTLS: &kuadrantv1beta1.MTLS{Enable: true},
+				},
+			}
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
@@ -119,17 +128,27 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is off", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			patch := &kuadrantv1beta1.Kuadrant{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+					Kind:       "Kuadrant",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant-sample",
+					Namespace: kuadrantInstallationNS,
+				},
+				Spec: kuadrantv1beta1.KuadrantSpec{
+					MTLS: &kuadrantv1beta1.MTLS{Enable: false},
+				},
+			}
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
 		})
+
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}
@@ -143,17 +162,27 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is on and disabled for authorino", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true, Authorino: ptr.To(false)}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			patch := &kuadrantv1beta1.Kuadrant{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+					Kind:       "Kuadrant",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant-sample",
+					Namespace: kuadrantInstallationNS,
+				},
+				Spec: kuadrantv1beta1.KuadrantSpec{
+					MTLS: &kuadrantv1beta1.MTLS{Enable: true, Authorino: ptr.To(false)},
+				},
+			}
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
 		})
+
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}

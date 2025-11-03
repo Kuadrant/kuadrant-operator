@@ -10,10 +10,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/tests"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("Observabiltity monitors for kuadrant components", func() {
@@ -141,12 +142,13 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Fetch current CR & set observability flag to enable the feature
-			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
-			kuadrantCR.Spec.Observability.Enable = true
-			err = testClient().Update(ctx, kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
+			// Set observability flag to enable the feature
+			kuadrantCR.Spec = kuadrantv1beta1.KuadrantSpec{
+				Observability: kuadrantv1beta1.Observability{
+					Enable: true,
+				},
+			}
+			Expect(testClient().Patch(ctx, kuadrantCR, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			// Verify monitors created
 			Eventually(func(g Gomega) {
@@ -185,11 +187,8 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Disable observability feature
-			err = testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
 			kuadrantCR.Spec.Observability.Enable = false
-			err = testClient().Update(ctx, kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(testClient().Patch(ctx, kuadrantCR, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 
 			// Verify monitors deleted
 			Eventually(func(g Gomega) {

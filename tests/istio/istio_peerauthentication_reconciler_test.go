@@ -88,11 +88,21 @@ var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 
 	Context("when mTLS is on", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			patch := &kuadrantv1beta1.Kuadrant{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+					Kind:       "Kuadrant",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kuadrantKey.Name,
+					Namespace: kuadrantKey.Namespace,
+				},
+				Spec: kuadrantv1beta1.KuadrantSpec{
+					MTLS: &kuadrantv1beta1.MTLS{Enable: true},
+				},
+			}
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 		})
 
 		It("peerauthentication is created", func(ctx SpecContext) {
@@ -129,11 +139,21 @@ var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 
 	Context("when mTLS is off", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			patch := &kuadrantv1beta1.Kuadrant{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+					Kind:       "Kuadrant",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kuadrantKey.Name,
+					Namespace: kuadrantKey.Namespace,
+				},
+				Spec: kuadrantv1beta1.KuadrantSpec{
+					MTLS: &kuadrantv1beta1.MTLS{Enable: false},
+				},
+			}
+			Expect(testClient().Patch(ctx, patch, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
 		})
 
 		It("peerauthentication does not exist", func(ctx SpecContext) {

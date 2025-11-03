@@ -290,18 +290,20 @@ var _ = Describe("DNSPolicy controller", func() {
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
+			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.WithProviderSecret(*dnsProviderSecret)
-			g.Expect(k8sClient.Update(ctx, dnsPolicy)).To(Succeed())
+			g.Expect(k8sClient.Patch(ctx, dnsPolicy, patch)).To(Succeed())
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 		// should not allow adding another providerRef
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
+			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.Spec.ProviderRefs = append(dnsPolicy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 				Name: "some-other-provider-secret",
 			})
-			err = k8sClient.Update(ctx, dnsPolicy)
+			err = k8sClient.Patch(ctx, dnsPolicy, patch)
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err).To(MatchError(ContainSubstring("spec.providerRefs: Too many: 2: must have at most 1 items")))
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())

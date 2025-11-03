@@ -7,17 +7,15 @@ Analyze all *_test.go files in the tests directory for common flaky test pattern
 ## Summary: Three Critical Flaky Test Patterns
 
 1. **Pattern 1:** Bare `Expect()` in Eventually/Consistently → Use `g.Expect()`
-2. **Pattern 2:** Get-Modify-Update → Use Patch (SSA or MergeFrom)
+2. **Pattern 2:** Get-Modify-Update → Use Patch with MergeFrom
 3. **Pattern 3:** Status().Update() → Use Status().Patch() with MergeFrom
 
-## When to Use Which Patch Strategy:
+## When to Use Patch Strategy:
 
 | Operation | Strategy | Eventually Needed? | Key Advantage |
 |-----------|----------|-------------------|---------------|
 | Status updates | Status().Patch() with MergeFrom | Yes | Prevents losing concurrent status changes |
-| Removing fields (= nil) | MergeFrom Patch | Yes | Only MergeFrom can remove fields |
-| Kuadrant CR add/update | Server-Side Apply (SSA) | No | Simpler - no Get, no Eventually needed |
-| Complex spec updates | MergeFrom Patch | Yes | Works for all cases, safer |
+| Spec updates | Patch with MergeFrom | Yes | Works for all cases - add, update, remove fields |
 
 ## Pattern 1: Expect() without Gomega parameter in Eventually/Consistently blocks
 
@@ -58,9 +56,8 @@ Consistently(func(g Gomega) []kuadrantdnsv1alpha1.DNSRecord {
 
 ## Pattern 2: Get-Modify-Update Antipattern (Must Use Patch)
 
-**THE RULE:** Never use Get-Modify-Update pattern. Use Patch instead, choosing the right patch strategy:
-- **Server-Side Apply (SSA)** `client.Apply`: For adding/updating fields (preferred for simple cases)
-- **MergeFrom Patch** `client.MergeFrom`: For removing fields or complex updates requiring current state
+**THE RULE:** Never use Get-Modify-Update pattern. Always use Patch with MergeFrom strategy:
+- **MergeFrom Patch** `client.MergeFrom`: For all spec updates (add, update, or remove fields)
 
 ### Why This Causes Flakes:
 
@@ -84,15 +81,13 @@ This results in "resource version conflict" errors and flaky tests. Even with Ev
      b) `Eventually\(func` or `Consistently\(func` in those 30 lines (indicates proper wrapping)
 
 3. **Classify the violation:**
-   - **Found .Get() + NO Eventually:** CRITICAL - Must use Patch (no Eventually needed with SSA)
+   - **Found .Get() + NO Eventually:** CRITICAL - Must use Patch with MergeFrom in Eventually
    - **Found .Get() + Has Eventually + Uses .Update():** HIGH - Should use Patch instead of Update
    - **No .Get() found:** Not a violation (skip this Update call)
 
-4. **Determine recommended fix based on operation:**
-   - Examine what's being modified in the code
-   - **If setting fields to nil or removing:** Recommend MergeFrom Patch
-   - **If only adding/updating fields (especially Kuadrant CR):** Recommend Server-Side Apply
-   - **If unsure or complex:** Recommend MergeFrom Patch (works for all cases)
+4. **Recommended fix:**
+   - Always recommend MergeFrom Patch wrapped in Eventually block
+   - This works for all operations: add, update, or remove fields
 
 ### Bad vs Good Examples:
 
@@ -134,28 +129,7 @@ kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())  // ❌❌ CRITICAL! Update is OUTSIDE Eventually!
 ```
 
-**✅ GOOD Example 2 (Server-Side Apply for adding/updating - preferred for Kuadrant CR):**
-```go
-// No Get needed - construct the desired state directly
-// No Eventually needed - SSA handles conflicts automatically
-patch := &kuadrantv1beta1.Kuadrant{
-    TypeMeta: metav1.TypeMeta{
-        APIVersion: kuadrantv1beta1.GroupVersion.String(),
-        Kind:       "Kuadrant",
-    },
-    ObjectMeta: metav1.ObjectMeta{
-        Name:      "kuadrant-sample",
-        Namespace: kuadrantInstallationNS,
-    },
-    Spec: kuadrantv1beta1.KuadrantSpec{
-        MTLS: &kuadrantv1beta1.MTLS{Enable: true},
-    },
-}
-Expect(k8sClient.Patch(ctx, patch, client.Apply,
-    client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())  // ✅ Simpler!
-```
-
-**✅ ALSO GOOD (MergeFrom works too, but requires Eventually):**
+**✅ GOOD (MergeFrom Patch in Eventually):**
 ```go
 Eventually(func(g Gomega) {
     kuadrantObj := &kuadrantv1beta1.Kuadrant{}
@@ -163,7 +137,7 @@ Eventually(func(g Gomega) {
     patch := client.MergeFrom(kuadrantObj.DeepCopy())
     kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
     g.Expect(k8sClient.Patch(ctx, kuadrantObj, patch)).To(Succeed())
-}).WithContext(ctx).Should(Succeed())  // ✅ Safe but more verbose
+}).WithContext(ctx).Should(Succeed())  // ✅ Safe and reliable
 ```
 
 ## Pattern 3: Status Updates Must Use Patch
@@ -256,44 +230,17 @@ Eventually(func(g Gomega) {
    - If `.Get` found + Has `Eventually\(func` → **HIGH** violation
      - Update is inside Eventually but should use Patch
 
-4. **Determine recommended fix - analyze the modification:**
-   - Read the code between Get and Update to see what's being modified
-   - Look for these patterns:
-     - `= nil` → Field removal → **Use MergeFrom**
-     - `= ""` or `= []` → Empty value → **Use MergeFrom**
-     - `= &SomeType{...}` → Adding/updating field → **Consider SSA**
-     - Multiple field changes → **Consider MergeFrom for safety**
-
-5. **Provide recommendation:**
-   - **For Kuadrant CR (small spec, adding/updating):**
+4. **Provide recommendation:**
+   - Always recommend MergeFrom Patch in Eventually block:
      ```go
-     // Server-Side Apply (SSA) - Preferred for simple add/update
-     patch := &kuadrantv1beta1.Kuadrant{
-         TypeMeta: metav1.TypeMeta{
-             APIVersion: kuadrantv1beta1.GroupVersion.String(),
-             Kind:       "Kuadrant",
-         },
-         ObjectMeta: metav1.ObjectMeta{Name: "...", Namespace: "..."},
-         Spec: kuadrantv1beta1.KuadrantSpec{
-             FieldToUpdate: value,
-         },
-     }
-     Expect(k8sClient.Patch(ctx, patch, client.Apply,
-         client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
-     ```
-
-   - **For removing fields or complex updates:**
-     ```go
-     // MergeFrom Patch - Required for field removal
+     // MergeFrom Patch - Works for all operations
      Eventually(func(g Gomega) {
          g.Expect(k8sClient.Get(ctx, key, obj)).To(Succeed())
          patch := client.MergeFrom(obj.DeepCopy())
-         obj.Spec.Field = nil  // or any update
+         obj.Spec.Field = value  // add, update, or remove (nil)
          g.Expect(k8sClient.Patch(ctx, obj, patch)).To(Succeed())
      }).WithContext(ctx).Should(Succeed())
      ```
-
-   - **If unsure:** Recommend MergeFrom (works for all cases)
 
 ### Phase 3: Pattern 3 - Status Updates
 
@@ -368,14 +315,11 @@ Code snippet (5-10 lines showing the problem)
 - **Be thorough:** Missing a flaky test is worse than a false positive
 - **Context matters:** Read 30 lines before Update/Status().Update calls to properly classify
 - **Status updates:** Status().Update() should ALWAYS use Status().Patch() with MergeFrom - no exceptions
-- **Spec updates - choose the right tool:**
-  - **Server-Side Apply (SSA):** Preferred for Kuadrant CR and simple add/update operations
-    - Advantages: No Get needed, no Eventually needed, simpler code
-    - Limitations: Cannot remove fields (set to nil), requires TypeMeta
-  - **MergeFrom Patch:** Required for removing fields or complex updates
-    - Advantages: Works for all operations (add, update, remove), no TypeMeta needed
+- **Spec updates:** Always use Patch with MergeFrom strategy
+  - **MergeFrom Patch:** Works for all operations (add, update, remove fields)
     - Must be in Eventually block with Get
-- **Eventually wrapper:** MergeFrom patterns MUST be in Eventually blocks; SSA doesn't need Eventually
+    - Patch created AFTER Get: `patch := client.MergeFrom(obj.DeepCopy())`
+- **Eventually wrapper:** MergeFrom patterns MUST be in Eventually blocks
 - **Gomega parameter:** Eventually/Consistently blocks making assertions MUST use `g Gomega` parameter
 - **Manual verification:** Some edge cases may need manual review to avoid false positives
 
@@ -383,8 +327,8 @@ Code snippet (5-10 lines showing the problem)
 
 | Violation | Severity | Recommended Fix |
 |-----------|----------|-----------------|
-| Get-Update outside Eventually | CRITICAL | Use SSA (if adding/updating) or MergeFrom in Eventually (if removing) |
-| Get-Update inside Eventually | HIGH | Change to Patch: SSA (simple) or MergeFrom (complex/remove) |
+| Get-Update outside Eventually | CRITICAL | Use MergeFrom Patch in Eventually block |
+| Get-Update inside Eventually | HIGH | Change Update to Patch with MergeFrom |
 | Status().Update() anywhere | HIGH | Change to Status().Patch() with MergeFrom (always) |
 | Bare Expect() in Eventually | MEDIUM | Add `g Gomega` parameter, use `g.Expect()` |
 
@@ -392,10 +336,6 @@ Code snippet (5-10 lines showing the problem)
 
 ```
 Is it a Status update?
-├─ YES → Use Status().Patch() with MergeFrom (always)
-└─ NO → Is it removing a field (= nil) or setting empty value?
-    ├─ YES → Use MergeFrom Patch in Eventually block
-    └─ NO → Is it Kuadrant CR or simple add/update?
-        ├─ YES → Prefer Server-Side Apply (SSA) - simpler, no Eventually needed
-        └─ NO → Use MergeFrom Patch in Eventually block (safer for complex cases)
+├─ YES → Use Status().Patch() with MergeFrom in Eventually block
+└─ NO → Use Patch with MergeFrom in Eventually block
 ```

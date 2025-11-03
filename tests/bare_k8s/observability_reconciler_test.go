@@ -25,6 +25,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 	)
 
 	const kuadrantNamespace = "kuadrant-system"
+	const kuadrantCRName = "local"
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
@@ -42,7 +43,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 					APIVersion: kuadrantv1beta1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "local",
+					Name:      kuadrantCRName,
 					Namespace: testNamespace,
 				},
 			}
@@ -143,12 +144,14 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Set observability flag to enable the feature
-			kuadrantCR.Spec = kuadrantv1beta1.KuadrantSpec{
-				Observability: kuadrantv1beta1.Observability{
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
 					Enable: true,
-				},
-			}
-			Expect(testClient().Patch(ctx, kuadrantCR, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
+				}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors created
 			Eventually(func(g Gomega) {
@@ -187,8 +190,14 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Disable observability feature
-			kuadrantCR.Spec.Observability.Enable = false
-			Expect(testClient().Patch(ctx, kuadrantCR, client.Apply, client.ForceOwnership, client.FieldOwner("test"))).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
+					Enable: false,
+				}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors deleted
 			Eventually(func(g Gomega) {

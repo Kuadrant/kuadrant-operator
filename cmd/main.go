@@ -17,10 +17,12 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"go.uber.org/zap/zapcore"
 
@@ -110,6 +112,31 @@ func printControllerMetaInfo() {
 }
 
 func main() {
+	// Setup OpenTelemetry logging if enabled
+	// Use context.Background() for initialization - the signal context is for app lifecycle only
+	otelConfig := log.NewOTelConfigFromEnv(version, gitSHA, dirty)
+	if otelConfig.Enabled {
+		if otelLogger, err := log.SetupOTelLogging(context.Background(), otelConfig); err != nil {
+			log.Log.Error(err, "Failed to setup OpenTelemetry logging, continuing with Zap")
+		} else {
+			log.Log.Info("OpenTelemetry logging enabled",
+				"exportEndpoint", otelConfig.Endpoint,
+				"gitSHA", gitSHA,
+				"dirty", dirty)
+			log.SetLogger(otelLogger)
+
+			// Ensure OTel logging is shut down gracefully on exit
+			defer func() {
+				// Create a fresh context with timeout for shutdown
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer shutdownCancel()
+				if err := log.ShutdownOTelLogging(shutdownCtx); err != nil {
+					log.Log.Error(err, "Failed to shutdown OpenTelemetry logging")
+				}
+			}()
+		}
+	}
+
 	printControllerMetaInfo()
 
 	setupLog := log.Log

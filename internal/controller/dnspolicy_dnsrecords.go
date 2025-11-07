@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/env"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -18,6 +19,16 @@ import (
 const (
 	LabelListenerReference = "kuadrant.io/listener-name"
 )
+
+func DNSPolicyDefaultTTL() int {
+	var ttl, _ = env.GetInt("DNS_DEFAULT_TTL", builder.DefaultTTL)
+	return ttl
+}
+
+func DNSPolicyDefaultCnameTTL() int {
+	var ttl, _ = env.GetInt("DNS_DEFAULT_LB_TTL", builder.DefaultLoadBalancedTTL)
+	return ttl
+}
 
 func dnsRecordName(gatewayName, listenerName string) string {
 	return fmt.Sprintf("%s-%s", gatewayName, listenerName)
@@ -134,7 +145,9 @@ func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, p
 	if err := gatewayWrapper.RemoveExcludedStatusAddresses(policy); err != nil {
 		return nil, fmt.Errorf("failed to reconcile gateway dns records error: %w ", err)
 	}
-	endpointBuilder := builder.NewEndpointsBuilder(gatewayWrapper, hostname)
+	endpointBuilder := builder.NewEndpointsBuilder(gatewayWrapper, hostname).
+		SetDefaultTTL(DNSPolicyDefaultTTL()).
+		SetDefaultLoadBalancedTTL(DNSPolicyDefaultCnameTTL())
 
 	if policy.Spec.LoadBalancing != nil {
 		endpointBuilder.WithLoadBalancingFor(

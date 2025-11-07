@@ -18,3 +18,81 @@ Apart from log level, the operator can output messages to the logs in 2 differen
 - `development`: more human-readable outputs, extra stack traces and logging info, plus extra values output as JSON, in the format: `<timestamp-iso-8601>\t<log-level>\t<logger>\t<message>\t{extra-values-as-json}`
 
 To configure the desired log mode, set the environment variable `LOG_MODE` to one of the supported values listed above. Default log level is `production`.
+
+## OpenTelemetry Logging
+
+The Kuadrant operator supports exporting logs to OpenTelemetry (OTel) collectors for integration with observability backends.
+
+### Quick Start
+
+For a hands-on quick start guide, see **[examples/otel/README.md](../../examples/otel/README.md)** which provides step-by-step instructions to get OTel logging running in under 5 minutes.
+
+### Configuration
+
+OpenTelemetry logging is disabled by default and can be enabled via environment variables:
+
+| Environment Variable | Description | Default |
+|---------------------|-------------|---------|
+| `OTEL_LOGS_ENABLED` | Enable OpenTelemetry logging | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (HTTP) | - |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | OTLP logs-specific endpoint (overrides `OTEL_EXPORTER_OTLP_ENDPOINT`) | - |
+| `OTEL_SERVICE_NAME` | Service name for telemetry data | `kuadrant-operator` |
+| `OTEL_SERVICE_VERSION` | Service version for telemetry data | Build version (from ldflags) |
+
+### Architecture
+
+**Dual Logging Mode:**
+
+When OTel is enabled (`OTEL_LOGS_ENABLED=true`), the operator uses a tee logger that writes to both destinations simultaneously:
+
+```
+Application Code (log.Log.Info(...))
+        ↓
+    logr.Logger (tee sink)
+        ↓
+    ┌───────────────────┴────────────────────┐
+    ↓                                        ↓
+Zap Logger                            OTel Logger
+(console output)                    (remote export)
+    ↓                                        ↓
+stdout (respects                    OTLP HTTP → Collector
+LOG_LEVEL & LOG_MODE)               (all logs with metadata)
+```
+
+**Key Features:**
+- **Dual Output**: Logs go to both console (Zap) and remote collector (OTel) simultaneously
+- **Separate Filtering**: Zap logger respects `LOG_LEVEL`/`LOG_MODE` for console, OTel exports everything for remote analysis
+- **No Code Changes**: Controllers use standard `logr` interface; dual logging happens transparently
+- **Resource Metadata**: Logs include service name/version, git SHA, Go version, and more
+- **Batch Export**: Remote logs are batched and exported asynchronously to minimize performance impact
+- **Graceful Shutdown**: Ensures all pending logs are flushed before termination
+- **Fallback**: If OTel setup fails, continues with Zap-only logging
+
+### Deployment Configuration
+
+When deploying the operator, configure OpenTelemetry logging via the deployment manifest:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuadrant-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        image: quay.io/kuadrant/kuadrant-operator:latest
+        env:
+        - name: OTEL_LOGS_ENABLED
+          value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "otel-collector.observability.svc.cluster.local:4318"
+        - name: OTEL_SERVICE_NAME
+          value: "kuadrant-operator"
+        # Optional: Control console output separately
+        - name: LOG_LEVEL
+          value: "info"  # Console shows info+, remote gets everything
+        - name: LOG_MODE
+          value: "production"  # JSON format for console
+```

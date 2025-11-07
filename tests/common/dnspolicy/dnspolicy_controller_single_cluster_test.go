@@ -20,6 +20,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -185,7 +186,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 						"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
 						"RecordType":    Equal("A"),
 						"SetIdentifier": Equal(""),
-						"RecordTTL":     Equal(externaldns.TTL(60)),
+						"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 					})),
 				))
 				g.Expect(dnsRecord.Status.OwnerID).ToNot(BeEmpty())
@@ -200,7 +201,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 						"Targets":       ContainElements(tests.IPAddressOne, tests.IPAddressTwo),
 						"RecordType":    Equal("A"),
 						"SetIdentifier": Equal(""),
-						"RecordTTL":     Equal(externaldns.TTL(60)),
+						"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 					})),
 				))
 				g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
@@ -245,14 +246,14 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf(tests.IPAddressOne, tests.IPAddressTwo),
 							"RecordType":    Equal("A"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(60)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
 							"DNSName":          Equal("ie.klb.test." + domain),
 							"Targets":          ConsistOf(clusterHash + "-" + gwHash + "." + "klb.test." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal(clusterHash + "-" + gwHash + "." + "klb.test." + domain),
-							"RecordTTL":        Equal(externaldns.TTL(60)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -260,7 +261,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":          ConsistOf("ie.klb.test." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal("IE"),
-							"RecordTTL":        Equal(externaldns.TTL(300)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -268,7 +269,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":          ConsistOf("ie.klb.test." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal("default"),
-							"RecordTTL":        Equal(externaldns.TTL(300)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -276,7 +277,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf("klb.test." + domain),
 							"RecordType":    Equal("CNAME"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(300)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 						})),
 					))
 					g.Expect(dnsRecord.Status.OwnerID).ToNot(BeEmpty())
@@ -291,14 +292,14 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf(tests.IPAddressOne, tests.IPAddressTwo),
 							"RecordType":    Equal("A"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(60)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
 							"DNSName":          Equal("ie.klb." + domain),
 							"Targets":          ConsistOf(clusterHash + "-" + gwHash + "." + "klb." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal(clusterHash + "-" + gwHash + "." + "klb." + domain),
-							"RecordTTL":        Equal(externaldns.TTL(60)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -306,7 +307,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":          ConsistOf("ie.klb." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal("default"),
-							"RecordTTL":        Equal(externaldns.TTL(300)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -314,7 +315,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":          ConsistOf("ie.klb." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal("IE"),
-							"RecordTTL":        Equal(externaldns.TTL(300)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -322,7 +323,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf("klb." + domain),
 							"RecordType":    Equal("CNAME"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(300)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 						})),
 					))
 					g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
@@ -365,14 +366,14 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf(tests.IPAddressOne, tests.IPAddressTwo),
 							"RecordType":    Equal("A"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(60)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
 							"DNSName":          Equal("ie.klb.test." + domain),
 							"Targets":          ConsistOf(clusterHash + "-" + gwHash + "." + "klb.test." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal(clusterHash + "-" + gwHash + "." + "klb.test." + domain),
-							"RecordTTL":        Equal(externaldns.TTL(60)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -380,7 +381,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":          ConsistOf("ie.klb.test." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal("IE"),
-							"RecordTTL":        Equal(externaldns.TTL(300)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -388,7 +389,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf("klb.test." + domain),
 							"RecordType":    Equal("CNAME"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(300)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 						})),
 					))
 					g.Expect(dnsRecord.Status.OwnerID).ToNot(BeEmpty())
@@ -403,14 +404,14 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf(tests.IPAddressOne, tests.IPAddressTwo),
 							"RecordType":    Equal("A"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(60)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
 							"DNSName":          Equal("ie.klb." + domain),
 							"Targets":          ConsistOf(clusterHash + "-" + gwHash + "." + "klb." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal(clusterHash + "-" + gwHash + "." + "klb." + domain),
-							"RecordTTL":        Equal(externaldns.TTL(60)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -418,7 +419,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":          ConsistOf("ie.klb." + domain),
 							"RecordType":       Equal("CNAME"),
 							"SetIdentifier":    Equal("IE"),
-							"RecordTTL":        Equal(externaldns.TTL(300)),
+							"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 							"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 						})),
 						PointTo(MatchFields(IgnoreExtras, Fields{
@@ -426,7 +427,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 							"Targets":       ConsistOf("klb." + domain),
 							"RecordType":    Equal("CNAME"),
 							"SetIdentifier": Equal(""),
-							"RecordTTL":     Equal(externaldns.TTL(300)),
+							"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 						})),
 					))
 					g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())

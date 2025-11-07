@@ -26,7 +26,6 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otellogr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -128,18 +127,11 @@ func SetupOTelLogging(ctx context.Context, config *OTelConfig) (logr.Logger, err
 		return logr.Logger{}, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
-	// TODO: This is good for local development without needing to look logs remotely but do we want to keep this in production?
-	// Create console/stdout exporter
-	stdoutExporter, err := stdoutlog.New()
-	if err != nil {
-		return logr.Logger{}, fmt.Errorf("failed to create stdout exporter: %w", err)
-	}
-
 	// Create logger provider with OTLP exporter
+	// Note: Console output is handled by Zap logger in dual-logging mode
 	loggerProvider = sdklog.NewLoggerProvider(
 		sdklog.WithResource(res),
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(otlpExporter)),
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(stdoutExporter)),
 	)
 
 	// Set as global logger provider

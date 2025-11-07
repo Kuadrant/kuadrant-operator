@@ -2,6 +2,10 @@
 
 Get OpenTelemetry logging running in under 5 minutes.
 
+**Dual Logging Mode:** When OTel is enabled, logs are sent to **both** destinations:
+- **Console (stdout)** - Zap logger respects `LOG_LEVEL` and `LOG_MODE` for readable local output
+- **Remote (OTLP)** - OTel exporter sends all logs to collector for observability backends
+
 ## Prerequisites
 
 - Docker installed

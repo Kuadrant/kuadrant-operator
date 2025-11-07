@@ -93,6 +93,7 @@ func init() {
 
 	sync := zapcore.Lock(zapcore.AddSync(os.Stdout))
 
+	// Create Zap logger (always used for console output)
 	logger := log.NewLogger(
 		log.SetLevel(log.ToLevel(logLevel)),
 		log.SetMode(log.ToMode(logMode)),
@@ -117,13 +118,17 @@ func main() {
 	otelConfig := log.NewOTelConfigFromEnv(version, gitSHA, dirty)
 	if otelConfig.Enabled {
 		if otelLogger, err := log.SetupOTelLogging(context.Background(), otelConfig); err != nil {
-			log.Log.Error(err, "Failed to setup OpenTelemetry logging, continuing with Zap")
+			log.Log.Error(err, "Failed to setup OpenTelemetry logging, continuing with Zap only")
 		} else {
 			log.Log.Info("OpenTelemetry logging enabled",
 				"exportEndpoint", otelConfig.Endpoint,
 				"gitSHA", gitSHA,
 				"dirty", dirty)
-			log.SetLogger(otelLogger)
+
+			// Use tee logger: Zap for console (respects LOG_LEVEL/LOG_MODE) + OTel for remote
+			zapLogger := log.Log
+			combinedLogger := log.NewTeeLogger(zapLogger, otelLogger)
+			log.SetLogger(combinedLogger)
 
 			// Ensure OTel logging is shut down gracefully on exit
 			defer func() {

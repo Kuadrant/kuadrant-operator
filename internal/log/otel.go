@@ -19,6 +19,7 @@ package log
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 
@@ -84,9 +85,12 @@ func NewOTelConfigFromEnv(version, gitSHA, dirty string) *OTelConfig {
 // loggerProvider holds the global logger provider for shutdown
 var loggerProvider *sdklog.LoggerProvider
 
-// SetupOTelLogging sets up OpenTelemetry logging with the given configuration
+// SetupOTelLogging sets up OpenTelemetry logging with the given configuration.
+// It creates a LoggerProvider with two exporters:
+// - OTLP exporter for remote telemetry collection
+// - Zap exporter for formatted console output
 // Returns a logr.Logger that bridges to OpenTelemetry
-func SetupOTelLogging(ctx context.Context, config *OTelConfig) (logr.Logger, error) {
+func SetupOTelLogging(ctx context.Context, config *OTelConfig, zapLevel Level, zapMode Mode, zapWriter io.Writer) (logr.Logger, error) {
 	if !config.Enabled {
 		return logr.Logger{}, fmt.Errorf("OpenTelemetry logging is not enabled")
 	}
@@ -127,11 +131,16 @@ func SetupOTelLogging(ctx context.Context, config *OTelConfig) (logr.Logger, err
 		return logr.Logger{}, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
-	// Create logger provider with OTLP exporter
-	// Note: Console output is handled by Zap logger in dual-logging mode
+	// Create Zap exporter for console output
+	stdOutExporter := newZapExporter(zapLevel, zapMode, zapWriter)
+
+	// Create logger provider with both exporters:
+	// - OTLP for remote collection (all logs)
+	// - Zap for console output (respects LOG_LEVEL and LOG_MODE)
 	loggerProvider = sdklog.NewLoggerProvider(
 		sdklog.WithResource(res),
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(otlpExporter)),
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(stdOutExporter)),
 	)
 
 	// Set as global logger provider

@@ -48,6 +48,7 @@ import (
 	"k8s.io/utils/env"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -57,6 +58,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
+	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
 	//+kubebuilder:scaffold:imports
 )
@@ -167,6 +169,30 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.Parse()
+
+	// Initialize OpenTelemetry metrics provider
+	// This bridges all Prometheus metrics (controller-runtime + custom metrics)
+	// to OTLP export without requiring any changes to existing metrics code
+	metricsConfig := metrics.NewConfig(ctrlmetrics.Registry)
+	metricsProvider, err := metrics.NewProvider(context.Background(), otelConfig, metricsConfig)
+	if err != nil {
+		setupLog.Error(err, "unable to create metrics provider")
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsProvider.Shutdown(shutdownCtx); err != nil {
+			setupLog.Error(err, "failed to shutdown metrics provider")
+		}
+	}()
+
+	if metricsProvider.IsOTLPEnabled() {
+		setupLog.Info("OpenTelemetry metrics export enabled",
+			"endpoint", otelConfig.MetricsEndpoint(),
+			"interval", metricsConfig.ExportInterval,
+		)
+	}
 
 	options := ctrl.Options{
 		Scheme:                 scheme,

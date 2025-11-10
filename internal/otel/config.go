@@ -48,3 +48,11 @@ func (c *Config) LogsEndpoint() string {
 	}
 	return c.Endpoint
 }
+
+// MetricsEndpoint returns the endpoint for metrics, with signal-specific override support
+func (c *Config) MetricsEndpoint() string {
+	if endpoint := env.GetString("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", ""); endpoint != "" {
+		return endpoint
+	}
+	return c.Endpoint
+}

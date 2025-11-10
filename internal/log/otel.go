@@ -20,67 +20,15 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"runtime"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/bridges/otellogr"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+
+	"github.com/kuadrant/kuadrant-operator/internal/otel"
 )
-
-// OTelConfig holds configuration for OpenTelemetry logging
-type OTelConfig struct {
-	// Enabled determines if OpenTelemetry logging is enabled
-	Enabled bool
-	// Endpoint is the OTLP endpoint to send logs to
-	Endpoint string
-	// ServiceName is the name of the service
-	ServiceName string
-	// ServiceVersion is the version of the service
-	ServiceVersion string
-	// GitSHA is the git commit SHA of the build
-	GitSHA string
-	// GitDirty indicates if the build had uncommitted changes
-	GitDirty string
-}
-
-// NewOTelConfigFromEnv creates OTelConfig from environment variables
-// version, gitSHA, and dirty should be build information injected via ldflags
-func NewOTelConfigFromEnv(version, gitSHA, dirty string) *OTelConfig {
-	// Check if OTel logging is explicitly enabled
-	enabled := os.Getenv("OTEL_LOGS_ENABLED") == "true"
-
-	// Get endpoint, preferring logs-specific endpoint
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-	if endpoint == "" {
-		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	}
-
-	serviceName := os.Getenv("OTEL_SERVICE_NAME")
-	if serviceName == "" {
-		serviceName = "kuadrant-operator"
-	}
-
-	// Use the build version, but allow override via environment variable
-	serviceVersion := os.Getenv("OTEL_SERVICE_VERSION")
-	if serviceVersion == "" {
-		serviceVersion = version
-	}
-
-	return &OTelConfig{
-		Enabled:        enabled,
-		Endpoint:       endpoint,
-		ServiceName:    serviceName,
-		ServiceVersion: serviceVersion,
-		GitSHA:         gitSHA,
-		GitDirty:       dirty,
-	}
-}
 
 // loggerProvider holds the global logger provider for shutdown
 var loggerProvider *sdklog.LoggerProvider
@@ -90,43 +38,25 @@ var loggerProvider *sdklog.LoggerProvider
 // - OTLP exporter for remote telemetry collection
 // - Zap exporter for formatted console output
 // Returns a logr.Logger that bridges to OpenTelemetry
-func SetupOTelLogging(ctx context.Context, config *OTelConfig, zapLevel Level, zapMode Mode, zapWriter io.Writer) (logr.Logger, error) {
+func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, zapMode Mode, zapWriter io.Writer) (logr.Logger, error) {
 	if !config.Enabled {
 		return logr.Logger{}, fmt.Errorf("OpenTelemetry logging is not enabled")
 	}
 
-	// Build resource attributes
-	attrs := []attribute.KeyValue{
-		semconv.ServiceName(config.ServiceName),
-		semconv.ServiceVersion(config.ServiceVersion),
-	}
-
-	// Add VCS (version control system) attributes
-	if config.GitSHA != "" {
-		attrs = append(attrs, attribute.String("vcs.revision", config.GitSHA))
-	}
-	if config.GitDirty != "" {
-		attrs = append(attrs, attribute.String("vcs.dirty", config.GitDirty))
-	}
-
-	// Add build information
-	attrs = append(attrs, attribute.String("build.go.version", runtime.Version()))
-
-	// Create resource with service information
-	res, err := resource.New(ctx,
-		resource.WithAttributes(attrs...),
-		resource.WithFromEnv(),
-		resource.WithTelemetrySDK(),
-	)
+	// Create shared resource for service identity (used across all signals)
+	res, err := otel.NewResource(ctx, config)
 	if err != nil {
 		return logr.Logger{}, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Create OTLP HTTP exporter
-	otlpExporter, err := otlploghttp.New(ctx,
-		otlploghttp.WithEndpoint(config.Endpoint),
-		otlploghttp.WithInsecure(), // TODO: Use HTTP instead of HTTPS for local development
-	)
+	// Create OTLP HTTP exporter for remote telemetry
+	opts := []otlploghttp.Option{
+		otlploghttp.WithEndpoint(config.LogsEndpoint()),
+	}
+	if config.Insecure {
+		opts = append(opts, otlploghttp.WithInsecure())
+	}
+	otlpExporter, err := otlploghttp.New(ctx, opts...)
 	if err != nil {
 		return logr.Logger{}, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}

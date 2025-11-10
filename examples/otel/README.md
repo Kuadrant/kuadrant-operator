@@ -24,7 +24,7 @@ docker compose -f examples/otel/docker-compose.otel.yaml up -d
 ### 2. Run Operator with OTel Logging
 
 ```bash
-export OTEL_LOGS_ENABLED=true
+export OTEL_ENABLED=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4319
 export OTEL_SERVICE_NAME=kuadrant-operator
 make run
@@ -42,14 +42,16 @@ You should see log entries being received and processed.
 
 ## Environment Variables
 
-| Variable                      | Required | Default             | Description                                        |
-|-------------------------------|----------|---------------------|----------------------------------------------------|
-| `OTEL_LOGS_ENABLED`           | No       | `false`             | Enable OpenTelemetry logging                       |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Yes*     | -                   | OTLP collector endpoint                            |
-| `OTEL_SERVICE_NAME`           | No       | `kuadrant-operator` | Service name                                       |
-| `OTEL_SERVICE_VERSION`        | No       | Build version       | Service version (defaults to version from ldflags) |
+| Variable                              | Required | Default             | Description                                        |
+|---------------------------------------|----------|---------------------|----------------------------------------------------|
+| `OTEL_ENABLED`                        | No       | `false`             | Enable OpenTelemetry                               |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`         | Yes*     | `localhost:4318`    | OTLP collector endpoint (default for all signals)  |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`    | No       | -                   | Override endpoint specifically for logs            |
+| `OTEL_EXPORTER_OTLP_INSECURE`         | No       | `true`              | Disable TLS for OTLP export (for local dev)        |
+| `OTEL_SERVICE_NAME`                   | No       | `kuadrant-operator` | Service name                                       |
+| `OTEL_SERVICE_VERSION`                | No       | Build version       | Service version (defaults to version from ldflags) |
 
-\* Required when `OTEL_LOGS_ENABLED=true`
+\* Required when `OTEL_ENABLED=true`
 
 ## Kubernetes Deployment
 
@@ -57,10 +59,12 @@ Add to your operator deployment:
 
 ```yaml
 env:
-  - name: OTEL_LOGS_ENABLED
+  - name: OTEL_ENABLED
     value: "true"
   - name: OTEL_EXPORTER_OTLP_ENDPOINT
     value: "otel-collector.observability.svc.cluster.local:4318"
+  - name: OTEL_EXPORTER_OTLP_INSECURE
+    value: "false"  # Use TLS in production
   - name: OTEL_SERVICE_NAME
     value: "kuadrant-operator"
 ```

@@ -57,6 +57,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
+	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -114,9 +115,8 @@ func printControllerMetaInfo() {
 }
 
 func main() {
-	// Setup OpenTelemetry logging if enabled
-	// Use context.Background() for initialization - the signal context is for app lifecycle only
-	otelConfig := log.NewOTelConfigFromEnv(version, gitSHA, dirty)
+	// Setup OpenTelemetry if enabled
+	otelConfig := kuadrantOtel.NewConfig(gitSHA, dirty, version)
 	if otelConfig.Enabled {
 		// Setup OTel logging with zap exporter for console output
 		otelLogger, err := log.SetupOTelLogging(

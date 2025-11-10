@@ -64,9 +64,10 @@ var (
 	scheme   = k8sruntime.NewScheme()
 	logLevel = env.GetString("LOG_LEVEL", "info")
 	logMode  = env.GetString("LOG_MODE", "production")
-	gitSHA   string // value injected in compilation-time
-	dirty    string // value injected in compilation-time
-	version  string // value injected in compilation-time
+	gitSHA   string              // value injected in compilation-time
+	dirty    string              // value injected in compilation-time
+	version  string              // value injected in compilation-time
+	sync     zapcore.WriteSyncer // logger output sync
 )
 
 func init() {
@@ -91,7 +92,7 @@ func init() {
 	utilruntime.Must(istiosecurity.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
-	sync := zapcore.Lock(zapcore.AddSync(os.Stdout))
+	sync = zapcore.Lock(zapcore.AddSync(os.Stdout))
 
 	// Create Zap logger (always used for console output)
 	logger := log.NewLogger(
@@ -117,7 +118,15 @@ func main() {
 	// Use context.Background() for initialization - the signal context is for app lifecycle only
 	otelConfig := log.NewOTelConfigFromEnv(version, gitSHA, dirty)
 	if otelConfig.Enabled {
-		if otelLogger, err := log.SetupOTelLogging(context.Background(), otelConfig); err != nil {
+		// Setup OTel logging with zap exporter for console output
+		otelLogger, err := log.SetupOTelLogging(
+			context.Background(),
+			otelConfig,
+			log.ToLevel(logLevel),
+			log.ToMode(logMode),
+			sync,
+		)
+		if err != nil {
 			log.Log.Error(err, "Failed to setup OpenTelemetry logging, continuing with Zap only")
 		} else {
 			log.Log.Info("OpenTelemetry logging enabled",
@@ -125,10 +134,10 @@ func main() {
 				"gitSHA", gitSHA,
 				"dirty", dirty)
 
-			// Use tee logger: Zap for console (respects LOG_LEVEL/LOG_MODE) + OTel for remote
-			zapLogger := log.Log
-			combinedLogger := log.NewTeeLogger(zapLogger, otelLogger)
-			log.SetLogger(combinedLogger)
+			// Use OTel logger which internally uses:
+			// - Zap exporter for console (respects LOG_LEVEL/LOG_MODE)
+			// - OTLP exporter for remote collection
+			log.SetLogger(otelLogger)
 
 			// Ensure OTel logging is shut down gracefully on exit
 			defer func() {

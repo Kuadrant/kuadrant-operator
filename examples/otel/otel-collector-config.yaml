@@ -1,0 +1,40 @@
+# OpenTelemetry Collector configuration for Kuadrant Operator
+# Receives OTLP metrics and logs them to console for local development
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 10s
+
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local
+        action: upsert
+
+exporters:
+  # Debug exporter - prints metrics to console
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # Prometheus exporter - exposes metrics for Prometheus to scrape
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      collector: otel
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [debug, prometheus]

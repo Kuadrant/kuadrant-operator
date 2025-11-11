@@ -1,0 +1,40 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'local-dev'
+
+scrape_configs:
+  # ============================================================================
+  # OPTION 1 (Recommended): Scrape via OTel Collector
+  # ============================================================================
+  # Use this when OTEL_METRICS_ENABLED=true
+  # Centralizes metrics through OTel pipeline, allows processing/filtering
+
+  - job_name: 'kuadrant-operator'
+    static_configs:
+      - targets: ['otel-collector:8889']
+        labels:
+          service: 'kuadrant-operator'
+
+  # ============================================================================
+  # OPTION 2: Scrape operator directly (traditional Prometheus)
+  # ============================================================================
+  # Use this when OTEL_METRICS_ENABLED=false
+  # Uncomment this and comment out the above if you want direct scraping:
+
+  # - job_name: 'kuadrant-operator'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:8080']
+  #       labels:
+  #         service: 'kuadrant-operator'
+
+  # ============================================================================
+  # OTel Collector Self-Monitoring
+  # ============================================================================
+
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+        labels:
+          service: 'otel-collector'

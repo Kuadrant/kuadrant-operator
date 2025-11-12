@@ -1,0 +1,76 @@
+# Grafana datasources configuration
+# Pre-configures Prometheus, Loki, and Tempo with correlations
+apiVersion: 1
+
+datasources:
+  # Prometheus - Metrics
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        # Link exemplars to Tempo traces
+        - name: trace_id
+          datasourceUid: tempo
+
+  # Tempo - Traces
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo
+    editable: true
+    jsonData:
+      httpMethod: GET
+      tracesToLogs:
+        # Link traces to logs in Loki
+        datasourceUid: loki
+        tags: ['service_name']
+        mappedTags: [{ key: 'service.name', value: 'service_name' }]
+        mapTagNamesEnabled: true
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: true
+        # Query by trace_id label (stored as structured metadata by OTLP)
+        query: '{service_name="$${__span.tags["service.name"]}", trace_id="$${__span.traceId}"}'
+      tracesToMetrics:
+        # Link traces to metrics in Prometheus
+        datasourceUid: prometheus
+        tags: [{ key: 'service.name', value: 'service' }]
+        queries:
+          - name: 'Sample query'
+            query: 'sum(rate(controller_runtime_reconcile_total{$$__tags}[5m]))'
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+
+  # Loki - Logs
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: loki
+    editable: true
+    jsonData:
+      derivedFields:
+        # Extract trace_id from OTLP structured metadata
+        - datasourceUid: tempo
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+        # Extract trace_id from log body
+        - datasourceUid: tempo
+          matcherRegex: "trace_id[=:]\\s*(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"

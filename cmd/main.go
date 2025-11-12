@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap/zapcore"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -60,6 +61,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/log"
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
+	"github.com/kuadrant/kuadrant-operator/internal/trace"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -148,6 +150,29 @@ func main() {
 				defer shutdownCancel()
 				if err := log.ShutdownOTelLogging(shutdownCtx); err != nil {
 					log.Log.Error(err, "Failed to shutdown OpenTelemetry logging")
+				}
+			}()
+		}
+
+		// Setup OTel tracing
+		traceProvider, err := trace.NewProvider(context.Background(), otelConfig)
+		if err != nil {
+			log.Log.Error(err, "Failed to setup OpenTelemetry tracing, continuing without traces")
+		} else {
+			log.Log.Info("OpenTelemetry tracing enabled",
+				"exportEndpoint", otelConfig.TracesEndpoint(),
+				"sampler", "AlwaysSample",
+			)
+
+			// Set as global tracer provider
+			otel.SetTracerProvider(traceProvider.TracerProvider())
+
+			// Ensure OTel tracing is shut down gracefully on exit
+			defer func() {
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer shutdownCancel()
+				if err := traceProvider.Shutdown(shutdownCtx); err != nil {
+					log.Log.Error(err, "Failed to shutdown OpenTelemetry tracing")
 				}
 			}()
 		}

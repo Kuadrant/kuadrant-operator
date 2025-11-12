@@ -79,6 +79,7 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 	// Create logr bridge to OpenTelemetry
 	logsink := otellogr.NewLogSink(config.ServiceName,
 		otellogr.WithLoggerProvider(loggerProvider),
+		otellogr.WithVersion(config.ServiceVersion),
 	)
 	logger := logr.New(logsink)
 

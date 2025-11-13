@@ -68,7 +68,7 @@ spec:
   limits: { … }
 ```
 
-![Rate limit policy targeting a HTTPRoute resource](https://i.imgur.com/ObfOp9u.png)
+![Rate limit policy targeting a HTTPRoute resource](../images/rlp-httproute-target.png)
 
 #### Hostnames and wildcards
 
@@ -104,7 +104,7 @@ spec:
     limits: { … }
 ```
 
-![rate limit policy targeting a Gateway resource](https://i.imgur.com/UkivAqA.png)
+![rate limit policy targeting a Gateway resource](../images/rlp-gateway-target.png)
 
 #### Overlapping Gateway and HTTPRoute RateLimitPolicies
 

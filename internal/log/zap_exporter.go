@@ -27,7 +27,7 @@ import (
 )
 
 // zapExporter is an OpenTelemetry log exporter that writes to a zap logger.
-// This allows OTel logs to be formatted and output using zap's console formatter,
+// This allows OTel logs to be formatted and output using zap's formatter,
 // while still sending raw logs to remote collectors via OTLP.
 type zapExporter struct {
 	logger *zap.Logger
@@ -39,15 +39,23 @@ type zapExporter struct {
 func newZapExporter(level Level, mode Mode, writer io.Writer) *zapExporter {
 	// Create encoder config based on mode
 	var encoderConfig zapcore.EncoderConfig
+	var encoder zapcore.Encoder
+
 	if mode == ModeDev {
 		encoderConfig = zap.NewDevelopmentEncoderConfig()
+		// Use ISO8601 with millisecond precision
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	} else {
 		encoderConfig = zap.NewProductionEncoderConfig()
+		// Use ISO8601 with millisecond precision
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
 	}
 
-	// Create core with console encoder
+	// Create core with appropriate encoder
 	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),
+		encoder,
 		zapcore.AddSync(writer),
 		zapcore.Level(level),
 	)
@@ -72,28 +80,42 @@ func (e *zapExporter) Export(_ context.Context, records []sdklog.Record) error {
 			continue
 		}
 
+		// Get the appropriate logger (with name if present)
+		logger := e.getLoggerForRecord(record)
+
 		// Extract fields from the record
 		fields := e.recordToZapFields(record)
 
 		// Log the message at the appropriate level
 		switch zapLevel {
 		case zapcore.DebugLevel:
-			e.logger.Debug(record.Body().AsString(), fields...)
+			logger.Debug(record.Body().AsString(), fields...)
 		case zapcore.InfoLevel:
-			e.logger.Info(record.Body().AsString(), fields...)
+			logger.Info(record.Body().AsString(), fields...)
 		case zapcore.WarnLevel:
-			e.logger.Warn(record.Body().AsString(), fields...)
+			logger.Warn(record.Body().AsString(), fields...)
 		case zapcore.ErrorLevel:
-			e.logger.Error(record.Body().AsString(), fields...)
+			logger.Error(record.Body().AsString(), fields...)
 		case zapcore.DPanicLevel:
-			e.logger.DPanic(record.Body().AsString(), fields...)
+			logger.DPanic(record.Body().AsString(), fields...)
 		case zapcore.PanicLevel:
-			e.logger.Panic(record.Body().AsString(), fields...)
+			logger.Panic(record.Body().AsString(), fields...)
 		case zapcore.FatalLevel:
-			e.logger.Fatal(record.Body().AsString(), fields...)
+			logger.Fatal(record.Body().AsString(), fields...)
 		}
 	}
 	return nil
+}
+
+// getLoggerForRecord returns a logger with the appropriate name from the instrumentation scope.
+// Named loggers are created on-demand for each record. This is acceptable because zap's Named()
+// is a lightweight operation that just wraps the logger with additional metadata.
+func (e *zapExporter) getLoggerForRecord(record *sdklog.Record) *zap.Logger {
+	scope := record.InstrumentationScope()
+	if scope.Name == "" {
+		return e.logger
+	}
+	return e.logger.Named(scope.Name)
 }
 
 // Shutdown flushes any buffered logs.
@@ -128,11 +150,6 @@ func (e *zapExporter) otelSeverityToZapLevel(severity log.Severity) zapcore.Leve
 // recordToZapFields converts OTel record attributes to zap fields.
 func (e *zapExporter) recordToZapFields(record *sdklog.Record) []zap.Field {
 	var fields []zap.Field
-
-	// Add timestamp if present
-	if !record.Timestamp().IsZero() {
-		fields = append(fields, zap.Time("timestamp", record.Timestamp()))
-	}
 
 	// Add trace context if present
 	if record.TraceID().IsValid() {

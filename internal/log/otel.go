@@ -81,9 +81,50 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 		otellogr.WithLoggerProvider(loggerProvider),
 		otellogr.WithVersion(config.ServiceVersion),
 	)
-	logger := logr.New(logsink)
+
+	// Wrap the sink to limit verbosity and match standard Zap logger behavior.
+	// This prevents excessive logging like Kubernetes client-go's V(8) request/response body dumps.
+	// Verbosity mapping: Info=V(0), Debug=V(1-4), V(5+) is typically too verbose.
+	// Max verbosity of 4 prevents V(8) logs (like HTTP request/response bodies) from appearing.
+	limitedSink := &maxVerbosityLogSink{
+		LogSink:      logsink,
+		maxVerbosity: 4,
+	}
+	logger := logr.New(limitedSink)
 
 	return logger, nil
+}
+
+// maxVerbosityLogSink wraps a logr.LogSink and limits the maximum verbosity level.
+// This prevents overly verbose logging like Kubernetes client-go's V(8) request/response bodies.
+type maxVerbosityLogSink struct {
+	logr.LogSink
+	maxVerbosity int
+}
+
+// Enabled checks if a given verbosity level is enabled.
+// Returns false for verbosity levels higher than maxVerbosity.
+func (m *maxVerbosityLogSink) Enabled(level int) bool {
+	if level > m.maxVerbosity {
+		return false
+	}
+	return m.LogSink.Enabled(level)
+}
+
+// WithValues wraps the result to preserve the verbosity limit.
+func (m *maxVerbosityLogSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
+	return &maxVerbosityLogSink{
+		LogSink:      m.LogSink.WithValues(keysAndValues...),
+		maxVerbosity: m.maxVerbosity,
+	}
+}
+
+// WithName wraps the result to preserve the verbosity limit.
+func (m *maxVerbosityLogSink) WithName(name string) logr.LogSink {
+	return &maxVerbosityLogSink{
+		LogSink:      m.LogSink.WithName(name),
+		maxVerbosity: m.maxVerbosity,
+	}
 }
 
 // ShutdownOTelLogging gracefully shuts down the OpenTelemetry logger provider

@@ -1,5 +1,5 @@
 # Grafana datasources configuration
-# Pre-configures Prometheus, Loki, and Tempo with correlations
+# Native OTLP correlation (no manual regex matching needed)
 apiVersion: 1
 
 datasources:
@@ -12,10 +12,6 @@ datasources:
     editable: true
     jsonData:
       httpMethod: POST
-      exemplarTraceIdDestinations:
-        # Link exemplars to Tempo traces
-        - name: trace_id
-          datasourceUid: tempo
 
   # Tempo - Traces
   - name: Tempo
@@ -32,8 +28,8 @@ datasources:
         tags: ['service_name']
         mappedTags: [{ key: 'service.name', value: 'service_name' }]
         mapTagNamesEnabled: true
-        spanStartTimeShift: '1h'
-        spanEndTimeShift: '1h'
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
         filterByTraceID: true
         filterBySpanID: false
         customQuery: true
@@ -62,15 +58,3 @@ datasources:
     url: http://loki:3100
     uid: loki
     editable: true
-    jsonData:
-      derivedFields:
-        # Extract trace_id from OTLP structured metadata
-        - datasourceUid: tempo
-          matcherRegex: "traceID=(\\w+)"
-          name: TraceID
-          url: "$${__value.raw}"
-        # Extract trace_id from log body
-        - datasourceUid: tempo
-          matcherRegex: "trace_id[=:]\\s*(\\w+)"
-          name: TraceID
-          url: "$${__value.raw}"

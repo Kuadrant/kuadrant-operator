@@ -16,14 +16,6 @@ common:
     kvstore:
       store: inmemory
 
-# Enable OTLP ingestion
-distributor:
-  otlp:
-    default_resource_attributes_as_index_labels:
-      - service.name
-      - service.namespace
-      - service.instance.id
-
 schema_config:
   configs:
     - from: 2020-10-24

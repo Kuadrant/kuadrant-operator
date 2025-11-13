@@ -145,6 +145,19 @@ func SetMode(mode Mode) func(o *Options) {
 	}
 }
 
+// createEncoder creates a zapcore.Encoder based on the mode with millisecond timestamps
+func createEncoder(mode Mode) zapcore.Encoder {
+	if mode == ModeDev {
+		encoderConfig := uberzap.NewDevelopmentEncoderConfig()
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		return zapcore.NewConsoleEncoder(encoderConfig)
+	}
+	// Production mode
+	encoderConfig := uberzap.NewProductionEncoderConfig()
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	return zapcore.NewJSONEncoder(encoderConfig)
+}
+
 // NewLogger creates new Logger based on controller runtime zap logger
 func NewLogger(opts ...Opts) logr.Logger {
 	o := &Options{}
@@ -157,24 +170,9 @@ func NewLogger(opts ...Opts) logr.Logger {
 		o.DestWriter = os.Stderr
 	}
 
-	// Use millisecond precision timestamps (ISO8601 with milliseconds)
-	// Configure encoder based on mode
-	var encoder zapcore.Encoder
-	if o.LogMode == ModeDev {
-		// Development mode: console encoder with color
-		encoderConfig := uberzap.NewDevelopmentEncoderConfig()
-		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	} else {
-		// Production mode: JSON encoder
-		encoderConfig := uberzap.NewProductionEncoderConfig()
-		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	}
-
 	return zap.New(
 		zap.Level(zapcore.Level(o.LogLevel)),
 		zap.WriteTo(o.DestWriter),
-		zap.Encoder(encoder),
+		zap.Encoder(createEncoder(o.LogMode)),
 	)
 }

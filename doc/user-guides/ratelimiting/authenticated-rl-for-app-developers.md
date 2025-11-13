@@ -89,7 +89,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/ma
 
 Create a HTTPRoute to route traffic to the service via Istio Ingress Gateway:
 
-![](https://i.imgur.com/rdN8lo3.png)
+![](../../images/httproute-diagram.png)
 
 ```sh
 kubectl apply -f - <<EOF
@@ -228,7 +228,7 @@ EOF
 
 Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 
-![](https://i.imgur.com/2A9sXXs.png)
+![](../../images/ratelimitpolicy-diagram.png)
 
 ```sh
 kubectl apply -f - <<EOF

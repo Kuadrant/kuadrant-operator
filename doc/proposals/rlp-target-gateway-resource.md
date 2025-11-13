@@ -10,7 +10,7 @@ The [current RateLimitPolicy CRD](https://github.com/Kuadrant/kuadrant-operator/
 
 Having in place this HTTPRoute - Gateway hierarchy, we are also considering to apply [Policy Attachment's](https://gateway-api.sigs.k8s.io/v1alpha2/references/policy-attachment/) defaults/overrides approach to the RateLimitPolicy CRD. But for now, it will only be about targeting the Gateway resource.
 
-![](https://i.imgur.com/UkivAqA.png)
+![](../images/rlp-gateway-target.png)
 
 On designing Kuadrant's rate limiting and considering Istio/Envoy's rate limiting offering, we hit two limitations ([described here](https://docs.google.com/document/d/1ve_8ZBq8TK_wnAZHg69M6-f_q1w-mX4vuP1BC1EuEO8/edit#bookmark=id.5wyq2fj56u94)). Therefore, not giving up entirely in existing [Envoy's RateLimit Filter](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/network/ratelimit/v3/rate_limit.proto#extension-envoy-filters-network-ratelimit), we decided to move on and leverage the Envoy's [Wasm Network Filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/listeners/network_filters/wasm_filter) and implement rate limiting [wasm-shim](https://github.com/Kuadrant/wasm-shim) module compliant with the Envoy's [Rate Limit Service (RLS)](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto). This wasm-shim module accepts a [PluginConfig](https://github.com/Kuadrant/kuadrant-operator/blob/fa2b52967409b7c4ea2c2e3412ecf80a8ad2b802/pkg/istio/wasm.go#L24) struct object as input configuration object.
 

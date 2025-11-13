@@ -22,10 +22,14 @@ import (
 	"io"
 
 	"github.com/go-logr/logr"
-	"go.opentelemetry.io/contrib/bridges/otellogr"
+	"github.com/go-logr/zapr"
+	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/kuadrant/kuadrant-operator/internal/otel"
 )
@@ -34,10 +38,10 @@ import (
 var loggerProvider *sdklog.LoggerProvider
 
 // SetupOTelLogging sets up OpenTelemetry logging with the given configuration.
-// It creates a LoggerProvider with two exporters:
-// - OTLP exporter for remote telemetry collection
-// - Zap exporter for formatted console output
-// Returns a logr.Logger that bridges to OpenTelemetry
+// It creates a Zap logger with a Tee core that sends logs to both:
+// - Console output (formatted via Zap encoder)
+// - OTel LoggerProvider (for OTLP export to remote collectors) using official otelzap bridge
+// Returns a logr.Logger that wraps the Zap logger
 func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, zapMode Mode, zapWriter io.Writer) (logr.Logger, error) {
 	if !config.Enabled {
 		return logr.Logger{}, fmt.Errorf("OpenTelemetry logging is not enabled")
@@ -61,70 +65,89 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 		return logr.Logger{}, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
-	// Create Zap exporter for console output
-	stdOutExporter := newZapExporter(zapLevel, zapMode, zapWriter)
-
-	// Create logger provider with both exporters:
-	// - OTLP for remote collection (all logs)
-	// - Zap for console output (respects LOG_LEVEL and LOG_MODE)
+	// Create logger provider with OTLP exporter
 	loggerProvider = sdklog.NewLoggerProvider(
 		sdklog.WithResource(res),
 		sdklog.WithProcessor(sdklog.NewBatchProcessor(otlpExporter)),
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(stdOutExporter)),
 	)
 
 	// Set as global logger provider
 	global.SetLoggerProvider(loggerProvider)
 
-	// Create logr bridge to OpenTelemetry
-	logsink := otellogr.NewLogSink(config.ServiceName,
-		otellogr.WithLoggerProvider(loggerProvider),
-		otellogr.WithVersion(config.ServiceVersion),
-	)
-
-	// Wrap the sink to limit verbosity and match standard Zap logger behavior.
-	// This prevents excessive logging like Kubernetes client-go's V(8) request/response body dumps.
-	// Verbosity mapping: Info=V(0), Debug=V(1-4), V(5+) is typically too verbose.
-	// Max verbosity of 4 prevents V(8) logs (like HTTP request/response bodies) from appearing.
-	limitedSink := &maxVerbosityLogSink{
-		LogSink:      logsink,
-		maxVerbosity: 4,
-	}
-	logger := logr.New(limitedSink)
+	// Create console and OTel cores, then tee them together
+	logger := newLoggerWithOTel(config.ServiceName, loggerProvider, zapLevel, zapMode, zapWriter)
 
 	return logger, nil
 }
 
-// maxVerbosityLogSink wraps a logr.LogSink and limits the maximum verbosity level.
-// This prevents overly verbose logging like Kubernetes client-go's V(8) request/response bodies.
-type maxVerbosityLogSink struct {
-	logr.LogSink
-	maxVerbosity int
+// newLoggerWithOTel creates a zapr logger that sends logs to both console and OTel
+func newLoggerWithOTel(serviceName string, provider *sdklog.LoggerProvider, level Level, mode Mode, writer io.Writer) logr.Logger {
+	// Create console core (with context field filtering to avoid noisy output)
+	consoleCore := &contextFilterCore{
+		Core: zapcore.NewCore(
+			createEncoder(mode),
+			zapcore.AddSync(writer),
+			zapcore.Level(level),
+		),
+	}
+
+	// Create OTel core using official otelzap bridge (needs context for trace extraction)
+	otelCore := otelzap.NewCore(
+		serviceName,
+		otelzap.WithLoggerProvider(provider),
+	)
+
+	// Tee both cores - logs go to both console (filtered) and OTel (with context)
+	teeCore := zapcore.NewTee(consoleCore, otelCore)
+	zapLogger := zap.New(teeCore)
+
+	return zapr.NewLogger(zapLogger)
 }
 
-// Enabled checks if a given verbosity level is enabled.
-// Returns false for verbosity levels higher than maxVerbosity.
-func (m *maxVerbosityLogSink) Enabled(level int) bool {
-	if level > m.maxVerbosity {
-		return false
-	}
-	return m.LogSink.Enabled(level)
+// contextFilterCore wraps a zapcore.Core and extracts trace context from context.Context fields.
+// It replaces the noisy "context" field with clean "trace_id" and "span_id" fields for console output.
+type contextFilterCore struct {
+	zapcore.Core
 }
 
-// WithValues wraps the result to preserve the verbosity limit.
-func (m *maxVerbosityLogSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
-	return &maxVerbosityLogSink{
-		LogSink:      m.LogSink.WithValues(keysAndValues...),
-		maxVerbosity: m.maxVerbosity,
-	}
+// With extracts trace context from "context" field and adds trace_id/span_id
+func (c *contextFilterCore) With(fields []zapcore.Field) zapcore.Core {
+	transformed := c.extractTraceContext(fields)
+	return &contextFilterCore{Core: c.Core.With(transformed)}
 }
 
-// WithName wraps the result to preserve the verbosity limit.
-func (m *maxVerbosityLogSink) WithName(name string) logr.LogSink {
-	return &maxVerbosityLogSink{
-		LogSink:      m.LogSink.WithName(name),
-		maxVerbosity: m.maxVerbosity,
+// Write extracts trace context from "context" field before writing
+func (c *contextFilterCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	transformed := c.extractTraceContext(fields)
+	return c.Core.Write(entry, transformed)
+}
+
+// extractTraceContext finds "context" fields, extracts trace_id and span_id, and removes the noisy context field
+func (c *contextFilterCore) extractTraceContext(fields []zapcore.Field) []zapcore.Field {
+	result := make([]zapcore.Field, 0, len(fields)+2) // +2 for potential trace_id and span_id
+
+	for _, field := range fields {
+		if field.Key == "context" {
+			// Try to extract context.Context and get trace info
+			if ctx, ok := field.Interface.(context.Context); ok {
+				span := trace.SpanFromContext(ctx)
+				if span != nil && span.SpanContext().IsValid() {
+					spanCtx := span.SpanContext()
+					if spanCtx.HasTraceID() {
+						result = append(result, zap.String("trace_id", spanCtx.TraceID().String()))
+					}
+					if spanCtx.HasSpanID() {
+						result = append(result, zap.String("span_id", spanCtx.SpanID().String()))
+					}
+				}
+			}
+			// Don't include the original "context" field
+			continue
+		}
+		result = append(result, field)
 	}
+
+	return result
 }
 
 // ShutdownOTelLogging gracefully shuts down the OpenTelemetry logger provider

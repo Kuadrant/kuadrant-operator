@@ -1,8 +1,8 @@
-# OpenTelemetry Observability for Kuadrant Operator
-# OTel Collector receives OTLP metrics and exports to Prometheus
+# OpenTelemetry Observability Stack for Kuadrant Operator
+# Complete LGTM stack: Loki (logs), Grafana (visualization), Tempo (traces), Metrics (Prometheus)
 
 services:
-  # OpenTelemetry Collector - receives OTLP metrics
+  # OpenTelemetry Collector - receives OTLP logs, traces, and metrics
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: kuadrant-otel-collector
@@ -13,6 +13,49 @@ services:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
       - "8889:8889"   # Prometheus exporter
+    networks:
+      - kuadrant-observability
+
+  # Loki - stores logs
+  loki:
+    image: grafana/loki:latest
+    container_name: kuadrant-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml
+      - loki-data:/loki
+    ports:
+      - "3100:3100"   # Loki HTTP API
+    networks:
+      - kuadrant-observability
+
+  # Tempo - stores traces
+  tempo:
+    image: grafana/tempo:latest
+    container_name: kuadrant-tempo
+    user: "0:0"  # Run as root - required for /tmp/tempo volume permissions
+    command: -config.file=/etc/tempo.yaml
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/tmp/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "4317"        # OTLP gRPC (internal)
+    networks:
+      - kuadrant-observability
+
+  # Jaeger - alternative distributed tracing UI (for comparison with Tempo)
+  jaeger:
+    image: jaegertracing/jaeger:2.11.0
+    container_name: kuadrant-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - METRICS_STORAGE_TYPE=prometheus
+      - PROMETHEUS_SERVER_URL=http://prometheus:9090
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317"         # OTLP gRPC receiver (internal)
+      - "4318"         # OTLP HTTP receiver (internal)
     networks:
       - kuadrant-observability
 
@@ -36,9 +79,33 @@ services:
     depends_on:
       - otel-collector
 
+  # Grafana - unified observability UI
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kuadrant-grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - kuadrant-observability
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
 networks:
   kuadrant-observability:
     driver: bridge
 
 volumes:
   prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

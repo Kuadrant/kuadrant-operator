@@ -33,7 +33,7 @@ OpenTelemetry logging is disabled by default and can be enabled via environment 
 
 | Environment Variable | Description | Default |
 |---------------------|-------------|---------|
-| `OTEL_LOGS_ENABLED` | Enable OpenTelemetry logging | `false` |
+| `OTEL_ENABLED` | Enable OpenTelemetry (logs, traces, metrics) | `false` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (HTTP) | - |
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | OTLP logs-specific endpoint (overrides `OTEL_EXPORTER_OTLP_ENDPOINT`) | - |
 | `OTEL_SERVICE_NAME` | Service name for telemetry data | `kuadrant-operator` |
@@ -43,7 +43,7 @@ OpenTelemetry logging is disabled by default and can be enabled via environment 
 
 **Dual Logging Mode:**
 
-When OTel is enabled (`OTEL_LOGS_ENABLED=true`), the operator uses a tee logger that writes to both destinations simultaneously:
+When OTel is enabled (`OTEL_ENABLED=true`), the operator uses a tee logger that writes to both destinations simultaneously:
 
 ```
 Application Code (log.Log.Info(...))
@@ -84,7 +84,7 @@ spec:
       - name: manager
         image: quay.io/kuadrant/kuadrant-operator:latest
         env:
-        - name: OTEL_LOGS_ENABLED
+        - name: OTEL_ENABLED
           value: "true"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "otel-collector.observability.svc.cluster.local:4318"

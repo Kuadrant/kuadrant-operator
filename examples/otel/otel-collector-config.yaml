@@ -34,6 +34,24 @@ exporters:
     const_labels:
       collector: otel
 
+  # OTLP exporter for traces - sends to Tempo
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # OTLP exporter for traces - sends to Jaeger
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # OTLP HTTP exporter for logs - sends to Loki
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
 service:
   pipelines:
     metrics:
@@ -43,4 +61,8 @@ service:
     logs:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [debug]
+      exporters: [debug, otlphttp/loki]
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [debug, otlp/tempo, otlp/jaeger]

@@ -33,7 +33,9 @@ type kuadrantLib struct {
 }
 
 func (l kuadrantLib) CompileOptions() []cel.EnvOption {
-	opts := []cel.EnvOption{}
+	opts := []cel.EnvOption{
+		cel.OptionalTypes(),
+	}
 
 	constVersion := "0"
 

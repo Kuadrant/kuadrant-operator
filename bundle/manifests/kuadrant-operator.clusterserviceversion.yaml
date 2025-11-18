@@ -224,7 +224,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-11-04T10:24:01Z"
+    createdAt: "2025-11-18T12:05:19Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -236,6 +236,12 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: APIKeyRequest
+      name: apikeyrequests.devportal.kuadrant.io
+      version: v1alpha1
+    - kind: APIProduct
+      name: apiproducts.devportal.kuadrant.io
+      version: v1alpha1
     - description: AuthPolicy enables authentication and authorization for service
         workloads in a Gateway API network
       displayName: AuthPolicy

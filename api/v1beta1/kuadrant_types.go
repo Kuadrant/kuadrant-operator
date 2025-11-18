@@ -71,6 +71,13 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
+func (k *Kuadrant) IsDeveloperPortalEnabled() bool {
+	if k == nil {
+		return false
+	}
+	return k.Spec.Components.DeveloperPortal.Enabled
+}
+
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	Observability Observability `json:"observability,omitempty"`
@@ -79,10 +86,23 @@ type KuadrantSpec struct {
 	// will add the configuration required to enable mTLS between an Istio provided
 	// gateway and the Kuadrant components.
 	MTLS *MTLS `json:"mtls,omitempty"`
+	// +optional
+	// Components configures optional Kuadrant components
+	Components Components `json:"components,omitempty"`
 }
 
 type Observability struct {
 	Enable bool `json:"enable,omitempty"`
+}
+
+type Components struct {
+	// +optional
+	// DeveloperPortal enables the developer portal integration including APIProduct and APIKeyRequest CRDs
+	DeveloperPortal DeveloperPortal `json:"developerPortal,omitempty"`
+}
+
+type DeveloperPortal struct {
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 type MTLS struct {

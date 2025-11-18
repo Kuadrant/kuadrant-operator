@@ -73,6 +73,16 @@ annotations:
       name: tlspolicies.kuadrant.io
       displayName: TLSPolicy
       description: TLSPolicy is the Schema for the tlspolicies API.
+    - kind: APIProduct
+      version: v1alpha1
+      name: apiproducts.devportal.kuadrant.io
+      displayName: APIProduct
+      description: APIProduct represents an API offering in a developer portal with rate limiting plans.
+    - kind: APIKeyRequest
+      version: v1alpha1
+      name: apikeyrequests.devportal.kuadrant.io
+      displayName: APIKeyRequest
+      description: APIKeyRequest represents a developer's request for API access with a specific plan tier.
   artifacthub.io/crdsExamples: |
     - apiVersion: kuadrant.io/v1beta1
       kind: Kuadrant
@@ -135,6 +145,32 @@ annotations:
           group: cert-manager.io
           kind: ClusterIssuer
           name: self-signed-ca
+    - apiVersion: devportal.kuadrant.io/v1alpha1
+      kind: APIProduct
+      metadata:
+        name: petstore-api
+        namespace: petstore
+      spec:
+        displayName: Petstore API
+        description: RESTful API for managing pet store inventory
+        targetRef:
+          group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: petstore
+        publishStatus: Published
+    - apiVersion: devportal.kuadrant.io/v1alpha1
+      kind: APIKeyRequest
+      metadata:
+        name: petstore-access
+        namespace: petstore
+      spec:
+        apiName: petstore-api
+        apiNamespace: petstore
+        planTier: gold
+        useCase: Building mobile app for pet adoption
+        requestedBy:
+          userId: user:default/developer
+          email: developer@example.com
   artifacthub.io/license: Apache-2.0
   artifacthub.io/links: |
     - name: Kuadrant

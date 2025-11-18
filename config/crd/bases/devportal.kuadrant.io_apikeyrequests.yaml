@@ -1,0 +1,155 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: apikeyrequests.devportal.kuadrant.io
+spec:
+  group: devportal.kuadrant.io
+  names:
+    kind: APIKeyRequest
+    listKind: APIKeyRequestList
+    plural: apikeyrequests
+    singular: apikeyrequest
+    shortNames:
+    - akr
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required:
+            - apiName
+            - apiNamespace
+            - planTier
+            - requestedBy
+            properties:
+              apiName:
+                type: string
+                description: name of the apiproduct being requested
+              apiNamespace:
+                type: string
+                description: namespace where the apiproduct exists
+              planTier:
+                type: string
+                description: requested plan tier (arbitrary string defined in planpolicy)
+              useCase:
+                type: string
+                description: user's use case for requesting access
+              requestedBy:
+                type: object
+                required:
+                - userId
+                properties:
+                  userId:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+              requestedAt:
+                type: string
+                format: date-time
+                description: when the request was created
+          status:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum: [Pending, Approved, Rejected]
+                default: Pending
+              reviewedBy:
+                type: string
+                description: userId of the approver/rejecter
+              reviewedAt:
+                type: string
+                format: date-time
+              reason:
+                type: string
+                description: reason for approval or rejection
+              apiKey:
+                type: string
+                description: generated api key (after approval)
+              apiHostname:
+                type: string
+                description: api hostname (populated after approval)
+              apiBasePath:
+                type: string
+                description: api base path (populated after approval)
+              apiDescription:
+                type: string
+                description: api description (populated after approval)
+              apiOasUrl:
+                type: string
+                description: openapi spec url (if available)
+              apiOasUiUrl:
+                type: string
+                description: openapi ui url (if available)
+              planLimits:
+                type: object
+                description: rate limit details for the approved plan
+                properties:
+                  daily:
+                    type: integer
+                    description: daily request limit
+                  weekly:
+                    type: integer
+                    description: weekly request limit
+                  monthly:
+                    type: integer
+                    description: monthly request limit
+                  custom:
+                    type: array
+                    description: custom rate limits
+                    items:
+                      type: object
+                      required:
+                      - limit
+                      - window
+                      properties:
+                        limit:
+                          type: integer
+                        window:
+                          type: string
+                          pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+              conditions:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - type
+                  - status
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                      enum: ["True", "False", "Unknown"]
+                    reason:
+                      type: string
+                    message:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+    additionalPrinterColumns:
+    - name: API
+      type: string
+      jsonPath: .spec.apiName
+    - name: Plan
+      type: string
+      jsonPath: .spec.planTier
+    - name: Status
+      type: string
+      jsonPath: .status.phase
+    - name: Requested By
+      type: string
+      jsonPath: .spec.requestedBy.userId
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    subresources:
+      status: {}

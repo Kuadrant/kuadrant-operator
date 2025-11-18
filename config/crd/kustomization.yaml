@@ -8,6 +8,8 @@ resources:
   - bases/kuadrant.io_dnspolicies.yaml
   - bases/kuadrant.io_tlspolicies.yaml
   - bases/kuadrant.io_tokenratelimitpolicies.yaml
+  - bases/devportal.kuadrant.io_apikeyrequests.yaml
+  - bases/devportal.kuadrant.io_apiproducts.yaml
   - bases/extensions.kuadrant.io_oidcpolicies.yaml
   - bases/extensions.kuadrant.io_planpolicies.yaml
   - bases/extensions.kuadrant.io_telemetrypolicies.yaml

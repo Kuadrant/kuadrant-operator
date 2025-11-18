@@ -9,6 +9,7 @@ olm:
 dependencies:
   authorino-operator: "0.0.0"
   console-plugin: "0.0.0"
+  developer-portal-controller: "0.0.0"
   dns-operator: "0.0.0"
   limitador-operator: "0.0.0"
   wasm-shim: "0.0.0"

@@ -2,6 +2,539 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: apikeys.devportal.kuadrant.io
+spec:
+  group: devportal.kuadrant.io
+  names:
+    kind: APIKey
+    listKind: APIKeyList
+    plural: apikeys
+    shortNames:
+    - apik
+    singular: apikey
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.apiProductRef.name
+      name: API
+      type: string
+    - jsonPath: .spec.planTier
+      name: Plan
+      type: string
+    - jsonPath: .spec.requestedBy.userId
+      name: User
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: APIKey is the Schema for the apikeys API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: APIKeySpec defines the desired state of APIKey.
+            properties:
+              apiProductRef:
+                description: Reference to the APIProduct this APIKey belongs to.
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              planTier:
+                description: PlanTier is the tier of the plan (e.g., "premium", "basic",
+                  "enterprise")
+                type: string
+              requestedBy:
+                description: RequestedBy contains information about who requested
+                  the API key
+                properties:
+                  email:
+                    description: Email is the email address of the user
+                    pattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+                    type: string
+                  userId:
+                    description: UserID is the identifier of the user requesting the
+                      API key
+                    type: string
+                required:
+                - email
+                - userId
+                type: object
+              useCase:
+                description: UseCase describes how the API key will be used
+                type: string
+            required:
+            - apiProductRef
+            - planTier
+            - requestedBy
+            - useCase
+            type: object
+          status:
+            description: APIKeyStatus defines the observed state of APIKey.
+            properties:
+              apiHostname:
+                description: APIHostname is the hostname from the HTTPRoute
+                type: string
+              canReadSecret:
+                default: true
+                description: CanReadSecret expresses the permission to read the APIKey's
+                  secret
+                type: boolean
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the APIKey's state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              limits:
+                description: Limits contains the rate limits for the plan
+                properties:
+                  custom:
+                    description: Custom defines any additional limits defined in terms
+                      of a RateLimitPolicy Rate.
+                    items:
+                      description: Rate defines the actual rate limit that will be
+                        used when there is a match
+                      properties:
+                        limit:
+                          description: Limit defines the max value allowed for a given
+                            period of time
+                          type: integer
+                        window:
+                          description: Window defines the time period for which the
+                            Limit specified above applies.
+                          pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                          type: string
+                      required:
+                      - limit
+                      - window
+                      type: object
+                    type: array
+                  daily:
+                    description: Daily limit of requests for this plan.
+                    type: integer
+                  monthly:
+                    description: Monthly limit of requests for this plan.
+                    type: integer
+                  weekly:
+                    description: Weekly limit of requests for this plan.
+                    type: integer
+                  yearly:
+                    description: Yearly limit of requests for this plan.
+                    type: integer
+                type: object
+              phase:
+                description: |-
+                  Phase represents the current phase of the APIKey
+                  Valid values are "Pending", "Approved", or "Rejected"
+                enum:
+                - Pending
+                - Approved
+                - Rejected
+                type: string
+              reviewedAt:
+                description: ReviewedAt is the timestamp when the request was reviewed
+                format: date-time
+                type: string
+              reviewedBy:
+                description: ReviewedBy indicates who approved or rejected the request
+                type: string
+              secretRef:
+                description: SecretRef is a reference to the created Secret
+                properties:
+                  key:
+                    description: The key of the secret to select from.  Must be a
+                      valid secret key.
+                    type: string
+                  name:
+                    description: The name of the secret in the Authorino's namespace
+                      to select from.
+                    type: string
+                required:
+                - key
+                - name
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: apiproducts.devportal.kuadrant.io
+spec:
+  group: devportal.kuadrant.io
+  names:
+    kind: APIProduct
+    listKind: APIProductList
+    plural: apiproducts
+    singular: apiproduct
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: APIProduct Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      priority: 2
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: APIProduct is the Schema for the apiproducts API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: APIProductSpec defines the desired state of APIProduct.
+            properties:
+              approvalMode:
+                default: manual
+                description: whether access requests are auto-approved or require
+                  manual review
+                enum:
+                - automatic
+                - manual
+                type: string
+              contact:
+                description: contact information for api owners
+                properties:
+                  email:
+                    description: contact email
+                    type: string
+                  slack:
+                    description: 'slack channel (e.g. #api-support)'
+                    type: string
+                  team:
+                    description: team name
+                    type: string
+                  url:
+                    description: url to team page or support portal
+                    type: string
+                type: object
+              description:
+                description: detailed description of the api product
+                type: string
+              displayName:
+                description: human-readable name for the api product
+                type: string
+              documentation:
+                description: api documentation links
+                properties:
+                  docsURL:
+                    description: URL to general documentation
+                    type: string
+                  gitRepository:
+                    description: URL to git repository (shown as view source in backstage)
+                    type: string
+                  openAPISpecURL:
+                    description: URL to openapi specification (json/yaml)
+                    type: string
+                  swaggerUI:
+                    description: URL to swagger ui or similar interactive docs
+                    type: string
+                  techdocsRef:
+                    description: techdocs reference (e.g. url:https://github.com/org/repo
+                      or dir:. for local docs)
+                    type: string
+                type: object
+              publishStatus:
+                default: Draft
+                description: controls whether the api product appears in the backstage
+                  catalog (Draft = hidden, Published = visible)
+                enum:
+                - Draft
+                - Published
+                type: string
+              tags:
+                description: tags for categorisation and search
+                items:
+                  type: string
+                type: array
+              targetRef:
+                description: reference to the httproute that this api product represents
+                properties:
+                  group:
+                    description: Group is the group of the target resource.
+                    maxLength: 253
+                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
+                  kind:
+                    description: Kind is kind of the target resource.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
+                    type: string
+                  name:
+                    description: Name is the name of the target resource.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - group
+                - kind
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported value is 'HTTPRoute'
+                  rule: self.kind == 'HTTPRoute'
+              version:
+                description: api version (e.g. v1, v2)
+                type: string
+            required:
+            - approvalMode
+            - displayName
+            - publishStatus
+            - targetRef
+            type: object
+          status:
+            description: APIProductStatus defines the observed state of APIProduct.
+            properties:
+              conditions:
+                description: Represents the observations of a foo's current state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              discoveredPlans:
+                description: list of planpolicies discovered from httproute
+                items:
+                  properties:
+                    limits:
+                      description: Limits contains the list of limits that the plan
+                        enforces.
+                      properties:
+                        custom:
+                          description: Custom defines any additional limits defined
+                            in terms of a RateLimitPolicy Rate.
+                          items:
+                            description: Rate defines the actual rate limit that will
+                              be used when there is a match
+                            properties:
+                              limit:
+                                description: Limit defines the max value allowed for
+                                  a given period of time
+                                type: integer
+                              window:
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                                type: string
+                            required:
+                            - limit
+                            - window
+                            type: object
+                          type: array
+                        daily:
+                          description: Daily limit of requests for this plan.
+                          type: integer
+                        monthly:
+                          description: Monthly limit of requests for this plan.
+                          type: integer
+                        weekly:
+                          description: Weekly limit of requests for this plan.
+                          type: integer
+                        yearly:
+                          description: Yearly limit of requests for this plan.
+                          type: integer
+                      type: object
+                    tier:
+                      description: Tier this plan represents.
+                      type: string
+                  required:
+                  - tier
+                  type: object
+                type: array
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
+                format: int64
+                type: integer
+              openapi:
+                description: OpenAPI specification fetched from the API and its sync
+                  status
+                properties:
+                  lastSyncTime:
+                    description: lastSyncTime is the last time the raw content was
+                      updated.
+                    format: date-time
+                    type: string
+                  raw:
+                    description: raw content
+                    type: string
+                required:
+                - lastSyncTime
+                - raw
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
     controller-gen.kubebuilder.io/version: v0.16.5
   labels:
     app: kuadrant
@@ -8180,6 +8713,17 @@ spec:
           spec:
             description: KuadrantSpec defines the desired state of Kuadrant
             properties:
+              components:
+                description: Components configures optional Kuadrant components
+                properties:
+                  developerPortal:
+                    description: DeveloperPortal enables the developer portal integration
+                      including APIProduct and APIKeyRequest CRDs
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
+                type: object
               mtls:
                 description: |-
                   MTLS is an optional entry which when enabled is set to true, kuadrant-operator
@@ -10369,10 +10913,60 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: developer-portal-controller
+  name: developer-portal-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-controller-manager
   namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: developer-portal-controller
+  name: developer-portal-leader-election-role
+  namespace: '{{ .Release.Namespace }}'
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -10414,6 +11008,83 @@ rules:
   verbs:
   - create
   - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: developer-portal-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devportal.kuadrant.io
+  resources:
+  - apikeys
+  - apiproducts
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devportal.kuadrant.io
+  resources:
+  - apikeys/finalizers
+  - apiproducts/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - devportal.kuadrant.io
+  resources:
+  - apikeys/status
+  - apiproducts/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - planpolicies
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - planpolicies/status
+  verbs:
+  - get
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes/status
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -10763,6 +11434,23 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: developer-portal-controller
+  name: developer-portal-leader-election-rolebinding
+  namespace: '{{ .Release.Namespace }}'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: developer-portal-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: developer-portal-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-leader-election-rolebinding
@@ -10774,6 +11462,22 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: kuadrant-operator-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/name: developer-portal-controller
+  name: developer-portal-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: developer-portal-manager-role
+subjects:
+- kind: ServiceAccount
+  name: developer-portal-controller-manager
   namespace: '{{ .Release.Namespace }}'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -10859,6 +11563,8 @@ spec:
           value: /extensions
         - name: RELATED_IMAGE_WASMSHIM
           value: oci://quay.io/kuadrant/wasm-shim:latest
+        - name: RELATED_IMAGE_DEVELOPERPORTAL
+          value: quay.io/kuadrant/developer-portal-controller:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

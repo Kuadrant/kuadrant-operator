@@ -308,3 +308,53 @@ func TestLogLevelStructure(t *testing.T) {
 		})
 	}
 }
+
+func TestIsDeveloperPortalEnabled(t *testing.T) {
+	tests := []struct {
+		name        string
+		components  *Components
+		expectedRes bool
+	}{
+		{
+			name:        "components is nil",
+			components:  nil,
+			expectedRes: false,
+		},
+		{
+			name:        "developer portal not set",
+			components:  &Components{},
+			expectedRes: false,
+		},
+		{
+			name: "developer portal disabled",
+			components: &Components{
+				DeveloperPortal: &DeveloperPortal{Enabled: false},
+			},
+			expectedRes: false,
+		},
+		{
+			name: "developer portal enabled",
+			components: &Components{
+				DeveloperPortal: &DeveloperPortal{Enabled: true},
+			},
+			expectedRes: true,
+		},
+	}
+	for _, tt := range tests {
+		kuadrantCR := &Kuadrant{
+			Spec: KuadrantSpec{
+				Components: tt.components,
+			},
+		}
+		t.Run(tt.name, func(subT *testing.T) {
+			got := kuadrantCR.IsDeveloperPortalEnabled()
+			assert.Equal(subT, got, tt.expectedRes)
+		})
+	}
+
+	t.Run("kuadrant is nil", func(subT *testing.T) {
+		var kuadrantCR *Kuadrant
+		got := kuadrantCR.IsDeveloperPortalEnabled()
+		assert.Assert(subT, !got)
+	})
+}

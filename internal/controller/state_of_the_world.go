@@ -132,6 +132,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		controller.WithRunnable("developer portal deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*appsv1.Deployment](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
+		)),
 		controller.WithRunnable("limitador deployment watcher", controller.Watch(
 			&appsv1.Deployment{},
 			kuadrantv1beta1.DeploymentsResource,
@@ -692,6 +698,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
 			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
 			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
+			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
 		},
 		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}
@@ -796,6 +803,19 @@ func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuad
 	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
 		o, isSortable := root.(controller.Object)
 		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
+	})
+	if len(kuadrants) == 0 {
+		return nil
+	}
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
+	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	return kuadrant
+}
+
+func GetKuadrantFromTopologyDuringDeletion(topology *machinery.Topology) *kuadrantv1beta1.Kuadrant {
+	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
+		o, isSortable := root.(controller.Object)
+		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind
 	})
 	if len(kuadrants) == 0 {
 		return nil

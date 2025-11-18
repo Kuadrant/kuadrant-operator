@@ -224,7 +224,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-11-27T12:04:06Z"
+    createdAt: "2025-12-02T17:16:45Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -236,6 +236,12 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: APIKey
+      name: apikeys.devportal.kuadrant.io
+      version: v1alpha1
+    - kind: APIProduct
+      name: apiproducts.devportal.kuadrant.io
+      version: v1alpha1
     - description: AuthPolicy enables authentication and authorization for service
         workloads in a Gateway API network
       displayName: AuthPolicy
@@ -286,6 +292,77 @@ spec:
   install:
     spec:
       clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - devportal.kuadrant.io
+          resources:
+          - apikeys
+          - apiproducts
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - devportal.kuadrant.io
+          resources:
+          - apikeys/finalizers
+          - apiproducts/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - devportal.kuadrant.io
+          resources:
+          - apikeys/status
+          - apiproducts/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - planpolicies
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - extensions.kuadrant.io
+          resources:
+          - planpolicies/status
+          verbs:
+          - get
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes/status
+          verbs:
+          - get
+        serviceAccountName: developer-portal-controller-manager
       - rules:
         - apiGroups:
           - ""
@@ -651,6 +728,8 @@ spec:
                   value: /extensions
                 - name: RELATED_IMAGE_WASMSHIM
                   value: oci://quay.io/kuadrant/wasm-shim:latest
+                - name: RELATED_IMAGE_DEVELOPERPORTAL
+                  value: quay.io/kuadrant/developer-portal-controller:latest
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -728,6 +807,39 @@ spec:
           verbs:
           - create
           - patch
+        serviceAccountName: developer-portal-controller-manager
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
         serviceAccountName: kuadrant-operator-controller-manager
     strategy: deployment
   installModes:
@@ -769,4 +881,6 @@ spec:
   relatedImages:
   - image: oci://quay.io/kuadrant/wasm-shim:latest
     name: wasmshim
+  - image: quay.io/kuadrant/developer-portal-controller:latest
+    name: developerportal
   version: 0.0.0

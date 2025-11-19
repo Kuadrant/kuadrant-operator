@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"sort"
+	"sync"
 
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
@@ -21,6 +23,9 @@ import (
 	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -623,36 +628,97 @@ func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {
 	return b.isIstioInstalled || b.isEnvoyGatewayInstalled
 }
 
+// additionalAttrsFn returns additional []attribute.KeyValue's derived from the reconciliation parameters to be added to
+// the parent span in the traceReconcileFunc
+type additionalAttrsFn func(resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) []attribute.KeyValue
+
+// traceReconcileFunc wraps a ReconcileFunc with OpenTelemetry tracing
+func traceReconcileFunc(name string, reconcileFunc controller.ReconcileFunc, additionalAttrs ...additionalAttrsFn) controller.ReconcileFunc {
+	tracer := otel.Tracer("kuadrant-operator")
+	return func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
+		ctx, span := tracer.Start(ctx, name)
+		defer span.End()
+
+		// Only add context field when span is actually recording (tracing enabled)
+		// This avoids noise in logs when tracing is disabled
+		if span.IsRecording() {
+			logger := controller.LoggerFromContext(ctx).WithValues("context", ctx)
+			ctx = controller.LoggerIntoContext(ctx, logger)
+		}
+
+		// Add attributes about the reconciliation
+		span.SetAttributes(
+			attribute.Bool("has_error", err != nil),
+		)
+
+		// Add any other custom attributes about reconciliation
+		for _, attr := range additionalAttrs {
+			span.SetAttributes(attr(resourceEvents, topology, err, state)...)
+		}
+
+		// Run the actual reconcile function
+		reconcileErr := reconcileFunc(ctx, resourceEvents, topology, err, state)
+
+		// Set span status based on result
+		if reconcileErr != nil {
+			span.RecordError(reconcileErr)
+			span.SetStatus(codes.Error, reconcileErr.Error())
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+
+		return reconcileErr
+	}
+}
+
+func additionalMainTraceAttributes(resourceEvents []controller.ResourceEvent, _ *machinery.Topology, _ error, _ *sync.Map) []attribute.KeyValue {
+	attrs := []attribute.KeyValue{
+		attribute.Int("event_count", len(resourceEvents)),
+	}
+
+	// Add event kinds as attributes
+	if len(resourceEvents) > 0 {
+		eventKinds := make([]string, 0, len(resourceEvents))
+		for _, event := range resourceEvents {
+			eventKinds = append(eventKinds, event.Kind.String())
+		}
+		attrs = append(attrs, attribute.StringSlice("event_kinds", eventKinds))
+	}
+
+	return attrs
+}
+
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: initWorkflow(b.client).Run,
+		Precondition: traceReconcileFunc("workflow.init", initWorkflow(b.client).Run),
 		Tasks: []controller.ReconcileFunc{
-			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run,
-			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
-			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
-			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
+			traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run),
+			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
+			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
+			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
 		},
-		Postcondition: b.finalStepsWorkflow().Run,
+		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}
 
 	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile,
+			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile),
 		)
 	}
 
 	if b.isLimitadorOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewLimitadorReconciler(b.client).Subscription().Reconcile,
+			traceReconcileFunc("workflow.limitador", NewLimitadorReconciler(b.client).Subscription().Reconcile),
 		)
 	}
 
 	if b.isAuthorinoOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewAuthorinoReconciler(b.client).Subscription().Reconcile)
+			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
 	}
 
-	return mainWorkflow.Run
+	// Wrap the entire main workflow with tracing
+	return traceReconcileFunc("reconcile", mainWorkflow.Run, additionalMainTraceAttributes)
 }
 
 func certManagerControllerOpts() []controller.ControllerOption {
@@ -702,9 +768,9 @@ func certManagerControllerOpts() []controller.ControllerOption {
 
 func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition: NewEventLogger().Log,
+		Precondition: traceReconcileFunc("init.event_logger", NewEventLogger().Log),
 		Tasks: []controller.ReconcileFunc{
-			NewTopologyReconciler(client, operatorNamespace).Reconcile,
+			traceReconcileFunc("init.topology_reconciler", NewTopologyReconciler(client, operatorNamespace).Reconcile),
 		},
 	}
 }
@@ -712,19 +778,19 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	workflow := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
-			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
+			traceReconcileFunc("finalize.kuadrant_status", NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile),
 		},
 	}
 
 	if b.isGatewayAPIInstalled {
 		workflow.Tasks = append(workflow.Tasks,
-			NewGatewayPolicyDiscoverabilityReconciler(b.client).Subscription().Reconcile,
-			NewHTTPRoutePolicyDiscoverabilityReconciler(b.client).Subscription().Reconcile,
+			traceReconcileFunc("finalize.gateway_policy_discoverability", NewGatewayPolicyDiscoverabilityReconciler(b.client).Subscription().Reconcile),
+			traceReconcileFunc("finalize.httproute_policy_discoverability", NewHTTPRoutePolicyDiscoverabilityReconciler(b.client).Subscription().Reconcile),
 		)
 	}
 
 	if b.isUsingExtensions {
-		workflow.Tasks = append(workflow.Tasks, extension.Reconcile)
+		workflow.Tasks = append(workflow.Tasks, traceReconcileFunc("finalize.extensions", extension.Reconcile))
 	}
 
 	return workflow

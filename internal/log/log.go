@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -144,6 +145,19 @@ func SetMode(mode Mode) func(o *Options) {
 	}
 }
 
+// createEncoder creates a zapcore.Encoder based on the mode with millisecond timestamps
+func createEncoder(mode Mode) zapcore.Encoder {
+	if mode == ModeDev {
+		encoderConfig := uberzap.NewDevelopmentEncoderConfig()
+		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+		return zapcore.NewConsoleEncoder(encoderConfig)
+	}
+	// Production mode
+	encoderConfig := uberzap.NewProductionEncoderConfig()
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	return zapcore.NewJSONEncoder(encoderConfig)
+}
+
 // NewLogger creates new Logger based on controller runtime zap logger
 func NewLogger(opts ...Opts) logr.Logger {
 	o := &Options{}
@@ -158,7 +172,7 @@ func NewLogger(opts ...Opts) logr.Logger {
 
 	return zap.New(
 		zap.Level(zapcore.Level(o.LogLevel)),
-		zap.UseDevMode(o.LogMode == ModeDev),
 		zap.WriteTo(o.DestWriter),
+		zap.Encoder(createEncoder(o.LogMode)),
 	)
 }

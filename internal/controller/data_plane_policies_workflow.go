@@ -75,58 +75,64 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 	isGatewayProviderInstalled := isIstioInstalled || isEnvoyGatewayInstalled
 	dataPlanePoliciesValidation := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
-			(&AuthPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile,
-			(&RateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile,
-			(&TokenRateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile,
+			traceReconcileFunc("validator.auth_policy", (&AuthPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile),
+			traceReconcileFunc("validator.ratelimit_policy", (&RateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile),
+			traceReconcileFunc("validator.token_ratelimit_policy", (&TokenRateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isGatewayProviderInstalled: isGatewayProviderInstalled}).Subscription().Reconcile),
 		},
 	}
 
 	effectiveDataPlanePoliciesWorkflow := &controller.Workflow{
-		Precondition: (&controller.Workflow{
+		Precondition: traceReconcileFunc("effective_policies.compute", (&controller.Workflow{
 			Tasks: []controller.ReconcileFunc{
-				(&EffectiveAuthPolicyReconciler{client: client}).Subscription().Reconcile,
-				(&EffectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
-				(&EffectiveTokenRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
+				traceReconcileFunc("effective_policies.auth", (&EffectiveAuthPolicyReconciler{client: client}).Subscription().Reconcile),
+				traceReconcileFunc("effective_policies.ratelimit", (&EffectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile),
+				traceReconcileFunc("effective_policies.token_ratelimit", (&EffectiveTokenRateLimitPolicyReconciler{client: client}).Subscription().Reconcile),
 			},
-		}).Run,
+		}).Run),
 		Tasks: []controller.ReconcileFunc{
-			(&AuthConfigsReconciler{client: client}).Subscription().Reconcile,
-			(&LimitadorLimitsReconciler{client: client}).Subscription().Reconcile,
+			traceReconcileFunc("reconciler.auth_configs", (&AuthConfigsReconciler{client: client}).Subscription().Reconcile),
+			traceReconcileFunc("reconciler.limitador_limits", (&LimitadorLimitsReconciler{client: client}).Subscription().Reconcile),
 		},
 	}
 
 	if isIstioInstalled {
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioAuthClusterReconciler{client: client}).Subscription().Reconcile)
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&IstioExtensionReconciler{client: client}).Subscription().Reconcile)
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.istio_auth_cluster", (&IstioAuthClusterReconciler{client: client}).Subscription().Reconcile))
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.istio_ratelimit_cluster", (&IstioRateLimitClusterReconciler{client: client}).Subscription().Reconcile))
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.istio_extension", (&IstioExtensionReconciler{client: client}).Subscription().Reconcile))
 	}
 
 	if isEnvoyGatewayInstalled {
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&EnvoyGatewayAuthClusterReconciler{client: client}).Subscription().Reconcile)
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&EnvoyGatewayRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
-		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks, (&EnvoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile)
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.envoy_gateway_auth_cluster", (&EnvoyGatewayAuthClusterReconciler{client: client}).Subscription().Reconcile))
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.envoy_gateway_ratelimit_cluster", (&EnvoyGatewayRateLimitClusterReconciler{client: client}).Subscription().Reconcile))
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.envoy_gateway_extension", (&EnvoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile))
 	}
 
 	if isIstioInstalled && isAuthorinoOperatorInstalled && isLimitadorOperatorInstalled {
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
-			NewPeerAuthenticationReconciler(mgr, client).Subscription().Reconcile,
-			NewLimitadorIstioIntegrationReconciler(mgr, client).Subscription().Reconcile,
-			NewAuthorinoIstioIntegrationReconciler(mgr, client).Subscription().Reconcile,
+			traceReconcileFunc("reconciler.peer_authentication", NewPeerAuthenticationReconciler(mgr, client).Subscription().Reconcile),
+			traceReconcileFunc("reconciler.limitador_istio_integration", NewLimitadorIstioIntegrationReconciler(mgr, client).Subscription().Reconcile),
+			traceReconcileFunc("reconciler.authorino_istio_integration", NewAuthorinoIstioIntegrationReconciler(mgr, client).Subscription().Reconcile),
 		)
 	}
 
 	dataPlanePoliciesStatus := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
-			(&AuthPolicyStatusUpdater{client: client}).Subscription().Reconcile,
-			(&RateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
-			(&TokenRateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
+			traceReconcileFunc("status.auth_policy", (&AuthPolicyStatusUpdater{client: client}).Subscription().Reconcile),
+			traceReconcileFunc("status.ratelimit_policy", (&RateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile),
+			traceReconcileFunc("status.token_ratelimit_policy", (&TokenRateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile),
 		},
 	}
 
 	return &controller.Workflow{
-		Precondition:  dataPlanePoliciesValidation.Run,
-		Tasks:         []controller.ReconcileFunc{effectiveDataPlanePoliciesWorkflow.Run},
-		Postcondition: dataPlanePoliciesStatus.Run,
+		Precondition:  traceReconcileFunc("validation", dataPlanePoliciesValidation.Run),
+		Tasks:         []controller.ReconcileFunc{traceReconcileFunc("effective_policies", effectiveDataPlanePoliciesWorkflow.Run)},
+		Postcondition: traceReconcileFunc("status_update", dataPlanePoliciesStatus.Run),
 	}
 }
 

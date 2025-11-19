@@ -48,11 +48,11 @@ var (
 
 func NewDNSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isGatewayAPIInstalled, isDNSOperatorInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition: NewDNSPoliciesValidator(isGatewayAPIInstalled, isDNSOperatorInstalled).Subscription().Reconcile,
+		Precondition: traceReconcileFunc("dns.validator", NewDNSPoliciesValidator(isGatewayAPIInstalled, isDNSOperatorInstalled).Subscription().Reconcile),
 		Tasks: []controller.ReconcileFunc{
-			NewEffectiveDNSPoliciesReconciler(client, scheme).Subscription().Reconcile,
+			traceReconcileFunc("dns.effective_policies", NewEffectiveDNSPoliciesReconciler(client, scheme).Subscription().Reconcile),
 		},
-		Postcondition: NewDNSPolicyStatusUpdater(client).Subscription().Reconcile,
+		Postcondition: traceReconcileFunc("dns.status_updater", NewDNSPolicyStatusUpdater(client).Subscription().Reconcile),
 	}
 }
 

@@ -44,13 +44,14 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	ctx, span := tracer.Start(ctx, "AuthorinoReconciler.Reconcile")
 	defer span.End()
 
-	logger := controller.LoggerFromContext(ctx).WithValues("context", ctx).WithName("AuthorinoReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler")
 	logger.V(1).Info("reconciling authorino resource", "status", "started")
 	defer logger.V(1).Info("reconciling authorino resource", "status", "completed")
 
 	kobj := GetKuadrantFromTopology(topology)
 	if kobj == nil {
-		span.SetStatus(codes.Ok, "no Kuadrant object found")
+		span.AddEvent("no kuadrant object found")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -69,7 +70,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 
 	if len(aobjs) > 0 {
 		span.AddEvent("Authorino resource already exists")
-		span.SetStatus(codes.Ok, "authorino exists, skipping creation")
+		span.SetStatus(codes.Ok, "")
 		logger.V(1).Info("authorino resource already exists, no need to create", "status", "skipping")
 		return nil
 	}
@@ -123,7 +124,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
 		if apiErrors.IsAlreadyExists(err) {
-			span.SetStatus(codes.Ok, "authorino already exists")
+			span.SetStatus(codes.Ok, "")
 			logger.V(1).Info("already created authorino resource", "status", "acceptable")
 		} else {
 			span.RecordError(err)
@@ -137,7 +138,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			attribute.String("authorino.name", authorino.Name),
 			attribute.String("authorino.namespace", authorino.Namespace),
 		)
-		span.SetStatus(codes.Ok, "created authorino resource")
+		span.SetStatus(codes.Ok, "")
 		logger.Info("created authorino resource", "status", "acceptable")
 	}
 

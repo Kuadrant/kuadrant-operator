@@ -10767,6 +10767,7 @@ rules:
   resources:
   - configmaps
   - leases
+  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -10862,6 +10863,23 @@ rules:
   resources:
   - configmaps
   - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devportal.kuadrant.io
+  resources:
+  - apikeyrequests
+  - apikeyrequests/finalizers
+  - apikeyrequests/status
+  - apiproducts
+  - apiproducts/finalizers
+  - apiproducts/status
   verbs:
   - create
   - delete
@@ -11086,6 +11104,19 @@ rules:
   - update
   - watch
 - apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - security.istio.io
   resources:
   - peerauthentications
@@ -11198,6 +11229,8 @@ spec:
           value: /extensions
         - name: RELATED_IMAGE_WASMSHIM
           value: oci://quay.io/kuadrant/wasm-shim:latest
+        - name: RELATED_IMAGE_DEVELOPERPORTAL
+          value: quay.io/kuadrant/developer-portal-controller:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

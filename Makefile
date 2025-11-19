@@ -182,6 +182,16 @@ else
 RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
 endif
 
+## developer-portal-controller
+DEVELOPERPORTAL_VERSION ?= latest
+developerportal_version_is_semantic := $(call is_semantic_version,$(DEVELOPERPORTAL_VERSION))
+
+ifeq (true,$(developerportal_version_is_semantic))
+RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:v$(DEVELOPERPORTAL_VERSION)
+else
+RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(DEVELOPERPORTAL_VERSION)
+endif
+
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
@@ -430,6 +440,9 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired developer-portal-controller image
+	V="$(RELATED_IMAGE_DEVELOPERPORTAL)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DEVELOPERPORTAL").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV

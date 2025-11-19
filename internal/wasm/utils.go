@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -19,6 +18,7 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -29,7 +29,29 @@ const (
 	RateLimitCheckServiceName  = "ratelimit-check-service"
 	RateLimitReportServiceName = "ratelimit-report-service"
 	AuthServiceName            = "auth-service"
+
+	DefaultHTTPHeaderIdentifier = "x-request-id"
 )
+
+type LogLevel int
+
+const (
+	LogLevelError LogLevel = iota
+	LogLevelWarn
+	LogLevelInfo
+	LogLevelDebug
+)
+
+var logLevelNames = map[LogLevel]string{
+	LogLevelError: "ERROR",
+	LogLevelWarn:  "WARN",
+	LogLevelInfo:  "INFO",
+	LogLevelDebug: "DEBUG",
+}
+
+func (ll LogLevel) String() string {
+	return logLevelNames[ll]
+}
 
 func AuthServiceTimeout() string {
 	return env.GetString("AUTH_SERVICE_TIMEOUT", "200ms")
@@ -82,7 +104,44 @@ func ExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
 }
 
-func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config {
+// BuildObservabilityConfig builds the wasm-shim observability config from the Observability spec
+// For MVP: finds the highest priority level that is set to "true"
+// Priority: DEBUG(4) > INFO(3) > WARN(2) > ERROR(1)
+// Future: will support dynamic CEL predicates for request-time evaluation
+func BuildObservabilityConfig(observabilitySpec *v1beta1.Observability) *Observability {
+	if observabilitySpec == nil || observabilitySpec.DataPlane == nil {
+		return nil
+	}
+
+	dataPlane := observabilitySpec.DataPlane
+
+	// Find the highest priority level set to "true"
+	var logLevel LogLevel
+	for _, level := range dataPlane.DefaultLevels {
+		if level.Debug != nil {
+			logLevel = LogLevelDebug
+		}
+		if level.Info != nil && logLevel < LogLevelInfo {
+			logLevel = LogLevelInfo
+		}
+		if level.Warn != nil && logLevel < LogLevelWarn {
+			logLevel = LogLevelWarn
+		}
+	}
+
+	var tracing *Tracing
+	if observabilitySpec.Tracing != nil {
+		tracing = &Tracing{Endpoint: observabilitySpec.Tracing.Endpoint}
+	}
+
+	return &Observability{
+		DefaultLevel:         ptr.To(logLevel.String()),
+		HTTPHeaderIdentifier: ptr.To(ptr.Deref(dataPlane.HTTPHeaderIdentifier, DefaultHTTPHeaderIdentifier)),
+		Tracing:              tracing,
+	}
+}
+
+func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observability *Observability) Config {
 	return Config{
 		Services: map[string]Service{
 			AuthServiceName: {
@@ -110,7 +169,8 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config
 				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
 			},
 		},
-		ActionSets: actionSets,
+		ActionSets:    actionSets,
+		Observability: observability,
 	}
 }
 

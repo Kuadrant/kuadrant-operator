@@ -68,9 +68,64 @@ spec:
                     type: boolean
                 type: object
               observability:
+                description: |-
+                  Observability configures telemetry and monitoring settings for Kuadrant components.
+                  When enabled, it configures logging, tracing, and other observability features for both
+                  the control plane and data plane components.
                 properties:
+                  dataPlane:
+                    description: DataPlane configures observability settings for the
+                      data plane components.
+                    properties:
+                      defaultLevels:
+                        description: |-
+                          DefaultLevels specifies the default logging levels and their activation predicates.
+                          Each entry defines a log level (debug, info, warn, error) and an optional CEL expression
+                          that determines when that level should be active for a given request.
+                        items:
+                          description: |-
+                            LogLevel defines a logging level with its activation predicate
+                            Only one field should be set per LogLevel entry
+                          properties:
+                            debug:
+                              description: Debug level - highest verbosity
+                              type: string
+                            error:
+                              description: Error level - lowest verbosity
+                              type: string
+                            info:
+                              description: Info level
+                              type: string
+                            warn:
+                              description: Warn level
+                              type: string
+                          type: object
+                        type: array
+                      httpHeaderIdentifier:
+                        description: |-
+                          HTTPHeaderIdentifier specifies the HTTP header name used to identify and correlate
+                          requests in logs and traces (e.g., "x-request-id", "x-correlation-id").
+                          If set, this header value will be included in log output for request correlation.
+                        type: string
+                    type: object
                   enable:
+                    description: |-
+                      Enable controls whether observability features are active.
+                      When false, no additional logging or tracing configuration is applied.
                     type: boolean
+                  tracing:
+                    description: Tracing configures distributed tracing for request
+                      flows through the system.
+                    properties:
+                      endpoint:
+                        description: Endpoint is the URL of the tracing collector
+                          backend where spans should be sent.
+                        type: string
+                      insecure:
+                        description: Insecure controls whether to skip TLS certificate
+                          verification.
+                        type: boolean
+                    type: object
                 type: object
             type: object
           status:

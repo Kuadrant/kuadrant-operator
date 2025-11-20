@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -14,15 +13,15 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"k8s.io/utils/env"
-
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete

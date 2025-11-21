@@ -63,7 +63,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	defer logger.V(1).Info("finished building istio extension")
 
 	// build wasm plugin configs for each gateway
-	wasmConfigs, err := r.buildWasmConfigs(ctx, state)
+	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveAuthPolicies) || errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
@@ -202,10 +202,17 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 }
 
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
-func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
+func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topology *machinery.Topology, state *sync.Map) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
 	logger.Info("build Wasm configuration", "status", "started")
 	logger.Info("build Wasm configuration", "status", "completed")
+
+	// Get Kuadrant CR to check observability settings
+	kObj := GetKuadrantFromTopology(topology)
+	var observability *wasm.Observability
+	if kObj != nil {
+		observability = wasm.BuildObservabilityConfig(&kObj.Spec.Observability)
+	}
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
@@ -338,7 +345,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
 		return wasm.BuildConfigForActionSet(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
 			return c.Config.(wasm.ActionSet)
-		}), &logger)
+		}), &logger, observability)
 	})
 
 	return wasmConfigs, nil

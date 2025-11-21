@@ -1,0 +1,170 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  labels:
+    app: kuadrant
+  name: apikeyrequests.devportal.kuadrant.io
+spec:
+  group: devportal.kuadrant.io
+  names:
+    kind: APIKeyRequest
+    listKind: APIKeyRequestList
+    plural: apikeyrequests
+    shortNames:
+    - akr
+    singular: apikeyrequest
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.apiName
+      name: API
+      type: string
+    - jsonPath: .spec.planTier
+      name: Plan
+      type: string
+    - jsonPath: .status.phase
+      name: Status
+      type: string
+    - jsonPath: .spec.requestedBy.userId
+      name: Requested By
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          spec:
+            properties:
+              apiName:
+                description: name of the apiproduct being requested
+                type: string
+              apiNamespace:
+                description: namespace where the apiproduct exists
+                type: string
+              planTier:
+                description: requested plan tier (arbitrary string defined in planpolicy)
+                type: string
+              requestedAt:
+                description: when the request was created
+                format: date-time
+                type: string
+              requestedBy:
+                properties:
+                  email:
+                    format: email
+                    type: string
+                  userId:
+                    type: string
+                required:
+                - userId
+                type: object
+              useCase:
+                description: user's use case for requesting access
+                type: string
+            required:
+            - apiName
+            - apiNamespace
+            - planTier
+            - requestedBy
+            type: object
+          status:
+            properties:
+              apiBasePath:
+                description: api base path (populated after approval)
+                type: string
+              apiDescription:
+                description: api description (populated after approval)
+                type: string
+              apiHostname:
+                description: api hostname (populated after approval)
+                type: string
+              apiKey:
+                description: generated api key (after approval)
+                type: string
+              apiOasUiUrl:
+                description: openapi ui url (if available)
+                type: string
+              apiOasUrl:
+                description: openapi spec url (if available)
+                type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - type
+                  - status
+                  type: object
+                type: array
+              phase:
+                default: Pending
+                enum:
+                - Pending
+                - Approved
+                - Rejected
+                type: string
+              planLimits:
+                description: rate limit details for the approved plan
+                properties:
+                  custom:
+                    description: custom rate limits
+                    items:
+                      properties:
+                        limit:
+                          type: integer
+                        window:
+                          pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                          type: string
+                      required:
+                      - limit
+                      - window
+                      type: object
+                    type: array
+                  daily:
+                    description: daily request limit
+                    type: integer
+                  monthly:
+                    description: monthly request limit
+                    type: integer
+                  weekly:
+                    description: weekly request limit
+                    type: integer
+                type: object
+              reason:
+                description: reason for approval or rejection
+                type: string
+              reviewedAt:
+                format: date-time
+                type: string
+              reviewedBy:
+                description: userId of the approver/rejecter
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

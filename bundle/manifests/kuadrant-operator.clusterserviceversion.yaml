@@ -224,7 +224,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2025-11-04T10:24:01Z"
+    createdAt: "2025-11-20T00:30:50Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -236,6 +236,12 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: APIKeyRequest
+      name: apikeyrequests.devportal.kuadrant.io
+      version: v1alpha1
+    - kind: APIProduct
+      name: apiproducts.devportal.kuadrant.io
+      version: v1alpha1
     - description: AuthPolicy enables authentication and authorization for service
         workloads in a Gateway API network
       displayName: AuthPolicy
@@ -292,6 +298,7 @@ spec:
           resources:
           - configmaps
           - leases
+          - secrets
           - serviceaccounts
           - services
           verbs:
@@ -387,6 +394,23 @@ spec:
           resources:
           - configmaps
           - leases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - devportal.kuadrant.io
+          resources:
+          - apikeyrequests
+          - apikeyrequests/finalizers
+          - apikeyrequests/status
+          - apiproducts
+          - apiproducts/finalizers
+          - apiproducts/status
           verbs:
           - create
           - delete
@@ -611,6 +635,19 @@ spec:
           - update
           - watch
         - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - clusterroles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - security.istio.io
           resources:
           - peerauthentications
@@ -651,6 +688,8 @@ spec:
                   value: /extensions
                 - name: RELATED_IMAGE_WASMSHIM
                   value: oci://quay.io/kuadrant/wasm-shim:latest
+                - name: RELATED_IMAGE_DEVELOPERPORTAL
+                  value: quay.io/kuadrant/developer-portal-controller:latest
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -769,4 +808,6 @@ spec:
   relatedImages:
   - image: oci://quay.io/kuadrant/wasm-shim:latest
     name: wasmshim
+  - image: quay.io/kuadrant/developer-portal-controller:latest
+    name: developerportal
   version: 0.0.0

@@ -9,6 +9,7 @@ rules:
   resources:
   - configmaps
   - leases
+  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -104,6 +105,23 @@ rules:
   resources:
   - configmaps
   - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - devportal.kuadrant.io
+  resources:
+  - apikeyrequests
+  - apikeyrequests/finalizers
+  - apikeyrequests/status
+  - apiproducts
+  - apiproducts/finalizers
+  - apiproducts/status
   verbs:
   - create
   - delete
@@ -319,6 +337,19 @@ rules:
   - operator.authorino.kuadrant.io
   resources:
   - authorinos
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
   verbs:
   - create
   - delete

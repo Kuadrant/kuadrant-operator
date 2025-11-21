@@ -25,6 +25,7 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -55,7 +56,13 @@ var (
 	operatorNamespace       = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 	kuadrantManagedLabelKey = "kuadrant.io/managed"
 
-	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+	ConfigMapGroupKind          = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+	ServiceAccountGroupKind     = schema.GroupKind{Group: corev1.GroupName, Kind: "ServiceAccount"}
+	ClusterRoleGroupKind        = schema.GroupKind{Group: rbacv1.GroupName, Kind: "ClusterRole"}
+	ClusterRoleBindingGroupKind = schema.GroupKind{Group: rbacv1.GroupName, Kind: "ClusterRoleBinding"}
+	ServiceAccountsResource     = corev1.SchemeGroupVersion.WithResource("serviceaccounts")
+	ClusterRolesResource        = rbacv1.SchemeGroupVersion.WithResource("clusterroles")
+	ClusterRoleBindingsResource = rbacv1.SchemeGroupVersion.WithResource("clusterrolebindings")
 )
 
 // gateway-api permissions
@@ -73,10 +80,12 @@ var (
 
 // core, apps, coordination.k8s,io permissions
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts;configmaps;services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=create;delete;get;list;patch;update;watch
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=devportal.kuadrant.io,resources=apiproducts;apiproducts/finalizers;apiproducts/status;apikeyrequests;apikeyrequests/finalizers;apikeyrequests/status,verbs=create;delete;get;list;patch;update;watch
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) (*controller.Controller, error) {
 	// Base options
@@ -127,6 +136,30 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		controller.WithRunnable("developer portal serviceaccount watcher", controller.Watch(
+			&corev1.ServiceAccount{},
+			ServiceAccountsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*corev1.ServiceAccount](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
+		)),
+		controller.WithRunnable("developer portal deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*appsv1.Deployment](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
+		)),
+		controller.WithRunnable("developer portal clusterrole watcher", controller.Watch(
+			&rbacv1.ClusterRole{},
+			ClusterRolesResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*rbacv1.ClusterRole](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
+		)),
+		controller.WithRunnable("developer portal clusterrolebinding watcher", controller.Watch(
+			&rbacv1.ClusterRoleBinding{},
+			ClusterRoleBindingsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*rbacv1.ClusterRoleBinding](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
+		)),
 		controller.WithRunnable("limitador deployment watcher", controller.Watch(
 			&appsv1.Deployment{},
 			kuadrantv1beta1.DeploymentsResource,
@@ -149,6 +182,9 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
+			ServiceAccountGroupKind,
+			ClusterRoleGroupKind,
+			ClusterRoleBindingGroupKind,
 			kuadrantv1beta1.DeploymentGroupKind,
 		),
 		controller.WithObjectLinks(
@@ -631,6 +667,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile,
+			NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile,
 		},
 		Postcondition: b.finalStepsWorkflow().Run,
 	}

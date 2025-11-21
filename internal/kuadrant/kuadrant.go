@@ -8,6 +8,7 @@ const (
 	ControllerName               = "kuadrant.io/policy-controller"
 	TopologyLabel                = "kuadrant.io/topology"
 	ObservabilityLabel           = "kuadrant.io/observability"
+	DeveloperPortalLabel         = "kuadrant.io/developerportal"
 	KuadrantRateLimitClusterName = "kuadrant-ratelimit-service"
 	KuadrantAuthClusterName      = "kuadrant-auth-service"
 	LimitadorName                = "limitador"

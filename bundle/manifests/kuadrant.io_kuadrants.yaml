@@ -56,6 +56,17 @@ spec:
           spec:
             description: KuadrantSpec defines the desired state of Kuadrant
             properties:
+              components:
+                description: Components configures optional Kuadrant components
+                properties:
+                  developerPortal:
+                    description: DeveloperPortal enables the developer portal integration
+                      including APIProduct and APIKeyRequest CRDs
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
+                type: object
               mtls:
                 description: |-
                   MTLS is an optional entry which when enabled is set to true, kuadrant-operator

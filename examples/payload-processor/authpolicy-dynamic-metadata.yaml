@@ -1,0 +1,19 @@
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: metadata-to-header
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: httpbin
+  rules:
+    authentication:
+      anonymous:
+        anonymous: {}
+    response:
+      success:
+        headers:
+          x-model:
+            plain:
+              expression: metadata.filter_metadata["io.kuadrant"].payload_processor.split("model")[1].split("\u0000")[1]

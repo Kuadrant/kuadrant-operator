@@ -1,0 +1,18 @@
+# Build artifacts
+*.so
+*.h
+extract_model.so
+extract_model.h
+
+# Go build cache
+go.sum
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+test_*.json

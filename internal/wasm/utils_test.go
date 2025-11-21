@@ -1969,3 +1969,116 @@ func TestConvertGRPCRouteMatchToHTTP(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRequestDataEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected map[string]string
+		wantErr  bool
+	}{
+		{
+			name:  "simple key=value pairs",
+			input: "key1=value1,key2=value2,key3=value3",
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+				"key3": "value3",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "value with quoted commas",
+			input: `key1=value1,key2="value,with,commas",key3=value3`,
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value,with,commas",
+				"key3": "value3",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "metadata filter paths",
+			input: "payload_processor_as_metadata=metadata.filter_metadata.payload_processor,payload_processor_as_filter_state=filter_state.payload_processor",
+			expected: map[string]string{
+				"payload_processor_as_metadata":     "metadata.filter_metadata.payload_processor",
+				"payload_processor_as_filter_state": "filter_state.payload_processor",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "values with spaces (trimmed)",
+			input: "key1 = value1 , key2 = value2",
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "value with equals sign",
+			input: "cel_expr=request.headers['x-value']=='test'",
+			expected: map[string]string{
+				"cel_expr": "request.headers['x-value']=='test'",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "quoted value with equals",
+			input: `key1="value=with=equals"`,
+			expected: map[string]string{
+				"key1": "value=with=equals",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "empty value",
+			input: "key1=,key2=value2",
+			expected: map[string]string{
+				"key1": "",
+				"key2": "value2",
+			},
+			wantErr: false,
+		},
+		{
+			name:     "single key=value",
+			input:    "single=value",
+			expected: map[string]string{"single": "value"},
+			wantErr:  false,
+		},
+		{
+			name:     "empty input",
+			input:    "",
+			expected: map[string]string{},
+			wantErr:  false,
+		},
+		{
+			name:     "unclosed quote",
+			input:    `key1="unclosed`,
+			expected: nil,
+			wantErr:  true,
+		},
+		{
+			name:  "complex nested value",
+			input: `complex="metadata.filter_metadata['ns'].value"`,
+			expected: map[string]string{
+				"complex": "metadata.filter_metadata['ns'].value",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseRequestDataEnv(tt.input)
+
+			if tt.wantErr {
+				assert.Assert(t, err != nil, "expected error but got nil")
+				return
+			}
+
+			assert.NilError(t, err, "unexpected error")
+			assert.DeepEqual(t, tt.expected, result)
+		})
+	}
+}

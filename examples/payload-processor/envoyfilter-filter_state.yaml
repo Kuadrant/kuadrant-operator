@@ -1,0 +1,51 @@
+# EnvoyFilter for the Golang payload processor - Filter State export
+# Prerequisites:
+# 1. Build extract_model.so (make build)
+# 2. Deploy with deploy.sh
+
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-model-golang
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              export_as: filter_state
+              object_key: payload_processor
+              object_value: '"{" + self.extractedValue + "}"' #=> {"model":"gpt-4"}
+
+              # Regex pattern to search for (first capture group will be extracted)
+              # Pattern captures the entire matched substring (e.g., '"model":"gpt-4"') to allow JSON-wrapping in the exported value
+              pattern: '("model"\s*:\s*"([^"]+)")'
+
+              # Maximum size of rolling buffer (handles patterns split across chunks)
+              max_buffer_size: 512
+
+              # Content types to process (requests with other content types are skipped)
+              content_types:
+                - "application/json"

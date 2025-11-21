@@ -111,6 +111,9 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger) Config
 			},
 		},
 		ActionSets: actionSets,
+		RequestData: map[string]string{
+			"kuadrant_metadata": "metadata.filter_metadata.kuadrant_metadata",
+		},
 	}
 }
 

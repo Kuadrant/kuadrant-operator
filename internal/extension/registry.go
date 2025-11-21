@@ -448,6 +448,11 @@ func (m *RegisteredDataMutator[TResource]) mutateAuthConfig(authConfig *authorin
 func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Config, targetRefs []machinery.PolicyTargetReference) error {
 	requestData := make(map[string]string)
 
+	// preserve existing request data
+	for k, v := range wasmConfig.RequestData {
+		requestData[k] = v
+	}
+
 	for _, targetRef := range targetRefs {
 		providerEntries := m.store.GetAllForTargetRef(targetRef.GetLocator(), extpb.Domain_DOMAIN_REQUEST)
 

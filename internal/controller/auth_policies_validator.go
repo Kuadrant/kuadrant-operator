@@ -35,7 +35,7 @@ func (r *AuthPolicyValidator) Subscription() controller.Subscription {
 }
 
 func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("AuthPolicyValidator")
+	logger := controller.LoggerFromContext(ctx).WithName("AuthPolicyValidator").WithValues("context", ctx)
 
 	policies := topology.Policies().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == kuadrantv1.AuthPolicyGroupKind

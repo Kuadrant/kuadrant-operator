@@ -639,12 +639,8 @@ func traceReconcileFunc(name string, reconcileFunc controller.ReconcileFunc, add
 		ctx, span := tracer.Start(ctx, name)
 		defer span.End()
 
-		// Only add context field when span is actually recording (tracing enabled)
-		// This avoids noise in logs when tracing is disabled
-		if span.IsRecording() {
-			logger := controller.LoggerFromContext(ctx).WithValues("context", ctx)
-			ctx = controller.LoggerIntoContext(ctx, logger)
-		}
+		// Note: We don't add the context field here to avoid duplicates when child reconcilers
+		// also add it. Individual reconcilers should add context field if needed.
 
 		// Add attributes about the reconciliation
 		span.SetAttributes(

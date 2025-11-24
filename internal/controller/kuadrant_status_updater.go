@@ -61,7 +61,7 @@ func (r *KuadrantStatusUpdater) Subscription() *controller.Subscription {
 }
 
 func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("KuadrantStatusUpdater")
+	logger := controller.LoggerFromContext(ctx).WithName("KuadrantStatusUpdater").WithValues("context", ctx)
 	logger.Info("reconciling kuadrant status", "status", "started")
 	defer logger.Info("reconciling kuadrant status", "status", "completed")
 

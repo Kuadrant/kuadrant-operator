@@ -42,7 +42,7 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 }
 
 func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithValues("context", ctx)
 	logger.Info("Limitador limits reconciler", "status", "started")
 	defer logger.Info("Limitador limits reconciler", "status", "completed")
 
@@ -82,7 +82,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 }
 
 func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) []limitadorv1alpha1.RateLimit {
-	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("buildLimitadorLimits")
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("buildLimitadorLimits").WithValues("context", ctx)
 
 	rateLimitIndex := ratelimit.NewIndex()
 
@@ -95,7 +95,7 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 }
 
 func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index) {
-	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processEffectivePolicies")
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processEffectivePolicies").WithValues("context", ctx)
 	// RateLimitPolicies
 	if effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
 		effectivePoliciesMap := effectivePolicies.(EffectiveRateLimitPolicies)
@@ -116,7 +116,7 @@ func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context
 }
 
 func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index) {
-	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processPolicyRules")
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processPolicyRules").WithValues("context", ctx)
 	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 

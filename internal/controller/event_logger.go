@@ -16,7 +16,7 @@ func NewEventLogger() *EventLogger {
 }
 
 func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology, err error, _ *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("event logger")
+	logger := controller.LoggerFromContext(ctx).WithName("event logger").WithValues("context", ctx)
 	eventType := make(map[string]int, 0)
 	resources := make([]string, 0)
 	for _, event := range resourceEvents {

@@ -47,7 +47,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) Subscription() controller.Subscripti
 }
 
 func (r *EnvoyGatewayAuthClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayAuthClusterReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayAuthClusterReconciler").WithValues("context", ctx)
 
 	logger.V(1).Info("building envoy gateway auth clusters")
 	defer logger.V(1).Info("finished building envoy gateway auth clusters")

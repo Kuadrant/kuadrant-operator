@@ -56,7 +56,7 @@ func (r *TokenRateLimitPolicyStatusUpdater) Subscription() controller.Subscripti
 }
 
 func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyStatusUpdater")
+	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyStatusUpdater").WithValues("context", ctx)
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, _ int) (*kuadrantv1alpha1.TokenRateLimitPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TokenRateLimitPolicy)

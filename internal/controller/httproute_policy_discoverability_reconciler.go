@@ -48,7 +48,7 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) Subscription() *controller.Su
 }
 
 func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("HTTPRoutePolicyDiscoverabilityReconciler").WithName("reconcile")
+	logger := controller.LoggerFromContext(ctx).WithName("HTTPRoutePolicyDiscoverabilityReconciler").WithName("reconcile").WithValues("context", ctx)
 
 	httpRoutes := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, _ int) (*machinery.HTTPRoute, bool) {
 		ob, ok := item.(*machinery.HTTPRoute)

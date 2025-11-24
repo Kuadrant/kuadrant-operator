@@ -23,12 +23,12 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
 	uberzap "go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 var (
@@ -158,7 +158,7 @@ func createEncoder(mode Mode) zapcore.Encoder {
 	return zapcore.NewJSONEncoder(encoderConfig)
 }
 
-// NewLogger creates new Logger based on controller runtime zap logger
+// NewLogger creates new Logger with context filtering for trace extraction
 func NewLogger(opts ...Opts) logr.Logger {
 	o := &Options{}
 	for _, opt := range opts {
@@ -170,9 +170,15 @@ func NewLogger(opts ...Opts) logr.Logger {
 		o.DestWriter = os.Stderr
 	}
 
-	return zap.New(
-		zap.Level(zapcore.Level(o.LogLevel)),
-		zap.WriteTo(o.DestWriter),
-		zap.Encoder(createEncoder(o.LogMode)),
-	)
+	// Create console core with context field filtering
+	core := &contextFilterCore{
+		Core: zapcore.NewCore(
+			createEncoder(o.LogMode),
+			zapcore.AddSync(o.DestWriter),
+			zapcore.Level(o.LogLevel),
+		),
+	}
+
+	zapLogger := uberzap.New(core)
+	return zapr.NewLogger(zapLogger)
 }

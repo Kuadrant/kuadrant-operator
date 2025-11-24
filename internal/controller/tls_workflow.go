@@ -138,7 +138,7 @@ func LinkTLSPolicyToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc 
 // Common functions used across multiple reconcilers
 
 func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1.TLSPolicy) (bool, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("IsPolicyValid")
+	logger := controller.LoggerFromContext(ctx).WithName("IsPolicyValid").WithValues("context", ctx)
 
 	store, ok := s.Load(TLSPolicyAcceptedKey)
 	if !ok {

@@ -44,7 +44,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	ctx, span := tracer.Start(ctx, "AuthorinoReconciler.Reconcile")
 	defer span.End()
 
-	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler").WithValues("context", ctx)
 	logger.V(1).Info("reconciling authorino resource", "status", "started")
 	defer logger.V(1).Info("reconciling authorino resource", "status", "completed")
 

@@ -58,7 +58,7 @@ func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription
 }
 
 func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithValues("context", ctx)
 
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
@@ -155,7 +155,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 // buildWasmConfigs returns a map of envoy gateway gateway locators to an ordered list of corresponding wasm policies
 func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("buildWasmConfigs")
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("buildWasmConfigs").WithValues("context", ctx)
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {

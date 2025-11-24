@@ -49,7 +49,7 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Subscription() controller.Subsc
 }
 
 func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayRateLimitClusterReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayRateLimitClusterReconciler").WithValues("context", ctx)
 
 	logger.V(1).Info("building envoy gateway rate limit clusters")
 	defer logger.V(1).Info("finished building envoy gateway rate limit clusters")

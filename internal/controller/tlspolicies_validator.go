@@ -10,6 +10,9 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,34 +48,52 @@ func (r *TLSPoliciesValidator) Subscription() *controller.Subscription {
 
 func (r *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate").WithValues("context", ctx)
+	tracer := otel.Tracer("kuadrant-operator")
 
 	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 	logger.V(1).Info("validating tls policies", "policies", len(policies))
 	defer logger.V(1).Info("finished validating tls policies")
 
-	state.Store(TLSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
-		if err := r.isMissingDependency(); err != nil {
-			return p.GetLocator(), err
-		}
+	validationResults := make(map[string]error)
 
+	for _, p := range policies {
 		policy := p.(*kuadrantv1.TLSPolicy)
-		// Validate target ref
-		if err := r.isTargetRefsFound(topology, policy); err != nil {
-			return p.GetLocator(), err
+
+		_, span := tracer.Start(ctx, "policy.TLSPolicy.validate")
+		span.SetAttributes(
+			attribute.String("policy.name", policy.GetName()),
+			attribute.String("policy.namespace", policy.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.TLSPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(policy.GetUID())),
+		)
+
+		var err error
+		if missingDepErr := r.isMissingDependency(); missingDepErr != nil {
+			err = missingDepErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "missing dependency")
+		} else if targetErr := r.isTargetRefsFound(topology, policy); targetErr != nil {
+			err = targetErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "target not found")
+		} else if conflictErr := r.isConflict(policies, policy); conflictErr != nil {
+			err = conflictErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "conflicting policy")
+		} else if issuerErr := r.isIssuerFound(topology, policy); issuerErr != nil {
+			err = issuerErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "issuer not found")
+		} else {
+			span.AddEvent("policy validated successfully")
+			span.SetStatus(codes.Ok, "")
 		}
 
-		// Validate if there's a conflicting policy
-		if err := r.isConflict(policies, policy); err != nil {
-			return p.GetLocator(), err
-		}
+		validationResults[p.GetLocator()] = err
+		span.End()
+	}
 
-		// Validate Issuer is present on cluster through the topology
-		if err := r.isIssuerFound(topology, policy); err != nil {
-			return p.GetLocator(), err
-		}
-
-		return p.GetLocator(), nil
-	}))
+	state.Store(TLSPolicyAcceptedKey, validationResults)
 
 	return nil
 }

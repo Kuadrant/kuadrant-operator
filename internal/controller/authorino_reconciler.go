@@ -8,9 +8,9 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -40,10 +40,7 @@ func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 }
 
 func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-	tracer := otel.Tracer("kuadrant-operator")
-	ctx, span := tracer.Start(ctx, "AuthorinoReconciler.Reconcile")
-	defer span.End()
-
+	span := trace.SpanFromContext(ctx)
 	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler").WithValues("context", ctx)
 	logger.V(1).Info("reconciling authorino resource", "status", "started")
 	defer logger.V(1).Info("reconciling authorino resource", "status", "completed")

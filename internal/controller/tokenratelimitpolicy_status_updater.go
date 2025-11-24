@@ -12,7 +12,6 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -60,7 +59,7 @@ func (r *TokenRateLimitPolicyStatusUpdater) Subscription() controller.Subscripti
 
 func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyStatusUpdater").WithValues("context", ctx)
-	tracer := otel.Tracer("kuadrant-operator")
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, _ int) (*kuadrantv1alpha1.TokenRateLimitPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TokenRateLimitPolicy)

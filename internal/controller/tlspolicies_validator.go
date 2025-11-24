@@ -10,7 +10,6 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,7 +47,7 @@ func (r *TLSPoliciesValidator) Subscription() *controller.Subscription {
 
 func (r *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate").WithValues("context", ctx)
-	tracer := otel.Tracer("kuadrant-operator")
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 	logger.V(1).Info("validating tls policies", "policies", len(policies))

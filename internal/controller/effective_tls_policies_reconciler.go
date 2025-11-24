@@ -11,6 +11,9 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,6 +54,7 @@ type CertTarget struct {
 
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile").WithValues("context", ctx)
+	tracer := otel.Tracer("kuadrant-operator")
 
 	certs := getCertificatesFromTopology(topology)
 	listeners := getListenersFromTopology(topology)
@@ -74,22 +78,44 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 
 			for _, p := range policies {
 				tlsPolicy := p.(*kuadrantv1.TLSPolicy)
+
+				_, span := tracer.Start(ctx, "policy.TLSPolicy.effective")
+				span.SetAttributes(
+					attribute.String("policy.name", tlsPolicy.GetName()),
+					attribute.String("policy.namespace", tlsPolicy.GetNamespace()),
+					attribute.String("policy.kind", kuadrantv1.TLSPolicyGroupKind.Kind),
+					attribute.String("policy.uid", string(tlsPolicy.GetUID())),
+				)
+
 				if tlsPolicy.DeletionTimestamp != nil {
 					logger.V(1).Info("policy is marked for deletion, nothing to do", "name", tlsPolicy.Name, "namespace", tlsPolicy.Namespace, "uid", tlsPolicy.GetUID())
+					span.AddEvent("policy marked for deletion, skipping")
+					span.SetStatus(codes.Ok, "")
+					span.End()
 					continue
 				}
 
 				isValid, _ := IsTLSPolicyValid(ctx, s, tlsPolicy)
 				if !isValid {
+					span.AddEvent("policy not valid, skipping")
+					span.SetStatus(codes.Ok, "")
+					span.End()
 					continue
 				}
 
 				cert := buildCertManagerCertificate(l, tlsPolicy, secretRef, []string{hostname})
 				if err := controllerutil.SetControllerReference(tlsPolicy, cert, t.scheme); err != nil {
 					logger.Error(err, "failed to set owner reference on certificate", "name", tlsPolicy.Name, "namespace", tlsPolicy.Namespace, "uid", tlsPolicy.GetUID())
+					span.RecordError(err)
+					span.SetStatus(codes.Error, "failed to set owner reference")
+					span.End()
 					continue
 				}
 				certTargets = append(certTargets, CertTarget{target: l, cert: cert})
+
+				span.AddEvent("certificate target added")
+				span.SetStatus(codes.Ok, "")
+				span.End()
 			}
 		}
 	}

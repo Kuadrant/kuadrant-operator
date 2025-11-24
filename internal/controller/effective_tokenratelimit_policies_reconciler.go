@@ -8,6 +8,9 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"k8s.io/client-go/dynamic"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -52,6 +55,7 @@ func (r *EffectiveTokenRateLimitPolicyReconciler) Reconcile(ctx context.Context,
 
 func (r *EffectiveTokenRateLimitPolicyReconciler) calculateEffectivePolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveTokenRateLimitPolicies {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTokenRateLimitPolicyReconciler").WithName("calculateEffectivePolicies").WithValues("context", ctx)
+	tracer := otel.Tracer("kuadrant-operator")
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant) // assumes only and all valid gateway classes are linked to kuadrant in the topology
@@ -64,10 +68,37 @@ func (r *EffectiveTokenRateLimitPolicyReconciler) calculateEffectivePolicies(ctx
 
 	effectivePolicies := EffectiveTokenRateLimitPolicies{}
 
+	// Track which policies have been processed to create spans only once per policy
+	processedPolicies := make(map[string]bool)
+
 	for _, gatewayClass := range gatewayClasses {
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gatewayClass, httpRouteRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
 			for i := range paths {
+				// Get all policies in this path to trace each one
+				policiesInPath := kuadrantv1.PoliciesInPath(paths[i], isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+
+				// Create a span for each policy in the path (only once per policy)
+				for _, p := range policiesInPath {
+					policy := p.(*kuadrantv1alpha1.TokenRateLimitPolicy)
+					policyKey := string(policy.GetUID())
+
+					if !processedPolicies[policyKey] {
+						_, span := tracer.Start(ctx, "policy.TokenRateLimitPolicy.effective")
+						span.SetAttributes(
+							attribute.String("policy.name", policy.GetName()),
+							attribute.String("policy.namespace", policy.GetNamespace()),
+							attribute.String("policy.kind", kuadrantv1alpha1.TokenRateLimitPolicyGroupKind.Kind),
+							attribute.String("policy.uid", policyKey),
+						)
+						span.AddEvent("policy evaluated in effective policy calculation")
+						span.SetStatus(codes.Ok, "")
+						span.End()
+
+						processedPolicies[policyKey] = true
+					}
+				}
+
 				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1alpha1.TokenRateLimitPolicy](paths[i], isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])
 					effectivePolicies[pathID] = EffectiveTokenRateLimitPolicy{

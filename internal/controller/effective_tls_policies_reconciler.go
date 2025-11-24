@@ -11,7 +11,6 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	corev1 "k8s.io/api/core/v1"
@@ -54,7 +53,7 @@ type CertTarget struct {
 
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile").WithValues("context", ctx)
-	tracer := otel.Tracer("kuadrant-operator")
+	tracer := controller.TracerFromContext(ctx)
 
 	certs := getCertificatesFromTopology(topology)
 	listeners := getListenersFromTopology(topology)

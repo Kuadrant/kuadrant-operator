@@ -8,7 +8,6 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"k8s.io/client-go/dynamic"
@@ -54,7 +53,7 @@ func (r *EffectiveAuthPolicyReconciler) Reconcile(ctx context.Context, _ []contr
 
 func CalculateEffectiveAuthPolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveAuthPolicies {
 	logger := controller.LoggerFromContext(ctx).WithName("calculateEffectivePolicies").WithValues("context", ctx)
-	tracer := otel.Tracer("kuadrant-operator")
+	tracer := controller.TracerFromContext(ctx)
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant) // assumes only and all valid gateway classes are linked to kuadrant in the topology

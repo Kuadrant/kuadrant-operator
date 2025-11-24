@@ -7,7 +7,6 @@ import (
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,7 +41,7 @@ func (r *TokenRateLimitPolicyValidator) Subscription() controller.Subscription {
 
 func (r *TokenRateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyValidator").WithValues("context", ctx)
-	tracer := otel.Tracer("kuadrant-operator")
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := topology.Policies().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == kuadrantv1alpha1.TokenRateLimitPolicyGroupKind

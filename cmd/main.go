@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/kuadrant/policy-machinery/controller"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap/zapcore"
 
@@ -119,6 +120,8 @@ func printControllerMetaInfo() {
 }
 
 func main() {
+	var opts []controller.ControllerOption
+
 	// Setup OpenTelemetry if enabled
 	otelConfig := kuadrantOtel.NewConfig(gitSHA, dirty, version)
 	if otelConfig.Enabled {
@@ -176,6 +179,8 @@ func main() {
 				}
 			}()
 		}
+
+		opts = append(opts, controller.WithTracer(traceProvider.TracerProvider().Tracer(otelConfig.ServiceName)))
 	}
 
 	printControllerMetaInfo()
@@ -255,7 +260,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log)
+	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, opts...)
 	if err != nil {
 		setupLog.Error(err, "unable to setup policy controller")
 		os.Exit(1)

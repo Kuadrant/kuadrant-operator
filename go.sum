@@ -22,8 +22,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/elliotchance/orderedmap/v2 v2.2.0 h1:7/2iwO98kYT4XkOjA9mBEIwvi4KpGB4cyHeOFOnj4Vk=
 github.com/elliotchance/orderedmap/v2 v2.2.0/go.mod h1:85lZyVbpGaGvHvnKa7Qhx7zncAdBIBq6u56Hb1PRU5Q=
-github.com/emicklei/dot v1.6.2 h1:08GN+DD79cy/tzN6uLCT84+2Wk9u+wvqP+Hkx/dIR8A=
-github.com/emicklei/dot v1.6.2/go.mod h1:DeV7GvQtIw4h2u73RKBkkFdvVAz0D9fzeJrgPW6gy/s=
+github.com/emicklei/dot v1.8.0 h1:HnD60yAKFAevNeT+TPYr9pb8VB9bqdeSo0nzwIW6IOI=
+github.com/emicklei/dot v1.8.0/go.mod h1:DeV7GvQtIw4h2u73RKBkkFdvVAz0D9fzeJrgPW6gy/s=
 github.com/emicklei/go-restful/v3 v3.12.1 h1:PJMDIM/ak7btuL8Ex0iYET9hxM3CI2sjZtzpL63nKAU=
 github.com/emicklei/go-restful/v3 v3.12.1/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
 github.com/envoyproxy/gateway v1.2.6 h1:QxHBcJUdF2Rvof1Om6GQnSGKnq+l57zp60AGfFuql1Q=
@@ -93,8 +93,8 @@ github.com/kuadrant/dns-operator v0.0.0-20250826105007-7a0e6d88f7bb h1:YTWt8bn7x
 github.com/kuadrant/dns-operator v0.0.0-20250826105007-7a0e6d88f7bb/go.mod h1:EF37SlMqbarJieimWDPRv/N5BACbdzLa9nCBJcoeFvs=
 github.com/kuadrant/limitador-operator v0.15.0 h1:BWgYKV0iasFY3+zKQhLpTdfIlI2pD4MuGr8Hc30ypfg=
 github.com/kuadrant/limitador-operator v0.15.0/go.mod h1:58b5gdSemjXUijd2TBPKBwaQskU7rynHGHD7rTqk2OE=
-github.com/kuadrant/policy-machinery v0.6.4 h1:UMdZ2p7WyUdOKcWlJA2w2MzJnB8/Nn4dT6hE9cUcbeg=
-github.com/kuadrant/policy-machinery v0.6.4/go.mod h1:ZV4xS0CCxPgu/Xg6gz+YUaS9zqEXKOiAj33bZ67B6Lo=
+github.com/kuadrant/policy-machinery v0.7.1-0.20251119154946-1ca17a075dd2 h1:82Qf4klsgQ/176P8PoDbno8Jlik/WPg4j2l3pp1nKG8=
+github.com/kuadrant/policy-machinery v0.7.1-0.20251119154946-1ca17a075dd2/go.mod h1:8JF2bof6DJsEVSQOxpi8Kuj/zEps+BezpRZpF3XRAa4=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=

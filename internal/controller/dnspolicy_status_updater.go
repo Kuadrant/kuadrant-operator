@@ -10,6 +10,9 @@ import (
 	"sync"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -46,6 +49,7 @@ func (r *DNSPolicyStatusUpdater) Subscription() controller.Subscription {
 
 func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("DNSPolicyStatusUpdater").WithValues("context", ctx)
+	tracer := otel.Tracer("kuadrant-operator")
 
 	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
 	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
@@ -56,12 +60,23 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 	logger.V(1).Info("updating dns policy statuses", "policies", len(policies))
 
 	for _, policy := range policies {
+		policyCtx, span := tracer.Start(ctx, "policy.DNSPolicy")
+		span.SetAttributes(
+			attribute.String("policy.name", policy.GetName()),
+			attribute.String("policy.namespace", policy.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.DNSPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(policy.GetUID())),
+		)
+
 		pLogger := logger.WithValues("policy", policy.GetLocator())
 
 		pLogger.V(1).Info("updating dns policy status")
 
 		if policy.GetDeletionTimestamp() != nil {
 			pLogger.V(1).Info("policy marked for deletion, skipping")
+			span.AddEvent("policy marked for deletion, skipping")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 
@@ -114,6 +129,9 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)
 		if equalStatus && policy.Generation == policy.Status.ObservedGeneration {
 			pLogger.V(1).Info("policy status unchanged, skipping update")
+			span.AddEvent("policy status unchanged, skipping update")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 		newStatus.ObservedGeneration = policy.Generation
@@ -122,15 +140,26 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 		obj, err := controller.Destruct(policy)
 		if err != nil {
 			pLogger.Error(err, "unable to destruct policy") // should never happen
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to destruct policy")
+			span.End()
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1.DNSPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.DNSPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(policyCtx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			pLogger.Error(err, "unable to update status for policy")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to update status")
+			span.End()
+			continue
 		}
 
 		emitConditionMetrics(policy)
+
+		span.AddEvent("policy status updated successfully")
+		span.SetStatus(codes.Ok, "")
+		span.End()
 	}
 
 	return nil

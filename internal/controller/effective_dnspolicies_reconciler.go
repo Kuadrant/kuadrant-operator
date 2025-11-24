@@ -7,6 +7,9 @@ import (
 	"sync"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,6 +55,7 @@ func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription 
 
 func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler").WithValues("context", ctx)
+	tracer := otel.Tracer("kuadrant-operator")
 
 	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
 	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
@@ -68,15 +72,29 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 	}
 
 	for _, policy := range policies {
+		_, span := tracer.Start(ctx, "policy.DNSPolicy.effective")
+		span.SetAttributes(
+			attribute.String("policy.name", policy.GetName()),
+			attribute.String("policy.namespace", policy.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.DNSPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(policy.GetUID())),
+		)
+
 		pLogger := logger.WithValues("policy", policy.GetLocator())
 
 		if policy.GetDeletionTimestamp() != nil {
 			pLogger.V(1).Info("policy marked for deletion, skipping")
+			span.AddEvent("policy marked for deletion, skipping")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 
 		if accepted, _ := policyAcceptedFunc(policy); !accepted {
 			pLogger.V(1).Info("policy not accepted, skipping")
+			span.AddEvent("policy not accepted, skipping")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 
@@ -205,10 +223,15 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 		if !gatewayHasAddresses {
 			pLogger.V(1).Info("gateway has no addresses")
 			policyErrors[policy.GetLocator()] = ErrNoAddresses
+			span.AddEvent("gateway has no addresses")
 		} else if !gatewayHasAttachedRoutes {
 			pLogger.V(1).Info("gateway has no attached routes")
 			policyErrors[policy.GetLocator()] = ErrNoRoutes
+			span.AddEvent("gateway has no attached routes")
 		}
+
+		span.SetStatus(codes.Ok, "")
+		span.End()
 	}
 
 	state.Store(StateDNSPolicyErrorsKey, policyErrors)

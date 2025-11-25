@@ -31,10 +31,10 @@ datasources:
         spanStartTimeShift: '-5m'
         spanEndTimeShift: '5m'
         filterByTraceID: true
-        filterBySpanID: false
+        filterBySpanID: true
         customQuery: true
         # Query by trace_id label (stored as structured metadata by OTLP)
-        query: '{service_name="$${__span.tags["service.name"]}", trace_id="$${__span.traceId}"}'
+        query: '{service_name="$${__span.tags["service.name"]}", trace_id="$${__span.traceId}", span_id="$${__span.spanId}"}'
       tracesToMetrics:
         # Link traces to metrics in Prometheus
         datasourceUid: prometheus

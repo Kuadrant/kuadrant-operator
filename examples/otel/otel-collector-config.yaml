@@ -1,0 +1,68 @@
+# OpenTelemetry Collector configuration for Kuadrant Operator
+# Receives OTLP metrics and logs them to console for local development
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Add resource attributes
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local-development
+        action: upsert
+
+exporters:
+  # Debug exporter - prints to console
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # Prometheus exporter - exposes metrics for Prometheus to scrape
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    const_labels:
+      collector: otel
+
+  # OTLP exporter for traces - sends to Tempo
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # OTLP exporter for traces - sends to Jaeger
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # OTLP HTTP exporter for logs - sends to Loki
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [debug, prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [debug, otlphttp/loki]
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [debug, otlp/tempo, otlp/jaeger]

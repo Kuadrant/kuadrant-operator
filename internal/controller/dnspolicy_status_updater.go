@@ -45,7 +45,7 @@ func (r *DNSPolicyStatusUpdater) Subscription() controller.Subscription {
 }
 
 func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("DNSPolicyStatusUpdater")
+	logger := controller.LoggerFromContext(ctx).WithName("DNSPolicyStatusUpdater").WithValues("context", ctx)
 
 	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
 	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)

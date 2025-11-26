@@ -35,7 +35,7 @@ func (r *RateLimitPolicyValidator) Subscription() controller.Subscription {
 }
 
 func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("RateLimitPolicyValidator")
+	logger := controller.LoggerFromContext(ctx).WithName("RateLimitPolicyValidator").WithValues("context", ctx)
 
 	policies := topology.Policies().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == kuadrantv1.RateLimitPolicyGroupKind

@@ -50,7 +50,7 @@ type CertTarget struct {
 }
 
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile")
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile").WithValues("context", ctx)
 
 	certs := getCertificatesFromTopology(topology)
 	listeners := getListenersFromTopology(topology)

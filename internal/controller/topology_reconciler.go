@@ -32,7 +32,7 @@ func NewTopologyReconciler(client *dynamic.DynamicClient, namespace string) *Top
 }
 
 func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("topology file")
+	logger := controller.LoggerFromContext(ctx).WithName("topology file").WithValues("context", ctx)
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

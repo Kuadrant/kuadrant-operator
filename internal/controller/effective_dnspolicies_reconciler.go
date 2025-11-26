@@ -51,7 +51,7 @@ func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription 
 }
 
 func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler").WithValues("context", ctx)
 
 	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
 	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
@@ -218,7 +218,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 // deleteOrphanDNSRecords deletes any DNSRecord resources that exist in the topology but have no parent targettable, policy or path back to the policy.
 func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology) error {
-	logger := controller.LoggerFromContext(ctx).WithName("deleteOrphanDNSRecords")
+	logger := controller.LoggerFromContext(ctx).WithName("deleteOrphanDNSRecords").WithValues("context", ctx)
 
 	orphanRecords := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
 		if item.GroupVersionKind().GroupKind() == DNSRecordGroupKind {

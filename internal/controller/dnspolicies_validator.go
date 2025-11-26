@@ -41,7 +41,7 @@ func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 }
 
 func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("DNSPoliciesValidator")
+	logger := controller.LoggerFromContext(ctx).WithName("DNSPoliciesValidator").WithValues("context", ctx)
 
 	policies := lo.Filter(topology.Policies().Items(), func(p machinery.Policy, _ int) bool {
 		_, ok := p.(*kuadrantv1.DNSPolicy)

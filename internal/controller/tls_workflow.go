@@ -42,11 +42,11 @@ var (
 
 func NewTLSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isGatewayAPIInstalled, isCertManagerInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition: NewTLSPoliciesValidator(isGatewayAPIInstalled, isCertManagerInstalled).Subscription().Reconcile,
+		Precondition: traceReconcileFunc("tls.validator", NewTLSPoliciesValidator(isGatewayAPIInstalled, isCertManagerInstalled).Subscription().Reconcile),
 		Tasks: []controller.ReconcileFunc{
-			NewEffectiveTLSPoliciesReconciler(client, scheme).Subscription().Reconcile,
+			traceReconcileFunc("tls.effective_policies", NewEffectiveTLSPoliciesReconciler(client, scheme).Subscription().Reconcile),
 		},
-		Postcondition: NewTLSPolicyStatusUpdater(client).Subscription().Reconcile,
+		Postcondition: traceReconcileFunc("tls.status_updater", NewTLSPolicyStatusUpdater(client).Subscription().Reconcile),
 	}
 }
 
@@ -138,7 +138,7 @@ func LinkTLSPolicyToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc 
 // Common functions used across multiple reconcilers
 
 func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1.TLSPolicy) (bool, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("IsPolicyValid")
+	logger := controller.LoggerFromContext(ctx).WithName("IsPolicyValid").WithValues("context", ctx)
 
 	store, ok := s.Load(TLSPolicyAcceptedKey)
 	if !ok {

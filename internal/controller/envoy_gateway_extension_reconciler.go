@@ -249,7 +249,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		actions, err := mergeAndVerify(actions)
+		actions, err := mergeAndVerify(ctx, actions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
@@ -277,7 +277,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, path, validatedActions)
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(ctx, pathID, path, validatedActions)
 		if err != nil {
 			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
 			continue

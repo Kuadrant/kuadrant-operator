@@ -16,6 +16,16 @@ services:
     networks:
       - kuadrant-observability
 
+  # Set permissions for Loki data directory to avoid "permission denied" errors without needing to run as root
+  loki-init:
+    image: busybox:latest
+    container_name: kuadrant-loki-init
+    command: ["sh", "-c", "chown 10001:10001 /loki"]
+    volumes:
+      - loki-data:/loki
+    networks:
+      - kuadrant-observability
+
   # Loki - stores logs
   loki:
     image: grafana/loki:latest
@@ -28,8 +38,10 @@ services:
       - "3100:3100"   # Loki HTTP API
     networks:
       - kuadrant-observability
+    depends_on:
+      - loki-init
 
-  # Set permissions for Loki data directory to avoid "permission denied" errors without needing to run as root
+  # Set permissions for Tempo data directory to avoid "permission denied" errors without needing to run as root
   tempo-init:
     image: busybox:latest
     container_name: kuadrant-tempo-init

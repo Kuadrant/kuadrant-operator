@@ -18,6 +18,10 @@ import (
 type EffectiveAuthPolicy struct {
 	Path []machinery.Targetable
 	Spec kuadrantv1.AuthPolicy
+	// SourcePolicies contains the locators of all policies that were evaluated/merged
+	// to create this effective policy. This is important for tracing which parent policies
+	// (e.g., Gateway-level and HTTPRoute-level) contributed to the final configuration.
+	SourcePolicies []string
 }
 
 type EffectiveAuthPolicies map[string]EffectiveAuthPolicy
@@ -99,14 +103,21 @@ func CalculateEffectiveAuthPolicies(ctx context.Context, topology *machinery.Top
 
 				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1.AuthPolicy](paths[i], isAuthPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])
+
+					// Collect all source policy locators that contributed to this effective policy
+					sourceLocators := lo.Map(policiesInPath, func(p machinery.Policy, _ int) string {
+						return p.GetLocator()
+					})
+
 					effectivePolicies[pathID] = EffectiveAuthPolicy{
-						Path: paths[i],
-						Spec: **effectivePolicy,
+						Path:           paths[i],
+						Spec:           **effectivePolicy,
+						SourcePolicies: sourceLocators,
 					}
 					if logger.V(1).Enabled() {
 						jsonEffectivePolicy, _ := json.Marshal(effectivePolicy)
 						pathLocators := lo.Map(paths[i], machinery.MapTargetableToLocatorFunc)
-						logger.V(1).Info("effective policy", "kind", kuadrantv1.AuthPolicyGroupKind.Kind, "pathID", pathID, "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy))
+						logger.V(1).Info("effective policy", "kind", kuadrantv1.AuthPolicyGroupKind.Kind, "pathID", pathID, "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy), "sourcePolicies", sourceLocators)
 					}
 				}
 			}

@@ -11,6 +11,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -155,9 +157,28 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
-func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
+func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, error) {
+	tracer := controller.TracerFromContext(ctx)
+	_, span := tracer.Start(ctx, "wasm.MergeAndVerifyActions")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("actions.input", len(actions)),
+	)
+
 	if len(actions) == 0 {
+		span.SetAttributes(attribute.Int("actions.output", 0))
+		span.SetStatus(codes.Ok, "")
 		return nil, nil
+	}
+
+	// Track unique source policies before merging
+	// Flatten all SourcePolicyLocators from all actions and get unique values
+	sourcePolicies := lo.Uniq(lo.FlatMap(actions, func(a wasm.Action, _ int) []string {
+		return a.SourcePolicyLocators
+	}))
+	if len(sourcePolicies) > 0 {
+		span.SetAttributes(attribute.StringSlice("source_policies", sourcePolicies))
 	}
 
 	result := []wasm.Action{actions[0]}
@@ -189,6 +210,8 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 
 				if existingValue, exists := keyValueMap[key]; exists {
 					if existingValue != value {
+						span.RecordError(fmt.Errorf("duplicate key '%s' with different values", key))
+						span.SetStatus(codes.Error, "duplicate key conflict")
 						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
 					}
 				} else {
@@ -197,6 +220,12 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 			}
 		}
 	}
+
+	span.SetAttributes(
+		attribute.Int("actions.output", len(result)),
+		attribute.Int("actions.merged", len(actions)-len(result)),
+	)
+	span.SetStatus(codes.Ok, "")
 
 	return result, nil
 }
@@ -291,7 +320,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		actions, err := mergeAndVerify(actions)
+		actions, err := mergeAndVerify(ctx, actions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
@@ -319,7 +348,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, path, validatedActions)
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(ctx, pathID, path, validatedActions)
 		if err != nil {
 			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
 				logger.V(1).Info("ingoring invalid paths", "error", err.Error(), "status", "skipping", "pathID", pathID)

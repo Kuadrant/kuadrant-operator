@@ -3,6 +3,7 @@
 package controllers
 
 import (
+	"context"
 	"testing"
 
 	"gotest.tools/assert"
@@ -539,7 +540,7 @@ func TestMergeAndVerify(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := mergeAndVerify(tt.actions)
+			result, err := mergeAndVerify(context.TODO(), tt.actions)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError, "description: %s", tt.description)
@@ -569,7 +570,7 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		result, err := mergeAndVerify(actions)
+		result, err := mergeAndVerify(context.TODO(), actions)
 		assert.NilError(t, err)
 		assert.Equal(t, len(result), 1)
 	})
@@ -587,7 +588,7 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		result, err := mergeAndVerify(actions)
+		result, err := mergeAndVerify(context.TODO(), actions)
 		assert.NilError(t, err)
 		assert.Equal(t, len(result), 1)
 	})
@@ -632,7 +633,7 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		_, err := mergeAndVerify(actions)
+		_, err := mergeAndVerify(context.TODO(), actions)
 		assert.ErrorContains(t, err, "duplicate key '' with different values")
 	})
 }

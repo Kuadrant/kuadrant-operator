@@ -43,7 +43,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) Subscription() *controller.Subs
 }
 
 func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, syncMap *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("GatewayPolicyDiscoverabilityReconciler").WithName("reconcile")
+	logger := controller.LoggerFromContext(ctx).WithName("GatewayPolicyDiscoverabilityReconciler").WithName("reconcile").WithValues("context", ctx)
 
 	gateways := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, _ int) (*machinery.Gateway, bool) {
 		gw, ok := item.(*machinery.Gateway)

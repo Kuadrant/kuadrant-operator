@@ -49,7 +49,7 @@ func (r *IstioRateLimitClusterReconciler) Subscription() controller.Subscription
 }
 
 func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("IstioRateLimitClusterReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("IstioRateLimitClusterReconciler").WithValues("context", ctx)
 
 	logger.V(1).Info("building istio rate limit clusters")
 	defer logger.V(1).Info("finished building istio rate limit clusters")

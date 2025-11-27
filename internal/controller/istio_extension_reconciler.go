@@ -57,7 +57,7 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 }
 
 func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithValues("context", ctx)
 
 	logger.V(1).Info("building istio extension ", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building istio extension")
@@ -203,7 +203,7 @@ func mergeAndVerify(actions []wasm.Action) ([]wasm.Action, error) {
 
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
 func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topology *machinery.Topology, state *sync.Map) (map[string]wasm.Config, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs")
+	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs").WithValues("context", ctx)
 	logger.Info("build Wasm configuration", "status", "started")
 	logger.Info("build Wasm configuration", "status", "completed")
 

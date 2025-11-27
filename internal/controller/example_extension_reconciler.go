@@ -19,7 +19,7 @@ type ExampleExtensionReconciler struct {
 }
 
 func (e *ExampleExtensionReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
-	logger := utils.LoggerFromContext(ctx).WithName("ExampleExtensionReconciler")
+	logger := utils.LoggerFromContext(ctx).WithName("ExampleExtensionReconciler").WithValues("context", ctx)
 	logger.Info("Reconciling ExampleExtension")
 
 	client, err := utils.ClientFromContext(ctx)

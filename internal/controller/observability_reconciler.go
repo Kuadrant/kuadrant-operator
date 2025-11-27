@@ -26,13 +26,14 @@ import (
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;podmonitors,verbs=get;list;watch;create;update;patch;delete
 
 const (
-	authOpMonitorName     = "authorino-operator-monitor"
-	dnsOpMonitorName      = "dns-operator-monitor"
-	envoyStatsMonitorName = "envoy-stats-monitor"
-	istioPodMonitorName   = "istio-pod-monitor"
-	kOpMonitorName        = "kuadrant-operator-monitor"
-	limitOpMonitorName    = "limitador-operator-monitor"
-	limitPodMonitorName   = "kuadrant-limitador-monitor"
+	authOpMonitorName           = "authorino-operator-monitor"
+	dnsOpMonitorName            = "dns-operator-monitor"
+	envoyStatsMonitorName       = "envoy-stats-monitor"
+	istioPodMonitorName         = "istio-pod-monitor"
+	kOpMonitorName              = "kuadrant-operator-monitor"
+	limitOpMonitorName          = "limitador-operator-monitor"
+	limitPodMonitorName         = "kuadrant-limitador-monitor"
+	authorinoServiceMonitorName = "kuadrant-authorino-monitor"
 )
 
 func kOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
@@ -60,6 +61,9 @@ func kOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
 					"control-plane": "controller-manager",
 					"app":           "kuadrant",
 				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
 			},
 		},
 	}
@@ -273,6 +277,43 @@ func limitMonitorBuild(ns string) *monitoringv1.PodMonitor {
 	}
 }
 
+func authorinoMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       monitoringv1.ServiceMonitorsKind,
+			APIVersion: monitoringv1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authorinoServiceMonitorName,
+			Namespace: ns,
+			Labels: map[string]string{
+				"control-plane":             "controller-manager",
+				kuadrant.ObservabilityLabel: "true",
+			},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					Port:   "http",
+					Path:   "/metrics",
+					Scheme: "http",
+				}, {
+					Port:   "http",
+					Path:   "/server-metrics",
+					Scheme: "http",
+				},
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"control-plane":               "controller-manager",
+					"app.kubernetes.io/component": "metrics",
+					"app.kubernetes.io/part-of":   "authorino",
+				},
+			},
+		},
+	}
+}
+
 func envoyStatsMonitorBuild(ns string) *monitoringv1.PodMonitor {
 	return &monitoringv1.PodMonitor{
 		TypeMeta: metav1.TypeMeta{
@@ -390,6 +431,12 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 	// Limitador monitor
 	limitMonitor := limitMonitorBuild(kObj.Namespace)
 	if err := r.createPodMonitor(ctx, limitMonitor, logger); err != nil {
+		return err
+	}
+
+	// Authorino monitor
+	authorinoMonitor := authorinoMonitorBuild(kObj.Namespace)
+	if err := r.createServiceMonitor(ctx, authorinoMonitor, logger); err != nil {
 		return err
 	}
 

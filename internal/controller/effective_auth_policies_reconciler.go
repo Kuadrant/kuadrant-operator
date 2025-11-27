@@ -33,7 +33,7 @@ func (r *EffectiveAuthPolicyReconciler) Subscription() controller.Subscription {
 }
 
 func (r *EffectiveAuthPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveAuthPolicyReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveAuthPolicyReconciler").WithValues("context", ctx)
 	logger.V(1).Info("generate effective auth policy", "status", "started")
 	defer logger.V(1).Info("generate effective auth policy", "status", "completed")
 
@@ -50,7 +50,7 @@ func (r *EffectiveAuthPolicyReconciler) Reconcile(ctx context.Context, _ []contr
 }
 
 func CalculateEffectiveAuthPolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveAuthPolicies {
-	logger := controller.LoggerFromContext(ctx).WithName("calculateEffectivePolicies")
+	logger := controller.LoggerFromContext(ctx).WithName("calculateEffectivePolicies").WithValues("context", ctx)
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant) // assumes only and all valid gateway classes are linked to kuadrant in the topology

@@ -47,7 +47,7 @@ func (r *IstioAuthClusterReconciler) Subscription() controller.Subscription {
 }
 
 func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("IstioAuthClusterReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("IstioAuthClusterReconciler").WithValues("context", ctx)
 
 	logger.V(1).Info("building istio auth clusters")
 	defer logger.V(1).Info("finished building istio auth clusters")

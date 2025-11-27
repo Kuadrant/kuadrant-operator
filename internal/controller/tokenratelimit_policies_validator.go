@@ -39,7 +39,7 @@ func (r *TokenRateLimitPolicyValidator) Subscription() controller.Subscription {
 }
 
 func (r *TokenRateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyValidator")
+	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyValidator").WithValues("context", ctx)
 
 	policies := topology.Policies().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == kuadrantv1alpha1.TokenRateLimitPolicyGroupKind

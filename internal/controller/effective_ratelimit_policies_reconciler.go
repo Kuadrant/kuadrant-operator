@@ -33,7 +33,7 @@ func (r *EffectiveRateLimitPolicyReconciler) Subscription() controller.Subscript
 }
 
 func (r *EffectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler").WithValues("context", ctx)
 	logger.V(1).Info("generating effective rate limit policy", "status", "started")
 	defer logger.V(1).Info("generating effective rate limit policy", "status", "completed")
 
@@ -50,7 +50,7 @@ func (r *EffectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []
 }
 
 func (r *EffectiveRateLimitPolicyReconciler) calculateEffectivePolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveRateLimitPolicies {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler").WithName("calculateEffectivePolicies")
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler").WithName("calculateEffectivePolicies").WithValues("context", ctx)
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant) // assumes only and all valid gateway classes are linked to kuadrant in the topology

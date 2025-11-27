@@ -48,7 +48,7 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 }
 
 func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus")
+	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus").WithValues("context", ctx)
 
 	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 
@@ -114,7 +114,7 @@ func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *
 }
 
 func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuadrantv1.TLSPolicy, topology *machinery.Topology) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("isIssuerReady")
+	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("isIssuerReady").WithValues("context", ctx)
 
 	var conditions []certmanagerv1.IssuerCondition
 

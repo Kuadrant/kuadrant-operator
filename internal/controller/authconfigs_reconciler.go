@@ -46,7 +46,7 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 }
 
 func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler").WithValues("context", ctx)
 
 	authorino := GetAuthorinoFromTopology(topology)
 	if authorino == nil {

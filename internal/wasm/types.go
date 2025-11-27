@@ -91,7 +91,7 @@ func (s Service) EqualTo(other Service) bool {
 	return true
 }
 
-// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report
+// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing
 type ServiceType string
 
 const (
@@ -99,6 +99,7 @@ const (
 	RateLimitCheckServiceType  ServiceType = "ratelimit-check"
 	RateLimitReportServiceType ServiceType = "ratelimit-report"
 	AuthServiceType            ServiceType = "auth"
+	TracingServiceType         ServiceType = "tracing"
 )
 
 // +kubebuilder:validation:Enum:=deny;allow
@@ -320,7 +321,11 @@ type Observability struct {
 }
 
 type Tracing struct {
-	Endpoint string `json:"endpoint,omitempty"`
+	Service string `json:"service,omitempty"`
+
+	// TracingEndpoint is used internally to pass the endpoint to BuildConfigForActionSet
+	// It is not serialized to JSON (json:"-") because the wasm-shim config uses service references
+	Endpoint string `json:"-"`
 }
 
 func (o *Observability) EqualTo(other *Observability) bool {
@@ -362,5 +367,5 @@ func (t *Tracing) EqualTo(other *Tracing) bool {
 	if t == nil || other == nil {
 		return false
 	}
-	return t.Endpoint == other.Endpoint
+	return t.Service == other.Service
 }

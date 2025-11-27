@@ -608,13 +608,13 @@ func TestBuildObservabilityConfig(t *testing.T) {
 					},
 				},
 				Tracing: &v1beta1.Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					DefaultEndpoint: "http://jaeger:14268/api/traces",
 				},
 			},
 			expectedDefaultLevel: "INFO",
 			expectedHttpHeaderId: DefaultHTTPHeaderIdentifier,
 			expectedTracing: &Tracing{
-				Endpoint: "http://jaeger:14268/api/traces",
+				Service: TracingServiceName,
 			},
 			expectedObservabilityNil: false,
 		},
@@ -628,13 +628,13 @@ func TestBuildObservabilityConfig(t *testing.T) {
 					HTTPHeaderIdentifier: ptr.To("x-trace-id"),
 				},
 				Tracing: &v1beta1.Tracing{
-					Endpoint: "http://tempo:4318/v1/traces",
+					DefaultEndpoint: "http://tempo:4318/v1/traces",
 				},
 			},
 			expectedDefaultLevel: "DEBUG",
 			expectedHttpHeaderId: "x-trace-id",
 			expectedTracing: &Tracing{
-				Endpoint: "http://tempo:4318/v1/traces",
+				Service: TracingServiceName,
 			},
 			expectedObservabilityNil: false,
 		},
@@ -658,7 +658,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 			observability: &v1beta1.Observability{
 				DataPlane: nil,
 				Tracing: &v1beta1.Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					DefaultEndpoint: "http://jaeger:14268/api/traces",
 				},
 			},
 			expectedObservabilityNil: true,
@@ -686,7 +686,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				assert.Assert(subT, result.Tracing == nil, "expected Tracing to be nil")
 			} else {
 				assert.Assert(subT, result.Tracing != nil, "expected Tracing to be non-nil")
-				assert.Equal(subT, result.Tracing.Endpoint, tc.expectedTracing.Endpoint)
+				assert.Equal(subT, result.Tracing.Service, tc.expectedTracing.Service)
 			}
 		})
 	}
@@ -809,14 +809,14 @@ func TestObservabilityEqualTo(t *testing.T) {
 				DefaultLevel:         ptr.To("DEBUG"),
 				HTTPHeaderIdentifier: ptr.To("x-request-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 			obs2: &Observability{
 				DefaultLevel:         ptr.To("DEBUG"),
 				HTTPHeaderIdentifier: ptr.To("x-request-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 			expected: true,
@@ -827,14 +827,14 @@ func TestObservabilityEqualTo(t *testing.T) {
 				DefaultLevel:         ptr.To("DEBUG"),
 				HTTPHeaderIdentifier: ptr.To("x-request-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 			obs2: &Observability{
 				DefaultLevel:         ptr.To("DEBUG"),
 				HTTPHeaderIdentifier: ptr.To("x-request-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://tempo:14268/api/traces",
+					Service: "different-service",
 				},
 			},
 			expected: false,
@@ -845,7 +845,7 @@ func TestObservabilityEqualTo(t *testing.T) {
 				DefaultLevel:         ptr.To("DEBUG"),
 				HTTPHeaderIdentifier: ptr.To("x-request-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 			obs2: &Observability{
@@ -866,7 +866,7 @@ func TestObservabilityEqualTo(t *testing.T) {
 				DefaultLevel:         ptr.To("DEBUG"),
 				HTTPHeaderIdentifier: ptr.To("x-request-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 			expected: false,
@@ -911,12 +911,12 @@ func TestTracingEqualTo(t *testing.T) {
 		{
 			name:     "first nil, second non-nil",
 			tracing1: nil,
-			tracing2: &Tracing{Endpoint: "http://jaeger:14268"},
+			tracing2: &Tracing{Service: TracingServiceName},
 			expected: false,
 		},
 		{
 			name:     "first non-nil, second nil",
-			tracing1: &Tracing{Endpoint: "http://jaeger:14268"},
+			tracing1: &Tracing{Service: TracingServiceName},
 			tracing2: nil,
 			expected: false,
 		},
@@ -928,14 +928,14 @@ func TestTracingEqualTo(t *testing.T) {
 		},
 		{
 			name:     "same endpoint",
-			tracing1: &Tracing{Endpoint: "http://jaeger:14268/api/traces"},
-			tracing2: &Tracing{Endpoint: "http://jaeger:14268/api/traces"},
+			tracing1: &Tracing{Service: TracingServiceName},
+			tracing2: &Tracing{Service: TracingServiceName},
 			expected: true,
 		},
 		{
 			name:     "different endpoint",
-			tracing1: &Tracing{Endpoint: "http://jaeger:14268/api/traces"},
-			tracing2: &Tracing{Endpoint: "http://tempo:14268/api/traces"},
+			tracing1: &Tracing{Service: TracingServiceName},
+			tracing2: &Tracing{Service: "different-service"},
 			expected: false,
 		},
 	}
@@ -1044,6 +1044,7 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("DEBUG"),
 					HTTPHeaderIdentifier: ptr.To("x-request-id"),
 					Tracing: &Tracing{
+						Service:  TracingServiceName,
 						Endpoint: "http://jaeger:14268/api/traces",
 					},
 				},
@@ -1055,6 +1056,7 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("DEBUG"),
 					HTTPHeaderIdentifier: ptr.To("x-request-id"),
 					Tracing: &Tracing{
+						Service:  TracingServiceName,
 						Endpoint: "http://jaeger:14268/api/traces",
 					},
 				},
@@ -1062,29 +1064,53 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "configs with different tracing endpoints",
-			config1: &Config{
-				Services:   baseConfig.Services,
-				ActionSets: baseConfig.ActionSets,
-				Observability: &Observability{
-					DefaultLevel:         ptr.To("DEBUG"),
-					HTTPHeaderIdentifier: ptr.To("x-request-id"),
-					Tracing: &Tracing{
-						Endpoint: "http://jaeger:14268/api/traces",
+			name: "configs with different tracing endpoints in services",
+			config1: func() *Config {
+				services1 := make(map[string]Service)
+				for k, v := range baseConfig.Services {
+					services1[k] = v
+				}
+				services1[TracingServiceName] = Service{
+					Type:        TracingServiceType,
+					Endpoint:    "jaeger-cluster",
+					FailureMode: FailureModeAllow,
+					Timeout:     ptr.To("100ms"),
+				}
+				return &Config{
+					Services:   services1,
+					ActionSets: baseConfig.ActionSets,
+					Observability: &Observability{
+						DefaultLevel:         ptr.To("DEBUG"),
+						HTTPHeaderIdentifier: ptr.To("x-request-id"),
+						Tracing: &Tracing{
+							Service: TracingServiceName,
+						},
 					},
-				},
-			},
-			config2: &Config{
-				Services:   baseConfig.Services,
-				ActionSets: baseConfig.ActionSets,
-				Observability: &Observability{
-					DefaultLevel:         ptr.To("DEBUG"),
-					HTTPHeaderIdentifier: ptr.To("x-request-id"),
-					Tracing: &Tracing{
-						Endpoint: "http://tempo:14268/api/traces",
+				}
+			}(),
+			config2: func() *Config {
+				services2 := make(map[string]Service)
+				for k, v := range baseConfig.Services {
+					services2[k] = v
+				}
+				services2[TracingServiceName] = Service{
+					Type:        TracingServiceType,
+					Endpoint:    "tempo-cluster",
+					FailureMode: FailureModeAllow,
+					Timeout:     ptr.To("100ms"),
+				}
+				return &Config{
+					Services:   services2,
+					ActionSets: baseConfig.ActionSets,
+					Observability: &Observability{
+						DefaultLevel:         ptr.To("DEBUG"),
+						HTTPHeaderIdentifier: ptr.To("x-request-id"),
+						Tracing: &Tracing{
+							Service: TracingServiceName,
+						},
 					},
-				},
-			},
+				}
+			}(),
 			expected: false,
 		},
 		{
@@ -1178,12 +1204,12 @@ func TestBuildObservabilityConfigWithTracing(t *testing.T) {
 					},
 				},
 				Tracing: &v1beta1.Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					DefaultEndpoint: "http://jaeger:14268/api/traces",
 				},
 			},
 			shouldHaveTracing: true,
 			expectedTracing: &Tracing{
-				Endpoint: "http://jaeger:14268/api/traces",
+				Service: TracingServiceName,
 			},
 		},
 		{
@@ -1206,13 +1232,10 @@ func TestBuildObservabilityConfigWithTracing(t *testing.T) {
 					},
 				},
 				Tracing: &v1beta1.Tracing{
-					Endpoint: "",
+					DefaultEndpoint: "",
 				},
 			},
-			shouldHaveTracing: true,
-			expectedTracing: &Tracing{
-				Endpoint: "",
-			},
+			shouldHaveTracing: false, // No tracing service created without an endpoint
 		},
 	}
 
@@ -1223,7 +1246,7 @@ func TestBuildObservabilityConfigWithTracing(t *testing.T) {
 
 			if tc.shouldHaveTracing {
 				assert.Assert(subT, result.Tracing != nil, "expected Tracing to be non-nil")
-				assert.Equal(subT, result.Tracing.Endpoint, tc.expectedTracing.Endpoint)
+				assert.Equal(subT, result.Tracing.Service, tc.expectedTracing.Service)
 			} else {
 				assert.Assert(subT, result.Tracing == nil, "expected Tracing to be nil")
 			}
@@ -1272,6 +1295,7 @@ func TestConfigToStructWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("INFO"),
 					HTTPHeaderIdentifier: ptr.To("x-trace-id"),
 					Tracing: &Tracing{
+						Service:  TracingServiceName,
 						Endpoint: "http://jaeger:14268/api/traces",
 					},
 				},
@@ -1336,6 +1360,7 @@ func TestConfigToJSONWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("DEBUG"),
 					HTTPHeaderIdentifier: ptr.To("x-request-id"),
 					Tracing: &Tracing{
+						Service:  TracingServiceName,
 						Endpoint: "http://jaeger:14268/api/traces",
 					},
 				},
@@ -1431,14 +1456,14 @@ func TestBuildConfigForActionSetWithObservability(t *testing.T) {
 				DefaultLevel:         ptr.To("INFO"),
 				HTTPHeaderIdentifier: ptr.To("x-trace-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 			expectedObservability: &Observability{
 				DefaultLevel:         ptr.To("INFO"),
 				HTTPHeaderIdentifier: ptr.To("x-trace-id"),
 				Tracing: &Tracing{
-					Endpoint: "http://jaeger:14268/api/traces",
+					Service: TracingServiceName,
 				},
 			},
 		},

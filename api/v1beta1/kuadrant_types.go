@@ -117,8 +117,9 @@ type DataPlane struct {
 // Tracing configures distributed tracing integration for request flows.
 // It enables tracing spans to be exported to external tracing systems (e.g., Jaeger, Zipkin).
 type Tracing struct {
-	// Endpoint is the URL of the tracing collector backend where spans should be sent.
-	Endpoint string `json:"endpoint,omitempty"`
+	// DefaultEndpoint is the default URL of the tracing collector backend where spans should be sent.
+	// Can be overridden per-gateway in future versions.
+	DefaultEndpoint string `json:"defaultEndpoint,omitempty"`
 
 	// Insecure controls whether to skip TLS certificate verification.
 	Insecure bool `json:"insecure,omitempty"`

@@ -29,6 +29,7 @@ const (
 	RateLimitCheckServiceName  = "ratelimit-check-service"
 	RateLimitReportServiceName = "ratelimit-report-service"
 	AuthServiceName            = "auth-service"
+	TracingServiceName         = "tracing-service"
 
 	DefaultHTTPHeaderIdentifier = "x-request-id"
 )
@@ -130,8 +131,12 @@ func BuildObservabilityConfig(observabilitySpec *v1beta1.Observability) *Observa
 	}
 
 	var tracing *Tracing
-	if observabilitySpec.Tracing != nil {
-		tracing = &Tracing{Endpoint: observabilitySpec.Tracing.Endpoint}
+	if observabilitySpec.Tracing != nil && observabilitySpec.Tracing.DefaultEndpoint != "" {
+		// Reference the tracing service that will be created in BuildConfigForActionSet
+		tracing = &Tracing{
+			Service:  TracingServiceName,
+			Endpoint: observabilitySpec.Tracing.DefaultEndpoint,
+		}
 	}
 
 	return &Observability{
@@ -142,33 +147,45 @@ func BuildObservabilityConfig(observabilitySpec *v1beta1.Observability) *Observa
 }
 
 func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observability *Observability) Config {
-	return Config{
-		Services: map[string]Service{
-			AuthServiceName: {
-				Type:        AuthServiceType,
-				Endpoint:    kuadrant.KuadrantAuthClusterName,
-				FailureMode: AuthServiceFailureMode(logger),
-				Timeout:     ptr.To(AuthServiceTimeout()),
-			},
-			RateLimitServiceName: {
-				Type:        RateLimitServiceType,
-				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-				FailureMode: RatelimitServiceFailureMode(logger),
-				Timeout:     ptr.To(RatelimitServiceTimeout()),
-			},
-			RateLimitCheckServiceName: {
-				Type:        RateLimitCheckServiceType,
-				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-				FailureMode: RatelimitCheckServiceFailureMode(logger),
-				Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
-			},
-			RateLimitReportServiceName: {
-				Type:        RateLimitReportServiceType,
-				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-				FailureMode: RatelimitReportServiceFailureMode(logger),
-				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
-			},
+	services := map[string]Service{
+		AuthServiceName: {
+			Type:        AuthServiceType,
+			Endpoint:    kuadrant.KuadrantAuthClusterName,
+			FailureMode: AuthServiceFailureMode(logger),
+			Timeout:     ptr.To(AuthServiceTimeout()),
 		},
+		RateLimitServiceName: {
+			Type:        RateLimitServiceType,
+			Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+			FailureMode: RatelimitServiceFailureMode(logger),
+			Timeout:     ptr.To(RatelimitServiceTimeout()),
+		},
+		RateLimitCheckServiceName: {
+			Type:        RateLimitCheckServiceType,
+			Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+			FailureMode: RatelimitCheckServiceFailureMode(logger),
+			Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
+		},
+		RateLimitReportServiceName: {
+			Type:        RateLimitReportServiceType,
+			Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+			FailureMode: RatelimitReportServiceFailureMode(logger),
+			Timeout:     ptr.To(RatelimitReportServiceTimeout()),
+		},
+	}
+
+	// Add tracing service if observability is configured with a tracing endpoint
+	if observability != nil && observability.Tracing != nil && observability.Tracing.Endpoint != "" {
+		services[TracingServiceName] = Service{
+			Type:        TracingServiceType,
+			Endpoint:    observability.Tracing.Endpoint,
+			FailureMode: FailureModeAllow,
+			Timeout:     ptr.To("100ms"),
+		}
+	}
+
+	return Config{
+		Services:      services,
 		ActionSets:    actionSets,
 		Observability: observability,
 	}

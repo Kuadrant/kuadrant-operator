@@ -117,9 +117,10 @@ spec:
                     description: Tracing configures distributed tracing for request
                       flows through the system.
                     properties:
-                      endpoint:
-                        description: Endpoint is the URL of the tracing collector
-                          backend where spans should be sent.
+                      defaultEndpoint:
+                        description: |-
+                          DefaultEndpoint is the default URL of the tracing collector backend where spans should be sent.
+                          Can be overridden per-gateway in future versions.
                         type: string
                       insecure:
                         description: Insecure controls whether to skip TLS certificate

@@ -12,6 +12,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -204,19 +206,32 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 	celValidationIssues := celvalidator.NewIssueCollection()
 
+	tracer := controller.TracerFromContext(ctx)
+
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an envoy gateway gateway
 	for i := range paths {
 		pathID := paths[i].Key
 		path := paths[i].Value
 
-		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
-
-		validatorBuilder := celvalidator.NewRootValidatorBuilder()
+		gatewayClass, gateway, listener, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 
 		// ignore if not an envoy gateway gateway
 		if !lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName) {
 			continue
 		}
+
+		// Create a parent span for this entire path processing
+		pathCtx, pathSpan := tracer.Start(ctx, "wasm.BuildConfigForPath")
+		pathSpan.SetAttributes(
+			attribute.String("path_id", pathID),
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace()),
+			attribute.String("listener.name", string(listener.Name)),
+			attribute.String("httproute.name", httpRoute.GetName()),
+			attribute.String("httproute.namespace", httpRoute.GetNamespace()),
+		)
+
+		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		var actions []wasm.Action
 
@@ -249,17 +264,35 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		actions, err := mergeAndVerify(ctx, actions)
+		pathSpan.SetAttributes(attribute.Int("actions.before_merge", len(actions)))
+
+		// Extract and track source policies before merging
+		sourcePolicies := lo.Uniq(lo.FlatMap(actions, func(a wasm.Action, _ int) []string {
+			return a.SourcePolicyLocators
+		}))
+		if len(sourcePolicies) > 0 {
+			pathSpan.SetAttributes(attribute.StringSlice("source_policies", sourcePolicies))
+		}
+
+		actions, err := mergeAndVerify(pathCtx, actions)
 		if err != nil {
+			pathSpan.RecordError(err)
+			pathSpan.SetStatus(codes.Error, "failed to merge/verify actions")
+			pathSpan.End()
 			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
 
 		if len(actions) == 0 {
+			pathSpan.SetStatus(codes.Ok, "no actions after merge")
+			pathSpan.End()
 			continue
 		}
 
 		validator, err := validatorBuilder.Build()
 		if err != nil {
+			pathSpan.RecordError(err)
+			pathSpan.SetStatus(codes.Error, "failed to build validator")
+			pathSpan.End()
 			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
 		var validatedActions []wasm.Action
@@ -273,15 +306,31 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			}
 		}
 
+		pathSpan.SetAttributes(
+			attribute.Int("actions.after_merge", len(actions)),
+			attribute.Int("actions.validated", len(validatedActions)),
+			attribute.Int("actions.invalid", len(actions)-len(validatedActions)),
+		)
+
 		if len(validatedActions) == 0 {
+			pathSpan.SetStatus(codes.Ok, "no validated actions")
+			pathSpan.End()
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(ctx, pathID, path, validatedActions)
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathCtx, pathID, path, validatedActions)
 		if err != nil {
 			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
+			pathSpan.RecordError(err)
+			pathSpan.SetStatus(codes.Error, "failed to build action sets")
+			pathSpan.End()
 			continue
 		}
+
+		pathSpan.SetAttributes(attribute.Int("actionsets.created", len(wasmActionSetsForPath)))
+		pathSpan.SetStatus(codes.Ok, "")
+		pathSpan.End()
+
 		wasmActionSets.Add(gateway.GetLocator(), wasmActionSetsForPath...)
 	}
 

@@ -237,25 +237,12 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 	_, span := tracer.Start(ctx, "wasm.BuildActionSetsForPath")
 	defer span.End()
 
-	span.SetAttributes(
-		attribute.String("path_id", pathID),
-		attribute.Int("action_count", len(actions)),
-	)
-
 	_, _, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to extract objects from request path")
 		return nil, err
 	}
-
-	span.SetAttributes(
-		attribute.String("gateway.name", listener.Gateway.GetName()),
-		attribute.String("gateway.namespace", listener.Gateway.GetNamespace()),
-		attribute.String("listener.name", string(listener.Name)),
-		attribute.String("httproute.name", httpRoute.GetName()),
-		attribute.String("httproute.namespace", httpRoute.GetNamespace()),
-	)
 
 	// Add action type attributes for observability
 	actionTypes := lo.Map(actions, func(action Action, _ int) string {
@@ -273,12 +260,13 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 			// Create a span for each ActionSet being created
 			_, actionSetSpan := tracer.Start(ctx, "wasm.ActionSet.create")
 			actionSetSpan.SetAttributes(
-				attribute.String("path_id", pathID),
 				attribute.String("hostname", string(hostname)),
 				attribute.Int("match_index", j),
-				attribute.String("httproute.name", httpRoute.GetName()),
-				attribute.String("httproute.namespace", httpRoute.GetNamespace()),
 			)
+
+			if httpRouteMatch.Path != nil && httpRouteMatch.Path.Value != nil {
+				actionSetSpan.SetAttributes(attribute.String("path", *httpRouteMatch.Path.Value))
+			}
 
 			actionSet := ActionSet{
 				Name:    ActionSetNameForPath(pathID, j, string(hostname)),
@@ -293,21 +281,13 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 			}
 			actionSet.RouteRuleConditions = routeRuleConditions
 
-			// Track which policies contributed to this ActionSet
-			// Flatten all SourcePolicyLocators from all actions and get unique values
-			sourcePolicies := lo.Uniq(lo.FlatMap(actions, func(a Action, _ int) []string {
-				return a.SourcePolicyLocators
-			}))
-
-			// Count actions by service type to understand policy composition
+			// Count actions by service type to understand policy composition for this specific match
 			actionsByService := lo.GroupBy(actions, func(a Action) string {
 				return a.ServiceName
 			})
 
 			actionSetSpan.SetAttributes(
 				attribute.String("actionset.name", actionSet.Name),
-				attribute.Int("actionset.action_count", len(actionSet.Actions)),
-				attribute.StringSlice("actionset.source_policies", sourcePolicies),
 				attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
 				attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
 				attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
@@ -327,7 +307,6 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 		})
 	})
 
-	span.SetAttributes(attribute.Int("config_count", len(configs)))
 	span.SetStatus(codes.Ok, "")
 
 	return configs, err

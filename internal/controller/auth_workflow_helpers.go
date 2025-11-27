@@ -164,7 +164,7 @@ func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy)
 		ServiceName:          wasm.AuthServiceName,
 		Scope:                AuthConfigNameForPath(pathID),
 		Predicates:           spec.Predicates.Into(),
-		SourcePolicyLocators: effectivePolicy.SourcePolicies, // All policies that contributed
+		SourcePolicyLocators: effectivePolicy.SourcePolicies,
 	}
 
 	return []wasm.Action{action}

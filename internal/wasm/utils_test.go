@@ -667,7 +667,9 @@ func TestBuildObservabilityConfig(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			result := BuildObservabilityConfig(tc.observability)
+			logger := logr.Discard()
+			serviceBuilder := NewServiceBuilder(&logger)
+			result := BuildObservabilityConfig(serviceBuilder, tc.observability)
 
 			if tc.expectedObservabilityNil {
 				assert.Assert(subT, result == nil, "expected observability to be nil")
@@ -1241,7 +1243,9 @@ func TestBuildObservabilityConfigWithTracing(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			result := BuildObservabilityConfig(tc.observability)
+			logger := logr.Discard()
+			serviceBuilder := NewServiceBuilder(&logger)
+			result := BuildObservabilityConfig(serviceBuilder, tc.observability)
 			assert.Assert(subT, result != nil, "expected observability to be non-nil")
 
 			if tc.shouldHaveTracing {
@@ -1471,7 +1475,8 @@ func TestBuildConfigForActionSetWithObservability(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			config := BuildConfigForActionSet(actionSets, &logger, tc.observability)
+			serviceBuilder := NewServiceBuilder(&logger)
+			config := BuildConfigForActionSet(actionSets, &logger, tc.observability, serviceBuilder)
 
 			// Verify the config has the expected structure
 			assert.Assert(subT, config.Services != nil, "expected services to be non-nil")

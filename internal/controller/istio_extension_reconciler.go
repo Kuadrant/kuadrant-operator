@@ -207,11 +207,12 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 	logger.Info("build Wasm configuration", "status", "started")
 	logger.Info("build Wasm configuration", "status", "completed")
 
-	// Get Kuadrant CR to check observability settings
+	serviceBuilder := wasm.NewServiceBuilder(&logger)
+	// Get Kuadrant CR to access observability settings
 	kObj := GetKuadrantFromTopology(topology)
 	var observability *wasm.Observability
 	if kObj != nil {
-		observability = wasm.BuildObservabilityConfig(&kObj.Spec.Observability)
+		observability = wasm.BuildObservabilityConfig(serviceBuilder, &kObj.Spec.Observability)
 	}
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
@@ -345,7 +346,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
 		return wasm.BuildConfigForActionSet(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
 			return c.Config.(wasm.ActionSet)
-		}), &logger, observability)
+		}), &logger, observability, serviceBuilder)
 	})
 
 	return wasmConfigs, nil

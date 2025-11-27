@@ -86,6 +86,14 @@ func RatelimitReportServiceFailureMode(logger *logr.Logger) FailureModeType {
 	return parseFailureModeValue("RATELIMIT_REPORT_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
 }
 
+func TracingServiceTimeout() string {
+	return env.GetString("TRACING_SERVICE_TIMEOUT", "100ms")
+}
+
+func TracingServiceFailureMode(logger *logr.Logger) FailureModeType {
+	return parseFailureModeValue("TRACING_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
+}
+
 func parseFailureModeValue(envVarName string, defaultValue FailureModeType, logger *logr.Logger) FailureModeType {
 	value := os.Getenv(envVarName)
 	if value == "" {
@@ -109,7 +117,7 @@ func ExtensionName(gatewayName string) string {
 // For MVP: finds the highest priority level that is set to "true"
 // Priority: DEBUG(4) > INFO(3) > WARN(2) > ERROR(1)
 // Future: will support dynamic CEL predicates for request-time evaluation
-func BuildObservabilityConfig(observabilitySpec *v1beta1.Observability) *Observability {
+func BuildObservabilityConfig(serviceBuilder *ServiceBuilder, observabilitySpec *v1beta1.Observability) *Observability {
 	if observabilitySpec == nil || observabilitySpec.DataPlane == nil {
 		return nil
 	}
@@ -134,9 +142,10 @@ func BuildObservabilityConfig(observabilitySpec *v1beta1.Observability) *Observa
 	if observabilitySpec.Tracing != nil && observabilitySpec.Tracing.DefaultEndpoint != "" {
 		// Reference the tracing service that will be created in BuildConfigForActionSet
 		tracing = &Tracing{
-			Service:  TracingServiceName,
-			Endpoint: observabilitySpec.Tracing.DefaultEndpoint,
+			Service: TracingServiceName,
 		}
+
+		serviceBuilder.WithTracing(observabilitySpec.Tracing.DefaultEndpoint)
 	}
 
 	return &Observability{
@@ -146,46 +155,75 @@ func BuildObservabilityConfig(observabilitySpec *v1beta1.Observability) *Observa
 	}
 }
 
-func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observability *Observability) Config {
-	services := map[string]Service{
-		AuthServiceName: {
-			Type:        AuthServiceType,
-			Endpoint:    kuadrant.KuadrantAuthClusterName,
-			FailureMode: AuthServiceFailureMode(logger),
-			Timeout:     ptr.To(AuthServiceTimeout()),
-		},
-		RateLimitServiceName: {
-			Type:        RateLimitServiceType,
-			Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-			FailureMode: RatelimitServiceFailureMode(logger),
-			Timeout:     ptr.To(RatelimitServiceTimeout()),
-		},
-		RateLimitCheckServiceName: {
-			Type:        RateLimitCheckServiceType,
-			Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-			FailureMode: RatelimitCheckServiceFailureMode(logger),
-			Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
-		},
-		RateLimitReportServiceName: {
-			Type:        RateLimitReportServiceType,
-			Endpoint:    kuadrant.KuadrantRateLimitClusterName,
-			FailureMode: RatelimitReportServiceFailureMode(logger),
-			Timeout:     ptr.To(RatelimitReportServiceTimeout()),
-		},
-	}
+// ServiceBuilder helps build wasm services with optional configurations using the builder pattern
+type ServiceBuilder struct {
+	services map[string]Service
+	logger   *logr.Logger
+}
 
-	// Add tracing service if observability is configured with a tracing endpoint
-	if observability != nil && observability.Tracing != nil && observability.Tracing.Endpoint != "" {
-		services[TracingServiceName] = Service{
-			Type:        TracingServiceType,
-			Endpoint:    observability.Tracing.Endpoint,
-			FailureMode: FailureModeAllow,
-			Timeout:     ptr.To("100ms"),
-		}
+// NewServiceBuilder creates a new ServiceBuilder with default services
+func NewServiceBuilder(logger *logr.Logger) *ServiceBuilder {
+	return &ServiceBuilder{
+		services: map[string]Service{
+			AuthServiceName: {
+				Type:        AuthServiceType,
+				Endpoint:    kuadrant.KuadrantAuthClusterName,
+				FailureMode: AuthServiceFailureMode(logger),
+				Timeout:     ptr.To(AuthServiceTimeout()),
+			},
+			RateLimitServiceName: {
+				Type:        RateLimitServiceType,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				FailureMode: RatelimitServiceFailureMode(logger),
+				Timeout:     ptr.To(RatelimitServiceTimeout()),
+			},
+			RateLimitCheckServiceName: {
+				Type:        RateLimitCheckServiceType,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				FailureMode: RatelimitCheckServiceFailureMode(logger),
+				Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
+			},
+			RateLimitReportServiceName: {
+				Type:        RateLimitReportServiceType,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				FailureMode: RatelimitReportServiceFailureMode(logger),
+				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
+			},
+		},
+		logger: logger,
+	}
+}
+
+// WithTracing adds a tracing service with the specified endpoint
+func (sb *ServiceBuilder) WithTracing(endpoint string) *ServiceBuilder {
+	sb.services[TracingServiceName] = Service{
+		Type:        TracingServiceType,
+		Endpoint:    endpoint,
+		FailureMode: TracingServiceFailureMode(sb.logger),
+		Timeout:     ptr.To(TracingServiceTimeout()),
+	}
+	return sb
+}
+
+// WithService adds a custom service
+func (sb *ServiceBuilder) WithService(name string, service Service) *ServiceBuilder {
+	sb.services[name] = service
+	return sb
+}
+
+// Build returns the built services map
+func (sb *ServiceBuilder) Build() map[string]Service {
+	return sb.services
+}
+
+func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observability *Observability, serviceBuilder *ServiceBuilder) Config {
+	// Use provided service builder or create a new one
+	if serviceBuilder == nil {
+		serviceBuilder = NewServiceBuilder(logger)
 	}
 
 	return Config{
-		Services:      services,
+		Services:      serviceBuilder.Build(),
 		ActionSets:    actionSets,
 		Observability: observability,
 	}

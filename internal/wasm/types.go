@@ -172,11 +172,12 @@ type Action struct {
 	// +optional
 	ConditionalData []ConditionalData `json:"conditionalData,omitempty"`
 
-	// SourcePolicyLocators tracks all policies that contributed to this action (not serialized to wasm config)
+	// SourcePolicyLocators tracks all policies that contributed to this action.
 	// This is important for policies that can be merged (e.g., Gateway-level + HTTPRoute-level).
 	// For atomic merge strategies or individual rules, this may contain a single entry.
+	// Serialized to wasm config as "sources" for observability and debugging.
 	// Format: "kind/namespace/name"
-	SourcePolicyLocators []string `json:"-"`
+	SourcePolicyLocators []string `json:"sources,omitempty"`
 }
 
 type ConditionalData struct {
@@ -237,6 +238,10 @@ func (a *Action) EqualTo(other Action) bool {
 	}
 
 	if !reflect.DeepEqual(a.Predicates, other.Predicates) {
+		return false
+	}
+
+	if !reflect.DeepEqual(a.SourcePolicyLocators, other.SourcePolicyLocators) {
 		return false
 	}
 

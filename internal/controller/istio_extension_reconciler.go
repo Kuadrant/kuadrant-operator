@@ -179,6 +179,8 @@ func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, 
 		if lastAction.Scope == currentAction.Scope &&
 			lastAction.ServiceName == currentAction.ServiceName && lastAction.ServiceName != wasm.AuthServiceName {
 			lastAction.ConditionalData = append(lastAction.ConditionalData, currentAction.ConditionalData...)
+			// Merge source policy locators - deduplicate them
+			lastAction.SourcePolicyLocators = lo.Uniq(append(lastAction.SourcePolicyLocators, currentAction.SourcePolicyLocators...))
 		} else {
 			result = append(result, currentAction)
 		}

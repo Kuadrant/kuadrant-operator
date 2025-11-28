@@ -30,8 +30,6 @@ const (
 	RateLimitReportServiceName = "ratelimit-report-service"
 	AuthServiceName            = "auth-service"
 	TracingServiceName         = "tracing-service"
-
-	DefaultHTTPHeaderIdentifier = "x-request-id"
 )
 
 type LogLevel int
@@ -150,7 +148,7 @@ func BuildObservabilityConfig(serviceBuilder *ServiceBuilder, observabilitySpec 
 
 	return &Observability{
 		DefaultLevel:         ptr.To(logLevel.String()),
-		HTTPHeaderIdentifier: ptr.To(ptr.Deref(dataPlane.HTTPHeaderIdentifier, DefaultHTTPHeaderIdentifier)),
+		HTTPHeaderIdentifier: dataPlane.HTTPHeaderIdentifier,
 		Tracing:              tracing,
 	}
 }

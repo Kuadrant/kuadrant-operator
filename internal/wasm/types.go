@@ -322,10 +322,6 @@ type Observability struct {
 
 type Tracing struct {
 	Service string `json:"service,omitempty"`
-
-	// TracingEndpoint is used internally to pass the endpoint to BuildConfigForActionSet
-	// It is not serialized to JSON (json:"-") because the wasm-shim config uses service references
-	Endpoint string `json:"-"`
 }
 
 func (o *Observability) EqualTo(other *Observability) bool {

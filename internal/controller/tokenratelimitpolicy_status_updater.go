@@ -12,6 +12,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,6 +59,7 @@ func (r *TokenRateLimitPolicyStatusUpdater) Subscription() controller.Subscripti
 
 func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TokenRateLimitPolicyStatusUpdater").WithValues("context", ctx)
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, _ int) (*kuadrantv1alpha1.TokenRateLimitPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TokenRateLimitPolicy)
@@ -69,8 +72,19 @@ func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ 
 	defer logger.V(1).Info("finished updating tokenratelimitpolicy statuses")
 
 	for _, policy := range policies {
+		policyCtx, span := tracer.Start(ctx, "policy.TokenRateLimitPolicy")
+		span.SetAttributes(
+			attribute.String("policy.name", policy.GetName()),
+			attribute.String("policy.namespace", policy.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1alpha1.TokenRateLimitPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(policy.GetUID())),
+		)
+
 		if policy.GetDeletionTimestamp() != nil {
 			logger.V(1).Info("tokenratelimitpolicy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+			span.AddEvent("policy marked for deletion, skipping")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 
@@ -94,6 +108,9 @@ func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ 
 		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)
 		if equalStatus && policy.Generation == policy.Status.ObservedGeneration {
 			logger.V(1).Info("policy status unchanged, skipping update")
+			span.AddEvent("policy status unchanged, skipping update")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 		newStatus.ObservedGeneration = policy.Generation
@@ -102,14 +119,24 @@ func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ 
 		obj, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy") // should never happen
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to destruct policy")
+			span.End()
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1alpha1.TokenRateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1alpha1.TokenRateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(policyCtx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "unable to update policy status", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to update status")
+			span.End()
 			continue
 		}
+
+		span.AddEvent("policy status updated successfully")
+		span.SetStatus(codes.Ok, "")
+		span.End()
 	}
 
 	return nil

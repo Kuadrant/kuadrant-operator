@@ -171,6 +171,12 @@ type Action struct {
 	// ConditionalData data contains the predicates and data that will be sent to the service
 	// +optional
 	ConditionalData []ConditionalData `json:"conditionalData,omitempty"`
+
+	// SourcePolicyLocators tracks all policies that contributed to this action (not serialized to wasm config)
+	// This is important for policies that can be merged (e.g., Gateway-level + HTTPRoute-level).
+	// For atomic merge strategies or individual rules, this may contain a single entry.
+	// Format: "kind/namespace/name"
+	SourcePolicyLocators []string `json:"-"`
 }
 
 type ConditionalData struct {

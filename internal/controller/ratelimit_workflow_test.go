@@ -82,8 +82,9 @@ func TestWasmActionFromLimit(t *testing.T) {
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
-				ServiceName: wasm.RateLimitServiceName,
-				Scope:       "my-ns/my-route",
+				SourcePolicyLocators: []string{"test/policy/locator"},
+				ServiceName:          wasm.RateLimitServiceName,
+				Scope:                "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Data: []wasm.DataType{
@@ -108,8 +109,9 @@ func TestWasmActionFromLimit(t *testing.T) {
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
-				ServiceName: wasm.RateLimitServiceName,
-				Scope:       "my-ns/my-route",
+				SourcePolicyLocators: []string{"test/policy/locator"},
+				ServiceName:          wasm.RateLimitServiceName,
+				Scope:                "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Data: []wasm.DataType{
@@ -143,8 +145,9 @@ func TestWasmActionFromLimit(t *testing.T) {
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
-				ServiceName: wasm.RateLimitServiceName,
-				Scope:       "my-ns/my-route",
+				SourcePolicyLocators: []string{"test/policy/locator"},
+				ServiceName:          wasm.RateLimitServiceName,
+				Scope:                "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{"auth.identity.group != admin"},
@@ -177,8 +180,9 @@ func TestWasmActionFromLimit(t *testing.T) {
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.Action{
-				ServiceName: wasm.RateLimitServiceName,
-				Scope:       "my-ns/my-route",
+				SourcePolicyLocators: []string{"test/policy/locator"},
+				ServiceName:          wasm.RateLimitServiceName,
+				Scope:                "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{"auth.identity.group != admin"},
@@ -205,8 +209,9 @@ func TestWasmActionFromLimit(t *testing.T) {
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.Action{
-				ServiceName: wasm.RateLimitServiceName,
-				Scope:       "my-ns/my-route",
+				SourcePolicyLocators: []string{"test/policy/locator"},
+				ServiceName:          wasm.RateLimitServiceName,
+				Scope:                "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -231,7 +236,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, tc.scope, tc.topLevelPredicates)
+			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedAction, computedRule); diff != "" {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}

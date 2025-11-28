@@ -16,7 +16,7 @@ require (
 	github.com/kuadrant/authorino-operator v0.21.0
 	github.com/kuadrant/dns-operator v0.0.0-20250826105007-7a0e6d88f7bb
 	github.com/kuadrant/limitador-operator v0.15.0
-	github.com/kuadrant/policy-machinery v0.6.4
+	github.com/kuadrant/policy-machinery v0.7.1-0.20251119154946-1ca17a075dd2
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
@@ -63,7 +63,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/emicklei/dot v1.6.2 // indirect
+	github.com/emicklei/dot v1.8.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/evanphx/json-patch v5.9.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect

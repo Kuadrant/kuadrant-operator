@@ -1,6 +1,7 @@
 package wasm
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,8 +11,12 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+
+	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/utils/env"
@@ -227,14 +232,42 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 	}
 }
 
-func BuildActionSetsForPath(pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+	tracer := controller.TracerFromContext(ctx)
+	_, span := tracer.Start(ctx, "wasm.BuildActionSetsForPath")
+	defer span.End()
+
 	_, _, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to extract objects from request path")
 		return nil, err
 	}
 
-	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
+	// Add action type attributes for observability
+	actionTypes := lo.Map(actions, func(action Action, _ int) string {
+		if action.ServiceName != "" {
+			return action.ServiceName
+		}
+		return "unknown"
+	})
+	if len(actionTypes) > 0 {
+		span.SetAttributes(attribute.StringSlice("action_types", actionTypes))
+	}
+
+	configs := lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
+			// Create a span for each ActionSet being created
+			_, actionSetSpan := tracer.Start(ctx, "wasm.ActionSet.create")
+			actionSetSpan.SetAttributes(
+				attribute.String("hostname", string(hostname)),
+				attribute.Int("match_index", j),
+			)
+
+			if httpRouteMatch.Path != nil && httpRouteMatch.Path.Value != nil {
+				actionSetSpan.SetAttributes(attribute.String("path", *httpRouteMatch.Path.Value))
+			}
+
 			actionSet := ActionSet{
 				Name:    ActionSetNameForPath(pathID, j, string(hostname)),
 				Actions: actions,
@@ -244,8 +277,25 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, actions 
 			}
 			if predicates := PredicatesFromHTTPRouteMatch(httpRouteMatch); len(predicates) > 0 {
 				routeRuleConditions.Predicates = predicates
+				actionSetSpan.SetAttributes(attribute.Int("predicate_count", len(predicates)))
 			}
 			actionSet.RouteRuleConditions = routeRuleConditions
+
+			// Count actions by service type to understand policy composition for this specific match
+			actionsByService := lo.GroupBy(actions, func(a Action) string {
+				return a.ServiceName
+			})
+
+			actionSetSpan.SetAttributes(
+				attribute.String("actionset.name", actionSet.Name),
+				attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
+				attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
+				attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
+				attribute.Int("actionset.ratelimit_report_actions", len(actionsByService[RateLimitReportServiceName])),
+			)
+			actionSetSpan.SetStatus(codes.Ok, "")
+			actionSetSpan.End()
+
 			return kuadrantgatewayapi.HTTPRouteMatchConfig{
 				Hostname:          string(hostname),
 				HTTPRouteMatch:    httpRouteMatch,
@@ -255,7 +305,11 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, actions 
 				Config:            actionSet,
 			}
 		})
-	}), err
+	})
+
+	span.SetStatus(codes.Ok, "")
+
+	return configs, err
 }
 
 func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname string) string {

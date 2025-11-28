@@ -15,8 +15,9 @@ import (
 )
 
 type EffectiveTokenRateLimitPolicy struct {
-	Path []machinery.Targetable
-	Spec kuadrantv1alpha1.TokenRateLimitPolicy
+	Path           []machinery.Targetable
+	Spec           kuadrantv1alpha1.TokenRateLimitPolicy
+	SourcePolicies []string
 }
 
 type EffectiveTokenRateLimitPolicies map[string]EffectiveTokenRateLimitPolicy
@@ -68,16 +69,25 @@ func (r *EffectiveTokenRateLimitPolicyReconciler) calculateEffectivePolicies(ctx
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gatewayClass, httpRouteRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
 			for i := range paths {
+				policiesInPath := kuadrantv1.PoliciesInPath(paths[i], isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+
 				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1alpha1.TokenRateLimitPolicy](paths[i], isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])
+
+					// Collect all source policy locators that contributed to this effective policy
+					sourceLocators := lo.Map(policiesInPath, func(p machinery.Policy, _ int) string {
+						return p.GetLocator()
+					})
+
 					effectivePolicies[pathID] = EffectiveTokenRateLimitPolicy{
-						Path: paths[i],
-						Spec: **effectivePolicy,
+						Path:           paths[i],
+						Spec:           **effectivePolicy,
+						SourcePolicies: sourceLocators,
 					}
 					if logger.V(1).Enabled() {
 						jsonEffectivePolicy, _ := json.Marshal(effectivePolicy)
 						pathLocators := lo.Map(paths[i], machinery.MapTargetableToLocatorFunc)
-						logger.V(1).Info("effective policy", "kind", kuadrantv1alpha1.TokenRateLimitPolicyGroupKind.Kind, "pathID", pathID, "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy))
+						logger.V(1).Info("effective policy", "kind", kuadrantv1alpha1.TokenRateLimitPolicyGroupKind.Kind, "pathID", pathID, "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy), "sourcePolicies", sourceLocators)
 					}
 				}
 			}

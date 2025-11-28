@@ -11,6 +11,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -49,13 +51,26 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 
 func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus").WithValues("context", ctx)
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 
 	for _, policy := range policies {
 		p := policy.(*kuadrantv1.TLSPolicy)
+
+		policyCtx, span := tracer.Start(ctx, "policy.TLSPolicy")
+		span.SetAttributes(
+			attribute.String("policy.name", p.GetName()),
+			attribute.String("policy.namespace", p.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.TLSPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(p.GetUID())),
+		)
+
 		if p.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
+			span.AddEvent("policy marked for deletion, skipping")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 
@@ -80,6 +95,9 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 		equalStatus := equality.Semantic.DeepEqual(newStatus, p.Status)
 		if equalStatus && p.Generation == p.Status.ObservedGeneration {
 			logger.V(1).Info("policy status unchanged, skipping update")
+			span.AddEvent("policy status unchanged, skipping update")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 		newStatus.ObservedGeneration = p.Generation
@@ -89,13 +107,24 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 		un, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to destruct policy")
+			span.End()
 			continue
 		}
 
-		_, err = resource.UpdateStatus(ctx, un, metav1.UpdateOptions{})
+		_, err = resource.UpdateStatus(policyCtx, un, metav1.UpdateOptions{})
 		if err != nil && !apierrors.IsConflict(err) {
 			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to update status")
+			span.End()
+			continue
 		}
+
+		span.AddEvent("policy status updated successfully")
+		span.SetStatus(codes.Ok, "")
+		span.End()
 	}
 
 	return nil

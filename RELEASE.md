@@ -47,7 +47,7 @@ Reference [slack Chat](https://kubernetes.slack.com/archives/C05J0D0V525/p174419
    * `./bundle`
    * `./config`
    * `./charts/`
-   **The PR must receive approval from at least one member of the QE team.**
+> NOTE: **The PR must receive approval from at least one member of the QE team.**
 4. Merge PR
 5. Run the Release Workflow on the `release-vX.Y`. This does the following:
    * Creates the GitHub release

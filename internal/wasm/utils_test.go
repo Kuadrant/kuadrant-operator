@@ -345,7 +345,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 		name                     string
 		observability            *v1beta1.Observability
 		expectedDefaultLevel     string
-		expectedHttpHeaderId     string
+		expectedHttpHeaderId     *string
 		expectedTracing          *Tracing
 		expectedObservabilityNil bool
 	}{
@@ -358,7 +358,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 			name:                     "empty log levels",
 			observability:            &v1beta1.Observability{DataPlane: &v1beta1.DataPlane{DefaultLevels: []v1beta1.LogLevel{}}},
 			expectedDefaultLevel:     "ERROR",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -371,7 +371,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -384,7 +384,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "INFO",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -397,7 +397,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "WARN",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -410,7 +410,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "ERROR",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -426,7 +426,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -441,7 +441,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "INFO",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -455,7 +455,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -469,7 +469,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "WARN",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -482,7 +482,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "WARN",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -496,7 +496,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     "x-custom-trace-id",
+			expectedHttpHeaderId:     ptr.To("x-custom-trace-id"),
 			expectedObservabilityNil: false,
 		},
 		{
@@ -510,7 +510,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -524,7 +524,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "INFO",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -537,7 +537,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "ERROR",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -552,7 +552,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -566,7 +566,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "INFO",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -580,7 +580,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "INFO",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -596,7 +596,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel:     "DEBUG",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedObservabilityNil: false,
 		},
 		{
@@ -612,7 +612,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel: "INFO",
-			expectedHttpHeaderId: DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId: nil,
 			expectedTracing: &Tracing{
 				Service: TracingServiceName,
 			},
@@ -632,7 +632,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				},
 			},
 			expectedDefaultLevel: "DEBUG",
-			expectedHttpHeaderId: "x-trace-id",
+			expectedHttpHeaderId: ptr.To("x-trace-id"),
 			expectedTracing: &Tracing{
 				Service: TracingServiceName,
 			},
@@ -649,7 +649,7 @@ func TestBuildObservabilityConfig(t *testing.T) {
 				Tracing: nil,
 			},
 			expectedDefaultLevel:     "WARN",
-			expectedHttpHeaderId:     DefaultHTTPHeaderIdentifier,
+			expectedHttpHeaderId:     nil,
 			expectedTracing:          nil,
 			expectedObservabilityNil: false,
 		},
@@ -680,8 +680,13 @@ func TestBuildObservabilityConfig(t *testing.T) {
 			assert.Assert(subT, result.DefaultLevel != nil, "expected DefaultLevel to be non-nil")
 			assert.Equal(subT, *result.DefaultLevel, tc.expectedDefaultLevel)
 
-			assert.Assert(subT, result.HTTPHeaderIdentifier != nil, "expected HttpHeaderIdentifier to be non-nil")
-			assert.Equal(subT, *result.HTTPHeaderIdentifier, tc.expectedHttpHeaderId)
+			// Validate HTTPHeaderIdentifier
+			if tc.expectedHttpHeaderId == nil {
+				assert.Assert(subT, result.HTTPHeaderIdentifier == nil, "expected HttpHeaderIdentifier to be nil")
+			} else {
+				assert.Assert(subT, result.HTTPHeaderIdentifier != nil, "expected HttpHeaderIdentifier to be non-nil")
+				assert.Equal(subT, *result.HTTPHeaderIdentifier, *tc.expectedHttpHeaderId)
+			}
 
 			// Validate tracing
 			if tc.expectedTracing == nil {
@@ -1046,8 +1051,7 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("DEBUG"),
 					HTTPHeaderIdentifier: ptr.To("x-request-id"),
 					Tracing: &Tracing{
-						Service:  TracingServiceName,
-						Endpoint: "http://jaeger:14268/api/traces",
+						Service: TracingServiceName,
 					},
 				},
 			},
@@ -1058,8 +1062,7 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("DEBUG"),
 					HTTPHeaderIdentifier: ptr.To("x-request-id"),
 					Tracing: &Tracing{
-						Service:  TracingServiceName,
-						Endpoint: "http://jaeger:14268/api/traces",
+						Service: TracingServiceName,
 					},
 				},
 			},
@@ -1299,8 +1302,7 @@ func TestConfigToStructWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("INFO"),
 					HTTPHeaderIdentifier: ptr.To("x-trace-id"),
 					Tracing: &Tracing{
-						Service:  TracingServiceName,
-						Endpoint: "http://jaeger:14268/api/traces",
+						Service: TracingServiceName,
 					},
 				},
 			},
@@ -1364,8 +1366,7 @@ func TestConfigToJSONWithObservability(t *testing.T) {
 					DefaultLevel:         ptr.To("DEBUG"),
 					HTTPHeaderIdentifier: ptr.To("x-request-id"),
 					Tracing: &Tracing{
-						Service:  TracingServiceName,
-						Endpoint: "http://jaeger:14268/api/traces",
+						Service: TracingServiceName,
 					},
 				},
 			},

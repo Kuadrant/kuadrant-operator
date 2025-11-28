@@ -15,7 +15,7 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
    - wasmShimVersion: WASM Shim version (X.Y.Z)
    - consolePluginVersion: ConsolePlugin version (X.Y.Z)
    - olmChannel: This will set the OLM `channels` and `default-channel` annotations
-2. The workflow will create a Pull Request that should be peer-reviewed and approved by a member of the Kuadrant team, focusing on the changes made in Kustomize config, OLM bundles and Helm Charts.
+2. The workflow will create a Pull Request that should be peer-reviewed and approved by a member of the Kuadrant team, focusing on the changes made in Kustomize config, OLM bundles and Helm Charts. **The PR must receive approval from at least one member of the QE team.**
 3. Once the PR is merged, a release workflow will be triggered tagging and publishing the [Github release](https://github.com/Kuadrant/kuadrant-operator/releases)
    it will also build the images and packages and publish them on Quay, Helm repository.
 
@@ -40,13 +40,14 @@ Reference [slack Chat](https://kubernetes.slack.com/archives/C05J0D0V525/p174419
 
 ### Remote steps
 
-1. Open a PR against the `release-vX.Y` branch with the changes from `release-vX.Y.Z-rc(n)` branch. 
+1. Open a PR against the `release-vX.Y` branch with the changes from `release-vX.Y.Z-rc(n)` branch.
 2. PR verification checks will run.
 3. Get manual review of PR with focus on changes in these areas:
    * `./bundle.Dockerfile`
    * `./bundle`
    * `./config`
    * `./charts/`
+> NOTE: **The PR must receive approval from at least one member of the QE team.**
 4. Merge PR
 5. Run the Release Workflow on the `release-vX.Y`. This does the following:
    * Creates the GitHub release

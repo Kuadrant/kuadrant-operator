@@ -89,11 +89,14 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is on", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			// Use Eventually to handle potential conflicts from concurrent reconciliations
+			Eventually(func(g Gomega) {
+				kuadrantObj := &kuadrantv1beta1.Kuadrant{}
+				kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).To(Succeed())
+				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
+				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(tests.LimitadorIsReady(testClient(), client.ObjectKey{
 				Name:      kuadrant.LimitadorName,

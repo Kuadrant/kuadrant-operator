@@ -81,8 +81,65 @@ type KuadrantSpec struct {
 	MTLS *MTLS `json:"mtls,omitempty"`
 }
 
+// Observability configures telemetry and monitoring settings for Kuadrant components.
+// When enabled, it configures logging, tracing, and other observability features for both
+// the control plane and data plane components.
 type Observability struct {
+	// Enable controls whether observability features are active.
+	// When false, no additional logging or tracing configuration is applied.
 	Enable bool `json:"enable,omitempty"`
+
+	// DataPlane configures observability settings for the data plane components.
+	// +optional
+	DataPlane *DataPlane `json:"dataPlane,omitempty"`
+
+	// Tracing configures distributed tracing for request flows through the system.
+	// +optional
+	Tracing *Tracing `json:"tracing"`
+}
+
+// DataPlane configures logging and observability for data plane components.
+// It controls logging behavior and request-level observability features.
+type DataPlane struct {
+	// DefaultLevels specifies the default logging levels and their activation predicates.
+	// Each entry defines a log level (debug, info, warn, error) and an optional CEL expression
+	// that determines when that level should be active for a given request.
+	// +optional
+	DefaultLevels []LogLevel `json:"defaultLevels,omitempty"`
+
+	// HTTPHeaderIdentifier specifies the HTTP header name used to identify and correlate
+	// requests in logs and traces (e.g., "x-request-id", "x-correlation-id").
+	// If set, this header value will be included in log output for request correlation.
+	// +optional
+	HTTPHeaderIdentifier *string `json:"httpHeaderIdentifier"`
+}
+
+// Tracing configures distributed tracing integration for request flows.
+// It enables tracing spans to be exported to external tracing systems (e.g., Jaeger, Zipkin).
+type Tracing struct {
+	// DefaultEndpoint is the default URL of the tracing collector backend where spans should be sent.
+	// Can be overridden per-gateway in future versions.
+	DefaultEndpoint string `json:"defaultEndpoint,omitempty"`
+
+	// Insecure controls whether to skip TLS certificate verification.
+	Insecure bool `json:"insecure,omitempty"`
+}
+
+// LogLevel defines a logging level with its activation predicate
+// Only one field should be set per LogLevel entry
+type LogLevel struct {
+	// Debug level - highest verbosity
+	// +optional
+	Debug *string `json:"debug,omitempty"`
+	// Info level
+	// +optional
+	Info *string `json:"info,omitempty"`
+	// Warn level
+	// +optional
+	Warn *string `json:"warn,omitempty"`
+	// Error level - lowest verbosity
+	// +optional
+	Error *string `json:"error,omitempty"`
 }
 
 type MTLS struct {

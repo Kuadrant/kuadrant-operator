@@ -12,9 +12,10 @@ import (
 )
 
 type Config struct {
-	RequestData map[string]string  `json:"requestData,omitempty"`
-	Services    map[string]Service `json:"services"`
-	ActionSets  []ActionSet        `json:"actionSets"`
+	RequestData   map[string]string  `json:"requestData,omitempty"`
+	Services      map[string]Service `json:"services"`
+	ActionSets    []ActionSet        `json:"actionSets"`
+	Observability *Observability     `json:"observability,omitempty"`
 }
 
 func (c *Config) ToStruct() (*_struct.Struct, error) {
@@ -62,6 +63,13 @@ func (c *Config) EqualTo(other *Config) bool {
 		}
 	}
 
+	if (c.Observability == nil) != (other.Observability == nil) {
+		return false
+	}
+	if c.Observability != nil && other.Observability != nil && !c.Observability.EqualTo(other.Observability) {
+		return false
+	}
+
 	return true
 }
 
@@ -83,7 +91,7 @@ func (s Service) EqualTo(other Service) bool {
 	return true
 }
 
-// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report
+// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing
 type ServiceType string
 
 const (
@@ -91,6 +99,7 @@ const (
 	RateLimitCheckServiceType  ServiceType = "ratelimit-check"
 	RateLimitReportServiceType ServiceType = "ratelimit-report"
 	AuthServiceType            ServiceType = "auth"
+	TracingServiceType         ServiceType = "tracing"
 )
 
 // +kubebuilder:validation:Enum:=deny;allow
@@ -303,4 +312,56 @@ type ExpressionItem struct {
 type Expression struct {
 	// Data to be sent to the service
 	ExpressionItem ExpressionItem `json:"expression"`
+}
+
+type Observability struct {
+	HTTPHeaderIdentifier *string  `json:"httpHeaderIdentifier,omitempty"`
+	DefaultLevel         *string  `json:"defaultLevel,omitempty"`
+	Tracing              *Tracing `json:"tracing,omitempty"`
+}
+
+type Tracing struct {
+	Service string `json:"service,omitempty"`
+}
+
+func (o *Observability) EqualTo(other *Observability) bool {
+	if o == nil && other == nil {
+		return true
+	}
+	if o == nil || other == nil {
+		return false
+	}
+
+	if (o.HTTPHeaderIdentifier == nil) != (other.HTTPHeaderIdentifier == nil) {
+		return false
+	}
+	if o.HTTPHeaderIdentifier != nil && other.HTTPHeaderIdentifier != nil && *o.HTTPHeaderIdentifier != *other.HTTPHeaderIdentifier {
+		return false
+	}
+
+	if (o.DefaultLevel == nil) != (other.DefaultLevel == nil) {
+		return false
+	}
+	if o.DefaultLevel != nil && other.DefaultLevel != nil && *o.DefaultLevel != *other.DefaultLevel {
+		return false
+	}
+
+	if (o.Tracing == nil) != (other.Tracing == nil) {
+		return false
+	}
+	if o.Tracing != nil && other.Tracing != nil && !o.Tracing.EqualTo(other.Tracing) {
+		return false
+	}
+
+	return true
+}
+
+func (t *Tracing) EqualTo(other *Tracing) bool {
+	if t == nil && other == nil {
+		return true
+	}
+	if t == nil || other == nil {
+		return false
+	}
+	return t.Service == other.Service
 }

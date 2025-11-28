@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
+
 	"gotest.tools/assert"
 	"k8s.io/utils/ptr"
 
@@ -335,4 +338,1165 @@ func TestPredicatesFromHTTPRouteMatch(t *testing.T) {
 	assert.Equal(t, predicates[3], "'foo' in queryMap(request.query) ? queryMap(request.query)['foo'] == 'bar' : false")
 	assert.Equal(t, predicates[4], "'kua' in queryMap(request.query) ? queryMap(request.query)['kua'] == 'drant' : false")
 	assert.Equal(t, len(predicates), 5)
+}
+
+func TestBuildObservabilityConfig(t *testing.T) {
+	testCases := []struct {
+		name                     string
+		observability            *v1beta1.Observability
+		expectedDefaultLevel     string
+		expectedHttpHeaderId     *string
+		expectedTracing          *Tracing
+		expectedObservabilityNil bool
+	}{
+		{
+			name:                     "nil observability",
+			observability:            nil,
+			expectedObservabilityNil: true,
+		},
+		{
+			name:                     "empty log levels",
+			observability:            &v1beta1.Observability{DataPlane: &v1beta1.DataPlane{DefaultLevels: []v1beta1.LogLevel{}}},
+			expectedDefaultLevel:     "ERROR",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "debug level enabled - highest priority",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "info level enabled",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "INFO",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "warn level enabled",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Warn: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "WARN",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "error level only - default",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Error: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "ERROR",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "multiple levels - debug wins",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Error: ptr.To("true")},
+						{Warn: ptr.To("true")},
+						{Info: ptr.To("true")},
+						{Debug: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "multiple levels - info wins (no debug)",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Error: ptr.To("true")},
+						{Warn: ptr.To("true")},
+						{Info: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "INFO",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "debug and info - debug wins",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("true")},
+						{Debug: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "warn and error - warn wins",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Error: ptr.To("true")},
+						{Warn: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "WARN",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "nil pointer values are ignored",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: nil, Info: nil, Warn: ptr.To("true"), Error: nil},
+					},
+				},
+			},
+			expectedDefaultLevel:     "WARN",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "custom http header identifier",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: ptr.To("true")},
+					},
+					HTTPHeaderIdentifier: ptr.To("x-custom-trace-id"),
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     ptr.To("x-custom-trace-id"),
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "info set after debug - debug still wins",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: ptr.To("true")},
+						{Info: ptr.To("false")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "warn set after info - info wins due to priority",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("true")},
+						{Warn: ptr.To("something")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "INFO",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "only error level set to false - still uses ERROR default",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Error: ptr.To("false")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "ERROR",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "warn then info then debug - debug wins",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Warn: ptr.To("true")},
+						{Info: ptr.To("true")},
+						{Debug: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "multiple entries same level - last one sets",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("condition1")},
+						{Info: ptr.To("condition2")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "INFO",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "info then warn - info wins even though warn comes after",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("true")},
+						{Warn: ptr.To("true")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "INFO",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "all levels with various values - debug wins",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Error: ptr.To("false")},
+						{Warn: ptr.To("cel_expression_1")},
+						{Info: ptr.To("cel_expression_2")},
+						{Debug: ptr.To("cel_expression_3")},
+					},
+				},
+			},
+			expectedDefaultLevel:     "DEBUG",
+			expectedHttpHeaderId:     nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "with tracing endpoint configured",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("true")},
+					},
+				},
+				Tracing: &v1beta1.Tracing{
+					DefaultEndpoint: "http://jaeger:14268/api/traces",
+				},
+			},
+			expectedDefaultLevel: "INFO",
+			expectedHttpHeaderId: nil,
+			expectedTracing: &Tracing{
+				Service: TracingServiceName,
+			},
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "debug level with tracing endpoint",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: ptr.To("true")},
+					},
+					HTTPHeaderIdentifier: ptr.To("x-trace-id"),
+				},
+				Tracing: &v1beta1.Tracing{
+					DefaultEndpoint: "http://tempo:4318/v1/traces",
+				},
+			},
+			expectedDefaultLevel: "DEBUG",
+			expectedHttpHeaderId: ptr.To("x-trace-id"),
+			expectedTracing: &Tracing{
+				Service: TracingServiceName,
+			},
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "only dataplane without tracing",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Warn: ptr.To("true")},
+					},
+				},
+				Tracing: nil,
+			},
+			expectedDefaultLevel:     "WARN",
+			expectedHttpHeaderId:     nil,
+			expectedTracing:          nil,
+			expectedObservabilityNil: false,
+		},
+		{
+			name: "nil dataplane with tracing - should return nil",
+			observability: &v1beta1.Observability{
+				DataPlane: nil,
+				Tracing: &v1beta1.Tracing{
+					DefaultEndpoint: "http://jaeger:14268/api/traces",
+				},
+			},
+			expectedObservabilityNil: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			logger := logr.Discard()
+			serviceBuilder := NewServiceBuilder(&logger)
+			result := BuildObservabilityConfig(serviceBuilder, tc.observability)
+
+			if tc.expectedObservabilityNil {
+				assert.Assert(subT, result == nil, "expected observability to be nil")
+				return
+			}
+
+			assert.Assert(subT, result != nil, "expected observability to be non-nil")
+			assert.Assert(subT, result.DefaultLevel != nil, "expected DefaultLevel to be non-nil")
+			assert.Equal(subT, *result.DefaultLevel, tc.expectedDefaultLevel)
+
+			// Validate HTTPHeaderIdentifier
+			if tc.expectedHttpHeaderId == nil {
+				assert.Assert(subT, result.HTTPHeaderIdentifier == nil, "expected HttpHeaderIdentifier to be nil")
+			} else {
+				assert.Assert(subT, result.HTTPHeaderIdentifier != nil, "expected HttpHeaderIdentifier to be non-nil")
+				assert.Equal(subT, *result.HTTPHeaderIdentifier, *tc.expectedHttpHeaderId)
+			}
+
+			// Validate tracing
+			if tc.expectedTracing == nil {
+				assert.Assert(subT, result.Tracing == nil, "expected Tracing to be nil")
+			} else {
+				assert.Assert(subT, result.Tracing != nil, "expected Tracing to be non-nil")
+				assert.Equal(subT, result.Tracing.Service, tc.expectedTracing.Service)
+			}
+		})
+	}
+}
+
+func TestObservabilityEqualTo(t *testing.T) {
+	testCases := []struct {
+		name     string
+		obs1     *Observability
+		obs2     *Observability
+		expected bool
+	}{
+		{
+			name:     "both nil",
+			obs1:     nil,
+			obs2:     nil,
+			expected: true,
+		},
+		{
+			name:     "first nil, second non-nil",
+			obs1:     nil,
+			obs2:     &Observability{},
+			expected: false,
+		},
+		{
+			name:     "first non-nil, second nil",
+			obs1:     &Observability{},
+			obs2:     nil,
+			expected: false,
+		},
+		{
+			name:     "both empty",
+			obs1:     &Observability{},
+			obs2:     &Observability{},
+			expected: true,
+		},
+		{
+			name: "same defaultLevel",
+			obs1: &Observability{
+				DefaultLevel: ptr.To("DEBUG"),
+			},
+			obs2: &Observability{
+				DefaultLevel: ptr.To("DEBUG"),
+			},
+			expected: true,
+		},
+		{
+			name: "different defaultLevel",
+			obs1: &Observability{
+				DefaultLevel: ptr.To("DEBUG"),
+			},
+			obs2: &Observability{
+				DefaultLevel: ptr.To("INFO"),
+			},
+			expected: false,
+		},
+		{
+			name: "defaultLevel nil vs non-nil",
+			obs1: &Observability{
+				DefaultLevel: ptr.To("DEBUG"),
+			},
+			obs2: &Observability{
+				DefaultLevel: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "defaultLevel non-nil vs nil",
+			obs1: &Observability{
+				DefaultLevel: nil,
+			},
+			obs2: &Observability{
+				DefaultLevel: ptr.To("DEBUG"),
+			},
+			expected: false,
+		},
+		{
+			name: "same httpHeaderIdentifier",
+			obs1: &Observability{
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+			obs2: &Observability{
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+			expected: true,
+		},
+		{
+			name: "different httpHeaderIdentifier",
+			obs1: &Observability{
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+			obs2: &Observability{
+				HTTPHeaderIdentifier: ptr.To("x-trace-id"),
+			},
+			expected: false,
+		},
+		{
+			name: "httpHeaderIdentifier nil vs non-nil",
+			obs1: &Observability{
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+			obs2: &Observability{
+				HTTPHeaderIdentifier: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "httpHeaderIdentifier non-nil vs nil",
+			obs1: &Observability{
+				HTTPHeaderIdentifier: nil,
+			},
+			obs2: &Observability{
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+			expected: false,
+		},
+		{
+			name: "complete observability - equal",
+			obs1: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+			obs2: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "complete observability - different tracing",
+			obs1: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+			obs2: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing: &Tracing{
+					Service: "different-service",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "tracing nil vs non-nil",
+			obs1: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+			obs2: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing:              nil,
+			},
+			expected: false,
+		},
+		{
+			name: "tracing non-nil vs nil",
+			obs1: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing:              nil,
+			},
+			obs2: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "both with nil tracing",
+			obs1: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing:              nil,
+			},
+			obs2: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				Tracing:              nil,
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.obs1.EqualTo(tc.obs2)
+			assert.Equal(subT, result, tc.expected)
+		})
+	}
+}
+
+func TestTracingEqualTo(t *testing.T) {
+	testCases := []struct {
+		name     string
+		tracing1 *Tracing
+		tracing2 *Tracing
+		expected bool
+	}{
+		{
+			name:     "both nil",
+			tracing1: nil,
+			tracing2: nil,
+			expected: true,
+		},
+		{
+			name:     "first nil, second non-nil",
+			tracing1: nil,
+			tracing2: &Tracing{Service: TracingServiceName},
+			expected: false,
+		},
+		{
+			name:     "first non-nil, second nil",
+			tracing1: &Tracing{Service: TracingServiceName},
+			tracing2: nil,
+			expected: false,
+		},
+		{
+			name:     "both empty",
+			tracing1: &Tracing{},
+			tracing2: &Tracing{},
+			expected: true,
+		},
+		{
+			name:     "same endpoint",
+			tracing1: &Tracing{Service: TracingServiceName},
+			tracing2: &Tracing{Service: TracingServiceName},
+			expected: true,
+		},
+		{
+			name:     "different endpoint",
+			tracing1: &Tracing{Service: TracingServiceName},
+			tracing2: &Tracing{Service: "different-service"},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.tracing1.EqualTo(tc.tracing2)
+			assert.Equal(subT, result, tc.expected)
+		})
+	}
+}
+
+func TestConfigEqualToWithObservability(t *testing.T) {
+	baseConfig := &Config{
+		Services: map[string]Service{
+			"test-service": {
+				Type:        "auth",
+				Endpoint:    "test-endpoint",
+				FailureMode: "deny",
+				Timeout:     ptr.To("200ms"),
+			},
+		},
+		ActionSets: []ActionSet{},
+	}
+
+	testCases := []struct {
+		name     string
+		config1  *Config
+		config2  *Config
+		expected bool
+	}{
+		{
+			name: "both configs without observability",
+			config1: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+			},
+			config2: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+			},
+			expected: true,
+		},
+		{
+			name: "one config with observability, one without",
+			config1: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				},
+			},
+			config2: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+			},
+			expected: false,
+		},
+		{
+			name: "both configs with same observability",
+			config1: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				},
+			},
+			config2: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "configs with different observability",
+			config1: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				},
+			},
+			config2: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("INFO"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "both configs with observability including tracing",
+			config1: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+					Tracing: &Tracing{
+						Service: TracingServiceName,
+					},
+				},
+			},
+			config2: &Config{
+				Services:   baseConfig.Services,
+				ActionSets: baseConfig.ActionSets,
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+					Tracing: &Tracing{
+						Service: TracingServiceName,
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "configs with different tracing endpoints in services",
+			config1: func() *Config {
+				services1 := make(map[string]Service)
+				for k, v := range baseConfig.Services {
+					services1[k] = v
+				}
+				services1[TracingServiceName] = Service{
+					Type:        TracingServiceType,
+					Endpoint:    "jaeger-cluster",
+					FailureMode: FailureModeAllow,
+					Timeout:     ptr.To("100ms"),
+				}
+				return &Config{
+					Services:   services1,
+					ActionSets: baseConfig.ActionSets,
+					Observability: &Observability{
+						DefaultLevel:         ptr.To("DEBUG"),
+						HTTPHeaderIdentifier: ptr.To("x-request-id"),
+						Tracing: &Tracing{
+							Service: TracingServiceName,
+						},
+					},
+				}
+			}(),
+			config2: func() *Config {
+				services2 := make(map[string]Service)
+				for k, v := range baseConfig.Services {
+					services2[k] = v
+				}
+				services2[TracingServiceName] = Service{
+					Type:        TracingServiceType,
+					Endpoint:    "tempo-cluster",
+					FailureMode: FailureModeAllow,
+					Timeout:     ptr.To("100ms"),
+				}
+				return &Config{
+					Services:   services2,
+					ActionSets: baseConfig.ActionSets,
+					Observability: &Observability{
+						DefaultLevel:         ptr.To("DEBUG"),
+						HTTPHeaderIdentifier: ptr.To("x-request-id"),
+						Tracing: &Tracing{
+							Service: TracingServiceName,
+						},
+					},
+				}
+			}(),
+			expected: false,
+		},
+		{
+			name: "configs with different RequestData",
+			config1: &Config{
+				RequestData: map[string]string{"key1": "value1"},
+				Services:    baseConfig.Services,
+				ActionSets:  baseConfig.ActionSets,
+			},
+			config2: &Config{
+				RequestData: map[string]string{"key1": "value2"},
+				Services:    baseConfig.Services,
+				ActionSets:  baseConfig.ActionSets,
+			},
+			expected: false,
+		},
+		{
+			name: "configs with RequestData - one missing key",
+			config1: &Config{
+				RequestData: map[string]string{"key1": "value1", "key2": "value2"},
+				Services:    baseConfig.Services,
+				ActionSets:  baseConfig.ActionSets,
+			},
+			config2: &Config{
+				RequestData: map[string]string{"key1": "value1"},
+				Services:    baseConfig.Services,
+				ActionSets:  baseConfig.ActionSets,
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.config1.EqualTo(tc.config2)
+			assert.Equal(subT, result, tc.expected)
+		})
+	}
+}
+
+func TestLogLevelString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		logLevel LogLevel
+		expected string
+	}{
+		{
+			name:     "error level",
+			logLevel: LogLevelError,
+			expected: "ERROR",
+		},
+		{
+
+			name:     "warn level",
+			logLevel: LogLevelWarn,
+			expected: "WARN",
+		},
+		{
+			name:     "info level",
+			logLevel: LogLevelInfo,
+			expected: "INFO",
+		},
+		{
+			name:     "debug level",
+			logLevel: LogLevelDebug,
+			expected: "DEBUG",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.logLevel.String()
+			assert.Equal(subT, result, tc.expected)
+		})
+	}
+}
+
+func TestBuildObservabilityConfigWithTracing(t *testing.T) {
+	testCases := []struct {
+		name              string
+		observability     *v1beta1.Observability
+		expectedTracing   *Tracing
+		shouldHaveTracing bool
+	}{
+		{
+			name: "with tracing endpoint",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: ptr.To("true")},
+					},
+				},
+				Tracing: &v1beta1.Tracing{
+					DefaultEndpoint: "http://jaeger:14268/api/traces",
+				},
+			},
+			shouldHaveTracing: true,
+			expectedTracing: &Tracing{
+				Service: TracingServiceName,
+			},
+		},
+		{
+			name: "without tracing",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Debug: ptr.To("true")},
+					},
+				},
+			},
+			shouldHaveTracing: false,
+		},
+		{
+			name: "with empty tracing endpoint",
+			observability: &v1beta1.Observability{
+				DataPlane: &v1beta1.DataPlane{
+					DefaultLevels: []v1beta1.LogLevel{
+						{Info: ptr.To("true")},
+					},
+				},
+				Tracing: &v1beta1.Tracing{
+					DefaultEndpoint: "",
+				},
+			},
+			shouldHaveTracing: false, // No tracing service created without an endpoint
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			logger := logr.Discard()
+			serviceBuilder := NewServiceBuilder(&logger)
+			result := BuildObservabilityConfig(serviceBuilder, tc.observability)
+			assert.Assert(subT, result != nil, "expected observability to be non-nil")
+
+			if tc.shouldHaveTracing {
+				assert.Assert(subT, result.Tracing != nil, "expected Tracing to be non-nil")
+				assert.Equal(subT, result.Tracing.Service, tc.expectedTracing.Service)
+			} else {
+				assert.Assert(subT, result.Tracing == nil, "expected Tracing to be nil")
+			}
+		})
+	}
+}
+
+func TestConfigToStructWithObservability(t *testing.T) {
+	testCases := []struct {
+		name        string
+		config      *Config
+		expectError bool
+	}{
+		{
+			name: "config with observability - basic",
+			config: &Config{
+				Services: map[string]Service{
+					"test-service": {
+						Type:        "auth",
+						Endpoint:    "test-endpoint",
+						FailureMode: "deny",
+						Timeout:     ptr.To("200ms"),
+					},
+				},
+				ActionSets: []ActionSet{},
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "config with observability and tracing",
+			config: &Config{
+				Services: map[string]Service{
+					"test-service": {
+						Type:        "auth",
+						Endpoint:    "test-endpoint",
+						FailureMode: "deny",
+						Timeout:     ptr.To("200ms"),
+					},
+				},
+				ActionSets: []ActionSet{},
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("INFO"),
+					HTTPHeaderIdentifier: ptr.To("x-trace-id"),
+					Tracing: &Tracing{
+						Service: TracingServiceName,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "config without observability",
+			config: &Config{
+				Services: map[string]Service{
+					"test-service": {
+						Type:        "auth",
+						Endpoint:    "test-endpoint",
+						FailureMode: "deny",
+						Timeout:     ptr.To("200ms"),
+					},
+				},
+				ActionSets: []ActionSet{},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			structPb, err := tc.config.ToStruct()
+
+			if tc.expectError {
+				assert.Assert(subT, err != nil, "expected an error")
+			} else {
+				assert.Assert(subT, err == nil, "expected no error, got: %v", err)
+				assert.Assert(subT, structPb != nil, "expected struct to be non-nil")
+
+				// Verify the config can be deserialized back
+				deserializedConfig, err := ConfigFromStruct(structPb)
+				assert.Assert(subT, err == nil, "expected no error deserializing, got: %v", err)
+				assert.Assert(subT, tc.config.EqualTo(deserializedConfig), "configs should be equal after round-trip")
+			}
+		})
+	}
+}
+
+func TestConfigToJSONWithObservability(t *testing.T) {
+	testCases := []struct {
+		name        string
+		config      *Config
+		expectError bool
+	}{
+		{
+			name: "config with observability",
+			config: &Config{
+				Services: map[string]Service{
+					"test-service": {
+						Type:        "auth",
+						Endpoint:    "test-endpoint",
+						FailureMode: "deny",
+						Timeout:     ptr.To("200ms"),
+					},
+				},
+				ActionSets: []ActionSet{},
+				Observability: &Observability{
+					DefaultLevel:         ptr.To("DEBUG"),
+					HTTPHeaderIdentifier: ptr.To("x-request-id"),
+					Tracing: &Tracing{
+						Service: TracingServiceName,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "config without observability",
+			config: &Config{
+				Services: map[string]Service{
+					"test-service": {
+						Type:        "auth",
+						Endpoint:    "test-endpoint",
+						FailureMode: "deny",
+						Timeout:     ptr.To("200ms"),
+					},
+				},
+				ActionSets: []ActionSet{},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			jsonData, err := tc.config.ToJSON()
+
+			if tc.expectError {
+				assert.Assert(subT, err != nil, "expected an error")
+			} else {
+				assert.Assert(subT, err == nil, "expected no error, got: %v", err)
+				assert.Assert(subT, jsonData != nil, "expected JSON to be non-nil")
+				assert.Assert(subT, len(jsonData.Raw) > 0, "expected JSON raw data to be non-empty")
+
+				// Verify the config can be deserialized back
+				deserializedConfig, err := ConfigFromJSON(jsonData)
+				assert.Assert(subT, err == nil, "expected no error deserializing, got: %v", err)
+				assert.Assert(subT, tc.config.EqualTo(deserializedConfig), "configs should be equal after round-trip")
+
+				// Verify observability is present in JSON if it was in the original config
+				if tc.config.Observability != nil {
+					jsonStr := string(jsonData.Raw)
+					assert.Assert(subT, len(jsonStr) > 0, "JSON string should not be empty")
+					// The observability field should be present in the JSON
+					assert.Assert(subT, deserializedConfig.Observability != nil, "deserialized config should have observability")
+				}
+			}
+		})
+	}
+}
+
+func TestBuildConfigForActionSetWithObservability(t *testing.T) {
+	logger := logr.Discard()
+	actionSets := []ActionSet{
+		{
+			Name: "test-action-set",
+			RouteRuleConditions: RouteRuleConditions{
+				Hostnames: []string{"example.com"},
+			},
+			Actions: []Action{
+				{
+					ServiceName: "auth-service",
+					Scope:       "test-scope",
+				},
+			},
+		},
+	}
+
+	testCases := []struct {
+		name                  string
+		observability         *Observability
+		expectedObservability *Observability
+	}{
+		{
+			name:                  "with nil observability",
+			observability:         nil,
+			expectedObservability: nil,
+		},
+		{
+			name: "with observability config",
+			observability: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+			expectedObservability: &Observability{
+				DefaultLevel:         ptr.To("DEBUG"),
+				HTTPHeaderIdentifier: ptr.To("x-request-id"),
+			},
+		},
+		{
+			name: "with observability and tracing",
+			observability: &Observability{
+				DefaultLevel:         ptr.To("INFO"),
+				HTTPHeaderIdentifier: ptr.To("x-trace-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+			expectedObservability: &Observability{
+				DefaultLevel:         ptr.To("INFO"),
+				HTTPHeaderIdentifier: ptr.To("x-trace-id"),
+				Tracing: &Tracing{
+					Service: TracingServiceName,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			serviceBuilder := NewServiceBuilder(&logger)
+			config := BuildConfigForActionSet(actionSets, &logger, tc.observability, serviceBuilder)
+
+			// Verify the config has the expected structure
+			assert.Assert(subT, config.Services != nil, "expected services to be non-nil")
+			assert.Assert(subT, config.ActionSets != nil, "expected action sets to be non-nil")
+			assert.Equal(subT, len(config.ActionSets), len(actionSets))
+
+			// Verify observability
+			if tc.expectedObservability == nil {
+				assert.Assert(subT, config.Observability == nil, "expected observability to be nil")
+			} else {
+				assert.Assert(subT, config.Observability != nil, "expected observability to be non-nil")
+				assert.Assert(subT, config.Observability.EqualTo(tc.expectedObservability),
+					"observability configs should be equal")
+			}
+
+			// Verify required services are present
+			assert.Assert(subT, config.Services[AuthServiceName] != Service{}, "auth service should be present")
+			assert.Assert(subT, config.Services[RateLimitCheckServiceName] != Service{}, "ratelimit check service should be present")
+			assert.Assert(subT, config.Services[RateLimitReportServiceName] != Service{}, "ratelimit report service should be present")
+		})
+	}
 }

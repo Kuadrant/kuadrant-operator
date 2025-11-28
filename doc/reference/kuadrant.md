@@ -13,6 +13,7 @@
 |-----------|-----------------------------------|:------------:|--------------------------------------|
 | `observability`    | [Observability](#observability)     | No | Kuadrant observability configuration. |
 | `mtls`  | [mTLS](#mtls) |      No      | Two way authentication between kuadrant components. |
+| `components`  | [Components](#components) |      No      | Optional Kuadrant components configuration. |
 
 #### mTLS
 
@@ -49,6 +50,18 @@ The truth table for authorino component is as follows:
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
 | `enable`    | Boolean     |  No | Enable observability on kuadrant. Default: `false` |
+
+#### Components
+
+| **Field** | **Type**                          | **Required** | **Description**                      |
+|-----------|-----------------------------------|:------------:|--------------------------------------|
+| `developerPortal`    | [DeveloperPortal](#developerportal)     |  No | Developer portal integration configuration. |
+
+##### DeveloperPortal
+
+| **Field** | **Type**                          | **Required** | **Description**                      |
+|-----------|-----------------------------------|:------------:|--------------------------------------|
+| `enabled`    | Boolean     |  No | Enable the developer portal integration including APIProduct and APIKeyRequest CRDs. Default: `false` |
 
 ### KuadrantStatus
 

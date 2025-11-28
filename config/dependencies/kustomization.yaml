@@ -4,6 +4,7 @@ resources:
   - authorino
   - limitador
   - dns
+  - developer-portal
 
 patchesStrategicMerge:
   - authorino/delete-ns.yaml

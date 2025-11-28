@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prefix to avoid name conflicts with other ClusterRoles
+# This will rename manager-role to developer-portal-controller-manager-role
+namePrefix: developer-portal-controller-
+
+resources:
+# CRDs
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apikeys.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apiproducts.yaml
+# RBAC resources
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/service_account.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/role.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/role_binding.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/leader_election_role.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/leader_election_role_binding.yaml
+
+# Label resources so they appear in kuadrant-operator topology
+patches:
+- patch: |-
+    - op: add
+      path: /metadata/labels
+      value:
+        kuadrant.io/developerportal: "true"
+        app: developer-portal-controller
+  target:
+    kind: ClusterRole
+- patch: |-
+    - op: add
+      path: /metadata/labels
+      value:
+        kuadrant.io/developerportal: "true"
+        app: developer-portal-controller
+  target:
+    kind: Role
+- patch: |-
+    - op: add
+      path: /metadata/labels
+      value:
+        kuadrant.io/developerportal: "true"
+        app: developer-portal-controller
+  target:
+    kind: ServiceAccount
+- patch: |-
+    - op: add
+      path: /metadata/labels
+      value:
+        kuadrant.io/developerportal: "true"
+        app: developer-portal-controller
+  target:
+    kind: ClusterRoleBinding
+- patch: |-
+    - op: add
+      path: /metadata/labels
+      value:
+        kuadrant.io/developerportal: "true"
+        app: developer-portal-controller
+  target:
+    kind: RoleBinding

@@ -225,3 +225,13 @@ func copyMergeablePolicy(policy MergeablePolicy) MergeablePolicy {
 	dup.SetRules(lo.MapValues(dup.Rules(), mapRuleWithSourceFunc(policy)))
 	return dup
 }
+
+// SourcePoliciesFromEffectivePolicy extracts the unique list of source policy locators
+// that contributed to the effective policy by examining the source of each rule.
+// This ensures only policies that actually contributed are tracked, excluding overridden ones.
+func SourcePoliciesFromEffectivePolicy(effectivePolicy MergeablePolicy) []string {
+	sources := lo.Map(lo.Values(effectivePolicy.Rules()), func(rule MergeableRule, _ int) string {
+		return rule.GetSource()
+	})
+	return lo.Uniq(sources)
+}

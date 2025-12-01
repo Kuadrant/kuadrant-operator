@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -238,5 +239,6 @@ func SourcePoliciesFromEffectivePolicy(effectivePolicy MergeablePolicy) []string
 	sources := lo.Map(lo.Values(effectivePolicy.Rules()), func(rule MergeableRule, _ int) string {
 		return rule.GetSource()
 	})
+	slices.Sort(sources)
 	return lo.Uniq(sources)
 }

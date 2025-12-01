@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
@@ -241,7 +242,7 @@ func (a *Action) EqualTo(other Action) bool {
 		return false
 	}
 
-	if !reflect.DeepEqual(a.SourcePolicyLocators, other.SourcePolicyLocators) {
+	if !slices.Equal(a.SourcePolicyLocators, other.SourcePolicyLocators) {
 		return false
 	}
 

@@ -216,7 +216,12 @@ func PathID(path []machinery.Targetable) string {
 
 func mapRuleWithSourceFunc(source machinery.Policy) func(MergeableRule, string) MergeableRule {
 	return func(rule MergeableRule, _ string) MergeableRule {
-		return rule.WithSource(source.GetLocator())
+		// Only set the source if the rule doesn't already have one
+		// This preserves the original source when rules are merged from multiple policies
+		if rule.GetSource() == "" {
+			return rule.WithSource(source.GetLocator())
+		}
+		return rule
 	}
 }
 

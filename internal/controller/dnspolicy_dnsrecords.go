@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/env"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -19,11 +20,27 @@ const (
 	LabelListenerReference = "kuadrant.io/listener-name"
 )
 
+func dnsPolicyDefaultTTL() (int, error) {
+	ttl, err := env.GetInt("DNS_DEFAULT_TTL", builder.DefaultTTL)
+	if err != nil {
+		return ttl, fmt.Errorf("DNS_DEFAULT_TTL env value could not be parsed as int, default %d will be used: %w", builder.DefaultTTL, err)
+	}
+	return ttl, nil
+}
+
+func dnsPolicyDefaultCnameTTL() (int, error) {
+	ttl, err := env.GetInt("DNS_DEFAULT_LB_TTL", builder.DefaultLoadBalancedTTL)
+	if err != nil {
+		return ttl, fmt.Errorf("DNS_DEFAULT_LB_TTL env value could not be parsed as int, default %d will be used: %w", builder.DefaultLoadBalancedTTL, err)
+	}
+	return ttl, nil
+}
+
 func dnsRecordName(gatewayName, listenerName string) string {
 	return fmt.Sprintf("%s-%s", gatewayName, listenerName)
 }
 
-func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *kuadrantv1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *kuadrantv1.DNSPolicy, targetListener gatewayapiv1.Listener, defaultTTL int, defaultLoadBalancedTTL int) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
@@ -65,7 +82,7 @@ func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy
 
 	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)
 
-	endpoints, err := buildEndpoints(clusterID, string(*targetListener.Hostname), gateway, dnsPolicy)
+	endpoints, err := buildEndpoints(clusterID, string(*targetListener.Hostname), gateway, dnsPolicy, defaultTTL, defaultLoadBalancedTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate dns record for a gateway %s in %s ns: %w", gateway.Name, gateway.Namespace, err)
 	}
@@ -127,14 +144,16 @@ func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *kuadrantv1.DNSPolicy) 
 	return nil
 }
 
-func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, policy *kuadrantv1.DNSPolicy) ([]*externaldns.Endpoint, error) {
+func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, policy *kuadrantv1.DNSPolicy, defaultTTL int, defaultLoadBalancedTTL int) ([]*externaldns.Endpoint, error) {
 	gw := gateway.DeepCopy()
 	gatewayWrapper := NewGatewayWrapper(gw)
 	// modify the status addresses based on any that need to be excluded
 	if err := gatewayWrapper.RemoveExcludedStatusAddresses(policy); err != nil {
 		return nil, fmt.Errorf("failed to reconcile gateway dns records error: %w ", err)
 	}
-	endpointBuilder := builder.NewEndpointsBuilder(gatewayWrapper, hostname)
+	endpointBuilder := builder.NewEndpointsBuilder(gatewayWrapper, hostname).
+		SetDefaultTTL(defaultTTL).
+		SetDefaultLoadBalancedTTL(defaultLoadBalancedTTL)
 
 	if policy.Spec.LoadBalancing != nil {
 		endpointBuilder.WithLoadBalancingFor(

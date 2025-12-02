@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -202,6 +203,7 @@ func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, 
 			lastAction.ConditionalData = append(lastAction.ConditionalData, currentAction.ConditionalData...)
 			// Merge source policy locators - deduplicate them
 			lastAction.SourcePolicyLocators = lo.Uniq(append(lastAction.SourcePolicyLocators, currentAction.SourcePolicyLocators...))
+			slices.Sort(lastAction.SourcePolicyLocators)
 		} else {
 			result = append(result, currentAction)
 		}

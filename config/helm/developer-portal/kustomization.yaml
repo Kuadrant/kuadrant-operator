@@ -22,17 +22,11 @@ patches:
     - op: replace
       path: /subjects/0/name
       value: developer-portal-controller-manager
-    - op: replace
-      path: /subjects/0/namespace
-      value: "{{ .Release.Namespace }}"
   target:
     kind: ClusterRoleBinding
 - patch: |-
     - op: replace
       path: /subjects/0/name
       value: developer-portal-controller-manager
-    - op: replace
-      path: /subjects/0/namespace
-      value: "{{ .Release.Namespace }}"
   target:
     kind: RoleBinding

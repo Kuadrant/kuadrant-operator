@@ -71,7 +71,7 @@ EOF
 
 ```sh
 kubectl apply -n kuadrant-system -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: gw-rlp-external
@@ -95,7 +95,7 @@ EOF
 
 ```sh
 kubectl apply -n kuadrant-system -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: gw-rlp-local

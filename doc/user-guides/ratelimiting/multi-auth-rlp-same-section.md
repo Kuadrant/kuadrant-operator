@@ -140,7 +140,7 @@ Create a Kuadrant `AuthPolicy` to configure the authentication:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -222,7 +222,7 @@ Create Kuadrant `RateLimitPolicy's` to configure rate limiting for Bob and Alice
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: toystore
@@ -248,7 +248,7 @@ EOF
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: toystore-alice

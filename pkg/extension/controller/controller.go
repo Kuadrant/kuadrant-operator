@@ -28,9 +28,20 @@ import (
 )
 
 const (
+	// ExtensionFinalizer is added to extension managed policies so that final
+	// cleanup (e.g. mutator/subscription deregistration) can occur prior to
+	// object deletion.
 	ExtensionFinalizer = "kuadrant.io/extensions"
 )
 
+// ExtensionConfig captures the immutable configuration for a controller
+// instance constructed by the Builder. It determines:
+//
+//	Name:        controller name (also used for logging prefix)
+//	PolicyKind:  the Kind of the primary policy CRD managed
+//	ForType:     the primary object type reconciled
+//	Reconcile:   the user provided reconcile function
+//	WatchSources: dynamic sources watched (primary, additional and owned)
 type ExtensionConfig struct {
 	Name         string
 	PolicyKind   string
@@ -39,6 +50,10 @@ type ExtensionConfig struct {
 	WatchSources []ctrlruntimesrc.Source
 }
 
+// ExtensionController is a thin wrapper around controller-runtime's manager
+// and controller that wires gRPC event subscriptions with the reconcile loop
+// and exposes helper methods (Resolve, ReconcileObject, etc.) via the
+// KuadrantCtx interface passed to user code.
 type ExtensionController struct {
 	config ExtensionConfig
 
@@ -50,6 +65,7 @@ type ExtensionController struct {
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
+// Start launches the controller manager and begins processing events.
 func (ec *ExtensionController) Start(ctx context.Context) error {
 	stopCh := make(chan struct{})
 	// todo(adam-cattermole): how big do we make the reconcile event channel?
@@ -92,6 +108,8 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	return nil
 }
 
+// Subscribe opens a long‑lived gRPC stream for events related to the policy
+// kind and enqueues reconcile requests for received events.
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
 	err := ec.extensionClient.subscribe(ctx, ec.config.PolicyKind, func(response *extpb.SubscribeResponse) {
 		ec.logger.Info("received response", "response", response)
@@ -113,6 +131,9 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 	}
 }
 
+// Reconcile implements the controller-runtime reconcile loop. It ensures
+// finalizers, dispatches the configured user Reconcile function and performs
+// post‑reconcile cleanup.
 func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	eventType, exists := ec.eventCache.popEvent(request.Namespace, request.Name)
 	if !exists {
@@ -201,6 +222,9 @@ func (ec *ExtensionController) resolveExpression(ctx context.Context, policy ext
 	return resp, nil
 }
 
+// Resolve evaluates a CEL expression against the provided policy returning the
+// raw CEL result as a ref.Val. If subscribe is true the extension service will
+// stream future changes (triggering new reconciliations).
 func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {
 	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
 	if err != nil {
@@ -215,6 +239,9 @@ func (ec *ExtensionController) Resolve(ctx context.Context, policy exttypes.Poli
 	return val, nil
 }
 
+// ResolvePolicy evaluates a CEL expression that must return a Policy protobuf
+// which is then adapted to the generic Policy interface. Used when expressions
+// transform or select policies.
 func (ec *ExtensionController) ResolvePolicy(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error) {
 	resp, err := ec.resolveExpression(ctx, policy, expression, subscribe)
 	if err != nil {
@@ -236,6 +263,8 @@ func (ec *ExtensionController) ResolvePolicy(ctx context.Context, policy exttype
 	return nil, fmt.Errorf("CEL result is not an object value that can be converted to Policy")
 }
 
+// AddDataTo registers a mutator expression that will inject computed data into
+// a policy under the provided domain and binding.
 func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Policy, domain exttypes.Domain, binding string, expression string) error {
 	pbPolicy := convertPolicyToProtobuf(policy)
 	pbDomain := convertDomainToProtobuf(domain)
@@ -249,6 +278,8 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Po
 	return err
 }
 
+// ReconcileObject performs a create/update patch against the API server for a
+// desired object applying the provided mutate function on differences.
 func (ec *ExtensionController) ReconcileObject(ctx context.Context, obj client.Object, desired client.Object, mutateFn exttypes.MutateFn) (client.Object, error) {
 	obj, err := ec.ReconcileResource(ctx, obj, desired, basereconciler.MutateFn(mutateFn)) // TODO(didierofrivia): Next iteration, use policy machinery
 	if err != nil {
@@ -257,6 +288,8 @@ func (ec *ExtensionController) ReconcileObject(ctx context.Context, obj client.O
 	return obj, nil
 }
 
+// ClearPolicy removes server side state associated with a policy (mutators,
+// subscriptions) after deletion.
 func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name, kind string) error {
 	pbPolicy := &extpb.Policy{
 		Metadata: &extpb.Metadata{
@@ -274,6 +307,7 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 	return err
 }
 
+// Manager returns the underlying controller-runtime Manager.
 func (ec *ExtensionController) Manager() ctrlruntime.Manager {
 	return ec.manager
 }

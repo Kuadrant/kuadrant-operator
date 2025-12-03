@@ -143,7 +143,7 @@ func BuildObservabilityConfig(serviceBuilder *ServiceBuilder, observabilitySpec 
 			Service: TracingServiceName,
 		}
 
-		serviceBuilder.WithTracing(observabilitySpec.Tracing.DefaultEndpoint)
+		serviceBuilder.WithTracing()
 	}
 
 	return &Observability{
@@ -193,10 +193,10 @@ func NewServiceBuilder(logger *logr.Logger) *ServiceBuilder {
 }
 
 // WithTracing adds a tracing service with the specified endpoint
-func (sb *ServiceBuilder) WithTracing(endpoint string) *ServiceBuilder {
+func (sb *ServiceBuilder) WithTracing() *ServiceBuilder {
 	sb.services[TracingServiceName] = Service{
 		Type:        TracingServiceType,
-		Endpoint:    endpoint,
+		Endpoint:    kuadrant.KuadrantTracingClusterName,
 		FailureMode: TracingServiceFailureMode(sb.logger),
 		Timeout:     ptr.To(TracingServiceTimeout()),
 	}

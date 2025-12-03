@@ -35,6 +35,8 @@ spec:
               value: "/extensions"
             - name: RELATED_IMAGE_WASMSHIM
               value: "oci://quay.io/kuadrant/wasm-shim:latest"
+            - name: RELATED_IMAGE_DEVELOPERPORTAL
+              value: "quay.io/kuadrant/developer-portal-controller:latest"
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:

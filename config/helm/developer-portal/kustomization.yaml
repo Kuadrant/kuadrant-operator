@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prefix to avoid name conflicts with other ClusterRoles
+# This will rename manager-role to developer-portal-manager-role
+namePrefix: developer-portal-
+
+resources:
+# CRDs
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apikeys.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apiproducts.yaml
+# RBAC resources
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/service_account.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/role.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/role_binding.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/leader_election_role.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/leader_election_role_binding.yaml
+
+# Patch ServiceAccount name and namespace in bindings to use developer-portal-controller-manager in Helm release namespace
+patches:
+- patch: |-
+    - op: replace
+      path: /subjects/0/name
+      value: developer-portal-controller-manager
+  target:
+    kind: ClusterRoleBinding
+- patch: |-
+    - op: replace
+      path: /subjects/0/name
+      value: developer-portal-controller-manager
+  target:
+    kind: RoleBinding

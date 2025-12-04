@@ -23,9 +23,8 @@ import (
 	consolev1 "github.com/openshift/api/console/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -83,7 +82,7 @@ var (
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
-func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) (*controller.Controller, error) {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*controller.Controller, error) {
 	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
@@ -166,6 +165,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 		),
 	}
+
+	controllerOpts = append(controllerOpts, opts...)
 
 	// Boot options and reconciler based on detected dependencies
 	bootOptions := NewBootOptionsBuilder(manager, client, logger)
@@ -638,38 +639,31 @@ func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {
 // the parent span in the traceReconcileFunc
 type additionalAttrsFn func(resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) []attribute.KeyValue
 
-// traceReconcileFunc wraps a ReconcileFunc with OpenTelemetry tracing
+// traceReconcileFunc wraps a ReconcileFunc with OpenTelemetry tracing.
+// It uses controller.TraceReconcileFunc from policy-machinery as the base,
+// then enhances it with additional custom attributes via functional parameters.
+//
+// The tracer is automatically retrieved from context (injected via controller.WithTracer).
 func traceReconcileFunc(name string, reconcileFunc controller.ReconcileFunc, additionalAttrs ...additionalAttrsFn) controller.ReconcileFunc {
-	tracer := otel.Tracer("kuadrant-operator")
+	// First wrap with policy-machinery's TraceReconcileFunc (handles basic tracing)
+	baseTraced := controller.TraceReconcileFunc(name, reconcileFunc)
+
+	// If no additional attributes needed, return the base
+	if len(additionalAttrs) == 0 {
+		return baseTraced
+	}
+
+	// Wrap again to add custom attributes
 	return func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
-		ctx, span := tracer.Start(ctx, name)
-		defer span.End()
+		span := trace.SpanFromContext(ctx)
 
-		// Note: We don't add the context field here to avoid duplicates when child reconcilers
-		// also add it. Individual reconcilers should add context field if needed.
-
-		// Add attributes about the reconciliation
-		span.SetAttributes(
-			attribute.Bool("has_error", err != nil),
-		)
-
-		// Add any other custom attributes about reconciliation
-		for _, attr := range additionalAttrs {
-			span.SetAttributes(attr(resourceEvents, topology, err, state)...)
+		// Add custom attributes before running reconciliation
+		for _, attrFn := range additionalAttrs {
+			span.SetAttributes(attrFn(resourceEvents, topology, err, state)...)
 		}
 
-		// Run the actual reconcile function
-		reconcileErr := reconcileFunc(ctx, resourceEvents, topology, err, state)
-
-		// Set span status based on result
-		if reconcileErr != nil {
-			span.RecordError(reconcileErr)
-			span.SetStatus(codes.Error, reconcileErr.Error())
-		} else {
-			span.SetStatus(codes.Ok, "")
-		}
-
-		return reconcileErr
+		// Run the base traced reconcile function
+		return baseTraced(ctx, resourceEvents, topology, err, state)
 	}
 }
 

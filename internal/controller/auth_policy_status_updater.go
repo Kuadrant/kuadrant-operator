@@ -15,6 +15,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,6 +62,7 @@ func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 
 func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthPolicyStatusUpdater").WithValues("context", ctx)
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, _ int) (*kuadrantv1.AuthPolicy, bool) {
 		p, ok := item.(*kuadrantv1.AuthPolicy)
@@ -72,8 +75,19 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 	defer logger.V(1).Info("finished updating authpolicy statuses")
 
 	for _, policy := range policies {
+		policyCtx, span := tracer.Start(ctx, "policy.AuthPolicy")
+		span.SetAttributes(
+			attribute.String("policy.name", policy.GetName()),
+			attribute.String("policy.namespace", policy.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.AuthPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(policy.GetUID())),
+		)
+
 		if policy.GetDeletionTimestamp() != nil {
 			logger.V(1).Info("authpolicy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+			span.AddEvent("policy marked for deletion, skipping")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 
@@ -97,6 +111,9 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)
 		if equalStatus && policy.Generation == policy.Status.ObservedGeneration {
 			logger.V(1).Info("policy status unchanged, skipping update")
+			span.AddEvent("policy status unchanged, skipping update")
+			span.SetStatus(codes.Ok, "")
+			span.End()
 			continue
 		}
 		newStatus.ObservedGeneration = policy.Generation
@@ -105,18 +122,32 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 		obj, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy") // should never happen
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to destruct policy")
+			span.End()
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1.AuthPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.AuthPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(policyCtx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			if strings.Contains(err.Error(), "StorageError: invalid object") {
 				logger.Info("possible error updating resource", "err", err, "possible_cause", "resource has being removed from the cluster already")
+				span.AddEvent("resource already removed from cluster")
+				span.SetStatus(codes.Ok, "")
+				span.End()
 				continue
 			}
 			logger.Error(err, "unable to update status for authpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "unable to update status")
+			span.End()
 			// TODO: handle error
+			continue
 		}
+
+		span.AddEvent("policy status updated successfully")
+		span.SetStatus(codes.Ok, "")
+		span.End()
 	}
 
 	return nil

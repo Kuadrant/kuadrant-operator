@@ -192,7 +192,7 @@ func EffectivePolicyForPath[T machinery.Policy](path []machinery.Targetable, pre
 	return &concreteEffectivePolicy
 }
 
-// OrderedPoliciesForPath gathers all policies in a path sorted from the least specific to the most specific.
+// PoliciesInPath gathers all policies in a path sorted from the least specific to the most specific.
 // Only policies whose predicate returns true are considered.
 func PoliciesInPath(path []machinery.Targetable, predicate func(machinery.Policy) bool) []machinery.Policy {
 	return lo.FlatMap(path, func(targetable machinery.Targetable, _ int) []machinery.Policy {

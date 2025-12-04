@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +44,7 @@ func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 
 func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("DNSPoliciesValidator").WithValues("context", ctx)
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := lo.Filter(topology.Policies().Items(), func(p machinery.Policy, _ int) bool {
 		_, ok := p.(*kuadrantv1.DNSPolicy)
@@ -50,23 +53,46 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
-	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
-		if err := r.isMissingDependency(); err != nil {
-			return p.GetLocator(), err
-		}
+	validationResults := make(map[string]error)
 
+	for _, p := range policies {
 		policy := p.(*kuadrantv1.DNSPolicy)
 
-		if err := isTargetRefsFound(topology, policy); err != nil {
-			return policy.GetLocator(), err
+		_, span := tracer.Start(ctx, "policy.DNSPolicy.validate")
+		span.SetAttributes(
+			attribute.String("policy.name", policy.GetName()),
+			attribute.String("policy.namespace", policy.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.DNSPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(policy.GetUID())),
+		)
+
+		var err error
+		if missingDepErr := r.isMissingDependency(); missingDepErr != nil {
+			err = missingDepErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "missing dependency")
+		} else if targetErr := isTargetRefsFound(topology, policy); targetErr != nil {
+			err = targetErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "target not found")
+		} else if conflictErr := isConflict(policies, policy); conflictErr != nil {
+			err = conflictErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "conflicting policy")
+		} else if validateErr := policy.Validate(); validateErr != nil {
+			err = validateErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "validation failed")
+		} else {
+			span.AddEvent("policy validated successfully")
+			span.SetStatus(codes.Ok, "")
 		}
 
-		if err := isConflict(policies, policy); err != nil {
-			return policy.GetLocator(), err
-		}
+		validationResults[policy.GetLocator()] = err
+		span.End()
+	}
 
-		return policy.GetLocator(), policy.Validate()
-	}))
+	state.Store(StateDNSPolicyAcceptedKey, validationResults)
 
 	logger.V(1).Info("finished validating dns policies")
 

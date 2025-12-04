@@ -6,7 +6,8 @@ import (
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
@@ -36,6 +37,7 @@ func (r *AuthPolicyValidator) Subscription() controller.Subscription {
 
 func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthPolicyValidator").WithValues("context", ctx)
+	tracer := controller.TracerFromContext(ctx)
 
 	policies := topology.Policies().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == kuadrantv1.AuthPolicyGroupKind
@@ -44,13 +46,25 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 	logger.V(1).Info("validating auth policies", "policies", len(policies))
 	defer logger.V(1).Info("finished validating auth policies")
 
-	state.Store(StateAuthPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
-		if err := r.isMissingDependency(); err != nil {
-			return policy.GetLocator(), err
-		}
+	validationResults := make(map[string]error)
+
+	for _, policy := range policies {
+		p := policy.(*kuadrantv1.AuthPolicy)
+
+		_, span := tracer.Start(ctx, "policy.AuthPolicy.validate")
+		span.SetAttributes(
+			attribute.String("policy.name", p.GetName()),
+			attribute.String("policy.namespace", p.GetNamespace()),
+			attribute.String("policy.kind", kuadrantv1.AuthPolicyGroupKind.Kind),
+			attribute.String("policy.uid", string(p.GetUID())),
+		)
 
 		var err error
-		if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
+		if missingDepErr := r.isMissingDependency(); missingDepErr != nil {
+			err = missingDepErr
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "missing dependency")
+		} else if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
 			ref := policy.GetTargetRefs()[0]
 			var res schema.GroupResource
 			switch ref.GroupVersionKind().Kind {
@@ -60,9 +74,18 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 				res = controller.HTTPRoutesResource.GroupResource()
 			}
 			err = kuadrant.NewErrPolicyTargetNotFound(kuadrantv1.AuthPolicyGroupKind.Kind, ref, apierrors.NewNotFound(res, ref.GetName()))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "target not found")
+		} else {
+			span.AddEvent("policy validated successfully")
+			span.SetStatus(codes.Ok, "")
 		}
-		return policy.GetLocator(), err
-	}))
+
+		validationResults[policy.GetLocator()] = err
+		span.End()
+	}
+
+	state.Store(StateAuthPolicyValid, validationResults)
 
 	return nil
 }

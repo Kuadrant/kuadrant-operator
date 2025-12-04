@@ -189,8 +189,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 						Actions: []wasm.Action{
 							{
-								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								ServiceName:          wasm.RateLimitServiceName,
+								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -893,8 +894,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 						Actions: []wasm.Action{
 							{
-								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								ServiceName:          wasm.RateLimitServiceName,
+								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -1150,6 +1152,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								},
 							},
 						},
@@ -1378,6 +1381,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								},
 							},
 						},
@@ -1524,6 +1528,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								},
 							},
 						},
@@ -1744,6 +1749,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								},
 							},
 						},
@@ -1853,6 +1859,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								},
 							},
 						},
@@ -2048,6 +2055,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp1Key.String()},
 								},
 							},
 						},
@@ -2175,6 +2183,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
 								},
 							},
 						},
@@ -2406,6 +2415,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
 								},
 							},
 						},
@@ -2530,6 +2540,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
 								},
 							},
 						},
@@ -2560,6 +2571,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
+									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp1Key.String()},
 								},
 							},
 						},
@@ -2703,8 +2715,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 						Actions: []wasm.Action{
 							{
-								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								ServiceName:          wasm.RateLimitServiceName,
+								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -2749,7 +2762,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		expectedWasmPluginConfig := func(httpRoute *gatewayapiv1.HTTPRoute, key, hostname string) *wasm.Config {
+		expectedWasmPluginConfig := func(httpRoute *gatewayapiv1.HTTPRoute, key, hostname string, sourcePolicies []string) *wasm.Config {
 			mGateway := &machinery.Gateway{Gateway: gateway}
 			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
 			pathID := kuadrantv1.PathID([]machinery.Targetable{
@@ -2815,6 +2828,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 										},
 									},
 								},
+								SourcePolicyLocators: sourcePolicies,
 							},
 						},
 					},
@@ -2873,7 +2887,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*.example.com")))
+			Expect(existingWASMConfig).To(
+				Equal(
+					expectedWasmPluginConfig(
+						httpRoute,
+						controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"),
+						"*.example.com",
+						[]string{"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String()},
+					),
+				),
+			)
 
 			// Create Route RLP
 			routeRLP := &kuadrantv1.RateLimitPolicy{
@@ -2911,7 +2934,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"), "*.example.com")))
+				g.Expect(existingWASMConfig).To(
+					Equal(
+						expectedWasmPluginConfig(
+							httpRoute,
+							controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"),
+							"*.example.com",
+							[]string{"ratelimitpolicy.kuadrant.io:" + routeRLPKey.String()},
+						),
+					),
+				)
 			}).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP to overrides
@@ -2928,7 +2960,918 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*.example.com")))
+				g.Expect(existingWASMConfig).To(
+					Equal(
+						expectedWasmPluginConfig(
+							httpRoute,
+							controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"),
+							"*.example.com",
+							[]string{"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String()},
+						),
+					),
+				)
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for AuthPolicy with merge strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// Create Gateway AuthPolicy with defaults and merge strategy
+			gwAuthPolicyName := "gw-auth"
+			gwAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+						Strategy: kuadrantv1.PolicyRuleMergeStrategy, // Merge strategy
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: &kuadrantv1.AuthSchemeSpec{
+								Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+									"gateway-auth": {
+										AuthenticationSpec: authorinoapi.AuthenticationSpec{
+											AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+												ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+													Selector: &metav1.LabelSelector{
+														MatchLabels: map[string]string{"app": "gateway"},
+													},
+												},
+											},
+											Credentials: authorinoapi.Credentials{
+												AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "GATEWAY-KEY"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwAuthPolicy)).To(Succeed())
+			gwAuthPolicyKey := client.ObjectKeyFromObject(gwAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source for auth action
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route AuthPolicy with merge strategy
+			routeAuthPolicyName := "route-auth"
+			routeAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+								"route-auth": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+												Selector: &metav1.LabelSelector{
+													MatchLabels: map[string]string{"app": "route"},
+												},
+											},
+										},
+										Credentials: authorinoapi.Credentials{
+											AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "ROUTE-KEY"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeAuthPolicy)).To(Succeed())
+			routeAuthPolicyKey := client.ObjectKeyFromObject(routeAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routeAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin config now has BOTH policies in sources (merged)
+			// Note: AuthPolicy creates a single auth action that includes all merged policies
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should still have 1 auth action (auth actions are not split per policy)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The single auth action should list BOTH policy sources
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
+					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
+				))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for AuthPolicy with atomic strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// Create Gateway AuthPolicy with defaults and atomic strategy
+			gwAuthPolicyName := "gw-auth"
+			gwAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+						Strategy: kuadrantv1.AtomicMergeStrategy, // Atomic strategy
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: &kuadrantv1.AuthSchemeSpec{
+								Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+									"gateway-auth": {
+										AuthenticationSpec: authorinoapi.AuthenticationSpec{
+											AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+												ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+													Selector: &metav1.LabelSelector{
+														MatchLabels: map[string]string{"app": "gateway"},
+													},
+												},
+											},
+											Credentials: authorinoapi.Credentials{
+												AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "GATEWAY-KEY"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwAuthPolicy)).To(Succeed())
+			gwAuthPolicyKey := client.ObjectKeyFromObject(gwAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source for auth action
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route AuthPolicy - with atomic strategy, route policy should replace gateway defaults entirely
+			routeAuthPolicyName := "route-auth"
+			routeAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+								"route-auth": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+												Selector: &metav1.LabelSelector{
+													MatchLabels: map[string]string{"app": "route"},
+												},
+											},
+										},
+										Credentials: authorinoapi.Credentials{
+											AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "ROUTE-KEY"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeAuthPolicy)).To(Succeed())
+			routeAuthPolicyKey := client.ObjectKeyFromObject(routeAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routeAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// With atomic strategy, route policy replaces gateway defaults - should have only route policy source
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 auth action with only route policy (atomic replacement)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"authpolicy.kuadrant.io:" + routeAuthPolicyKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for AuthPolicy with overrides and atomic strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// Create Gateway AuthPolicy with overrides and atomic strategy
+			gwAuthPolicyName := "gw-auth"
+			gwAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Overrides: &kuadrantv1.MergeableAuthPolicySpec{
+						Strategy: kuadrantv1.AtomicMergeStrategy, // Atomic strategy with overrides
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: &kuadrantv1.AuthSchemeSpec{
+								Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+									"gateway-auth": {
+										AuthenticationSpec: authorinoapi.AuthenticationSpec{
+											AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+												ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+													Selector: &metav1.LabelSelector{
+														MatchLabels: map[string]string{"app": "gateway"},
+													},
+												},
+											},
+											Credentials: authorinoapi.Credentials{
+												AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "GATEWAY-KEY"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwAuthPolicy)).To(Succeed())
+			gwAuthPolicyKey := client.ObjectKeyFromObject(gwAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source (gateway with overrides)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route AuthPolicy - with atomic overrides, gateway policy should override route policy entirely
+			routeAuthPolicyName := "route-auth"
+			routeAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+								"route-auth": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+												Selector: &metav1.LabelSelector{
+													MatchLabels: map[string]string{"app": "route"},
+												},
+											},
+										},
+										Credentials: authorinoapi.Credentials{
+											AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "ROUTE-KEY"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeAuthPolicy)).To(Succeed())
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routeAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// With atomic overrides strategy, gateway policy atomically overrides route policy - should have only gateway policy source
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 auth action with only gateway policy (atomic override)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The action should list ONLY the gateway policy source (atomic overrides route policy)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for AuthPolicy with overrides and merge strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// Create Gateway AuthPolicy with overrides and merge strategy
+			gwAuthPolicyName := "gw-auth"
+			gwAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Overrides: &kuadrantv1.MergeableAuthPolicySpec{
+						Strategy: kuadrantv1.PolicyRuleMergeStrategy, // Merge strategy with overrides
+						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+							AuthScheme: &kuadrantv1.AuthSchemeSpec{
+								Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+									"gateway-auth": {
+										AuthenticationSpec: authorinoapi.AuthenticationSpec{
+											AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+												ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+													Selector: &metav1.LabelSelector{
+														MatchLabels: map[string]string{"app": "gateway"},
+													},
+												},
+											},
+											Credentials: authorinoapi.Credentials{
+												AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "GATEWAY-KEY"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwAuthPolicy)).To(Succeed())
+			gwAuthPolicyKey := client.ObjectKeyFromObject(gwAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source (gateway with overrides)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route AuthPolicy - with merge overrides, both policies should be present in sources
+			routeAuthPolicyName := "route-auth"
+			routeAuthPolicy := &kuadrantv1.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
+				Spec: kuadrantv1.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
+						AuthScheme: &kuadrantv1.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
+								"route-auth": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+												Selector: &metav1.LabelSelector{
+													MatchLabels: map[string]string{"app": "route"},
+												},
+											},
+										},
+										Credentials: authorinoapi.Credentials{
+											AuthorizationHeader: &authorinoapi.Prefixed{Prefix: "ROUTE-KEY"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeAuthPolicy)).To(Succeed())
+			routeAuthPolicyKey := client.ObjectKeyFromObject(routeAuthPolicy)
+			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routeAuthPolicy)).WithContext(ctx).Should(BeTrue())
+
+			// With merge overrides strategy, both gateway and route policies are merged - should have both policy sources
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 merged auth action with both policies
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The action should list BOTH policy sources (merge overrides merges both policies)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
+					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
+				))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for RateLimitPolicy with merge strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create Gateway RLP with defaults and merge strategy
+			gwRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Defaults: &kuadrantv1.MergeableRateLimitPolicySpec{
+						Strategy: kuadrantv1.PolicyRuleMergeStrategy, // Merge strategy
+						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1.Limit{
+								"gateway-limit": {
+									Rates: []kuadrantv1.Rate{{Limit: 10, Window: kuadrantv1.Duration("1m")}},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwRLP)).To(Succeed())
+			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route RLP with merge strategy
+			routeRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"route-limit": {
+								Rates: []kuadrantv1.Rate{{Limit: 100, Window: kuadrantv1.Duration("1m")}},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeRLP)).To(Succeed())
+			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin config now has BOTH policies in sources (merged)
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 merged action with both limits' data
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The merged action should list BOTH policy sources
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+					"ratelimitpolicy.kuadrant.io:"+gwRLPKey.String(),
+					"ratelimitpolicy.kuadrant.io:"+routeRLPKey.String(),
+				))
+
+				// Verify both limits' data is present
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(2))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for RateLimitPolicy with atomic strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create Gateway RLP with defaults and atomic strategy
+			gwRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Defaults: &kuadrantv1.MergeableRateLimitPolicySpec{
+						Strategy: kuadrantv1.AtomicMergeStrategy, // Atomic strategy
+						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1.Limit{
+								"gateway-limit": {
+									Rates: []kuadrantv1.Rate{{Limit: 10, Window: kuadrantv1.Duration("1m")}},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwRLP)).To(Succeed())
+			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route RLP - with atomic strategy, route policy should replace gateway defaults entirely
+			routeRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"route-limit": {
+								Rates: []kuadrantv1.Rate{{Limit: 100, Window: kuadrantv1.Duration("1m")}},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeRLP)).To(Succeed())
+			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// With atomic strategy, route policy replaces gateway defaults - should have only route policy source
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 action with only route RLP data (atomic replacement)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"ratelimitpolicy.kuadrant.io:" + routeRLPKey.String(),
+				}))
+
+				// Verify only route limit's data is present
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(1))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for RateLimitPolicy with overrides with atomic strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create Gateway RLP with overrides and atomic strategy
+			gwRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Overrides: &kuadrantv1.MergeableRateLimitPolicySpec{
+						Strategy: kuadrantv1.AtomicMergeStrategy, // Atomic strategy with overrides
+						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1.Limit{
+								"gateway-limit": {
+									Rates: []kuadrantv1.Rate{{Limit: 5, Window: kuadrantv1.Duration("1m")}},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwRLP)).To(Succeed())
+			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source (gateway with overrides)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route RLP - with atomic overrides, gateway policy should override route policy entirely
+			routeRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"route-limit": {
+								Rates: []kuadrantv1.Rate{{Limit: 100, Window: kuadrantv1.Duration("1m")}},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeRLP)).To(Succeed())
+			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeFalse())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// With atomic overrides strategy, gateway policy atomically overrides route policy - should have only gateway policy source
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 action with only gateway RLP data (atomic override)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The action should list ONLY the gateway policy source (atomic overrides route policy)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
+				}))
+
+				// Verify only gateway limit's data is present
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(1))
+			}).WithContext(ctx).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("WasmPlugin config includes source policy locators for RateLimitPolicy with overrides with merge strategy", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create Gateway RLP with overrides and merge strategy
+			gwRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
+					},
+					Overrides: &kuadrantv1.MergeableRateLimitPolicySpec{
+						Strategy: kuadrantv1.PolicyRuleMergeStrategy, // Merge strategy with overrides
+						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1.Limit{
+								"gateway-limit": {
+									Rates: []kuadrantv1.Rate{{Limit: 5, Window: kuadrantv1.Duration("1m")}},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, gwRLP)).To(Succeed())
+			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check wasm plugin exists and has correct source for gateway policy
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+				// Single policy source (gateway with overrides)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
+				}))
+			}).WithContext(ctx).Should(Succeed())
+
+			// Create Route RLP - with merge overrides, both policies should be present in sources
+			routeRLP := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"route-limit": {
+								Rates: []kuadrantv1.Rate{{Limit: 100, Window: kuadrantv1.Duration("1m")}},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, routeRLP)).To(Succeed())
+			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+
+			// With merge overrides strategy, both gateway and route policies are merged - should have both policy sources
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+
+				// Should have 1 merged action with both policies' data
+				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
+
+				// The action should list BOTH policy sources (merge overrides merges both policies)
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+					"ratelimitpolicy.kuadrant.io:"+gwRLPKey.String(),
+					"ratelimitpolicy.kuadrant.io:"+routeRLPKey.String(),
+				))
+
+				// Verify both limits' data is present
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(2))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)

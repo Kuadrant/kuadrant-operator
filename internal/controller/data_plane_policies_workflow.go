@@ -1,9 +1,13 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -20,6 +24,7 @@ import (
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 const (
@@ -172,4 +177,71 @@ func defaultGatewayControllerName(controllerName gatewayapiv1.GatewayController)
 		return defaultEnvoyGatewayGatewayControllerName
 	}
 	return "Unknown"
+}
+
+func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, error) {
+	tracer := controller.TracerFromContext(ctx)
+	_, span := tracer.Start(ctx, "wasm.MergeAndVerifyActions")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.Int("actions.input", len(actions)),
+	)
+
+	if len(actions) == 0 {
+		span.SetAttributes(attribute.Int("actions.output", 0))
+		span.SetStatus(codes.Ok, "")
+		return nil, nil
+	}
+
+	result := []wasm.Action{actions[0]}
+	for _, currentAction := range actions[1:] {
+		lastAction := &result[len(result)-1]
+
+		if lastAction.Scope == currentAction.Scope &&
+			lastAction.ServiceName == currentAction.ServiceName && lastAction.ServiceName != wasm.AuthServiceName {
+			lastAction.ConditionalData = append(lastAction.ConditionalData, currentAction.ConditionalData...)
+			// Merge source policy locators - deduplicate them
+			lastAction.SourcePolicyLocators = lo.Uniq(append(lastAction.SourcePolicyLocators, currentAction.SourcePolicyLocators...))
+			slices.Sort(lastAction.SourcePolicyLocators)
+		} else {
+			result = append(result, currentAction)
+		}
+	}
+
+	for i := range result {
+		keyValueMap := make(map[string]string)
+		for _, conditionalData := range result[i].ConditionalData {
+			for _, data := range conditionalData.Data {
+				var key, value string
+
+				switch val := data.Value.(type) {
+				case *wasm.Static:
+					key = val.Static.Key
+					value = val.Static.Value
+				case *wasm.Expression:
+					key = val.ExpressionItem.Key
+					value = val.ExpressionItem.Value
+				}
+
+				if existingValue, exists := keyValueMap[key]; exists {
+					if existingValue != value {
+						span.RecordError(fmt.Errorf("duplicate key '%s' with different values", key))
+						span.SetStatus(codes.Error, "duplicate key conflict")
+						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
+					}
+				} else {
+					keyValueMap[key] = value
+				}
+			}
+		}
+	}
+
+	span.SetAttributes(
+		attribute.Int("actions.output", len(result)),
+		attribute.Int("actions.merged", len(actions)-len(result)),
+	)
+	span.SetStatus(codes.Ok, "")
+
+	return result, nil
 }

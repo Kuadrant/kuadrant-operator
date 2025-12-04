@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -216,7 +217,12 @@ func PathID(path []machinery.Targetable) string {
 
 func mapRuleWithSourceFunc(source machinery.Policy) func(MergeableRule, string) MergeableRule {
 	return func(rule MergeableRule, _ string) MergeableRule {
-		return rule.WithSource(source.GetLocator())
+		// Only set the source if the rule doesn't already have one
+		// This preserves the original source when rules are merged from multiple policies
+		if rule.GetSource() == "" {
+			return rule.WithSource(source.GetLocator())
+		}
+		return rule
 	}
 }
 
@@ -224,4 +230,15 @@ func copyMergeablePolicy(policy MergeablePolicy) MergeablePolicy {
 	dup := policy.DeepCopyObject().(MergeablePolicy)
 	dup.SetRules(lo.MapValues(dup.Rules(), mapRuleWithSourceFunc(policy)))
 	return dup
+}
+
+// SourcePoliciesFromEffectivePolicy extracts the unique list of source policy locators
+// that contributed to the effective policy by examining the source of each rule.
+// This ensures only policies that actually contributed are tracked, excluding overridden ones.
+func SourcePoliciesFromEffectivePolicy(effectivePolicy MergeablePolicy) []string {
+	sources := lo.Map(lo.Values(effectivePolicy.Rules()), func(rule MergeableRule, _ int) string {
+		return rule.GetSource()
+	})
+	slices.Sort(sources)
+	return lo.Uniq(sources)
 }

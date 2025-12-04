@@ -101,6 +101,8 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.istio_ratelimit_cluster", (&IstioRateLimitClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.istio_tracing_cluster", (&IstioTracingClusterReconciler{client: client}).Subscription().Reconcile))
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.istio_extension", (&IstioExtensionReconciler{client: client}).Subscription().Reconcile))
 	}
 
@@ -109,6 +111,8 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 			traceReconcileFunc("reconciler.envoy_gateway_auth_cluster", (&EnvoyGatewayAuthClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.envoy_gateway_ratelimit_cluster", (&EnvoyGatewayRateLimitClusterReconciler{client: client}).Subscription().Reconcile))
+		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
+			traceReconcileFunc("reconciler.envoy_gateway_tracing_cluster", (&EnvoyGatewayTracingClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.envoy_gateway_extension", (&EnvoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile))
 	}

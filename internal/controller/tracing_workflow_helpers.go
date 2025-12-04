@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"sync"
 
+	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -69,4 +71,47 @@ func parseTracingEndpoint(endpoint string) (string, int, error) {
 	}
 
 	return host, port, nil
+}
+
+// targetIsInEffectivePolicyPath checks if a target is in the path of any effective policies
+func targetIsInEffectivePolicyPath(target machinery.Targetable, state *sync.Map) bool {
+	locator := target.GetLocator()
+
+	// Check for effective auth policies
+	if effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies); ok {
+		effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
+		for _, policy := range effectiveAuthPoliciesMap {
+			for _, targetable := range policy.Path {
+				if targetable.GetLocator() == locator {
+					return true
+				}
+			}
+		}
+	}
+
+	// Check for effective rate limit policies
+	if effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
+		effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
+		for _, policy := range effectiveRateLimitPoliciesMap {
+			for _, targetable := range policy.Path {
+				if targetable.GetLocator() == locator {
+					return true
+				}
+			}
+		}
+	}
+
+	// Check for effective token rate limit policies
+	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
+		effectiveTokenRateLimitPoliciesMap := effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)
+		for _, policy := range effectiveTokenRateLimitPoliciesMap {
+			for _, targetable := range policy.Path {
+				if targetable.GetLocator() == locator {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }

@@ -25,7 +25,7 @@ type EffectiveAuthPolicyReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-// EffectiveAuthPolicyReconciler subscribe to the same events as rate limit because they are used together to compose gateway extension resources
+// Subscription subscribe to the same events as rate limit because they are used together to compose gateway extension resources
 func (r *EffectiveAuthPolicyReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,

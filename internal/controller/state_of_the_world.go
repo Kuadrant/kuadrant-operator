@@ -776,6 +776,7 @@ func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	workflow := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
 			traceReconcileFunc("finalize.kuadrant_status", NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile),
+			traceReconcileFunc("finalize.policy_metrics", NewPolicyMetricsReconciler().Reconcile),
 		},
 	}
 

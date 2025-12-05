@@ -49,6 +49,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/istio"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
+	operatormetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 	"github.com/kuadrant/kuadrant-operator/internal/observability"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
@@ -313,10 +314,16 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOp
 	if err != nil {
 		return nil, err
 	}
+
+	operatormetrics.SetDependencyDetected("envoygateway", b.isEnvoyGatewayInstalled)
+
 	if !b.isEnvoyGatewayInstalled {
 		b.logger.Info("envoygateway is not installed, skipping related watches and reconcilers")
+		operatormetrics.SetControllerRegistered("envoygateway_integration", false)
 		return opts, nil
 	}
+
+	operatormetrics.SetControllerRegistered("envoygateway_integration", true)
 	opts = append(opts,
 		controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
 			&egv1alpha1.EnvoyPatchPolicy{},
@@ -350,10 +357,16 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 	if err != nil {
 		return nil, err
 	}
+
+	operatormetrics.SetDependencyDetected("istio", b.isIstioInstalled)
+
 	if !b.isIstioInstalled {
 		b.logger.Info("istio is not installed. skipping related watches and reconcilers")
+		operatormetrics.SetControllerRegistered("istio_integration", false)
 		return opts, nil
 	}
+
+	operatormetrics.SetControllerRegistered("istio_integration", true)
 	opts = append(opts,
 		controller.WithRunnable("envoyfilter watcher", controller.Watch(
 			&istioclientnetworkingv1alpha3.EnvoyFilter{},
@@ -395,10 +408,16 @@ func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOpt
 	if err != nil {
 		return nil, err
 	}
+
+	operatormetrics.SetDependencyDetected("cert-manager", b.isCertManagerInstalled)
+
 	if !b.isCertManagerInstalled {
 		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers")
+		operatormetrics.SetControllerRegistered("tls_policies", false)
 		return opts, nil
 	}
+
+	operatormetrics.SetControllerRegistered("tls_policies", true)
 
 	opts = append(opts, certManagerControllerOpts()...)
 
@@ -451,10 +470,16 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 	if err != nil {
 		return nil, err
 	}
+
+	operatormetrics.SetDependencyDetected("dns-operator", b.isDNSOperatorInstalled)
+
 	if !b.isDNSOperatorInstalled {
 		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers")
+		operatormetrics.SetControllerRegistered("dns_policies", false)
 		return opts, nil
 	}
+
+	operatormetrics.SetControllerRegistered("dns_policies", true)
 
 	opts = append(opts,
 		controller.WithRunnable("dnsrecord watcher", controller.Watch(
@@ -479,10 +504,16 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 	if err != nil {
 		return nil, err
 	}
+
+	operatormetrics.SetDependencyDetected("limitador-operator", b.isLimitadorOperatorInstalled)
+
 	if !b.isLimitadorOperatorInstalled {
 		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers")
+		operatormetrics.SetControllerRegistered("rate_limit_policies", false)
 		return nil, err
 	}
+
+	operatormetrics.SetControllerRegistered("rate_limit_policies", true)
 
 	opts = append(opts,
 		controller.WithRunnable("limitador watcher", controller.Watch(
@@ -509,10 +540,16 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 	if err != nil {
 		return nil, err
 	}
+
+	operatormetrics.SetDependencyDetected("authorino-operator", b.isAuthorinoOperatorInstalled)
+
 	if !b.isAuthorinoOperatorInstalled {
 		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers")
+		operatormetrics.SetControllerRegistered("auth_policies", false)
 		return opts, nil
 	}
+
+	operatormetrics.SetControllerRegistered("auth_policies", true)
 
 	opts = append(opts,
 		controller.WithRunnable("authorino watcher", controller.Watch(

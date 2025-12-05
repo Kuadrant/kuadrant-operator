@@ -20,6 +20,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/authorino"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	operatormetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 )
 
 const (
@@ -67,10 +68,22 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
+		operatormetrics.SetKuadrantExists(false)
+		operatormetrics.ResetKuadrantMetrics()
 		return nil
 	}
 
+	// Kuadrant CR exists in the cluster
+	operatormetrics.SetKuadrantExists(true)
+
 	newStatus := r.calculateStatus(topology, logger, kObj, state)
+
+	// Emit Kuadrant readiness metric
+	isReady := meta.IsStatusConditionTrue(newStatus.Conditions, ReadyConditionType)
+	operatormetrics.SetKuadrantReady(kObj.Namespace, kObj.Name, isReady)
+
+	// Emit component readiness metrics
+	r.emitComponentMetrics(topology, kObj.Namespace, logger)
 
 	equalStatus := kObj.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
@@ -240,4 +253,17 @@ func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *
 	}
 
 	return nil
+}
+
+// emitComponentMetrics emits readiness metrics for Kuadrant-managed components (Authorino and Limitador).
+// This is called during reconciliation when a Kuadrant CR exists to provide real-time visibility into component health.
+// When no CR exists, component metrics are cleared via ResetKuadrantMetrics() instead.
+func (r *KuadrantStatusUpdater) emitComponentMetrics(topology *machinery.Topology, namespace string, logger logr.Logger) {
+	// Check Authorino readiness
+	authorinoReady := checkAuthorinoAvailable(topology, logger) == nil
+	operatormetrics.SetComponentReady("authorino", namespace, authorinoReady)
+
+	// Check Limitador readiness
+	limitadorReady := checkLimitadorReady(topology, logger) == nil
+	operatormetrics.SetComponentReady("limitador", namespace, limitadorReady)
 }

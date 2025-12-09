@@ -15,9 +15,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/tests"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
 var _ = Describe("Observabiltity monitors for istio gateway", func() {
@@ -86,23 +87,18 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Fetch current CR & set observability flag to enable the feature
+			// Set observability flag to enable the feature
 			kuadrantNS := getKuadrantNamespace(ctx, testClient())
-			kuadrantCR := &kuadrantv1beta1.Kuadrant{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Kuadrant",
-					APIVersion: kuadrantv1beta1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "kuadrant-sample",
-					Namespace: kuadrantNS,
-				},
-			}
-			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
-			kuadrantCR.Spec.Observability.Enable = true
-			err = testClient().Update(ctx, kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantNS}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
+					Enable: true,
+				}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify all monitors are created
 			Eventually(func(g Gomega) {
@@ -113,11 +109,14 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 
 			// Unset observability flag to disable the feature
 			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-				kuadrantCR.Spec.Observability.Enable = false
-				err = testClient().Update(ctx, kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantNS}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
+					Enable: false,
+				}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors were deleted

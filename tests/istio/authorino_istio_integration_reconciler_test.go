@@ -79,11 +79,14 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is on", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantInstallationNS}
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
@@ -119,17 +122,21 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is off", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantInstallationNS}
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
 		})
+
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}
@@ -143,17 +150,21 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 
 	Context("when mTLS is on and disabled for authorino", func() {
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true, Authorino: ptr.To(false)}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantInstallationNS}
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true, Authorino: ptr.To(false)}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(tests.AuthorinoIsReady(testClient(), client.ObjectKey{
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
 		})
+
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}

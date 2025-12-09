@@ -233,7 +233,7 @@ operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary.
 
 CONTROLLER_GEN = $(PROJECT_PATH)/bin/controller-gen
 $(CONTROLLER_GEN):
-	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.5)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN)  ## Download controller-gen locally if necessary.

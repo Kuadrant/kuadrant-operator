@@ -27,6 +27,9 @@ linters:
       - linters:
           - revive
         text: 'var-naming: don''t use leading k in Go names'
+      - linters:
+          - revive
+        text: 'var-naming: avoid meaningless package names'
     paths:
       - third_party$
       - builtin$

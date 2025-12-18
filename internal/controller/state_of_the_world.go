@@ -514,6 +514,15 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 			&limitadorv1alpha1.Limitador{},
 			kuadrantv1beta1.LimitadorsResource,
 			metav1.NamespaceAll,
+			controller.WithPredicates(
+				// Only care about spec and status changes
+				&ctrlruntimepredicate.TypedGenerationChangedPredicate[*limitadorv1alpha1.Limitador]{},
+				&ctrlruntimepredicate.TypedFuncs[*limitadorv1alpha1.Limitador]{
+					UpdateFunc: func(e event.TypedUpdateEvent[*limitadorv1alpha1.Limitador]) bool {
+						return !e.ObjectOld.Status.Equals(&e.ObjectNew.Status, b.logger.WithName("limitador-status-predicate"))
+					},
+				},
+			),
 		)),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.LimitadorGroupKind,

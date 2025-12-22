@@ -8,10 +8,8 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,14 +79,11 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 					Controller:         ptr.To(true),
 				},
 			},
-			Annotations: map[string]string{},
 		},
 		Spec: limitadorv1alpha1.LimitadorSpec{
 			MetricLabelsDefault: ptr.To("descriptors[1]"),
 		},
 	}
-
-	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(desiredLimitador.Annotations))
 
 	if kobj.Spec.Observability.Tracing != nil && kobj.Spec.Observability.Tracing.DefaultEndpoint != "" {
 		desiredLimitador.Spec.Tracing = &limitadorv1alpha1.Tracing{

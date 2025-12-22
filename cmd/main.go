@@ -168,8 +168,11 @@ func main() {
 				"sampler", "AlwaysSample",
 			)
 
-			// Set trace propagator
-			otel.SetTextMapPropagator(propagation.TraceContext{})
+			// Set global propagator for distributed tracing
+			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+				propagation.TraceContext{},
+				propagation.Baggage{},
+			))
 
 			// Set as global tracer provider
 			otel.SetTracerProvider(traceProvider.TracerProvider())

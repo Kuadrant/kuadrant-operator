@@ -18,15 +18,15 @@ install-metallb: kustomize yq ## Installs the metallb load balancer allowing use
 	./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} ${CIDR} ${NUM_IPS} | kubectl apply -n metallb-system -f -
 
 .PHONY: install-observability-crds
-install-observability-crds: $(KUSTOMIZE) $(YQ)
+install-observability-crds: kustomize yq
 	$(KUSTOMIZE) build ./config/observability/| $(YQ) e 'select(.kind == "CustomResourceDefinition")' | kubectl apply --server-side -f -
 
 .PHONY: uninstall-metallb
-uninstall-metallb: $(KUSTOMIZE)
+uninstall-metallb: kustomize
 	$(KUSTOMIZE) build config/metallb | kubectl delete -f -
 
 .PHONY: install-olm
-install-olm: $(OPERATOR_SDK)
+install-olm: operator-sdk
 	$(OPERATOR_SDK) olm install
 
 .PHONY: uninstall-olm
@@ -107,7 +107,7 @@ local-env-setup: ## env-setup based on kind cluster
 	$(MAKE) env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
 
 .PHONY: local-setup
-local-setup: $(KIND) ## Run local Kubernetes cluster and deploy kuadrant operator (and *all* dependencies)
+local-setup: kind ## Run local Kubernetes cluster and deploy kuadrant operator (and *all* dependencies)
 	$(MAKE) local-env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
 	$(MAKE) local-deploy
 

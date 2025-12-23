@@ -6,7 +6,7 @@ CHART_NAME ?= kuadrant-operator
 CHART_DIRECTORY ?= charts/$(CHART_NAME)
 
 .PHONY: helm-build
-helm-build: $(YQ) kustomize manifests ## Build the helm chart from kustomize manifests
+helm-build: yq kustomize manifests ## Build the helm chart from kustomize manifests
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
@@ -25,22 +25,22 @@ helm-build: $(YQ) kustomize manifests ## Build the helm chart from kustomize man
 	V="$(DNS_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 
 .PHONY: helm-install
-helm-install: $(HELM) ## Install the helm chart
+helm-install: helm ## Install the helm chart
 	# Install the helm chart in the cluster
 	$(HELM) install $(CHART_NAME) $(CHART_DIRECTORY)
 
 .PHONY: helm-uninstall
-helm-uninstall: $(HELM) ## Uninstall the helm chart
+helm-uninstall: helm ## Uninstall the helm chart
 	# Uninstall the helm chart from the cluster
 	$(HELM) uninstall $(CHART_NAME)
 
 .PHONY: helm-upgrade
-helm-upgrade: $(HELM) ## Upgrade the helm chart
+helm-upgrade: helm ## Upgrade the helm chart
 	# Upgrade the helm chart in the cluster
 	$(HELM) upgrade $(CHART_NAME) $(CHART_DIRECTORY)
 
 .PHONY: helm-package
-helm-package: $(HELM) ## Package the helm chart
+helm-package: helm ## Package the helm chart
 	# Package the helm chart
 	$(HELM) package $(CHART_DIRECTORY)
 
@@ -48,17 +48,17 @@ helm-package: $(HELM) ## Package the helm chart
 GPG_KEY_UID ?= 'Kuadrant Development Team'
 # The keyring should've been imported before running this target
 .PHONY: helm-package-sign
-helm-package-sign: $(HELM) ## Package the helm chart and GPG sign it
+helm-package-sign: helm ## Package the helm chart and GPG sign it
 	# Package the helm chart and sign it
 	$(HELM) package --sign --key "$(GPG_KEY_UID)" $(CHART_DIRECTORY)
 
 .PHONY: helm-dependency-build
-helm-dependency-build: $(HELM) ## Build the chart dependencies
+helm-dependency-build: helm ## Build the chart dependencies
 	# Fetch and builds dependencies in Chart.yaml, updates the Chart.lock and downloads the charts .tgz
 	$(HELM) dependency build $(CHART_DIRECTORY)
 
 .PHONY: helm-add-kuadrant-repo
-helm-add-kuadrant-repo: $(HELM) ## Add the Kuadrant charts repo and force update it
+helm-add-kuadrant-repo: helm ## Add the Kuadrant charts repo and force update it
 	$(HELM) repo add kuadrant https://kuadrant.io/helm-charts --force-update
 
 # GitHub Token with permissions to upload to the release assets
@@ -91,8 +91,8 @@ helm-sync-package-deleted: ## Sync the deleted helm chart package to the helm-ch
 	  -d '{"event_type":"chart-deleted","client_payload":{"chart":"$(CHART_NAME)","version":"$(CHART_VERSION)"}}'
 
 .PHONY: helm-print-chart-version
-helm-print-chart-version: $(HELM) ## Reads local chart version
+helm-print-chart-version: helm ## Reads local chart version
 	@$(HELM) show chart charts/$(CHART_NAME) | grep -E "^version:" | awk '{print $$2}'
 
-helm-print-installed-chart-version: $(YQ) $(HELM) ## Reads installed chart version
+helm-print-installed-chart-version: yq helm ## Reads installed chart version
 	@$(HELM) list --all-namespaces -o yaml | $(YQ) '(.[] | select(.name == "kuadrant") | .app_version)'

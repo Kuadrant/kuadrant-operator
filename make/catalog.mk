@@ -21,12 +21,12 @@ LABEL quay.expires-after=$${QUAY_IMAGE_EXPIRY}
 endef
 export QUAY_EXPIRY_TIME_LABEL
 
-$(CATALOG_DOCKERFILE): $(OPM)
+$(CATALOG_DOCKERFILE): opm
 	-mkdir -p $(PROJECT_PATH)/catalog/kuadrant-operator-catalog
 	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog -l quay.expires-after=$(QUAY_IMAGE_EXPIRY)
 catalog-dockerfile: $(CATALOG_DOCKERFILE) ## Generate catalog dockerfile.
 
-$(CATALOG_FILE): $(OPM) $(YQ)
+$(CATALOG_FILE): opm yq
 	@echo "************************************************************"
 	@echo Build kuadrant operator catalog
 	@echo
@@ -45,7 +45,7 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 			$(DNS_OPERATOR_BUNDLE_IMG) $(CHANNEL) $@
 
 .PHONY: catalog
-catalog: $(OPM) ## Generate catalog content and validate.
+catalog: opm ## Generate catalog content and validate.
 	# Initializing the Catalog
 	-rm -rf $(PROJECT_PATH)/catalog/kuadrant-operator-catalog
 	-rm -rf $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfile
@@ -68,12 +68,12 @@ catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
 .PHONY: deploy-catalog
-deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy operator to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+deploy-catalog: kustomize yq ## Deploy operator to the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	V="$(CATALOG_IMG)" $(YQ) eval '.spec.image = strenv(V)' -i config/deploy/olm/catalogsource.yaml
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
 
 .PHONY: undeploy-catalog
-undeploy-catalog: $(KUSTOMIZE) ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
+undeploy-catalog: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
 
 print-catalog-repo: ## Print catalog repo

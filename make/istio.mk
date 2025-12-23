@@ -14,17 +14,14 @@ INSTALL_COMMAND=sail-install
 endif
 
 # istioctl tool
-ISTIOCTL=$(shell pwd)/bin/istioctl
-ISTIOVERSION = 1.27.1
-$(ISTIOCTL):
-	mkdir -p $(shell pwd)/bin
-	$(eval TMP := $(shell mktemp -d))
-	cd $(TMP); curl -sSL https://istio.io/downloadIstio | ISTIO_VERSION=$(ISTIOVERSION) sh -
-	cp $(TMP)/istio-$(ISTIOVERSION)/bin/istioctl ${ISTIOCTL}
-	-rm -rf $(TMP)
+ISTIOCTL ?= $(LOCALBIN)/istioctl
+ISTIOCTL_VERSION ?= 1.27.1
+ISTIOCTL_V_BINARY := $(LOCALBIN)/istioctl-$(ISTIOCTL_VERSION)
 
 .PHONY: istioctl
-istioctl: $(ISTIOCTL) ## Download istioctl locally if necessary.
+istioctl: $(ISTIOCTL_V_BINARY) ## Download istioctl locally if necessary.
+$(ISTIOCTL_V_BINARY): $(LOCALBIN)
+	$(call go-install-tool,$(ISTIOCTL),istio.io/istio/istioctl/cmd/istioctl,$(ISTIOCTL_VERSION))
 
 .PHONY: istioctl-install
 istioctl-install: istioctl ## Install istio.
@@ -55,5 +52,5 @@ istio-install:
 	$(MAKE) $(INSTALL_COMMAND)
 
 .PHONY: deploy-istio-gateway
-deploy-istio-gateway: $(KUSTOMIZE) ## Deploy Gateway API gateway with gatewayclass set to Istio
+deploy-istio-gateway: kustomize ## Deploy Gateway API gateway with gatewayclass set to Istio
 	$(KUSTOMIZE) build config/dependencies/istio/gateway | kubectl apply -f -

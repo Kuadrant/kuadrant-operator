@@ -123,40 +123,22 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 		// create
 		if !found {
 			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoypatchpolicy is created, because updates won't change the status
-			desiredEnvoyPatchPolicyUnstructured, err := controller.Destruct(desiredEnvoyPatchPolicy)
-			if err != nil {
-				logger.Error(err, "failed to destruct envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicy)
+		} else {
+			existingEnvoyPatchPolicy := existingEnvoyPatchPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy)
+
+			if kuadrantenvoygateway.EqualEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
+				logger.V(1).Info("envoypatchpolicy object is up to date, nothing to do")
 				continue
 			}
-			if _, err = resource.Create(ctx, desiredEnvoyPatchPolicyUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicyUnstructured.Object)
-				// TODO: handle error
-			}
-			continue
 		}
 
-		existingEnvoyPatchPolicy := existingEnvoyPatchPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy)
-
-		if kuadrantenvoygateway.EqualEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
-			logger.V(1).Info("envoypatchpolicy object is up to date, nothing to do")
-			continue
-		}
-
-		// update
-		existingEnvoyPatchPolicy.Spec = envoygatewayv1alpha1.EnvoyPatchPolicySpec{
-			TargetRef:   desiredEnvoyPatchPolicy.Spec.TargetRef,
-			Type:        desiredEnvoyPatchPolicy.Spec.Type,
-			JSONPatches: desiredEnvoyPatchPolicy.Spec.JSONPatches,
-			Priority:    desiredEnvoyPatchPolicy.Spec.Priority,
-		}
-
-		existingEnvoyPatchPolicyUnstructured, err := controller.Destruct(existingEnvoyPatchPolicy)
+		desiredEnvoyPatchPolicyUnstructured, err := controller.Destruct(desiredEnvoyPatchPolicy)
 		if err != nil {
-			logger.Error(err, "failed to destruct envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", existingEnvoyPatchPolicy)
+			logger.Error(err, "failed to destruct envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicy)
 			continue
 		}
-		if _, err = resource.Update(ctx, existingEnvoyPatchPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", existingEnvoyPatchPolicyUnstructured.Object)
+		if _, err = resource.Apply(ctx, desiredEnvoyPatchPolicyUnstructured.GetName(), desiredEnvoyPatchPolicyUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName}); err != nil {
+			logger.Error(err, "failed to apply envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicyUnstructured.Object)
 			// TODO: handle error
 		}
 	}

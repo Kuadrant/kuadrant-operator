@@ -396,7 +396,7 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(enforcedCond).ToNot(BeNil())
 				g.Expect(enforcedCond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(enforcedCond.Message).To(ContainSubstring("Shared TLS certificates refs between listeners not supported. Use unique certificates refs in the Gateway listeners to fully enforce policy"))
-			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 

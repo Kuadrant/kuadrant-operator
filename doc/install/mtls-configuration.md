@@ -11,6 +11,14 @@ At the time of writing there is [an RFC](https://github.com/Kuadrant/architectur
 
     This method currently only works if the Gateway is provided by Istio, with service mesh capabilities enabled across the cluster. For example, the [Istio CNI](https://github.com/istio-ecosystem/sail-operator/blob/main/docs/README.md#istiocni-resource) agent is running on each node.
 
+!!! warning "OpenShift 4.19+ Users"
+
+    If you require mTLS on OpenShift Container Platform (OCP) 4.19 or later, the Cluster Ingress Operator (CIO) managed Istio is **not** a viable option because it lacks the necessary service mesh capabilities that Kuadrant's mTLS feature relies on.
+
+    Instead, you must create a custom Istio CR (Custom Resource) with the CNI (Container Network Interface) requirement enabled. The Gateway API can also be enabled on this custom Istio CR.
+
+    **Important:** When defining your Gateways, ensure they avoid using the `openshift.io/gateway-controller/v1` controller name. This prevents the Cluster Ingress Operator from attempting to manage resources for your custom Istio control plane.
+
 ## Prerequisites
 
 - Have [Istio](https://istio.io/) as the Gateway API provider installed.

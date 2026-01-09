@@ -34,7 +34,7 @@ var (
 	ConsolePluginImageURL = "quay.io/kuadrant/console-plugin:latest"
 )
 
-func buildTopologyWithConfigMaps(t *testing.T) *machinery.Topology {
+func buildTopologyWithClusterVersion(t *testing.T) *machinery.Topology {
 	topologyConfigMap := &controller.RuntimeObject{
 		Object: &corev1.ConfigMap{
 			TypeMeta: metav1.TypeMeta{
@@ -47,27 +47,6 @@ func buildTopologyWithConfigMaps(t *testing.T) *machinery.Topology {
 				Labels:    map[string]string{kuadrant.TopologyLabel: "true"},
 			},
 			Data: map[string]string{},
-		},
-	}
-
-	consolePluginConfigMap := &controller.RuntimeObject{
-		Object: &corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       ConfigMapGroupKind.Kind,
-				APIVersion: "v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ConsolePluginImagesConfigMapName,
-				Namespace: TestNamespace,
-			},
-			Data: map[string]string{
-				"4.16":    "quay.io/kuadrant/console-plugin:v0.1.5",
-				"4.17":    "quay.io/kuadrant/console-plugin:v0.1.5",
-				"4.18":    "quay.io/kuadrant/console-plugin:v0.1.5",
-				"4.19":    "quay.io/kuadrant/console-plugin:v0.1.5",
-				"4.20":    "quay.io/kuadrant/console-plugin:latest",
-				"default": "quay.io/kuadrant/console-plugin:latest",
-			},
 		},
 	}
 
@@ -88,7 +67,7 @@ func buildTopologyWithConfigMaps(t *testing.T) *machinery.Topology {
 		},
 	}
 
-	topology, err := machinery.NewTopology(machinery.WithObjects(topologyConfigMap, consolePluginConfigMap, clusterVersion))
+	topology, err := machinery.NewTopology(machinery.WithObjects(topologyConfigMap, clusterVersion))
 	if err != nil {
 		t.Fatalf("failed to create topology: %v", err)
 	}
@@ -98,6 +77,9 @@ func buildTopologyWithConfigMaps(t *testing.T) *machinery.Topology {
 // Since this reconciler only runs on Openshift,
 // this unit test will add some coverage
 func TestConsolePluginReconciler(t *testing.T) {
+	t.Setenv(openshift.RelatedImageConsolePluginLatestEnvVar, ConsolePluginImageURL)
+	t.Setenv(openshift.RelatedImageConsolePluginPF5EnvVar, "quay.io/kuadrant/console-plugin:v0.1.5")
+
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -130,7 +112,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 		subscription := reconciler.Subscription()
 		assert.Assert(subT, subscription != nil)
 		events := subscription.Events
-		assert.Assert(subT, is.Len(events, 4))
+		assert.Assert(subT, is.Len(events, 3))
 		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ConsolePluginGVK.GroupKind()))
 		assert.DeepEqual(subT, events[1].Kind, ptr.To(ConfigMapGroupKind))
 		assert.DeepEqual(subT, events[1].ObjectName, TopologyConfigMapName)
@@ -140,13 +122,10 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.DeepEqual(subT, events[2].ObjectName, TopologyConfigMapName)
 		assert.DeepEqual(subT, events[2].ObjectNamespace, TestNamespace)
 		assert.DeepEqual(subT, events[2].EventType, ptr.To(controller.DeleteEvent))
-		assert.DeepEqual(subT, events[3].Kind, ptr.To(ConfigMapGroupKind))
-		assert.DeepEqual(subT, events[3].ObjectName, ConsolePluginImagesConfigMapName)
-		assert.DeepEqual(subT, events[3].ObjectNamespace, TestNamespace)
 	})
 
 	t.Run("Create service", func(subT *testing.T) {
-		topology := buildTopologyWithConfigMaps(subT)
+		topology := buildTopologyWithClusterVersion(subT)
 		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
 		service := &corev1.Service{}
 		serviceKey := client.ObjectKey{Name: consoleplugin.ServiceName(), Namespace: TestNamespace}
@@ -173,7 +152,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 	})
 
 	t.Run("Create deployment", func(subT *testing.T) {
-		topology := buildTopologyWithConfigMaps(subT)
+		topology := buildTopologyWithClusterVersion(subT)
 		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
 		deployment := &appsv1.Deployment{}
 		deploymentKey := client.ObjectKey{Name: consoleplugin.DeploymentName(), Namespace: TestNamespace}
@@ -196,7 +175,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 	})
 
 	t.Run("Create nginx configmap", func(subT *testing.T) {
-		topology := buildTopologyWithConfigMaps(subT)
+		topology := buildTopologyWithClusterVersion(subT)
 		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
 		configMap := &corev1.ConfigMap{}
 		cmKey := client.ObjectKey{Name: consoleplugin.NginxConfigMapName(), Namespace: TestNamespace}
@@ -217,7 +196,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 	})
 
 	t.Run("Create consoleplugin", func(subT *testing.T) {
-		topology := buildTopologyWithConfigMaps(subT)
+		topology := buildTopologyWithClusterVersion(subT)
 		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
 		consolePlugin := &consolev1.ConsolePlugin{}
 		consolePluginKey := client.ObjectKey{Name: consoleplugin.Name()}

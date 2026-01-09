@@ -56,12 +56,15 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 
 		// kuadrant mTLS is off
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
+			kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantInstallationNS}
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		})
 
 		It("EnvoyFilter only created if RLP is in the path to a route", func(ctx SpecContext) {
@@ -152,12 +155,15 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 	Context("when mTLS is on", func() {
 
 		BeforeEach(func(ctx SpecContext) {
-			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
+			kuadrantKey := client.ObjectKey{Name: tests.KuadrantName, Namespace: kuadrantInstallationNS}
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
-			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			Eventually(func(g Gomega) {
+				kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantCR)).To(Succeed())
+				patch := client.MergeFrom(kuadrantCR.DeepCopy())
+				kuadrantCR.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
+				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		})
 
 		It("envoy filter has transport configured with TLS", func(ctx SpecContext) {

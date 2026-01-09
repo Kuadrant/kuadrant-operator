@@ -9,11 +9,15 @@ EG_NAMESPACE = envoy-gateway-system
 EG_VERSION ?= v1.2.6
 
 # egctl tool
-EGCTL=$(PROJECT_PATH)/bin/egctl
+EGCTL ?= $(LOCALBIN)/egctl
 EGCTL_VERSION ?= $(EG_VERSION)
+EGCTL_V_BINARY := $(LOCALBIN)/egctl-$(EGCTL_VERSION)
 
 ifeq ($(ARCH),x86_64)
 	EG_ARCH = amd64
+endif
+ifeq ($(ARCH),arm64)
+	EG_ARCH = arm64
 endif
 ifeq ($(ARCH),aarch64)
 	EG_ARCH = arm64
@@ -28,20 +32,20 @@ ifneq ($(filter armv7%,$(ARCH)),)
 	EG_ARCH = arm
 endif
 
-$(EGCTL):
-	mkdir -p $(PROJECT_PATH)/bin
+.PHONY: egctl
+egctl: $(EGCTL_V_BINARY) ## Download egctl locally if necessary.
+$(EGCTL_V_BINARY): $(LOCALBIN)
+	@mkdir -p $(LOCALBIN)
 	## get-egctl.sh requires sudo and does not allow installing in a custom location. Fails if not in the PATH as well
-	# curl -sSL https://gateway.envoyproxy.io/get-egctl.sh | EGCTL_INSTALL_DIR=$(PROJECT_PATH)/bin  VERSION=$(EGCTL_VERSION) bash
+	# curl -sSL https://gateway.envoyproxy.io/get-egctl.sh | EGCTL_INSTALL_DIR=$(LOCALBIN)  VERSION=$(EGCTL_VERSION) bash
 	$(eval TMP := $(shell mktemp -d))
 	cd $(TMP); curl -sSL https://github.com/envoyproxy/gateway/releases/download/$(EGCTL_VERSION)/egctl_$(EGCTL_VERSION)_$(OS)_$(EG_ARCH).tar.gz -o egctl.tar.gz
 	tar xf $(TMP)/egctl.tar.gz -C $(TMP)
-	cp $(TMP)/bin/$(OS)/$(EG_ARCH)/egctl $(EGCTL)
+	cp $(TMP)/bin/$(OS)/$(EG_ARCH)/egctl $(EGCTL_V_BINARY)
 	-rm -rf $(TMP)
+	@ln -sf $(shell basename $(EGCTL_V_BINARY)) $(EGCTL)
 
-.PHONY: egctl
-egctl: $(EGCTL) ## Download egctl locally if necessary.
-
-envoy-gateway-enable-envoypatchpolicy: $(YQ)
+envoy-gateway-enable-envoypatchpolicy: yq
 	$(eval TMP := $(shell mktemp -d))
 	kubectl get configmap -n $(EG_NAMESPACE) envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > $(TMP)/envoy-gateway.yaml
 	yq e '.extensionApis.enableEnvoyPatchPolicy = true' -i $(TMP)/envoy-gateway.yaml
@@ -50,7 +54,7 @@ envoy-gateway-enable-envoypatchpolicy: $(YQ)
 	kubectl rollout restart deployment envoy-gateway -n $(EG_NAMESPACE)
 
 .PHONY: envoy-gateway-install
-envoy-gateway-install: kustomize $(HELM)
+envoy-gateway-install: kustomize helm
 	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n $(EG_NAMESPACE) --create-namespace
 	$(MAKE) envoy-gateway-enable-envoypatchpolicy
 	kubectl wait --timeout=5m -n $(EG_NAMESPACE) deployment/envoy-gateway --for=condition=Available

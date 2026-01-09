@@ -1,8 +1,7 @@
 package consoleplugin
 
 const (
-	KuadrantConsoleName              = "kuadrant-console-plugin"
-	KuadrantConsolePluginImagesLabel = "kuadrant-operator-console-plugin-images"
+	KuadrantConsoleName = "kuadrant-console-plugin"
 )
 
 var (

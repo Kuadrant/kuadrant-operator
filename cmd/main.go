@@ -26,6 +26,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.uber.org/zap/zapcore"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -166,6 +167,12 @@ func main() {
 				"exportEndpoint", otelConfig.TracesEndpoint(),
 				"sampler", "AlwaysSample",
 			)
+
+			// Set global propagator for distributed tracing
+			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+				propagation.TraceContext{},
+				propagation.Baggage{},
+			))
 
 			// Set as global tracer provider
 			otel.SetTracerProvider(traceProvider.TracerProvider())

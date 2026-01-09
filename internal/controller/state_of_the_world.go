@@ -451,12 +451,6 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 			openshift.ClusterVersionResource,
 			metav1.NamespaceAll,
 		)),
-		controller.WithRunnable("console plugin images configmap watcher", controller.Watch(
-			&corev1.ConfigMap{},
-			controller.ConfigMapsResource,
-			operatorNamespace,
-			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", consoleplugin.KuadrantConsolePluginImagesLabel)),
-		)),
 		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
 	)
 

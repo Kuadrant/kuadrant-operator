@@ -1,7 +1,6 @@
 resources:
 - manager.yaml
 - metrics_service.yaml
-- console-plugin-images.yaml
 
 generatorOptions:
   disableNameSuffixHash: true

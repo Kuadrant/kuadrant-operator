@@ -24,10 +24,6 @@ import (
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
 
-const (
-	ConsolePluginImagesConfigMapName = "kuadrant-operator-console-plugin-images"
-)
-
 type ConsolePluginReconciler struct {
 	*reconcilers.BaseReconciler
 
@@ -62,11 +58,6 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 				ObjectName:      TopologyConfigMapName,
 				EventType:       ptr.To(controller.DeleteEvent),
 			},
-			{
-				Kind:            ptr.To(ConfigMapGroupKind),
-				ObjectNamespace: r.namespace,
-				ObjectName:      ConsolePluginImagesConfigMapName,
-			},
 		},
 	}
 }
@@ -83,28 +74,15 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	topologyExists := len(existingTopologyConfigMaps) > 0
 
-	consolePluginConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
-		return object.GetName() == ConsolePluginImagesConfigMapName && object.GetNamespace() == r.namespace && object.GroupVersionKind().Kind == ConfigMapGroupKind.Kind
-	})
-
-	consolePluginConfigMapExists := len(consolePluginConfigMaps) > 0
-
 	clusterVersions := topology.Objects().Items(func(object machinery.Object) bool {
 		return object.GetName() == "version" && object.GroupVersionKind().GroupKind() == openshift.ClusterVersionGroupKind.GroupKind()
 	})
 
 	clusterVersionExists := len(clusterVersions) > 0
 
-	if topologyExists && clusterVersionExists && !consolePluginConfigMapExists {
-		logger.Info("Warning: console plugin images ConfigMap not found - console plugin will not be deployed",
-			"configMapName", ConsolePluginImagesConfigMapName,
-			"namespace", r.namespace,
-			"reason", "ConfigMap may have been accidentally deleted or not properly deployed")
-	}
-
 	// Service
 	service := consoleplugin.Service(r.namespace)
-	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
+	if !topologyExists || !clusterVersionExists {
 		utils.TagObjectToDelete(service)
 	}
 	_, err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
@@ -115,12 +93,12 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	// Deployment
 	var consolePluginImageURL string
-	if topologyExists && consolePluginConfigMapExists && clusterVersionExists {
-		configMap := consolePluginConfigMaps[0].(*controller.RuntimeObject).Object.(*corev1.ConfigMap)
+	if topologyExists && clusterVersionExists {
 		clusterVersion := clusterVersions[0].(*controller.RuntimeObject).Object.(*configv1.ClusterVersion)
 
-		consolePluginImageURL, err = openshift.GetConsolePluginImageFromConfigMap(configMap, clusterVersion)
+		consolePluginImageURL, err = openshift.GetConsolePluginImageForVersion(clusterVersion)
 		if err != nil {
+			logger.Error(err, "failed to get console plugin image for OpenShift version")
 			return err
 		}
 	}
@@ -128,7 +106,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	deployment := consoleplugin.Deployment(r.namespace, consolePluginImageURL, TopologyConfigMapName)
 	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
-	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
+	if !topologyExists || !clusterVersionExists {
 		utils.TagObjectToDelete(deployment)
 	}
 	_, err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
@@ -139,7 +117,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	// Nginx ConfigMap
 	nginxConfigMap := consoleplugin.NginxConfigMap(r.namespace)
-	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
+	if !topologyExists || !clusterVersionExists {
 		utils.TagObjectToDelete(nginxConfigMap)
 	}
 	_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
@@ -150,7 +128,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	// ConsolePlugin
 	consolePlugin := consoleplugin.ConsolePlugin(r.namespace)
-	if !topologyExists || !consolePluginConfigMapExists || !clusterVersionExists {
+	if !topologyExists || !clusterVersionExists {
 		utils.TagObjectToDelete(consolePlugin)
 	}
 	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.ServiceMutator)

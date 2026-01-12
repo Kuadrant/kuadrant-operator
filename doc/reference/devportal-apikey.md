@@ -2,7 +2,7 @@
 
 ## Overview
 
-The APIKey CRD is part of the Developer Portal (DevPortal) extension for Kuadrant. It represents a request for API access credentials by a developer for a specific APIProduct and plan tier. When approved, the APIKey creates a Kubernetes Secret containing the actual API key that can be used to authenticate requests. The APIKey resource manages the entire lifecycle of API access requests, from initial submission through approval/rejection to credential generation.
+The APIKey CRD is part of the Developer Portal extension for Kuadrant. It represents a request for API access credentials by a developer for a specific APIProduct and plan tier. When approved, the APIKey creates a Kubernetes Secret containing the actual API key that can be used to authenticate requests. The APIKey resource manages the entire lifecycle of API access requests, from initial submission through approval/rejection to credential generation.
 
 ## APIKey
 
@@ -35,16 +35,16 @@ The APIKey CRD is part of the Developer Portal (DevPortal) extension for Kuadran
 
 ## APIKeyStatus
 
-| **Field**        | **Type**                            | **Description**                                                                   |
-|------------------|-------------------------------------|-----------------------------------------------------------------------------------|
-| `phase`          | String                              | Current phase of the APIKey. Valid values: `Pending`, `Approved`, `Rejected`     |
-| `conditions`     | [][ConditionSpec](#conditionspec)   | Represents the observations of the APIKey's current state                         |
-| `secretRef`      | [SecretReference](#secretreference) | Reference to the created Secret containing the API key (only when Approved)       |
-| `limits`         | [PlanLimits](#planlimits)           | Rate limits for the plan                                                          |
-| `apiHostname`    | String                              | Hostname from the HTTPRoute that the APIProduct references                        |
-| `reviewedBy`     | String                              | Who approved or rejected the request                                              |
-| `reviewedAt`     | Timestamp                           | When the request was reviewed                                                     |
-| `canReadSecret`  | Boolean                             | Permission to read the APIKey's secret. Default: `true`                           |
+| **Field**       | **Type**                          | **Description**                                                                   |
+|-----------------|-----------------------------------|-----------------------------------------------------------------------------------|
+| `phase`         | String                            | Current phase of the APIKey. Valid values: `Pending`, `Approved`, `Rejected`     |
+| `conditions`    | [][ConditionSpec](#conditionspec) | Represents the observations of the APIKey's current state                         |
+| `secretRef`     | [SecretReference](#secretreference) | Reference to the created Secret containing the API key (only when Approved)     |
+| `limits`        | [Limits](#limits)                 | Rate limits for the plan                                                          |
+| `apiHostname`   | String                            | Hostname from the HTTPRoute that the APIProduct references                        |
+| `reviewedBy`    | String                            | Who approved or rejected the request                                              |
+| `reviewedAt`    | Timestamp                         | When the request was reviewed                                                     |
+| `canReadSecret` | Boolean                           | Permission to read the APIKey's secret. Default: `true`                           |
 
 ### ConditionSpec
 
@@ -61,27 +61,27 @@ Standard Kubernetes condition type with the following fields:
 
 ### SecretReference
 
-| **Field** | **Type** | **Required** | **Description**                                          |
-|-----------|----------|:------------:|----------------------------------------------------------|
-| `name`    | String   | Yes          | Name of the secret in the Authorino's namespace          |
-| `key`     | String   | Yes          | The key of the secret to select from                     |
+| **Field** | **Type** | **Required** | **Description**                              |
+|-----------|----------|:------------:|----------------------------------------------|
+| `name`    | String   | Yes          | Name of the secret in the Authorino's namespace |
+| `key`     | String   | Yes          | The key of the secret to select from         |
 
-### PlanLimits
+### Limits
 
-| **Field** | **Type**         | **Description**                                                    |
-|-----------|------------------|--------------------------------------------------------------------|
-| `daily`   | Integer          | Daily limit of requests for this plan                              |
-| `weekly`  | Integer          | Weekly limit of requests for this plan                             |
-| `monthly` | Integer          | Monthly limit of requests for this plan                            |
-| `yearly`  | Integer          | Yearly limit of requests for this plan                             |
-| `custom`  | [][Rate](#rate)  | Additional limits defined in terms of a RateLimitPolicy Rate       |
+| **Field**  | **Type**      | **Required** | **Description**                                                    |
+|------------|---------------|:------------:|--------------------------------------------------------------------|
+| `daily`    | Integer       | No           | Daily limit of requests for this plan                              |
+| `weekly`   | Integer       | No           | Weekly limit of requests for this plan                             |
+| `monthly`  | Integer       | No           | Monthly limit of requests for this plan                            |
+| `yearly`   | Integer       | No           | Yearly limit of requests for this plan                             |
+| `custom`   | [][Rate](#rate) | No         | Additional limits defined in terms of a RateLimitPolicy Rate       |
 
 ### Rate
 
-| **Field** | **Type** | **Required** | **Description**                                               |
-|-----------|----------|:------------:|---------------------------------------------------------------|
-| `limit`   | Integer  | Yes          | Maximum value allowed for a given period of time              |
-| `window`  | String   | Yes          | Time period for which the limit applies (e.g., `1h`, `30m`, `1d`) |
+| **Field**  | **Type** | **Required** | **Description**                                                    |
+|------------|----------|:------------:|--------------------------------------------------------------------|
+| `limit`    | Integer  | Yes          | Maximum value allowed for a given period of time                   |
+| `window`   | String   | Yes          | Time period for which the limit applies (pattern: `^([0-9]{1,5}(h\|m\|s\|ms)){1,4}$`) |
 
 ## High level example
 

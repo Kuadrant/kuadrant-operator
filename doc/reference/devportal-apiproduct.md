@@ -2,7 +2,7 @@
 
 ## Overview
 
-The APIProduct CRD is part of the Developer Portal (DevPortal) extension for Kuadrant. It wraps an HTTPRoute with product catalog information, enabling APIs to be published to a developer portal (Backstage) where they can be discovered and consumed by developers. While HTTPRoute defines the technical routing configuration, APIProduct adds the business and organizational context needed for API consumption: human-readable names, descriptions, documentation links, contact information, versioning, and approval workflows. When combined with PlanPolicy and AuthPolicy, it enables self-service API access through API key provisioning with tiered rate limits.
+The APIProduct CRD is part of the Developer Portal extension for Kuadrant. It references an HTTPRoute and adds product catalog information, enabling APIs to be published to a developer portal (Backstage) where they can be discovered and consumed. While HTTPRoute defines the technical routing configuration, APIProduct adds the business and organizational context needed for API consumption: human-readable names, descriptions, documentation links, contact information, versioning, and approval workflows. 
 
 ## APIProduct
 
@@ -76,27 +76,27 @@ Standard Kubernetes condition type with the following fields:
 
 ### DiscoveredPlan
 
-| **Field** | **Type**                   | **Required** | **Description**                            |
-|-----------|----------------------------|--------------|--------------------------------------------|
-| `tier`    | String                     | Yes          | Tier this plan represents                  |
-| `limits`  | [PlanLimits](#planlimits)  | No           | Rate limits that the plan enforces         |
+| **Field**        | **Type** | **Required** | **Description**                                                    |
+|------------------|----------|:------------:|--------------------------------------------------------------------|
+| `tier`           | String   | Yes          | Tier this plan represents                                          |
+| `limits`         | [Limits](#limits)   | No           | Rate limits that the plan enforces                                 |
 
-### PlanLimits
+### Limits
 
-| **Field** | **Type**         | **Description**                                                    |
-|-----------|------------------|--------------------------------------------------------------------|
-| `daily`   | Integer          | Daily limit of requests for this plan                              |
-| `weekly`  | Integer          | Weekly limit of requests for this plan                             |
-| `monthly` | Integer          | Monthly limit of requests for this plan                            |
-| `yearly`  | Integer          | Yearly limit of requests for this plan                             |
-| `custom`  | [][Rate](#rate)  | Additional limits defined in terms of a RateLimitPolicy Rate       |
+| **Field**  | **Type**      | **Required** | **Description**                                                    |
+|------------|---------------|:------------:|--------------------------------------------------------------------|
+| `daily`    | Integer       | No           | Daily limit of requests for this plan                              |
+| `weekly`   | Integer       | No           | Weekly limit of requests for this plan                             |
+| `monthly`  | Integer       | No           | Monthly limit of requests for this plan                            |
+| `yearly`   | Integer       | No           | Yearly limit of requests for this plan                             |
+| `custom`   | [][Rate](#rate) | No         | Additional limits defined in terms of a RateLimitPolicy Rate       |
 
 ### Rate
 
-| **Field** | **Type** | **Required** | **Description**                                               |
-|-----------|----------|:------------:|---------------------------------------------------------------|
-| `limit`   | Integer  | Yes          | Maximum value allowed for a given period of time              |
-| `window`  | String   | Yes          | Time period for which the limit applies (e.g., `1h`, `30m`, `1d`) |
+| **Field**  | **Type** | **Required** | **Description**                                                    |
+|------------|----------|:------------:|--------------------------------------------------------------------|
+| `limit`    | Integer  | Yes          | Maximum value allowed for a given period of time                   |
+| `window`   | String   | Yes          | Time period for which the limit applies (pattern: `^([0-9]{1,5}(h\|m\|s\|ms)){1,4}$`) |
 
 ### OpenAPIStatus
 

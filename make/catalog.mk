@@ -24,6 +24,8 @@ export QUAY_EXPIRY_TIME_LABEL
 $(CATALOG_DOCKERFILE): opm
 	-mkdir -p $(PROJECT_PATH)/catalog/kuadrant-operator-catalog
 	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog -l quay.expires-after=$(QUAY_IMAGE_EXPIRY)
+	# Inject --pprof-addr="" into both RUN and CMD serve invocations to disable running the pprof server
+	sed -i.bak -E '/(opm".*"serve|^CMD \["serve)/s#\]$$#, "--pprof-addr="]#' $(CATALOG_DOCKERFILE) && rm -f $(CATALOG_DOCKERFILE).bak
 catalog-dockerfile: $(CATALOG_DOCKERFILE) ## Generate catalog dockerfile.
 
 $(CATALOG_FILE): opm yq

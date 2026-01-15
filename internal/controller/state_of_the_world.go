@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -94,30 +95,35 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantsResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(getKuadrantWatcherPredicate()),
+			controller.WithTransformerFunc[*kuadrantv1beta1.Kuadrant](controller.TransformFunc[*kuadrantv1beta1.Kuadrant](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(
 			&kuadrantv1.DNSPolicy{},
 			kuadrantv1.DNSPoliciesResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.DNSPolicy]{}),
+			controller.WithTransformerFunc[*kuadrantv1.DNSPolicy](controller.TransformFunc[*kuadrantv1.DNSPolicy](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(
 			&kuadrantv1.TLSPolicy{},
 			kuadrantv1.TLSPoliciesResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.TLSPolicy]{}),
+			controller.WithTransformerFunc[*kuadrantv1.TLSPolicy](controller.TransformFunc[*kuadrantv1.TLSPolicy](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(
 			&kuadrantv1.AuthPolicy{},
 			kuadrantv1.AuthPoliciesResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.AuthPolicy]{}),
+			controller.WithTransformerFunc[*kuadrantv1.AuthPolicy](controller.TransformFunc[*kuadrantv1.AuthPolicy](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(
 			&kuadrantv1.RateLimitPolicy{},
 			kuadrantv1.RateLimitPoliciesResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.RateLimitPolicy]{}),
+			controller.WithTransformerFunc[*kuadrantv1.RateLimitPolicy](controller.TransformFunc[*kuadrantv1.RateLimitPolicy](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("tokenratelimitpolicy watcher", controller.Watch(
 			&kuadrantv1alpha1.TokenRateLimitPolicy{},
@@ -296,11 +302,13 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOpti
 			&gwapiv1.Gateway{},
 			controller.GatewaysResource,
 			metav1.NamespaceAll,
+			controller.WithTransformerFunc[*gwapiv1.Gateway](controller.TransformFunc[*gwapiv1.Gateway](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("httproute watcher", controller.Watch(
 			&gwapiv1.HTTPRoute{},
 			controller.HTTPRoutesResource,
 			metav1.NamespaceAll,
+			controller.WithTransformerFunc[*gwapiv1.HTTPRoute](controller.TransformFunc[*gwapiv1.HTTPRoute](managedFieldsNilTransFunc)),
 		)),
 	)
 
@@ -330,12 +338,14 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOp
 			envoygateway.EnvoyPatchPoliciesResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.WithTransformerFunc[*egv1alpha1.EnvoyPatchPolicy](controller.TransformFunc[*egv1alpha1.EnvoyPatchPolicy](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
 			&egv1alpha1.EnvoyExtensionPolicy{},
 			envoygateway.EnvoyExtensionPoliciesResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*egv1alpha1.EnvoyExtensionPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.WithTransformerFunc[*egv1alpha1.EnvoyExtensionPolicy](controller.TransformFunc[*egv1alpha1.EnvoyExtensionPolicy](managedFieldsNilTransFunc)),
 		)),
 		controller.WithObjectKinds(
 			envoygateway.EnvoyPatchPolicyGroupKind,
@@ -373,6 +383,7 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			istio.EnvoyFiltersResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.WithTransformerFunc[*istioclientnetworkingv1alpha3.EnvoyFilter](controller.TransformFunc[*istioclientnetworkingv1alpha3.EnvoyFilter](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("peerauthentication watcher", controller.Watch(
 			&istiosecurity.PeerAuthentication{},
@@ -385,6 +396,7 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			istio.WasmPluginsResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.WithTransformerFunc[*istioclientgoextensionv1alpha1.WasmPlugin](controller.TransformFunc[*istioclientgoextensionv1alpha1.WasmPlugin](managedFieldsNilTransFunc)),
 		)),
 		controller.WithObjectKinds(
 			istio.EnvoyFilterGroupKind,
@@ -478,7 +490,8 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 	opts = append(opts,
 		controller.WithRunnable("dnsrecord watcher", controller.Watch(
 			&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)))),
+			controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)),
+			controller.WithTransformerFunc[*kuadrantdnsv1alpha1.DNSRecord](controller.TransformFunc[*kuadrantdnsv1alpha1.DNSRecord](managedFieldsNilTransFunc)))),
 		controller.WithObjectKinds(
 			DNSRecordGroupKind,
 		),
@@ -514,6 +527,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 			&limitadorv1alpha1.Limitador{},
 			kuadrantv1beta1.LimitadorsResource,
 			metav1.NamespaceAll,
+			controller.WithTransformerFunc[*limitadorv1alpha1.Limitador](controller.TransformFunc[*limitadorv1alpha1.Limitador](managedFieldsNilTransFunc)),
 		)),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.LimitadorGroupKind,
@@ -550,12 +564,14 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 			&authorinooperatorv1beta1.Authorino{},
 			kuadrantv1beta1.AuthorinosResource,
 			metav1.NamespaceAll,
+			controller.WithTransformerFunc[*authorinooperatorv1beta1.Authorino](controller.TransformFunc[*authorinooperatorv1beta1.Authorino](managedFieldsNilTransFunc)),
 		)),
 		controller.WithRunnable("authconfig watcher", controller.Watch(
 			&authorinov1beta3.AuthConfig{},
 			authorino.AuthConfigsResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*authorinov1beta3.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.WithTransformerFunc[*authorinov1beta3.AuthConfig](controller.TransformFunc[*authorinov1beta3.AuthConfig](managedFieldsNilTransFunc)),
 		)),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.AuthorinoGroupKind,
@@ -755,7 +771,8 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			&certmanagerv1.Certificate{},
 			CertManagerCertificatesResource,
 			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*certmanagerv1.Certificate](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue))),
+			controller.FilterResourcesByLabel[*certmanagerv1.Certificate](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)),
+			controller.WithTransformerFunc[*certmanagerv1.Certificate](controller.TransformFunc[*certmanagerv1.Certificate](managedFieldsNilTransFunc))),
 		),
 		controller.WithRunnable("issuers watcher", controller.Watch(
 			&certmanagerv1.Issuer{},
@@ -855,4 +872,8 @@ func KuadrantManagedObjectLabels() labels.Set {
 	return labels.Set(map[string]string{
 		kuadrantManagedLabelKey: "true",
 	})
+}
+
+func managedFieldsNilTransFunc(unstructuredObj *unstructured.Unstructured) {
+	unstructuredObj.SetManagedFields(nil)
 }

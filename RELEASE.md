@@ -14,6 +14,7 @@ For both processes, first make sure every [Kuadrant Operator dependency](https:/
    - dnsOperatorVersion: DNS Operator version (X.Y.Z)
    - wasmShimVersion: WASM Shim version (X.Y.Z)
    - consolePluginVersion: ConsolePlugin version (X.Y.Z)
+   - developerPortalControllerVersion: Developer Portal Controller version (X.Y.Z)
    - olmChannel: This will set the OLM `channels` and `default-channel` annotations
 2. The workflow will create a Pull Request that should be peer-reviewed and approved by a member of the Kuadrant team, focusing on the changes made in Kustomize config, OLM bundles and Helm Charts. **The PR must receive approval from at least one member of the QE team.**
 3. Once the PR is merged, a release workflow will be triggered tagging and publishing the [Github release](https://github.com/Kuadrant/kuadrant-operator/releases)
@@ -84,6 +85,7 @@ olm:
 dependencies:
   authorino-operator: "0.16.0"
   console-plugin: "0.0.14"
+  developer-portal-controller: "0.1.0"
   dns-operator: "0.12.0"
   limitador-operator: "0.12.1"
   wasm-shim: "0.8.1"
@@ -100,6 +102,7 @@ There are validation steps during the `make prepare-release` that require the de
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md).
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/).
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin).
+   * [Developer Portal Controller](https://github.com/Kuadrant/developer-portal-controller/blob/main/RELEASE.md).
 
 ## Verification 
 

@@ -169,8 +169,11 @@ The `make bundle` target accepts the following variables:
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`           |                                                                                                               |
 | `DEFAULT_CHANNEL`               | The default channel used in the bundle               | `alpha`           |                                                                                                               |
 
-*Note:* The `RELATED_IMAGE_CONSOLEPLUGIN` variable is not used anymore. The console plugin now relies on a `kuadrant-operator-console-plugin-images` configmap that stores the images to be used for different openshift versions. 
-This configmap is only created during OLM or Helm installation. To manually override the consoleplugin image edit the configmap manually.
+*Note:* The console plugin image is configured via two `RELATED_IMAGE` environment variables based on OpenShift version:
+- `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST`: Used for OpenShift versions >= 4.20 (PatternFly 6 compatible)
+- `RELATED_IMAGE_CONSOLE_PLUGIN_PF5`: Used for OpenShift versions < 4.20 (PatternFly 5 compatible)
+
+The operator automatically selects the appropriate image based on the detected OpenShift cluster version.
 
 * Build the bundle manifests
 

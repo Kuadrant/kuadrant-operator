@@ -213,7 +213,7 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               discoveredAuthScheme:
-                description: Authpolicy discovered from httproute
+                description: AuthPolicy discovered from httproute
                 properties:
                   authentication:
                     additionalProperties:
@@ -2643,6 +2643,17 @@ spec:
                   recently observed spec.
                 format: int64
                 type: integer
+              oidcDiscovery:
+                description: OIDCDiscovery contains OIDC discovery information when
+                  JWT auth is configured
+                properties:
+                  tokenEndpoint:
+                    description: TokenEndpoint is the URL where clients can obtain
+                      tokens
+                    type: string
+                required:
+                - tokenEndpoint
+                type: object
               openapi:
                 description: OpenAPI specification fetched from the API and its sync
                   status

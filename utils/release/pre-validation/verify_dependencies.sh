@@ -2,7 +2,7 @@
 
 echo "Verifying if the dependencies have been already released"
 file=$env/release.yaml
-dependencies=("authorino-operator" "console-plugin" "dns-operator" "limitador-operator" "wasm-shim")
+dependencies=("authorino-operator" "console-plugin" "developer-portal-controller" "dns-operator" "limitador-operator" "wasm-shim")
 
 auth_header=""
 if [[ $GITHUB_TOKEN ]]; then

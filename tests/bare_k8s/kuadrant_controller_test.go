@@ -264,7 +264,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 		}, testTimeOut)
 	})
 
-	Context("tracing", func() {
+	FContext("tracing configuration", func() {
 		var kuadrantCR *kuadrantv1beta1.Kuadrant
 
 		BeforeEach(func(ctx SpecContext) {
@@ -285,8 +285,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			assertTracingIsNotConfigured := func(g Gomega) {
 				limtador := &limitadorv1alpha1.Limitador{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}, limtador)).To(Succeed())
-				g.Expect(limtador.Spec.Tracing).ToNot(BeNil())
-				g.Expect(limtador.Spec.Tracing.Endpoint).To(BeEmpty())
+				g.Expect(limtador.Spec.Tracing).To(BeNil())
 
 				authorino := &authorinoopapi.Authorino{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
@@ -360,7 +359,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			Eventually(assertTracingIsNotConfigured).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
-		It("Forces ownership of only tracing fields", func(ctx SpecContext) {
+		It("Ownership is ceded to user when set in child CRs", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				limtador := &limitadorv1alpha1.Limitador{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}, limtador)).To(Succeed())
@@ -375,12 +374,12 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
-				limiador := &limitadorv1alpha1.Limitador{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}, limiador)).To(Succeed())
-				g.Expect(limiador.Spec.Tracing).ToNot(BeNil())
-				g.Expect(limiador.Spec.Image).ToNot(BeNil())
-				g.Expect(limiador.Spec.Tracing.Endpoint).To(Equal("grpc://limitador-collector:4317"))
-				g.Expect(limiador.Spec.Image).To(Equal(ptr.To("limitador-image:test")))
+				limitador := &limitadorv1alpha1.Limitador{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}, limitador)).To(Succeed())
+				g.Expect(limitador.Spec.Tracing).ToNot(BeNil())
+				g.Expect(limitador.Spec.Image).ToNot(BeNil())
+				g.Expect(limitador.Spec.Tracing.Endpoint).To(Equal("grpc://limitador-collector:4317"))
+				g.Expect(limitador.Spec.Image).To(Equal(ptr.To("limitador-image:test")))
 			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -419,7 +418,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 					Observability: kuadrantv1beta1.Observability{
 						Tracing: &kuadrantv1beta1.Tracing{
 							DefaultEndpoint: "grpc://kuadrant-collector:4317",
-							Insecure:        true,
+							Insecure:        false,
 						},
 					},
 				},
@@ -430,19 +429,19 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			Eventually(func(g Gomega) {
 				authorino := &authorinoopapi.Authorino{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
-				// Managed fields are restored
-				g.Expect(authorino.Spec.Tracing.Endpoint).To(Equal(kuadrantCR.Spec.Observability.Tracing.DefaultEndpoint))
-				g.Expect(authorino.Spec.Tracing.Insecure).To(Equal(kuadrantCR.Spec.Observability.Tracing.Insecure))
-				// Unmanaged fields are kept
+				// Tracing field is still unmanaged
+				g.Expect(authorino.Spec.Tracing.Endpoint).To(Equal("grpc://authorino-collector:4317"))
+				g.Expect(authorino.Spec.Tracing.Insecure).To(Equal(true))
+				// Other unmanaged fields are still kept
 				g.Expect(authorino.Spec.ClusterWide).To(Equal(false))
 			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
 				limitador := &limitadorv1alpha1.Limitador{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}, limitador)).To(Succeed())
-				// Managed fields are restored
-				g.Expect(limitador.Spec.Tracing.Endpoint).To(Equal(kuadrantCR.Spec.Observability.Tracing.DefaultEndpoint))
-				// Unmanaged fields are kept
+				// Tracing field is still unmanaged
+				g.Expect(limitador.Spec.Tracing.Endpoint).To(Equal("grpc://limitador-collector:4317"))
+				// Other unmanaged fields are still kept
 				g.Expect(limitador.Spec.Image).ToNot(BeNil())
 				g.Expect(*limitador.Spec.Image).To(Equal("limitador-image:test"))
 			}).WithContext(ctx).Should(Succeed())

@@ -82,14 +82,13 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		},
 		Spec: limitadorv1alpha1.LimitadorSpec{
 			MetricLabelsDefault: ptr.To("descriptors[1]"),
-			Tracing: &limitadorv1alpha1.Tracing{
-				Endpoint: "",
-			},
 		},
 	}
 
-	if kobj.Spec.Observability.Tracing != nil {
-		desiredLimitador.Spec.Tracing.Endpoint = kobj.Spec.Observability.Tracing.DefaultEndpoint
+	if kobj.Spec.Observability.Tracing != nil && kobj.Spec.Observability.Tracing.DefaultEndpoint != "" {
+		desiredLimitador.Spec.Tracing = &limitadorv1alpha1.Tracing{
+			Endpoint: kobj.Spec.Observability.Tracing.DefaultEndpoint,
+		}
 	}
 
 	unstructuredLimitador, err := controller.Destruct(desiredLimitador)
@@ -103,34 +102,31 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	span.AddEvent("Applying Limitador resource")
 	logger.Info("applying limitador resource")
 
-	force := kobj.Spec.Observability.Tracing != nil && kobj.Spec.Observability.Tracing.DefaultEndpoint != ""
-
 	_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(kobj.Namespace).Apply(
 		ctx,
 		unstructuredLimitador.GetName(),
 		unstructuredLimitador,
 		metav1.ApplyOptions{
 			FieldManager: FieldManagerName,
-			Force:        force,
 		},
 	)
 
 	if err != nil {
-		// Force was false initially (i.e., kuadrant tracing was nil or empty)
 		if apiErrors.IsConflict(err) {
 			statusErr, _ := err.(apiErrors.APIStatus)
 			conflicts := statusErr.Status().Details.Causes
 
-			// User has set tracing endpoint on limitador
+			// User has set tracing endpoint on limitador - cede ownership to them
 			for _, cause := range conflicts {
 				if cause.Field == ".spec.tracing.endpoint" {
 					path := strings.Split(cause.Field, ".")
 					unstructured.RemoveNestedField(unstructuredLimitador.Object, path[1:]...)
-					logger.Info("Ceding ownership of conflicting field", "field", cause.Field)
+					logger.V(1).Info("Ceding ownership of conflicting field", "field", cause.Field)
 					break
 				}
 			}
 
+			// MetricLabelsDefault must always to reconciled to our set value
 			_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(kobj.Namespace).Apply(
 				ctx,
 				unstructuredLimitador.GetName(),

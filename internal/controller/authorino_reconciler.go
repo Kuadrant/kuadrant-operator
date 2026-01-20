@@ -106,7 +106,8 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			}
 		}
 
-		force := kobj.Spec.Observability.Tracing != nil && (kobj.Spec.Observability.Tracing.DefaultEndpoint != "" || kobj.Spec.Observability.Tracing.Insecure)
+		// Only force ownership if tracing field is available for ownership
+		force := clusterAuthorino.Spec.Tracing.Endpoint == ""
 
 		_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(kobj.Namespace).Apply(
 			ctx,
@@ -119,10 +120,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		)
 
 		if err != nil {
-			// Force was false initially (i.e., kuadrant tracing was nil or empty)
-			// User has set tracing endpoint on authorino
+			// Cede ownership of conflicting fields
 			if apiErrors.IsConflict(err) {
-				logger.Info("Ceding ownership of conflicting of tracing fields")
+				logger.V(0).Info("Ceding ownership due to conflicting fields", "err", err.Error())
 				return nil
 			}
 			span.RecordError(err)

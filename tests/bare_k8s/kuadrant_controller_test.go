@@ -264,7 +264,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 		}, testTimeOut)
 	})
 
-	FContext("tracing configuration", func() {
+	Context("tracing configuration", func() {
 		var kuadrantCR *kuadrantv1beta1.Kuadrant
 
 		BeforeEach(func(ctx SpecContext) {

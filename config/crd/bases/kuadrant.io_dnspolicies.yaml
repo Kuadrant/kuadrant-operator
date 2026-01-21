@@ -109,7 +109,8 @@ spec:
                   failureThreshold:
                     default: 5
                     description: |-
-                      FailureThreshold is a limit of consecutive failures that must occur for a host to be considered unhealthy
+                      FailureThreshold is the number of consecutive failures that must be exceeded for a host to be considered unhealthy.
+                      When the number of consecutive failures exceeds this threshold, the health check will be marked as unhealthy.
                       Defaults to 5
                     type: integer
                     x-kubernetes-validations:

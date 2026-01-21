@@ -70,6 +70,15 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 		return fmt.Errorf("failed to generate cluster ID: %w", err)
 	}
 
+	defaultTTL, err := dnsPolicyDefaultTTL()
+	if err != nil {
+		logger.Error(err, err.Error())
+	}
+	defaultLoadBalancedTTL, err := dnsPolicyDefaultCnameTTL()
+	if err != nil {
+		logger.Error(err, err.Error())
+	}
+
 	for _, policy := range policies {
 		_, span := tracer.Start(ctx, "policy.DNSPolicy.effective")
 		span.SetAttributes(
@@ -133,7 +142,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				gatewayHasAttachedRoutes = true
 			}
 
-			desiredRecord, err := desiredDNSRecord(gateway.Gateway, clusterID, policy, *listener.Listener)
+			desiredRecord, err := desiredDNSRecord(gateway.Gateway, clusterID, policy, *listener.Listener, defaultTTL, defaultLoadBalancedTTL)
 			if err != nil {
 				lLogger.Error(err, "failed to build desired dns record")
 				continue

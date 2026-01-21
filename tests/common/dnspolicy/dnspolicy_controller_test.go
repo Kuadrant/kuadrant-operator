@@ -26,6 +26,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -1077,8 +1078,8 @@ var _ = Describe("DNSPolicy controller", func() {
 
 		It("should re-create dns record when loadbalanced section added/removed", func(ctx SpecContext) {
 			//listener 1 & 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
-			currentRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
-			currentWildcardRecRootEndpoint := endpointMatcher(tests.HostWildcard(domain), "CNAME", "", 300, "klb."+domain)
+			currentRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb.test."+domain)
+			currentWildcardRecRootEndpoint := endpointMatcher(tests.HostWildcard(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb."+domain)
 
 			//get the current dnsrecord and wildcard dnsrecord
 			currentRec := &kuadrantdnsv1alpha1.DNSRecord{}
@@ -1103,8 +1104,8 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 			//listener 1 & 2 - Default gateway policy has no loadbalancing section so will create simple records with A Records for the rootHost
-			newRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "A", "", 60, tests.IPAddressOne, tests.IPAddressTwo)
-			newWildcardRecRootEndpoint := endpointMatcher(tests.HostWildcard(domain), "A", "", 60, tests.IPAddressOne, tests.IPAddressTwo)
+			newRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "A", "", kuadrantdnsbuilder.DefaultTTL, tests.IPAddressOne, tests.IPAddressTwo)
+			newWildcardRecRootEndpoint := endpointMatcher(tests.HostWildcard(domain), "A", "", kuadrantdnsbuilder.DefaultTTL, tests.IPAddressOne, tests.IPAddressTwo)
 
 			//get the dnsrecord again and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
 			//get the wildcard dnsrecord again and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
@@ -1139,7 +1140,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						"Targets":          ConsistOf(geo + ".klb.test." + domain),
 						"RecordType":       Equal("CNAME"),
 						"SetIdentifier":    Equal(geo),
-						"RecordTTL":        Equal(externaldns.TTL(300)),
+						"RecordTTL":        Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultLoadBalancedTTL)),
 						"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: geo}}),
 					}))
 				}
@@ -1196,7 +1197,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						"Targets":       ConsistOf(targets),
 						"RecordType":    Equal("A"),
 						"SetIdentifier": Equal(""),
-						"RecordTTL":     Equal(externaldns.TTL(60)),
+						"RecordTTL":     Equal(externaldns.TTL(kuadrantdnsbuilder.DefaultTTL)),
 					}))
 				}
 				beforeMatcher := endpointMatcher(tests.IPAddressOne, tests.IPAddressTwo)
@@ -1257,8 +1258,8 @@ var _ = Describe("DNSPolicy controller", func() {
 		Context("section name", func() {
 			It("should handle policy with section name", func(ctx SpecContext) {
 				//listener 1 & 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
-				currentRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
-				currentWildcardRecRootEndpoint := endpointMatcher(tests.HostWildcard(domain), "CNAME", "", 300, "klb."+domain)
+				currentRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb.test."+domain)
+				currentWildcardRecRootEndpoint := endpointMatcher(tests.HostWildcard(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb."+domain)
 
 				//get the current dnsrecord and wildcard dnsrecord
 				currentRec := &kuadrantdnsv1alpha1.DNSRecord{}
@@ -1280,7 +1281,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				Expect(k8sClient.Create(ctx, dnsPolicyWithSection)).To(Succeed())
 
 				//listener 1 - Listener policy has no loadbalancing section so will create simple records with A Records for the rootHost
-				newRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "A", "", 60, tests.IPAddressOne, tests.IPAddressTwo)
+				newRecRootEndpoint := endpointMatcher(tests.HostOne(domain), "A", "", kuadrantdnsbuilder.DefaultTTL, tests.IPAddressOne, tests.IPAddressTwo)
 				//listener 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
 				newWildcardRecRootEndpoint := currentWildcardRecRootEndpoint
 
@@ -1319,9 +1320,9 @@ var _ = Describe("DNSPolicy controller", func() {
 				}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 				//listener 1 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
-				newRecRootEndpoint = endpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
+				newRecRootEndpoint = endpointMatcher(tests.HostOne(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb.test."+domain)
 				//listener 2 - Listener policy has no loadbalancing section so will create simple records with A Records for the rootHost
-				newWildcardRecRootEndpoint = endpointMatcher(tests.HostWildcard(domain), "A", "", 60, tests.IPAddressOne, tests.IPAddressTwo)
+				newWildcardRecRootEndpoint = endpointMatcher(tests.HostWildcard(domain), "A", "", kuadrantdnsbuilder.DefaultTTL, tests.IPAddressOne, tests.IPAddressTwo)
 
 				//get the dnsrecord again and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
 				//get the wildcard dnsrecord and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
@@ -1350,8 +1351,8 @@ var _ = Describe("DNSPolicy controller", func() {
 				Expect(k8sClient.Delete(ctx, dnsPolicyWithSection)).To(Succeed())
 
 				//listener 1 & 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
-				newRecRootEndpoint = endpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
-				newWildcardRecRootEndpoint = endpointMatcher(tests.HostWildcard(domain), "CNAME", "", 300, "klb."+domain)
+				newRecRootEndpoint = endpointMatcher(tests.HostOne(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb.test."+domain)
+				newWildcardRecRootEndpoint = endpointMatcher(tests.HostWildcard(domain), "CNAME", "", kuadrantdnsbuilder.DefaultLoadBalancedTTL, "klb."+domain)
 
 				//get the dnsrecord again and verify the DNSRecord resource is unchanged
 				//get the wildcard dnsrecord and verify it's no longer the same DNSRecord resource and the record type for the root host has changed

@@ -2663,6 +2663,10 @@ spec:
                       updated.
                     format: date-time
                     type: string
+                  maxSizeUsed:
+                    description: maxSizeUsed is the max size limit that was in effect
+                      when this spec was fetched.
+                    type: integer
                   raw:
                     description: raw content
                     type: string

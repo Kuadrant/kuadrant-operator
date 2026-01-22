@@ -4,15 +4,15 @@ import (
 	"context"
 	"sync"
 
-	v1beta2 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
@@ -34,7 +34,8 @@ func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
-			{Kind: ptr.To(v1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.DeleteEvent)},
+			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: ptr.To(v1beta1.AuthorinoGroupKind)},
 		},
 	}
 }
@@ -58,23 +59,87 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		attribute.String("kuadrant.namespace", kobj.Namespace),
 	)
 
-	aobjs := lo.FilterMap(topology.Objects().Objects().Children(kobj), func(item machinery.Object, _ int) (machinery.Object, bool) {
-		if item.GroupVersionKind().Kind == v1beta1.AuthorinoGroupKind.Kind {
-			return item, true
-		}
-		return nil, false
-	})
+	clusterAuthorino := GetAuthorinoFromTopology(topology)
 
-	if len(aobjs) > 0 {
+	if clusterAuthorino != nil {
 		span.AddEvent("Authorino resource already exists")
+
+		patch := &authorinoopapi.Authorino{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Authorino",
+				APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "authorino",
+				Namespace: kobj.Namespace,
+			},
+			Spec: authorinoopapi.AuthorinoSpec{
+				// Required fields for SSA to succeed as required fields cannot be omitted
+				OIDCServer: authorinoopapi.OIDCServer{
+					Tls: clusterAuthorino.Spec.OIDCServer.Tls,
+				},
+				Listener: authorinoopapi.Listener{
+					Tls: clusterAuthorino.Spec.Listener.Tls,
+				},
+			},
+		}
+
+		if kobj.Spec.Observability.Tracing != nil {
+			patch.Spec.Tracing = authorinoopapi.Tracing{
+				Endpoint: kobj.Spec.Observability.Tracing.DefaultEndpoint,
+				Insecure: kobj.Spec.Observability.Tracing.Insecure,
+			}
+		}
+
+		unstructuredAuthorino, err := controller.Destruct(patch)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to destruct authorino")
+			logger.Error(err, "failed to destruct authorino", "status", "error")
+			return err
+		}
+
+		// This is required since Destruct resulted in the spec.tracing.insecure field being omitted
+		if kobj.Spec.Observability.Tracing != nil {
+			if err := unstructured.SetNestedField(unstructuredAuthorino.Object, kobj.Spec.Observability.Tracing.Insecure, "spec", "tracing", "insecure"); err != nil {
+				return err
+			}
+		}
+
+		// Only force ownership if tracing field is available for ownership
+		force := clusterAuthorino.Spec.Tracing.Endpoint == ""
+
+		_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(kobj.Namespace).Apply(
+			ctx,
+			unstructuredAuthorino.GetName(),
+			unstructuredAuthorino,
+			metav1.ApplyOptions{
+				FieldManager: FieldManagerName,
+				Force:        force,
+			},
+		)
+
+		if err != nil {
+			// Cede ownership of conflicting fields
+			if apiErrors.IsConflict(err) {
+				logger.V(0).Info("Ceding ownership due to conflicting fields", "err", err.Error())
+				return nil
+			}
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to apply authorino")
+			logger.Error(err, "failed to apply authorino", "status", "error")
+			return err
+		}
+
 		span.SetStatus(codes.Ok, "")
-		logger.V(1).Info("authorino resource already exists, no need to create", "status", "skipping")
+		logger.Info("authorino resource applied successfully")
+
 		return nil
 	}
 
 	span.AddEvent("Creating new Authorino resource")
 
-	authorino := &v1beta2.Authorino{
+	authorino := &authorinoopapi.Authorino{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Authorino",
 			APIVersion: "operator.authorino.kuadrant.io/v1beta1",
@@ -93,20 +158,27 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				},
 			},
 		},
-		Spec: v1beta2.AuthorinoSpec{
+		Spec: authorinoopapi.AuthorinoSpec{
 			ClusterWide:            true,
 			SupersedingHostSubsets: true,
-			Listener: v1beta2.Listener{
-				Tls: v1beta2.Tls{
+			Listener: authorinoopapi.Listener{
+				Tls: authorinoopapi.Tls{
 					Enabled: ptr.To(false),
 				},
 			},
-			OIDCServer: v1beta2.OIDCServer{
-				Tls: v1beta2.Tls{
+			OIDCServer: authorinoopapi.OIDCServer{
+				Tls: authorinoopapi.Tls{
 					Enabled: ptr.To(false),
 				},
 			},
 		},
+	}
+
+	if kobj.Spec.Observability.Tracing != nil {
+		authorino.Spec.Tracing = authorinoopapi.Tracing{
+			Endpoint: kobj.Spec.Observability.Tracing.DefaultEndpoint,
+			Insecure: kobj.Spec.Observability.Tracing.Insecure,
+		}
 	}
 
 	unstructuredAuthorino, err := controller.Destruct(authorino)

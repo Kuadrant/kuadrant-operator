@@ -128,7 +128,10 @@ type DataPlane struct {
 // It enables tracing spans to be exported to external tracing systems (e.g., Jaeger, Zipkin).
 type Tracing struct {
 	// DefaultEndpoint is the default URL of the tracing collector backend where spans should be sent.
-	// Can be overridden per-gateway in future versions.
+	// This endpoint is used by Auth (Authorino), RateLimiting (Limitador) and WASM services for exporting trace data.
+	// If tracing endpoints have been configured directly in Authorino or Limitador CRs, those take precedence
+	// over this default value.
+	// Note: Per-gateway overrides are not currently supported.
 	DefaultEndpoint string `json:"defaultEndpoint,omitempty"`
 
 	// Insecure controls whether to skip TLS certificate verification.

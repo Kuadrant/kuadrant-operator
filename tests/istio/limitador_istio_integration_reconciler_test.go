@@ -134,10 +134,11 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 		BeforeEach(func(ctx SpecContext) {
 			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
-
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).To(Succeed())
+				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
+				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.LimitadorIsReady(testClient(), client.ObjectKey{
 				Name:      "limitador",
 				Namespace: kuadrantInstallationNS,

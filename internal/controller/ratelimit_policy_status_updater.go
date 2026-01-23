@@ -2,14 +2,14 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
 
-	"github.com/kuadrant/kuadrant-operator/internal/cel"
-
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -27,6 +27,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/internal/cel"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
@@ -101,7 +102,7 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 		if !accepted {
 			meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		} else {
-			enforcedCond := r.enforcedCondition(policy, topology, state)
+			enforcedCond := r.enforcedCondition(policy, topology, state, logger)
 			meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
 		}
 
@@ -150,7 +151,7 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.RateLimitPolicy, topology *machinery.Topology, state *sync.Map, logger logr.Logger) *metav1.Condition {
 	kObj := GetKuadrantFromTopology(topology)
 	if kObj == nil {
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("kuadrant"), false)
@@ -193,7 +194,19 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 			}
 		}
 
-		gatewayClass, gateway, listener, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, listener, httpRoute, _, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		if err != nil {
+			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
+				logger.V(1).Info("skipping effectivePolicy for invalid path", "path", effectivePolicy.Path)
+			} else {
+				logger.Error(err, "unable to process effectivePolicy", "path", effectivePolicy.Path)
+			}
+			continue
+		}
+
+		if gatewayClass.GetDeletionTimestamp() != nil || gateway.GetDeletionTimestamp() != nil || httpRoute.GetDeletionTimestamp() != nil {
+			continue
+		}
 		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.Spec.ControllerName) {
 			continue
 		}

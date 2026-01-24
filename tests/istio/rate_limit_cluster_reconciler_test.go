@@ -161,7 +161,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).To(Succeed())
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
-			}).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		})
 
 		It("envoy filter has transport configured with TLS", func(ctx SpecContext) {

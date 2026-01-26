@@ -223,11 +223,14 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		if len(effectivePolicyRules) > 0 {
 			for _, policyRuleKey := range policyRuleKeys {
 				if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) { // policy rule has been overridden by another policy
-					var overriddenBy string
-					if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
-						overriddenBy = effectivePolicyRule.GetSource()
+					if ok {
+						// Rule exists in effective policy but from a different source (rule-level override)
+						overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], effectivePolicyRule.GetSource())
+					} else {
+						// Rule doesn't exist at all (atomic override) - the policies that contributed
+						// to the effective policy are the ones that overrode this policy
+						overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], effectivePolicy.SourcePolicies...)
 					}
-					overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
 					continue
 				}
 				// policy rule is in the effective policy, track the Gateway and the HTTPRouteRule affected by the policy

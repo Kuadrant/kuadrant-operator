@@ -26,7 +26,7 @@ metadata:
 spec:
   tracing:
   - providers:
-    - name: tempo-otlp
+    - name: jaeger-collector
     randomSamplingPercentage: 100
 ---
 apiVersion: operator.istio.io/v1alpha1
@@ -41,10 +41,10 @@ spec:
         tracing: {}
       enableTracing: true
       extensionProviders:
-      - name: tempo-otlp
+      - name: jaeger-collector
         opentelemetry:
           port: 4317
-          service: tempo.tempo.svc.cluster.local
+          service: jaeger-collector.jaeger.svc.cluster.local
 ```
 
 **Important:**
@@ -70,18 +70,24 @@ metadata:
 spec:
   observability:
     tracing:
-      defaultEndpoint: grpc://tempo.tempo.svc.cluster.local:4317
+      defaultEndpoint: rpc://jaeger-collector.jaeger.svc.cluster.local:4317
       insecure: true
 ```
 
 **Configuration Fields:**
-- `defaultEndpoint`: The URL of the tracing collector backend. Supported protocols include `grpc://` and `http://`.
+- `defaultEndpoint`: The URL of the tracing collector backend (OTLP endpoint). Supported protocols:
+  - `rpc://` for gRPC OTLP (port 4317) - recommended for Authorino
+  - `grpc://` for gRPC OTLP (port 4317) - used by other components
+  - `http://` for HTTP OTLP (port 4318)
 - `insecure`: Set to `true` to skip TLS certificate verification (useful for development environments).
 
+**Important:** Point to the **collector** service (e.g., `jaeger-collector`), not the query service. The collector receives traces from your applications, while the query service is only for viewing traces in the UI.
+
 This configuration will be automatically propagated to:
-- **Authorino** (Auth service)
-- **Limitador** (Rate limiting service)
-- **WASM** modules (Envoy WebAssembly filters)
+- **Kuadrant Operator** (Control plane - reconciliation loops)
+- **Authorino** (Auth service - authentication decisions)
+- **Limitador** (Rate limiting service - rate limit checks)
+- **WASM** modules (Envoy WebAssembly filters - gateway-level tracing)
 
 Once applied, the Authorino and Limitador components will be redeployed with tracing enabled.
 
@@ -129,7 +135,23 @@ Despite this, Kuadrant configures tracing for WASM modules when using the centra
 
 ## Control Plane Tracing
 
-The Kuadrant operator itself (the control plane) can export traces to an OpenTelemetry collector. This allows you to trace the operator's reconciliation loops and internal operations, which is useful for debugging controller behavior, understanding operator performance, and tracking policy lifecycle events.
+The Kuadrant operator itself (the control plane) exports traces to your OpenTelemetry collector, allowing you to observe the operator's reconciliation loops and internal operations. This is useful for debugging controller behavior, understanding operator performance, and tracking policy lifecycle events.
+
+**Note:** Control plane tracing may already be enabled in your installation. Check if you can see `kuadrant-operator` service in your tracing UI before configuring.
+
+### Control Plane vs Data Plane Tracing
+
+Kuadrant supports tracing at two levels:
+
+1. **Control Plane Tracing** (this section): Traces the operator's reconciliation loops and internal operations
+   - Shows policy lifecycle events, topology building, resource creation
+   - Helps debug operator behavior and performance
+
+2. **Data Plane Tracing** (see configuration above): Traces actual user requests through the gateway and policy enforcement components
+   - Shows request flows through Istio/Envoy, Authorino, Limitador, and WASM filters
+   - Helps debug request-level issues and policy enforcement
+
+Both are configured via the Kuadrant CR (`spec.observability.tracing`) and send traces to the same collector, providing a complete view of your Kuadrant system from policy reconciliation to request processing.
 
 ### What Control Plane Traces Show
 
@@ -144,66 +166,20 @@ Control plane traces capture operator activities such as:
 
 These traces are separate from data plane traces (actual user requests) and help operators understand what the Kuadrant operator is doing behind the scenes.
 
-### Configuration
-
-Control plane tracing is configured via environment variables in the operator deployment:
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kuadrant-operator-controller-manager
-  namespace: kuadrant-system
-spec:
-  template:
-    spec:
-      containers:
-      - name: manager
-        env:
-        - name: OTEL_ENABLED
-          value: "true"
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "jaeger.jaeger.svc.cluster.local:4318"
-        - name: OTEL_EXPORTER_OTLP_INSECURE
-          value: "true"  # Set to "false" for production with TLS
-        - name: OTEL_SERVICE_NAME
-          value: "kuadrant-operator"
-```
-
-You can apply this configuration by patching the deployment:
-
-```bash
-kubectl set env deployment/kuadrant-operator-controller-manager \
-  -n kuadrant-system \
-  OTEL_ENABLED=true \
-  OTEL_EXPORTER_OTLP_ENDPOINT=jaeger.jaeger.svc.cluster.local:4318 \
-  OTEL_EXPORTER_OTLP_INSECURE=true \
-  OTEL_SERVICE_NAME=kuadrant-operator
-```
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OTEL_ENABLED` | No | `false` | Enable OpenTelemetry (logs, traces, metrics) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Yes* | `localhost:4318` | OTLP collector endpoint (HTTP) for all signals |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | No | - | Override endpoint specifically for traces |
-| `OTEL_EXPORTER_OTLP_INSECURE` | No | `true` | Disable TLS for OTLP export (for local dev) |
-| `OTEL_SERVICE_NAME` | No | `kuadrant-operator` | Service name shown in tracing UI |
-| `OTEL_SERVICE_VERSION` | No | Build version | Service version (defaults to version from ldflags) |
-| `OTEL_METRICS_INTERVAL_SECONDS` | No | `15` | Metrics export interval in seconds |
-
-\* Required when `OTEL_ENABLED=true`
-
 ### Viewing Control Plane Traces
 
 Once control plane tracing is enabled, you can view operator traces in Jaeger or Grafana:
 
 **Using Jaeger UI:**
 
-1. Port-forward to Jaeger:
+1. Port-forward to Jaeger Query service:
    ```bash
-   kubectl port-forward -n jaeger svc/jaeger 16686:16686
+   kubectl port-forward -n <jaeger-namespace> svc/jaeger-query 16686:80
+   ```
+
+   Or if using the Jaeger all-in-one deployment:
+   ```bash
+   kubectl port-forward -n <jaeger-namespace> svc/jaeger 16686:16686
    ```
 
 2. Open http://localhost:16686
@@ -211,46 +187,92 @@ Once control plane tracing is enabled, you can view operator traces in Jaeger or
 3. Select service: **kuadrant-operator**
 
 4. Search for traces by:
-   - **Operation name**: Look for operations like `RateLimitPolicyReconciler.Reconcile`, `AuthPolicyReconciler.Reconcile`
-   - **Tags**: Filter by resource name, namespace, or policy type
-   - **Duration**: Find slow reconciliations
+   - **Operation name**: Look for operations like `controller.reconcile`, `workflow.data_plane_policies`
+   - **Tags**: Filter by specific policy using `policy.name=my-policy-name`
+   - **Duration**: Find slow reconciliations (e.g., min duration > 100ms)
+
+**Example searches:**
+
+Find all traces for a specific RateLimitPolicy:
+```
+Service: kuadrant-operator
+Tags: policy.name=my-ratelimitpolicy
+```
+
+Find slow reconciliations for data plane policies:
+```
+Service: kuadrant-operator
+Operation: workflow.data_plane_policies
+Min Duration: 100ms
+```
 
 **Example Trace Spans:**
 
-A typical policy creation generates traces like:
+A typical reconciliation loop generates traces showing the workflow structure:
 
 ```
-kuadrant-operator
-└─ RateLimitPolicyReconciler.Reconcile (5.2s)
-   ├─ Fetch RateLimitPolicy (12ms)
-   ├─ Compute Topology (45ms)
-   ├─ Reconcile Limitador Config (2.1s)
-   │  ├─ Generate Limitador Limits (15ms)
-   │  └─ Update Limitador CR (2.0s)
-   ├─ Reconcile WASM Plugin (1.8s)
-   │  ├─ Build WASM Config (120ms)
-   │  └─ Apply WasmPlugin (1.6s)
-   └─ Update Policy Status (1.2s)
+controller.reconcile (29.8ms)
+├─ topology.build (495µs)
+├─ workflow.init (12.56ms)
+│  └─ init.topology_reconciler (10.41ms)
+├─ workflow.data_plane_policies (15.73ms)
+│  ├─ validation (72µs)
+│  ├─ effective_policies (3.01ms)
+│  │  ├─ effective_policies.auth
+│  │  ├─ effective_policies.ratelimit
+│  │  └─ effective_policies.token_ratelimit
+│  ├─ reconciler.auth_configs (293µs)
+│  ├─ reconciler.limitador_limits (216µs)
+│  └─ wasm.BuildConfigForPath (142µs)
+└─ status_update (12.64ms)
 ```
+
+The trace structure reflects the operator's workflow-based reconciliation:
+
+**Main Workflows:**
+- **controller.reconcile**: Main reconciliation entry point for all policy changes
+- **topology.build**: Building the Gateway API topology graph
+- **workflow.init**: Initialization workflow (topology reconciliation, event logging)
+- **workflow.data_plane_policies**: Auth and rate limiting policy reconciliation
+- **workflow.dns**: DNS policy reconciliation (when DNS policies are present)
+- **workflow.tls**: TLS policy reconciliation (when TLS policies are present)
+- **workflow.observability**: Observability configuration reconciliation
+- **workflow.limitador**: Limitador deployment reconciliation (when Limitador operator is installed)
+- **workflow.authorino**: Authorino deployment reconciliation (when Authorino operator is installed)
+- **status_update**: Final workflow for updating policy statuses
+
+**Data Plane Policy Workflow Spans:**
+- **validation**: Validates AuthPolicy, RateLimitPolicy, TokenRateLimitPolicy resources
+- **effective_policies**: Computes effective policies for each HTTPRoute and Gateway
+  - `effective_policies.auth`: Effective auth policies
+  - `effective_policies.ratelimit`: Effective rate limit policies
+  - `effective_policies.token_ratelimit`: Effective token rate limit policies
+- **reconciler.auth_configs**: Reconciles Authorino AuthConfig resources
+- **reconciler.limitador_limits**: Reconciles Limitador limit configurations
+- **reconciler.istio_extension**: Reconciles Istio WasmPlugin and EnvoyFilter resources (when Istio is the gateway provider)
+- **reconciler.envoy_gateway_extension**: Reconciles Envoy Gateway extension policies (when Envoy Gateway is the provider)
+- **wasm.BuildConfigForPath**: Builds WASM filter configuration for a specific HTTPRoute path
 
 ### Tracing Policy Lifecycle
 
-To trace a specific policy creation:
+To trace a specific policy creation or update:
 
-1. **Create a policy**:
+1. **Create or update a policy**:
    ```bash
    kubectl apply -f my-ratelimitpolicy.yaml
    ```
 
-2. **Get the policy creation timestamp**:
+2. **Get the policy creation/update timestamp**:
    ```bash
    kubectl get ratelimitpolicy my-policy -o jsonpath='{.metadata.creationTimestamp}'
    ```
 
 3. **Search in Jaeger**:
-   - Set the time range around the creation timestamp
-   - Look for operation: `RateLimitPolicyReconciler.Reconcile`
-   - Filter by tags like `policy.name=my-policy`
+   - Set the time range around the policy change timestamp
+   - Look for operation: `controller.reconcile`
+   - Expand the trace to see workflow details like `workflow.data_plane_policies`
+   - Look for specific reconciler spans like `reconciler.limitador_limits` or `reconciler.auth_configs`
+   - Check timing information to identify performance bottlenecks
 
 ### Correlating Control Plane and Data Plane Traces
 
@@ -273,13 +295,14 @@ Example workflow:
 
 ### Local Development
 
-For local development, you can run the operator with control plane tracing enabled:
+For local development, you can run the operator with control plane tracing enabled by setting environment variables:
 
 ```bash
 # Start Jaeger or an OTel collector
 docker compose -f examples/otel/docker-compose.yaml up -d
 
 # Run the operator with OpenTelemetry enabled
+# Note: When running locally, env vars are used instead of the Kuadrant CR
 export OTEL_ENABLED=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4318
 make run
@@ -287,34 +310,60 @@ make run
 # View traces in Jaeger (http://localhost:16686)
 ```
 
+**Note:** When running the operator locally (outside the cluster), control plane tracing is configured via environment variables. When deployed in-cluster, both control plane and data plane tracing are configured via the Kuadrant CR.
+
 See the [OpenTelemetry example](../../examples/otel/README.md) for complete local development setup with Grafana, Tempo, Jaeger, Loki, and Prometheus.
+
+### Configuration Notes
+
+When you configure tracing via the Kuadrant CR (`spec.observability.tracing`), it automatically enables tracing for:
+- **Control Plane**: The Kuadrant operator's reconciliation loops
+- **Data Plane**: Authorino, Limitador, and WASM filters
+
+The tracing configuration you set in the Kuadrant CR propagates to all components, ensuring consistent tracing across your entire Kuadrant deployment.
 
 ### Troubleshooting Control Plane Tracing
 
 **Traces not appearing in Jaeger:**
 
-1. Check operator logs for OTLP errors:
+1. Check if tracing is configured in the Kuadrant CR:
+   ```bash
+   kubectl get kuadrant kuadrant -n kuadrant-system -o jsonpath='{.spec.observability.tracing}'
+   ```
+
+   Expected output should show `defaultEndpoint` configured:
+   ```json
+   {"defaultEndpoint":"rpc://jaeger-collector.jaeger.svc.cluster.local:4317","insecure":true}
+   ```
+
+2. Check operator logs for OTLP connection errors:
    ```bash
    kubectl logs -n kuadrant-system -l control-plane=controller-manager --tail=50 | grep -i otel
    ```
 
-2. Verify OTLP endpoint is reachable:
+3. Verify the tracing collector endpoint is reachable from the operator:
    ```bash
+   # For HTTP OTLP endpoint (port 4318)
    kubectl exec -n kuadrant-system deployment/kuadrant-operator-controller-manager -- \
-     curl -v http://jaeger.jaeger.svc.cluster.local:4318/v1/traces
+     curl -v http://jaeger-collector.jaeger.svc.cluster.local:4318/v1/traces
    ```
 
-3. Check environment variables are set:
+4. Test sending traces to the collector directly:
    ```bash
-   kubectl get deployment -n kuadrant-system kuadrant-operator-controller-manager \
-     -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OTEL_ENABLED")]}'
+   # Port-forward to the collector for local testing
+   kubectl port-forward -n <jaeger-namespace> svc/jaeger-collector 4318:4318
+
+   # Send a test trace
+   curl -X POST http://localhost:4318/v1/traces \
+     -H "Content-Type: application/json" \
+     -d '{"resourceSpans":[]}'
    ```
 
 **Traces are incomplete or missing spans:**
 
-- Ensure all reconciler functions properly propagate the context
-- Check for errors in the operator logs
-- Verify the OTLP collector is not dropping spans due to rate limiting
+- Check for errors in the operator logs that might indicate reconciliation failures
+- Verify the collector is not dropping spans due to rate limiting or storage issues
+- Check the collector's own logs for processing errors
 
 ## Troubleshooting Flow Using Traces and Logs
 

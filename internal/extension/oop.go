@@ -37,16 +37,17 @@ import (
 const defaultUnixSocket = ".grpc.sock"
 
 type OOPExtension struct {
-	name       string
-	executable string
-	socket     string
-	cmd        *exec.Cmd
-	server     *grpc.Server
-	service    extpb.ExtensionServiceServer
-	logger     logr.Logger
-	sync       io.Writer
-	serverMu   sync.Mutex
-	monitorWg  sync.WaitGroup
+	name         string
+	executable   string
+	socket       string
+	cmd          *exec.Cmd
+	server       *grpc.Server
+	service      extpb.ExtensionServiceServer
+	logger       logr.Logger
+	sync         io.Writer
+	serverMu     sync.Mutex
+	monitorWg    sync.WaitGroup
+	completionWg sync.WaitGroup
 }
 
 func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
@@ -89,9 +90,10 @@ func (p *OOPExtension) Start() error {
 		return err
 	}
 
-	p.monitorWg.Add(1)
 	monitorReady := make(chan struct{})
-	go p.monitorStderr(stderr, monitorReady)
+	p.monitorWg.Go(func() {
+		p.monitorStderr(stderr, monitorReady)
+	})
 	<-monitorReady
 
 	if err = cmd.Start(); err != nil {
@@ -102,13 +104,14 @@ func (p *OOPExtension) Start() error {
 	}
 	p.logger.Info("started")
 
-	go func() {
+	p.completionWg.Go(func() {
+		// We must wait for stderr to be fully read before calling cmd.Wait()
+		p.monitorWg.Wait()
+
 		if e := cmd.Wait(); e != nil {
 			p.logger.Error(e, fmt.Sprintf("Extension %q finished with an error", p.name))
 		}
-		// wait for stderr
-		p.monitorWg.Wait()
-	}()
+	})
 
 	// only set this, if we successfully started it all
 	p.cmd = cmd
@@ -120,7 +123,7 @@ func (p *OOPExtension) IsAlive() bool {
 }
 
 func (p *OOPExtension) WaitForCompletion() {
-	p.monitorWg.Wait()
+	p.completionWg.Wait()
 }
 
 func (p *OOPExtension) Stop() error {
@@ -222,7 +225,6 @@ func (p *OOPExtension) cleanupSocket() error {
 }
 
 func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, monitorReady chan struct{}) {
-	defer p.monitorWg.Done()
 	defer stderr.Close()
 
 	scanner := bufio.NewScanner(stderr)

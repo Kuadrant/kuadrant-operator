@@ -110,6 +110,12 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 			continue
 		}
 		desiredEnvoyFilters[k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()}] = struct{}{}
+		desiredEnvoyFilterUnstructured, err := controller.Destruct(desiredEnvoyFilter)
+		if err != nil {
+			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilter)
+			continue
+		}
+
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
 		existingEnvoyFilterObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
@@ -122,39 +128,17 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		// create
 		if !found {
 			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoyfilter is created, because updates won't change the status
-			desiredEnvoyFilterUnstructured, err := controller.Destruct(desiredEnvoyFilter)
-			if err != nil {
-				logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilter)
+		} else {
+			existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
+
+			if kuadrantistio.EqualEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
+				logger.V(1).Info("envoyfilter object is up to date, nothing to do")
 				continue
 			}
-			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
-				// TODO: handle error
-			}
-			continue
 		}
 
-		existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
-
-		if kuadrantistio.EqualEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
-			logger.V(1).Info("envoyfilter object is up to date, nothing to do")
-			continue
-		}
-
-		// update
-		existingEnvoyFilter.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs:    desiredEnvoyFilter.Spec.TargetRefs,
-			ConfigPatches: desiredEnvoyFilter.Spec.ConfigPatches,
-			Priority:      desiredEnvoyFilter.Spec.Priority,
-		}
-
-		existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)
-		if err != nil {
-			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter)
-			continue
-		}
-		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
+		if _, err = resource.Apply(ctx, desiredEnvoyFilterUnstructured.GetName(), desiredEnvoyFilterUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName}); err != nil {
+			logger.Error(err, "failed to apply envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
 			// TODO: handle error
 		}
 	}

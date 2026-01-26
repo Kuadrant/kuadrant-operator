@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -188,28 +187,21 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		logger.Error(err, "failed to destruct authorino", "status", "error")
 		return err
 	}
-
-	logger.V(1).Info("creating authorino resource", "status", "processing")
-	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
+	logger.V(1).Info("applying authorino resource", "status", "processing")
+	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Apply(ctx, unstructuredAuthorino.GetName(), unstructuredAuthorino, metav1.ApplyOptions{FieldManager: FieldManagerName, Force: true})
 	if err != nil {
-		if apiErrors.IsAlreadyExists(err) {
-			span.SetStatus(codes.Ok, "")
-			logger.V(1).Info("already created authorino resource", "status", "acceptable")
-		} else {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to create authorino")
-			logger.Error(err, "failed to create authorino resource", "status", "error")
-			return err
-		}
-	} else {
-		span.AddEvent("Authorino resource created successfully")
-		span.SetAttributes(
-			attribute.String("authorino.name", authorino.Name),
-			attribute.String("authorino.namespace", authorino.Namespace),
-		)
-		span.SetStatus(codes.Ok, "")
-		logger.Info("created authorino resource", "status", "acceptable")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to apply authorino")
+		logger.Error(err, "failed to apply authorino resource", "status", "error")
+		return err
 	}
+	span.AddEvent("Authorino resource applied successfully")
+	span.SetAttributes(
+		attribute.String("authorino.name", authorino.Name),
+		attribute.String("authorino.namespace", authorino.Namespace),
+	)
+	span.SetStatus(codes.Ok, "")
+	logger.Info("applied authorino resource", "status", "acceptable")
 
 	return nil
 }

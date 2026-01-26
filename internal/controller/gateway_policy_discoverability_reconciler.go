@@ -73,7 +73,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) updateGatewayStatus(ctx context
 	if err != nil {
 		return err
 	}
-	_, err = r.Client.Resource(controller.GatewaysResource).Namespace(gw.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	_, err = r.Client.Resource(controller.GatewaysResource).Namespace(gw.GetNamespace()).ApplyStatus(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName})
 	return err
 }
 

@@ -969,7 +969,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
@@ -1053,7 +1053,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
 
 			// create Route A -> Gw A
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
@@ -1185,7 +1185,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 				// not found
 				return true
-			})
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Proceed with the update:
 			// From Route A -> Gw A
@@ -1215,7 +1215,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 				// not found
 				return true
-			})
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin for gateway B does not exist
 			// There is not RLP targeting Gateway B or any route parented by Gateway B
@@ -1414,7 +1414,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 				// not found
 				return true
-			})
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Proceed with the update:
 			// From Route A -> Gw A
@@ -1444,7 +1444,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 				// not found
 				return true
-			})
+			}).WithContext(ctx).Should(BeTrue())
 
 			mGateway = &machinery.Gateway{Gateway: gwB}
 			pathID = kuadrantv1.PathID([]machinery.Targetable{

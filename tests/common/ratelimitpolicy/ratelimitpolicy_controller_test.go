@@ -515,7 +515,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
 			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))).To(BeTrue())
 
 			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
 
@@ -556,7 +556,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Route RLP should no longer be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))).To(BeTrue())
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -583,7 +583,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey)))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey))).To(BeTrue())
 
 			// Route RLP should still be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
@@ -610,7 +610,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// GW RLP should now be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))).To(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Should contain override values
@@ -637,7 +637,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Route RLP should not be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))).To(BeTrue())
 
 			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
 
@@ -661,7 +661,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Route RLP now takes precedence
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey)))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey))).To(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Should contain Route RLP values

@@ -3,13 +3,13 @@
 With this guide, you will learn how to setup Kuadrant to use CoreDNS via the Kuadrant `DNSPolicy` and leverage CoreDNS as the authoritative nameserver(s) for a given domain shared across multiple gateways to provide both a weighted and GEO based DNS response similar to that offered by common cloud providers.
 
 
->Note: Core DNS support is intended for evaluation and feedback only. This guide makes use of a developer preview version of the CoreDNS integration and is **not** intended for production use.
-
 The basic architecture for how the CoreDNS integration works is shown in the image below:
 
 ![architecture](./core-dns.png)
 
 ### Overview
+
+> **dns-operator documentation**: For detailed CoreDNS configuration including Corefile setup, zone configuration, GeoIP databases, and local development, see the [dns-operator CoreDNS documentation](https://github.com/Kuadrant/dns-operator/tree/main/docs/coredns).
 
 Kuadrant's DNS Operator will create an authoritative DNSRecord for any DNSRecord that reference a CoreDNS provider secret directly or via a "default" provider secret.
 The authoritative record is named and labeled in a deterministic way using the source DNSRecord root host and contains all the endpoints related to that root host which could be coming from multiple DNSRecord sources.
@@ -47,9 +47,9 @@ export CTX_SECONDARY1=kind-kuadrant-local-3
 
 ## Setup Cluster 1 and 2 (Primary)
 
-At least one cluster must be configured as a primary. 
+At least one cluster must be configured as a primary.
 A primary cluster that is intended to be used with the CoreDNS provider should have a CoreDNS instance running with the Kuadrant plugin enabled.
-A primary cluster should have cluster kubeconfig secrets added for all other clusters.
+A primary cluster should have cluster interconnection secrets added for all other clusters.
 A primary cluster should have dns provider (coredns) secrets in target namespaces.
 
 ### Install CoreDNS
@@ -87,6 +87,19 @@ NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context 
 NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
 echo $NS1
 echo $NS2
+dig @${NS1} k.example.com SOA
+```
+
+**Expected output** (before DNSRecords are created):
+```
+;; ANSWER SECTION:
+k.example.com. 60 IN SOA ns1.k.example.com. hostmaster.k.example.com. 12345 7200 1800 86400 60
+```
+
+The zone is configured but contains no records yet. This is normal.
+
+You can also view all zone records using zone transfer:
+```shell
 dig @${NS1} -t AXFR k.example.com
 dig @${NS2} -t AXFR k.example.com
 ```
@@ -101,18 +114,30 @@ kubectl get configmap/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${C
 kubectl get configmap/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq .data
 ```
 
-The sample CoreDNS configuration is generated from this file: [CoreDNS Configuration](https://raw.githubusercontent.com/Kuadrant/dns-operator/refs/heads/main/config/coredns/Corefile). 
+The sample CoreDNS configuration is generated from this file: [CoreDNS Configuration](https://raw.githubusercontent.com/Kuadrant/dns-operator/refs/heads/main/config/coredns/Corefile).
 That domain name can be changed or duplicated to add other domains as required.
+
+For detailed zone configuration options, NS records, and multi-cluster setup, see the dns-operator CoreDNS documentation.
 
 For more information on configuring CoreDNS please refer to their [documentation](https://coredns.io/manual/configuration/).
 
 #### Using a GEO IP database
 
-The CoreDNS instances will need to be configured to use a GEO IP database, in the example above this is called: `GeoLite2-City-demo.mmdb`. 
-This is a mock database we provide to for illustrative purposes. 
+The CoreDNS instances will need to be configured to use a GEO IP database, in the example above this is called: `GeoLite2-City-demo.mmdb`.
+This is a mock database we provide for illustrative purposes.
 Change this to refer to your maxmind database file, for more information see [here](https://www.maxmind.com/en/geoip-databases).
 
+For testing geographic routing with the demo database, see the subnet-to-location mapping table and testing instructions in the dns-operator CoreDNS documentation.
+
 For more information on configuring the CoreDNS geoip plugin please refer to their [documentation](https://coredns.io/plugins/geoip/).
+
+#### Corefile Configuration
+
+The CoreDNS configuration (Corefile) defines which plugins execute for each zone. For plugin configuration details, execution order, and complete examples, see the dns-operator CoreDNS documentation.
+
+#### Advanced: Customizing SOA RNAME (Optional)
+
+To customize the SOA RNAME email address in DNS records, see the dns-operator CoreDNS documentation.
 
 #### Delegate the zones (public cluster only)
 
@@ -137,45 +162,47 @@ If the CoreDNS instances are not publicly accessible, then we will be able to ve
 Clusters being configured as "primary" should have the delegation role of the running dns operator set to "primary".
 This is currently the default so nothing needs to be done here.
 
-### Add Cluster Kubeconfig Secrets
+### Add Cluster Interconnection Secrets
 
-In order for each primary cluster to read DNSRecord resources from all other clusters (primary or secondary) a cluster secret containing kubeconfig data for each of the other clusters must be added.
-The `kubectl_kuadrant-dns` plugin provides a command to help create a valid cluster secret from the expected service account on the target cluster.
+For each primary cluster to read DNSRecord resources from all other clusters (primary or secondary), a cluster interconnection secret containing kubeconfig data for each of the other clusters must be added.
 
-Refer to the [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md) for more information on how to install the plugin.
+The `kubectl kuadrant-dns` CLI provides a command to help create a valid cluster secret from the expected service account on the target cluster. There is no alternative method for creating these secrets - the CLI tool must be used to ensure proper formatting and permissions.
 
-Assuming the `kubectl_kuadrant-dns` plugin is in the system path, you can run the following to connect all clusters to each primary:
+Refer to the dns-operator documentation for instructions on installing the CLI.
+
+Assuming the `kubectl kuadrant-dns` CLI is installed (or the `kubectl-kuadrant_dns` binary is in the system path), run the following to connect all clusters to each primary:
 
 ```shell
 # Set current context to primary 1
 kubectl config use-context ${CTX_PRIMARY1}
-kubectl_kuadrant-dns add-cluster-secret --context ${CTX_PRIMARY2} --namespace kuadrant-system
-kubectl_kuadrant-dns add-cluster-secret --context ${CTX_SECONDARY1} --namespace kuadrant-system
+kubectl kuadrant-dns add-cluster-secret --context ${CTX_PRIMARY2} --namespace kuadrant-system
+kubectl kuadrant-dns add-cluster-secret --context ${CTX_SECONDARY1} --namespace kuadrant-system
 # Set current context to primary 2
 kubectl config use-context ${CTX_PRIMARY2}
-kubectl_kuadrant-dns add-cluster-secret --context ${CTX_PRIMARY1} --namespace kuadrant-system
-kubectl_kuadrant-dns add-cluster-secret --context ${CTX_SECONDARY1} --namespace kuadrant-system
+kubectl kuadrant-dns add-cluster-secret --context ${CTX_PRIMARY1} --namespace kuadrant-system
+kubectl kuadrant-dns add-cluster-secret --context ${CTX_SECONDARY1} --namespace kuadrant-system
 ```
 
-If you are using Kind clusters (created via `./hack/multicluster.sh`) the above will produce invalid kubeconfig data. 
-As a temporary workaround you can run the following from the root of the kuadrant-operator repo:
+If you are using Kind clusters (created with `./hack/multicluster.sh`), the above produces invalid kubeconfig data.
+As a temporary workaround you can run the following from the root of the kuadrant-operator repository:
 ```shell
-../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY1} ${CTX_PRIMARY2}
-../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY1} ${CTX_SECONDARY1}
-../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY2} ${CTX_PRIMARY1}
-../../../hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY2} ${CTX_SECONDARY1}
+# Run from kuadrant-operator repository root
+./hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY1} ${CTX_PRIMARY2}
+./hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY1} ${CTX_SECONDARY1}
+./hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY2} ${CTX_PRIMARY1}
+./hack/multicluster.sh create-cluster-secret ${CTX_PRIMARY2} ${CTX_SECONDARY1}
 ```
 
 #### Verify
 
-Check the cluster secrets exist on the primary clusters:
+Check that the cluster interconnection secrets exist on the primary clusters:
 ```shell
 kubectl get secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_PRIMARY1}
 kubectl get secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_PRIMARY2}
 kubectl get secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_SECONDARY1}
 ```
 
-Check the cluster secret content is valid kubeconfig data:
+Check that the cluster interconnection secret content is valid kubeconfig data:
 ```shell
 kubectl get secret kind-kuadrant-local-2 -n kuadrant-system --context ${CTX_PRIMARY1} -o jsonpath='{.data.kubeconfig}' | base64 -d
 ```
@@ -205,7 +232,7 @@ kubectl label secret/dns-provider-coredns -n dnstest kuadrant.io/default-provide
 
 Secondary clusters are optional.
 A secondary does not have CoreDNS installed.
-A secondary cluster does not have cluster kubeconfig secrets added.
+A secondary cluster does not have cluster interconnection secrets added.
 A secondary cluster does not have provider credentials.
 
 ### DNS Operator Configuration
@@ -364,7 +391,16 @@ echo "${dnspolicyeu}" | kubectl apply --context ${CTX_SECONDARY1} -f -
 
 ### Verify
 
-Check the DNSRecord resources on each cluster: 
+First, retrieve the CoreDNS nameserver addresses:
+```shell
+NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq '.status.loadBalancer.ingress[0].ip'`
+NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
+echo "CoreDNS Nameservers:"
+echo "NS1 (Cluster 1): ${NS1}"
+echo "NS2 (Cluster 2): ${NS2}"
+```
+
+Check the DNSRecord resources on each cluster:
 ```shell
 kubectl get dnsrecord -n dnstest -o wide --context ${CTX_PRIMARY1}
 kubectl get dnsrecord -n dnstest -o wide --context ${CTX_PRIMARY2}
@@ -372,25 +408,27 @@ kubectl get dnsrecord -n dnstest -o wide --context ${CTX_SECONDARY1}
 ```
 
 Check the authoritative DNSRecord resources on each primary:
+
+> **Note**: The authoritative DNSRecord name is deterministically generated from the root host domain using the pattern `authoritative-record-<hash>`, where the hash is computed from the domain name. For this guide using the domain `k.example.com`, the authoritative record will be named `authoritative-record-oii1lttl`. You can list all DNSRecords to verify the name in your environment.
+
 ```shell
+# List all DNSRecords to see both source and authoritative records
+kubectl get dnsrecord -n dnstest --context ${CTX_PRIMARY1}
+kubectl get dnsrecord -n dnstest --context ${CTX_PRIMARY2}
+
+# Inspect the authoritative record for k.example.com
 kubectl get dnsrecord/authoritative-record-oii1lttl -n dnstest -o json --context ${CTX_PRIMARY1} | jq -r '.spec.endpoints[] | "dnsName: \(.dnsName), recordType: \(.recordType), targets: \(.targets)"'
 kubectl get dnsrecord/authoritative-record-oii1lttl -n dnstest -o json --context ${CTX_PRIMARY2} | jq -r '.spec.endpoints[] | "dnsName: \(.dnsName), recordType: \(.recordType), targets: \(.targets)"'
 ```
 
 Check the k.example.com zone on each CoreDNS instance contains the expected records:
 ```shell
-NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq '.status.loadBalancer.ingress[0].ip'`
-NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
-echo $NS1
-echo $NS2
 dig @${NS1} -t AXFR k.example.com
 dig @${NS2} -t AXFR k.example.com
 ```
 
 Check the CoreDNS instances respond as expected:
 ```shell
-NS1=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY1} | yq '.status.loadBalancer.ingress[0].ip'`
-NS2=`kubectl get service/kuadrant-coredns -n kuadrant-coredns -o yaml --context ${CTX_PRIMARY2} | yq '.status.loadBalancer.ingress[0].ip'`
 dig @${NS1} api.toystore.k.example.com +short
 dig @${NS2} api.toystore.k.example.com +short
 ```
@@ -400,4 +438,54 @@ Delete DNSPolicy from all clusters:
 kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_PRIMARY1}
 kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_PRIMARY2}
 kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_SECONDARY1}
+```
+
+## Cleanup
+
+> **Exercise caution when running cleanup commands.** If you had delegation configured on these clusters before following this guide, the cleanup steps below will disrupt your existing delegation setup. Review each command carefully and skip any that would affect pre-existing resources you want to preserve.
+
+To remove all resources created in this guide:
+
+```shell
+# Delete DNS policies
+kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_PRIMARY1}
+kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_PRIMARY2}
+kubectl delete dnspolicy external-dns -n dnstest --context ${CTX_SECONDARY1}
+
+# Delete gateway
+kubectl delete gateway external -n dnstest --context ${CTX_PRIMARY1}
+kubectl delete gateway external -n dnstest --context ${CTX_PRIMARY2}
+kubectl delete gateway external -n dnstest --context ${CTX_SECONDARY1}
+
+# Delete httproute
+kubectl delete httproute toystore -n dnstest --context ${CTX_PRIMARY1}
+kubectl delete httproute toystore -n dnstest --context ${CTX_PRIMARY2}
+kubectl delete httproute toystore -n dnstest --context ${CTX_SECONDARY1}
+
+# Delete toystore deployment
+kubectl delete -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n dnstest --context ${CTX_PRIMARY1}
+kubectl delete -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n dnstest --context ${CTX_PRIMARY2}
+kubectl delete -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n dnstest --context ${CTX_SECONDARY1}
+
+# Delete provider secrets
+kubectl delete secret dns-provider-coredns -n dnstest --context ${CTX_PRIMARY1}
+kubectl delete secret dns-provider-coredns -n dnstest --context ${CTX_PRIMARY2}
+
+# Delete test namespace
+kubectl delete ns dnstest --context ${CTX_PRIMARY1}
+kubectl delete ns dnstest --context ${CTX_PRIMARY2}
+kubectl delete ns dnstest --context ${CTX_SECONDARY1}
+
+# Delete cluster interconnection secrets (primary clusters only)
+kubectl delete secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_PRIMARY1}
+kubectl delete secret -A -l kuadrant.io/multicluster-kubeconfig=true --context ${CTX_PRIMARY2}
+
+# Delete CoreDNS instances (primary clusters only)
+kubectl delete ns kuadrant-coredns --context ${CTX_PRIMARY1}
+kubectl delete ns kuadrant-coredns --context ${CTX_PRIMARY2}
+
+# Reset DNS Operator to primary mode on secondary cluster (if needed)
+kubectl patch configmap dns-operator-controller-env -n kuadrant-system --type merge -p '{"data":{"DELEGATION_ROLE":"primary"}}' --context ${CTX_SECONDARY1}
+kubectl scale deployment/dns-operator-controller-manager -n kuadrant-system --replicas=0 --context ${CTX_SECONDARY1}
+kubectl scale deployment/dns-operator-controller-manager -n kuadrant-system --replicas=1 --context ${CTX_SECONDARY1}
 ```

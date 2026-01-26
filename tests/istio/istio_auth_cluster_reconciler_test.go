@@ -97,7 +97,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			policyKey := client.ObjectKey{Name: apName, Namespace: testNamespace}
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.IsAuthPolicyEnforced(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.IsAuthPolicyEnforcedCondition(ctx, testClient(), policyKey, kuadrant.PolicyReasonUnknown, "AuthPolicy is not in the path to any existing routes")).To(BeTrue())
+			Eventually(tests.IsAuthPolicyEnforcedCondition(ctx, testClient(), policyKey, kuadrant.PolicyReasonUnknown, "AuthPolicy is not in the path to any existing routes")).WithContext(ctx).Should(BeTrue())
 
 			// Check envoy filter has not been created
 			Eventually(func(g Gomega, ctx context.Context) {

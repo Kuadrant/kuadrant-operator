@@ -104,7 +104,9 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(tests.RLPIsAccepted(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Check envoy filter has not been created
 			Eventually(func() bool {

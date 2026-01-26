@@ -89,8 +89,6 @@ github.com/kuadrant/authorino v0.22.0 h1:jJVVs7S4uRM/ZkidBaThyYvMl2u5ExZzruo9OJ1
 github.com/kuadrant/authorino v0.22.0/go.mod h1:ABfDIfRebQ1cuL2qW+lrwwjN9t5aO1sjAdyd8lR4mKk=
 github.com/kuadrant/authorino-operator v0.21.0 h1:wjb0lAF7ZzP8Rgc7rbJkGf+1PL2StSVDVdZ+/LjD3D8=
 github.com/kuadrant/authorino-operator v0.21.0/go.mod h1:elsjAwIFdLDDu9ljq5S28LJIekhtVqeCA7AlaqPTL3U=
-github.com/kuadrant/dns-operator v0.0.0-20250826105007-7a0e6d88f7bb h1:YTWt8bn7xi5T7XJ9+MlrMDnWk5d8AVMVWVePvHkvR9k=
-github.com/kuadrant/dns-operator v0.0.0-20250826105007-7a0e6d88f7bb/go.mod h1:EF37SlMqbarJieimWDPRv/N5BACbdzLa9nCBJcoeFvs=
 github.com/kuadrant/dns-operator v0.0.0-20251125201831-f74008dc171c h1:4FXlQ+zZEtdbc0Wa2E/2fsa0V/myvIcoxoGgVRRHH5Q=
 github.com/kuadrant/dns-operator v0.0.0-20251125201831-f74008dc171c/go.mod h1:QgQK9JsmEkmaH+en2u2r1oXlbLcgvB+1qRnzilYKExI=
 github.com/kuadrant/limitador-operator v0.15.0 h1:BWgYKV0iasFY3+zKQhLpTdfIlI2pD4MuGr8Hc30ypfg=

@@ -119,6 +119,10 @@ func (p *OOPExtension) IsAlive() bool {
 	return p.cmd != nil && p.cmd.Process.Signal(syscall.Signal(0)) == nil
 }
 
+func (p *OOPExtension) WaitForCompletion() {
+	p.monitorWg.Wait()
+}
+
 func (p *OOPExtension) Stop() error {
 	p.logger.Info("stopping...")
 	var err error

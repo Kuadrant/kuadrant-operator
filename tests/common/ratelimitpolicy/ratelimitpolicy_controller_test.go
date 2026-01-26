@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -676,7 +677,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Gateway atomic override - no underlying routes to enforce policy", func(ctx SpecContext) {
 			// Delete HTTPRoute
-			Expect(k8sClient.Delete(ctx, &gatewayapiv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: routeName, Namespace: testNamespace}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, httpRoute)).To(Succeed())
+
+			Eventually(func() bool {
+				route := &gatewayapiv1.HTTPRoute{}
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), route)
+				// Either deleted OR has deletionTimestamp
+				return apierrors.IsNotFound(err) ||
+					(err == nil && route.GetDeletionTimestamp() != nil)
+			}).WithContext(ctx).WithTimeout(5 * time.Second).Should(BeTrue())
 
 			// create GW RLP with overrides
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())

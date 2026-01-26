@@ -109,8 +109,8 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 	for oopErrorLog.cmd.ProcessState == nil {
 		time.Sleep(5 * time.Millisecond) // wait for the command to return
 	}
-	// try wait for ps to finish writing its output
-	time.Sleep(50 * time.Millisecond)
+
+	oopErrorLog.WaitForCompletion()
 
 	_ = oopErrorLog.Stop()
 

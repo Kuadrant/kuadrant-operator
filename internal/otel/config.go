@@ -41,7 +41,7 @@ type Config struct {
 func NewConfig(gitSHA, dirty, version string) *Config {
 	enabled, _ := env.GetBool("OTEL_ENABLED", false)
 	endpoint := env.GetString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318")
-	insecure, _ := env.GetBool("OTEL_EXPORTER_OTLP_INSECURE", true)
+	insecure, _ := env.GetBool("OTEL_EXPORTER_OTLP_INSECURE", false)
 
 	serviceName := env.GetString("OTEL_SERVICE_NAME", "kuadrant-operator")
 	serviceVersion := env.GetString("OTEL_SERVICE_VERSION", version)

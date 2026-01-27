@@ -255,8 +255,8 @@ When configuring Prometheus scraping, choose **one** of these options:
 | `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`    | No       | -                   | Override endpoint specifically for logs              |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`  | No       | -                   | Override endpoint specifically for traces            |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | No       | -                   | Override endpoint specifically for metrics           |
-| `OTEL_EXPORTER_OTLP_INSECURE`         | No       | `true`              | Disable TLS for OTLP export (for local dev)          |
-| `OTEL_SERVICE_NAME`                   | No       | `kuadrant-operator` | Service name shown in Grafana/Tempo/Jaeger          |
+| `OTEL_EXPORTER_OTLP_INSECURE`         | No       | `false`             | Disable TLS for OTLP export                          |
+| `OTEL_SERVICE_NAME`                   | No       | `kuadrant-operator` | Service name shown in Grafana/Tempo/Jaeger           |
 | `OTEL_SERVICE_VERSION`                | No       | Build version       | Service version (defaults to version from ldflags)   |
 
 \* Required when `OTEL_ENABLED=true`

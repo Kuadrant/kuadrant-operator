@@ -1,5 +1,3 @@
-CEL Kuadrant
-
 # Introduction to CEL
 
 ## 1. The Basic Syntax
@@ -45,7 +43,6 @@ Within policies, in `Predicate`s you can combine checks. If the expression evalu
 ```
 // Method is POST AND path starts with /api/admin
 request.method == 'POST' && request.path.startsWith('/api/admin')
-
 ```
 
 
@@ -53,7 +50,6 @@ request.method == 'POST' && request.path.startsWith('/api/admin')
 ```
 // Method is GET OR HEAD
 request.method == 'GET' || request.method == 'HEAD'
-
 ```
 
 
@@ -61,7 +57,6 @@ request.method == 'GET' || request.method == 'HEAD'
 ```
 // User-Agent must NOT contain 'bot'
 !request.headers['user-agent'].contains('bot')
-
 ```
 
 
@@ -73,7 +68,6 @@ Conditional logic is useful for dependent checks, such as validating specific he
 ```
 // If path is /secure, check for x-user-id header, otherwise allow.
 request.path.startsWith('/secure') ? has(request.headers['x-user-id']) : true
-
 ```
 
 ---
@@ -89,7 +83,6 @@ Use `has()` to check if a header or metadata field exists before accessing it.
 ```
 // Rule: If an Authorization header exists, it must start with 'Bearer'
 has(request.headers['authorization']) ? request.headers['authorization'].startsWith('Bearer ') : true
-
 ```
 
 > [!Note]
@@ -108,7 +101,6 @@ Checks if **every** item in the list satisfies a condition.
 
 ```
 auth.identity.groups.all(group, group.endsWith('.admin'))
-
 ```
 
 ### `.exists()`
@@ -118,7 +110,6 @@ Checks if **at least one** item satisfies a condition.
 ```
 // Rule: The JWT 'groups' claim must contain 'admin'
 auth.identity.claims['groups'].exists(g, g == 'admin')
-
 ```
 
 ### `.exists_one()`
@@ -128,7 +119,6 @@ Checks if **exactly one** item satisfies the condition.
 ```
 // Rule: Exactly one group must match
 auth.identity.groups.exists_one(group, group == 'foo')
-
 ```
 
 ---
@@ -144,7 +134,6 @@ Validating paths and headers.
 ```
 request.path.startsWith('/public/')
 request.headers['host'].endsWith('.example.com')
-
 ```
 
 
@@ -157,7 +146,6 @@ CEL uses **RE2** syntax for regex.
 ```
 // Rule: X-Request-ID must be a UUID-like format
 request.headers['x-request-id'].matches(r'^[0-9a-f-]+$')
-
 ```
 
 > [!Tip]
@@ -177,7 +165,6 @@ HTTP headers are always strings. To compare them numerically (e.g., Content-Leng
 ```
 // Rule: Content-Length must be less than 1MB (1,000,000 bytes)
 has(request.headers['content-length']) && int(request.headers['content-length']) < 1000000
-
 ```
 
 ### Timestamps and Durations
@@ -200,7 +187,6 @@ You can wrap values that might be missing:
 ```
 // Wraps the 'x-priority' header into an Optional
 optional.of(request.headers['x-priority'])
-
 ```
 
 ### Unwrapping with Defaults (`orValue`)
@@ -211,7 +197,6 @@ Provide a default value if the header is missing.
 
 ```
 (has(request.headers['x-retries']) ? int(request.headers['x-retries']) : 0) < 3
-
 ```
 
 **New Way (Optional):**
@@ -219,7 +204,6 @@ Provide a default value if the header is missing.
 ```
 // If header is missing, default to 0, then check if < 3
 optional.of(request.headers['x-retries']).orValue('0').matches(r'^[0-2]$')
-
 ```
 
 *(Note: Since headers are strings, we handle the value as a string or cast inside a map).*
@@ -228,7 +212,6 @@ optional.of(request.headers['x-retries']).orValue('0').matches(r'^[0-2]$')
 
 ```
 request.?headers[?'x-retries']).orValue('0').matches(r'^[0-2]$')
-
 ```
 
 TODO explain the two forms
@@ -242,7 +225,6 @@ Transform a value only if it exists.
 optional.of(request.headers['x-debug'])
   .optMap(val, val == 'true')
   .orValue(true)
-
 ```
 
 ### Chaining (`or`)
@@ -254,7 +236,6 @@ Check multiple headers in order of preference.
 optional.of(request.headers['x-client-id'])
   .or(optional.of(request.headers['x-app-id']))
   .orValue('anonymous')
-
 ```
 
 ---
@@ -268,3 +249,4 @@ optional.of(request.headers['x-client-id'])
 | **Regex Match** | `request.headers['authority'].matches(r'.*\.internal$')` |
 | **Size Limit** | `request.size < 1024` |
 | **Header Fallback** | `request.headers[?'x-group'].orValue('guest')` |
+

@@ -19,9 +19,11 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	prombridge "go.opentelemetry.io/contrib/bridges/prometheus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/sdk/metric"
 
@@ -63,16 +65,8 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 
 	// Only setup OTLP export if OTel is enabled
 	if otelConfig.Enabled {
-		// Configure OTLP HTTP exporter options
-		opts := []otlpmetrichttp.Option{
-			otlpmetrichttp.WithEndpoint(otelConfig.MetricsEndpoint()),
-		}
-		if otelConfig.Insecure {
-			opts = append(opts, otlpmetrichttp.WithInsecure())
-		}
-
-		// Create OTLP HTTP exporter
-		otlpExporter, err := otlpmetrichttp.New(ctx, opts...)
+		// Create metric exporter based on endpoint URL
+		otlpExporter, err := newMetricExporter(ctx, otelConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 		}
@@ -104,6 +98,44 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 		meterProvider: meterProvider,
 		otlpEnabled:   otelConfig.Enabled,
 	}, nil
+}
+
+// newMetricExporter creates an OTLP metric exporter based on endpoint URL scheme.
+// Following the Authorino pattern:
+//   - rpc://host:port  → gRPC exporter
+//   - http://host:port → HTTP exporter (insecure)
+//   - https://host:port → HTTP exporter (secure)
+func newMetricExporter(ctx context.Context, otelConfig *kuadrantotel.Config) (metric.Exporter, error) {
+	u, err := url.Parse(otelConfig.MetricsEndpoint())
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+
+	switch u.Scheme {
+	case "rpc":
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithEndpoint(u.Host),
+		}
+		if otelConfig.Insecure {
+			opts = append(opts, otlpmetricgrpc.WithInsecure())
+		}
+		return otlpmetricgrpc.New(ctx, opts...)
+
+	case "http", "https":
+		opts := []otlpmetrichttp.Option{
+			otlpmetrichttp.WithEndpoint(u.Host),
+		}
+		if path := u.Path; path != "" {
+			opts = append(opts, otlpmetrichttp.WithURLPath(path))
+		}
+		if otelConfig.Insecure || u.Scheme == "http" {
+			opts = append(opts, otlpmetrichttp.WithInsecure())
+		}
+		return otlpmetrichttp.New(ctx, opts...)
+
+	default:
+		return nil, fmt.Errorf("unsupported endpoint scheme: %s (use 'rpc', 'http', or 'https')", u.Scheme)
+	}
 }
 
 // Shutdown gracefully shuts down the metrics provider, flushing any pending metrics

@@ -20,10 +20,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"go.opentelemetry.io/contrib/bridges/otelzap"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -53,14 +55,8 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 		return logr.Logger{}, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Create OTLP HTTP exporter for remote telemetry
-	opts := []otlploghttp.Option{
-		otlploghttp.WithEndpoint(config.LogsEndpoint()),
-	}
-	if config.Insecure {
-		opts = append(opts, otlploghttp.WithInsecure())
-	}
-	otlpExporter, err := otlploghttp.New(ctx, opts...)
+	// Create log exporter based on endpoint URL
+	otlpExporter, err := newLogExporter(ctx, config)
 	if err != nil {
 		return logr.Logger{}, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
@@ -78,6 +74,44 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 	logger := newLoggerWithOTel(config.ServiceName, loggerProvider, zapLevel, zapMode, zapWriter)
 
 	return logger, nil
+}
+
+// newLogExporter creates an OTLP log exporter based on endpoint URL scheme.
+// Following the Authorino pattern:
+//   - rpc://host:port  → gRPC exporter
+//   - http://host:port → HTTP exporter (insecure)
+//   - https://host:port → HTTP exporter (secure)
+func newLogExporter(ctx context.Context, otelConfig *otel.Config) (sdklog.Exporter, error) {
+	u, err := url.Parse(otelConfig.LogsEndpoint())
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+
+	switch u.Scheme {
+	case "rpc":
+		opts := []otlploggrpc.Option{
+			otlploggrpc.WithEndpoint(u.Host),
+		}
+		if otelConfig.Insecure {
+			opts = append(opts, otlploggrpc.WithInsecure())
+		}
+		return otlploggrpc.New(ctx, opts...)
+
+	case "http", "https":
+		opts := []otlploghttp.Option{
+			otlploghttp.WithEndpoint(u.Host),
+		}
+		if path := u.Path; path != "" {
+			opts = append(opts, otlploghttp.WithURLPath(path))
+		}
+		if otelConfig.Insecure || u.Scheme == "http" {
+			opts = append(opts, otlploghttp.WithInsecure())
+		}
+		return otlploghttp.New(ctx, opts...)
+
+	default:
+		return nil, fmt.Errorf("unsupported endpoint scheme: %s (use 'rpc', 'http', or 'https')", u.Scheme)
+	}
 }
 
 // newLoggerWithOTel creates a zapr logger that sends logs to both console and OTel

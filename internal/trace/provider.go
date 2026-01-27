@@ -19,7 +19,10 @@ package trace
 import (
 	"context"
 	"fmt"
+	"net/url"
 
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -50,16 +53,8 @@ func NewProvider(ctx context.Context, otelConfig *otel.Config) (*Provider, error
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Configure OTLP HTTP exporter options
-	opts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpoint(otelConfig.TracesEndpoint()),
-	}
-	if otelConfig.Insecure {
-		opts = append(opts, otlptracehttp.WithInsecure())
-	}
-
-	// Create OTLP HTTP exporter for traces
-	exporter, err := otlptracehttp.New(ctx, opts...)
+	// Create trace exporter based on endpoint URL
+	exporter, err := newTraceExporter(ctx, otelConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
 	}
@@ -77,6 +72,48 @@ func NewProvider(ctx context.Context, otelConfig *otel.Config) (*Provider, error
 	return &Provider{
 		tracerProvider: tracerProvider,
 	}, nil
+}
+
+// newTraceExporter creates an OTLP trace exporter based on endpoint URL scheme
+// Following the Authorino pattern:
+//   - rpc://host:port  → gRPC exporter
+//   - http://host:port → HTTP exporter (insecure)
+//   - https://host:port → HTTP exporter (secure)
+func newTraceExporter(ctx context.Context, otelConfig *otel.Config) (sdktrace.SpanExporter, error) {
+	u, err := url.Parse(otelConfig.TracesEndpoint())
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+
+	var client otlptrace.Client
+
+	switch u.Scheme {
+	case "rpc":
+		opts := []otlptracegrpc.Option{
+			otlptracegrpc.WithEndpoint(u.Host),
+		}
+		if otelConfig.Insecure {
+			opts = append(opts, otlptracegrpc.WithInsecure())
+		}
+		client = otlptracegrpc.NewClient(opts...)
+
+	case "http", "https":
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint(u.Host),
+		}
+		if path := u.Path; path != "" {
+			opts = append(opts, otlptracehttp.WithURLPath(path))
+		}
+		if otelConfig.Insecure || u.Scheme == "http" {
+			opts = append(opts, otlptracehttp.WithInsecure())
+		}
+		client = otlptracehttp.NewClient(opts...)
+
+	default:
+		return nil, fmt.Errorf("unsupported endpoint scheme: %s (use 'rpc', 'http', or 'https')", u.Scheme)
+	}
+
+	return otlptrace.New(ctx, client)
 }
 
 // TracerProvider returns the underlying TracerProvider

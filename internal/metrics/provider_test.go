@@ -41,7 +41,7 @@ func TestNewProvider(t *testing.T) {
 			name: "OTLP disabled",
 			otelConfig: &kuadrantotel.Config{
 				Enabled:        false,
-				Endpoint:       "localhost:4318",
+				Endpoint:       "http://localhost:4318",
 				Insecure:       true,
 				ServiceName:    "test",
 				ServiceVersion: "v1.0.0",
@@ -57,7 +57,7 @@ func TestNewProvider(t *testing.T) {
 			name: "OTLP enabled with insecure endpoint",
 			otelConfig: &kuadrantotel.Config{
 				Enabled:        true,
-				Endpoint:       "localhost:4318",
+				Endpoint:       "http://localhost:4318",
 				Insecure:       true,
 				ServiceName:    "test",
 				ServiceVersion: "v1.0.0",

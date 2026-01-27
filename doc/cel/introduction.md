@@ -37,7 +37,7 @@ Within policies, in `Predicate`s you  can combine checks. If the expression eval
 ### Boolean Logic
 
 * **AND (`&&`):** Both conditions must be true.
-```proto
+```
 // Method is POST AND path starts with /api/admin
 request.method == 'POST' && request.path.startsWith('/api/admin')
 
@@ -45,7 +45,7 @@ request.method == 'POST' && request.path.startsWith('/api/admin')
 
 
 * **OR (`||`):** At least one condition must be true.
-```proto
+```
 // Method is GET OR HEAD
 request.method == 'GET' || request.method == 'HEAD'
 
@@ -53,7 +53,7 @@ request.method == 'GET' || request.method == 'HEAD'
 
 
 * **NOT (`!`):** Inverts the result.
-```proto
+```
 // User-Agent must NOT contain 'bot'
 !request.headers['user-agent'].contains('bot')
 
@@ -65,7 +65,7 @@ request.method == 'GET' || request.method == 'HEAD'
 
 Conditional logic is useful for dependent checks, such as validating specific headers only for certain paths.
 
-```proto
+```
 // If path is /secure, check for x-user-id header, otherwise allow.
 request.path.startsWith('/secure') ? has(request.headers['x-user-id']) : true
 
@@ -100,7 +100,7 @@ While standard HTTP headers are often strings, Kuadrant provides powerful lists 
 
 Checks if **every** item in the list satisfies a condition.
 
-```proto
+```
 auth.identity.groups.all(group, group.endsWith('.admin'))
 
 ```
@@ -109,7 +109,7 @@ auth.identity.groups.all(group, group.endsWith('.admin'))
 
 Checks if **at least one** item satisfies a condition.
 
-```proto
+```
 // Rule: The JWT 'groups' claim must contain 'admin'
 auth.identity.claims['groups'].exists(g, g == 'admin')
 
@@ -119,7 +119,7 @@ auth.identity.claims['groups'].exists(g, g == 'admin')
 
 Checks if **exactly one** item satisfies the condition.
 
-```proto
+```
 // Rule: Exactly one group must match
 auth.identity.groups.exists_one(group, group == 'foo')
 
@@ -135,7 +135,7 @@ Validating paths and headers.
 
 * **Equality:** `request.method == 'PUT'`
 * **Prefix/Suffix:**
-```proto
+```
 request.path.startsWith('/public/')
 request.headers['host'].endsWith('.example.com')
 
@@ -167,7 +167,7 @@ HTTP headers are always strings. To compare them numerically (e.g., Content-Leng
 * **int()**: Converts strings to integers.
 * **size()**: Returns the size of a string, list, or map.
 
-```proto
+```
 // Rule: Content-Length must be less than 1MB (1,000,000 bytes)
 has(request.headers['content-length']) && int(request.headers['content-length']) < 1000000
 
@@ -190,7 +190,7 @@ You can wrap values that might be missing:
 * **`optional.of(value)`**: Wraps a value.
 * **`optional.none()`**: Represents a missing value.
 
-```proto
+```
 // Wraps the 'x-priority' header into an Optional
 optional.of(request.headers['x-priority'])
 
@@ -202,14 +202,14 @@ Provide a default value if the header is missing.
 
 **Old Way (Verbose):**
 
-```proto
+```
 (has(request.headers['x-retries']) ? int(request.headers['x-retries']) : 0) < 3
 
 ```
 
 **New Way (Optional):**
 
-```proto
+```
 // If header is missing, default to 0, then check if < 3
 optional.of(request.headers['x-retries']).orValue('0').matches(r'^[0-2]$')
 
@@ -219,7 +219,7 @@ optional.of(request.headers['x-retries']).orValue('0').matches(r'^[0-2]$')
 
 **Optional syntax:**
 
-```proto
+```
 request.?headers[?'x-retries']).orValue('0').matches(r'^[0-2]$')
 
 ```
@@ -230,7 +230,7 @@ TODO explain the two forms
 
 Transform a value only if it exists.
 
-```proto
+```
 // Rule: If 'x-debug' header exists, it must be 'true'. If missing, pass.
 optional.of(request.headers['x-debug'])
   .optMap(val, val == 'true')
@@ -242,7 +242,7 @@ optional.of(request.headers['x-debug'])
 
 Check multiple headers in order of preference.
 
-```proto
+```
 // Use 'x-client-id', or fallback to 'x-app-id', or default to 'anonymous'
 optional.of(request.headers['x-client-id'])
   .or(optional.of(request.headers['x-app-id']))

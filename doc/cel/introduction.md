@@ -1,6 +1,6 @@
 # Introduction to CEL
 
-## 1. The Basic Syntax
+## The Basic Syntax
 
 Using CEL in Kuadrant, you evaluate the **Request** (attributes like path, method, headers) or the **Connection** (mTLS details, source IP).
 
@@ -33,7 +33,7 @@ CEL supports standard data types:
 
 ---
 
-## 2. Logical Operators
+## Logical Operators
 
 Within policies, in `Predicate`s you can combine checks. If the expression evaluates to `true`, the policy applies (e.g. allowing or denying the request based on the action).
 
@@ -72,7 +72,7 @@ request.path.startsWith('/secure') ? has(request.headers['x-user-id']) : true
 
 ---
 
-## 3. Handling Optional Fields (Presence)
+## Handling Optional Fields (Presence)
 
 In HTTP traffic, headers and metadata are often missing. Accessing a missing map key in CEL can result in an error or `no_such_field`.
 
@@ -91,7 +91,7 @@ has(request.headers['authorization']) ? request.headers['authorization'].startsW
 
 ---
 
-## 4. Working with Lists (SANs, JWT Claims)
+## Working with Lists (SANs, JWT Claims)
 
 While standard HTTP headers are often strings, Kuadrant provides powerful lists in some contexts like **JWT Auth** (Claims).
 
@@ -123,7 +123,7 @@ auth.identity.groups.exists_one(group, group == 'foo')
 
 ---
 
-## 5. String Manipulation & Regex
+## String Manipulation & Regex
 
 Validating paths and headers.
 
@@ -153,7 +153,7 @@ request.headers['x-request-id'].matches(r'^[0-9a-f-]+$')
 
 ---
 
-## 6. Type Conversion & Math
+## Type Conversion & Math
 
 HTTP headers are always strings. To compare them numerically (e.g., Content-Length or custom logic), you must cast them.
 
@@ -173,7 +173,7 @@ TODO!
 
 ---
 
-## 7. The `Optional` Type
+## The `Optional` Type
 
 The `optional` type offers a cleaner way to handle missing headers or metadata without verbose `has()` checks.
 

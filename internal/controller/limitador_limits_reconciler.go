@@ -9,6 +9,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -60,6 +62,12 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	}
 
 	state.Store(StateLimitadorLimitsModified, true)
+
+	if limitador.Annotations == nil {
+		limitador.Annotations = make(map[string]string)
+	}
+
+	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(limitador.Annotations))
 
 	limitador.Spec.Limits = desiredLimits
 

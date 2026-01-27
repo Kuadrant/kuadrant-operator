@@ -11,6 +11,8 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -83,7 +85,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		httpRouteRuleKey := httpRouteRule.Name
 
 		authConfigName := AuthConfigNameForPath(pathID)
-		desiredAuthConfig := r.buildDesiredAuthConfig(effectivePolicy, authConfigName, authConfigsNamespace)
+		desiredAuthConfig := r.buildDesiredAuthConfig(ctx, effectivePolicy, authConfigName, authConfigsNamespace)
 		desiredAuthConfigs[k8stypes.NamespacedName{Name: desiredAuthConfig.GetName(), Namespace: desiredAuthConfig.GetNamespace()}] = struct{}{}
 
 		resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
@@ -159,7 +161,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	return nil
 }
 
-func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta3.AuthConfig {
+func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta3.AuthConfig {
 	_, _, _, _, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 
 	authConfig := &authorinov1beta3.AuthConfig{
@@ -179,6 +181,8 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 			Hosts: []string{name},
 		},
 	}
+
+	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(authConfig.Annotations))
 
 	spec := effectivePolicy.Spec.Spec.Proper()
 

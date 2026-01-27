@@ -25,14 +25,19 @@ CEL supports standard data types:
 | **Bool** | `true`, `false` |
 | **Duration** | `duration('500ms')`, `duration('10s')` |
 | **Map** | `{'group': 'admin', 'tier': 'gold'}` |
-| **List** | `[1, 2, 3]`
+| **List** | `[1, 2, 3]` |
 
-Note: CEL has no implicit type coercion.
+
+> [!Caution]
+> CEL has no implicit type coercion.
+> It isn't valid to for example compare different types, this expression is invalid:
+> `"3" != 3`
+
 ---
 
 ## 2. Logical Operators
 
-Within policies, in `Predicate`s you  can combine checks. If the expression evaluates to `true`, the policy applies (e.g. allowing or denying the request based on the action).
+Within policies, in `Predicate`s you can combine checks. If the expression evaluates to `true`, the policy applies (e.g. allowing or denying the request based on the action).
 
 ### Boolean Logic
 
@@ -81,14 +86,15 @@ In HTTP traffic, headers and metadata are often missing. Accessing a missing map
 
 Use `has()` to check if a header or metadata field exists before accessing it.
 
-```proto
+```
 // Rule: If an Authorization header exists, it must start with 'Bearer'
 has(request.headers['authorization']) ? request.headers['authorization'].startsWith('Bearer ') : true
 
 ```
 
-> **Note:** For `request.headers`, checking `has()` ensures the key exists in the map. For standard attributes like `request.referer`, it checks if the value is populated.
-> **Note:** See below to learn about the optional syntax, which can in places be an alternative to the ternary operator.
+> [!Note]
+> For `request.headers`, checking `has()` ensures the key exists in the map. For standard attributes like `request.referer`, it checks if the value is populated.
+> See below to learn about the optional syntax, which can in places be an alternative to the ternary operator.
 
 ---
 
@@ -148,13 +154,14 @@ request.headers['host'].endsWith('.example.com')
 
 CEL uses **RE2** syntax for regex.
 
-```proto
+```
 // Rule: X-Request-ID must be a UUID-like format
 request.headers['x-request-id'].matches(r'^[0-9a-f-]+$')
 
 ```
 
-> **Tip:** Always use `r'...'` for regex strings to handle backslashes correctly.
+> [!Tip]
+> Always use `r'...'` for regex strings to handle backslashes correctly.
 
 ---
 

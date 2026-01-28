@@ -40,8 +40,7 @@ func TestNewProvider(t *testing.T) {
 		{
 			name: "OTLP disabled",
 			otelConfig: &kuadrantotel.Config{
-				Enabled:        false,
-				Endpoint:       "localhost:4318",
+				Endpoint:       "", // Empty endpoint = disabled
 				Insecure:       true,
 				ServiceName:    "test",
 				ServiceVersion: "v1.0.0",
@@ -56,8 +55,22 @@ func TestNewProvider(t *testing.T) {
 		{
 			name: "OTLP enabled with insecure endpoint",
 			otelConfig: &kuadrantotel.Config{
-				Enabled:        true,
-				Endpoint:       "localhost:4318",
+				Endpoint:       "http://localhost:4318",
+				Insecure:       true,
+				ServiceName:    "test",
+				ServiceVersion: "v1.0.0",
+			},
+			metricsConfig: &Config{
+				PrometheusGatherer: registry,
+				ExportInterval:     30 * time.Second,
+			},
+			wantEnabled: true,
+			wantErr:     false,
+		},
+		{
+			name: "OTLP enabled with RPC endpoint",
+			otelConfig: &kuadrantotel.Config{
+				Endpoint:       "rpc://localhost:4317",
 				Insecure:       true,
 				ServiceName:    "test",
 				ServiceVersion: "v1.0.0",
@@ -95,7 +108,6 @@ func TestProviderShutdown(t *testing.T) {
 	registry := prometheus.NewRegistry()
 
 	otelConfig := &kuadrantotel.Config{
-		Enabled:        false,
 		ServiceName:    "test",
 		ServiceVersion: "v1.0.0",
 	}
@@ -134,7 +146,6 @@ func TestBridgePrometheusMetrics(t *testing.T) {
 
 	// Create provider with the registry
 	otelConfig := &kuadrantotel.Config{
-		Enabled:        false,
 		ServiceName:    "test",
 		ServiceVersion: "v1.0.0",
 	}

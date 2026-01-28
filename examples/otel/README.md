@@ -7,7 +7,7 @@ This example demonstrates how to enable OpenTelemetry logging, tracing, and metr
 - **Dual Logging**: Logs to both console (Zap) and remote collector (OTLP) with automatic trace correlation
 - **Trace Correlation**: Logs include `trace_id` and `span_id` for distributed tracing
 - **Metrics Bridge**: Export existing Prometheus metrics via OTLP without code changes
-- **Unified Configuration**: Single `OTEL_ENABLED` switch for all signals
+- **Flexible Configuration**: Enable signals independently via endpoint configuration
 - **Local Development Stack**: Complete observability stack (Loki, Grafana, Tempo, Prometheus) with Docker Compose
 
 ## Architecture
@@ -71,6 +71,7 @@ docker compose -f examples/otel/docker-compose.yaml up -d
 ```
 
 This starts:
+
 - **OTel Collector** - Receives OTLP logs, traces, and metrics on ports 4317 (gRPC) and 4318 (HTTP)
 - **Loki** - Stores logs with full-text search and label filtering on port 3100
 - **Tempo** - Distributed tracing backend on port 3200
@@ -82,9 +83,14 @@ This starts:
 
 ```bash
 # Set environment variables
-export OTEL_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4318
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_INSECURE=true
 export OTEL_METRICS_INTERVAL_SECONDS=5
+
+# Alternatively, enable signals individually:
+# export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=http://localhost:4318
+# export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=rpc://localhost:4317
+# export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318
 
 # Run the operator
 make run
@@ -163,12 +169,14 @@ Grafana provides a unified view across all signals:
 The operator uses a **Tee core architecture** powered by the official `go.opentelemetry.io/contrib/bridges/otelzap` library:
 
 **Console Core:**
+
 - Formats logs for human readability (JSON or console format based on `LOG_MODE`)
 - Respects `LOG_LEVEL` for verbosity filtering
 - Extracts and displays `trace_id` and `span_id` from context for correlation
 - Filters out noisy context objects
 
 **OTel Core (otelzap bridge):**
+
 - Sends structured logs to OTLP collector
 - Automatically extracts trace context from `context.Context` fields
 - Preserves all log attributes and severity levels
@@ -198,6 +206,7 @@ func (r *MyReconciler) Reconcile(ctx context.Context) (controller.Result, error)
 ```
 
 **Important Notes:**
+
 - The tracing span **must** be started before getting the logger for trace IDs to be present
 - The `tracer.Start()` call enriches the context with trace context
 - The `.WithValues("context", ctx)` passes the enriched context to the logger for extraction
@@ -207,8 +216,9 @@ Both cores receive the same log records from the Tee, ensuring consistent loggin
 ### Dual Metrics Export
 
 The operator exposes metrics in **two ways simultaneously**:
+
 1. **Prometheus `/metrics` endpoint** (`:8080/metrics`) - Native Prometheus scraping
-2. **OTLP push** (when `OTEL_ENABLED=true`) - Push to OTel Collector
+2. **OTLP push** (when metrics endpoint is configured) - Push to OTel Collector
 
 Both expose the **same underlying metrics** from the same Prometheus registry. The OTel bridge reads from the Prometheus registry and converts to OTLP format.
 
@@ -220,12 +230,12 @@ When configuring Prometheus scraping, choose **one** of these options:
 
 ```yaml
 # prometheus.yaml (default in this example)
-- job_name: 'kuadrant-operator'
+- job_name: "kuadrant-operator"
   static_configs:
-    - targets: [ 'otel-collector:8889' ]
+    - targets: ["otel-collector:8889"]
 ```
 
-✅ Use when `OTEL_ENABLED=true`
+✅ Use when OTLP metrics export is enabled (endpoint configured)
 ✅ Allows OTel processing/filtering before Prometheus
 ✅ Consistent with OTel-first approach
 
@@ -233,12 +243,12 @@ When configuring Prometheus scraping, choose **one** of these options:
 
 ```yaml
 # prometheus.yaml (alternative)
-- job_name: 'kuadrant-operator'
+- job_name: "kuadrant-operator"
   static_configs:
-    - targets: [ 'host.docker.internal:8080' ]
+    - targets: ["host.docker.internal:8080"]
 ```
 
-✅ Use when `OTEL_ENABLED=false`
+✅ Use when OTLP metrics export is disabled (no endpoint)
 ✅ Traditional Prometheus setup
 ✅ No OTel Collector needed
 
@@ -248,24 +258,28 @@ When configuring Prometheus scraping, choose **one** of these options:
 
 ### Shared OpenTelemetry Configuration
 
-| Variable                              | Required | Default             | Description                                          |
-|---------------------------------------|----------|---------------------|------------------------------------------------------|
-| `OTEL_ENABLED`                        | No       | `false`             | Enable OpenTelemetry (logs, traces, metrics)         |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`         | Yes*     | `localhost:4318`    | OTLP collector endpoint (default for all signals)    |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`    | No       | -                   | Override endpoint specifically for logs              |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`  | No       | -                   | Override endpoint specifically for traces            |
-| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | No       | -                   | Override endpoint specifically for metrics           |
-| `OTEL_EXPORTER_OTLP_INSECURE`         | No       | `true`              | Disable TLS for OTLP export (for local dev)          |
-| `OTEL_SERVICE_NAME`                   | No       | `kuadrant-operator` | Service name shown in Grafana/Tempo/Jaeger          |
-| `OTEL_SERVICE_VERSION`                | No       | Build version       | Service version (defaults to version from ldflags)   |
+| Variable                              | Required | Default             | Description                                                                                     |
+| ------------------------------------- | -------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`         | No       | - (disabled)       | OTLP collector endpoint (enables all signals). Supports `http://`, `https://`, `rpc://` schemes |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`    | No       | -                   | Override endpoint specifically for logs (enables logs if set)                                   |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`  | No       | -                   | Override endpoint specifically for traces (enables traces if set)                               |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | No       | -                   | Override endpoint specifically for metrics (enables metrics if set)                             |
+| `OTEL_EXPORTER_OTLP_INSECURE`         | No       | `false`             | Disable TLS for OTLP export (required for `rpc://` scheme without TLS)                          |
+| `OTEL_SERVICE_NAME`                   | No       | `kuadrant-operator` | Service name shown in Grafana/Tempo/Jaeger                                                      |
+| `OTEL_SERVICE_VERSION`                | No       | Build version       | Service version (defaults to version from ldflags)                                              |
 
-\* Required when `OTEL_ENABLED=true`
+**Configuration Logic:**
+
+- If `OTEL_EXPORTER_OTLP_ENDPOINT` is set, all signals (logs, traces, metrics) are enabled with that endpoint
+- Per-signal endpoints override the global endpoint for that specific signal
+- If no endpoint is configured (neither global nor per-signal), that signal is disabled
+- Endpoint schemes: `http://` (insecure HTTP), `https://` (secure HTTP), `rpc://` (gRPC, use with `OTEL_EXPORTER_OTLP_INSECURE=true` for plaintext)
 
 ### Metrics-Specific Configuration
 
-| Variable                        | Default | Description                    |
-|---------------------------------|---------|--------------------------------|
-| `OTEL_METRICS_INTERVAL_SECONDS` | `15`    | Export interval in seconds     |
+| Variable                        | Default | Description                |
+| ------------------------------- | ------- | -------------------------- |
+| `OTEL_METRICS_INTERVAL_SECONDS` | `15`    | Export interval in seconds |
 
 ## Available Metrics
 
@@ -299,12 +313,19 @@ Add to your operator deployment:
 
 ```yaml
 env:
-  - name: OTEL_ENABLED
-    value: "true"
   - name: OTEL_EXPORTER_OTLP_ENDPOINT
-    value: "otel-collector.observability.svc.cluster.local:4318"
+    value: "https://otel-collector.observability.svc.cluster.local:4318"
+
+  # Or enable signals individually with different endpoints/protocols:
+  # - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+  #   value: "http://loki-gateway.observability.svc.cluster.local:3100"
+  # - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+  #   value: "rpc://tempo.observability.svc.cluster.local:4317"
+  # - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+  #   value: "http://otel-collector.observability.svc.cluster.local:4318"
+
   - name: OTEL_EXPORTER_OTLP_INSECURE
-    value: "false"  # Use TLS in production
+    value: "false" # Use TLS in production
   - name: OTEL_SERVICE_NAME
     value: "kuadrant-operator"
   - name: OTEL_METRICS_INTERVAL_SECONDS
@@ -335,17 +356,17 @@ service:
     logs:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [debug, otlphttp]  # Export logs to multiple backends
+      exporters: [debug, otlphttp] # Export logs to multiple backends
 
     traces:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [debug, otlphttp]  # Export traces to multiple backends
+      exporters: [debug, otlphttp] # Export traces to multiple backends
 
     metrics:
       receivers: [otlp]
       processors: [batch, resource]
-      exporters: [debug, prometheus, otlphttp]  # Export metrics to multiple backends
+      exporters: [debug, prometheus, otlphttp] # Export metrics to multiple backends
 ```
 
 ## Implementation Details
@@ -358,9 +379,10 @@ The operator uses a sophisticated logging setup that provides:
 2. **Tee Core Pattern**: Single Zap logger with two cores (console + OTel) via `zapcore.NewTee()`
 3. **Trace Context Extraction**: Custom `contextFilterCore` extracts `trace_id` and `span_id` for console output
 4. **Clean Console Output**: Filters noisy context objects while preserving trace correlation
-5. **Zero Overhead When Disabled**: Standard Zap logger when `OTEL_ENABLED=false`
+5. **Zero Overhead When Disabled**: Standard Zap logger when no endpoint is configured
 
 **Key Files:**
+
 - `internal/log/otel.go` - OTel logging setup with Tee architecture and `contextFilterCore`
 - `internal/log/log.go` - Standard logging setup
 - `cmd/main.go` - Conditional OTel initialization based on env vars
@@ -386,6 +408,7 @@ logger.Info("message")  // Includes trace_id and span_id
 ```
 
 The `contextFilterCore` in `internal/log/otel.go` handles the context field differently for each core:
+
 - **Console core**: Extracts `trace_id` and `span_id` as readable strings, filters out noisy context object
 - **OTel core**: Uses official otelzap bridge to include full trace context in OTLP records
 

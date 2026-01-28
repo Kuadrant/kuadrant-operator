@@ -19,9 +19,11 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	prombridge "go.opentelemetry.io/contrib/bridges/prometheus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/sdk/metric"
 
@@ -60,19 +62,13 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 	)
 
 	var readers []metric.Reader
+	otlpEnabled := false
 
-	// Only setup OTLP export if OTel is enabled
-	if otelConfig.Enabled {
-		// Configure OTLP HTTP exporter options
-		opts := []otlpmetrichttp.Option{
-			otlpmetrichttp.WithEndpoint(otelConfig.MetricsEndpoint()),
-		}
-		if otelConfig.Insecure {
-			opts = append(opts, otlpmetrichttp.WithInsecure())
-		}
-
-		// Create OTLP HTTP exporter
-		otlpExporter, err := otlpmetrichttp.New(ctx, opts...)
+	// Only setup OTLP export if metrics endpoint is configured
+	endpoint := otelConfig.MetricsEndpoint()
+	if endpoint != "" {
+		// Create metric exporter based on endpoint URL
+		otlpExporter, err := newMetricExporter(ctx, endpoint, otelConfig.Insecure)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 		}
@@ -86,6 +82,7 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 			metric.WithProducer(promBridge),
 		)
 		readers = append(readers, reader)
+		otlpEnabled = true
 	}
 
 	// Create MeterProvider with the configured readers
@@ -102,8 +99,46 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 
 	return &Provider{
 		meterProvider: meterProvider,
-		otlpEnabled:   otelConfig.Enabled,
+		otlpEnabled:   otlpEnabled,
 	}, nil
+}
+
+// newMetricExporter creates an OTLP metric exporter based on endpoint URL scheme.
+// Following the Authorino pattern:
+//   - rpc://host:port  → gRPC exporter
+//   - http://host:port → HTTP exporter (insecure)
+//   - https://host:port → HTTP exporter (secure)
+func newMetricExporter(ctx context.Context, endpoint string, insecure bool) (metric.Exporter, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+
+	switch u.Scheme {
+	case "rpc":
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithEndpoint(u.Host),
+		}
+		if insecure {
+			opts = append(opts, otlpmetricgrpc.WithInsecure())
+		}
+		return otlpmetricgrpc.New(ctx, opts...)
+
+	case "http", "https":
+		opts := []otlpmetrichttp.Option{
+			otlpmetrichttp.WithEndpoint(u.Host),
+		}
+		if path := u.Path; path != "" {
+			opts = append(opts, otlpmetrichttp.WithURLPath(path))
+		}
+		if insecure || u.Scheme == "http" {
+			opts = append(opts, otlpmetrichttp.WithInsecure())
+		}
+		return otlpmetrichttp.New(ctx, opts...)
+
+	default:
+		return nil, fmt.Errorf("unsupported endpoint scheme: %s (use 'rpc', 'http', or 'https')", u.Scheme)
+	}
 }
 
 // Shutdown gracefully shuts down the metrics provider, flushing any pending metrics

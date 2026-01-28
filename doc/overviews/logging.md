@@ -31,19 +31,21 @@ For a hands-on quick start guide, see **[examples/otel/README.md](../../examples
 
 OpenTelemetry logging is disabled by default and can be enabled via environment variables:
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `OTEL_ENABLED` | Enable OpenTelemetry (logs, traces, metrics) | `false` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (HTTP) | - |
-| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | OTLP logs-specific endpoint (overrides `OTEL_EXPORTER_OTLP_ENDPOINT`) | - |
-| `OTEL_SERVICE_NAME` | Service name for telemetry data | `kuadrant-operator` |
-| `OTEL_SERVICE_VERSION` | Service version for telemetry data | Build version (from ldflags) |
+| Environment Variable               | Description                                                                                                       | Default                      |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`      | OTLP collector endpoint for all signals (logs, traces, metrics). Supports `http://`, `https://`, `rpc://` schemes | - (disabled)                |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | OTLP logs-specific endpoint (overrides `OTEL_EXPORTER_OTLP_ENDPOINT`)                                             | -                            |
+| `OTEL_EXPORTER_OTLP_INSECURE`      | Disable TLS for OTLP export                                                                                       | `false`                      |
+| `OTEL_SERVICE_NAME`                | Service name for telemetry data                                                                                   | `kuadrant-operator`          |
+| `OTEL_SERVICE_VERSION`             | Service version for telemetry data                                                                                | Build version (from ldflags) |
+
+**Note:** Logging is enabled when either `OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` is set to a non-empty value.
 
 ### Architecture
 
 **Dual Logging Mode:**
 
-When OTel is enabled (`OTEL_ENABLED=true`), the operator uses a tee logger that writes to both destinations simultaneously:
+When OTel is enabled (by setting an endpoint), the operator uses a tee logger that writes to both destinations simultaneously:
 
 ```
 Application Code (log.Log.Info(...))
@@ -60,6 +62,7 @@ LOG_LEVEL & LOG_MODE)               (all logs with metadata)
 ```
 
 **Key Features:**
+
 - **Dual Output**: Logs go to both console (Zap) and remote collector (OTel) simultaneously
 - **Separate Filtering**: Zap logger respects `LOG_LEVEL`/`LOG_MODE` for console, OTel exports everything for remote analysis
 - **No Code Changes**: Controllers use standard `logr` interface; dual logging happens transparently
@@ -81,18 +84,21 @@ spec:
   template:
     spec:
       containers:
-      - name: manager
-        image: quay.io/kuadrant/kuadrant-operator:latest
-        env:
-        - name: OTEL_ENABLED
-          value: "true"
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "otel-collector.observability.svc.cluster.local:4318"
-        - name: OTEL_SERVICE_NAME
-          value: "kuadrant-operator"
-        # Optional: Control console output separately
-        - name: LOG_LEVEL
-          value: "info"  # Console shows info+, remote gets everything
-        - name: LOG_MODE
-          value: "production"  # JSON format for console
+        - name: manager
+          image: quay.io/kuadrant/kuadrant-operator:latest
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "https://otel-collector.observability.svc.cluster.local:4318"
+            # Or enable logs specifically (overrides global endpoint)
+            # - name: OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+            #   value: "http://loki-gateway.observability.svc.cluster.local:3100"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "false" # Use TLS in production
+            - name: OTEL_SERVICE_NAME
+              value: "kuadrant-operator"
+            # Optional: Control console output separately
+            - name: LOG_LEVEL
+              value: "info" # Console shows info+, remote gets everything
+            - name: LOG_MODE
+              value: "production" # JSON format for console
 ```

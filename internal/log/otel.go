@@ -44,9 +44,11 @@ var loggerProvider *sdklog.LoggerProvider
 // - Console output (formatted via Zap encoder)
 // - OTel LoggerProvider (for OTLP export to remote collectors) using official otelzap bridge
 // Returns a logr.Logger that wraps the Zap logger
+// Returns an error if no logs endpoint is configured.
 func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, zapMode Mode, zapWriter io.Writer) (logr.Logger, error) {
-	if !config.Enabled {
-		return logr.Logger{}, fmt.Errorf("OpenTelemetry logging is not enabled")
+	endpoint := config.LogsEndpoint()
+	if endpoint == "" {
+		return logr.Logger{}, fmt.Errorf("logs disabled: no endpoint configured")
 	}
 
 	// Create shared resource for service identity (used across all signals)
@@ -56,7 +58,7 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 	}
 
 	// Create log exporter based on endpoint URL
-	otlpExporter, err := newLogExporter(ctx, config)
+	otlpExporter, err := newLogExporter(ctx, endpoint, config.Insecure)
 	if err != nil {
 		return logr.Logger{}, fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
@@ -81,8 +83,8 @@ func SetupOTelLogging(ctx context.Context, config *otel.Config, zapLevel Level, 
 //   - rpc://host:port  → gRPC exporter
 //   - http://host:port → HTTP exporter (insecure)
 //   - https://host:port → HTTP exporter (secure)
-func newLogExporter(ctx context.Context, otelConfig *otel.Config) (sdklog.Exporter, error) {
-	u, err := url.Parse(otelConfig.LogsEndpoint())
+func newLogExporter(ctx context.Context, endpoint string, insecure bool) (sdklog.Exporter, error) {
+	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
 	}
@@ -92,7 +94,7 @@ func newLogExporter(ctx context.Context, otelConfig *otel.Config) (sdklog.Export
 		opts := []otlploggrpc.Option{
 			otlploggrpc.WithEndpoint(u.Host),
 		}
-		if otelConfig.Insecure {
+		if insecure {
 			opts = append(opts, otlploggrpc.WithInsecure())
 		}
 		return otlploggrpc.New(ctx, opts...)
@@ -104,7 +106,7 @@ func newLogExporter(ctx context.Context, otelConfig *otel.Config) (sdklog.Export
 		if path := u.Path; path != "" {
 			opts = append(opts, otlploghttp.WithURLPath(path))
 		}
-		if otelConfig.Insecure || u.Scheme == "http" {
+		if insecure || u.Scheme == "http" {
 			opts = append(opts, otlploghttp.WithInsecure())
 		}
 		return otlploghttp.New(ctx, opts...)

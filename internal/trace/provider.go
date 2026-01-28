@@ -42,9 +42,11 @@ type Provider struct {
 // - Performance analysis and debugging across reconciler operations
 //
 // otelConfig provides shared service identity (used across logs, traces, metrics)
+// Returns an error if no traces endpoint is configured.
 func NewProvider(ctx context.Context, otelConfig *otel.Config) (*Provider, error) {
-	if !otelConfig.Enabled {
-		return nil, fmt.Errorf("OpenTelemetry is not enabled")
+	endpoint := otelConfig.TracesEndpoint()
+	if endpoint == "" {
+		return nil, fmt.Errorf("traces disabled: no endpoint configured")
 	}
 
 	// Create shared resource for service identity (same as logs/metrics)
@@ -54,7 +56,7 @@ func NewProvider(ctx context.Context, otelConfig *otel.Config) (*Provider, error
 	}
 
 	// Create trace exporter based on endpoint URL
-	exporter, err := newTraceExporter(ctx, otelConfig)
+	exporter, err := newTraceExporter(ctx, endpoint, otelConfig.Insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
 	}
@@ -79,8 +81,8 @@ func NewProvider(ctx context.Context, otelConfig *otel.Config) (*Provider, error
 //   - rpc://host:port  → gRPC exporter
 //   - http://host:port → HTTP exporter (insecure)
 //   - https://host:port → HTTP exporter (secure)
-func newTraceExporter(ctx context.Context, otelConfig *otel.Config) (sdktrace.SpanExporter, error) {
-	u, err := url.Parse(otelConfig.TracesEndpoint())
+func newTraceExporter(ctx context.Context, endpoint string, insecure bool) (sdktrace.SpanExporter, error) {
+	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
 	}
@@ -92,7 +94,7 @@ func newTraceExporter(ctx context.Context, otelConfig *otel.Config) (sdktrace.Sp
 		opts := []otlptracegrpc.Option{
 			otlptracegrpc.WithEndpoint(u.Host),
 		}
-		if otelConfig.Insecure {
+		if insecure {
 			opts = append(opts, otlptracegrpc.WithInsecure())
 		}
 		client = otlptracegrpc.NewClient(opts...)
@@ -104,7 +106,7 @@ func newTraceExporter(ctx context.Context, otelConfig *otel.Config) (sdktrace.Sp
 		if path := u.Path; path != "" {
 			opts = append(opts, otlptracehttp.WithURLPath(path))
 		}
-		if otelConfig.Insecure || u.Scheme == "http" {
+		if insecure || u.Scheme == "http" {
 			opts = append(opts, otlptracehttp.WithInsecure())
 		}
 		client = otlptracehttp.NewClient(opts...)

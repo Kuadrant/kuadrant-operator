@@ -125,8 +125,9 @@ func main() {
 
 	// Setup OpenTelemetry if enabled
 	otelConfig := kuadrantOtel.NewConfig(gitSHA, dirty, version)
-	if otelConfig.Enabled {
-		// Setup OTel logging with zap exporter for console output
+
+	// Setup OTel logging if endpoint is configured
+	if otelConfig.LogsEndpoint() != "" {
 		otelLogger, err := log.SetupOTelLogging(
 			context.Background(),
 			otelConfig,
@@ -138,7 +139,7 @@ func main() {
 			log.Log.Error(err, "Failed to setup OpenTelemetry logging, continuing with Zap only")
 		} else {
 			log.Log.Info("OpenTelemetry logging enabled",
-				"exportEndpoint", otelConfig.Endpoint,
+				"endpoint", otelConfig.LogsEndpoint(),
 				"gitSHA", gitSHA,
 				"dirty", dirty)
 
@@ -157,14 +158,16 @@ func main() {
 				}
 			}()
 		}
+	}
 
-		// Setup OTel tracing
+	// Setup OTel tracing if endpoint is configured
+	if otelConfig.TracesEndpoint() != "" {
 		traceProvider, err := trace.NewProvider(context.Background(), otelConfig)
 		if err != nil {
 			log.Log.Error(err, "Failed to setup OpenTelemetry tracing, continuing without traces")
 		} else {
 			log.Log.Info("OpenTelemetry tracing enabled",
-				"exportEndpoint", otelConfig.TracesEndpoint(),
+				"endpoint", otelConfig.TracesEndpoint(),
 				"sampler", "AlwaysSample",
 			)
 
@@ -185,9 +188,9 @@ func main() {
 					log.Log.Error(err, "Failed to shutdown OpenTelemetry tracing")
 				}
 			}()
-		}
 
-		opts = append(opts, controller.WithTracer(traceProvider.TracerProvider().Tracer(otelConfig.ServiceName)))
+			opts = append(opts, controller.WithTracer(traceProvider.TracerProvider().Tracer(otelConfig.ServiceName)))
+		}
 	}
 
 	printControllerMetaInfo()

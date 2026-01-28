@@ -62,11 +62,13 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 	)
 
 	var readers []metric.Reader
+	otlpEnabled := false
 
-	// Only setup OTLP export if OTel is enabled
-	if otelConfig.Enabled {
+	// Only setup OTLP export if metrics endpoint is configured
+	endpoint := otelConfig.MetricsEndpoint()
+	if endpoint != "" {
 		// Create metric exporter based on endpoint URL
-		otlpExporter, err := newMetricExporter(ctx, otelConfig)
+		otlpExporter, err := newMetricExporter(ctx, endpoint, otelConfig.Insecure)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OTLP exporter: %w", err)
 		}
@@ -80,6 +82,7 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 			metric.WithProducer(promBridge),
 		)
 		readers = append(readers, reader)
+		otlpEnabled = true
 	}
 
 	// Create MeterProvider with the configured readers
@@ -96,7 +99,7 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 
 	return &Provider{
 		meterProvider: meterProvider,
-		otlpEnabled:   otelConfig.Enabled,
+		otlpEnabled:   otlpEnabled,
 	}, nil
 }
 
@@ -105,8 +108,8 @@ func NewProvider(ctx context.Context, otelConfig *kuadrantotel.Config, metricsCo
 //   - rpc://host:port  → gRPC exporter
 //   - http://host:port → HTTP exporter (insecure)
 //   - https://host:port → HTTP exporter (secure)
-func newMetricExporter(ctx context.Context, otelConfig *kuadrantotel.Config) (metric.Exporter, error) {
-	u, err := url.Parse(otelConfig.MetricsEndpoint())
+func newMetricExporter(ctx context.Context, endpoint string, insecure bool) (metric.Exporter, error) {
+	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint URL: %w", err)
 	}
@@ -116,7 +119,7 @@ func newMetricExporter(ctx context.Context, otelConfig *kuadrantotel.Config) (me
 		opts := []otlpmetricgrpc.Option{
 			otlpmetricgrpc.WithEndpoint(u.Host),
 		}
-		if otelConfig.Insecure {
+		if insecure {
 			opts = append(opts, otlpmetricgrpc.WithInsecure())
 		}
 		return otlpmetricgrpc.New(ctx, opts...)
@@ -128,7 +131,7 @@ func newMetricExporter(ctx context.Context, otelConfig *kuadrantotel.Config) (me
 		if path := u.Path; path != "" {
 			opts = append(opts, otlpmetrichttp.WithURLPath(path))
 		}
-		if otelConfig.Insecure || u.Scheme == "http" {
+		if insecure || u.Scheme == "http" {
 			opts = append(opts, otlpmetrichttp.WithInsecure())
 		}
 		return otlpmetrichttp.New(ctx, opts...)

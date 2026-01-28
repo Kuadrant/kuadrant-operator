@@ -20,8 +20,6 @@ import "k8s.io/utils/env"
 
 // Config holds configuration for OpenTelemetry (logs, traces, metrics)
 type Config struct {
-	// Enabled indicates if OpenTelemetry is enabled
-	Enabled bool
 	// Endpoint is the OTLP endpoint to send telemetry to
 	Endpoint string
 	// Insecure disables TLS for OTLP export (useful for local development)
@@ -39,15 +37,13 @@ type Config struct {
 // NewConfig creates OTel configuration from environment variables.
 // gitSHA, dirty, and version should be build information injected via ldflags.
 func NewConfig(gitSHA, dirty, version string) *Config {
-	enabled, _ := env.GetBool("OTEL_ENABLED", false)
-	endpoint := env.GetString("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318")
+	endpoint := env.GetString("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 	insecure, _ := env.GetBool("OTEL_EXPORTER_OTLP_INSECURE", false)
 
 	serviceName := env.GetString("OTEL_SERVICE_NAME", "kuadrant-operator")
 	serviceVersion := env.GetString("OTEL_SERVICE_VERSION", version)
 
 	return &Config{
-		Enabled:        enabled,
 		Endpoint:       endpoint,
 		Insecure:       insecure,
 		ServiceName:    serviceName,
@@ -58,6 +54,7 @@ func NewConfig(gitSHA, dirty, version string) *Config {
 }
 
 // LogsEndpoint returns the endpoint for logs, with signal-specific override support
+// Returns empty string if no endpoint is configured (logs disabled).
 func (c *Config) LogsEndpoint() string {
 	if endpoint := env.GetString("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", ""); endpoint != "" {
 		return endpoint
@@ -66,6 +63,7 @@ func (c *Config) LogsEndpoint() string {
 }
 
 // TracesEndpoint returns the endpoint for traces, with signal-specific override support
+// Returns empty string if no endpoint is configured (traces disabled).
 func (c *Config) TracesEndpoint() string {
 	if endpoint := env.GetString("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""); endpoint != "" {
 		return endpoint
@@ -74,6 +72,7 @@ func (c *Config) TracesEndpoint() string {
 }
 
 // MetricsEndpoint returns the endpoint for metrics, with signal-specific override support
+// Returns empty string if no endpoint is configured (metrics disabled).
 func (c *Config) MetricsEndpoint() string {
 	if endpoint := env.GetString("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", ""); endpoint != "" {
 		return endpoint

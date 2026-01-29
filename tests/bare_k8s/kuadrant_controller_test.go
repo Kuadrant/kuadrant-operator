@@ -299,7 +299,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "local", Namespace: testNamespace}, kuadrantCR)).To(Succeed())
 				kuadrantCR.Spec.Observability.Tracing = &kuadrantv1beta1.Tracing{
-					DefaultEndpoint: "grpc://kuadrant-collector:4317",
+					DefaultEndpoint: "rpc://kuadrant-collector:4317",
 					Insecure:        true,
 				}
 				g.Expect(testClient().Update(ctx, kuadrantCR)).To(Succeed())
@@ -337,7 +337,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				Spec: kuadrantv1beta1.KuadrantSpec{
 					Observability: kuadrantv1beta1.Observability{
 						Tracing: &kuadrantv1beta1.Tracing{
-							DefaultEndpoint: "grpc://kuadrant-collector:4317",
+							DefaultEndpoint: "rpc://kuadrant-collector:4317",
 							Insecure:        true,
 						},
 					},
@@ -417,7 +417,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				Spec: kuadrantv1beta1.KuadrantSpec{
 					Observability: kuadrantv1beta1.Observability{
 						Tracing: &kuadrantv1beta1.Tracing{
-							DefaultEndpoint: "grpc://kuadrant-collector:4317",
+							DefaultEndpoint: "rpc://kuadrant-collector:4317",
 							Insecure:        false,
 						},
 					},

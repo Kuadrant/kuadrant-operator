@@ -271,28 +271,30 @@ var _ = Describe("TLSPolicy controller", func() {
 		})
 
 		It("should not create any certificates when TLS is not present", func(ctx SpecContext) {
-			Consistently(func() []certmanv1.Certificate {
+			Consistently(func(g Gomega) []certmanv1.Certificate {
 				certList := &certmanv1.CertificateList{}
 				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
-				Expect(err).ToNot(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 				return certList.Items
 			}, time.Second*10, time.Second).Should(BeEmpty())
 		}, testTimeOut)
 
 		It("should create certificate when TLS is present", func(ctx SpecContext) {
 			certNS := gatewayapiv1.Namespace(testNamespace)
-			patch := client.MergeFrom(gateway.DeepCopy())
-			gateway.Spec.Listeners[0].Protocol = gatewayapiv1.HTTPSProtocolType
-			gateway.Spec.Listeners[0].TLS = &gatewayapiv1.GatewayTLSConfig{
-				Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
-				CertificateRefs: []gatewayapiv1.SecretObjectReference{
-					{
-						Name:      "test-tls-secret",
-						Namespace: &certNS,
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Spec.Listeners[0].Protocol = gatewayapiv1.HTTPSProtocolType
+				gateway.Spec.Listeners[0].TLS = &gatewayapiv1.GatewayTLSConfig{
+					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
+					CertificateRefs: []gatewayapiv1.SecretObjectReference{
+						{
+							Name:      "test-tls-secret",
+							Namespace: &certNS,
+						},
 					},
-				},
-			}
-			Expect(k8sClient.Patch(ctx, gateway, patch)).To(BeNil())
+				}
+				g.Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega, ctx context.Context) {
 				certList := &certmanv1.CertificateList{}
@@ -446,9 +448,9 @@ var _ = Describe("TLSPolicy controller", func() {
 
 		It("should delete all tls certificates when policy is deleted", func(ctx SpecContext) {
 			// confirm all expected certificates are present
-			Eventually(func() error {
+			Eventually(func(g Gomega) error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				g.Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 				if len(certificateList.Items) != 3 {
 					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
 				}
@@ -473,9 +475,9 @@ var _ = Describe("TLSPolicy controller", func() {
 
 		It("should delete tls certificate when listener is removed", func(ctx SpecContext) {
 			// confirm all expected certificates are present
-			Eventually(func() error {
+			Eventually(func(g Gomega) error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				g.Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 				if len(certificateList.Items) != 3 {
 					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
 				}
@@ -483,9 +485,11 @@ var _ = Describe("TLSPolicy controller", func() {
 			}, time.Second*60, time.Second).Should(BeNil())
 
 			// remove a listener
-			patch := client.MergeFrom(gateway.DeepCopy())
-			gateway.Spec.Listeners = gateway.Spec.Listeners[1:]
-			Expect(k8sClient.Patch(ctx, gateway, patch)).To(BeNil())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Spec.Listeners = gateway.Spec.Listeners[1:]
+				g.Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// confirm a certificate has been deleted
 			Eventually(func() error {
@@ -502,9 +506,9 @@ var _ = Describe("TLSPolicy controller", func() {
 
 		It("should delete all tls certificates when gateway is deleted", func(ctx SpecContext) {
 			// confirm all expected certificates are present
-			Eventually(func() error {
+			Eventually(func(g Gomega) error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				g.Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 				if len(certificateList.Items) != 3 {
 					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
 				}
@@ -517,7 +521,9 @@ var _ = Describe("TLSPolicy controller", func() {
 			// confirm all certificates have been deleted
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
+					return err
+				}
 				if len(certificateList.Items) != 0 {
 					return fmt.Errorf("expected 0 certificates, found: %v", len(certificateList.Items))
 				}
@@ -527,9 +533,9 @@ var _ = Describe("TLSPolicy controller", func() {
 
 		It("Should delete orphaned tls certificates when changing to valid target ref", func(ctx SpecContext) {
 			// confirm all expected certificates are present
-			Eventually(func() error {
+			Eventually(func(g Gomega) error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				g.Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 				if len(certificateList.Items) != 3 {
 					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
 				}
@@ -551,7 +557,9 @@ var _ = Describe("TLSPolicy controller", func() {
 			// confirm orphaned certs are deleted
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
+					return err
+				}
 				if len(certificateList.Items) != 1 {
 					return fmt.Errorf("expected 1 certificates, found: %v", len(certificateList.Items))
 				}
@@ -568,7 +576,9 @@ var _ = Describe("TLSPolicy controller", func() {
 			// confirm all expected certificates are present
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
+					return err
+				}
 				if len(certificateList.Items) != 3 {
 					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
 				}
@@ -585,7 +595,9 @@ var _ = Describe("TLSPolicy controller", func() {
 			// confirm orphaned certs are deleted
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
+					return err
+				}
 				if len(certificateList.Items) != 0 {
 					return fmt.Errorf("expected 0 certificates, found: %v", len(certificateList.Items))
 				}

@@ -257,25 +257,23 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			// ensure imagePullsecret is empty as expected
-			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
 			// update the WASMPlugin imagePullSecret directly, it should get reconciled back to empty when RLP is reconciled next
-			patch := client.MergeFrom(existingWasmPlugin.DeepCopy())
-			existingWasmPlugin.Spec.ImagePullSecret = "shouldntbehere"
-			err = testClient().Patch(ctx, existingWasmPlugin, patch)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				// ensure imagePullsecret is empty as expected
+				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
+				existingWasmPlugin.Spec.ImagePullSecret = "shouldntbehere"
+				g.Expect(testClient().Update(ctx, existingWasmPlugin)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 			// update the RLP to trigger reconcile
-			Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
-			original := rlp.DeepCopy()
-			if rlp.Annotations == nil {
-				rlp.Annotations = map[string]string{}
-			}
-			rlp.Annotations["test"] = "2"
-			patch = client.MergeFrom(original)
-			Expect(testClient().Patch(ctx, rlp, patch)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
+				if rlp.Annotations == nil {
+					rlp.Annotations = map[string]string{}
+				}
+				rlp.Annotations["test"] = "2"
+				g.Expect(testClient().Update(ctx, rlp)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
@@ -1199,9 +1197,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
 				err = testClient().Get(ctx, client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
 				g.Expect(err).ToNot(HaveOccurred())
-				patch := client.MergeFrom(httpRouteUpdated.DeepCopy())
 				httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
-				err = testClient().Patch(ctx, httpRouteUpdated, patch)
+				err = testClient().Update(ctx, httpRouteUpdated)
 				g.Expect(err).ToNot(HaveOccurred())
 			}).Should(Succeed())
 
@@ -1429,9 +1426,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
 				err = testClient().Get(ctx, client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
 				g.Expect(err).ToNot(HaveOccurred())
-				patch := client.MergeFrom(httpRouteUpdated.DeepCopy())
 				httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
-				err = testClient().Patch(ctx, httpRouteUpdated, patch)
+				err = testClient().Update(ctx, httpRouteUpdated)
 				g.Expect(err).ToNot(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
@@ -1779,9 +1775,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				rlpUpdated := &kuadrantv1.RateLimitPolicy{}
 				err = testClient().Get(ctx, client.ObjectKeyFromObject(rlpR), rlpUpdated)
 				g.Expect(err).ToNot(HaveOccurred())
-				patch := client.MergeFrom(rlpUpdated.DeepCopy())
 				rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
-				err = testClient().Patch(ctx, rlpUpdated, patch)
+				err = testClient().Update(ctx, rlpUpdated)
 				g.Expect(err).ToNot(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
@@ -2957,10 +2952,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Update GW RLP to overrides
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
-				patch := client.MergeFrom(gwRLP.DeepCopy())
 				gwRLP.Spec.Overrides = gwRLP.Spec.Defaults.DeepCopy()
 				gwRLP.Spec.Defaults = nil
-				g.Expect(testClient().Patch(ctx, gwRLP, patch)).To(Succeed())
+				g.Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())

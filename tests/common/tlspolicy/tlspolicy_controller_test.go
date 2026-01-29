@@ -281,18 +281,20 @@ var _ = Describe("TLSPolicy controller", func() {
 
 		It("should create certificate when TLS is present", func(ctx SpecContext) {
 			certNS := gatewayapiv1.Namespace(testNamespace)
-			patch := client.MergeFrom(gateway.DeepCopy())
-			gateway.Spec.Listeners[0].Protocol = gatewayapiv1.HTTPSProtocolType
-			gateway.Spec.Listeners[0].TLS = &gatewayapiv1.GatewayTLSConfig{
-				Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
-				CertificateRefs: []gatewayapiv1.SecretObjectReference{
-					{
-						Name:      "test-tls-secret",
-						Namespace: &certNS,
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Spec.Listeners[0].Protocol = gatewayapiv1.HTTPSProtocolType
+				gateway.Spec.Listeners[0].TLS = &gatewayapiv1.GatewayTLSConfig{
+					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
+					CertificateRefs: []gatewayapiv1.SecretObjectReference{
+						{
+							Name:      "test-tls-secret",
+							Namespace: &certNS,
+						},
 					},
-				},
-			}
-			Expect(k8sClient.Patch(ctx, gateway, patch)).To(BeNil())
+				}
+				g.Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega, ctx context.Context) {
 				certList := &certmanv1.CertificateList{}
@@ -483,9 +485,11 @@ var _ = Describe("TLSPolicy controller", func() {
 			}, time.Second*60, time.Second).Should(BeNil())
 
 			// remove a listener
-			patch := client.MergeFrom(gateway.DeepCopy())
-			gateway.Spec.Listeners = gateway.Spec.Listeners[1:]
-			Expect(k8sClient.Patch(ctx, gateway, patch)).To(BeNil())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Spec.Listeners = gateway.Spec.Listeners[1:]
+				g.Expect(k8sClient.Update(ctx, gateway)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// confirm a certificate has been deleted
 			Eventually(func() error {
@@ -546,9 +550,8 @@ var _ = Describe("TLSPolicy controller", func() {
 			// update tls policy target ref to new gateway
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)).To(Succeed())
-				patch := client.MergeFrom(tlsPolicy.DeepCopy())
 				tlsPolicy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gateway2.Name)
-				g.Expect(k8sClient.Patch(ctx, tlsPolicy, patch)).To(Succeed())
+				g.Expect(k8sClient.Update(ctx, tlsPolicy)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// confirm orphaned certs are deleted
@@ -585,9 +588,8 @@ var _ = Describe("TLSPolicy controller", func() {
 			// update tlspolicy target ref to invalid reference
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)).To(Succeed())
-				patch := client.MergeFrom(tlsPolicy.DeepCopy())
 				tlsPolicy.Spec.TargetRef.Name = "does-not-exist"
-				g.Expect(k8sClient.Patch(ctx, tlsPolicy, patch)).To(Succeed())
+				g.Expect(k8sClient.Update(ctx, tlsPolicy)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// confirm orphaned certs are deleted

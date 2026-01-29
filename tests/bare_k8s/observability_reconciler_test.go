@@ -146,11 +146,10 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			// Set observability flag to enable the feature
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
-				patch := client.MergeFrom(kuadrantCR.DeepCopy())
 				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
 					Enable: true,
 				}
-				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+				g.Expect(testClient().Update(ctx, kuadrantCR)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors created
@@ -192,11 +191,10 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 			// Disable observability feature
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
-				patch := client.MergeFrom(kuadrantCR.DeepCopy())
 				kuadrantCR.Spec.Observability = kuadrantv1beta1.Observability{
 					Enable: false,
 				}
-				g.Expect(testClient().Patch(ctx, kuadrantCR, patch)).To(Succeed())
+				g.Expect(testClient().Update(ctx, kuadrantCR)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// Verify monitors deleted

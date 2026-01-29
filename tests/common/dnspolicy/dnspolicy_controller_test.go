@@ -290,20 +290,18 @@ var _ = Describe("DNSPolicy controller", func() {
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
-			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.WithProviderSecret(*dnsProviderSecret)
-			g.Expect(k8sClient.Patch(ctx, dnsPolicy, patch)).To(Succeed())
+			g.Expect(k8sClient.Update(ctx, dnsPolicy)).To(Succeed())
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 		// should not allow adding another providerRef
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
-			patch := client.MergeFrom(dnsPolicy.DeepCopy())
 			dnsPolicy.Spec.ProviderRefs = append(dnsPolicy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 				Name: "some-other-provider-secret",
 			})
-			err = k8sClient.Patch(ctx, dnsPolicy, patch)
+			err = k8sClient.Update(ctx, dnsPolicy)
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err).To(MatchError(ContainSubstring("spec.providerRefs: Too many: 2: must have at most 1 items")))
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
@@ -627,10 +625,10 @@ var _ = Describe("DNSPolicy controller", func() {
 		})
 
 		It("should not create a dns record", func(ctx SpecContext) {
-			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
+			Consistently(func(g Gomega) []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
 				dnsRecords := kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, &dnsRecords, client.InNamespace(dnsPolicy.GetNamespace()))
-				Expect(err).ToNot(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 				return dnsRecords.Items
 			}, time.Second*15, time.Second).Should(BeEmpty())
 		}, testTimeOut)

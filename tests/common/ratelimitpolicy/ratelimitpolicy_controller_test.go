@@ -615,10 +615,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Update GW RLP defaults to overrides
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
-				patch := client.MergeFrom(gwRLP.DeepCopy())
 				gwRLP.Spec.Overrides = gwRLP.Spec.Defaults.DeepCopy()
 				gwRLP.Spec.Defaults = nil
-				g.Expect(k8sClient.Patch(ctx, gwRLP, patch)).To(Succeed())
+				g.Expect(k8sClient.Update(ctx, gwRLP)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// GW RLP should now be enforced
@@ -671,10 +670,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Update GW RLP overrides to defaults
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
-				patch := client.MergeFrom(gwRLP.DeepCopy())
 				gwRLP.Spec.Defaults = gwRLP.Spec.Overrides.DeepCopy()
 				gwRLP.Spec.Overrides = nil
-				g.Expect(k8sClient.Patch(ctx, gwRLP, patch)).To(Succeed())
+				g.Expect(k8sClient.Update(ctx, gwRLP)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 
 			// Route RLP now takes precedence

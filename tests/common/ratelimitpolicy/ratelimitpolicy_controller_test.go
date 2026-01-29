@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -359,7 +360,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")
+			}).WithContext(ctx).Should(BeTrue())
 
 			// check limits
 			Eventually(func(g Gomega) {
@@ -454,7 +457,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("Implicit defaults - no underlying routes to enforce policy", func(ctx SpecContext) {
@@ -468,7 +473,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 
@@ -514,7 +521,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
 			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))
+			}).WithContext(ctx).Should(BeTrue())
 
 			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
 
@@ -555,7 +564,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Route RLP should no longer be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -582,7 +593,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey)))
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey))
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Route RLP should still be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
@@ -609,7 +622,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// GW RLP should now be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))
+			}).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Should contain override values
@@ -636,7 +651,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Route RLP should not be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey))
+			}).WithContext(ctx).Should(BeTrue())
 
 			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
 
@@ -660,7 +677,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Route RLP now takes precedence
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey)))
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey))
+			}).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Should contain Route RLP values
@@ -676,13 +695,23 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Gateway atomic override - no underlying routes to enforce policy", func(ctx SpecContext) {
 			// Delete HTTPRoute
-			Expect(k8sClient.Delete(ctx, &gatewayapiv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: routeName, Namespace: testNamespace}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, httpRoute)).To(Succeed())
+
+			Eventually(func() bool {
+				route := &gatewayapiv1.HTTPRoute{}
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), route)
+				// Either deleted OR has deletionTimestamp
+				return apierrors.IsNotFound(err) ||
+					(err == nil && route.GetDeletionTimestamp() != nil)
+			}).WithContext(ctx).WithTimeout(5 * time.Second).Should(BeTrue())
 
 			// create GW RLP with overrides
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			gwRLPKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")).To(BeTrue())
+			Eventually(func() bool {
+				return tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes")
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 

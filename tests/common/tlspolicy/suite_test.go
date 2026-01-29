@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -47,6 +48,9 @@ func testClient() client.Client { return k8sClient }
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
+
+	SetDefaultEventuallyPollingInterval(500 * time.Millisecond)
+	SetDefaultEventuallyTimeout(2 * time.Minute)
 
 	RunSpecs(t, "TLS Policy Controller Suite")
 }

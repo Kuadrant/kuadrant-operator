@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
@@ -28,6 +29,9 @@ func testClient() client.Client { return k8sClient }
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
+
+	SetDefaultEventuallyPollingInterval(500 * time.Millisecond)
+	SetDefaultEventuallyTimeout(2 * time.Minute)
 
 	RunSpecs(t, "Controller Suite on Envoy Gateway")
 }

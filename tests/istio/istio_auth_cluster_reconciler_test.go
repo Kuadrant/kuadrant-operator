@@ -59,9 +59,11 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).To(Succeed())
+				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
+				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		})
 
 		It("EnvoyFilter only created if KAP is in the path to a route", func(ctx SpecContext) {
@@ -95,7 +97,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			policyKey := client.ObjectKey{Name: apName, Namespace: testNamespace}
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.IsAuthPolicyEnforced(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.IsAuthPolicyEnforcedCondition(ctx, testClient(), policyKey, kuadrant.PolicyReasonUnknown, "AuthPolicy is not in the path to any existing routes"))
+			Eventually(tests.IsAuthPolicyEnforcedCondition(ctx, testClient(), policyKey, kuadrant.PolicyReasonUnknown, "AuthPolicy is not in the path to any existing routes")).WithContext(ctx).Should(BeTrue())
 
 			// Check envoy filter has not been created
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -148,9 +150,11 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
 			Eventually(tests.KuadrantIsReady(testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 			kuadrantObj := &kuadrantv1beta1.Kuadrant{}
-			Eventually(testClient().Get).WithContext(ctx).WithArguments(kuadrantKey, kuadrantObj).Should(Succeed())
-			kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
-			Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).To(Succeed())
+				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
+				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 		})
 
 		It("envoy filter has transport configured with TLS", func(ctx SpecContext) {

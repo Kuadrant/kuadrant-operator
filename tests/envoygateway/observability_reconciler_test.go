@@ -98,11 +98,11 @@ var _ = Describe("Observabiltity monitors for envoy gateway", func() {
 					Namespace: kuadrantNS,
 				},
 			}
-			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
-			kuadrantCR.Spec.Observability.Enable = true
-			err = testClient().Update(ctx, kuadrantCR)
-			Expect(err).NotTo(HaveOccurred())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)).To(Succeed())
+				kuadrantCR.Spec.Observability.Enable = true
+				g.Expect(testClient().Update(ctx, kuadrantCR)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Verify all monitors are created
 			Eventually(func(g Gomega) {

@@ -15,8 +15,6 @@ import (
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
-	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -30,6 +28,9 @@ import (
 	"sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/utils"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -53,6 +54,7 @@ const (
 	IPAddressOne         = "172.0.0.1"
 	IPAddressTwo         = "172.0.0.2"
 	HTTPRouteName        = "toystore-route"
+	KuadrantName         = "kuadrant-sample"
 )
 
 var CommonLabels = map[string]string{"app.kubernetes.io/part-of": "kuadrant-test-suite"}
@@ -120,7 +122,7 @@ func CreateNamespace(ctx context.Context, cl client.Client) string {
 }
 
 func ApplyKuadrantCR(ctx context.Context, cl client.Client, namespace string) {
-	ApplyKuadrantCRWithName(ctx, cl, namespace, "kuadrant-sample")
+	ApplyKuadrantCRWithName(ctx, cl, namespace, KuadrantName)
 }
 
 func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, name string, mutateFns ...func(*kuadrantv1beta1.Kuadrant)) {
@@ -260,7 +262,7 @@ func BuildMultipleRulesHttpRoute(routeName, gwName, ns string, hostnames []strin
 }
 
 func DeleteKuadrantCR(ctx context.Context, cl client.Client, namespace string) {
-	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: namespace}}
+	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: KuadrantName, Namespace: namespace}}
 	Eventually(func(g Gomega) {
 		err := cl.Delete(ctx, k)
 		g.Expect(err).To(HaveOccurred())

@@ -3,12 +3,12 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Infrastructure Requirements](#infrastructure-requirements)
-3. [Purpose and Use Cases](#purpose-and-use-cases)
+2. [Purpose and Use Cases](#purpose-and-use-cases)
+3. [Infrastructure Requirements](#infrastructure-requirements)
 4. [Deploying CoreDNS](#deploying-coredns)
 5. [Configuring CoreDNS](#configuring-coredns)
 6. [Testing the Deployment](#testing-the-deployment)
-7. [Configuring an Edge Server](#configuring-an-edge-server)
+7. [Advanced Configuration: Configuring an Edge Server](#advanced-configuration-configuring-an-edge-server)
 8. [Appendix](#appendix)
 
 ---
@@ -17,73 +17,32 @@
 
 CoreDNS integration enables DNS Operator to manage DNS records using a self-hosted CoreDNS instance running in Kubernetes, providing an alternative to cloud-managed DNS services (AWS Route53, Google Cloud DNS, Azure DNS).
 
+> [!NOTE]
+> **Reversibility**: CoreDNS integration can be removed by deleting the CoreDNS deployment and switching DNSPolicies to use a different DNS provider. To migrate to a different provider, delete existing DNSRecords and recreate them with the new provider secret reference. No data is permanently locked into CoreDNS.
+
 ### Is This for You?
 
 Consider CoreDNS integration if you:
 - Need to avoid dependency on external cloud DNS services
-- Operate in air-gapped or disconnected environments
+- Operate in environments with no internet access or restricted network connectivity
 - Have regulatory or compliance requirements mandating self-hosted infrastructure
 - Want to delegate specific DNS zones from existing DNS servers (BIND, Unbound, or cloud DNS) to Kubernetes-managed CoreDNS
 - Require consistent DNS management across hybrid or multi-cloud environments
 - Need to reduce DNS operational costs by eliminating per-query charges
 
-If these scenarios don't apply and you're running exclusively in cloud environments with no restrictions, cloud DNS providers may be a simpler choice.
+Cloud DNS providers might be a simpler choice if you are running exclusively in cloud environments and none of these scenarios apply.
 
-**Audience**: System administrators, DevOps engineers, and platform operators deploying DNS infrastructure.
-
----
-
-## Infrastructure Requirements
-
-### CoreDNS Infrastructure
-
-For CoreDNS infrastructure requirements (resource limits, storage, networking, etc.), see the [CoreDNS deployment documentation](https://coredns.io/manual/toc/#installation).
-
-### DNS Operator Integration Requirements
-
-**Minimum Kubernetes Version**: 1.19.0 or higher
-
-**Cluster Architecture**:
-- **Single Cluster**: One Kubernetes cluster running CoreDNS and DNS Operator
-- **Multi-Cluster**: Multiple clusters with different roles:
-  - **Primary Clusters**: Run CoreDNS instance and DNS Operator in primary mode
-  - **Secondary Clusters**: Run DNS Operator only in secondary mode (no CoreDNS deployment needed)
-
-**RBAC Permissions**:
-
-CoreDNS pods require Kubernetes API permissions to watch DNSRecord resources:
-- **DNSRecord resources** (`kuadrant.io` API group): `get`, `list`, `watch` permissions
-- **Scope**: Configured via `WATCH_NAMESPACES` environment variable (empty = all namespaces)
-
-### Multi-Cluster Requirements
-
-For multi-cluster delegation scenarios:
-
-**Network Connectivity**:
-- Primary clusters must have network connectivity to secondary cluster Kubernetes APIs
-- Required for synchronizing DNSRecord status across clusters
-
-**Cluster Interconnection Secrets**:
-- Primary clusters require kubeconfig secrets for all other clusters (primary and secondary)
-- Created using `kubectl-kuadrant_dns add-cluster-secret` command (from dns-operator CLI)
-- Labeled with `kuadrant.io/multicluster-kubeconfig=true`
-- Stored in `dns-operator-system` namespace
-
-**DNS Operator Configuration**:
-- Primary clusters: `--delegation-role=primary` (default)
-- Secondary clusters: `--delegation-role=secondary`
-
-For complete details, see [DNS Record Delegation](../user-guides/dns/understanding_dns_delegation.md)
+**Audience**: Platform engineers, DevOps engineers, and system administrators deploying DNS infrastructure.
 
 ---
 
 ## Purpose and Use Cases
 
-CoreDNS integration exists to address the need for self-managed DNS infrastructure in Kubernetes environments. Organizations choose CoreDNS integration to maintain full control over their DNS records, meet regulatory compliance requirements, avoid cloud provider dependencies, or integrate with existing DNS infrastructure through zone delegation.
+Using CoreDNS integration, you can self-manage your DNS infrastructure in Kubernetes environments. Organizations choose CoreDNS integration to maintain full control over their DNS records, meet regulatory compliance requirements, avoid cloud provider dependencies, or integrate with existing DNS infrastructure through zone delegation.
 
 ### How It Works
 
-Unlike cloud DNS providers where DNS Operator "pushes" records via API calls, CoreDNS integration works through a Kubernetes-native **label-based watch mechanism**:
+Unlike cloud DNS providers where a DNS Operator "pushes" records through API calls, CoreDNS integration works through a Kubernetes-native **label-based watch mechanism**:
 
 1. **DNS Operator processes DNSRecords**
 2. **DNS Operator adds a label** `kuadrant.io/coredns-zone-name: <zone>` to processed DNSRecords
@@ -143,6 +102,51 @@ Integration with existing DNS infrastructure by delegating specific zones to Cor
 
 ---
 
+## Infrastructure Requirements
+
+### CoreDNS Infrastructure
+
+For CoreDNS infrastructure requirements (resource limits, storage, networking, etc.), see the [CoreDNS deployment documentation](https://coredns.io/manual/toc/#installation).
+
+### DNS Operator Integration Requirements
+
+**Minimum Kubernetes Version**: 1.19.0 or higher
+
+**Cluster Architecture**:
+- **Single Cluster**: One Kubernetes cluster running CoreDNS and DNS Operator
+- **Multi-Cluster**: Multiple clusters with different roles:
+  - **Primary Clusters**: Run CoreDNS instance and DNS Operator in primary mode
+  - **Secondary Clusters**: Run DNS Operator only in secondary mode (no CoreDNS deployment needed)
+
+**RBAC Permissions**:
+
+CoreDNS pods require Kubernetes API permissions to watch DNSRecord resources:
+- **DNSRecord resources** (`kuadrant.io` API group): `get`, `list`, `watch` permissions
+- **Scope**: Configured with the `WATCH_NAMESPACES` environment variable (empty = all namespaces, which is the default)
+
+### Multi-Cluster Requirements
+
+For multi-cluster delegation scenarios:
+
+**Network Connectivity**:
+
+Primary clusters must have network connectivity to secondary cluster Kubernetes APIs. Required for synchronizing DNSRecord status across clusters
+
+**Cluster Interconnection Secrets**:
+
+Primary clusters require kubeconfig interconnection secrets for all other clusters (primary and secondary):
+- The secret must be created using the `kubectl-kuadrant_dns add-cluster-secret` command (from the `dns-operator` CLI, which must be installed separately - see [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md))
+- Labeled with `kuadrant.io/multicluster-kubeconfig=true`
+- Stored in `dns-operator-system` namespace
+
+**DNS Operator Configuration**:
+- Primary clusters: `--delegation-role=primary` (default)
+- Secondary clusters: `--delegation-role=secondary`
+
+For complete details, see [DNS Record Delegation](../user-guides/dns/understanding_dns_delegation.md)
+
+---
+
 ## Deploying CoreDNS
 
 > [!IMPORTANT]
@@ -152,7 +156,7 @@ Integration with existing DNS infrastructure by delegating specific zones to Cor
 
 **Single Cluster Deployment**:
 
-A standalone deployment where all components run in a single Kubernetes cluster. Suitable for development, testing, or standalone deployments. No delegation required.
+A standalone deployment where all CoreDNS components run in a single Kubernetes cluster. Suitable for development, testing, or standalone deployments. No delegation required.
 
 **What Gets Deployed:**
 - CoreDNS instance (with Kuadrant plugin) - serves DNS queries
@@ -201,16 +205,15 @@ CoreDNS configuration consists of two main components:
 ### Core Configuration
 
 **Corefile**:
-- Zone definitions matching the zones CoreDNS will serve
-- Plugin directives and configuration
+- Zone definitions matching the zones CoreDNS serves with plugin directives and configuration
 - Essential plugin: `kuadrant`
 
 **Provider Secrets**:
-- **Non-delegating DNSRecords** require a CoreDNS provider secret reference (via `providerRef` or default provider label) for DNS Operator to add the zone label
+- **Non-delegating DNSRecords** require a CoreDNS provider secret reference (with the `providerRef` or default provider label) for DNS Operator to add the zone label
 - **Delegating DNSRecords** do not require provider secrets themselves, but they cause authoritative DNSRecords to be created on primary clusters, which **do require provider secrets**
 
 **Zone Coordination**:
-Zones must be listed in both the Corefile and provider secret `ZONES` field to ensure both CoreDNS and DNS Operator know which zones they manage.
+Zones must be listed in both the Corefile and provider secret `ZONES` fields to ensure that the zones CoreDNS and DNS Operator manage are specified.
 
 ### Optional Configuration
 
@@ -251,7 +254,7 @@ The deployment guides include comprehensive verification procedures for testing 
 1. Verify DNSRecord has the `kuadrant.io/coredns-zone-name` label - DNS Operator adds this when processing the record
 2. Check the zone in the label matches a zone defined in your Corefile
 3. Review CoreDNS logs for watch errors or plugin issues
-4. Confirm CoreDNS has RBAC permissions to watch DNSRecords in the target namespace
+4. Confirm that CoreDNS has RBAC permissions to watch DNSRecords in the target namespace
 
 **Geo-routing not working**:
 1. Ensure `geoip` and `metadata` plugins are enabled in your Corefile
@@ -266,7 +269,7 @@ The deployment guides include comprehensive verification procedures for testing 
 
 ---
 
-## Configuring an Edge Server
+## Advanced Configuration: Configuring an Edge Server
 
 This section covers **zone delegation** - an advanced configuration for integrating CoreDNS with existing DNS infrastructure. Zone delegation allows you to maintain your existing authoritative DNS servers while delegating specific subdomains to CoreDNS running in Kubernetes.
 
@@ -299,14 +302,14 @@ For step-by-step instructions on configuring zone delegation with Bind9, see:
 - **[Zone Delegation Guide](https://github.com/Kuadrant/dns-operator/blob/main/docs/coredns/zone-delegation.md)** - Complete guide for setting up Bind9 delegation
 
 **What the guide covers**:
-- Configuring Bind9 (deployed via `make local-setup`) to delegate zones to CoreDNS
+- Configuring Bind9 (deployed with `make local-setup` command) to delegate zones to CoreDNS
 - Creating NS and glue A records for delegation using `nsupdate`
 - Configuring cluster CoreDNS to forward queries to the edge server
-- Setting up rewrite rules in kuadrant-coredns for active groups queries
+- Setting up rewrite rules in `kuadrant-coredns` for active groups queries
 - Verification procedures
 
 **Production Adaptations**:
-- If using an existing Bind9 server (not in Kubernetes), adapt the nsupdate commands to target your server
+- If using an existing Bind9 server (not in Kubernetes), adapt the `nsupdate` commands to target your server
 - For cloud DNS providers (Route53, Cloud DNS, Azure DNS), create NS records via their web console or API
 - Ensure proper network connectivity between your edge DNS and CoreDNS LoadBalancer IPs
 - Consider DNSSEC if your root zone uses it

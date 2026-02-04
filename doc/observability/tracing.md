@@ -76,8 +76,7 @@ spec:
 
 **Configuration Fields:**
 - `defaultEndpoint`: The URL of the tracing collector backend (OTLP endpoint). Supported protocols:
-  - `rpc://` for gRPC OTLP (port 4317) - recommended for Authorino
-  - `grpc://` for gRPC OTLP (port 4317) - used by other components
+  - `rpc://` for gRPC OTLP (port 4317)
   - `http://` for HTTP OTLP (port 4318)
 - `insecure`: Set to `true` to skip TLS certificate verification (useful for development environments).
 
@@ -314,13 +313,48 @@ make run
 
 See the [OpenTelemetry example](../../examples/otel/README.md) for complete local development setup with Grafana, Tempo, Jaeger, Loki, and Prometheus.
 
+### Enabling Control Plane Tracing (In-Cluster Deployment)
+
+The Kuadrant operator exposes OpenTelemetry environment variables for control plane tracing. To enable control plane tracing, set the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable in the operator deployment manifest (`config/manager/manager.yaml`):
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            # ... existing env vars ...
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "jaeger-collector.jaeger.svc.cluster.local:4318"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"  # Use "false" in production with TLS
+```
+
+**Supported endpoint URL schemes:**
+- `rpc://host:port` → gRPC OTLP
+- `http://host:port` → HTTP OTLP (insecure)
+- `https://host:port` → HTTP OTLP (secure)
+
+**Available environment variables:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint URL | Tracing disabled |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Override endpoint specifically for traces | Uses `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| `OTEL_EXPORTER_OTLP_INSECURE` | Use insecure connection to collector | `true` |
+| `OTEL_SERVICE_NAME` | Service name for traces | `kuadrant-operator` |
+
+Control plane traces will appear under service name `kuadrant-operator` in Jaeger/Grafana.
+
 ### Configuration Notes
 
 When you configure tracing via the Kuadrant CR (`spec.observability.tracing`), it automatically enables tracing for:
-- **Control Plane**: The Kuadrant operator's reconciliation loops
 - **Data Plane**: Authorino, Limitador, and WASM filters
 
-The tracing configuration you set in the Kuadrant CR propagates to all components, ensuring consistent tracing across your entire Kuadrant deployment.
+For **control plane tracing** (the operator's reconciliation loops), you must configure environment variables in the operator deployment as described in the section above.
+
+The combination of control plane environment variables and Kuadrant CR data plane configuration provides complete tracing across your entire Kuadrant deployment.
 
 ### Troubleshooting Control Plane Tracing
 

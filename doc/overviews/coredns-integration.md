@@ -280,7 +280,7 @@ This section covers **zone delegation** - an advanced configuration for integrat
 
 Zone delegation is a DNS mechanism where an authoritative DNS server delegates responsibility for a subdomain to another set of nameservers. This creates a hierarchical DNS structure where:
 
-1. **Parent Zone** (e.g., `example.com`) is managed by an authoritative edge server (Bind9, cloud DNS, etc.)
+1. **Parent Zone** (e.g., `example.com`) is managed by an authoritative edge server (BIND9, cloud DNS, etc.)
 2. **Delegated Zone** (e.g., `k.example.com`) is delegated to CoreDNS instances running in Kubernetes
 3. **Delegation Records** (NS and glue A records) in the parent zone point to the CoreDNS nameservers
 

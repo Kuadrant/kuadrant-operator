@@ -67,10 +67,10 @@ kubectl rollout status deployment/$NAME --namespace $NAMESPACE --timeout=300s
 A **cluster secret** is a secret in the *dns-operator* namespace that has connection details to a service account on the **secondary cluster**.
 These connection details are in the form of a kubeconfig.
 
-The `kubectl-dns` plugin by the *dns-operator* provides helpful commands to create the service accounts on the **secondary cluster**, and add the **cluster secret** to the primary.
-Refer to the [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md) for more information on the `kubectl-dns`.
+The `kubectl_kuadrant-dns` plugin by the *dns-operator* provides helpful commands to create the service accounts on the **secondary cluster**, and add the **cluster secret** to the primary.
+Refer to the [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md) for more information on the `kubectl_kuadrant-dns`.
 
-Assuming the `kubectl-dns` plugin is in the system path.
+Assuming the `kubectl_kuadrant-dns` plugin is in the system path.
 Ensure the current context is set to the **primary cluster**.
 ```sh
 kubectl config use-context <primary cluster>
@@ -79,7 +79,7 @@ The **cluster secret** must be created in the same namespace as the *dns-operato
 ```sh
 export NAME=dns-operator-controller-manager
 export NAMESPACE=$(kubectl get deployment --all-namespaces --no-headers | grep -w $NAME | head -1 | awk '{print $1}')
-kubectl-dns secret-generation --context <secondary cluster> --namespace $NAMESPACE
+kubectl_kuadrant-dns add-cluster-secret --context <secondary cluster> --namespace $NAMESPACE
 ```
 
 The creation of **cluster secrets** is repeated for all **secondary clusters** that are in the multi cluster setup.

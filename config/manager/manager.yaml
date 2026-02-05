@@ -34,11 +34,11 @@ spec:
             - name: EXTENSIONS_DIR
               value: "/extensions"
             - name: RELATED_IMAGE_WASMSHIM
-              value: "oci://quay.io/kuadrant/wasm-shim:latest"
+              value: "oci://quay.io/kuadrant/wasm-shim:v0.12.0"
             - name: RELATED_IMAGE_DEVELOPERPORTAL
-              value: "quay.io/kuadrant/developer-portal-controller:latest"
+              value: "quay.io/kuadrant/developer-portal-controller:v0.1.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-              value: "quay.io/kuadrant/console-plugin:latest"
+              value: "quay.io/kuadrant/console-plugin:v0.3.4"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
               value: "quay.io/kuadrant/console-plugin:v0.1.5"
             - name: OPERATOR_NAMESPACE

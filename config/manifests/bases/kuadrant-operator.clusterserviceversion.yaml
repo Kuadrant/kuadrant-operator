@@ -6,13 +6,13 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
-    containerImage: quay.io/kuadrant/kuadrant-operator:v1.4.0-rc1
+    containerImage: quay.io/kuadrant/kuadrant-operator:v1.4.0
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.9.0
     operators.operatorframework.io/project_layout: unknown
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v1.4.0-rc1
+  name: kuadrant-operator.v1.4.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -88,4 +88,4 @@ spec:
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
-  version: 1.4.0-rc1
+  version: 1.4.0

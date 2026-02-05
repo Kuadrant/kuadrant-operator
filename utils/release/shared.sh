@@ -35,6 +35,7 @@ fi
 
 AUTHORINO_OPERATOR_VERSION=$(yq '.dependencies.authorino-operator' $env/release.yaml)
 CONSOLEPLUGIN_VERSION=$(yq '.dependencies.console-plugin' $env/release.yaml)
+DEVELOPERPORTAL_VERSION=$(yq '.dependencies.developer-portal-controller' $env/release.yaml)
 DNS_OPERATOR_VERSION=$(yq '.dependencies.dns-operator' $env/release.yaml)
 LIMITADOR_OPERATOR_VERSION=$(yq '.dependencies.limitador-operator' $env/release.yaml)
 WASM_SHIM_VERSION=$(yq '.dependencies.wasm-shim' $env/release.yaml)

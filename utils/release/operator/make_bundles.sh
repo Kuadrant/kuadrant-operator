@@ -19,6 +19,14 @@ cd $env
 wasm_shim=$(mod_version $WASM_SHIM_VERSION)
 wasm_shim_image="oci://quay.io/kuadrant/wasm-shim:$wasm_shim"
 
+# Set desired developer-portal-controller image
+developerportal_version=$(mod_version $DEVELOPERPORTAL_VERSION)
+developerportal_image="quay.io/kuadrant/developer-portal-controller:$developerportal_version"
+
+# Set desired console-plugin image
+consoleplugin_version=$(mod_version $CONSOLEPLUGIN_VERSION)
+consoleplugin_image="quay.io/kuadrant/console-plugin:$consoleplugin_version"
+
 # Set desired operator image
 operator_image=quay.io/kuadrant/kuadrant-operator:$(mod_version $KUADRANT_OPERATOR_VERSION)
 
@@ -37,7 +45,7 @@ authorino_image=quay.io/kuadrant/authorino-operator-bundle:$authorino_version
 dns_version=$(mod_version $DNS_OPERATOR_VERSION)
 dns_image=quay.io/kuadrant/dns-operator-bundle:$dns_version
 
-make bundle BUNDLE_VERSION=$KUADRANT_OPERATOR_VERSION BUNDLE_METADATA_OPTS="--channels $OLM_CHANNELS $default_channel_opt" IMG=$operator_image RELATED_IMAGE_WASMSHIM=$wasm_shim_image LIMITADOR_OPERATOR_BUNDLE_IMG=$limitador_image AUTHORINO_OPERATOR_BUNDLE_IMG=$authorino_image DNS_OPERATOR_BUNDLE_IMG=$dns_image
+make bundle BUNDLE_VERSION=$KUADRANT_OPERATOR_VERSION BUNDLE_METADATA_OPTS="--channels $OLM_CHANNELS $default_channel_opt" IMG=$operator_image RELATED_IMAGE_WASMSHIM=$wasm_shim_image RELATED_IMAGE_DEVELOPERPORTAL=$developerportal_image RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=$consoleplugin_image LIMITADOR_OPERATOR_BUNDLE_IMG=$limitador_image AUTHORINO_OPERATOR_BUNDLE_IMG=$authorino_image DNS_OPERATOR_BUNDLE_IMG=$dns_image
 
 operator-sdk bundle validate $env/bundle
 git diff --quiet -I'^    createdAt: ' ./bundle && git checkout ./bundle || true

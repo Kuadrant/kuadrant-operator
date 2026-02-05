@@ -21,6 +21,12 @@ developerportal_image="quay.io/kuadrant/developer-portal-controller:$developerpo
 V=$developerportal_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DEVELOPERPORTAL").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
+# Set desired console-plugin image
+consoleplugin_version=$(mod_version $(yq '.dependencies.console-plugin' $env/release.yaml))
+consoleplugin_image="quay.io/kuadrant/console-plugin:$consoleplugin_version"
+V=$consoleplugin_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
 # Set desired operator image
 cd $env/config/manager
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))

@@ -224,14 +224,14 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
-    containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-01-21T11:20:16Z"
+    containerImage: quay.io/kuadrant/kuadrant-operator:v1.4.0-rc1
+    createdAt: "2026-02-05T16:23:07Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v0.0.0
+  name: kuadrant-operator.v1.4.0-rc1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -742,7 +742,7 @@ spec:
                 - name: EXTENSIONS_DIR
                   value: /extensions
                 - name: RELATED_IMAGE_WASMSHIM
-                  value: oci://quay.io/kuadrant/wasm-shim:latest
+                  value: oci://quay.io/kuadrant/wasm-shim:v0.12.0
                 - name: RELATED_IMAGE_DEVELOPERPORTAL
                   value: quay.io/kuadrant/developer-portal-controller:latest
                 - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
@@ -753,7 +753,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
-                image: quay.io/kuadrant/kuadrant-operator:latest
+                image: quay.io/kuadrant/kuadrant-operator:v1.4.0-rc1
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -898,7 +898,7 @@ spec:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
   relatedImages:
-  - image: oci://quay.io/kuadrant/wasm-shim:latest
+  - image: oci://quay.io/kuadrant/wasm-shim:v0.12.0
     name: wasmshim
   - image: quay.io/kuadrant/developer-portal-controller:latest
     name: developerportal
@@ -906,4 +906,4 @@ spec:
     name: console-plugin-latest
   - image: quay.io/kuadrant/console-plugin:v0.1.5
     name: console-plugin-pf5
-  version: 0.0.0
+  version: 1.4.0-rc1

@@ -140,21 +140,21 @@ This is currently the default so nothing needs to be done here.
 ### Add Cluster Kubeconfig Secrets
 
 In order for each primary cluster to read DNSRecord resources from all other clusters (primary or secondary) a cluster secret containing kubeconfig data for each of the other clusters must be added.
-The `kubectl-dns` plugin provides a command to help create a valid cluster secret from the expected service account on the target cluster.
+The `kubectl_kuadrant-dns` plugin provides a command to help create a valid cluster secret from the expected service account on the target cluster.
 
 Refer to the [CLI documentation](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md) for more information on how to install the plugin.
 
-Assuming the `kubectl-dns` plugin is in the system path, you can run the following to connect all clusters to each primary:
+Assuming the `kubectl_kuadrant-dns` plugin is in the system path, you can run the following to connect all clusters to each primary:
 
 ```shell
 # Set current context to primary 1
 kubectl config use-context ${CTX_PRIMARY1}
-kubectl-dns secret-generation --context ${CTX_PRIMARY2} --namespace kuadrant-system
-kubectl-dns secret-generation --context ${CTX_SECONDARY1} --namespace kuadrant-system
+kubectl_kuadrant-dns add-cluster-secret --context ${CTX_PRIMARY2} --namespace kuadrant-system
+kubectl_kuadrant-dns add-cluster-secret --context ${CTX_SECONDARY1} --namespace kuadrant-system
 # Set current context to primary 2
 kubectl config use-context ${CTX_PRIMARY2}
-kubectl-dns secret-generation --context ${CTX_PRIMARY1} --namespace kuadrant-system
-kubectl-dns secret-generation --context ${CTX_SECONDARY1} --namespace kuadrant-system
+kubectl_kuadrant-dns add-cluster-secret --context ${CTX_PRIMARY1} --namespace kuadrant-system
+kubectl_kuadrant-dns add-cluster-secret --context ${CTX_SECONDARY1} --namespace kuadrant-system
 ```
 
 If you are using Kind clusters (created via `./hack/multicluster.sh`) the above will produce invalid kubeconfig data. 

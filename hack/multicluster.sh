@@ -67,11 +67,11 @@ local-setup() {
 ## --- Local Setup End --- ##
 
 create-cluster-secret() {
-  cp "$(which kubectl-dns)" ${ROOT_DIR}/tmp/
+  cp "$(which kubectl_kuadrant-dns)" ${ROOT_DIR}/tmp/
   kubectl config use-context ${1} --kubeconfig ${ROOT_DIR}/tmp/kubeconfigs/kuadrant-local-all.internal.kubeconfig
   docker run --rm -v ${ROOT_DIR}:/tmp/dns-operator:z --network kind \
     -e KUBECONFIG=/tmp/dns-operator/tmp/kubeconfigs/kuadrant-local-all.internal.kubeconfig alpine/k8s:1.30.13 \
-    /tmp/dns-operator/tmp/kubectl-dns secret-generation --context ${2} --namespace kuadrant-system
+    /tmp/dns-operator/tmp/kubectl_kuadrant-dns add-cluster-secret --context ${2} --namespace kuadrant-system
 }
 
 f_call=${1-help}; shift; $f_call "$@"

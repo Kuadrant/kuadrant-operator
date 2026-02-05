@@ -29,7 +29,7 @@ EOF
 data=$(curl -L "https://api.github.com/repos/kuadrant/kuadrant-operator/releases/generate-notes" -X POST -H "Accept: apllication/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" -d "$payload")
 
 release_body_data=$(echo $data | yq '.body')
-release_body="**This release enables installations of Authorino Operator v$AUTHORINO_OPERATOR_VERSION, Limitador Operator v$LIMITADOR_OPERATOR_VERSION, DNS Operator v$DNS_OPERATOR_VERSION, WASM Shim v$WASM_SHIM_VERSION and ConsolePlugin v$CONSOLEPLUGIN_VERSION**$release_body_data"
+release_body="**This release enables installations of Authorino Operator v$AUTHORINO_OPERATOR_VERSION, Limitador Operator v$LIMITADOR_OPERATOR_VERSION, DNS Operator v$DNS_OPERATOR_VERSION, WASM Shim v$WASM_SHIM_VERSION, ConsolePlugin v$CONSOLEPLUGIN_VERSION and Developer Portal Controller v$DEVELOPERPORTAL_VERSION**$release_body_data"
 
 if [[ $_log == "1" ]]; then
   log "releaseBody=$release_body"

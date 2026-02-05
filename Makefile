@@ -202,6 +202,18 @@ RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(
 DEVELOPERPORTAL_GITREF = $(DEVELOPERPORTAL_VERSION)
 endif
 
+## console-plugin
+CONSOLEPLUGIN_VERSION ?= latest
+consoleplugin_version_is_semantic := $(call is_semantic_version,$(CONSOLEPLUGIN_VERSION))
+
+ifeq (latest,$(CONSOLEPLUGIN_VERSION))
+RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:latest
+else ifeq (true,$(consoleplugin_version_is_semantic))
+RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:v$(CONSOLEPLUGIN_VERSION)
+else
+RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(CONSOLEPLUGIN_VERSION)
+endif
+
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
@@ -453,6 +465,9 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	# Set desired developer-portal-controller image
 	V="$(RELATED_IMAGE_DEVELOPERPORTAL)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DEVELOPERPORTAL").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired console-plugin image
+	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV

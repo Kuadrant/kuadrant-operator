@@ -20,6 +20,7 @@ if [[ $_log == "1" ]]; then
   log "limitadorOperatorVersion=$LIMITADOR_OPERATOR_VERSION"
   log "authorinoOperatorVersion=$AUTHORINO_OPERATOR_VERSION"
   log "dnsOperatorVersion=$DNS_OPERATOR_VERSION"
+  log "developerPortalVersion=$DEVELOPERPORTAL_VERSION"
 fi
 
 if [[ $dry_run == "0" ]]; then
@@ -29,4 +30,5 @@ if [[ $dry_run == "0" ]]; then
   echo "limitadorOperatorVersion=$LIMITADOR_OPERATOR_VERSION" >> "$GITHUB_ENV"
   echo "authorinoOperatorVersion=$AUTHORINO_OPERATOR_VERSION" >> "$GITHUB_ENV"
   echo "dnsOperatorVersion=$DNS_OPERATOR_VERSION" >> "$GITHUB_ENV"
+  echo "developerPortalVersion=$DEVELOPERPORTAL_VERSION" >> "$GITHUB_ENV"
 fi

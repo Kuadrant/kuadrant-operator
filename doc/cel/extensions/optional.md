@@ -16,7 +16,7 @@ Creates a new optional containing the given value.
 * **Signature:** `optional.of(T) -> optional_type(T)`
 
 #### Examples:
-```cel
+```js
 optional.of(1)         // returns optional(1)
 optional.of("hello")   // returns optional("hello")
 optional.of(null)      // returns optional(null)
@@ -31,7 +31,7 @@ Creates a new optional containing the given value, or `optional.none()` if the v
 * **Signature:** `optional.ofNonZeroValue(T) -> optional_type(T)`
 
 #### Examples:
-```cel
+```js
 optional.ofNonZeroValue(null)    // returns optional.none()
 optional.ofNonZeroValue("")      // returns optional.none()
 optional.ofNonZeroValue(0)       // returns optional.none()
@@ -47,7 +47,7 @@ Returns a singleton value representing an empty optional.
 * **Signature:** `optional.none() -> optional_type(any)`
 
 #### Examples:
-```cel
+```js
 optional.none()
 ```
 
@@ -62,7 +62,7 @@ Determines whether the optional contains a value.
 * **Signature:** `<optional_type(T)>.hasValue() -> bool`
 
 #### Examples:
-```cel
+```js
 optional.of(1).hasValue()   // returns true
 optional.none().hasValue()  // returns false
 ```
@@ -76,7 +76,7 @@ Obtains the value contained by the optional. If the optional is empty, it result
 * **Signature:** `<optional_type(T)>.value() -> T`
 
 #### Examples:
-```cel
+```js
 optional.of(1).value()   // returns 1
 optional.none().value()  // error: optional.none() dereference
 ```
@@ -92,7 +92,7 @@ Chains optional expressions together, picking the first valued optional expressi
 * **Signature:** `<optional_type(T)>.or(<optional_type(T)>) -> optional_type(T)`
 
 #### Examples:
-```cel
+```js
 optional.none().or(optional.of(1)) // returns optional.of(1)
 optional.of(1).or(optional.of(2))   // returns optional.of(1)
 ```
@@ -106,7 +106,7 @@ Chains optional expressions together, picking the first valued optional or the d
 * **Signature:** `<optional_type(T)>.orValue(T) -> T`
 
 #### Examples:
-```cel
+```js
 optional.of(1).orValue(0)   // returns 1
 optional.none().orValue(0)  // returns 0
 {'a': 1}[? 'b'].orValue(0)  // returns 0
@@ -123,7 +123,7 @@ Performs a computation on the value if present and returns the result as an opti
 * **Signature:** `<optional_type(T)>.optMap(var, expr)`
 
 #### Examples:
-```cel
+```js
 optional.of(1).optMap(i, i * 2)  // returns optional.of(2)
 optional.none().optMap(i, i * 2) // returns optional.none()
 ```
@@ -137,7 +137,7 @@ Performs a computation on the value if present and produces an optional value wi
 * **Signature:** `<optional_type(T)>.optFlatMap(var, expr)`
 
 #### Examples:
-```cel
+```js
 // m = {'key': {'subkey': 'value'}}
 m.?key.optFlatMap(k, k.?subkey) // returns optional.of('value')
 
@@ -154,7 +154,7 @@ m.?key.optFlatMap(k, k.?subkey) // returns optional.none()
 If the field is present, creates an optional of the field value; otherwise, returns `optional.none()`.
 
 #### Examples:
-```cel
+```js
 msg.?field                // optional.of(field) if present, else optional.none()
 msg.?field.?nested_field  // optional.of(nested_field) if both are present
 ```
@@ -166,7 +166,7 @@ msg.?field.?nested_field  // optional.of(nested_field) if both are present
 If the index or key is present, creates an optional of the element value; otherwise, returns `optional.none()`.
 
 #### Examples:
-```cel
+```js
 [1, 2, 3][? 1]    // returns optional.of(2)
 [1, 2, 3][? 5]    // returns optional.none()
 {'a': 1}[? 'a']   // returns optional.of(1)
@@ -185,7 +185,7 @@ Returns the first or last value in a list as an optional.
 * **Signature:** `<list<T>>.last() -> optional_type(T)`
 
 #### Examples:
-```cel
+```js
 [1, 2, 3].first() // returns optional.of(1)
 [].first()        // returns optional.none()
 [1, 2, 3].last()  // returns optional.of(3)
@@ -201,7 +201,7 @@ Converts a list of optional values to a list containing only values which are no
 * **Signature:** `<list<optional_type(T)>>.unwrapOpt() -> list<T>`
 
 #### Examples:
-```cel
+```js
 optional.unwrap([optional.of(1), optional.none()]) // returns [1]
 [optional.of(1), optional.none()].unwrapOpt()      // returns [1]
 ```

@@ -13,7 +13,7 @@ Returns the character at the given position. If the position is negative, or gre
 
 #### Examples:
 
-```cel
+```js
 'hello'.charAt(4)  // return 'o'
 'hello'.charAt(5)  // return ''
 'hello'.charAt(-1) // error

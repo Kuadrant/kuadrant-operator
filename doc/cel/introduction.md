@@ -214,7 +214,15 @@ optional.of(request.headers['x-retries']).orValue('0').matches(r'^[0-2]$')
 request.?headers[?'x-retries']).orValue('0').matches(r'^[0-2]$')
 ```
 
-TODO explain the two forms
+The `.?` operator will not err out if the field, `headers` in this case, isn't present. Instead it will return a
+`Optional` representing `None`. If on the other hand the field is there, in this case a `Map<String, String>`, the 
+value will be wrapped into a `Optional` holding the actual reference to the value.
+
+The `[?<index>]` syntax does the same for index accesses into a collection, whether it's a `List` or a `Map`.
+
+To use the value, access it using `.orValue()` providing a default value in the case of absence. 
+
+To read more about the `Optional` type, see the [`Optional` documentation](extensions/optional.md).
 
 ### Safe Transformation (`optMap`)
 

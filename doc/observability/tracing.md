@@ -29,7 +29,7 @@ spec:
     - name: jaeger-collector
     randomSamplingPercentage: 100
 ---
-apiVersion: sailoperator.io/v1
+apiVersion: operator.istio.io/v1alpha1
 kind: Istio
 metadata:
   name: default
@@ -94,7 +94,7 @@ Once applied, the Authorino and Limitador components will be redeployed with tra
 
 **Data Plane Configuration Fields:**
 
-- `defaultLevels`: Controls the **OpenTelemetry trace filtering level** for the wasm-shim. This determines which trace spans are exported to your tracing collector.
+- `defaultLevels`: Controls the **OpenTelemetry trace filtering level** for WASM modules. This determines which trace spans are exported to your tracing collector.
   - Supported levels (highest to lowest verbosity): `debug`, `info`, `warn`, `error`
   - **Current implementation (MVP)**: Set to `"true"` to enable that level (e.g., `debug: "true"`)
   - **Future**: Will support CEL expressions for dynamic request-time evaluation
@@ -146,11 +146,11 @@ If you set tracing in the Kuadrant CR and later configure it directly in an Auth
 
 **Note on Trace Continuity:**
 
-Currently, trace IDs [do not propagate](https://github.com/envoyproxy/envoy/issues/22028) to WebAssembly modules in Istio/Envoy. This affects trace continuity when rate limiting is enforced, as requests may not have the relevant 'parent' trace ID in their trace information.
+Currently, trace IDs [do not propagate](https://github.com/envoyproxy/envoy/issues/22028) to WebAssembly modules in Istio/Envoy. This affects trace continuity when rate limiting is enforced via WASM filters, as requests may not have the relevant 'parent' trace ID in their trace information.
 
 However, if the trace initiation point is outside of Envoy/Istio, the 'parent' trace ID will be available and included in traces passed to the collector. This limitation can impact correlating traces across the gateway, auth service, rate limiting, and other components in the request path.
 
-Despite this, Kuadrant configures tracing for the wasm-shim when using the centralized configuration, ensuring that trace data is collected even if parent-child relationships may be limited in some scenarios.
+Despite this, Kuadrant configures tracing for WASM modules when using the centralized configuration, ensuring that trace data is collected even if parent-child relationships may be limited in some scenarios.
 
 ## Control Plane Tracing
 
@@ -189,7 +189,7 @@ Kuadrant supports tracing at two levels:
    - Helps debug operator behavior and performance
 
 2. **Data Plane Tracing** (see configuration above): Traces actual user requests through the gateway and policy enforcement components
-   - Shows request flows through Istio/Envoy, Authorino, Limitador, and wasm-shim
+   - Shows request flows through Istio/Envoy, Authorino, Limitador, and WASM filters
    - Helps debug request-level issues and policy enforcement
 
 **Configuration:**
@@ -203,7 +203,7 @@ When both are configured to send traces to the same collector, you get a complet
 Control plane traces capture operator activities such as:
 
 - **Policy reconciliation**: When a policy (AuthPolicy, RateLimitPolicy, DNSPolicy, TLSPolicy) is created, updated, or deleted
-- **Resource creation**: Creating Authorino AuthConfigs, Limitador configurations, wasm-shim, etc.
+- **Resource creation**: Creating Authorino AuthConfigs, Limitador configurations, Envoy WASM filters, etc.
 - **Gateway topology discovery**: Analyzing Gateway API resources and computing policy attachments
 - **Status updates**: Updating policy status conditions
 - **Conflict detection**: Detecting and resolving policy conflicts
@@ -296,7 +296,7 @@ The trace structure reflects the operator's workflow-based reconciliation:
 - **reconciler.limitador_limits**: Reconciles Limitador limit configurations
 - **reconciler.istio_extension**: Reconciles Istio WasmPlugin and EnvoyFilter resources (when Istio is the gateway provider)
 - **reconciler.envoy_gateway_extension**: Reconciles Envoy Gateway extension policies (when Envoy Gateway is the provider)
-- **wasm.BuildConfigForPath**: Builds wasm-shim configuration for a specific HTTPRoute path
+- **wasm.BuildConfigForPath**: Builds WASM filter configuration for a specific HTTPRoute path
 
 ### Tracing Policy Lifecycle
 
@@ -334,7 +334,7 @@ Example workflow:
    - WASM plugin deployed
 3. Send a test request at `15:30:10`
 4. View data plane trace to see:
-   - Request processed through the wasm-shim
+   - Request processed through WASM filter
    - Rate limit check sent to Limitador
    - Response returned
 
@@ -465,14 +465,14 @@ Request Flow (29.4ms total):
 
 Data plane traces include rich context from multiple services:
 
-**Wasm-shim Spans** (service: `wasm-shim`):
+**WASM Filter Spans** (service: `wasm-shim`):
 - Request correlation IDs from `httpHeaderIdentifier` configuration
 - Matched hostname and route configuration details
 - Policy attribution showing which AuthPolicy/RateLimitPolicy rules were evaluated
 - At DEBUG level: Detailed gRPC call information, property updates, and header manipulations
 
 **Authorino Spans** (service: `authorino`):
-- Request ID correlation
+- Request ID correlation matching the WASM filter
 - gRPC service calls and status codes
 - Authentication and authorization decision details
 
@@ -547,7 +547,7 @@ Tags: sources=authpolicy.kuadrant.io:kuadrant/my-auth-policy
 
 ### Enabling Gateway Debug Logs
 
-The wasm-shim's logs you see via `kubectl logs` are controlled by **Envoy's log level**, not the Kuadrant CR `defaultLevels` setting.
+The WASM filter logs you see via `kubectl logs` are controlled by **Envoy's log level**, not the Kuadrant CR `defaultLevels` setting.
 
 To enable debug logging in gateway pod output:
 
@@ -566,10 +566,10 @@ curl -X POST 'http://localhost:15000/logging?level=debug'
 
 **Note:** Most gateway pods don't have `curl` installed, so we use port-forwarding to access the Envoy admin interface from your local machine. This setting is temporary and will reset when the pod restarts.
 
-**For Istio gateways (persistent - via Sail Operator):**
+**For Istio gateways (persistent - via Istio Operator):**
 
 ```yaml
-apiVersion: sailoperator.io/v1
+apiVersion: operator.istio.io/v1alpha1
 kind: Istio
 metadata:
   name: default

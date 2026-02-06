@@ -1,5 +1,14 @@
 # Observability stack guide
 
+## Overview
+
+Kuadrant provides comprehensive observability features including:
+
+- **[Metrics](./metrics.md)**: Prometheus metrics for monitoring gateway and policy performance
+- **[Tracing](./tracing.md)**: Distributed tracing with OpenTelemetry support for request flows
+- **[Access Logs](./envoy-access-logs.md)**: Envoy access logs with request correlation and structured logging
+- **[Dashboards](./examples.md)**: Pre-built Grafana dashboards for visualization
+
 ## Deploying the observabilty
 
 Make sure to enable the observability reconciler in your Kuadrant CR, this will create service monitors for the kuadrant, dns, limitador and authorino operators:

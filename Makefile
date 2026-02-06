@@ -390,7 +390,7 @@ test-unit: VERBOSE_FLAG = -v
 endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
 	mkdir -p $(PROJECT_PATH)/coverage/unit
-	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
+	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit $(VERBOSE_FLAG) -timeout 0 -race $(TEST_PATTERN)
 
 ##@ Build
 

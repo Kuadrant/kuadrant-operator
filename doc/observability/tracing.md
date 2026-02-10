@@ -395,9 +395,9 @@ Using a tracing interface like the Jaeger UI or Grafana, you can search for trac
 You may get the trace ID from logs, or from a header in a sample request you want to troubleshoot.
 You can also search for recent traces, filtering by the service you want to focus on.
 
-Here is an example trace in the Grafana UI showing the total request time from the gateway (Istio), the time to check the curent rate limit count (and update it) in limitador and the time to check auth in Authorino:
+Here is an example trace in the Jaeger UI showing the total request time from the gateway (Istio), the time to check the curent rate limit count (and update it) in limitador and the time to check auth in Authorino:
 
-![Trace in Grafana UI](grafana_trace.png)
+![Trace in Jaeger UI](jaeger_ui_trace.png)
 
 In limitador, it is possible to enable request logging with trace IDs to get more information on requests.
 This requires the log level to be increased to at least debug, so the verbosity must be set to 3 or higher in the Limitador CR. For example:
@@ -414,12 +414,12 @@ spec:
 A log entry will look something like this, with the `traceparent` field holding the trace ID:
 
 ```
-"Request received: Request { metadata: MetadataMap { headers: {"te": "trailers", "grpc-timeout": "5000m", "content-type": "application/grpc", "traceparent": "00-4a2a933a23df267aed612f4694b32141-00f067aa0ba902b7-01", "x-envoy-internal": "true", "x-envoy-expected-rq-timeout-ms": "5000"} }, message: RateLimitRequest { domain: "default/toystore", descriptors: [RateLimitDescriptor { entries: [Entry { key: "limit.general_user__f5646550", value: "1" }, Entry { key: "metadata.filter_metadata.envoy\\.filters\\.http\\.ext_authz.identity.userid", value: "alice" }], limit: None }], hits_addend: 1 }, extensions: Extensions }"
+"ShouldRateLimit Request received: Request { metadata: MetadataMap { headers: {"te": "trailers", "grpc-timeout": "1000m", "content-type": "application/grpc", "traceparent": "00-bd579c77366d2868ec14a69d0abd2b6d-532e38f2d4e17132-01", "x-request-id": "b18cf0b0-29d8-9feb-bcfb-a0dc08479400", "x-envoy-internal": "true", "x-envoy-expected-rq-timeout-ms": "1000"} }, message: RateLimitRequest { domain: "kuadrant/route-tester--d304", descriptors: [RateLimitDescriptor { entries: [Entry { key: "limit.testuser__2feff48d", value: "1" }], limit: None }], hits_addend: 1 }, extensions: Extensions }"
 ```
 
 If you centrally aggregate logs using something like promtail and loki, you can jump between trace information and the relevant logs for that service:
 
-![Trace and logs in Grafana UI](grafana_tracing_loki.png)
+![Trace and logs in Grafana UI](jaeger_ui_tracing_logs.png)
 
 Using a combination of tracing and logs, you can visualise and troubleshoot request timing issues and drill down to specific services.
 This method becomes even more powerful when combined with [metrics](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/metrics/), [access logs](./envoy-access-logs.md), and [dashboards](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) to get a more complete picture of your users traffic.

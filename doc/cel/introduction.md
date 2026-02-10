@@ -92,9 +92,10 @@ has(request.headers['authorization']) ? request.headers['authorization'].startsW
 
 ---
 
-## Working with Lists (SANs, JWT Claims)
+## Working with Lists and Maps
 
 While standard HTTP headers are often strings, Kuadrant provides powerful lists in some contexts like **JWT Auth** (Claims).
+In CEL, you can use these macros on both `Map`s or `List`s to work with collections:
 
 ### `.all()`
 
@@ -120,6 +121,24 @@ Checks if **exactly one** item satisfies the condition.
 ```
 // Rule: Exactly one group must match
 auth.identity.groups.exists_one(group, group == 'foo')
+```
+
+### `.filter()`
+
+Returns a new list containing only the elements that satisfy the condition.
+
+```
+// Get all groups that end with '.admin'
+auth.identity.groups.filter(group, group.endsWith('.admin'))
+```
+
+### `.map()`
+
+Returns a new list where each element has been transformed by the expression.
+
+```
+// Convert all group names to lowercase
+auth.identity.groups.map(group, group.lowerascii())
 ```
 
 ---

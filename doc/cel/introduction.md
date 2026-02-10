@@ -25,6 +25,7 @@ CEL supports standard data types:
 | **Map** | `{'group': 'admin', 'tier': 'gold'}` |
 | **List** | `[1, 2, 3]` |
 
+For more details on all member overloads for these types, please refer to [the standard library docs](standard.md).
 
 > [!Caution]
 > CEL has no implicit type coercion.
@@ -175,6 +176,8 @@ You can create `timestamp` & `duration` values, using these functions to operate
 // Was the request made in the first 12 hours of 2025?
 request.time - timestamp('2025-01-01T12:00:00Z') < duration('12h')
 ```
+
+For more details on all member overloads for these types, please refer to [the standard library docs](standard.md).
 
 ---
 

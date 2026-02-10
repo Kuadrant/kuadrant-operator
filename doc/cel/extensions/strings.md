@@ -53,7 +53,7 @@ The valid formatting clauses are:
 "26 in hex: %x".format([26]) // returns "26 in hex: 1a"
 "26 in hex (uppercase): %X".format([26]) // returns "26 in hex (uppercase): 1A"
 "30 in octal: %o".format([30]) // returns "30 in octal: 36"
-"a map inside a list: %s".format([[1, 2, 3, {"a": "x", "b": "y", "c": "z"}]]) // returns "a map inside a list: [1, 2, 3, {"a":"x", "b":"y", "c":"d"}]"
+"a map inside a list: %s".format([[1, 2, 3, {"a": "x", "b": "y", "c": "z"}]]) // returns "a map inside a list: [1, 2, 3, {"a":"x", "b":"y", "c":"z"}]"
 "true bool: %s - false bool: %s\nbinary bool: %b".format([true, false, true]) // returns "true bool: true - false bool: false\nbinary bool: 1"
 ```
 

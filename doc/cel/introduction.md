@@ -169,7 +169,12 @@ has(request.headers['content-length']) && int(request.headers['content-length'])
 
 ### Timestamps and Durations
 
-TODO!
+You can create `timestamp` & `duration` values, using these functions to operate on these types:
+
+```js
+// Was the request made in the first 12 hours of 2025?
+request.time - timestamp('2025-01-01T12:00:00Z') < duration('12h')
+```
 
 ---
 

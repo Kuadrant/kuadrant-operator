@@ -47,3 +47,4 @@ jobs:
           generate_release_notes: false
           target_commitish: ${{ env.releaseBranch }}
           prerelease: ${{ env.prerelease }}
+          token: '${{ secrets.KUADRANT_DEV_PAT }}'

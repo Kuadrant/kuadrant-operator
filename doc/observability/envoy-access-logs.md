@@ -171,14 +171,25 @@ spec:
   observability:
     dataPlane:
       httpHeaderIdentifier: x-request-id
+      defaultLevels:
+        - debug: "true"  # Optional: Controls OTEL trace filtering for WASM modules
     tracing:
       defaultEndpoint: rpc://jaeger.jaeger.svc.cluster.local:4317
       insecure: true
 ```
 
 This configuration:
-- Tells WASM filters to log the `x-request-id` header value
-- Enables request correlation across Envoy, Authorino, Limitador, and WASM logs
+- Tells WASM filters to include the `x-request-id` header value in trace spans
+- Enables request correlation across Envoy access logs, Authorino, Limitador, and WASM traces
+- Optionally controls OpenTelemetry trace filtering via `defaultLevels`
+
+**Important - Understanding Kuadrant Observability vs Envoy Access Logs:**
+
+- **Envoy Access Logs** (configured via Istio Telemetry API above): HTTP request/response logs visible via `kubectl logs` on gateway pods
+- **Kuadrant `dataPlane.defaultLevels`**: Controls trace span filtering sent to your tracing collector (Jaeger/Tempo), **not** gateway pod logs
+- **Kuadrant `dataPlane.httpHeaderIdentifier`**: Includes the specified header in both trace spans and enables correlation with access logs
+
+For detailed information on WASM observability configuration and how to enable debug logging in gateway pods, see the [Tracing documentation](./tracing.md#data-plane-observability-configuration).
 
 ### Example Log Correlation
 
@@ -204,66 +215,6 @@ With proper configuration, you can correlate logs across all components using th
 **Limitador Log:**
 ```
 Request received: ... "x-request-id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" ...
-```
-
-## Log Aggregation with Loki
-
-For centralized log aggregation and correlation, configure Promtail to collect and forward logs to Loki:
-
-### Promtail Configuration
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: promtail-config
-  namespace: monitoring
-data:
-  promtail.yaml: |
-    server:
-      http_listen_port: 9080
-      grpc_listen_port: 0
-
-    positions:
-      filename: /tmp/positions.yaml
-
-    clients:
-      - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
-
-    scrape_configs:
-      - job_name: kubernetes-pods
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_label_app]
-            target_label: app
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
-        pipeline_stages:
-          - json:
-              expressions:
-                request_id: request_id
-                level: level
-                timestamp: start_time
-          - labels:
-              request_id:
-              level:
-```
-
-### Querying Logs by Request ID
-
-Once logs are aggregated in Loki, you can query by `request_id`:
-
-```logql
-{namespace="istio-system"} |~ "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-```
-
-Or filter by specific components:
-
-```logql
-{app="authorino"} | json | request_id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
 ## Integration with Tracing

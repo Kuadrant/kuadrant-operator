@@ -57,23 +57,31 @@ Configures telemetry and monitoring settings for Kuadrant components. When enabl
 
 ##### DataPlane
 
-Configures logging and observability for data plane components. It controls logging behavior and request-level observability features.
+Configures observability for data plane components (WASM filters). Controls OpenTelemetry trace filtering and request correlation features.
 
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `defaultLevels` | [][LogLevel](#loglevel) | No | Specifies the default logging levels and their activation predicates. Each entry defines a log level (debug, info, warn, error) and an optional CEL expression that determines when that level should be active for a given request. |
-| `httpHeaderIdentifier` | String | No | Specifies the HTTP header name used to identify and correlate requests in logs and traces (e.g., "x-request-id", "x-correlation-id"). If set, this header value will be included in log output for request correlation. |
+| `defaultLevels` | [][LogLevel](#loglevel) | No | Specifies the OpenTelemetry trace filtering levels for WASM modules. Controls which trace spans are exported to your observability backend (Jaeger, Tempo, etc.). The highest priority level set determines the filter level. **Important:** This controls trace span filtering, not gateway pod log verbosity. To control logs visible via `kubectl logs`, configure Envoy's log level separately. |
+| `httpHeaderIdentifier` | String | No | Specifies the HTTP header name used to identify and correlate requests in traces (e.g., "x-request-id", "x-correlation-id"). If set, this header value will be included in trace spans for request correlation across components. |
 
 ###### LogLevel
 
-Defines a logging level with its activation predicate. Only one field should be set per LogLevel entry.
+Defines a trace filtering level. The highest priority level set (DEBUG > INFO > WARN > ERROR) determines the OTEL trace filter. Only one field should be set per LogLevel entry.
 
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `debug` | String | No | Debug level - highest verbosity. Value is a CEL expression. |
-| `info` | String | No | Info level. Value is a CEL expression. |
-| `warn` | String | No | Warn level. Value is a CEL expression. |
-| `error` | String | No | Error level - lowest verbosity. Value is a CEL expression. |
+| `debug` | String | No | Debug level for trace filtering - highest verbosity, most spans exported. **Current implementation (MVP):** Set to `"true"` to enable. **Future:** Will support CEL expressions for dynamic request-time evaluation. |
+| `info` | String | No | Info level for trace filtering. **Current implementation (MVP):** Set to `"true"` to enable. **Future:** Will support CEL expressions. |
+| `warn` | String | No | Warn level for trace filtering. **Current implementation (MVP):** Set to `"true"` to enable. **Future:** Will support CEL expressions. |
+| `error` | String | No | Error level for trace filtering - lowest verbosity, minimal spans exported. **Current implementation (MVP):** Set to `"true"` to enable. **Future:** Will support CEL expressions. |
+
+**Example:**
+```yaml
+dataPlane:
+  defaultLevels:
+    - debug: "true"  # Enable DEBUG level trace filtering
+  httpHeaderIdentifier: x-request-id
+```
 
 ##### Tracing
 

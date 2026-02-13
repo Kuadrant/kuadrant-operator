@@ -90,6 +90,97 @@ This configuration will be automatically propagated to:
 
 Once applied, the Authorino and Limitador components will be redeployed with tracing enabled.
 
+#### Data Plane Observability Configuration
+
+In addition to tracing endpoints, you can configure trace filtering for the WASM filters deployed to the data plane:
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec:
+  observability:
+    dataPlane:
+      defaultLevels:
+        - debug: "true"  # Enable DEBUG level trace filtering
+      httpHeaderIdentifier: x-request-id
+    tracing:
+      defaultEndpoint: rpc://jaeger-collector.jaeger.svc.cluster.local:4317
+      insecure: true
+```
+
+**Data Plane Configuration Fields:**
+
+- `defaultLevels`: Controls the **OpenTelemetry trace filtering level** for WASM modules. This determines which trace spans are exported to your tracing collector.
+  - Supported levels (highest to lowest verbosity): `debug`, `info`, `warn`, `error`
+  - **Current implementation (MVP)**: Set to `"true"` to enable that level (e.g., `debug: "true"`)
+  - **Future**: Will support CEL expressions for dynamic request-time evaluation
+  - Default: `WARN` if not specified
+  - Priority: DEBUG > INFO > WARN > ERROR (highest level set wins)
+
+- `httpHeaderIdentifier`: Specifies the HTTP header name used to correlate requests in traces (e.g., `x-request-id`)
+
+**Important - Understanding what `defaultLevels` controls:**
+
+The `defaultLevels` configuration controls **trace span filtering** sent to your observability backend (Jaeger, Tempo, etc.), **not** the verbosity of logs appearing in gateway pod output.
+
+**To view traces:**
+- Configure `defaultLevels` in the Kuadrant CR
+- View traces in your tracing UI (Jaeger/Grafana) - you'll see more detailed spans at DEBUG level
+
+**To see debug logs in gateway pods:**
+
+The WASM filter logs you see via `kubectl logs` are controlled by **Envoy's log level**, not the `defaultLevels` setting. To enable debug logging in gateway pod output:
+
+**For Istio gateways (dynamic):**
+```bash
+# Port-forward to Envoy admin interface
+kubectl port-forward -n istio-system deploy/istio-ingressgateway 15000:15000
+
+# Enable WASM debug logging
+curl -X POST 'http://localhost:15000/logging?wasm=debug'
+
+# Or enable debug for all components:
+curl -X POST 'http://localhost:15000/logging?level=debug'
+```
+
+**Note:** Most gateway pods don't have `curl` installed, so we use port-forwarding to access the Envoy admin interface from your local machine.
+
+**For Istio gateways (persistent - via Istio Operator):**
+```yaml
+apiVersion: operator.istio.io/v1alpha1
+kind: Istio
+metadata:
+  name: default
+spec:
+  values:
+    meshConfig:
+      defaultConfig:
+        proxyMetadata:
+          WASM_LOG_LEVEL: debug
+```
+
+**For Envoy Gateway:**
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: custom-proxy-config
+  namespace: envoy-gateway-system
+spec:
+  logging:
+    level:
+      default: debug
+```
+
+**Example Use Cases:**
+
+1. **Troubleshooting in production with traces**: Set `defaultLevels.debug: "true"` to get detailed trace spans in Jaeger without flooding gateway logs
+2. **Local development debugging**: Enable both `defaultLevels.debug` AND Envoy's WASM log level for complete visibility
+3. **Request correlation**: Set `httpHeaderIdentifier: x-request-id` to track requests across components using the request ID header
+
 #### Direct Configuration (Advanced)
 
 For advanced use cases, you can configure tracing directly in the Authorino or Limitador CRs:
@@ -111,6 +202,7 @@ metadata:
 spec:
   tracing:
     endpoint: rpc://limitador-collector:4317
+    insecure: true
 ```
 
 **Important:** When tracing is configured directly in Authorino or Limitador CRs, those settings take precedence over the Kuadrant CR configuration. The Kuadrant operator will cede ownership of the tracing field to you, allowing full control over component-specific tracing endpoints. This is useful when you need different collectors for different components.
@@ -388,6 +480,150 @@ The combination of control plane environment variables and Kuadrant CR data plan
 - Check for errors in the operator logs that might indicate reconciliation failures
 - Verify the collector is not dropping spans due to rate limiting or storage issues
 - Check the collector's own logs for processing errors
+
+## Understanding Data Plane Traces
+
+### Prerequisites
+
+Before you can view data plane traces, ensure you have:
+
+1. **Tracing collector deployed** - Jaeger, Tempo, or another OTLP-compatible collector
+2. **Kuadrant CR configured with tracing endpoint**:
+   ```yaml
+   spec:
+     observability:
+       tracing:
+         defaultEndpoint: rpc://jaeger-collector.jaeger.svc.cluster.local:4317
+   ```
+3. **At least one policy applied** - AuthPolicy or RateLimitPolicy on a Gateway or HTTPRoute
+4. **Traffic flowing through the gateway** - Send requests to see traces
+
+Without these prerequisites, you won't see traces in your tracing UI even if `defaultLevels` is configured.
+
+### What You'll See
+
+When data plane tracing is enabled with `defaultLevels: debug`, you'll see detailed trace spans showing the complete request flow through Kuadrant components.
+
+### Example: Complete Request Trace
+
+Here's what a typical traced request looks like when it flows through auth and rate limiting policies:
+
+```text
+Request Flow (29.4ms total):
+│
+├─ Envoy Gateway Span (34.7ms)
+│  └─ kuadrant_filter (29.4ms)
+│     │
+│     ├─ auth (6.8ms)
+│     │  ├─ auth_request (1.2ms)
+│     │  │  └─ Authorino gRPC Call
+│     │  │     └─ envoy.service.auth.v3.Authorization/Check (2.0ms)
+│     │  │        └─ Check (1.7ms)
+│     │  └─ auth_response (56μs)
+│     │
+│     └─ ratelimit (6.0ms)
+│        ├─ ratelimit_request (576μs)
+│        │  └─ Limitador gRPC Call
+│        │     └─ should_rate_limit (309μs)
+│        │        └─ check_and_update (36μs)
+│        └─ ratelimit_response (38μs)
+│
+└─ Backend Service: httpbin (34.7ms)
+```
+
+### Trace Attributes You'll See
+
+**WASM Filter Spans** (service: `wasm-shim`):
+- `request_id`: Correlation ID from `httpHeaderIdentifier` (e.g., `adefc8cf-78af-9db7-97e5-5ae5e2b22c05`)
+- `hostname`: Matched hostname from HTTPRoute
+- `action_set`: Hash identifying the matched route configuration
+- `sources`: Policies that contributed to this action (e.g., `["authpolicy.kuadrant.io:kuadrant/my-auth-policy"]`)
+- `scope`: Rate limit scope identifier
+- `task_id`: Sequential task identifier in the pipeline
+
+**Debug Log Events** (when `defaultLevels.debug: "true"`):
+- `"Dispatching gRPC call to kuadrant-auth-service/envoy.service.auth.v3.Authorization.Check, timeout: 1s"`
+- `"gRPC call dispatched successfully, token_id: 5"`
+- `"Getting gRPC response, size: 42 bytes"`
+- `"Setting property: kuadrant.auth.identity.user"`
+- `"Appending 1 headers"`
+
+**Authorino Spans** (service: `authorino`):
+- `authorino.request_id`: Same as WASM request_id for correlation
+- `rpc.service`: `envoy.service.auth.v3.Authorization`
+- `rpc.grpc.status_code`: gRPC status (0 = success)
+
+**Limitador Spans** (service: `limitador`):
+- Debug logs show the full request: `"ShouldRateLimit Request received: ... traceparent: 00-3536c2b25e0b7e1e272578b5cf2f3e2c-..."`
+- Shows limit descriptors and hit counts
+
+### Viewing This Trace in Jaeger
+
+**Search by Request ID:**
+```text
+Service: wasm-shim
+Tags: request_id=adefc8cf-78af-9db7-97e5-5ae5e2b22c05
+```
+
+**Filter by Operation:**
+```text
+Service: wasm-shim
+Operation: kuadrant_filter
+Min Duration: 10ms
+```
+
+**Examine Specific Policy:**
+```text
+Service: wasm-shim
+Tags: sources=authpolicy.kuadrant.io:kuadrant/my-auth-policy
+```
+
+### What This Shows You
+
+1. **Complete Request Timeline**: See exactly how long each component took
+   - Auth check: 6.8ms (including Authorino processing)
+   - Rate limit check: 6.0ms (including Limitador processing)
+   - Total WASM overhead: 12.8ms
+
+2. **Request Correlation**: The `request_id` appears across all services:
+   - WASM filter logs it in spans and debug events
+   - Authorino receives it via `authorino.request_id`
+   - Limitador sees it in the `traceparent` header
+
+3. **Policy Attribution**: The `sources` tag shows which policies affected the request:
+   ```
+   sources: ["authpolicy.kuadrant.io:kuadrant/authz-policy",
+             "ratelimitpolicy.kuadrant.io:kuadrant/limit-policy"]
+   ```
+
+4. **gRPC Call Details**: Debug logs show the complete gRPC communication:
+   - Request dispatch with timeout
+   - Token IDs for tracking async operations
+   - Response sizes
+   - Status codes
+
+### Troubleshooting Scenarios with Traces
+
+**Scenario: Auth is slow**
+
+1. Find the trace in Jaeger by `request_id`
+2. Expand the `auth` span
+3. Check the `auth_request` → `Check` span duration
+4. Look at debug log events for errors or retries
+
+**Scenario: Rate limit not working**
+
+1. Search for traces with `operation: ratelimit`
+2. Check the `sources` tag - is your RateLimitPolicy listed?
+3. Examine `ratelimit_request` logs for the limit descriptors sent
+4. Check Limitador's `should_rate_limit` span for the decision
+
+**Scenario: Find which policy is rejecting requests**
+
+1. Filter traces by response code: `Tags: http.status_code=403`
+2. Look at the `sources` tag to identify the policy
+3. Check the span that completed just before the rejection
+4. Examine debug log events for rejection reasons
 
 ## Troubleshooting Flow Using Traces and Logs
 

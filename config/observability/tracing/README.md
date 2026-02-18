@@ -9,7 +9,7 @@ Enable distributed tracing across Istio and Kuadrant components for local develo
 make install-jaeger
 
 # 2. Deploy tracing configurations
-kubectl apply -k config/observability/tracing
+make deploy-tracing
 
 # 3. Access Jaeger UI
 make jaeger-port-forward
@@ -19,7 +19,7 @@ Open http://localhost:16686 to view traces.
 
 ## What Gets Configured
 
-**Jaeger v2** (Helm chart 4.5.0)
+**Jaeger v2** 
 - All-in-one deployment with in-memory storage
 - OTLP endpoints: `jaeger.observability.svc.cluster.local:4317`
 
@@ -33,12 +33,7 @@ Open http://localhost:16686 to view traces.
 ## Viewing Traces
 
 1. Open Jaeger UI: http://localhost:16686
-2. Select a service from the dropdown:
-   - `istio-ingressgateway` - Gateway traces
-   - `authorino` - Authentication traces
-   - `limitador` - Rate limiting traces
-   - `kuadrant-operator` - Operator control plane
-   - `limitador-operator` - Limitador operator control plane
+2. Select a service from the dropdown
 3. Click "Find Traces" to see recent activity
 4. Click a trace to see the full request flow with timing breakdowns
 
@@ -64,12 +59,12 @@ make uninstall-jaeger
 make install-jaeger         # Install Jaeger v2 via Helm
 make uninstall-jaeger       # Remove Jaeger
 make jaeger-port-forward    # Port-forward to UI (http://localhost:16686)
-make deploy-tracing         # Same as kubectl apply -k (optional)
+make deploy-tracing         # Deploys tracing configuration
 ```
 
 ## Configuration Files
 
-This directory contains kustomize configs that get applied via `kubectl apply -k`:
+This directory contains kustomize configs that get applied:
 
 - `istio-tracing.yaml` - Istio Telemetry resource (100% sampling)
 - `istio-patch.yaml` - Istio CR patch for OpenTelemetry provider

@@ -1,0 +1,15 @@
+apiVersion: sailoperator.io/v1
+kind: Istio
+metadata:
+  name: default
+spec:
+  values:
+    meshConfig:
+      defaultConfig:
+        tracing: {}
+      enableTracing: true
+      extensionProviders:
+        - name: jaeger-otlp
+          opentelemetry:
+            port: 4317
+            service: jaeger.observability.svc.cluster.local

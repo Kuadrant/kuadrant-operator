@@ -83,4 +83,4 @@ print-catalog-repo: ## Print catalog repo
 
 print-catalog-image: ## Print catalog image
 	@ver=$$( $(MAKE) -s read-release-version ); \
-		echo "$(CATALOG_IMG_REPO):$$ver"
+		echo "$(CATALOG_IMG_REPO):v$$ver"

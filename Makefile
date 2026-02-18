@@ -535,14 +535,14 @@ read-release-version: ## Reads release version
 
 print-bundle-image: ## Print bundle image
 	@ver=$$( $(MAKE) -s read-release-version ); \
-		echo "$(IMAGE_TAG_BASE)-bundle:$$ver"
+		echo "$(IMAGE_TAG_BASE)-bundle:v$$ver"
 
 print-operator-repo: ## Print operator repo
 	@echo $(IMAGE_TAG_BASE)
 
 print-operator-image: ## Print operator image
 	@ver=$$( $(MAKE) -s read-release-version ); \
-		echo "$(IMAGE_TAG_BASE):$$ver"
+		echo "$(IMAGE_TAG_BASE):v$$ver"
 
 .PHONY: update-catalogsource
 update-catalogsource:

@@ -531,16 +531,18 @@ bundle-operator-image-url: yq ## Read operator image reference URL from the mani
 
 .PHONY: read-release-version
 read-release-version: ## Reads release version
-	@echo "v$(VERSION)"
+	@$(YQ) '.kuadrant-operator.version' $(PROJECT_PATH)/release.yaml
 
 print-bundle-image: ## Print bundle image
-	@echo $(BUNDLE_IMG)
+	@ver=$$( $(MAKE) -s read-release-version ); \
+		echo "$(IMAGE_TAG_BASE)-bundle:$$ver"
 
 print-operator-repo: ## Print operator repo
 	@echo $(IMAGE_TAG_BASE)
 
 print-operator-image: ## Print operator image
-	@echo $(IMG)
+	@ver=$$( $(MAKE) -s read-release-version ); \
+		echo "$(IMAGE_TAG_BASE):$$ver"
 
 .PHONY: update-catalogsource
 update-catalogsource:

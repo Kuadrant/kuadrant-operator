@@ -152,7 +152,7 @@ The most important fields for request correlation are:
 A typical request flows through these components:
 
 ```
-Client → Envoy Gateway → [WASM Filters] → Authorino → Limitador → Backend Service
+Client → Envoy Gateway → [Wasm Shim] → Authorino → Limitador → Backend Service
          ↓                                    ↓            ↓
     Access Logs                          Auth Logs    Rate Limit Logs
 ```
@@ -172,15 +172,15 @@ spec:
     dataPlane:
       httpHeaderIdentifier: x-request-id
       defaultLevels:
-        - debug: "true"  # Optional: Controls OTEL trace filtering for WASM modules
+        - debug: "true"  # Optional: Controls OTEL trace filtering for the wasm-shim
     tracing:
       defaultEndpoint: rpc://jaeger.jaeger.svc.cluster.local:4317
       insecure: true
 ```
 
 This configuration:
-- Tells WASM filters to include the `x-request-id` header value in trace spans
-- Enables request correlation across Envoy access logs, Authorino, Limitador, and WASM traces
+- Tells wasm-shim to include the `x-request-id` header value in trace spans
+- Enables request correlation across Envoy access logs, Authorino, Limitador, and wasm-shim traces
 - Optionally controls OpenTelemetry trace filtering via `defaultLevels`
 
 **Important - Understanding Kuadrant Observability vs Envoy Access Logs:**
@@ -189,7 +189,7 @@ This configuration:
 - **Kuadrant `dataPlane.defaultLevels`**: Controls trace span filtering sent to your tracing collector (Jaeger/Tempo), **not** gateway pod logs
 - **Kuadrant `dataPlane.httpHeaderIdentifier`**: Includes the specified header in both trace spans and enables correlation with access logs
 
-For detailed information on WASM observability configuration and how to enable debug logging in gateway pods, see the [Tracing documentation](./tracing.md#data-plane-observability-configuration).
+For detailed information on wasm-shim observability configuration and how to enable debug logging in gateway pods, see the [Tracing documentation](./tracing.md#data-plane-observability-configuration).
 
 ### Example Log Correlation
 

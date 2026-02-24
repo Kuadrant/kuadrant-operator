@@ -44,36 +44,7 @@ type Provider struct {
 // otelConfig provides shared service identity (used across logs, traces, metrics)
 // Returns an error if no traces endpoint is configured.
 func NewProvider(ctx context.Context, otelConfig *otel.Config) (*Provider, error) {
-	endpoint := otelConfig.TracesEndpoint()
-	if endpoint == "" {
-		return nil, fmt.Errorf("traces disabled: no endpoint configured")
-	}
-
-	// Create shared resource for service identity (same as logs/metrics)
-	res, err := otel.NewResource(ctx, otelConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create resource: %w", err)
-	}
-
-	// Create trace exporter based on endpoint URL
-	exporter, err := newTraceExporter(ctx, endpoint, otelConfig.Insecure)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
-	}
-
-	// Create TracerProvider with batch span processor
-	// Batching improves performance by sending spans in groups
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-		sdktrace.WithBatcher(exporter),
-		// Sample all traces in development
-		// In production, you may want to use a sampling strategy
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	)
-
-	return &Provider{
-		tracerProvider: tracerProvider,
-	}, nil
+	return NewProviderWithEndpoint(ctx, otelConfig, otelConfig.TracesEndpoint(), otelConfig.Insecure)
 }
 
 // newTraceExporter creates an OTLP trace exporter based on endpoint URL scheme
@@ -116,6 +87,32 @@ func newTraceExporter(ctx context.Context, endpoint string, insecure bool) (sdkt
 	}
 
 	return otlptrace.New(ctx, client)
+}
+
+// NewProviderWithEndpoint creates a trace provider using the given endpoint directly,
+// bypassing env var lookups. Used by DynamicProvider for runtime reconfiguration.
+func NewProviderWithEndpoint(ctx context.Context, otelConfig *otel.Config, endpoint string, insecure bool) (*Provider, error) {
+	if endpoint == "" {
+		return nil, fmt.Errorf("traces disabled: no endpoint configured")
+	}
+
+	res, err := otel.NewResource(ctx, otelConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	exporter, err := newTraceExporter(ctx, endpoint, insecure)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
+	}
+
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+
+	return &Provider{tracerProvider: tracerProvider}, nil
 }
 
 // TracerProvider returns the underlying TracerProvider

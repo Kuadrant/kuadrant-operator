@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/otel"
 	otelapi "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/embedded"
-	"go.opentelemetry.io/otel/trace/noop" // used for noop.NewTracerProvider() in Reconfigure
+	"go.opentelemetry.io/otel/trace/noop"
 
 	kuadrantotel "github.com/kuadrant/kuadrant-operator/internal/otel"
 )
@@ -33,35 +33,35 @@ import (
 // replacing the global OTEL tracer provider.
 //
 // Precedence: ConfigMap endpoint > env var endpoint > disabled (noop).
-// Deleting the ConfigMap reverts to the env var config captured at startup.
+// Deleting the ConfigMap reverts to the env var config.
 type DynamicProvider struct {
-	mu               sync.Mutex
-	current          *Provider
-	otelConfig       *kuadrantotel.Config
-	fallbackEndpoint string
-	fallbackInsecure bool
+	mu         sync.Mutex
+	current    *Provider
+	otelConfig *kuadrantotel.Config
+	// currentEndpoint and currentInsecure track the active configuration so
+	// Reconfigure can skip unnecessary provider restarts on every reconcile cycle.
+	currentEndpoint string
+	currentInsecure bool
 }
 
-// NewDynamicProvider creates a DynamicProvider initialized from env var config.
-// If a traces endpoint is set via env vars, it attempts to start exporting immediately.
-// The env var values are stored as fallback for when a ConfigMap is later deleted.
+// NewDynamicProvider creates a DynamicProvider.
+// If a traces endpoint is configured, it attempts to start exporting immediately.
 //
 // Failure to connect to the initial endpoint is non-fatal: the provider is always
 // returned so the tracing ConfigMap reconciler can still reconfigure it at runtime.
-// The error is returned alongside the provider so callers can log it.
 func NewDynamicProvider(ctx context.Context, otelConfig *kuadrantotel.Config) (*DynamicProvider, error) {
 	dp := &DynamicProvider{
-		otelConfig:       otelConfig,
-		fallbackEndpoint: otelConfig.TracesEndpoint(),
-		fallbackInsecure: otelConfig.Insecure,
+		otelConfig: otelConfig,
 	}
 
-	if dp.fallbackEndpoint != "" {
-		p, err := NewProviderWithEndpoint(ctx, otelConfig, dp.fallbackEndpoint, dp.fallbackInsecure)
+	if endpoint := otelConfig.TracesEndpoint(); endpoint != "" {
+		p, err := NewProviderWithEndpoint(ctx, otelConfig, endpoint, otelConfig.Insecure)
 		if err != nil {
 			return dp, err
 		}
 		dp.current = p
+		dp.currentEndpoint = endpoint
+		dp.currentInsecure = otelConfig.Insecure
 		otel.SetTracerProvider(p.TracerProvider())
 	}
 
@@ -70,35 +70,44 @@ func NewDynamicProvider(ctx context.Context, otelConfig *kuadrantotel.Config) (*
 
 // Reconfigure hot-swaps the trace provider to export to the given endpoint.
 // Passing an empty endpoint disables tracing (sets a noop provider).
-// The previous provider is shut down gracefully before the new one starts.
+// Idempotent: if the endpoint and insecure flag are unchanged it returns
+// immediately without restarting the provider.
 func (d *DynamicProvider) Reconfigure(ctx context.Context, endpoint string, insecure bool) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	if d.currentEndpoint == endpoint && d.currentInsecure == insecure {
+		return nil
+	}
 
 	_ = d.shutdownCurrent(ctx)
 
 	if endpoint == "" {
 		otel.SetTracerProvider(noop.NewTracerProvider())
+		d.currentEndpoint = ""
+		d.currentInsecure = false
 		return nil
 	}
 
 	p, err := NewProviderWithEndpoint(ctx, d.otelConfig, endpoint, insecure)
 	if err != nil {
-		// Ensure a consistent state even on failure: no partial provider.
 		otel.SetTracerProvider(noop.NewTracerProvider())
+		d.currentEndpoint = ""
+		d.currentInsecure = false
 		return err
 	}
 
 	d.current = p
 	otel.SetTracerProvider(p.TracerProvider())
+	d.currentEndpoint = endpoint
+	d.currentInsecure = insecure
 	return nil
 }
 
-// RevertToFallback restores the trace provider to the env var configuration
-// captured at startup. Used when the tracing ConfigMap is deleted.
-// If no env var endpoint was set, this disables tracing.
+// RevertToFallback restores the trace provider to the env var configuration.
+// If no env var endpoint is configured, this disables tracing.
 func (d *DynamicProvider) RevertToFallback(ctx context.Context) error {
-	return d.Reconfigure(ctx, d.fallbackEndpoint, d.fallbackInsecure)
+	return d.Reconfigure(ctx, d.otelConfig.TracesEndpoint(), d.otelConfig.Insecure)
 }
 
 // Shutdown gracefully shuts down the current provider, flushing any pending spans.
@@ -110,13 +119,13 @@ func (d *DynamicProvider) Shutdown(ctx context.Context) error {
 }
 
 // GlobalTracer returns a tracer that always delegates to the current global tracer
-// provider. This ensures that after a Reconfigure call, spans are routed to the
-// updated provider without needing to update every call site.
+// provider. This is necessary because the controller caches the tracer as a field
+// and reuses it across reconcile cycles — the proxy ensures provider swaps are
+// picked up without replacing the cached instance.
 func (d *DynamicProvider) GlobalTracer(name string) otelapi.Tracer {
 	return &globalTracerProxy{name: name}
 }
 
-// shutdownCurrent shuts down the current provider using the caller's context.
 // Must be called with d.mu held.
 func (d *DynamicProvider) shutdownCurrent(ctx context.Context) error {
 	if d.current == nil {
@@ -127,10 +136,8 @@ func (d *DynamicProvider) shutdownCurrent(ctx context.Context) error {
 	return err
 }
 
-// globalTracerProxy implements otelapi.Tracer by delegating every call to the
-// current global tracer provider. This makes the tracer resilient to provider
-// swaps performed by DynamicProvider.Reconfigure.
-// embedded.Tracer satisfies the unexported embedded interface requirement of otelapi.Tracer.
+// globalTracerProxy implements otelapi.Tracer.
+// embedded.Tracer satisfies its unexported interface requirement.
 type globalTracerProxy struct {
 	embedded.Tracer
 	name string

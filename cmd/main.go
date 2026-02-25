@@ -269,12 +269,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = controllers.NewTracingConfigMapReconciler(mgr, env.GetString("OPERATOR_NAMESPACE", ""), dynTraceProvider).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to setup tracing configmap reconciler")
-		os.Exit(1)
-	}
-
-	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, opts...)
+	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, dynTraceProvider, opts...)
 	if err != nil {
 		setupLog.Error(err, "unable to setup policy controller")
 		os.Exit(1)

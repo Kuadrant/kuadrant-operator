@@ -431,6 +431,15 @@ func (r *RequestPathObjects) Hostnames() []string
 
 **Note:** Per Gateway API spec, "at least one of Service and Method MUST be a non-empty string"
 
+**Empty match handling:**
+
+```go
+// Empty GRPCRouteMatch = match all gRPC requests (consistent with HTTPRoute behavior)
+if match.Method == nil && len(match.Headers) == 0 {
+    return []string{} // Empty predicates = match all
+}
+```
+
 ---
 
 #### Task 5: kuadrant-operator - AuthPolicy GRPCRoute Support

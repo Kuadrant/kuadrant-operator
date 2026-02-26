@@ -20,6 +20,11 @@ This design document outlines the implementation of GRPCRoute support in the Kua
 4. **gRPC streaming support for token limiting** - Out of scope for this feature (TokenRateLimitPolicy is separate)
 5. **gRPC-specific convenience attributes** - Optional future enhancement (`grpc.service`, `grpc.method`)
 
+## Requirements
+
+- **Minimum Gateway API version:** v1.1.0 (GRPCRoute reached GA in this release)
+- The operator should log a warning if GRPCRoute CRD is not available at startup
+
 ## Design
 
 ### Backwards Compatibility
@@ -351,6 +356,33 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 - [ ] Update existing callers of `ObjectsInRequestPath()` for new signature
 - [ ] Add unit tests for path extraction with both route types
 
+**RequestPathObjects struct design:**
+
+```go
+// RequestPathObjects holds extracted objects from a topology path,
+// supporting both HTTPRoute and GRPCRoute paths.
+type RequestPathObjects struct {
+    GatewayClass *machinery.GatewayClass
+    Gateway      *machinery.Gateway
+    Listener     *machinery.Listener
+    Route        machinery.Targetable  // Either HTTPRoute or GRPCRoute
+    RouteRule    machinery.Targetable  // Either HTTPRouteRule or GRPCRouteRule
+}
+
+// Type checking helpers
+func (r *RequestPathObjects) IsHTTPRoute() bool
+func (r *RequestPathObjects) IsGRPCRoute() bool
+
+// Type assertion helpers
+func (r *RequestPathObjects) AsHTTPRoute() (*machinery.HTTPRoute, *machinery.HTTPRouteRule)
+func (r *RequestPathObjects) AsGRPCRoute() (*machinery.GRPCRoute, *machinery.GRPCRouteRule)
+
+// Common accessors
+func (r *RequestPathObjects) RouteNamespace() string
+func (r *RequestPathObjects) RouteName() string
+func (r *RequestPathObjects) Hostnames() []string
+```
+
 ---
 
 #### Task 4: kuadrant-operator - GRPCRoute Predicate Generation
@@ -361,12 +393,24 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 - [ ] Implement `predicateFromGRPCMethod()` for service/method → url_path conversion
 - [ ] Implement `predicateFromGRPCHeader()` (can reuse HTTP header logic)
 - [ ] Create `GRPCRouteMatchConfig` struct in `internal/gatewayapi/types.go`
-- [ ] Implement `SortableGRPCRouteMatchConfigs` with Gateway API precedence rules
+- [ ] Implement `SortableGRPCRouteMatchConfigs` with Gateway API precedence rules (see below)
 - [ ] Implement `BuildActionSetsForGRPCPath()` in `internal/wasm/utils.go`
-- [ ] Verify DNSPolicy works with GRPCRoutes attached to Gateway (topology test)
-- [ ] Verify TLSPolicy works with GRPCRoutes attached to Gateway (topology test)
+- [ ] Verify topology correctly links Gateway → GRPCRoute (prerequisite for DNS/TLS policy inheritance)
+- [ ] Integration test: DNSPolicy on Gateway with attached GRPCRoutes resolves correctly
+- [ ] Integration test: TLSPolicy on Gateway with attached GRPCRoutes resolves correctly
 - [ ] Add unit tests for predicate generation (all match types, edge cases)
 - [ ] Add unit tests for sorting behavior
+
+**GRPCRouteMatch sorting precedence (per Gateway API spec):**
+
+1. **Method specificity** (most specific first):
+   - Exact service + exact method
+   - Exact service + regex method
+   - Exact service only (no method)
+   - Regex service
+   - No service/method specified
+2. **Number of header matches** (more headers = higher precedence)
+3. **Lexicographic order** (namespace/name tie-breaker)
 
 ---
 
@@ -383,6 +427,8 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 - [ ] Add unit tests for AuthPolicy with GRPCRoute targets
 - [ ] Add integration tests for AuthConfig generation from GRPCRoutes
 
+**Iteration strategy:** Use separate iteration loops for HTTPRouteRules and GRPCRouteRules (rather than combined iteration with type switching). This provides clearer separation and easier debugging.
+
 ---
 
 #### Task 6: kuadrant-operator - RateLimitPolicy GRPCRoute Support
@@ -396,6 +442,8 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 - [ ] Create `LimitsNamespaceFromGRPCRoute()` helper function
 - [ ] Add unit tests for RateLimitPolicy with GRPCRoute targets
 - [ ] Add integration tests for Limitador config generation from GRPCRoutes
+
+**Iteration strategy:** Use separate iteration loops for HTTPRouteRules and GRPCRouteRules (same pattern as Task 5).
 
 ---
 
@@ -456,6 +504,53 @@ _(No tasks in progress)_
 ### Completed
 
 _(No tasks completed yet)_
+
+---
+
+## Alternatives Considered
+
+### Alternative 1: GRPCRoute as HTTPRoute Adapter
+
+Translate GRPCRoute to HTTPRoute internally instead of parallel code paths:
+
+```go
+func GRPCRouteMatchToHTTPRouteMatch(grpcMatch gwapiv1.GRPCRouteMatch) gwapiv1.HTTPRouteMatch {
+    return gwapiv1.HTTPRouteMatch{
+        Path: &gwapiv1.HTTPPathMatch{
+            Type:  ptr(gwapiv1.PathMatchExact),
+            Value: ptr("/" + grpcMatch.Method.Service + "/" + grpcMatch.Method.Method),
+        },
+        Method: ptr(gwapiv1.HTTPMethodPost), // gRPC is always POST
+    }
+}
+```
+
+| Pros | Cons |
+|------|------|
+| Reuses all existing HTTPRoute logic | Loses GRPCRoute semantics |
+| Simpler maintenance - one code path | Harder to add gRPC-specific features later |
+| | Obscures what's actually happening |
+
+**Verdict:** Not recommended. The parallel approach is cleaner and more extensible.
+
+### Alternative 2: Generic Route Interface
+
+Create a common interface for both route types:
+
+```go
+type RouteWrapper interface {
+    Hostnames() []string
+    ParentRefs() []gwapiv1.ParentReference
+    Rules() []RouteRuleWrapper
+}
+```
+
+| Pros | Cons |
+|------|------|
+| Truly unified handling | Significant refactor of existing code |
+| Extensible to TCPRoute, UDPRoute | Over-engineering for current needs |
+
+**Verdict:** Not recommended for initial implementation. Could be considered as a future refactor if TCPRoute/UDPRoute support is needed.
 
 ---
 

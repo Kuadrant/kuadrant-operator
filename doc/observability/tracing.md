@@ -29,7 +29,7 @@ spec:
     - name: jaeger-collector
     randomSamplingPercentage: 100
 ---
-apiVersion: operator.istio.io/v1alpha1
+apiVersion: sailoperator.io/v1
 kind: Istio
 metadata:
   name: default
@@ -566,10 +566,10 @@ curl -X POST 'http://localhost:15000/logging?level=debug'
 
 **Note:** Most gateway pods don't have `curl` installed, so we use port-forwarding to access the Envoy admin interface from your local machine. This setting is temporary and will reset when the pod restarts.
 
-**For Istio gateways (persistent - via Istio Operator):**
+**For Istio gateways (persistent - via Sail Operator):**
 
 ```yaml
-apiVersion: operator.istio.io/v1alpha1
+apiVersion: sailoperator.io/v1
 kind: Istio
 metadata:
   name: default

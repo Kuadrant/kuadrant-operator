@@ -329,11 +329,12 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 
 ### Todo
 
-#### Task 1: policy-machinery - GRPCRoutesResource
+#### Task 1: policy-machinery - GRPCRoute Support
 **Repository:** `kuadrant/policy-machinery`
 
 - [ ] Add `GRPCRoutesResource` constant to `controller/resources.go`
-- [ ] Add unit test for new resource constant
+- [ ] Update `controller/topology_builder.go` to include GRPCRoutes in topology building
+- [ ] Add unit tests for new resource constant and topology building
 
 ---
 

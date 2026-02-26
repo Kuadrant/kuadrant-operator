@@ -417,6 +417,20 @@ func (r *RequestPathObjects) Hostnames() []string
 2. **Number of header matches** (more headers = higher precedence)
 3. **Lexicographic order** (namespace/name tie-breaker)
 
+**GRPCMethodMatch predicate patterns (all combinations to implement):**
+
+| Pattern | CEL Predicate |
+|---------|---------------|
+| Exact service + exact method | `request.url_path == '/Service/Method'` |
+| Exact service only | `request.url_path.startsWith('/Service/')` |
+| Exact method only (no service) | `request.url_path.matches('^/[^/]+/Method$')` |
+| Regex service + regex method | `request.url_path.matches('^/ServicePattern/MethodPattern$')` |
+| Regex service only | `request.url_path.matches('^/ServicePattern/.*$')` |
+| Regex method only | `request.url_path.matches('^/[^/]+/MethodPattern$')` |
+| Mixed: exact service + regex method | `request.url_path.matches('^/Service/MethodPattern$')` |
+
+**Note:** Per Gateway API spec, "at least one of Service and Method MUST be a non-empty string"
+
 ---
 
 #### Task 5: kuadrant-operator - AuthPolicy GRPCRoute Support

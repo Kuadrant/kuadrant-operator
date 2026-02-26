@@ -19,6 +19,8 @@ This design document outlines the implementation of GRPCRoute support in the Kua
 3. **New Well-Known Attributes** - RFC 0002 already supports HTTP/2; gRPC uses standard `request.url_path`
 4. **gRPC streaming support for token limiting** - Out of scope for this feature (TokenRateLimitPolicy is separate)
 5. **gRPC-specific convenience attributes** - Optional future enhancement (`grpc.service`, `grpc.method`)
+6. **Extension policies** - OIDCPolicy, PlanPolicy, TelemetryPolicy have separate reconcilers and will be addressed in follow-up work
+7. **APIProduct CRD** - Developer portal feature, separate domain from traffic policy
 
 ## Requirements
 
@@ -319,6 +321,9 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 1. **Go vs Ruby for talker-api**: Should the example app be rewritten in Go for ecosystem alignment, or extended in Ruby to preserve existing knowledge?
 2. **GRPCRoute GA verification**: Confirm Gateway API version in use includes GA GRPCRoute (v1.1.0+)
 3. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
+4. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
+5. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
+6. **GRPCRoute sectionName support**: How does `sectionName` targeting work for GRPCRoute rules? GRPCRoute rules don't have explicit names in the Gateway API spec. Behavior should mirror HTTPRoute's approach - to be documented during implementation.
 
 ## Execution
 
@@ -426,6 +431,7 @@ func (r *RequestPathObjects) Hostnames() []string
 - [ ] Add `AuthConfigGRPCRouteRuleAnnotation` constant
 - [ ] Add unit tests for AuthPolicy with GRPCRoute targets
 - [ ] Add integration tests for AuthConfig generation from GRPCRoutes
+- [ ] Run `make generate manifests bundle helm-build` after API changes
 
 **Iteration strategy:** Use separate iteration loops for HTTPRouteRules and GRPCRouteRules (rather than combined iteration with type switching). This provides clearer separation and easier debugging.
 
@@ -442,6 +448,7 @@ func (r *RequestPathObjects) Hostnames() []string
 - [ ] Create `LimitsNamespaceFromGRPCRoute()` helper function
 - [ ] Add unit tests for RateLimitPolicy with GRPCRoute targets
 - [ ] Add integration tests for Limitador config generation from GRPCRoutes
+- [ ] Run `make generate manifests bundle helm-build` after API changes
 
 **Iteration strategy:** Use separate iteration loops for HTTPRouteRules and GRPCRouteRules (same pattern as Task 5).
 
@@ -452,6 +459,8 @@ func (r *RequestPathObjects) Hostnames() []string
 **Depends on:** Task 5, Task 6
 
 - [ ] Create `grpcroute_policy_discoverability_reconciler.go` (mirror HTTPRoute pattern)
+- [ ] Create `FindGRPCRouteParentStatusFunc` helper (mirrors `FindRouteParentStatusFunc`)
+- [ ] Use `controller.GRPCRoutesResource` for status updates (requires Task 1)
 - [ ] Register GRPCRoute policy discoverability reconciler in workflow
 - [ ] Update all effective policy reconciler subscriptions with `GRPCRouteGroupKind`
 - [ ] Update all effective policy reconciler subscriptions with `GRPCRouteRuleGroupKind`
@@ -492,6 +501,28 @@ This task ensures comprehensive test coverage and adds E2E tests. Unit and integ
 - [ ] Write `doc/user-guides/ratelimiting/grpc-rl-for-app-developers.md`
 - [ ] Write `doc/user-guides/auth/grpc-auth-for-app-developers.md`
 - [ ] Include grpcurl commands for verification
+- [ ] Include gRPC-specific `when` clause examples in rate limiting guide
+
+**Example gRPC-specific `when` clause for documentation:**
+
+```yaml
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: grpc-method-limit
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpcstore
+  limits:
+    per-grpc-method:
+      when:
+        - predicate: "request.url_path == '/talker.TalkerService/Echo'"
+      rates:
+        - limit: 100
+          window: 1m
+```
 
 ---
 

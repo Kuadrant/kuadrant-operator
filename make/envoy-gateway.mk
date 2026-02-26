@@ -6,7 +6,7 @@
 EG_CONFIG_DIR = config/dependencies/envoy-gateway
 EG_NAMESPACE = envoy-gateway-system
 
-EG_VERSION ?= v1.2.6
+EG_VERSION ?= v1.7.0
 
 # egctl tool
 EGCTL ?= $(LOCALBIN)/egctl

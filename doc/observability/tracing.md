@@ -180,6 +180,22 @@ The Kuadrant operator exposes OpenTelemetry environment variables for control pl
 
 Control plane traces will appear under service name `kuadrant-operator` in Jaeger/Grafana.
 
+#### Authorino
+
+[Authorino control plane tracing](https://github.com/Kuadrant/authorino/blob/main/docs/user-guides/observability.md#control-plane-tracing) is automatically enabled when data plane tracing is configured via the Kuadrant CR. When enabled, 
+Authorino will attempt to link `AuthConfig` reconciliation traces with traces from the Kuadrant operator through 
+[trace context propagation](https://github.com/Kuadrant/authorino/blob/main/docs/user-guides/observability.md#linking-parent-traces-for-authconfig). 
+This linking requires Kuadrant operator control plane tracing to also be enabled.
+
+#### Limitador Operator
+
+[Limitador Operator control plane tracing](https://github.com/Kuadrant/limitador-operator/blob/main/doc/tracing.md#control-plane-tracing-limitador-operator) can be enabled using the 
+same environment variable configuration as the Kuadrant operator.
+
+When enabled, the Limitador Operator will attempt to link `Limitador` reconciliation traces with traces from the Kuadrant operator 
+through [trace context propagation](https://github.com/Kuadrant/limitador-operator/blob/main/doc/tracing.md#trace-context-propagation). 
+This linking requires Kuadrant operator control plane tracing to also be enabled.
+
 ### Control Plane vs Data Plane Tracing
 
 Kuadrant supports tracing at two levels:

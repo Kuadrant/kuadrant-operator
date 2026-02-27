@@ -12,6 +12,8 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -70,6 +72,8 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
 	modifiedAuthConfigs := []string{}
 
+	tracer := controller.TracerFromContext(ctx)
+
 	for pathID, effectivePolicy := range effectivePoliciesMap {
 		_, _, _, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		if err != nil {
@@ -84,8 +88,18 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
 		httpRouteRuleKey := httpRouteRule.Name
 
+		spanCtx, span := tracer.Start(ctx, "authconfig")
+
 		authConfigName := AuthConfigNameForPath(pathID)
-		desiredAuthConfig := r.buildDesiredAuthConfig(ctx, effectivePolicy, authConfigName, authConfigsNamespace)
+		desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace)
+
+		defer span.End()
+		span.SetAttributes(
+			attribute.String("namespace", desiredAuthConfig.GetNamespace()),
+			attribute.String("name", desiredAuthConfig.GetName()),
+			attribute.StringSlice("sources", effectivePolicy.SourcePolicies),
+		)
+
 		desiredAuthConfigs[k8stypes.NamespacedName{Name: desiredAuthConfig.GetName(), Namespace: desiredAuthConfig.GetNamespace()}] = struct{}{}
 
 		resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
@@ -99,12 +113,18 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
 			desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
 			if err != nil {
-				logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
+				msg := "failed to destruct authconfig object"
+				logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, msg)
 				continue
 			}
 
 			if _, err = resource.Create(ctx, desiredAuthConfigUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
+				msg := "failed to create authconfig object"
+				logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, msg)
 				// TODO: handle error
 			}
 			continue
@@ -122,7 +142,10 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		// delete
 		if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
 			if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
-				logger.Error(err, "failed to delete wasmplugin object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
+				msg := "failed to delete authconfig object"
+				logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
+				span.RecordError(err)
+				span.SetStatus(codes.Error, msg)
 				// TODO: handle error
 			}
 			continue
@@ -133,11 +156,17 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 		existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
 		if err != nil {
-			logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
+			msg := "failed to destruct authconfig object"
+			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, msg)
 			continue
 		}
 		if _, err = resource.Update(ctx, existingAuthConfigUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
+			msg := "failed to update authconfig object"
+			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, msg)
 			// TODO: handle error
 		}
 	}

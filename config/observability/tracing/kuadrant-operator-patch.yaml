@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuadrant-operator-controller-manager
+  namespace: kuadrant-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: rpc://jaeger.observability.svc.cluster.local:4317
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"

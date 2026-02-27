@@ -10,7 +10,9 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -67,6 +69,12 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		limitador.Annotations = make(map[string]string)
 	}
 
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.String("namespace", limitador.Namespace),
+		attribute.String("name", limitador.Name),
+	)
+
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(limitador.Annotations))
 
 	limitador.Spec.Limits = desiredLimits
@@ -104,11 +112,13 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 
 func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index) {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processEffectivePolicies").WithValues("context", ctx)
+	var sources []string
 	// RateLimitPolicies
 	if effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
 		effectivePoliciesMap := effectivePolicies.(EffectiveRateLimitPolicies)
 		logger.V(1).Info("processing rate limit policies", "count", len(effectivePoliciesMap))
 		for pathID, effectivePolicy := range effectivePoliciesMap {
+			sources = append(sources, effectivePolicy.SourcePolicies...)
 			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex)
 		}
 	}
@@ -118,9 +128,15 @@ func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context
 		effectivePoliciesMap := effectivePolicies.(EffectiveTokenRateLimitPolicies)
 		logger.V(1).Info("processing token rate limit policies", "count", len(effectivePoliciesMap))
 		for pathID, effectivePolicy := range effectivePoliciesMap {
+			sources = append(sources, effectivePolicy.SourcePolicies...)
 			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex)
 		}
 	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.StringSlice("sources", lo.Uniq(sources)),
+	)
 }
 
 func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index) {

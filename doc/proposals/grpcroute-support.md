@@ -2,11 +2,11 @@
 
 ## Summary
 
-This design document outlines the implementation of GRPCRoute support in the Kuadrant ecosystem. GRPCRoute is a Gateway API resource (GA since v1.1.0) that provides gRPC-native routing semantics. This work enables AuthPolicy, RateLimitPolicy, DNSPolicy, and TLSPolicy to target GRPCRoute resources, allowing Kuadrant to manage authentication, authorization, and rate limiting for gRPC services.
+This design document outlines the implementation of GRPCRoute support in the Kuadrant ecosystem. GRPCRoute is a Gateway API resource (GA since v1.1.0) that provides gRPC-native routing semantics. This work enables AuthPolicy and RateLimitPolicy to target GRPCRoute resources, and ensures DNSPolicy and TLSPolicy correctly resolve when applied to Gateways with attached GRPCRoutes.
 
 ## Goals
 
-1. Enable all Kuadrant policies to target GRPCRoute resources via the standard `targetRef` field
+1. Enable AuthPolicy and RateLimitPolicy to target GRPCRoute resources via the standard `targetRef` field
 2. Generate correct CEL predicates from GRPCRouteMatch (service/method matching)
 3. Integrate GRPCRoutes into the existing topology graph
 4. Provide example applications and documentation for gRPC use cases
@@ -25,6 +25,7 @@ This design document outlines the implementation of GRPCRoute support in the Kua
 ## Requirements
 
 - **Minimum Gateway API version:** v1.1.0 (GRPCRoute reached GA in this release)
+- **sectionName targeting** requires Gateway API v1.2.0+ (GRPCRouteRule `name` field was added in v1.2.0)
 - The operator should log a warning if GRPCRoute CRD is not available at startup
 
 ## Design
@@ -56,25 +57,25 @@ This means:
 ```
                             KUADRANT OPERATOR (changes here)
   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-  │ GRPCRoute   │ →  │ CEL         │ →  │ AuthConfig  │    │ Limitador   │
-  │ Match       │    │ Predicates  │    │ (Authorino) │    │ Limits      │
-  │             │    │             │    │             │    │             │
-  │ service: X  │    │ url_path == │    │             │    │             │
-  │ method: Y   │    │ '/X/Y'      │    │             │    │             │
+  │ GRPCRoute   │    │ AuthPolicy/ │    │ CEL         │    │ AuthConfig/ │
+  │ Match       │ +  │ RateLimit   │ →  │ Predicates  │ →  │ Limitador   │
+  │             │    │ Policy      │    │             │    │ Limits      │
+  │ service: X  │    │             │    │ url_path == │    │             │
+  │ method: Y   │    │             │    │ '/X/Y'      │    │             │
   └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-        ▲                                     │                  │
-        │                                     ▼                  ▼
-        │                              ┌───────────────────────────────┐
-        │                              │     ENVOY + WASM (no changes) │
-        │                              │  - Evaluates CEL predicates   │
-        │                              │  - Works for HTTP and gRPC    │
-        │                              └───────────────────────────────┘
-        │                                     │                  │
-        │                                     ▼                  ▼
-        │                              ┌─────────────┐    ┌─────────────┐
-        │                              │ AUTHORINO   │    │ LIMITADOR   │
-        │                              │ (no changes)│    │ (no changes)│
-        │                              └─────────────┘    └─────────────┘
+                                                                 │
+                                                                 ▼
+                                         ┌───────────────────────────────┐
+                                         │     ENVOY + WASM (no changes) │
+                                         │  - Evaluates CEL predicates   │
+                                         │  - Works for HTTP and gRPC    │
+                                         └───────────────────────────────┘
+                                                │                  │
+                                                ▼                  ▼
+                                         ┌─────────────┐    ┌─────────────┐
+                                         │ AUTHORINO   │    │ LIMITADOR   │
+                                         │ (no changes)│    │ (no changes)│
+                                         └─────────────┘    └─────────────┘
 ```
 
 #### Predicate Generation
@@ -91,57 +92,9 @@ GRPCRouteMatch translates to CEL predicates using standard HTTP attributes:
 
 #### Policy TargetRef Validation
 
-AuthPolicy and RateLimitPolicy `targetRef` fields will accept `GRPCRoute` as a valid kind. The policy structure is identical to HTTPRoute - only the `targetRef` changes.
+AuthPolicy and RateLimitPolicy `targetRef` fields will accept `GRPCRoute` as a valid kind. The policy structure is identical to HTTPRoute — only the `targetRef` changes.
 
-**AuthPolicy - HTTPRoute (existing):**
-```yaml
-apiVersion: kuadrant.io/v1
-kind: AuthPolicy
-metadata:
-  name: toystore-authn
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: toystore
-  defaults:
-    rules:
-      authentication:
-        api-key-authn:
-          apiKey:
-            selector:
-              matchLabels:
-                app: toystore
-          credentials:
-            authorizationHeader:
-              prefix: APIKEY
-```
-
-**AuthPolicy - GRPCRoute (equivalent):**
-```yaml
-apiVersion: kuadrant.io/v1
-kind: AuthPolicy
-metadata:
-  name: grpcstore-authn
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: GRPCRoute  # Only this changes
-    name: grpcstore
-  defaults:
-    rules:
-      authentication:
-        api-key-authn:
-          apiKey:
-            selector:
-              matchLabels:
-                app: grpcstore
-          credentials:
-            authorizationHeader:
-              prefix: APIKEY
-```
-
-**RateLimitPolicy - HTTPRoute (existing):**
+**Example - RateLimitPolicy targeting HTTPRoute (existing):**
 ```yaml
 apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
@@ -160,26 +113,15 @@ spec:
             window: 10s
 ```
 
-**RateLimitPolicy - GRPCRoute (equivalent):**
+**For GRPCRoute, only the targetRef changes:**
 ```yaml
-apiVersion: kuadrant.io/v1
-kind: RateLimitPolicy
-metadata:
-  name: grpcstore-ratelimit
-spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: GRPCRoute  # Only this changes
     name: grpcstore
-  defaults:
-    limits:
-      global:
-        rates:
-          - limit: 10
-            window: 10s
 ```
 
-**Key observation:** The policy definitions are identical. Only the `targetRef.kind` changes from `HTTPRoute` to `GRPCRoute`. This is because policies operate on the generated CEL predicates, not the route type directly.
+The rest of the policy spec (rules, limits, authentication config, etc.) is identical. This applies to both AuthPolicy and RateLimitPolicy. Policies operate on the generated CEL predicates, not the route type directly.
 
 #### Example GRPCRoute Configuration
 
@@ -209,7 +151,7 @@ spec:
 
 | Component | Repository | Change Type |
 |-----------|------------|-------------|
-| policy-machinery | `kuadrant/policy-machinery` | Add `GRPCRoutesResource` constant |
+| policy-machinery | `kuadrant/policy-machinery` | Controller-layer wiring (machinery types/topology already exist) |
 | kuadrant-operator | `kuadrant/kuadrant-operator` | Watchers, topology, predicates, reconcilers |
 | authorino-examples | `kuadrant/authorino-examples` | Dual-protocol talker-api (optional) |
 
@@ -323,18 +265,18 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 3. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
 4. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
 5. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
-6. **GRPCRoute sectionName support**: How does `sectionName` targeting work for GRPCRoute rules? GRPCRoute rules don't have explicit names in the Gateway API spec. Behavior should mirror HTTPRoute's approach - to be documented during implementation.
 
 ## Execution
 
 ### Todo
 
-#### Task 1: policy-machinery - GRPCRoute Support
+#### Task 1: policy-machinery - GRPCRoute Controller Wiring
 **Repository:** `kuadrant/policy-machinery`
+**Note:** The machinery layer already has full GRPCRoute support (types, link functions, topology options) via PR #16. This task adds the controller-layer integration.
 
 - [ ] Add `GRPCRoutesResource` constant to `controller/resources.go`
 - [ ] Update `controller/topology_builder.go` to include GRPCRoutes in topology building
-- [ ] Add unit tests for new resource constant and topology building
+- [ ] Add unit tests for topology building with GRPCRoutes
 
 ---
 
@@ -407,16 +349,15 @@ func (r *RequestPathObjects) Hostnames() []string
 - [ ] Add unit tests for predicate generation (all match types, edge cases)
 - [ ] Add unit tests for sorting behavior
 
-**GRPCRouteMatch sorting precedence (per Gateway API spec):**
+**GRPCRouteMatch sorting precedence ([per Gateway API spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCRouteRule)):**
 
-1. **Method specificity** (most specific first):
-   - Exact service + exact method
-   - Exact service + regex method
-   - Exact service only (no method)
-   - Regex service
-   - No service/method specified
-2. **Number of header matches** (more headers = higher precedence)
-3. **Lexicographic order** (namespace/name tie-breaker)
+1. Largest number of characters in a matching non-wildcard hostname
+2. Largest number of characters in a matching hostname
+3. Largest number of characters in a matching service
+4. Largest number of characters in a matching method
+5. Largest number of header matches
+6. Oldest Route based on creation timestamp (tie-breaker)
+7. Alphabetical order by `{namespace}/{name}` (tie-breaker)
 
 **GRPCMethodMatch predicate patterns (all combinations to implement):**
 

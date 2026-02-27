@@ -172,7 +172,8 @@ spec:
 3. **Path Extraction**: Abstract `ObjectsInRequestPath()` to handle both HTTP and gRPC routes
 4. **Predicate Generation**: New `PredicatesFromGRPCRouteMatch()` function
 5. **Policy Reconcilers**: Update effective policy reconcilers to iterate over GRPCRouteRules
-6. **Extension Reconcilers**: Add GRPCRouteGroupKind subscriptions
+6. **Extension Reconcilers**: Add GRPCRouteGroupKind subscriptions to Istio and Envoy Gateway reconcilers (WasmPlugin, EnvoyExtensionPolicy, auth/ratelimit cluster configs)
+7. **Discoverability Reconcilers**: Define a `GRPCRoutePolicyDiscoverabilityReconciler` reconciler
 
 ### Security Considerations
 

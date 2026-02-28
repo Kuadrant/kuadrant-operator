@@ -14,7 +14,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/kuadrant/authorino v0.22.0
 	github.com/kuadrant/authorino-operator v0.21.0
-	github.com/kuadrant/dns-operator v0.0.0-20251125201831-f74008dc171c
+	github.com/kuadrant/dns-operator v0.0.0-20260129221933-ff9da55cd2a4
 	github.com/kuadrant/limitador-operator v0.15.0
 	github.com/kuadrant/policy-machinery v0.7.1-0.20251119154946-1ca17a075dd2
 	github.com/martinlindhe/base36 v1.1.1

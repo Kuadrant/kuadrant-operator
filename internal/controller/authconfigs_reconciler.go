@@ -23,7 +23,6 @@ import (
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	extensionmanager "github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
-	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -68,7 +67,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	defer logger.V(1).Info("finished reconciling authconfig objects")
 
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
-	modifiedAuthConfigs := []string{}
+	var modifiedAuthConfigs []string
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
 		_, _, _, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
@@ -90,55 +89,31 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 		resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
 
+		desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
+		if err != nil {
+			logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
+			continue
+		}
+
 		existingAuthConfigObj, found := lo.Find(topology.Objects().Children(httpRouteRule), func(child machinery.Object) bool {
 			return child.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && child.GetName() == authConfigName && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredAuthConfig.GetLabels()))
 		})
 
-		// create
-		if !found {
+		// Store modified auth configs for reporting
+		if !found { // Create
 			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
-			desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
-			if err != nil {
-				logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
+		} else { // update
+			existingAuthConfig := existingAuthConfigObj.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
+			if equalAuthConfigs(existingAuthConfig, desiredAuthConfig) {
+				logger.V(1).Info("authconfig object is up to date, nothing to do")
 				continue
 			}
-
-			if _, err = resource.Create(ctx, desiredAuthConfigUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
-				// TODO: handle error
-			}
-			continue
+			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
 		}
 
-		existingAuthConfig := existingAuthConfigObj.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
-
-		if equalAuthConfigs(existingAuthConfig, desiredAuthConfig) {
-			logger.V(1).Info("authconfig object is up to date, nothing to do")
-			continue
-		}
-
-		modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
-
-		// delete
-		if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
-			if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
-				logger.Error(err, "failed to delete wasmplugin object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
-				// TODO: handle error
-			}
-			continue
-		}
-
-		// update
-		existingAuthConfig.Spec = desiredAuthConfig.Spec
-
-		existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
+		_, err = resource.Apply(ctx, desiredAuthConfigUnstructured.GetName(), desiredAuthConfigUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil {
-			logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
-			continue
-		}
-		if _, err = resource.Update(ctx, existingAuthConfigUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
-			// TODO: handle error
+			logger.Error(err, "failed to apple authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
 		}
 	}
 

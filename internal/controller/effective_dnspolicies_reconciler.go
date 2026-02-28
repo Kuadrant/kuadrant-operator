@@ -183,36 +183,22 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				if !canUpdateDNSRecord(ctx, existingRecord, desiredRecord) {
 					rLogger.V(1).Info("unable to update record, deleting record for listener and re-creating")
 					r.deleteRecord(ctx, existingRecordObj)
-					break
-				}
-
-				if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) {
+					// continue to apply below
+				} else if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) {
 					rLogger.V(1).Info("dns record is up to date, nothing to do")
 					continue
 				}
-				existingRecord.Spec = desiredRecord.Spec
-
-				un, err := controller.Destruct(existingRecord)
-				if err != nil {
-					lLogger.Error(err, "unable to destruct dns record")
+			} else {
+				// Check if we should skip creating
+				if !hasAttachedRoute {
+					lLogger.V(1).Info("listener has no attached routes, skipping record create for listener")
 					continue
 				}
 
-				rLogger.V(1).Info("updating record for listener")
-				if _, uErr := resource.Update(ctx, un, metav1.UpdateOptions{}); uErr != nil {
-					rLogger.Error(uErr, "unable to update dns record")
+				if len(desiredRecord.Spec.Endpoints) == 0 {
+					lLogger.V(1).Info("record for listener has no addresses, skipping record create for listener")
+					continue
 				}
-				continue
-			}
-
-			if !hasAttachedRoute {
-				lLogger.V(1).Info("listener has no attached routes, skipping record create for listener")
-				continue
-			}
-
-			if len(desiredRecord.Spec.Endpoints) == 0 {
-				lLogger.V(1).Info("record for listener has no addresses, skipping record create for listener")
-				continue
 			}
 
 			un, err := controller.Destruct(desiredRecord)
@@ -221,10 +207,9 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				continue
 			}
 
-			//Create
-			lLogger.V(1).Info("creating DNS record for listener")
-			if _, cErr := resource.Create(ctx, un, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
-				lLogger.Error(cErr, "unable to create dns record")
+			lLogger.V(1).Info("applying DNS record for listener")
+			if _, err := resource.Apply(ctx, un.GetName(), un, metav1.ApplyOptions{FieldManager: FieldManagerName}); err != nil {
+				lLogger.Error(err, "unable to apply dns record")
 			}
 		}
 

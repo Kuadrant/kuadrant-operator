@@ -98,7 +98,7 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) updateRouteStatus(ctx context
 		logger.Error(err, "unable to destruct route", "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
 		return err
 	}
-	_, err = r.Client.Resource(controller.HTTPRoutesResource).Namespace(route.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	_, err = r.Client.Resource(controller.HTTPRoutesResource).Namespace(route.GetNamespace()).ApplyStatus(ctx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName, Force: true})
 	return err
 }
 

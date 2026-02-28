@@ -120,7 +120,7 @@ func (r *KuadrantStatusUpdater) updateKuadrantStatus(ctx context.Context, kObj *
 	if err != nil {
 		return err
 	}
-	_, err = r.Client.Resource(kuadrantv1beta1.KuadrantsResource).Namespace(kObj.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	_, err = r.Client.Resource(kuadrantv1beta1.KuadrantsResource).Namespace(kObj.GetNamespace()).ApplyStatus(ctx, kObj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName})
 	return err
 }
 

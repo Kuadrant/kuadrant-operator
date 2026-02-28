@@ -145,7 +145,7 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1.DNSPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(policyCtx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.DNSPoliciesResource).Namespace(policy.GetNamespace()).ApplyStatus(policyCtx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil {
 			pLogger.Error(err, "unable to update status for policy")
 			span.RecordError(err)

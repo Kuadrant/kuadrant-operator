@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sync"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -151,36 +150,20 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 		// Create
 		if !ok {
 			expectedCerts = append(expectedCerts, certTarget.cert)
-			un, err := controller.Destruct(certTarget.cert)
-			if err != nil {
-				logger.Error(err, "unable to destruct cert")
-				continue
-			}
-			_, err = resource.Create(ctx, un, metav1.CreateOptions{})
-			if err != nil {
-				logger.Error(err, "unable to create certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
-			}
-
-			continue
+		} else {
+			// Update
+			tCert := obj.(*controller.RuntimeObject).Object.(*certmanagerv1.Certificate)
+			expectedCerts = append(expectedCerts, tCert)
 		}
 
-		// Update
-		tCert := obj.(*controller.RuntimeObject).Object.(*certmanagerv1.Certificate)
-		expectedCerts = append(expectedCerts, tCert)
-		if reflect.DeepEqual(tCert.Spec, certTarget.cert.Spec) {
-			logger.V(1).Info("skipping update, cert specs are the same, nothing to do")
-			continue
-		}
-
-		tCert.Spec = certTarget.cert.Spec
-		un, err := controller.Destruct(tCert)
+		un, err := controller.Destruct(certTarget.cert)
 		if err != nil {
 			logger.Error(err, "unable to destruct cert")
 			continue
 		}
-		_, err = resource.Update(ctx, un, metav1.UpdateOptions{})
+		_, err = resource.Apply(ctx, un.GetName(), un, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil {
-			logger.Error(err, "unable to update certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
+			logger.Error(err, "unable to apply certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
 		}
 	}
 	return expectedCerts

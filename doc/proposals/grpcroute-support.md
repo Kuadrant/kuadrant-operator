@@ -153,6 +153,7 @@ spec:
 |-----------|------------|-------------|
 | policy-machinery | `kuadrant/policy-machinery` | Controller-layer wiring (machinery types/topology already exist) |
 | kuadrant-operator | `kuadrant/kuadrant-operator` | Watchers, topology, predicates, reconcilers |
+| testsuite | `kuadrant/testsuite` | GRPCRoute class, gRPC backend, E2E tests |
 
 #### Repositories NOT Affected
 
@@ -180,7 +181,7 @@ No additional security considerations. GRPCRoute support uses the same policy en
 
 ## Implementation Plan
 
-Work is organized into 9 tasks across 2 repositories, designed to be reviewed and merged independently while respecting dependencies.
+Work is organized into 9 tasks across 3 repositories, designed to be reviewed and merged independently while respecting dependencies.
 
 ### Task Dependency Graph
 
@@ -226,8 +227,8 @@ Work is organized into 9 tasks across 2 repositories, designed to be reviewed an
               ▼               ▼
        ┌──────────────┐ ┌──────────────┐
        │   Task 8     │ │   Task 9     │
-       │  Coverage &  │ │  Examples &  │
-       │  E2E Tests   │ │  Docs        │
+       │  Examples &  │ │  Testsuite   │
+       │  Docs        │ │  E2E Tests   │
        └──────────────┘ └──────────────┘
 ```
 
@@ -244,19 +245,22 @@ Work is organized into 9 tasks across 2 repositories, designed to be reviewed an
 - Action set building for gRPC paths
 - Sorting behavior for GRPCRouteMatchConfigs
 
-### Integration Tests
+### Integration Tests (kuadrant-operator)
 
 - AuthPolicy targeting GRPCRoute
 - RateLimitPolicy targeting GRPCRoute
-- Mixed HTTPRoute and GRPCRoute on same Gateway
-- Policy inheritance (Gateway → GRPCRoute)
-- Both Istio and Envoy Gateway providers
-
-### E2E Tests
-
 - Real gRPC traffic with AuthPolicy enforcement
 - Real gRPC traffic with RateLimitPolicy enforcement
 - gRPC method-specific policies
+- Mixed HTTPRoute and GRPCRoute on same Gateway
+- Policy inheritance (Gateway → GRPCRoute)
+- DNSPolicy on Gateway with attached GRPCRoutes resolves hostnames correctly
+- TLSPolicy on Gateway with attached GRPCRoutes provisions certificates correctly
+- Both Istio and Envoy Gateway providers
+
+### E2E Tests (testsuite)
+
+The `kuadrant/testsuite` repository provides the broader E2E test coverage following the existing HTTPRoute test patterns. This includes a `GRPCRoute` class implementing the `GatewayRoute` interface, a gRPC client wrapper, and test cases mirroring the existing HTTPRoute suite (auth enforcement, rate limiting, section targeting, deletion reconciliation, policy inheritance). See Task 9 for details.
 
 ## Open Questions
 
@@ -424,7 +428,7 @@ if match.Method == nil && len(match.Headers) == 0 {
 
 #### Task 7: kuadrant-operator - GRPCRoute Reconciler Updates
 **Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 5, Task 6
+**Depends on:** Task 2, Task 5, Task 6
 
 - [ ] Create `grpcroute_policy_discoverability_reconciler.go` (mirror HTTPRoute pattern)
 - [ ] Create `FindGRPCRouteParentStatusFunc` helper (mirrors `FindRouteParentStatusFunc`)
@@ -437,29 +441,18 @@ if match.Method == nil && len(match.Headers) == 0 {
 - [ ] Update auth cluster reconcilers (Istio, Envoy Gateway)
 - [ ] Update ratelimit cluster reconcilers (Istio, Envoy Gateway)
 - [ ] Add unit tests for reconciler subscriptions
+- [ ] Integration test: gRPC traffic with AuthPolicy enforcement
+- [ ] Integration test: gRPC traffic with RateLimitPolicy enforcement
+- [ ] Integration test: Method-specific policies targeting individual gRPC methods
+- [ ] Integration test: Mixed HTTPRoute and GRPCRoute on same Gateway
+- [ ] Integration test: Policy inheritance (Gateway → GRPCRoute)
+- [ ] Integration tests run on both Istio and Envoy Gateway providers
 
 ---
 
-#### Task 8: kuadrant-operator - Test Coverage & E2E Tests
+#### Task 8: kuadrant-operator - GRPCRoute Examples & Documentation
 **Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 7 (Task 2 for E2E tests that need a gRPC backend)
-
-This task ensures comprehensive test coverage and adds E2E tests. Unit and integration tests for specific components are included in Tasks 3-7.
-
-- [ ] Verify test coverage for all new code meets project standards
-- [ ] Add any missing unit tests identified during coverage review
-- [ ] Integration tests: Mixed HTTPRoute and GRPCRoute on same Gateway
-- [ ] Integration tests: Policy inheritance (Gateway → GRPCRoute)
-- [ ] Integration tests: Both Istio and Envoy Gateway providers
-- [ ] E2E tests: gRPC service with AuthPolicy enforcement
-- [ ] E2E tests: gRPC service with RateLimitPolicy enforcement
-- [ ] E2E tests: Method-specific policies (target specific service/method)
-
----
-
-#### Task 9: kuadrant-operator - GRPCRoute Examples & Documentation
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 2, Task 7 (can run in parallel with Task 8)
+**Depends on:** Task 2, Task 7
 
 - [ ] Create `examples/grpcstore/grpcstore.yaml` (Deployment + Service)
 - [ ] Create `examples/grpcstore/grpcroute.yaml`
@@ -491,6 +484,39 @@ spec:
         - limit: 100
           window: 1m
 ```
+
+---
+
+#### Task 9: testsuite - GRPCRoute E2E Test Coverage
+**Repository:** `kuadrant/testsuite`
+**Depends on:** Task 2, Task 7
+
+The testsuite follows established patterns for HTTPRoute testing. GRPCRoute support mirrors these patterns with gRPC-specific equivalents.
+
+**Framework additions:**
+
+- [ ] Create `GRPCRoute` class in `testsuite/gateway/gateway_api/grpc_route.py` implementing the `GatewayRoute` interface (mirror `route.py` for HTTPRoute)
+  - `create_instance()` with kind `GRPCRoute`, apiVersion `gateway.networking.k8s.io/v1`
+  - `add_rule()` supporting `GRPCRouteMatch` (service/method matching)
+  - `add_backend()` for gRPC backend services
+  - `reference` property returning `{"group": "gateway.networking.k8s.io", "kind": "GRPCRoute", ...}`
+- [ ] Create gRPC backend class in `testsuite/backend/` for the chosen public gRPC image (from Task 2)
+- [ ] Create gRPC client wrapper (equivalent to `KuadrantClient` for HTTP) supporting unary gRPC calls
+- [ ] Add `grpcroute` test marker to `pyproject.toml`
+- [ ] Add `grpc_route` fixture in `tests/singlecluster/conftest.py` (mirror the `route` fixture pattern)
+- [ ] Add `grpc_backend` fixture in `tests/singlecluster/conftest.py`
+
+**Test cases** (mirror existing HTTPRoute tests under `tests/singlecluster/`):
+
+- [ ] AuthPolicy targeting GRPCRoute - basic authentication enforcement
+- [ ] AuthPolicy section targeting GRPCRoute rule (mirror `test_authpolicy_section_targeting_http_route.py`)
+- [ ] RateLimitPolicy targeting GRPCRoute - basic rate limiting
+- [ ] RateLimitPolicy section targeting GRPCRoute rule (mirror `test_route_rule.py`)
+- [ ] RateLimitPolicy with defaults block targeting GRPCRoute
+- [ ] GRPCRoute deletion reconciliation (mirror `test_httproute_delete.py`) - verify policy status updates when target is removed
+- [ ] Mixed HTTPRoute and GRPCRoute on same Gateway
+- [ ] Policy inheritance: Gateway-level policy applying to attached GRPCRoutes
+- [ ] Both Istio and Envoy Gateway providers
 
 ---
 

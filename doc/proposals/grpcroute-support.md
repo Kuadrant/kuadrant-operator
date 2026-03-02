@@ -24,8 +24,8 @@ This design document outlines the implementation of GRPCRoute support in the Kua
 
 ## Requirements
 
-- **Minimum Gateway API version:** v1.1.0 (GRPCRoute reached GA in this release)
-- **sectionName targeting** requires Gateway API v1.2.0+ (GRPCRouteRule `name` field was added in v1.2.0)
+- **Minimum Gateway API version:** v1.1.0 (GRPCRoute reached GA in this release). The current dependency (`gateway-api v1.2.1`) already satisfies this.
+- **sectionName targeting** requires Gateway API v1.2.0+ (GRPCRouteRule `name` field was added in v1.2.0). Already met by current dependency.
 - The operator should log a warning if GRPCRoute CRD is not available at startup
 
 ## Design
@@ -264,10 +264,9 @@ The `kuadrant/testsuite` repository provides the broader E2E test coverage follo
 
 ## Open Questions
 
-1. **GRPCRoute GA verification**: Confirm Gateway API version in use includes GA GRPCRoute (v1.1.0+)
-2. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
-3. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
-4. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
+1. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
+2. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
+3. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
 
 ## Execution
 
@@ -278,7 +277,7 @@ The `kuadrant/testsuite` repository provides the broader E2E test coverage follo
 **Note:** The machinery layer already has full GRPCRoute support (types, link functions, topology options) via PR #16. This task adds the controller-layer integration.
 
 - [ ] Add `GRPCRoutesResource` constant to `controller/resources.go`
-- [ ] Update `controller/topology_builder.go` to include GRPCRoutes in topology building
+- [ ] Update `controller/topology_builder.go` to filter GRPCRoute objects from the store and pass them to the topology builder (mirroring the existing HTTPRoute pattern: `lo.Map(objs.FilterByGroupKind(machinery.GRPCRouteGroupKind), ...)` → `machinery.WithGRPCRoutes(grpcRoutes...)`, `machinery.ExpandGRPCRouteRules()`)
 - [ ] Add unit tests for topology building with GRPCRoutes
 
 ---
@@ -311,7 +310,9 @@ Rather than building a custom gRPC backend, use a publicly available gRPC-capabl
 - [ ] Update existing callers of `ObjectsInRequestPath()` for new signature
 - [ ] Add unit tests for path extraction with both route types
 
-**RequestPathObjects struct design:**
+**RequestPathObjects struct design (implementation-time decision):**
+
+The approach below uses a unified struct with interface types. An alternative is to keep separate `ObjectsInHTTPRequestPath()` and `ObjectsInGRPCRequestPath()` functions with concrete return types, which avoids runtime type assertions. Since Tasks 5/6 use separate iteration loops by route type, callers will already know the type — making separate functions potentially cleaner. The final approach should be decided during implementation based on how many callers genuinely need route-type-agnostic access.
 
 ```go
 // RequestPathObjects holds extracted objects from a topology path,
@@ -378,7 +379,7 @@ func (r *RequestPathObjects) Hostnames() []string
 | Regex method only | `request.url_path.matches('^/[^/]+/MethodPattern$')` |
 | Mixed: exact service + regex method | `request.url_path.matches('^/Service/MethodPattern$')` |
 
-**Note:** Per Gateway API spec, "at least one of Service and Method MUST be a non-empty string"
+**Note:** Per Gateway API spec, "at least one of Service and Method MUST be a non-empty string". For Exact match type, values are expected to be valid gRPC identifiers (alphanumeric + dots), so regex escaping should not be needed in practice. For RegularExpression match type, values are user-provided regex patterns and should be used as-is.
 
 **Empty match handling:**
 
@@ -399,7 +400,7 @@ if match.Method == nil && len(match.Headers) == 0 {
 - [ ] Update `effective_auth_policies_reconciler.go` to iterate over GRPCRouteRules
 - [ ] Update `auth_workflow_helpers.go` for GRPCRoute path handling
 - [ ] Create `LinkGRPCRouteRuleToAuthConfig()` in `internal/authorino/utils.go`
-- [ ] Update `authconfigs_reconciler.go` to handle GRPCRouteRule paths
+- [ ] Update `authconfigs_reconciler.go` to handle GRPCRouteRule paths and add `GRPCRouteGroupKind` to its event subscription
 - [ ] Add `AuthConfigGRPCRouteRuleAnnotation` constant
 - [ ] Add unit tests for AuthPolicy with GRPCRoute targets
 - [ ] Add integration tests for AuthConfig generation from GRPCRoutes
@@ -416,7 +417,7 @@ if match.Method == nil && len(match.Headers) == 0 {
 - [ ] Update `api/v1/ratelimitpolicy_types.go` targetRef validation to accept GRPCRoute
 - [ ] Update `effective_ratelimit_policies_reconciler.go` to iterate over GRPCRouteRules
 - [ ] Update `ratelimit_workflow_helpers.go` for GRPCRoute path handling
-- [ ] Update `limitador_limits_reconciler.go` to handle GRPCRouteRule paths
+- [ ] Update `limitador_limits_reconciler.go` to handle GRPCRouteRule paths and add `GRPCRouteGroupKind` to its event subscription
 - [ ] Create `LimitsNamespaceFromGRPCRoute()` helper function
 - [ ] Add unit tests for RateLimitPolicy with GRPCRoute targets
 - [ ] Add integration tests for Limitador config generation from GRPCRoutes
@@ -434,12 +435,15 @@ if match.Method == nil && len(match.Headers) == 0 {
 - [ ] Create `FindGRPCRouteParentStatusFunc` helper (mirrors `FindRouteParentStatusFunc`)
 - [ ] Use `controller.GRPCRoutesResource` for status updates (requires Task 1)
 - [ ] Register GRPCRoute policy discoverability reconciler in workflow
-- [ ] Update all effective policy reconciler subscriptions with `GRPCRouteGroupKind`
-- [ ] Update all effective policy reconciler subscriptions with `GRPCRouteRuleGroupKind`
+- [ ] Add `GRPCRouteGroupKind` to event subscriptions (not `GRPCRouteRuleGroupKind` — following the existing HTTPRoute pattern where only route-level kinds are in event matchers)
+- [ ] Update `dataPlaneEffectivePoliciesEventMatchers` in `data_plane_policies_workflow.go` (note: this shared list also affects TokenRateLimitPolicy reconcilers — they will receive GRPCRoute events but no-op since TRLP doesn't accept GRPCRoute targets)
 - [ ] Update `istio_extension_reconciler.go` for GRPCRoute events
 - [ ] Update `envoy_gateway_extension_reconciler.go` for GRPCRoute events
-- [ ] Update auth cluster reconcilers (Istio, Envoy Gateway)
-- [ ] Update ratelimit cluster reconcilers (Istio, Envoy Gateway)
+- [ ] Update `istio_auth_cluster_reconciler.go` for GRPCRoute events
+- [ ] Update `envoy_gateway_auth_cluster_reconciler.go` for GRPCRoute events
+- [ ] Update `istio_ratelimit_cluster_reconciler.go` for GRPCRoute events
+- [ ] Update `envoy_gateway_ratelimit_cluster_reconciler.go` for GRPCRoute events
+- [ ] Update `limitador_istio_integration_reconciler.go` for GRPCRoute events
 - [ ] Add unit tests for reconciler subscriptions
 - [ ] Integration test: gRPC traffic with AuthPolicy enforcement
 - [ ] Integration test: gRPC traffic with RateLimitPolicy enforcement

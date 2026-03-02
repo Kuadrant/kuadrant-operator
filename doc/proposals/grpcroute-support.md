@@ -153,7 +153,6 @@ spec:
 |-----------|------------|-------------|
 | policy-machinery | `kuadrant/policy-machinery` | Controller-layer wiring (machinery types/topology already exist) |
 | kuadrant-operator | `kuadrant/kuadrant-operator` | Watchers, topology, predicates, reconcilers |
-| authorino-examples | `kuadrant/authorino-examples` | Dual-protocol talker-api (optional) |
 
 #### Repositories NOT Affected
 
@@ -181,25 +180,25 @@ No additional security considerations. GRPCRoute support uses the same policy en
 
 ## Implementation Plan
 
-Work is organized into 9 tasks across 3 repositories, designed to be reviewed and merged independently while respecting dependencies.
+Work is organized into 9 tasks across 2 repositories, designed to be reviewed and merged independently while respecting dependencies.
 
 ### Task Dependency Graph
 
 ```
-  policy-machinery          authorino-examples
+  policy-machinery
+  ┌──────────────┐
+  │   Task 1     │
+  │  GRPCRoutes  │
+  │  Resource    │
+  └──────┬───────┘
+         │
+         ▼
+  kuadrant-operator
   ┌──────────────┐          ┌──────────────┐
-  │   Task 1     │          │   Task 2     │
-  │  GRPCRoutes  │          │  talker-api  │
-  │  Resource    │          │  (parallel)  │
-  └──────┬───────┘          └───────┬──────┘
-         │                          │
-         ▼                          │
-  kuadrant-operator                 │
-  ┌──────────────┐                  │
-  │   Task 3     │                  │
-  │  Core Infra  │                  │
-  └──────┬───────┘                  │
-         │                          │
+  │   Task 3     │          │   Task 2     │
+  │  Core Infra  │          │  gRPC Image  │
+  └──────┬───────┘          │  (parallel)  │
+         │                  └───────┬──────┘
          ▼                          │
   ┌──────────────┐                  │
   │   Task 4     │                  │
@@ -261,11 +260,10 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 
 ## Open Questions
 
-1. **Go vs Ruby for talker-api**: Should the example app be rewritten in Go for ecosystem alignment, or extended in Ruby to preserve existing knowledge?
-2. **GRPCRoute GA verification**: Confirm Gateway API version in use includes GA GRPCRoute (v1.1.0+)
-3. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
-4. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
-5. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
+1. **GRPCRoute GA verification**: Confirm Gateway API version in use includes GA GRPCRoute (v1.1.0+)
+2. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
+3. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
+4. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
 
 ## Execution
 
@@ -281,16 +279,20 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 
 ---
 
-#### Task 2: authorino-examples - Dual-Protocol talker-api
-**Repository:** `kuadrant/authorino-examples`
-**Note:** Team decision required on Go vs Ruby implementation
+#### Task 2: gRPC Backend Image for Testing & Examples
+**Repository:** `kuadrant/kuadrant-operator` (examples and test fixtures only)
 
-- [ ] Create proto definition (`talker.proto`) with Echo and SayHello RPCs
-- [ ] Implement dual-protocol server (HTTP on :3000, gRPC on :9000)
-- [ ] Create multi-stage Dockerfile
-- [ ] Update Kubernetes manifests with both ports
-- [ ] Enable gRPC reflection for grpcurl testing
-- [ ] Publish to `quay.io/kuadrant/authorino-examples:talker-api`
+Rather than building a custom gRPC backend, use a publicly available gRPC-capable image for tests and examples. Suitable options might be:
+
+- **[Istio echo](https://github.com/istio/istio/tree/master/pkg/test/echo)** (`gcr.io/istio-testing/app`) - Multi-protocol server (HTTP, gRPC, TCP) used in Istio's own integration tests
+- **[grpcbin](https://github.com/moul/grpcbin)** (`moul/grpcbin`) - gRPC echo server with reflection
+- **[Fortio](https://fortio.org/)** (`fortio/fortio`) - Load testing tool with built-in gRPC server
+- **[grpc-health-probe](https://github.com/grpc-ecosystem/grpc-health-probe)** with a simple gRPC server image
+
+- [ ] Evaluate and select a publicly available gRPC image
+- [ ] Create Kubernetes manifests for the chosen image (Deployment + Service)
+- [ ] Verify the image works with GRPCRoute on both Istio and Envoy Gateway
+- [ ] Document the chosen image and any configuration needed
 
 ---
 
@@ -440,7 +442,7 @@ if match.Method == nil && len(match.Headers) == 0 {
 
 #### Task 8: kuadrant-operator - Test Coverage & E2E Tests
 **Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 2, Task 7
+**Depends on:** Task 7 (Task 2 for E2E tests that need a gRPC backend)
 
 This task ensures comprehensive test coverage and adds E2E tests. Unit and integration tests for specific components are included in Tasks 3-7.
 

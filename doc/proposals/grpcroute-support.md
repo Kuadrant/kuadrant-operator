@@ -226,6 +226,15 @@ An empty GRPCRouteMatch (no method, no headers) should return empty predicates, 
 6. Oldest Route based on creation timestamp (tie-breaker)
 7. Alphabetical order by `{namespace}/{name}` (tie-breaker)
 
+### Future: gRPC Convenience Attributes
+
+The following attributes could be added as a future enhancement to improve UX for `when` clauses and `counters`:
+
+- `request.grpc.service` — extracted from `request.url_path` (e.g., `UserService` from `/UserService/GetUser`)
+- `request.grpc.method` — extracted from `request.url_path` (e.g., `GetUser` from `/UserService/GetUser`)
+
+This would require WASM shim changes to detect gRPC requests (via `content-type: application/grpc`) and parse the URL path into components. The internal predicate generation should continue using `request.url_path` regardless, as using convenience attributes internally would create a hard dependency on WASM shim changes that must land before any GRPCRoute support can ship.
+
 ### Security Considerations
 
 No additional security considerations. GRPCRoute support uses the same policy enforcement mechanisms as HTTPRoute. All authentication, authorization, and rate limiting policies apply identically — only the predicate generation differs.

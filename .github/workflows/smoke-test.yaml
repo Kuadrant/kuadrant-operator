@@ -1,0 +1,128 @@
+name: E2E Smoke Test
+
+on:
+  pull_request:
+    branches: ['main']
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+jobs:
+  pre-job:
+    runs-on: ubuntu-latest
+    name: Pre job checks
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v3.4.1
+        with:
+          cancel_others: false
+          paths_ignore: '["**.adoc", "**.md", "examples/**", "LICENSE"]'
+
+  smoke-tests:
+    name: Smoke Tests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install CFSSL
+        run: |
+          go install github.com/cloudflare/cfssl/cmd/cfssl@v1.6.4
+          go install github.com/cloudflare/cfssl/cmd/cfssljson@v1.6.4
+
+      - name: Deploy local Kind cluster with Kuadrant operator
+        run: GATEWAYAPI_PROVIDER=istio make local-setup
+        timeout-minutes: 25
+
+      - name: Create Kuadrant CR
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: kuadrant.io/v1beta1
+          kind: Kuadrant
+          metadata:
+            name: kuadrant-sample
+            namespace: kuadrant-system
+          spec: {}
+          EOF
+          kubectl wait --timeout=180s --for=condition=Ready kuadrant kuadrant-sample -n kuadrant-system
+
+      - name: Create test namespaces
+        run: |
+          kubectl create namespace kuadrant
+          kubectl create namespace kuadrant2
+
+      - name: Create cluster resources for testsuite
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: aws-credentials
+            namespace: kuadrant
+            annotations:
+              base_domain: "${{ secrets.QE_AWS_BASE_DOMAIN }}"
+          type: kuadrant.io/aws
+          stringData:
+            AWS_ACCESS_KEY_ID: "${{ secrets.QE_AWS_ACCESS_KEY_ID }}"
+            AWS_SECRET_ACCESS_KEY: "${{ secrets.QE_AWS_SECRET_ACCESS_KEY }}"
+            AWS_REGION: "eu-north-1"
+          EOF
+
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: kuadrant-qe-ca
+            namespace: cert-manager
+          type: Opaque
+          data:
+            tls.crt: "${{ secrets.QE_CA_TLS_CRT }}"
+            tls.key: "${{ secrets.QE_CA_TLS_KEY }}"
+          EOF
+
+          kubectl apply -f - <<EOF
+          apiVersion: cert-manager.io/v1
+          kind: ClusterIssuer
+          metadata:
+            name: kuadrant-qe-issuer
+          spec:
+            ca:
+              secretName: kuadrant-qe-ca
+          EOF
+
+      - name: Deploy testsuite tools
+        run: |
+          kubectl create namespace tools
+          kubectl -n tools create secret docker-registry redhat-registry-secret --docker-server=registry.redhat.io --docker-username="${{ secrets.RH_REGISTRY_USERNAME }}" --docker-password="${{ secrets.RH_REGISTRY_PASSWORD }}"
+          kubectl -n tools patch serviceaccount default -p '{"imagePullSecrets": [{"name": "redhat-registry-secret"}]}'
+          
+          helm install --repo https://kuadrant.io/helm-charts-olm \
+          --set=tools.keycloak.keycloakProvider=deployment --set=tools.coredns.enable=false --set=tools.redis.enable=false --set=tools.dragonfly.enable=false --set=tools.valkey.enable=false --set=tools.customMetricsApiserver.enable=false --set=tools.jaeger.enable=false --set=tools.mockserver.enable=false \
+          --debug --wait --timeout=10m0s tools tools-instances
+
+      - name: Check out testsuite
+        uses: actions/checkout@v4
+        with:
+          repository: Kuadrant/testsuite
+          ref: main
+          path: testsuite
+
+      - name: Run smoke tests
+        working-directory: testsuite
+        run: flags=-vv make smoke

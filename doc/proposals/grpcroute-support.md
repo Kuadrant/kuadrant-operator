@@ -14,12 +14,12 @@ This design document outlines the implementation of GRPCRoute support in the Kua
 
 ## Non-Goals
 
-1. **LLM/AI token-based rate limiting** - TokenRateLimitPolicy is a separate feature that works independently of route types
+1. **LLM/AI token-based rate limiting** - TokenRateLimitPolicy requires response body parsing to extract token counts. For gRPC, responses are protobuf-encoded rather than JSON, requiring WASM shim changes beyond this proposal's scope (see Open Questions)
 2. **Changes to backend services** - Authorino, Limitador, and WASM shim require no modifications
 3. **New Well-Known Attributes** - RFC 0002 already supports HTTP/2; gRPC uses standard `request.url_path`
 4. **gRPC streaming support for token limiting** - Out of scope for this feature (TokenRateLimitPolicy is separate)
 5. **gRPC-specific convenience attributes** - Optional future enhancement (`grpc.service`, `grpc.method`)
-6. **Extension policies** - OIDCPolicy, PlanPolicy, TelemetryPolicy have separate reconcilers and will be addressed in follow-up work
+6. **Extension policy internal reconciler changes** - Extension reconciler logic changes beyond targetRef and event subscription updates
 7. **APIProduct CRD** - Developer portal feature, separate domain from traffic policy
 
 ## Requirements
@@ -175,66 +175,64 @@ spec:
 6. **Extension Reconcilers**: Add GRPCRouteGroupKind subscriptions to Istio and Envoy Gateway reconcilers (WasmPlugin, EnvoyExtensionPolicy, auth/ratelimit cluster configs)
 7. **Discoverability Reconcilers**: Define a `GRPCRoutePolicyDiscoverabilityReconciler` reconciler
 
+### Design Decisions
+
+#### Path Extraction Approach
+
+The current `ObjectsInRequestPath()` returns hard-coded HTTPRoute types. Two approaches for supporting GRPCRoute:
+
+1. **Unified struct** with `machinery.Targetable` interface fields and type-assertion helpers (`IsHTTPRoute()`, `AsGRPCRoute()`, etc.)
+2. **Separate functions** (`ObjectsInHTTPRequestPath()`, `ObjectsInGRPCRequestPath()`) returning concrete types
+
+Since policy reconcilers use separate iteration loops for HTTPRouteRules and GRPCRouteRules (see below), callers will already know the route type — making separate functions potentially cleaner. The final approach should be decided during implementation based on how many callers genuinely need route-type-agnostic access.
+
+#### Reconciler Iteration Strategy
+
+Effective policy reconcilers should use **separate iteration loops** for HTTPRouteRules and GRPCRouteRules, rather than combined iteration with type switching. This provides clearer separation and easier debugging.
+
+#### Event Subscription Approach
+
+Only `GRPCRouteGroupKind` should be added to event matchers — not `GRPCRouteRuleGroupKind`. This follows the existing HTTPRoute pattern where only route-level kinds are used in event subscriptions; rule-level kinds are only used in link functions and topology filtering.
+
+Adding `GRPCRouteGroupKind` to the shared `dataPlaneEffectivePoliciesEventMatchers` list will also cause TokenRateLimitPolicy reconcilers to receive GRPCRoute events. These will be no-ops since TRLP doesn't accept GRPCRoute targets.
+
+#### GRPCRouteMatch Predicate Patterns
+
+GRPCRouteMatch translates to CEL predicates using `request.url_path`:
+
+| Pattern | CEL Predicate |
+|---------|---------------|
+| Exact service + exact method | `request.url_path == '/Service/Method'` |
+| Exact service only | `request.url_path.startsWith('/Service/')` |
+| Exact method only (no service) | `request.url_path.matches('^/[^/]+/Method$')` |
+| Regex service + regex method | `request.url_path.matches('^/ServicePattern/MethodPattern$')` |
+| Regex service only | `request.url_path.matches('^/ServicePattern/.*$')` |
+| Regex method only | `request.url_path.matches('^/[^/]+/MethodPattern$')` |
+| Mixed: exact service + regex method | `request.url_path.matches('^/Service/MethodPattern$')` |
+
+Per Gateway API spec, "at least one of Service and Method MUST be a non-empty string". For Exact match type, values are expected to be valid gRPC identifiers (alphanumeric + dots), so regex escaping should not be needed in practice. For RegularExpression match type, values are user-provided regex patterns and should be used as-is.
+
+An empty GRPCRouteMatch (no method, no headers) should return empty predicates, meaning "match all" — consistent with HTTPRoute behaviour.
+
+#### GRPCRouteMatch Sorting Precedence
+
+[Per Gateway API spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCRouteRule):
+
+1. Largest number of characters in a matching non-wildcard hostname
+2. Largest number of characters in a matching hostname
+3. Largest number of characters in a matching service
+4. Largest number of characters in a matching method
+5. Largest number of header matches
+6. Oldest Route based on creation timestamp (tie-breaker)
+7. Alphabetical order by `{namespace}/{name}` (tie-breaker)
+
 ### Security Considerations
 
-No additional security considerations. GRPCRoute support uses the same policy enforcement mechanisms as HTTPRoute. All authentication, authorization, and rate limiting policies apply identically - only the predicate generation differs.
+No additional security considerations. GRPCRoute support uses the same policy enforcement mechanisms as HTTPRoute. All authentication, authorization, and rate limiting policies apply identically — only the predicate generation differs.
 
 ## Implementation Plan
 
-Work is organized into 9 tasks across 3 repositories, designed to be reviewed and merged independently while respecting dependencies.
-
-### Task Dependency Graph
-
-```
-  policy-machinery
-  ┌──────────────┐
-  │   Task 1     │
-  │  GRPCRoutes  │
-  │  Resource    │
-  └──────┬───────┘
-         │
-         ▼
-  kuadrant-operator
-  ┌──────────────┐          ┌──────────────┐
-  │   Task 3     │          │   Task 2     │
-  │  Core Infra  │          │  gRPC Image  │
-  └──────┬───────┘          │  (parallel)  │
-         │                  └───────┬──────┘
-         ▼                          │
-  ┌──────────────┐                  │
-  │   Task 4     │                  │
-  │  Predicates  │                  │
-  └──────┬───────┘                  │
-         │                          │
-    ┌────┴────┐                     │
-    ▼         ▼                     │
-┌───────┐ ┌───────┐                 │
-│Task 5 │ │Task 6 │                 │
-│Auth   │ │Rate   │                 │
-│Policy │ │Limit  │                 │
-└───┬───┘ └───┬───┘                 │
-    │         │                     │
-    └────┬────┘                     │
-         ▼                          │
-  ┌──────────────┐                  │
-  │   Task 7     │                  │
-  │  Reconcilers │                  │
-  └──────┬───────┘                  │
-         │                          │
-         └────────────┬─────────────┘
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-       ┌──────────────┐ ┌──────────────┐
-       │   Task 8     │ │   Task 9     │
-       │  Examples &  │ │  Testsuite   │
-       │  Docs        │ │  E2E Tests   │
-       └──────────────┘ └──────────────┘
-```
-
-- Tasks 5 & 6 can run in parallel
-- Tasks 8 & 9 can run in parallel
-- Task 2 runs in parallel with Tasks 1-7
+Work is organized into 10 tasks across 3 repositories, designed to be reviewed and merged independently while respecting dependencies.
 
 ## Testing Strategy
 
@@ -260,275 +258,66 @@ Work is organized into 9 tasks across 3 repositories, designed to be reviewed an
 
 ### E2E Tests (testsuite)
 
-The `kuadrant/testsuite` repository provides the broader E2E test coverage following the existing HTTPRoute test patterns. This includes a `GRPCRoute` class implementing the `GatewayRoute` interface, a gRPC client wrapper, and test cases mirroring the existing HTTPRoute suite (auth enforcement, rate limiting, section targeting, deletion reconciliation, policy inheritance). See Task 9 for details.
+The `kuadrant/testsuite` repository provides the broader E2E test coverage following the existing HTTPRoute test patterns. This includes a `GRPCRoute` class implementing the `GatewayRoute` interface, a gRPC client wrapper, and test cases mirroring the existing HTTPRoute suite (auth enforcement, rate limiting, section targeting, deletion reconciliation, policy inheritance). See Task 10 for details.
 
 ## Open Questions
 
 1. **Gateway provider gRPC support**: Verify Istio and Envoy Gateway gRPC routing behavior is consistent
 2. **TokenRateLimitPolicy scope**: Should TokenRateLimitPolicy support GRPCRoute targets? This would require protobuf response body parsing in the WASM shim (gRPC responses are protobuf-encoded, not JSON), which is additional work beyond this proposal's scope.
-3. **Extension policies scope**: Should extension policies (OIDCPolicy, PlanPolicy, TelemetryPolicy) be updated as part of this work or in a separate follow-up?
 
 ## Execution
 
 ### Todo
 
-#### Task 1: policy-machinery - GRPCRoute Controller Wiring
-**Repository:** `kuadrant/policy-machinery`
-**Note:** The machinery layer already has full GRPCRoute support (types, link functions, topology options) via PR #16. This task adds the controller-layer integration.
+- [ ] **Task 1: policy-machinery - GRPCRoute Controller Wiring**
+  The machinery layer already has full GRPCRoute support (types, link functions, topology options) via [PR #16](https://github.com/Kuadrant/policy-machinery/pull/16). This task adds the controller-layer wiring.
+  - [ ] Add GRPCRoutesResource constant and GRPCRoute integration to topology builder
 
-- [ ] Add `GRPCRoutesResource` constant to `controller/resources.go`
-- [ ] Update `controller/topology_builder.go` to filter GRPCRoute objects from the store and pass them to the topology builder (mirroring the existing HTTPRoute pattern: `lo.Map(objs.FilterByGroupKind(machinery.GRPCRouteGroupKind), ...)` → `machinery.WithGRPCRoutes(grpcRoutes...)`, `machinery.ExpandGRPCRouteRules()`)
-- [ ] Add unit tests for topology building with GRPCRoutes
+- [ ] **Task 2: gRPC Backend Image for Testing & Examples**
+  Select a publicly available gRPC-capable image for use in tests and examples. Candidates include [Istio echo](https://github.com/istio/istio/tree/master/pkg/test/echo), [grpcbin](https://github.com/moul/grpcbin), [Fortio](https://fortio.org/), and [grpc-health-probe](https://github.com/grpc-ecosystem/grpc-health-probe).
+  - [ ] Evaluate and select a publicly available gRPC image
+  - [ ] Create Kubernetes manifests and verify with Istio and Envoy Gateway
 
----
+- [ ] **Task 3: kuadrant-operator - Core GRPCRoute Infrastructure** (depends on Task 1)
+  Register GRPCRoute resources in the operator and extend the topology and path extraction to support both HTTPRoute and GRPCRoute.
+  - [ ] Register GRPCRoute watcher and update topology building
+  - [ ] Abstract path extraction to support both HTTPRoute and GRPCRoute
 
-#### Task 2: gRPC Backend Image for Testing & Examples
-**Repository:** `kuadrant/kuadrant-operator` (examples and test fixtures only)
+- [ ] **Task 4: kuadrant-operator - GRPCRoute Predicate Generation** (depends on Task 3)
+  Implement the translation from GRPCRouteMatch to CEL predicates, matching config sorting, and action set building. Verify Gateway topology works for DNS/TLS policies with attached GRPCRoutes.
+  - [ ] Implement GRPCRouteMatch to CEL predicate generation and sorting
+  - [ ] Implement action set building for GRPCRoute paths
+  - [ ] Verify DNS/TLS policy topology with attached GRPCRoutes
 
-Rather than building a custom gRPC backend, use a publicly available gRPC-capable image for tests and examples. Suitable options might be:
+- [ ] **Task 5: kuadrant-operator - Extension Policies GRPCRoute Support** (depends on Task 4)
+  Update extension policies to accept GRPCRoute as a valid targetRef kind and subscribe to GRPCRoute events.
+  - [ ] Update OIDCPolicy, PlanPolicy, TelemetryPolicy targetRef validation
+  - [ ] Add GRPCRouteGroupKind to extension event subscriptions
 
-- **[Istio echo](https://github.com/istio/istio/tree/master/pkg/test/echo)** (`gcr.io/istio-testing/app`) - Multi-protocol server (HTTP, gRPC, TCP) used in Istio's own integration tests
-- **[grpcbin](https://github.com/moul/grpcbin)** (`moul/grpcbin`) - gRPC echo server with reflection
-- **[Fortio](https://fortio.org/)** (`fortio/fortio`) - Load testing tool with built-in gRPC server
-- **[grpc-health-probe](https://github.com/grpc-ecosystem/grpc-health-probe)** with a simple gRPC server image
+- [ ] **Task 6: kuadrant-operator - AuthPolicy GRPCRoute Support** (depends on Task 4)
+  Enable AuthPolicy to target GRPCRoute resources and generate AuthConfig CRDs with gRPC-derived predicates.
+  - [ ] Enable AuthPolicy to target GRPCRoute resources
+  - [ ] Update AuthConfig generation for GRPCRouteRule paths
 
-- [ ] Evaluate and select a publicly available gRPC image
-- [ ] Create Kubernetes manifests for the chosen image (Deployment + Service)
-- [ ] Verify the image works with GRPCRoute on both Istio and Envoy Gateway
-- [ ] Document the chosen image and any configuration needed
+- [ ] **Task 7: kuadrant-operator - RateLimitPolicy GRPCRoute Support** (depends on Task 4)
+  Enable RateLimitPolicy to target GRPCRoute resources and generate Limitador limits with gRPC-derived namespaces and predicates.
+  - [ ] Enable RateLimitPolicy to target GRPCRoute resources
+  - [ ] Update Limitador limits generation for GRPCRouteRule paths
 
----
+- [ ] **Task 8: kuadrant-operator - GRPCRoute Reconciler Updates** (depends on Tasks 2, 6, 7)
+  Create the GRPCRoute policy discoverability reconciler, wire up GRPCRouteGroupKind across all reconciler event subscriptions, and add integration tests with real gRPC traffic.
+  - [ ] Create GRPCRoute policy discoverability reconciler
+  - [ ] Add GRPCRouteGroupKind to all reconciler event subscriptions
+  - [ ] Integration tests for gRPC traffic with policy enforcement
 
-#### Task 3: kuadrant-operator - Core GRPCRoute Infrastructure
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 1
+- [ ] **Task 9: kuadrant-operator - GRPCRoute Examples & Documentation** (depends on Tasks 2, 8)
+  Create example manifests and user guide documentation for gRPC with AuthPolicy and RateLimitPolicy, including grpcurl verification commands.
+  - [ ] Create example manifests and user guide documentation for gRPC
 
-- [ ] Register GRPCRoute watcher in `internal/controller/state_of_the_world.go`
-- [ ] Update topology building with `machinery.WithGRPCRoutes()` and `machinery.ExpandGRPCRouteRules()`
-- [ ] Abstract `ObjectsInRequestPath()` to return `RequestPathObjects` supporting both route types
-- [ ] Create helper methods: `IsHTTPRoute()`, `IsGRPCRoute()`, `RouteNamespace()`, `RouteName()`
-- [ ] Update existing callers of `ObjectsInRequestPath()` for new signature
-- [ ] Add unit tests for path extraction with both route types
-
-**RequestPathObjects struct design (implementation-time decision):**
-
-The approach below uses a unified struct with interface types. An alternative is to keep separate `ObjectsInHTTPRequestPath()` and `ObjectsInGRPCRequestPath()` functions with concrete return types, which avoids runtime type assertions. Since Tasks 5/6 use separate iteration loops by route type, callers will already know the type — making separate functions potentially cleaner. The final approach should be decided during implementation based on how many callers genuinely need route-type-agnostic access.
-
-```go
-// RequestPathObjects holds extracted objects from a topology path,
-// supporting both HTTPRoute and GRPCRoute paths.
-type RequestPathObjects struct {
-    GatewayClass *machinery.GatewayClass
-    Gateway      *machinery.Gateway
-    Listener     *machinery.Listener
-    Route        machinery.Targetable  // Either HTTPRoute or GRPCRoute
-    RouteRule    machinery.Targetable  // Either HTTPRouteRule or GRPCRouteRule
-}
-
-// Type checking helpers
-func (r *RequestPathObjects) IsHTTPRoute() bool
-func (r *RequestPathObjects) IsGRPCRoute() bool
-
-// Type assertion helpers
-func (r *RequestPathObjects) AsHTTPRoute() (*machinery.HTTPRoute, *machinery.HTTPRouteRule)
-func (r *RequestPathObjects) AsGRPCRoute() (*machinery.GRPCRoute, *machinery.GRPCRouteRule)
-
-// Common accessors
-func (r *RequestPathObjects) RouteNamespace() string
-func (r *RequestPathObjects) RouteName() string
-func (r *RequestPathObjects) Hostnames() []string
-```
-
----
-
-#### Task 4: kuadrant-operator - GRPCRoute Predicate Generation
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 3
-
-- [ ] Implement `PredicatesFromGRPCRouteMatch()` in `internal/wasm/utils.go`
-- [ ] Implement `predicateFromGRPCMethod()` for service/method → url_path conversion
-- [ ] Implement `predicateFromGRPCHeader()` (can reuse HTTP header logic)
-- [ ] Create `GRPCRouteMatchConfig` struct in `internal/gatewayapi/types.go`
-- [ ] Implement `SortableGRPCRouteMatchConfigs` with Gateway API precedence rules (see below)
-- [ ] Implement `BuildActionSetsForGRPCPath()` in `internal/wasm/utils.go`
-- [ ] Verify topology correctly links Gateway → GRPCRoute (prerequisite for DNS/TLS policy inheritance)
-- [ ] Integration test: DNSPolicy on Gateway with attached GRPCRoutes resolves correctly
-- [ ] Integration test: TLSPolicy on Gateway with attached GRPCRoutes resolves correctly
-- [ ] Add unit tests for predicate generation (all match types, edge cases)
-- [ ] Add unit tests for sorting behavior
-
-**GRPCRouteMatch sorting precedence ([per Gateway API spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCRouteRule)):**
-
-1. Largest number of characters in a matching non-wildcard hostname
-2. Largest number of characters in a matching hostname
-3. Largest number of characters in a matching service
-4. Largest number of characters in a matching method
-5. Largest number of header matches
-6. Oldest Route based on creation timestamp (tie-breaker)
-7. Alphabetical order by `{namespace}/{name}` (tie-breaker)
-
-**GRPCMethodMatch predicate patterns (all combinations to implement):**
-
-| Pattern | CEL Predicate |
-|---------|---------------|
-| Exact service + exact method | `request.url_path == '/Service/Method'` |
-| Exact service only | `request.url_path.startsWith('/Service/')` |
-| Exact method only (no service) | `request.url_path.matches('^/[^/]+/Method$')` |
-| Regex service + regex method | `request.url_path.matches('^/ServicePattern/MethodPattern$')` |
-| Regex service only | `request.url_path.matches('^/ServicePattern/.*$')` |
-| Regex method only | `request.url_path.matches('^/[^/]+/MethodPattern$')` |
-| Mixed: exact service + regex method | `request.url_path.matches('^/Service/MethodPattern$')` |
-
-**Note:** Per Gateway API spec, "at least one of Service and Method MUST be a non-empty string". For Exact match type, values are expected to be valid gRPC identifiers (alphanumeric + dots), so regex escaping should not be needed in practice. For RegularExpression match type, values are user-provided regex patterns and should be used as-is.
-
-**Empty match handling:**
-
-```go
-// Empty GRPCRouteMatch = match all gRPC requests (consistent with HTTPRoute behavior)
-if match.Method == nil && len(match.Headers) == 0 {
-    return []string{} // Empty predicates = match all
-}
-```
-
----
-
-#### Task 5: kuadrant-operator - AuthPolicy GRPCRoute Support
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 4
-
-- [ ] Update `api/v1/authpolicy_types.go` targetRef validation to accept GRPCRoute
-- [ ] Update `effective_auth_policies_reconciler.go` to iterate over GRPCRouteRules
-- [ ] Update `auth_workflow_helpers.go` for GRPCRoute path handling
-- [ ] Create `LinkGRPCRouteRuleToAuthConfig()` in `internal/authorino/utils.go`
-- [ ] Update `authconfigs_reconciler.go` to handle GRPCRouteRule paths and add `GRPCRouteGroupKind` to its event subscription
-- [ ] Add `AuthConfigGRPCRouteRuleAnnotation` constant
-- [ ] Add unit tests for AuthPolicy with GRPCRoute targets
-- [ ] Add integration tests for AuthConfig generation from GRPCRoutes
-- [ ] Run `make generate manifests bundle helm-build` after API changes
-
-**Iteration strategy:** Use separate iteration loops for HTTPRouteRules and GRPCRouteRules (rather than combined iteration with type switching). This provides clearer separation and easier debugging.
-
----
-
-#### Task 6: kuadrant-operator - RateLimitPolicy GRPCRoute Support
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 4
-
-- [ ] Update `api/v1/ratelimitpolicy_types.go` targetRef validation to accept GRPCRoute
-- [ ] Update `effective_ratelimit_policies_reconciler.go` to iterate over GRPCRouteRules
-- [ ] Update `ratelimit_workflow_helpers.go` for GRPCRoute path handling
-- [ ] Update `limitador_limits_reconciler.go` to handle GRPCRouteRule paths and add `GRPCRouteGroupKind` to its event subscription
-- [ ] Create `LimitsNamespaceFromGRPCRoute()` helper function
-- [ ] Add unit tests for RateLimitPolicy with GRPCRoute targets
-- [ ] Add integration tests for Limitador config generation from GRPCRoutes
-- [ ] Run `make generate manifests bundle helm-build` after API changes
-
-**Iteration strategy:** Use separate iteration loops for HTTPRouteRules and GRPCRouteRules (same pattern as Task 5).
-
----
-
-#### Task 7: kuadrant-operator - GRPCRoute Reconciler Updates
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 2, Task 5, Task 6
-
-- [ ] Create `grpcroute_policy_discoverability_reconciler.go` (mirror HTTPRoute pattern)
-- [ ] Create `FindGRPCRouteParentStatusFunc` helper (mirrors `FindRouteParentStatusFunc`)
-- [ ] Use `controller.GRPCRoutesResource` for status updates (requires Task 1)
-- [ ] Register GRPCRoute policy discoverability reconciler in workflow
-- [ ] Add `GRPCRouteGroupKind` to event subscriptions (not `GRPCRouteRuleGroupKind` — following the existing HTTPRoute pattern where only route-level kinds are in event matchers)
-- [ ] Update `dataPlaneEffectivePoliciesEventMatchers` in `data_plane_policies_workflow.go` (note: this shared list also affects TokenRateLimitPolicy reconcilers — they will receive GRPCRoute events but no-op since TRLP doesn't accept GRPCRoute targets)
-- [ ] Update `istio_extension_reconciler.go` for GRPCRoute events
-- [ ] Update `envoy_gateway_extension_reconciler.go` for GRPCRoute events
-- [ ] Update `istio_auth_cluster_reconciler.go` for GRPCRoute events
-- [ ] Update `envoy_gateway_auth_cluster_reconciler.go` for GRPCRoute events
-- [ ] Update `istio_ratelimit_cluster_reconciler.go` for GRPCRoute events
-- [ ] Update `envoy_gateway_ratelimit_cluster_reconciler.go` for GRPCRoute events
-- [ ] Update `limitador_istio_integration_reconciler.go` for GRPCRoute events
-- [ ] Add unit tests for reconciler subscriptions
-- [ ] Integration test: gRPC traffic with AuthPolicy enforcement
-- [ ] Integration test: gRPC traffic with RateLimitPolicy enforcement
-- [ ] Integration test: Method-specific policies targeting individual gRPC methods
-- [ ] Integration test: Mixed HTTPRoute and GRPCRoute on same Gateway
-- [ ] Integration test: Policy inheritance (Gateway → GRPCRoute)
-- [ ] Integration tests run on both Istio and Envoy Gateway providers
-
----
-
-#### Task 8: kuadrant-operator - GRPCRoute Examples & Documentation
-**Repository:** `kuadrant/kuadrant-operator`
-**Depends on:** Task 2, Task 7
-
-- [ ] Create `examples/grpcstore/grpcstore.yaml` (Deployment + Service)
-- [ ] Create `examples/grpcstore/grpcroute.yaml`
-- [ ] Create `examples/grpcstore/authpolicy.yaml`
-- [ ] Create `examples/grpcstore/ratelimitpolicy.yaml`
-- [ ] Create `examples/grpcstore/README.md` with usage instructions
-- [ ] Write `doc/user-guides/ratelimiting/grpc-rl-for-app-developers.md`
-- [ ] Write `doc/user-guides/auth/grpc-auth-for-app-developers.md`
-- [ ] Include grpcurl commands for verification
-- [ ] Include gRPC-specific `when` clause examples in rate limiting guide
-
-**Example gRPC-specific `when` clause for documentation:**
-
-```yaml
-apiVersion: kuadrant.io/v1
-kind: RateLimitPolicy
-metadata:
-  name: grpc-method-limit
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: GRPCRoute
-    name: grpcstore
-  limits:
-    per-grpc-method:
-      when:
-        - predicate: "request.url_path == '/talker.TalkerService/Echo'"
-      rates:
-        - limit: 100
-          window: 1m
-```
-
----
-
-#### Task 9: testsuite - GRPCRoute E2E Test Coverage
-**Repository:** `kuadrant/testsuite`
-**Depends on:** Task 2, Task 7
-
-The testsuite follows established patterns for HTTPRoute testing. GRPCRoute support mirrors these patterns with gRPC-specific equivalents.
-
-**Framework additions:**
-
-- [ ] Create `GRPCRoute` class in `testsuite/gateway/gateway_api/grpc_route.py` implementing the `GatewayRoute` interface (mirror `route.py` for HTTPRoute)
-  - `create_instance()` with kind `GRPCRoute`, apiVersion `gateway.networking.k8s.io/v1`
-  - `add_rule()` supporting `GRPCRouteMatch` (service/method matching)
-  - `add_backend()` for gRPC backend services
-  - `reference` property returning `{"group": "gateway.networking.k8s.io", "kind": "GRPCRoute", ...}`
-- [ ] Create gRPC backend class in `testsuite/backend/` for the chosen public gRPC image (from Task 2)
-- [ ] Create gRPC client wrapper (equivalent to `KuadrantClient` for HTTP) supporting unary gRPC calls
-- [ ] Add `grpcroute` test marker to `pyproject.toml`
-- [ ] Add `grpc_route` fixture in `tests/singlecluster/conftest.py` (mirror the `route` fixture pattern)
-- [ ] Add `grpc_backend` fixture in `tests/singlecluster/conftest.py`
-
-**Test cases** (mirror existing HTTPRoute tests under `tests/singlecluster/`):
-
-- [ ] AuthPolicy targeting GRPCRoute - basic authentication enforcement
-- [ ] AuthPolicy section targeting GRPCRoute rule (mirror `test_authpolicy_section_targeting_http_route.py`)
-- [ ] RateLimitPolicy targeting GRPCRoute - basic rate limiting
-- [ ] RateLimitPolicy section targeting GRPCRoute rule (mirror `test_route_rule.py`)
-- [ ] RateLimitPolicy with defaults block targeting GRPCRoute
-- [ ] GRPCRoute deletion reconciliation (mirror `test_httproute_delete.py`) - verify policy status updates when target is removed
-- [ ] Mixed HTTPRoute and GRPCRoute on same Gateway
-- [ ] Policy inheritance: Gateway-level policy applying to attached GRPCRoutes
-- [ ] Both Istio and Envoy Gateway providers
-
----
-
-### In Progress
-
-_(No tasks in progress)_
-
----
+- [ ] **Task 10: testsuite - GRPCRoute E2E Test Coverage** (depends on Tasks 2, 8)
+  Add GRPCRoute support to the testsuite framework and E2E tests mirroring the existing HTTPRoute test patterns.
+  - [ ] Add GRPCRoute class, gRPC backend, client wrapper, and fixtures
+  - [ ] E2E tests mirroring existing HTTPRoute test patterns
 
 ### Completed
 
@@ -605,3 +394,27 @@ Optional future enhancement: `grpc.service` and `grpc.method` convenience attrib
 ### "Authorino/Limitador need changes for gRPC"
 
 **Incorrect.** These components receive generated artifacts (AuthConfig CRDs, limit definitions) that are protocol-agnostic. The WASM filter evaluates CEL predicates against HTTP/2 attributes - this works identically for gRPC because gRPC IS HTTP/2.
+
+---
+
+## References
+
+### Gateway API
+- [GRPCRoute spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCRoute)
+- [GRPCRouteRule spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCRouteRule) — sorting precedence rules
+- [GRPCRouteMatch spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCRouteMatch)
+- [GRPCMethodMatch spec](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCMethodMatch)
+- [Policy Attachment (GEP-713)](https://gateway-api.sigs.k8s.io/geps/gep-713/)
+
+### gRPC
+- [gRPC over HTTP/2 protocol spec](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)
+
+### Kuadrant
+- [Well-Known Attributes (RFC 0002)](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md)
+- [policy-machinery PR #16 — GRPCRoute types](https://github.com/Kuadrant/policy-machinery/pull/16)
+
+### Candidate gRPC Test Images
+- [Istio echo](https://github.com/istio/istio/tree/master/pkg/test/echo) — multi-protocol server (HTTP, gRPC, TCP)
+- [grpcbin](https://github.com/moul/grpcbin) — gRPC echo server with reflection
+- [Fortio](https://fortio.org/) — load testing tool with built-in gRPC server
+- [grpc-health-probe](https://github.com/grpc-ecosystem/grpc-health-probe)

@@ -29,27 +29,37 @@ No breaking changes. `RegisterService` is a new additive method on the `Kuadrant
 ### Architecture Changes
 
 ```
-Extension Reconciler
-    │
-    ├── kCtx.RegisterService(ctx, policy, "grpc://my-svc:8081", ServiceConfig{...})
-    │       │
-    │       ▼
-    │   gRPC RegisterService RPC ──► extensionService (operator)
-    │                                     │
-    │                                     ├── Store in RegisteredDataStore (policy-scoped)
-    │                                     └── Trigger reconciliation
-    │
-    ▼
-Reconciliation cycle
-    │
-    ├── ExtensionClusterReconciler (Istio)
-    │   └── Creates EnvoyFilter with cluster patch per gateway
-    │
-    ├── ExtensionClusterReconciler (EnvoyGateway)
-    │   └── Creates EnvoyPatchPolicy with cluster patch per gateway
-    │
-    └── WasmConfig builder
-        └── ServiceBuilder picks up registered services → adds to services map
+Phase 1: Extension registers a service
+──────────────────────────────────────
+
+Extension              SDK Client           Operator (gRPC server)
+   │                      │                        │
+   │── RegisterService ──►│                        │
+   │   (policy, url,      │── RegisterService ────►│
+   │    ServiceConfig)     │   RPC (unix socket)    │
+   │                       │                        │── Dial url (reachability check)
+   │                       │                        │── Parse url → host + port
+   │                       │                        │── Generate cluster name
+   │                       │                        │── Store in RegisteredDataStore
+   │                       │◄── OK / Unavailable ───│
+   │◄── nil / error ──────│                        │── Trigger reconciliation
+   │                       │                        │
+
+
+Phase 2: Operator reconciles the registered service
+────────────────────────────────────────────────────
+
+RegisteredDataStore
+   │
+   ├──► ExtensionClusterReconciler (per gateway provider)
+   │       │
+   │       ├── Istio:         creates EnvoyFilter with cluster patch
+   │       └── EnvoyGateway:  creates EnvoyPatchPolicy with cluster patch
+   │
+   └──► WasmConfig ServiceBuilder
+           │
+           └── Adds service to wasm config services map
+               (cluster name = service key = endpoint)
 ```
 
 A single new `ExtensionClusterReconciler` per gateway provider handles all extension-registered clusters, rather than one reconciler per service type.

@@ -17,7 +17,7 @@ import (
 var (
 	defaultWasmImage  = WASMFilterImageURL
 	registry          = "protected.registry.io"
-	protectedRegImage = fmt.Sprintf("oci://%s/kuadrant/wasm-shim:latest", registry)
+	protectedRegImage = fmt.Sprintf("%s/kuadrant/wasm-shim:latest", registry)
 	testGateway       = &machinery.Gateway{
 		Gateway: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{

@@ -308,5 +308,5 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: kuadrant-ingressgateway
-  url: oci://quay.io/kuadrant/wasm-shim:latest
+  url: quay.io/kuadrant/wasm-shim:latest
 ```

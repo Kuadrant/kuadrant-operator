@@ -17,7 +17,7 @@ cd $env
 
 # Set desired Wasm-shim image
 wasm_shim=$(mod_version $WASM_SHIM_VERSION)
-wasm_shim_image="oci://quay.io/kuadrant/wasm-shim:$wasm_shim"
+wasm_shim_image="quay.io/kuadrant/wasm-shim:$wasm_shim"
 
 # Set desired developer-portal-controller image
 developerportal_version=$(mod_version $DEVELOPERPORTAL_VERSION)

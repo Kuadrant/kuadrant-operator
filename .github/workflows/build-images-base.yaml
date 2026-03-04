@@ -119,7 +119,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           provenance: false
           tags: |
@@ -172,7 +172,7 @@ jobs:
         with:
           context: .
           file: ./bundle.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           provenance: false
           tags: |
@@ -219,7 +219,7 @@ jobs:
         with:
           context: ./catalog
           file: ./catalog/kuadrant-operator-catalog.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           provenance: false
           tags: |

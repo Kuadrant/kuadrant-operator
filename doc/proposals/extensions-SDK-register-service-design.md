@@ -33,16 +33,16 @@ Phase 1: Extension registers a service
 ──────────────────────────────────────
 
 Extension              SDK Client           Operator (gRPC server)
-   │                      │                        │
-   │── RegisterService ──►│                        │
-   │   (policy, url,      │── RegisterService ────►│
+   │                       │                        │
+   │── RegisterService  ──►│                        │
+   │   (policy, url,       │── RegisterService ────►│
    │    ServiceConfig)     │   RPC (unix socket)    │
    │                       │                        │── Dial url (reachability check)
    │                       │                        │── Parse url → host + port
    │                       │                        │── Generate cluster name
    │                       │                        │── Store in RegisteredDataStore
    │                       │◄── OK / Unavailable ───│
-   │◄── nil / error ──────│                        │── Trigger reconciliation
+   │◄── nil / error  ──────│                        │── Trigger reconciliation
    │                       │                        │
 
 
@@ -51,18 +51,17 @@ Phase 2: Operator reconciles the registered service
 
 RegisteredDataStore
    │
-   ├──► ExtensionClusterReconciler (per gateway provider)
-   │       │
-   │       ├── Istio:         creates EnvoyFilter with cluster patch
-   │       └── EnvoyGateway:  creates EnvoyPatchPolicy with cluster patch
-   │
-   └──► WasmConfig ServiceBuilder
+   └──► Existing extension reconcilers (IstioExtensionReconciler / EnvoyGatewayExtensionReconciler)
            │
-           └── Adds service to wasm config services map
-               (cluster name = service key = endpoint)
+           ├── ServiceBuilder picks up registered services → adds to wasm config services map
+           │   (cluster name = service key = endpoint)
+           │
+           └── Creates cluster patches for registered services
+               ├── Istio:         adds EnvoyFilter with cluster patch
+               └── EnvoyGateway:  adds EnvoyPatchPolicy with cluster patch
 ```
 
-A single new `ExtensionClusterReconciler` per gateway provider handles all extension-registered clusters, rather than one reconciler per service type.
+Registered service handling is integrated into the existing `IstioExtensionReconciler` and `EnvoyGatewayExtensionReconciler` rather than creating new reconcilers. These already build wasm configs and manage per-gateway resources, so cluster creation for registered services is a natural extension of their responsibilities.
 
 ### API Changes
 
@@ -71,11 +70,20 @@ A single new `ExtensionClusterReconciler` per gateway provider handles all exten
 ```go
 // pkg/extension/types/types.go
 
+type ServiceType int
+
+const (
+    ServiceTypeRateLimit ServiceType = iota
+    ServiceTypeAuth
+)
+
 type ServiceConfig struct {
-    Type        string // "ratelimit", "auth", "ratelimit-check", "ratelimit-report", "tracing"
-    FailureMode string // "deny" or "allow"
-    Timeout     string // e.g. "100ms"
+    Type ServiceType
 }
+
+// Defaults applied by the operator:
+//   FailureMode: "deny"
+//   Timeout:     "100ms"
 
 type KuadrantCtx interface {
     Resolve(context.Context, Policy, string, bool) (celref.Val, error)
@@ -96,12 +104,17 @@ service ExtensionService {
   rpc RegisterService(RegisterServiceRequest) returns (google.protobuf.Empty) {}
 }
 
+enum ServiceType {
+  SERVICE_TYPE_RATELIMIT = 0;
+  SERVICE_TYPE_AUTH = 1;
+}
+
 message RegisterServiceRequest {
   Policy policy = 1;
-  string url = 2;             // e.g. "grpc://my-service:8081"
-  string service_type = 3;    // "ratelimit", "auth", etc.
-  string failure_mode = 4;    // "deny" or "allow"
-  string timeout = 5;         // "100ms"
+  string url = 2;               // e.g. "grpc://my-service:8081"
+  ServiceType service_type = 3;
+  // failure_mode and timeout are reserved for future use.
+  // Defaults: failure_mode = "deny", timeout = "100ms"
 }
 ```
 
@@ -164,9 +177,7 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
     r.Client.Get(ctx, req.NamespacedName, policy)
 
     err := kCtx.RegisterService(ctx, policy, "grpc://my-ratelimiter:8081", types.ServiceConfig{
-        Type:        "ratelimit",
-        FailureMode: "deny",
-        Timeout:     "100ms",
+        Type: types.ServiceTypeRateLimit,
     })
     if errors.Is(err, types.ErrServiceUnreachable) {
         // Service not available yet — requeue and retry later
@@ -195,7 +206,7 @@ type RegisteredServiceEntry struct {
     Policy      ResourceID
     URL         string
     ClusterName string
-    ServiceType string
+    ServiceType ServiceType
     FailureMode string
     Timeout     string
 }
@@ -223,34 +234,27 @@ New `RegisterService` handler:
 Extend `mutateWasmConfig` (or add a new mutator) to inject registered services into the `Config.Services` map. For each registered service entry, add:
 
 ```go
+timeout := "100ms"
 wasmConfig.Services[entry.ClusterName] = wasm.Service{
     Endpoint:    entry.ClusterName,
     Type:        wasm.ServiceType(entry.ServiceType),
-    FailureMode: wasm.FailureModeType(entry.FailureMode),
-    Timeout:     &entry.Timeout,
+    FailureMode: wasm.FailureModeDeny,
+    Timeout:     &timeout,
 }
 ```
 
-#### 4. ExtensionClusterReconciler — Istio (internal/controller/)
+#### 4. IstioExtensionReconciler (internal/controller/istio_extension_reconciler.go)
 
-New `istio_extension_cluster_reconciler.go`:
-- Subscribes to Kuadrant, Gateway, and extension-related events
-- Reads registered services from `RegisteredDataStore`
-- For each gateway in scope, builds an `EnvoyFilter` with cluster patches for all registered services
-- Uses `buildClusterPatch(clusterName, host, port, false, true)` — HTTP/2 enabled, mTLS configurable
-- Creates/updates/deletes `EnvoyFilter` resources named `kuadrant-ext-<gateway>`
+Extend the existing reconciler to handle registered services:
+- In `buildWasmConfigs`: read registered services from `RegisteredDataStore` and add them to the `ServiceBuilder` via `WithService(clusterName, service)`
+- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for all registered services using `buildClusterPatch(clusterName, host, port, false, true)` (HTTP/2 enabled)
+- Cleanup: delete cluster EnvoyFilters when registered services are removed
 
-#### 5. ExtensionClusterReconciler — EnvoyGateway (internal/controller/)
+#### 5. EnvoyGatewayExtensionReconciler (internal/controller/envoy_gateway_extension_reconciler.go)
 
-New `envoy_gateway_extension_cluster_reconciler.go`:
-- Same logic as Istio variant but creates `EnvoyPatchPolicy` resources
-- Uses `BuildEnvoyPatchPolicyClusterPatch`
-
-#### 6. DataPlanePoliciesWorkflow (internal/controller/data_plane_policies_workflow.go)
-
-Register the two new reconcilers in `NewDataPlanePoliciesWorkflow`:
-- `IstioExtensionClusterReconciler` alongside existing Istio reconcilers
-- `EnvoyGatewayExtensionClusterReconciler` alongside existing EG reconcilers
+Same changes as the Istio variant:
+- In `buildWasmConfigs`: add registered services to the `ServiceBuilder`
+- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for registered services using `BuildEnvoyPatchPolicyClusterPatch`
 
 #### 7. Extension Controller client side (pkg/extension/controller/controller.go)
 
@@ -271,12 +275,10 @@ Implement `RegisterService` on `ExtensionController`:
 1. Extend `RegisteredDataStore` with service registration storage and `ClearPolicyData` cleanup
 2. Add `RegisterService` RPC to the gRPC proto and regenerate
 3. Implement server-side `RegisterService` handler in `extensionService`
-4. Add wasm config mutator to inject registered services into `Config.Services`
-5. Create `IstioExtensionClusterReconciler`
-6. Create `EnvoyGatewayExtensionClusterReconciler`
-7. Register new reconcilers in `DataPlanePoliciesWorkflow`
-8. Implement client-side `RegisterService` on `ExtensionController`
-9. Add `RegisterService` to `KuadrantCtx` interface and `ServiceConfig` type
+4. Extend `IstioExtensionReconciler` to add registered services to `ServiceBuilder` and create cluster EnvoyFilters
+5. Extend `EnvoyGatewayExtensionReconciler` to add registered services to `ServiceBuilder` and create cluster EnvoyPatchPolicies
+6. Implement client-side `RegisterService` on `ExtensionController`
+7. Add `RegisterService` to `KuadrantCtx` interface and `ServiceConfig` type
 
 ## Testing Strategy
 
@@ -288,6 +290,191 @@ Implement `RegisterService` on `ExtensionController`:
 - Should mTLS be configurable per registered service, or always disabled for extension services?
 - Should there be a limit on the number of services an extension can register?
 
+## Future Work
+
+### ServiceReachable — Data Plane Reachability Check
+
+A `ServiceReachable` method on `KuadrantCtx` that checks whether the wasm-shim can actually reach a registered service, as opposed to `RegisterService` which only validates reachability from the operator.
+
+The intended approach is to query metrics emitted by the wasm-shim via a Prometheus client. However, this is **blocked** by two prerequisites:
+
+1. **Wasm-shim per-service metrics**: The wasm-shim currently emits only aggregate counters (`kuadrant.hits`, `kuadrant.errors`, etc.) without per-service labels. Upstream changes to the wasm-shim are needed to add a `service` label so that errors and connectivity failures can be attributed to a specific registered service.
+
+2. **Prometheus endpoint configuration**: The Kuadrant CR has no field for a Prometheus query endpoint. A new CRD field (e.g. `spec.observability.prometheus.url`) would be needed so the operator knows where to query.
+
+Once those prerequisites are met, the API would look like:
+
+```go
+type KuadrantCtx interface {
+    // ... existing methods ...
+    RegisterService(ctx context.Context, policy Policy, url string, svc ServiceConfig) error
+    ServiceReachable(ctx context.Context, policy Policy, url string, svc ServiceConfig) (bool, error)
+}
+```
+
+Extension authors would use it to check data plane connectivity before relying on a service:
+
+```go
+reachable, err := kCtx.ServiceReachable(ctx, policy, "grpc://my-service:8081", svcConfig)
+if err != nil {
+    return reconcile.Result{}, err
+}
+if !reachable {
+    // Service registered but wasm-shim cannot reach it yet
+    return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+}
+```
+
+## Demo: Echo/Debug Extension
+
+A two-part demo showing RegisterService in action with a minimal echo server.
+
+### Echo Server
+
+A small Go binary (~100 lines) implementing the Envoy ext_authz `Check` RPC. It logs every request it receives and returns `OK` with debug headers:
+
+```go
+// cmd/echo-debug-server/main.go
+
+package main
+
+import (
+    "log"
+    "net"
+
+    authv3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+    typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
+    "google.golang.org/grpc"
+    rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
+    corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+)
+
+type echoServer struct {
+    authv3.UnimplementedAuthorizationServer
+}
+
+func (s *echoServer) Check(ctx context.Context, req *authv3.CheckRequest) (*authv3.CheckResponse, error) {
+    httpReq := req.GetAttributes().GetRequest().GetHttp()
+    log.Printf("[echo] %s %s from %s | headers: %v",
+        httpReq.GetMethod(), httpReq.GetPath(), httpReq.GetHost(), httpReq.GetHeaders())
+
+    return &authv3.CheckResponse{
+        Status: &rpcstatus.Status{Code: int32(0)}, // OK
+        HttpResponse: &authv3.CheckResponse_OkResponse{
+            OkResponse: &authv3.OkHttpResponse{
+                Headers: []*corev3.HeaderValueOption{
+                    {Header: &corev3.HeaderValue{
+                        Key:   "x-echo-debug",
+                        Value: fmt.Sprintf("method=%s path=%s host=%s", httpReq.GetMethod(), httpReq.GetPath(), httpReq.GetHost()),
+                    }},
+                },
+            },
+        },
+    }, nil
+}
+
+func main() {
+    lis, _ := net.Listen("tcp", ":9001")
+    srv := grpc.NewServer()
+    authv3.RegisterAuthorizationServer(srv, &echoServer{})
+    log.Println("echo-debug-server listening on :9001")
+    srv.Serve(lis)
+}
+```
+
+### DebugPolicy Extension
+
+A minimal extension with a single-field CRD:
+
+```yaml
+# DebugPolicy CRD instance
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: DebugPolicy
+metadata:
+  name: echo-debug
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: my-api
+  echoServiceURL: "grpc://echo-debug-server.default.svc.cluster.local:9001"
+```
+
+Extension reconciler:
+
+```go
+func (r *DebugPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
+    policy := &v1alpha1.DebugPolicy{}
+    r.Client.Get(ctx, req.NamespacedName, policy)
+
+    err := kCtx.RegisterService(ctx, policy, policy.Spec.EchoServiceURL, types.ServiceConfig{
+        Type: types.ServiceTypeAuth,
+    })
+    if errors.Is(err, types.ErrServiceUnreachable) {
+        return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+    }
+    return reconcile.Result{}, err
+}
+```
+
+### Demo Script
+
+**Part 1: RegisterService infrastructure**
+
+```bash
+# 1. Deploy the echo server
+kubectl apply -f examples/echo-debug-server/deployment.yaml
+
+# 2. Apply the DebugPolicy
+kubectl apply -f examples/echo-debug-server/debug-policy.yaml
+
+# 3. Verify the Envoy cluster was created
+#    (Istio)
+istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-auth
+#    Expected: ext-auth-echo-debug-server   STRICT_DNS   ...
+
+#    (Envoy Gateway)
+kubectl get envoyPatchPolicy -n envoy-gateway-system -o yaml | grep ext-auth
+
+# 4. Verify the service appears in the wasm config
+#    (Istio)
+kubectl get wasmplugin -n istio-system -o jsonpath='{.items[0].spec.pluginConfig}' | jq '.services'
+#    Expected: { "ext-auth-echo-debug-server": { "endpoint": "ext-auth-echo-debug-server", "type": "auth", "failureMode": "deny", "timeout": "100ms" } }
+
+# 5. Delete the DebugPolicy and verify cleanup
+kubectl delete debugpolicy echo-debug
+istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-auth
+#    Expected: (empty — cluster removed)
+```
+
+**Part 2: Traffic flow (manual action wiring)**
+
+```bash
+# 6. Re-apply the DebugPolicy
+kubectl apply -f examples/echo-debug-server/debug-policy.yaml
+
+# 7. Patch the WasmPlugin to add an action referencing the echo service
+#    This adds an action for all requests to the HTTPRoute, calling ext-auth-echo-debug-server
+kubectl patch wasmplugin kuadrant-istio-ingressgateway -n istio-system --type merge -p '
+  ... (add action with service: "ext-auth-echo-debug-server") ...'
+
+# 8. Send traffic and observe
+curl -v http://my-api.example.com/anything
+#    Response includes header: x-echo-debug: method=GET path=/anything host=my-api.example.com
+
+# 9. Check echo server logs
+kubectl logs deploy/echo-debug-server
+#    [echo] GET /anything from my-api.example.com | headers: {host: my-api.example.com, ...}
+```
+
+### What the demo proves
+
+- **Part 1**: RegisterService creates the correct Envoy cluster and wasm service entry. Cleanup works when the policy is deleted. The `ErrServiceUnreachable` error is returned if the echo server isn't running.
+- **Part 2**: The registered service is callable from the data plane. The wasm-shim routes traffic to it via the ext_authz protocol. Debug headers appear in responses.
+
+**Note**: Part 2 requires manual action wiring. A future `RegisterAction` method on `KuadrantCtx` would allow extensions to automate this step, completing the full self-service extension story.
+
 ## Execution
 
 ### Todo
@@ -298,15 +485,12 @@ Implement `RegisterService` on `ExtensionController`:
   - [ ] Unit tests
 - [ ] Implement server-side RegisterService handler
   - [ ] Unit tests
-- [ ] Add wasm config service injection mutator
-  - [ ] Unit tests
-- [ ] Create IstioExtensionClusterReconciler
+- [ ] Extend IstioExtensionReconciler with registered service support
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Create EnvoyGatewayExtensionClusterReconciler
+- [ ] Extend EnvoyGatewayExtensionReconciler with registered service support
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Register new reconcilers in DataPlanePoliciesWorkflow
 - [ ] Implement client-side RegisterService on ExtensionController
   - [ ] Unit tests
 - [ ] Add RegisterService to KuadrantCtx interface and ServiceConfig type
@@ -318,11 +502,12 @@ Implement `RegisterService` on `ExtensionController`:
 ### 2026-03-04 — Initial design
 
 - Chose policy-scoped lifecycle (consistent with AddDataTo pattern)
-- Chose single reconciler per gateway provider over extending existing reconcilers
+- Chose to extend existing IstioExtensionReconciler and EnvoyGatewayExtensionReconciler rather than creating new reconcilers
 - Chose cluster name = wasm service name (derived from type + host)
 - Extensions specify existing ServiceType values; no wasm-shim changes needed
 - URL + ServiceConfig struct as RegisterService parameters
 - Added gRPC dial reachability check — returns `ErrServiceUnreachable` sentinel error via gRPC `Unavailable` status
+- Deferred `ServiceReachable` (data plane reachability via wasm-shim metrics) as future work — blocked on wasm-shim per-service metric labels and Prometheus endpoint configuration in Kuadrant CR
 
 ## References
 

@@ -2,9 +2,11 @@
 
 ## Key Points
 
-1. **New `RegisterService` method on `KuadrantCtx`** — extensions call it with a `ServiceConfig{Name, URL}` to register an external gRPC service
+1. **New `RegisterService` method on `KuadrantCtx`** — extensions call it with a `ServiceConfig{URL}` to register an external gRPC service
 2. **Operator creates Envoy cluster + wasm service entry** — cluster is STRICT_DNS/HTTP2, wasm service uses `auth` type (hardcoded until wasm-shim adds `dynamic` type)
-3. **Names prefixed with `ext-`** — extension-provided name is prefixed to avoid collisions with built-in services (e.g. `"my-auth"` → `"ext-my-auth"`)
+3. **Two distinct generated names, both prefixed with `ext-`**:
+   - **Envoy cluster name**: derived from URL host + port, invalid chars replaced with hyphens (e.g. `ext-my-service-ns-svc-cluster-local-8081`)
+   - **Wasm service key**: derived from policy namespace/name + targetRef namespace/name (e.g. `ext-default-my-policy-my-api`)
 4. **Policy-scoped lifecycle** — registrations are tied to a policy and cleaned up automatically via `ClearPolicy`, consistent with `AddDataTo`
 5. **Reachability check on registration** — operator performs a gRPC dial to the URL; returns `ErrServiceUnreachable` if it fails, allowing extensions to requeue
 6. **No new reconcilers** — extends existing `IstioExtensionReconciler` and `EnvoyGatewayExtensionReconciler` to handle cluster creation and wasm config injection
@@ -19,7 +21,7 @@ Add a `RegisterService` method to `KuadrantCtx` so that extensions can register 
 - Allow extensions to register gRPC services via `KuadrantCtx.RegisterService`
 - Automatically create Envoy clusters (STRICT_DNS, HTTP/2) for registered services
 - Automatically add registered services to the wasm config services map
-- Generate deterministic, collision-resistant cluster names from service type + host
+- Generate deterministic, collision-resistant names: Envoy cluster name from URL, wasm service key from policy + targetRef identity
 - Tie service registrations to policy lifecycle (cleaned up via `ClearPolicy`)
 - Support both Istio (EnvoyFilter) and Envoy Gateway (EnvoyPatchPolicy) providers
 
@@ -49,7 +51,8 @@ Extension              SDK Client           Operator (gRPC server)
    │    ServiceConfig)     │   RPC (unix socket)    │
    │                       │                        │── Dial svc.URL (reachability check)
    │                       │                        │── Parse svc.URL → host + port
-   │                       │                        │── Generate cluster name
+   │                       │                        │── Generate cluster name (from URL)
+   │                       │                        │── Generate wasm service key (from policy + targetRef)
    │                       │                        │── Store in RegisteredDataStore
    │                       │◄── OK / Unavailable ───│
    │◄── nil / error  ──────│                        │── Trigger reconciliation
@@ -64,9 +67,9 @@ RegisteredDataStore
    └──► Existing extension reconcilers (IstioExtensionReconciler / EnvoyGatewayExtensionReconciler)
            │
            ├── ServiceBuilder picks up registered services → adds to wasm config services map
-           │   (cluster name = service key = endpoint)
+           │   (wasm service key from policy+targetRef, endpoint points to URL-based cluster name)
            │
-           └── Creates cluster patches for registered services
+           └── Creates cluster patches for registered services (cluster name from URL)
                ├── Istio:         adds EnvoyFilter with cluster patch
                └── EnvoyGateway:  adds EnvoyPatchPolicy with cluster patch
 ```
@@ -81,14 +84,17 @@ Registered service handling is integrated into the existing `IstioExtensionRecon
 // pkg/extension/types/types.go
 
 type ServiceConfig struct {
-    Name string // cluster name and wasm service key, e.g. "my-auth-service"
-    URL  string // e.g. "grpc://my-service:8081"
+    URL string // e.g. "grpc://my-service:8081"
 }
 
 // Defaults applied by the operator:
 //   Type:        "auth" (will change to "dynamic" once supported by wasm-shim)
 //   FailureMode: "deny"
 //   Timeout:     "100ms"
+//
+// Generated names (not user-specified):
+//   Envoy cluster name: "ext-" + URL host + port, invalid chars → hyphens
+//   Wasm service key:   "ext-" + policy namespace + policy name + targetRef name
 
 type KuadrantCtx interface {
     Resolve(context.Context, Policy, string, bool) (celref.Val, error)
@@ -111,23 +117,40 @@ service ExtensionService {
 
 message RegisterServiceRequest {
   Policy policy = 1;
-  string name = 2;              // cluster name and wasm service key
-  string url = 3;               // e.g. "grpc://my-service:8081"
+  string url = 2;               // e.g. "grpc://my-service:8081"
   // service_type, failure_mode, and timeout are reserved for future use.
   // Operator defaults: type = "auth", failure_mode = "deny", timeout = "100ms"
+  // Names are generated server-side:
+  //   Envoy cluster: from URL host+port
+  //   Wasm service key: from policy + targetRef identity
 }
 ```
 
-#### Cluster Naming
+#### Naming
 
-The cluster name is provided by the extension author via `ServiceConfig.Name`. The operator prefixes it with `ext-` to prevent collisions with built-in services (e.g. `kuadrant-auth-service`, `kuadrant-ratelimit-service`). The prefixed value is used as both the Envoy cluster name and the wasm config service map key.
+The Envoy cluster name and wasm service key are distinct values, both generated by the operator — neither is user-specified. Both are prefixed with `ext-` to prevent collisions with built-in services.
+
+**Envoy cluster name** — derived from the URL host and port. Non-alphanumeric characters (dots, colons, slashes) are replaced with hyphens:
 
 ```
-Input:  Name = "my-auth-service"
-Result: "ext-my-auth-service" (cluster name + wasm service key)
+URL:          grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051
+Cluster name: ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051
 ```
 
-The operator validates the name is non-empty and contains only valid Envoy cluster identifier characters (alphanumeric, hyphens, underscores).
+**Wasm service key** — derived from the policy's namespace/name and its targetRef's namespace/name. Since targetRefs are local (same namespace as the policy), the targetRef namespace equals the policy namespace:
+
+```
+Policy:       default/demo-auth
+TargetRef:    default/my-api  (HTTPRoute)
+Service key:  ext-default-demo-auth-default-my-api
+```
+
+If a policy has multiple targetRefs, a separate wasm service entry is generated for each, all pointing to the same Envoy cluster via the `endpoint` field:
+
+```
+ext-default-demo-auth-default-my-api-1   → endpoint: ext-authorino-...-50051
+ext-default-demo-auth-default-my-api-2   → endpoint: ext-authorino-...-50051
+```
 
 #### Error Handling
 
@@ -148,7 +171,6 @@ The client-side `RegisterService` implementation inspects the gRPC status code a
 
 request := &extpb.RegisterServiceRequest{
     Policy: convertPolicyToProtobuf(policy),
-    Name:   svc.Name,
     Url:    svc.URL,
 }
 _, err := ec.extensionClient.client.RegisterService(ctx, request)
@@ -182,8 +204,7 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
     r.Client.Get(ctx, req.NamespacedName, policy)
 
     err := kCtx.RegisterService(ctx, policy, types.ServiceConfig{
-        Name: "my-authservice",
-        URL:  "grpc://my-authservice:8081",
+        URL: "grpc://my-authservice.my-ns.svc.cluster.local:8081",
     })
     if errors.Is(err, types.ErrServiceUnreachable) {
         // Service not available yet — requeue and retry later
@@ -193,8 +214,8 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
         return reconcile.Result{}, err
     }
 
-    // Service is now available in wasm config as "ext-my-authservice"
-    // Cluster "ext-my-authservice" is created in Envoy config
+    // Envoy cluster created:   "ext-my-authservice-my-ns-svc-cluster-local-8081"
+    // Wasm service key created: "ext-{policyNs}-{policyName}-{targetRefNs}-{targetRefName}"
     // Cleanup happens automatically when ClearPolicy is called for this policy
 
     return reconcile.Result{}, nil
@@ -209,20 +230,20 @@ Add a new `registeredServices` map alongside the existing `dataProviders` and `s
 
 ```go
 type RegisteredServiceEntry struct {
-    Policy ResourceID
-    Name   string
-    URL    string
+    Policy      ResourceID
+    URL         string // original URL from the extension
+    ClusterName string // generated: ext-{host}-{port}
     FailureMode string
     Timeout     string
 }
 
 type RegisteredServiceKey struct {
     Policy ResourceID
-    Name   string
+    URL    string
 }
 ```
 
-Services are stored keyed by `(Policy, Name)`. `ClearPolicyData` is extended to also clear registered services for the deleted policy.
+Services are stored keyed by `(Policy, URL)`. `ClearPolicyData` is extended to also clear registered services for the deleted policy. The wasm service key (`ext-{policyNs}-{policyName}-{targetRefNs}-{targetRefName}`) is generated at reconcile time when building the wasm config, not at registration time, since it depends on target ref resolution.
 
 #### 2. extensionService (internal/extension/manager.go)
 
@@ -230,49 +251,64 @@ New `RegisterService` handler:
 - Parses `request.Url` to extract host and port
 - Performs a gRPC dial attempt to the URL with a 5-second timeout
 - If dial fails, returns gRPC status `Unavailable` with descriptive message
-- If dial succeeds, prefixes `request.Name` with `ext-` to form cluster name
-- Stores in `RegisteredDataStore`
+- If dial succeeds, generates Envoy cluster name: `ext-` + host + port with invalid chars replaced by hyphens
+- Stores `RegisteredServiceEntry` (with `ClusterName`) in `RegisteredDataStore`
 - Triggers reconciliation via `changeNotifier`
 
 #### 3. MutatorRegistry — WasmConfig mutation (internal/extension/registry.go)
 
-Extend `mutateWasmConfig` (or add a new mutator) to inject registered services into the `Config.Services` map. For each registered service entry, add:
+Extend `mutateWasmConfig` (or add a new mutator) to inject registered services into the `Config.Services` map. For each registered service entry and each of the policy's targetRefs, generate a wasm service key and build a candidate `wasm.Service`. Before inserting, deduplicate: if any existing entry in `Config.Services` already has an identical configuration (same Endpoint, Type, FailureMode, Timeout), reuse that entry's key instead of adding a duplicate.
 
 ```go
 timeout := "100ms"
-clusterName := "ext-" + entry.Name
-wasmConfig.Services[clusterName] = wasm.Service{
-    Endpoint:    clusterName,
+candidate := wasm.Service{
+    Endpoint:    entry.ClusterName, // points to the URL-based Envoy cluster
     Type:        wasm.AuthServiceType, // default; will change to "dynamic" once supported
     FailureMode: wasm.FailureModeDeny,
     Timeout:     &timeout,
 }
+
+// Deduplicate: skip if an identical service config already exists
+alreadyExists := false
+for _, existing := range wasmConfig.Services {
+    if existing.EqualTo(candidate) {
+        alreadyExists = true
+        break
+    }
+}
+if !alreadyExists {
+    wasmConfig.Services[wasmServiceKey] = candidate
+}
 ```
+
+This handles two common duplication scenarios:
+- **Multiple policies registering the same URL**: produces identical service configs (same cluster endpoint) — only one entry is kept
+- **Single policy with multiple targetRefs**: would generate multiple wasm service keys pointing to the same cluster — deduplicated to one entry
 
 #### 4. IstioExtensionReconciler (internal/controller/istio_extension_reconciler.go)
 
 Extend the existing reconciler to handle registered services:
-- In `buildWasmConfigs`: read registered services from `RegisteredDataStore` and add them to the `ServiceBuilder` via `WithService("ext-"+entry.Name, service)`
-- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for all registered services using `buildClusterPatch(clusterName, host, port, false, true)` (HTTP/2 enabled)
+- In `buildWasmConfigs`: read registered services from `RegisteredDataStore`, generate wasm service keys from policy + targetRef identity, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
+- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for all registered services using `buildClusterPatch(entry.ClusterName, host, port, false, true)` (HTTP/2 enabled)
 - Cleanup: delete cluster EnvoyFilters when registered services are removed
 
 #### 5. EnvoyGatewayExtensionReconciler (internal/controller/envoy_gateway_extension_reconciler.go)
 
 Same changes as the Istio variant:
-- In `buildWasmConfigs`: add registered services to the `ServiceBuilder`
-- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for registered services using `BuildEnvoyPatchPolicyClusterPatch`
+- In `buildWasmConfigs`: generate wasm service keys from policy + targetRef identity and add registered services to the `ServiceBuilder`
+- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for registered services using `BuildEnvoyPatchPolicyClusterPatch` with `entry.ClusterName`
 
 #### 7. Extension Controller client side (pkg/extension/controller/controller.go)
 
 Implement `RegisterService` on `ExtensionController`:
-- Extract `URL` from `ServiceConfig`, convert to proto `RegisterServiceRequest`
+- Convert `ServiceConfig.URL` and policy to proto `RegisterServiceRequest`
 - Call `ec.extensionClient.client.RegisterService(ctx, request)`
 - Translate gRPC `Unavailable` status to `types.ErrServiceUnreachable`
 
 ### Security Considerations
 
 - **URL validation**: The operator must validate that the URL is well-formed and uses the `grpc://` scheme. Reject URLs with credentials or query parameters.
-- **Cluster name validation**: Extension-provided names must be valid Envoy cluster identifiers (alphanumeric, hyphens, underscores). The operator rejects invalid names.
+- **No user-controlled names in Envoy/wasm config**: Both the cluster name and wasm service key are operator-generated, preventing injection of crafted identifiers.
 - **No privilege escalation**: Extensions can only register services reachable from the data plane network. The cluster is created with the same access level as existing auth/ratelimit clusters.
 - **Policy-scoped cleanup**: Services cannot outlive their owning policy, preventing resource leaks.
 
@@ -288,7 +324,7 @@ Implement `RegisterService` on `ExtensionController`:
 
 ## Testing Strategy
 
-- **Unit tests**: URL parsing, name validation, `RegisteredDataStore` service CRUD, `ClearPolicyData` cleanup, wasm config mutation, gRPC dial failure → `ErrServiceUnreachable` mapping
+- **Unit tests**: URL parsing, cluster name generation, wasm service key generation, `RegisteredDataStore` service CRUD, `ClearPolicyData` cleanup, wasm config mutation, gRPC dial failure → `ErrServiceUnreachable` mapping
 - **Integration tests**: End-to-end RegisterService flow with Istio and EnvoyGateway — verify EnvoyFilter/EnvoyPatchPolicy creation, wasm config services map population, cleanup on policy deletion
 
 ## Open Questions
@@ -371,13 +407,16 @@ func (r *DemoPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Requ
     // Register the already-deployed Authorino as an extension-managed service
     // Authorino listens on port 50051 for gRPC authorization
     err := kCtx.RegisterService(ctx, policy, types.ServiceConfig{
-        Name: "demo-authorino",
-        URL:  "grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051",
+        URL: "grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051",
     })
     if errors.Is(err, types.ErrServiceUnreachable) {
         return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
     }
     return reconcile.Result{}, err
+
+    // Generated names:
+    //   Envoy cluster: ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051
+    //   Wasm service:  ext-default-demo-auth-default-my-api (from policy ns/name + targetRef ns/name)
 }
 ```
 
@@ -393,23 +432,26 @@ kubectl get pods -n kuadrant-system -l app=authorino
 # 2. Apply the DemoPolicy
 kubectl apply -f examples/demo-policy/demo-policy.yaml
 
-# 3. Verify the Envoy cluster was created
+# 3. Verify the Envoy cluster was created (name derived from URL)
 #    (Istio)
-istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-demo-authorino
-#    Expected: ext-demo-authorino   STRICT_DNS   ...
+istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-authorino-authorino-authorization
+#    Expected: ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051   STRICT_DNS   ...
 
 #    (Envoy Gateway)
-kubectl get envoyPatchPolicy -n envoy-gateway-system -o yaml | grep ext-demo-authorino
+kubectl get envoyPatchPolicy -n envoy-gateway-system -o yaml | grep ext-authorino-authorino-authorization
 
-# 4. Verify the service appears in the wasm config
+# 4. Verify the service appears in the wasm config (key derived from policy + targetRef)
 #    (Istio)
 kubectl get wasmplugin -n istio-system -o jsonpath='{.items[0].spec.pluginConfig}' | jq '.services'
-#    Expected: "ext-demo-authorino": { "endpoint": "ext-demo-authorino", "type": "auth", "failureMode": "deny", "timeout": "100ms" }
+#    Expected: "ext-default-demo-auth-default-my-api": {
+#      "endpoint": "ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051",
+#      "type": "auth", "failureMode": "deny", "timeout": "100ms"
+#    }
 #    Note: the built-in "auth-service" entry also remains — both coexist
 
 # 5. Delete the DemoPolicy and verify cleanup
 kubectl delete demopolicy demo-auth
-istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-demo-authorino
+istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-authorino-authorino-authorization
 #    Expected: (empty — cluster removed, built-in auth cluster unaffected)
 ```
 
@@ -420,13 +462,13 @@ istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep
 kubectl apply -f examples/demo-policy/demo-policy.yaml
 
 # 7. Patch the WasmPlugin to add an action referencing the extension-registered service
-#    This adds an action for all requests to the HTTPRoute, calling ext-demo-authorino
+#    This adds an action for all requests to the HTTPRoute, referencing the wasm service key
 kubectl patch wasmplugin kuadrant-istio-ingressgateway -n istio-system --type merge -p '
-  ... (add action with service: "ext-demo-authorino") ...'
+  ... (add action with service: "ext-default-demo-auth-default-my-api") ...'
 
 # 8. Send traffic — Authorino evaluates the request via the extension-registered service
 curl -v http://my-api.example.com/anything
-#    Authorino processes the request through the ext-demo-authorino cluster
+#    Authorino processes the request through the ext-authorino-...-50051 cluster
 
 # 9. Check Authorino logs for the request
 kubectl logs deploy/authorino -n kuadrant-system
@@ -434,8 +476,8 @@ kubectl logs deploy/authorino -n kuadrant-system
 
 ### What the demo proves
 
-- **Part 1**: RegisterService creates a new Envoy cluster and wasm service entry pointing to an already-running service. The built-in `auth-service` is unaffected — both coexist. Cleanup works when the policy is deleted.
-- **Part 2**: The extension-registered service is callable from the data plane. The wasm-shim routes traffic to Authorino via the `ext-demo-authorino` cluster, independent of the built-in auth flow.
+- **Part 1**: RegisterService creates a new Envoy cluster (named from URL) and wasm service entry (named from policy + targetRef) pointing to an already-running service. The built-in `auth-service` is unaffected — both coexist. Cleanup works when the policy is deleted.
+- **Part 2**: The extension-registered service is callable from the data plane. The wasm-shim routes traffic to Authorino via the URL-derived cluster, independent of the built-in auth flow.
 - **No new services deployed**: The demo uses only infrastructure already present in a standard Kuadrant installation.
 
 **Note**: Part 2 requires manual action wiring. A future `RegisterAction` method on `KuadrantCtx` would allow extensions to automate this step.
@@ -468,11 +510,24 @@ kubectl logs deploy/authorino -n kuadrant-system
 
 ## Change Log
 
+### 2026-03-05 — Deduplicate wasm service entries
+
+- Added deduplication logic in wasm config mutation: before inserting a service entry, check if any existing entry has an identical configuration (Endpoint, Type, FailureMode, Timeout) using `Service.EqualTo()` — skip if duplicate
+- Handles multiple policies registering the same URL and single policies with multiple targetRefs
+
+### 2026-03-05 — Split cluster name and wasm service key
+
+- Envoy cluster name is now derived from the URL (host + port, invalid chars → hyphens), not user-provided
+- Wasm service key is now generated from policy namespace/name + targetRef namespace/name
+- Removed `Name` field from `ServiceConfig` — neither name is user-specified
+- Both names still prefixed with `ext-` to prevent collisions with built-in services
+- `RegisteredServiceKey` now keyed by `(Policy, URL)` instead of `(Policy, Name)`
+- Removed `name` field from gRPC proto `RegisterServiceRequest`
+
 ### 2026-03-04 — Initial design
 
 - Chose policy-scoped lifecycle (consistent with AddDataTo pattern)
 - Chose to extend existing IstioExtensionReconciler and EnvoyGatewayExtensionReconciler rather than creating new reconcilers
-- Chose extension-provided name as cluster name and wasm service key
 - ServiceConfig contains only URL; Type hardcoded to `auth`, will change to `dynamic` once wasm-shim supports it
 - No wasm-shim changes needed for initial implementation
 - Added gRPC dial reachability check — returns `ErrServiceUnreachable` sentinel error via gRPC `Unavailable` status

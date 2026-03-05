@@ -1,5 +1,15 @@
 # Feature: Extension SDK RegisterService
 
+## Key Points
+
+1. **New `RegisterService` method on `KuadrantCtx`** — extensions call it with a `ServiceConfig{Name, URL}` to register an external gRPC service
+2. **Operator creates Envoy cluster + wasm service entry** — cluster is STRICT_DNS/HTTP2, wasm service uses `auth` type (hardcoded until wasm-shim adds `dynamic` type)
+3. **Names prefixed with `ext-`** — extension-provided name is prefixed to avoid collisions with built-in services (e.g. `"my-auth"` → `"ext-my-auth"`)
+4. **Policy-scoped lifecycle** — registrations are tied to a policy and cleaned up automatically via `ClearPolicy`, consistent with `AddDataTo`
+5. **Reachability check on registration** — operator performs a gRPC dial to the URL; returns `ErrServiceUnreachable` if it fails, allowing extensions to requeue
+6. **No new reconcilers** — extends existing `IstioExtensionReconciler` and `EnvoyGatewayExtensionReconciler` to handle cluster creation and wasm config injection
+7. **Future work** — `ServiceReachable` (data plane reachability via metrics) and `dynamic` ServiceType are deferred
+
 ## Summary
 
 Add a `RegisterService` method to `KuadrantCtx` so that extensions can register arbitrary gRPC services with the data plane. The operator creates the corresponding Envoy cluster and wasm service entry, enabling extensions to introduce new upstream service integrations beyond the built-in auth, ratelimit, and tracing services.
@@ -35,10 +45,10 @@ Phase 1: Extension registers a service
 Extension              SDK Client           Operator (gRPC server)
    │                       │                        │
    │── RegisterService  ──►│                        │
-   │   (policy, url,       │── RegisterService ────►│
+   │   (policy,            │── RegisterService ────►│
    │    ServiceConfig)     │   RPC (unix socket)    │
-   │                       │                        │── Dial url (reachability check)
-   │                       │                        │── Parse url → host + port
+   │                       │                        │── Dial svc.URL (reachability check)
+   │                       │                        │── Parse svc.URL → host + port
    │                       │                        │── Generate cluster name
    │                       │                        │── Store in RegisteredDataStore
    │                       │◄── OK / Unavailable ───│
@@ -70,19 +80,13 @@ Registered service handling is integrated into the existing `IstioExtensionRecon
 ```go
 // pkg/extension/types/types.go
 
-type ServiceType int
-
-const (
-    ServiceTypeRateLimit ServiceType = iota
-    ServiceTypeAuth
-)
-
 type ServiceConfig struct {
-    URL  string      // e.g. "grpc://my-service:8081"
-    Type ServiceType
+    Name string // cluster name and wasm service key, e.g. "my-auth-service"
+    URL  string // e.g. "grpc://my-service:8081"
 }
 
 // Defaults applied by the operator:
+//   Type:        "auth" (will change to "dynamic" once supported by wasm-shim)
 //   FailureMode: "deny"
 //   Timeout:     "100ms"
 
@@ -105,30 +109,25 @@ service ExtensionService {
   rpc RegisterService(RegisterServiceRequest) returns (google.protobuf.Empty) {}
 }
 
-enum ServiceType {
-  SERVICE_TYPE_RATELIMIT = 0;
-  SERVICE_TYPE_AUTH = 1;
-}
-
 message RegisterServiceRequest {
   Policy policy = 1;
-  string url = 2;               // e.g. "grpc://my-service:8081"
-  ServiceType service_type = 3;
-  // failure_mode and timeout are reserved for future use.
-  // Defaults: failure_mode = "deny", timeout = "100ms"
+  string name = 2;              // cluster name and wasm service key
+  string url = 3;               // e.g. "grpc://my-service:8081"
+  // service_type, failure_mode, and timeout are reserved for future use.
+  // Operator defaults: type = "auth", failure_mode = "deny", timeout = "100ms"
 }
 ```
 
 #### Cluster Naming
 
-The cluster name is derived from the service type and a substring of the host, ensuring determinism and avoiding collisions:
+The cluster name is provided by the extension author via `ServiceConfig.Name`. The operator prefixes it with `ext-` to prevent collisions with built-in services (e.g. `kuadrant-auth-service`, `kuadrant-ratelimit-service`). The prefixed value is used as both the Envoy cluster name and the wasm config service map key.
 
 ```
-Format: ext-<service_type>-<host_substring>
-Example: ext-ratelimit-my-service
+Input:  Name = "my-auth-service"
+Result: "ext-my-auth-service" (cluster name + wasm service key)
 ```
 
-The same value is used as both the Envoy cluster name and the wasm config service map key (the `Endpoint` field in the wasm `Service` struct).
+The operator validates the name is non-empty and contains only valid Envoy cluster identifier characters (alphanumeric, hyphens, underscores).
 
 #### Error Handling
 
@@ -147,6 +146,11 @@ The client-side `RegisterService` implementation inspects the gRPC status code a
 ```go
 // pkg/extension/controller/controller.go (inside RegisterService)
 
+request := &extpb.RegisterServiceRequest{
+    Policy: convertPolicyToProtobuf(policy),
+    Name:   svc.Name,
+    Url:    svc.URL,
+}
 _, err := ec.extensionClient.client.RegisterService(ctx, request)
 if err != nil {
     if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
@@ -161,11 +165,11 @@ The server-side handler performs the dial check before storing the registration:
 ```go
 // internal/extension/manager.go (inside RegisterService handler)
 
-conn, err := grpc.NewClient(url,
+conn, err := grpc.NewClient(request.Url,
     grpc.WithTransportCredentials(insecure.NewCredentials()),
 )
 if err != nil {
-    return nil, status.Errorf(codes.Unavailable, "cannot reach service at %s: %v", url, err)
+    return nil, status.Errorf(codes.Unavailable, "cannot reach service at %s: %v", request.Url, err)
 }
 conn.Close()
 ```
@@ -177,8 +181,9 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
     policy := &v1alpha1.MyPolicy{}
     r.Client.Get(ctx, req.NamespacedName, policy)
 
-    err := kCtx.RegisterService(ctx, policy, "grpc://my-ratelimiter:8081", types.ServiceConfig{
-        Type: types.ServiceTypeRateLimit,
+    err := kCtx.RegisterService(ctx, policy, types.ServiceConfig{
+        Name: "my-authservice",
+        URL:  "grpc://my-authservice:8081",
     })
     if errors.Is(err, types.ErrServiceUnreachable) {
         // Service not available yet — requeue and retry later
@@ -188,8 +193,8 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
         return reconcile.Result{}, err
     }
 
-    // Service is now available in wasm config as "ext-ratelimit-my-ratelimiter"
-    // Cluster "ext-ratelimit-my-ratelimiter" is created in Envoy config
+    // Service is now available in wasm config as "ext-my-authservice"
+    // Cluster "ext-my-authservice" is created in Envoy config
     // Cleanup happens automatically when ClearPolicy is called for this policy
 
     return reconcile.Result{}, nil
@@ -204,29 +209,28 @@ Add a new `registeredServices` map alongside the existing `dataProviders` and `s
 
 ```go
 type RegisteredServiceEntry struct {
-    Policy      ResourceID
-    URL         string
-    ClusterName string
-    ServiceType ServiceType
+    Policy ResourceID
+    Name   string
+    URL    string
     FailureMode string
     Timeout     string
 }
 
 type RegisteredServiceKey struct {
-    Policy      ResourceID
-    ClusterName string
+    Policy ResourceID
+    Name   string
 }
 ```
 
-Services are stored keyed by `(Policy, ClusterName)`. `ClearPolicyData` is extended to also clear registered services for the deleted policy.
+Services are stored keyed by `(Policy, Name)`. `ClearPolicyData` is extended to also clear registered services for the deleted policy.
 
 #### 2. extensionService (internal/extension/manager.go)
 
 New `RegisterService` handler:
-- Parses URL to extract host and port
+- Parses `request.Url` to extract host and port
 - Performs a gRPC dial attempt to the URL with a 5-second timeout
 - If dial fails, returns gRPC status `Unavailable` with descriptive message
-- If dial succeeds, generates cluster name: `ext-<type>-<host>`
+- If dial succeeds, prefixes `request.Name` with `ext-` to form cluster name
 - Stores in `RegisteredDataStore`
 - Triggers reconciliation via `changeNotifier`
 
@@ -236,9 +240,10 @@ Extend `mutateWasmConfig` (or add a new mutator) to inject registered services i
 
 ```go
 timeout := "100ms"
-wasmConfig.Services[entry.ClusterName] = wasm.Service{
-    Endpoint:    entry.ClusterName,
-    Type:        wasm.ServiceType(entry.ServiceType),
+clusterName := "ext-" + entry.Name
+wasmConfig.Services[clusterName] = wasm.Service{
+    Endpoint:    clusterName,
+    Type:        wasm.AuthServiceType, // default; will change to "dynamic" once supported
     FailureMode: wasm.FailureModeDeny,
     Timeout:     &timeout,
 }
@@ -247,7 +252,7 @@ wasmConfig.Services[entry.ClusterName] = wasm.Service{
 #### 4. IstioExtensionReconciler (internal/controller/istio_extension_reconciler.go)
 
 Extend the existing reconciler to handle registered services:
-- In `buildWasmConfigs`: read registered services from `RegisteredDataStore` and add them to the `ServiceBuilder` via `WithService(clusterName, service)`
+- In `buildWasmConfigs`: read registered services from `RegisteredDataStore` and add them to the `ServiceBuilder` via `WithService("ext-"+entry.Name, service)`
 - In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for all registered services using `buildClusterPatch(clusterName, host, port, false, true)` (HTTP/2 enabled)
 - Cleanup: delete cluster EnvoyFilters when registered services are removed
 
@@ -260,14 +265,14 @@ Same changes as the Istio variant:
 #### 7. Extension Controller client side (pkg/extension/controller/controller.go)
 
 Implement `RegisterService` on `ExtensionController`:
-- Convert `ServiceConfig` to proto `RegisterServiceRequest`
+- Extract `URL` from `ServiceConfig`, convert to proto `RegisterServiceRequest`
 - Call `ec.extensionClient.client.RegisterService(ctx, request)`
 - Translate gRPC `Unavailable` status to `types.ErrServiceUnreachable`
 
 ### Security Considerations
 
 - **URL validation**: The operator must validate that the URL is well-formed and uses the `grpc://` scheme. Reject URLs with credentials or query parameters.
-- **Cluster name sanitization**: Generated cluster names must be valid Envoy cluster identifiers (alphanumeric + hyphens).
+- **Cluster name validation**: Extension-provided names must be valid Envoy cluster identifiers (alphanumeric, hyphens, underscores). The operator rejects invalid names.
 - **No privilege escalation**: Extensions can only register services reachable from the data plane network. The cluster is created with the same access level as existing auth/ratelimit clusters.
 - **Policy-scoped cleanup**: Services cannot outlive their owning policy, preventing resource leaks.
 
@@ -283,7 +288,7 @@ Implement `RegisterService` on `ExtensionController`:
 
 ## Testing Strategy
 
-- **Unit tests**: URL parsing, cluster name generation, `RegisteredDataStore` service CRUD, `ClearPolicyData` cleanup, wasm config mutation, gRPC dial failure → `ErrServiceUnreachable` mapping
+- **Unit tests**: URL parsing, name validation, `RegisteredDataStore` service CRUD, `ClearPolicyData` cleanup, wasm config mutation, gRPC dial failure → `ErrServiceUnreachable` mapping
 - **Integration tests**: End-to-end RegisterService flow with Istio and EnvoyGateway — verify EnvoyFilter/EnvoyPatchPolicy creation, wasm config services map population, cleanup on policy deletion
 
 ## Open Questions
@@ -308,15 +313,15 @@ Once those prerequisites are met, the API would look like:
 ```go
 type KuadrantCtx interface {
     // ... existing methods ...
-    RegisterService(ctx context.Context, policy Policy, url string, svc ServiceConfig) error
-    ServiceReachable(ctx context.Context, policy Policy, url string, svc ServiceConfig) (bool, error)
+    RegisterService(ctx context.Context, policy Policy, svc ServiceConfig) error
+    ServiceReachable(ctx context.Context, policy Policy, svc ServiceConfig) (bool, error)
 }
 ```
 
 Extension authors would use it to check data plane connectivity before relying on a service:
 
 ```go
-reachable, err := kCtx.ServiceReachable(ctx, policy, "grpc://my-service:8081", svcConfig)
+reachable, err := kCtx.ServiceReachable(ctx, policy, svcConfig)
 if err != nil {
     return reconcile.Result{}, err
 }
@@ -326,91 +331,48 @@ if !reachable {
 }
 ```
 
-## Demo: Echo/Debug Extension
+### Dynamic ServiceType
 
-A two-part demo showing RegisterService in action with a minimal echo server.
+The `ServiceConfig` currently has no `Type` field — the operator hardcodes `auth` (ext_authz protocol). Once a `dynamic` service type is added to the wasm-shim, the operator will switch the hardcoded default from `auth` to `dynamic`. No `Type` field will be exposed on `ServiceConfig` — registered services will always use the `dynamic` type.
 
-### Echo Server
+## Demo: RegisterService with Authorino
 
-A small Go binary (~100 lines) implementing the Envoy ext_authz `Check` RPC. It logs every request it receives and returns `OK` with debug headers:
+A two-part demo using the already-deployed Authorino instance to demonstrate RegisterService without deploying any new services.
 
-```go
-// cmd/echo-debug-server/main.go
+### Concept
 
-package main
+Authorino is already running in the cluster as part of the Kuadrant stack and implements the `envoy.service.auth.v3.Authorization/Check` RPC. The demo extension registers Authorino as a second, extension-managed auth service via RegisterService — proving the infrastructure works with a real, reachable gRPC service.
 
-import (
-    "log"
-    "net"
+### DemoPolicy Extension
 
-    authv3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-    typev3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-    "google.golang.org/grpc"
-    rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
-    corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-)
-
-type echoServer struct {
-    authv3.UnimplementedAuthorizationServer
-}
-
-func (s *echoServer) Check(ctx context.Context, req *authv3.CheckRequest) (*authv3.CheckResponse, error) {
-    httpReq := req.GetAttributes().GetRequest().GetHttp()
-    log.Printf("[echo] %s %s from %s | headers: %v",
-        httpReq.GetMethod(), httpReq.GetPath(), httpReq.GetHost(), httpReq.GetHeaders())
-
-    return &authv3.CheckResponse{
-        Status: &rpcstatus.Status{Code: int32(0)}, // OK
-        HttpResponse: &authv3.CheckResponse_OkResponse{
-            OkResponse: &authv3.OkHttpResponse{
-                Headers: []*corev3.HeaderValueOption{
-                    {Header: &corev3.HeaderValue{
-                        Key:   "x-echo-debug",
-                        Value: fmt.Sprintf("method=%s path=%s host=%s", httpReq.GetMethod(), httpReq.GetPath(), httpReq.GetHost()),
-                    }},
-                },
-            },
-        },
-    }, nil
-}
-
-func main() {
-    lis, _ := net.Listen("tcp", ":9001")
-    srv := grpc.NewServer()
-    authv3.RegisterAuthorizationServer(srv, &echoServer{})
-    log.Println("echo-debug-server listening on :9001")
-    srv.Serve(lis)
-}
-```
-
-### DebugPolicy Extension
-
-A minimal extension with a single-field CRD:
+A minimal extension that registers the existing Authorino as an extension-managed service:
 
 ```yaml
-# DebugPolicy CRD instance
+# DemoPolicy CRD instance
 apiVersion: extensions.kuadrant.io/v1alpha1
-kind: DebugPolicy
+kind: DemoPolicy
 metadata:
-  name: echo-debug
+  name: demo-auth
   namespace: default
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: my-api
-  echoServiceURL: "grpc://echo-debug-server.default.svc.cluster.local:9001"
 ```
 
 Extension reconciler:
 
 ```go
-func (r *DebugPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
-    policy := &v1alpha1.DebugPolicy{}
+func (r *DemoPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
+    policy := &v1alpha1.DemoPolicy{}
     r.Client.Get(ctx, req.NamespacedName, policy)
 
-    err := kCtx.RegisterService(ctx, policy, policy.Spec.EchoServiceURL, types.ServiceConfig{
-        Type: types.ServiceTypeAuth,
+    // Register the already-deployed Authorino as an extension-managed service
+    // Authorino listens on port 50051 for gRPC authorization
+    err := kCtx.RegisterService(ctx, policy, types.ServiceConfig{
+        Name: "demo-authorino",
+        URL:  "grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051",
     })
     if errors.Is(err, types.ErrServiceUnreachable) {
         return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
@@ -424,57 +386,59 @@ func (r *DebugPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Req
 **Part 1: RegisterService infrastructure**
 
 ```bash
-# 1. Deploy the echo server
-kubectl apply -f examples/echo-debug-server/deployment.yaml
+# 1. Verify Authorino is running
+kubectl get pods -n kuadrant-system -l app=authorino
+#    Expected: authorino pod Running
 
-# 2. Apply the DebugPolicy
-kubectl apply -f examples/echo-debug-server/debug-policy.yaml
+# 2. Apply the DemoPolicy
+kubectl apply -f examples/demo-policy/demo-policy.yaml
 
 # 3. Verify the Envoy cluster was created
 #    (Istio)
-istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-auth
-#    Expected: ext-auth-echo-debug-server   STRICT_DNS   ...
+istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-demo-authorino
+#    Expected: ext-demo-authorino   STRICT_DNS   ...
 
 #    (Envoy Gateway)
-kubectl get envoyPatchPolicy -n envoy-gateway-system -o yaml | grep ext-auth
+kubectl get envoyPatchPolicy -n envoy-gateway-system -o yaml | grep ext-demo-authorino
 
 # 4. Verify the service appears in the wasm config
 #    (Istio)
 kubectl get wasmplugin -n istio-system -o jsonpath='{.items[0].spec.pluginConfig}' | jq '.services'
-#    Expected: { "ext-auth-echo-debug-server": { "endpoint": "ext-auth-echo-debug-server", "type": "auth", "failureMode": "deny", "timeout": "100ms" } }
+#    Expected: "ext-demo-authorino": { "endpoint": "ext-demo-authorino", "type": "auth", "failureMode": "deny", "timeout": "100ms" }
+#    Note: the built-in "auth-service" entry also remains — both coexist
 
-# 5. Delete the DebugPolicy and verify cleanup
-kubectl delete debugpolicy echo-debug
-istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-auth
-#    Expected: (empty — cluster removed)
+# 5. Delete the DemoPolicy and verify cleanup
+kubectl delete demopolicy demo-auth
+istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-demo-authorino
+#    Expected: (empty — cluster removed, built-in auth cluster unaffected)
 ```
 
 **Part 2: Traffic flow (manual action wiring)**
 
 ```bash
-# 6. Re-apply the DebugPolicy
-kubectl apply -f examples/echo-debug-server/debug-policy.yaml
+# 6. Re-apply the DemoPolicy
+kubectl apply -f examples/demo-policy/demo-policy.yaml
 
-# 7. Patch the WasmPlugin to add an action referencing the echo service
-#    This adds an action for all requests to the HTTPRoute, calling ext-auth-echo-debug-server
+# 7. Patch the WasmPlugin to add an action referencing the extension-registered service
+#    This adds an action for all requests to the HTTPRoute, calling ext-demo-authorino
 kubectl patch wasmplugin kuadrant-istio-ingressgateway -n istio-system --type merge -p '
-  ... (add action with service: "ext-auth-echo-debug-server") ...'
+  ... (add action with service: "ext-demo-authorino") ...'
 
-# 8. Send traffic and observe
+# 8. Send traffic — Authorino evaluates the request via the extension-registered service
 curl -v http://my-api.example.com/anything
-#    Response includes header: x-echo-debug: method=GET path=/anything host=my-api.example.com
+#    Authorino processes the request through the ext-demo-authorino cluster
 
-# 9. Check echo server logs
-kubectl logs deploy/echo-debug-server
-#    [echo] GET /anything from my-api.example.com | headers: {host: my-api.example.com, ...}
+# 9. Check Authorino logs for the request
+kubectl logs deploy/authorino -n kuadrant-system
 ```
 
 ### What the demo proves
 
-- **Part 1**: RegisterService creates the correct Envoy cluster and wasm service entry. Cleanup works when the policy is deleted. The `ErrServiceUnreachable` error is returned if the echo server isn't running.
-- **Part 2**: The registered service is callable from the data plane. The wasm-shim routes traffic to it via the ext_authz protocol. Debug headers appear in responses.
+- **Part 1**: RegisterService creates a new Envoy cluster and wasm service entry pointing to an already-running service. The built-in `auth-service` is unaffected — both coexist. Cleanup works when the policy is deleted.
+- **Part 2**: The extension-registered service is callable from the data plane. The wasm-shim routes traffic to Authorino via the `ext-demo-authorino` cluster, independent of the built-in auth flow.
+- **No new services deployed**: The demo uses only infrastructure already present in a standard Kuadrant installation.
 
-**Note**: Part 2 requires manual action wiring. A future `RegisterAction` method on `KuadrantCtx` would allow extensions to automate this step, completing the full self-service extension story.
+**Note**: Part 2 requires manual action wiring. A future `RegisterAction` method on `KuadrantCtx` would allow extensions to automate this step.
 
 ## Execution
 
@@ -495,6 +459,10 @@ kubectl logs deploy/echo-debug-server
 - [ ] Implement client-side RegisterService on ExtensionController
   - [ ] Unit tests
 - [ ] Add RegisterService to KuadrantCtx interface and ServiceConfig type
+- [ ] Create demo entities and interactive demo script
+  - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
+  - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)
+  - [ ] Interactive demo script (`examples/demo-policy/demo.sh`) that walks through Part 1 and Part 2, pausing at each step for discussion
 
 ### Completed
 
@@ -504,9 +472,9 @@ kubectl logs deploy/echo-debug-server
 
 - Chose policy-scoped lifecycle (consistent with AddDataTo pattern)
 - Chose to extend existing IstioExtensionReconciler and EnvoyGatewayExtensionReconciler rather than creating new reconcilers
-- Chose cluster name = wasm service name (derived from type + host)
-- Extensions specify existing ServiceType values; no wasm-shim changes needed
-- URL + ServiceConfig struct as RegisterService parameters
+- Chose extension-provided name as cluster name and wasm service key
+- ServiceConfig contains only URL; Type hardcoded to `auth`, will change to `dynamic` once wasm-shim supports it
+- No wasm-shim changes needed for initial implementation
 - Added gRPC dial reachability check — returns `ErrServiceUnreachable` sentinel error via gRPC `Unavailable` status
 - Deferred `ServiceReachable` (data plane reachability via wasm-shim metrics) as future work — blocked on wasm-shim per-service metric labels and Prometheus endpoint configuration in Kuadrant CR
 

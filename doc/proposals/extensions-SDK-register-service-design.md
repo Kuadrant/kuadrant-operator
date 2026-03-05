@@ -78,6 +78,7 @@ const (
 )
 
 type ServiceConfig struct {
+    URL  string      // e.g. "grpc://my-service:8081"
     Type ServiceType
 }
 
@@ -90,7 +91,7 @@ type KuadrantCtx interface {
     ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
     AddDataTo(context.Context, Policy, Domain, string, string) error
     ReconcileObject(context.Context, client.Object, client.Object, MutateFn) (client.Object, error)
-    RegisterService(ctx context.Context, policy Policy, url string, svc ServiceConfig) error // new
+    RegisterService(ctx context.Context, policy Policy, svc ServiceConfig) error // new
 }
 ```
 

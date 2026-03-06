@@ -1,28 +1,82 @@
-name: Schedule nightly build with latest image SHA versions
+name: Schedule nightly build
 
 on:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: "0 4 * * *"
+  workflow_dispatch: {}
 
 jobs:
-  date:
+  release-date:
     name: GetDate
     runs-on: ubuntu-latest
     outputs:
-      date: ${{ steps.date.outputs.date }}
+      release_date: ${{ steps.release_date.outputs.release_date }}
     steps:
-      - id: date
-        run: echo "date=nightly-$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+      - id: release_date
+        run: echo "release_date=nightly-$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+  wasmshim-latest-digest:
+    name: Get the digest sha of the latest wasmshim docker image
+    runs-on: ubuntu-latest
+    outputs:
+      wasmshim_digest: ${{ steps.wasmshim-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.1
+      - id: wasmshim-get-digest
+        name: Get digest of latest wasmshim image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/wasm-shim:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "WASM shim latest digest: ${DIGEST}"
+  devportal-controlller-latest-digest:
+    name: Get the digest sha of the latest devportal controller docker image
+    runs-on: ubuntu-latest
+    outputs:
+      devportal_controller_digest: ${{ steps.devportal-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.1
+      - id: devportal-get-digest
+        name: Get digest of latest devportal controller image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/developer-portal-controller:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Developer portal controller latest digest: ${DIGEST}"
+  console-plugin-latest-digest:
+    name: Get the digest sha of the latest console plugin docker image
+    runs-on: ubuntu-latest
+    outputs:
+      console_plugin_digest: ${{ steps.console-plugin-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.1
+      - id: console-plugin-get-digest
+        name: Get digest of latest console plugin image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/console-plugin:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Console plugin latest digest: ${DIGEST}"
   workflow-build:
-    needs: date
+    needs:
+      - release-date
+      - wasmshim-latest-digest
+      - devportal-controlller-latest-digest
+      - console-plugin-latest-digest
     name: Calls build-images-base workflow
     uses: ./.github/workflows/build-images-base.yaml
     secrets: inherit
     with:
-      kuadrantOperatorVersion: ${{ github.sha }}
-      kuadrantOperatorTag: ${{ needs.date.outputs.date }}
-      authorinoOperatorVersion: ${{ vars.AUTHORINO_OPERATOR_SHA }}
-      limitadorOperatorVersion: ${{ vars.LIMITADOR_OPERATOR_SHA }}
-      dnsOperatorVersion: ${{ vars.DNS_OPERATOR_SHA }}
-      wasmShimVersion: ${{ vars.WASM_SHIM_SHA }}
+      kuadrantOperatorVersion: 0.0.0
+      kuadrantOperatorTag: ${{ needs.release-date.outputs.release_date }}
+      authorinoBundleImg: quay.io/kuadrant/authorino-operator-bundle:${{ needs.release-date.outputs.release_date }}
+      limitadorBundleImg: quay.io/kuadrant/limitador-operator-bundle:${{ needs.release-date.outputs.release_date }}
+      # dns-operator does not build nightly images
+      # The only reference in the bundle is the dns-operator image, and it is already pinned to git sha tag
+      dnsOperatorBundleImg: quay.io/kuadrant/dns-operator-bundle:latest
+      relatedImageWasmShim: quay.io/kuadrant/wasm-shim@${{ needs.wasmshim-latest-digest.outputs.wasmshim_digest }}
+      relatedImageDeveloperPortalController: quay.io/kuadrant/wasm-shim@${{ needs.devportal-controlller-latest-digest.outputs.devportal_controller_digest }}
+      relatedImageConsolePluginLatest: quay.io/kuadrant/console-plugin@${{ needs.console-plugin-latest-digest.outputs.console_plugin_digest }}
       quayImageExpiry: 2w

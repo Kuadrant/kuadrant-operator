@@ -11,21 +11,33 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
-      authorinoOperatorVersion:
-        description: Authorino Operator bundle version
-        default: latest
+      authorinoBundleImg:
+        description: Authorino Operator bundle image url
+        default: quay.io/kuadrant/authorino-operator-bundle:latest
         type: string
-      limitadorOperatorVersion:
-        description: Limitador Operator bundle version
-        default: latest
+      limitadorBundleImg:
+        description: Limitador Operator bundle image url
+        default: quay.io/kuadrant/limitador-operator-bundle:latest
         type: string
-      dnsOperatorVersion:
-        description: DNS Operator bundle version
-        default: latest
+      dnsOperatorBundleImg:
+        description: DNS Operator bundle image url
+        default: quay.io/kuadrant/dns-operator-bundle:latest
         type: string
-      wasmShimVersion:
-        description: WASM Shim version
-        default: latest
+      relatedImageWasmShim:
+        description: Related image WASM Shim
+        default: quay.io/kuadrant/wasm-shim:latest
+        type: string
+      relatedImageDeveloperPortalController:
+        description: Related image Developer portal controller
+        default: quay.io/kuadrant/developer-portal-controller:latest
+        type: string
+      relatedImageConsolePluginLatest:
+        description: Related image ConsolePlugin latest (PatternFly 6)
+        default: quay.io/kuadrant/console-plugin:latest
+        type: string
+      relatedImageConsolePluginPF5:
+        description: Related image ConsolePlugin v0.1.5 (PatternFly 5)
+        default: quay.io/kuadrant/console-plugin:v0.1.5
         type: string
       consolePluginImageURL:
         description: ConsolePlugin image URL
@@ -53,21 +65,33 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
-      authorinoOperatorVersion:
-        description: Authorino Operator bundle version
-        default: latest
+      authorinoBundleImg:
+        description: Authorino Operator bundle image url
+        default: quay.io/kuadrant/authorino-operator-bundle:latest
         type: string
-      limitadorOperatorVersion:
-        description: Limitador Operator bundle version
-        default: latest
+      limitadorBundleImg:
+        description: Limitador Operator bundle image url
+        default: quay.io/kuadrant/limitador-operator-bundle:latest
         type: string
-      dnsOperatorVersion:
-        description: DNS Operator bundle version
-        default: latest
+      dnsOperatorBundleImg:
+        description: DNS Operator bundle image url
+        default: quay.io/kuadrant/dns-operator-bundle:latest
         type: string
-      wasmShimVersion:
-        description: WASM Shim version
-        default: latest
+      relatedImageWasmShim:
+        description: Related image WASM Shim
+        default: quay.io/kuadrant/wasm-shim:latest
+        type: string
+      relatedImageDeveloperPortalController:
+        description: Related image Developer portal controller
+        default: quay.io/kuadrant/developer-portal-controller:latest
+        type: string
+      relatedImageConsolePluginLatest:
+        description: Related image ConsolePlugin latest (PatternFly 6)
+        default: quay.io/kuadrant/console-plugin:latest
+        type: string
+      relatedImageConsolePluginPF5:
+        description: Related image ConsolePlugin v0.1.5 (PatternFly 5)
+        default: quay.io/kuadrant/console-plugin:v0.1.5
         type: string
       consolePluginImageURL:
         description: ConsolePlugin image URL
@@ -87,8 +111,6 @@ on:
         type: string
 
 env:
-  IMG_TAGS: ${{ inputs.kuadrantOperatorTag }}
-  VERSION: ${{ inputs.kuadrantOperatorVersion }}
   IMG_REGISTRY_HOST: quay.io
   IMG_REGISTRY_ORG: kuadrant
   MAIN_BRANCH_NAME: main
@@ -101,10 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set IMG_TAG to lower case
-        id: lower-img-tag
-        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
+        uses: actions/checkout@v5
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to container registry
@@ -113,6 +132,13 @@ jobs:
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
           registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}
+          tags: |
+            type=raw,value=${{ inputs.kuadrantOperatorTag }}
       - name: Build and Push Image
         id: build-image
         uses: docker/build-push-action@v5
@@ -122,15 +148,16 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           provenance: false
-          tags: |
-            ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}
+          tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
             GIT_SHA=${{ github.sha }}
             DIRTY=false
-            VERSION=${{ inputs.operatorVersion }}
+            VERSION=${{ inputs.kuadrantOperatorVersion }}
       - name: Print Image URL
-        run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}"
+        run: |
+          echo "Image(s) pushed:"
+          echo "${{ steps.meta.outputs.tags }}"
 
   build-bundle:
     needs: build
@@ -138,24 +165,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
         id: go
-      - name: Set IMG_TAG to lower case
-        id: lower-img-tag
-        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
       - name: Run make bundle
         id: make-bundle
         run: |
-          make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
-            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ env.IMG_TAGS }} \
-            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
-            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-            DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
-            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+          make bundle \
+            IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ inputs.kuadrantOperatorTag }} \
+            VERSION=${{ inputs.kuadrantOperatorVersion }} \
+            AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
+            LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
+            DNS_OPERATOR_BUNDLE_IMG=${{ inputs.dnsOperatorBundleImg }} \
+            RELATED_IMAGE_WASMSHIM=${{ inputs.relatedImageWasmShim }} \
+            RELATED_IMAGE_DEVELOPERPORTAL=${{ inputs.relatedImageWasmShim }} \
+            RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=${{ inputs.relatedImageConsolePluginLatest}} \
+            RELATED_IMAGE_CONSOLE_PLUGIN_PF5=${{ inputs.relatedImageConsolePluginPF5}} \
             DEFAULT_CHANNEL=${{ inputs.defaultChannel }} \
             CHANNELS=${{ inputs.channels }}
       - name: Set up Docker Buildx
@@ -166,6 +194,13 @@ jobs:
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
           registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Extract metadata
+        id: bundle-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle
+          tags: |
+            type=raw,value=${{ inputs.kuadrantOperatorTag }}
       - name: Build and Push Bundle Image
         id: build-bundle-image
         uses: docker/build-push-action@v5
@@ -175,15 +210,16 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           provenance: false
-          tags: |
-            ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.IMG_TAGS }}
+          tags: ${{ steps.bundle-meta.outputs.tags }}
           build-args: QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
-      - name: Print Bundle Image URL
-        run: echo "Bundle image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.IMG_TAGS }}"
+      - name: Print Image URL
+        run: |
+          echo "Image(s) pushed:"
+          echo "${{ steps.bundle-meta.outputs.tags }}"
 
   build-catalog:
     name: Build Catalog
-    needs: [ build, build-bundle ]
+    needs: [build, build-bundle]
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -193,17 +229,13 @@ jobs:
         with:
           go-version-file: go.mod
         id: go
-      - name: Set IMG_TAG to lower case
-        id: lower-img-tag
-        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
       - name: Generate Catalog Content
         run: |
-          make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
-            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ env.IMG_TAGS }} \
-            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
-            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-            DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
-            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+          make catalog \
+            BUNDLE_IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ inputs.kuadrantOperatorTag }} \
+            AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
+            LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
+            DNS_OPERATOR_BUNDLE_IMG=${{ inputs.dnsOperatorBundleImg }} \
             CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -213,6 +245,13 @@ jobs:
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
           registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Extract metadata
+        id: catalog-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog
+          tags: |
+            type=raw,value=${{ inputs.kuadrantOperatorTag }}
       - name: Build and Push Catalog Image
         id: build-catalog-image
         uses: docker/build-push-action@v5
@@ -222,8 +261,9 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/s390x
           push: true
           provenance: false
-          tags: |
-            ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}
+          tags: ${{ steps.catalog-meta.outputs.tags }}
           # The Quay image expiry label for the generated catalog Dockerfile is set via opm, using the value set in the QUAY_IMAGE_EXPIRY environment variable
-      - name: Print Catalog Image URL
-        run: echo "Catalog image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}"
+      - name: Print Image URL
+        run: |
+          echo "Image(s) pushed:"
+          echo "${{ steps.catalog-meta.outputs.tags }}"

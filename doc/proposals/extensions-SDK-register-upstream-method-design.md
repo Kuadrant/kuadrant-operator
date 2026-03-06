@@ -1,8 +1,8 @@
-# Feature: Extension SDK RegisterUpstream
+# Feature: Extension SDK RegisterUpstreamMethod
 
 ## Key Points
 
-1. **New `RegisterUpstream` method on `KuadrantCtx`** — extensions call it with a `UpstreamConfig{URL}` to register an external gRPC service
+1. **New `RegisterUpstreamMethod` method on `KuadrantCtx`** — extensions call it with an `UpstreamConfig{URL, Service, Method}` to register an external gRPC service (Service and Method are reserved for future use)
 2. **Operator creates Envoy cluster + wasm service entry** — cluster is STRICT_DNS/HTTP2, wasm service uses `auth` type (hardcoded until wasm-shim adds `dynamic` type)
 3. **Two distinct generated names, both prefixed with `ext-`**:
    - **Envoy cluster name**: derived from URL host + port, invalid chars replaced with hyphens (e.g. `ext-my-service-ns-svc-cluster-local-8081`)
@@ -14,11 +14,11 @@
 
 ## Summary
 
-Add a `RegisterUpstream` method to `KuadrantCtx` so that extensions can register arbitrary gRPC services with the data plane. The operator creates the corresponding Envoy cluster and wasm service entry, enabling extensions to introduce new upstream service integrations beyond the built-in auth, ratelimit, and tracing services.
+Add a `RegisterUpstreamMethod` method to `KuadrantCtx` so that extensions can register arbitrary gRPC services with the data plane. The operator creates the corresponding Envoy cluster and wasm service entry, enabling extensions to introduce new upstream service integrations beyond the built-in auth, ratelimit, and tracing services.
 
 ## Goals
 
-- Allow extensions to register gRPC services via `KuadrantCtx.RegisterUpstream`
+- Allow extensions to register gRPC services via `KuadrantCtx.RegisterUpstreamMethod`
 - Automatically create Envoy clusters (STRICT_DNS, HTTP/2) for registered services
 - Automatically add registered services to the wasm config services map
 - Generate deterministic, collision-resistant names: Envoy cluster name from URL, wasm service key from config hash (natural deduplication)
@@ -36,7 +36,7 @@ Add a `RegisterUpstream` method to `KuadrantCtx` so that extensions can register
 
 ### Backwards Compatibility
 
-No breaking changes. `RegisterUpstream` is a new additive method on the `KuadrantCtx` interface. Existing extensions that do not call `RegisterUpstream` are unaffected. The gRPC proto gains a new RPC; existing clients ignore it.
+No breaking changes. `RegisterUpstreamMethod` is a new additive method on the `KuadrantCtx` interface. Existing extensions that do not call `RegisterUpstreamMethod` are unaffected. The gRPC proto gains a new RPC; existing clients ignore it.
 
 ### Architecture Changes
 
@@ -46,8 +46,8 @@ Phase 1: Extension registers a service
 
 Extension              SDK Client           Operator (gRPC server)
    │                       │                        │
-   │── RegisterUpstream  ──►│                        │
-   │   (policy,            │── RegisterUpstream ────►│
+   │── RegisterUpstreamMethod  ──►│                        │
+   │   (policy,            │── RegisterUpstreamMethod ────►│
    │    UpstreamConfig)     │   RPC (unix socket)    │
    │                       │                        │── Dial svc.URL (reachability check)
    │                       │                        │── Parse svc.URL → host + port
@@ -84,7 +84,9 @@ Registered service handling is integrated into the existing `IstioExtensionRecon
 // pkg/extension/types/types.go
 
 type UpstreamConfig struct {
-    URL string // e.g. "grpc://my-service:8081"
+    URL     string // e.g. "grpc://my-service:8081"
+    Service string // gRPC service name, e.g. "envoy.service.auth.v3.Authorization" (currently unused)
+    Method  string // gRPC method name, e.g. "Check" (currently unused)
 }
 
 // Defaults applied by the operator:
@@ -101,7 +103,7 @@ type KuadrantCtx interface {
     ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
     AddDataTo(context.Context, Policy, Domain, string, string) error
     ReconcileObject(context.Context, client.Object, client.Object, MutateFn) (client.Object, error)
-    RegisterUpstream(ctx context.Context, policy Policy, svc UpstreamConfig) error // new
+    RegisterUpstreamMethod(ctx context.Context, policy Policy, svc UpstreamConfig) error // new
 }
 ```
 
@@ -112,12 +114,14 @@ type KuadrantCtx interface {
 
 service ExtensionService {
   // ... existing RPCs ...
-  rpc RegisterUpstream(RegisterUpstreamRequest) returns (google.protobuf.Empty) {}
+  rpc RegisterUpstreamMethod(RegisterUpstreamMethodRequest) returns (google.protobuf.Empty) {}
 }
 
-message RegisterUpstreamRequest {
+message RegisterUpstreamMethodRequest {
   Policy policy = 1;
   string url = 2;               // e.g. "grpc://my-service:8081"
+  string service = 3;           // gRPC service name (currently unused, reserved for future routing)
+  string method = 4;            // gRPC method name (currently unused, reserved for future routing)
   // service_type, failure_mode, and timeout are reserved for future use.
   // Operator defaults: type = "auth", failure_mode = "deny", timeout = "100ms"
   // Names are generated server-side:
@@ -154,26 +158,26 @@ Two policies registering the same URL produce the same cluster name and therefor
 
 #### Error Handling
 
-When `RegisterUpstream` is called, the operator performs a gRPC dial attempt to the provided URL with a short timeout (5 seconds). If the service is unreachable, the operator returns gRPC status `Unavailable`. The client-side SDK translates this into a typed sentinel error that extension authors can check:
+When `RegisterUpstreamMethod` is called, the operator performs a gRPC dial attempt to the provided URL with a short timeout (5 seconds). If the service is unreachable, the operator returns gRPC status `Unavailable`. The client-side SDK translates this into a typed sentinel error that extension authors can check:
 
 ```go
 // pkg/extension/types/errors.go
 
-// ErrUpstreamUnreachable is returned by RegisterUpstream when the operator
+// ErrUpstreamUnreachable is returned by RegisterUpstreamMethod when the operator
 // cannot establish a gRPC connection to the provided URL.
 var ErrUpstreamUnreachable = errors.New("upstream unreachable")
 ```
 
-The client-side `RegisterUpstream` implementation inspects the gRPC status code and wraps appropriately:
+The client-side `RegisterUpstreamMethod` implementation inspects the gRPC status code and wraps appropriately:
 
 ```go
-// pkg/extension/controller/controller.go (inside RegisterUpstream)
+// pkg/extension/controller/controller.go (inside RegisterUpstreamMethod)
 
-request := &extpb.RegisterUpstreamRequest{
+request := &extpb.RegisterUpstreamMethodRequest{
     Policy: convertPolicyToProtobuf(policy),
     Url:    svc.URL,
 }
-_, err := ec.extensionClient.client.RegisterUpstream(ctx, request)
+_, err := ec.extensionClient.client.RegisterUpstreamMethod(ctx, request)
 if err != nil {
     if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
         return fmt.Errorf("%w: %s", types.ErrUpstreamUnreachable, st.Message())
@@ -185,7 +189,7 @@ if err != nil {
 The server-side handler performs the dial check before storing the registration:
 
 ```go
-// internal/extension/manager.go (inside RegisterUpstream handler)
+// internal/extension/manager.go (inside RegisterUpstreamMethod handler)
 
 conn, err := grpc.NewClient(request.Url,
     grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -203,8 +207,10 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
     policy := &v1alpha1.MyPolicy{}
     r.Client.Get(ctx, req.NamespacedName, policy)
 
-    err := kCtx.RegisterUpstream(ctx, policy, types.UpstreamConfig{
-        URL: "grpc://my-authservice.my-ns.svc.cluster.local:8081",
+    err := kCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{
+        URL:     "grpc://my-authservice.my-ns.svc.cluster.local:8081",
+        Service: "envoy.service.auth.v3.Authorization", // currently unused
+        Method:  "Check",                                // currently unused
     })
     if errors.Is(err, types.ErrUpstreamUnreachable) {
         // Service not available yet — requeue and retry later
@@ -229,30 +235,38 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCt
 Add a new `registeredUpstreams` map alongside the existing `dataProviders` and `subscriptions` maps:
 
 ```go
-type RegisteredUpstreamEntry struct {
-    Policy      ResourceID
-    URL         string // original URL from the extension
-    ClusterName string // generated: ext-{host}-{port}
-    FailureMode string
-    Timeout     string
-}
-
 type RegisteredUpstreamKey struct {
     Policy ResourceID
     URL    string
 }
+
+type RegisteredUpstreamEntry struct {
+    URL         string       // original URL from the extension
+    ClusterName string       // generated: ext-{host}-{port}
+    TargetRefs  []TargetRef  // extracted from the policy at registration time
+    FailureMode string
+    Timeout     string
+}
+
+type TargetRef struct {
+    Group     string
+    Kind      string
+    Name      string
+    Namespace string // same as the policy's namespace (local refs)
+}
 ```
 
-Services are stored keyed by `(Policy, URL)`. `ClearPolicyData` is extended to also clear registered services for the deleted policy. The wasm service key is generated at reconcile time by hashing the fully-built service config values.
+The key contains the `Policy` identity; the entry does not duplicate it. `TargetRefs` are extracted from the policy's `GetTargetRefs()` at registration time and stored in the entry so that reconcilers can determine which gateway's wasm config should include the upstream — without needing to re-resolve the policy object. `ClearPolicyData` clears all entries matching the policy's `ResourceID`.
 
 #### 2. extensionService (internal/extension/manager.go)
 
-New `RegisterUpstream` handler:
+New `RegisterUpstreamMethod` handler:
 - Parses `request.Url` to extract host and port
 - Performs a gRPC dial attempt to the URL with a 5-second timeout
 - If dial fails, returns gRPC status `Unavailable` with descriptive message
 - If dial succeeds, generates Envoy cluster name: `ext-` + host + port with invalid chars replaced by hyphens
-- Stores `RegisteredUpstreamEntry` (with `ClusterName`) in `RegisteredDataStore`
+- Extracts `TargetRefs` from the policy in the request
+- Stores `RegisteredUpstreamEntry` (with `ClusterName` and `TargetRefs`) in `RegisteredDataStore` keyed by `(Policy, URL)`
 - Triggers reconciliation via `changeNotifier`
 
 #### 3. MutatorRegistry — WasmConfig mutation (internal/extension/registry.go)
@@ -278,22 +292,22 @@ Multiple policies registering the same URL produce the same cluster name, and th
 
 #### 4. IstioExtensionReconciler (internal/controller/istio_extension_reconciler.go)
 
-Extend the existing reconciler to handle registered services:
-- In `buildWasmConfigs`: read registered services from `RegisteredDataStore`, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
-- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for all registered services using `buildClusterPatch(entry.ClusterName, host, port, false, true)` (HTTP/2 enabled)
-- Cleanup: delete cluster EnvoyFilters when registered services are removed
+Extend the existing reconciler to handle registered upstreams:
+- In `buildWasmConfigs`: read registered upstreams from `RegisteredDataStore`, filter by `TargetRefs` to include only entries whose targets resolve to the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
+- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for upstreams targeting that gateway using `buildClusterPatch(entry.ClusterName, host, port, false, true)` (HTTP/2 enabled)
+- Cleanup: delete cluster EnvoyFilters when registered upstreams are removed
 
 #### 5. EnvoyGatewayExtensionReconciler (internal/controller/envoy_gateway_extension_reconciler.go)
 
 Same changes as the Istio variant:
-- In `buildWasmConfigs`: generate wasm service keys by hashing config values and add registered services to the `ServiceBuilder`
-- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for registered services using `BuildEnvoyPatchPolicyClusterPatch` with `entry.ClusterName`
+- In `buildWasmConfigs`: filter registered upstreams by `TargetRefs` for the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder`
+- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for upstreams targeting that gateway using `BuildEnvoyPatchPolicyClusterPatch` with `entry.ClusterName`
 
 #### 7. Extension Controller client side (pkg/extension/controller/controller.go)
 
-Implement `RegisterUpstream` on `ExtensionController`:
-- Convert `UpstreamConfig.URL` and policy to proto `RegisterUpstreamRequest`
-- Call `ec.extensionClient.client.RegisterUpstream(ctx, request)`
+Implement `RegisterUpstreamMethod` on `ExtensionController`:
+- Convert `UpstreamConfig.URL` and policy to proto `RegisterUpstreamMethodRequest`
+- Call `ec.extensionClient.client.RegisterUpstreamMethod(ctx, request)`
 - Translate gRPC `Unavailable` status to `types.ErrUpstreamUnreachable`
 
 ### Security Considerations
@@ -306,17 +320,17 @@ Implement `RegisterUpstream` on `ExtensionController`:
 ## Implementation Plan
 
 1. Extend `RegisteredDataStore` with service registration storage and `ClearPolicyData` cleanup
-2. Add `RegisterUpstream` RPC to the gRPC proto and regenerate
-3. Implement server-side `RegisterUpstream` handler in `extensionService`
+2. Add `RegisterUpstreamMethod` RPC to the gRPC proto and regenerate
+3. Implement server-side `RegisterUpstreamMethod` handler in `extensionService`
 4. Extend `IstioExtensionReconciler` to add registered services to `ServiceBuilder` and create cluster EnvoyFilters
 5. Extend `EnvoyGatewayExtensionReconciler` to add registered services to `ServiceBuilder` and create cluster EnvoyPatchPolicies
-6. Implement client-side `RegisterUpstream` on `ExtensionController`
-7. Add `RegisterUpstream` to `KuadrantCtx` interface and `UpstreamConfig` type
+6. Implement client-side `RegisterUpstreamMethod` on `ExtensionController`
+7. Add `RegisterUpstreamMethod` to `KuadrantCtx` interface and `UpstreamConfig` type
 
 ## Testing Strategy
 
 - **Unit tests**: URL parsing, cluster name generation, service config hashing and deduplication, `RegisteredDataStore` service CRUD, `ClearPolicyData` cleanup, wasm config mutation, gRPC dial failure → `ErrUpstreamUnreachable` mapping
-- **Integration tests**: End-to-end RegisterUpstream flow with Istio and EnvoyGateway — verify EnvoyFilter/EnvoyPatchPolicy creation, wasm config services map population, cleanup on policy deletion
+- **Integration tests**: End-to-end RegisterUpstreamMethod flow with Istio and EnvoyGateway — verify EnvoyFilter/EnvoyPatchPolicy creation, wasm config services map population, cleanup on policy deletion
 
 ## Open Questions
 
@@ -327,7 +341,7 @@ Implement `RegisterUpstream` on `ExtensionController`:
 
 ### UpstreamReachable — Data Plane Reachability Check
 
-A `UpstreamReachable` method on `KuadrantCtx` that checks whether the wasm-shim can actually reach a registered service, as opposed to `RegisterUpstream` which only validates reachability from the operator.
+A `UpstreamReachable` method on `KuadrantCtx` that checks whether the wasm-shim can actually reach a registered service, as opposed to `RegisterUpstreamMethod` which only validates reachability from the operator.
 
 The intended approach is to query metrics emitted by the wasm-shim via a Prometheus client. However, this is **blocked** by two prerequisites:
 
@@ -340,7 +354,7 @@ Once those prerequisites are met, the API would look like:
 ```go
 type KuadrantCtx interface {
     // ... existing methods ...
-    RegisterUpstream(ctx context.Context, policy Policy, svc UpstreamConfig) error
+    RegisterUpstreamMethod(ctx context.Context, policy Policy, svc UpstreamConfig) error
     UpstreamReachable(ctx context.Context, policy Policy, svc UpstreamConfig) (bool, error)
 }
 ```
@@ -362,17 +376,17 @@ if !reachable {
 
 The `UpstreamConfig` currently has no `Type` field — the operator hardcodes `auth` (ext_authz protocol). Once a `dynamic` service type is added to the wasm-shim, the operator will switch the hardcoded default from `auth` to `dynamic`. No `Type` field will be exposed on `UpstreamConfig` — registered services will always use the `dynamic` type.
 
-### Upstream Method Definitions
+### Upstream Method Routing
 
-Allow extension authors to define the gRPC methods available on a registered upstream via `UpstreamConfig`. This would let the wasm-shim know which RPCs the upstream supports, enabling method-level routing and validation at the data plane.
+`UpstreamConfig` already includes `Service` and `Method` fields (e.g. `envoy.service.auth.v3.Authorization` / `Check`), but they are currently unused by the operator. Once the wasm-shim supports dynamic service types, these fields will be used to configure method-level routing — telling the wasm-shim which gRPC service and method to invoke on the upstream, rather than relying on the hardcoded ext_authz protocol.
 
-## Demo: RegisterUpstream with Authorino
+## Demo: RegisterUpstreamMethod with Authorino
 
-A two-part demo using the already-deployed Authorino instance to demonstrate RegisterUpstream without deploying any new services.
+A two-part demo using the already-deployed Authorino instance to demonstrate RegisterUpstreamMethod without deploying any new services.
 
 ### Concept
 
-Authorino is already running in the cluster as part of the Kuadrant stack and implements the `envoy.service.auth.v3.Authorization/Check` RPC. The demo extension registers Authorino as a second, extension-managed auth service via RegisterUpstream — proving the infrastructure works with a real, reachable gRPC service.
+Authorino is already running in the cluster as part of the Kuadrant stack and implements the `envoy.service.auth.v3.Authorization/Check` RPC. The demo extension registers Authorino as a second, extension-managed auth service via RegisterUpstreamMethod — proving the infrastructure works with a real, reachable gRPC service.
 
 ### DemoPolicy Extension
 
@@ -401,8 +415,10 @@ func (r *DemoPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Requ
 
     // Register the already-deployed Authorino as an extension-managed service
     // Authorino listens on port 50051 for gRPC authorization
-    err := kCtx.RegisterUpstream(ctx, policy, types.UpstreamConfig{
-        URL: "grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051",
+    err := kCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{
+        URL:     "grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051",
+        Service: "envoy.service.auth.v3.Authorization",
+        Method:  "Check",
     })
     if errors.Is(err, types.ErrUpstreamUnreachable) {
         return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
@@ -417,7 +433,7 @@ func (r *DemoPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Requ
 
 ### Demo Script
 
-**Part 1: RegisterUpstream infrastructure**
+**Part 1: RegisterUpstreamMethod infrastructure**
 
 ```bash
 # 1. Verify Authorino is running
@@ -473,7 +489,7 @@ kubectl logs deploy/authorino -n kuadrant-system
 
 ### What the demo proves
 
-- **Part 1**: RegisterUpstream creates a new Envoy cluster (named from URL) and wasm service entry (keyed by config hash) pointing to an already-running service. The built-in `auth-service` is unaffected — both coexist. Cleanup works when the policy is deleted.
+- **Part 1**: RegisterUpstreamMethod creates a new Envoy cluster (named from URL) and wasm service entry (keyed by config hash) pointing to an already-running service. The built-in `auth-service` is unaffected — both coexist. Cleanup works when the policy is deleted.
 - **Part 2**: The extension-registered service is callable from the data plane. The wasm-shim routes traffic to Authorino via the URL-derived cluster, independent of the built-in auth flow.
 - **No new services deployed**: The demo uses only infrastructure already present in a standard Kuadrant installation.
 
@@ -485,9 +501,9 @@ kubectl logs deploy/authorino -n kuadrant-system
 
 - [ ] Extend RegisteredDataStore with service storage
   - [ ] Unit tests
-- [ ] Add RegisterUpstream RPC to gRPC proto and regenerate
+- [ ] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate
   - [ ] Unit tests
-- [ ] Implement server-side RegisterUpstream handler
+- [ ] Implement server-side RegisterUpstreamMethod handler
   - [ ] Unit tests
 - [ ] Extend IstioExtensionReconciler with registered service support
   - [ ] Unit tests
@@ -495,9 +511,9 @@ kubectl logs deploy/authorino -n kuadrant-system
 - [ ] Extend EnvoyGatewayExtensionReconciler with registered service support
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Implement client-side RegisterUpstream on ExtensionController
+- [ ] Implement client-side RegisterUpstreamMethod on ExtensionController
   - [ ] Unit tests
-- [ ] Add RegisterUpstream to KuadrantCtx interface and UpstreamConfig type
+- [ ] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type
 - [ ] Create demo entities and interactive demo script
   - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
   - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)
@@ -507,9 +523,22 @@ kubectl logs deploy/authorino -n kuadrant-system
 
 ## Change Log
 
-### 2026-03-05 — Rename to RegisterUpstream
+### 2026-03-06 — Add Service and Method to UpstreamConfig
 
-- Renamed `RegisterService` → `RegisterUpstream` throughout
+- Added `Service` (gRPC service name) and `Method` (gRPC method name) fields to `UpstreamConfig` and proto `RegisterUpstreamMethodRequest`
+- Both fields are currently unused — reserved for future method-level routing once wasm-shim supports dynamic service types
+- Updated future work: "Upstream Method Definitions" → "Upstream Method Routing" since the API surface is already in place
+
+### 2026-03-06 — Store TargetRefs, remove Policy from entry
+
+- Removed `Policy` from `RegisteredUpstreamEntry` — it's already in the `RegisteredUpstreamKey`, no need to duplicate
+- Added `TargetRefs` (group, kind, name, namespace) to `RegisteredUpstreamEntry`, extracted from the policy at registration time
+- Reconcilers filter registered upstreams by `TargetRefs` to determine which gateway's wasm config should include each upstream
+- Added `TargetRef` struct to hold target reference identity
+
+### 2026-03-05 — Rename to RegisterUpstreamMethod
+
+- Renamed `RegisterService` → `RegisterUpstreamMethod` throughout
 - Renamed related types: `ServiceConfig` → `UpstreamConfig`, `ErrServiceUnreachable` → `ErrUpstreamUnreachable`, `RegisteredServiceEntry` → `RegisteredUpstreamEntry`, `RegisteredServiceKey` → `RegisteredUpstreamKey`
 - Renamed future work: `ServiceReachable` → `UpstreamReachable`
 - Added future work: upstream method definitions via `UpstreamConfig`
@@ -527,7 +556,7 @@ kubectl logs deploy/authorino -n kuadrant-system
 - Removed `Name` field from `UpstreamConfig` — neither name is user-specified
 - Both names still prefixed with `ext-` to prevent collisions with built-in services
 - `RegisteredUpstreamKey` now keyed by `(Policy, URL)` instead of `(Policy, Name)`
-- Removed `name` field from gRPC proto `RegisterUpstreamRequest`
+- Removed `name` field from gRPC proto `RegisterUpstreamMethodRequest`
 
 ### 2026-03-04 — Initial design
 

@@ -181,7 +181,7 @@ jobs:
             LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
             DNS_OPERATOR_BUNDLE_IMG=${{ inputs.dnsOperatorBundleImg }} \
             RELATED_IMAGE_WASMSHIM=${{ inputs.relatedImageWasmShim }} \
-            RELATED_IMAGE_DEVELOPERPORTAL=${{ inputs.relatedImageWasmShim }} \
+            RELATED_IMAGE_DEVELOPERPORTAL=${{ inputs.relatedImageDeveloperPortalController }} \
             RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=${{ inputs.relatedImageConsolePluginLatest}} \
             RELATED_IMAGE_CONSOLE_PLUGIN_PF5=${{ inputs.relatedImageConsolePluginPF5}} \
             DEFAULT_CHANNEL=${{ inputs.defaultChannel }} \

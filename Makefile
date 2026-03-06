@@ -214,6 +214,8 @@ else
 RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(CONSOLEPLUGIN_VERSION)
 endif
 
+RELATED_IMAGE_CONSOLE_PLUGIN_PF5 ?= quay.io/kuadrant/console-plugin:v0.1.5
+
 ## gatewayapi-provider
 GATEWAYAPI_PROVIDER ?= istio
 
@@ -468,6 +470,9 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	# Set desired console-plugin image
 	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired console-plugin PF5 image
+	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_PF5").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV

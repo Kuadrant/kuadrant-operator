@@ -380,120 +380,17 @@ The `UpstreamConfig` currently has no `Type` field — the operator hardcodes `a
 
 `UpstreamConfig` already includes `Service` and `Method` fields (e.g. `envoy.service.auth.v3.Authorization` / `Check`), but they are currently unused by the operator. Once the wasm-shim supports dynamic service types, these fields will be used to configure method-level routing — telling the wasm-shim which gRPC service and method to invoke on the upstream, rather than relying on the hardcoded ext_authz protocol.
 
-## Demo: RegisterUpstreamMethod with Authorino
+## Demo
 
-A two-part demo using the already-deployed Authorino instance to demonstrate RegisterUpstreamMethod without deploying any new services.
+The demo uses the already-deployed Authorino instance (part of the standard Kuadrant stack) to verify RegisterUpstreamMethod without deploying any new services. A minimal `DemoPolicy` extension registers Authorino's `envoy.service.auth.v3.Authorization/Check` endpoint as an extension-managed upstream.
 
-### Concept
+The demo should show:
 
-Authorino is already running in the cluster as part of the Kuadrant stack and implements the `envoy.service.auth.v3.Authorization/Check` RPC. The demo extension registers Authorino as a second, extension-managed auth service via RegisterUpstreamMethod — proving the infrastructure works with a real, reachable gRPC service.
-
-### DemoPolicy Extension
-
-A minimal extension that registers the existing Authorino as an extension-managed service:
-
-```yaml
-# DemoPolicy CRD instance
-apiVersion: extensions.kuadrant.io/v1alpha1
-kind: DemoPolicy
-metadata:
-  name: demo-auth
-  namespace: default
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: my-api
-```
-
-Extension reconciler:
-
-```go
-func (r *DemoPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Request, kCtx types.KuadrantCtx) (reconcile.Result, error) {
-    policy := &v1alpha1.DemoPolicy{}
-    r.Client.Get(ctx, req.NamespacedName, policy)
-
-    // Register the already-deployed Authorino as an extension-managed service
-    // Authorino listens on port 50051 for gRPC authorization
-    err := kCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{
-        URL:     "grpc://authorino-authorino-authorization.kuadrant-system.svc.cluster.local:50051",
-        Service: "envoy.service.auth.v3.Authorization",
-        Method:  "Check",
-    })
-    if errors.Is(err, types.ErrUpstreamUnreachable) {
-        return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-    }
-    return reconcile.Result{}, err
-
-    // Generated names:
-    //   Envoy cluster: ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051
-    //   Wasm service:  ext-<hash of config values> (deduplicated by content)
-}
-```
-
-### Demo Script
-
-**Part 1: RegisterUpstreamMethod infrastructure**
-
-```bash
-# 1. Verify Authorino is running
-kubectl get pods -n kuadrant-system -l app=authorino
-#    Expected: authorino pod Running
-
-# 2. Apply the DemoPolicy
-kubectl apply -f examples/demo-policy/demo-policy.yaml
-
-# 3. Verify the Envoy cluster was created (name derived from URL)
-#    (Istio)
-istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-authorino-authorino-authorization
-#    Expected: ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051   STRICT_DNS   ...
-
-#    (Envoy Gateway)
-kubectl get envoyPatchPolicy -n envoy-gateway-system -o yaml | grep ext-authorino-authorino-authorization
-
-# 4. Verify the service appears in the wasm config (key is hash of config values)
-#    (Istio)
-kubectl get wasmplugin -n istio-system -o jsonpath='{.items[0].spec.pluginConfig}' | jq '.services'
-#    Expected: "ext-<hash>": {
-#      "endpoint": "ext-authorino-authorino-authorization-kuadrant-system-svc-cluster-local-50051",
-#      "type": "auth", "failureMode": "deny", "timeout": "100ms"
-#    }
-#    Note: the built-in "auth-service" entry also remains — both coexist
-#    Note: the key is a hash, so look for any "ext-" prefixed entry
-
-# 5. Delete the DemoPolicy and verify cleanup
-kubectl delete demopolicy demo-auth
-istioctl proxy-config cluster deploy/istio-ingressgateway -n istio-system | grep ext-authorino-authorino-authorization
-#    Expected: (empty — cluster removed, built-in auth cluster unaffected)
-```
-
-**Part 2: Traffic flow (manual action wiring)**
-
-```bash
-# 6. Re-apply the DemoPolicy
-kubectl apply -f examples/demo-policy/demo-policy.yaml
-
-# 7. Patch the WasmPlugin to add an action referencing the extension-registered service
-#    This adds an action for all requests to the HTTPRoute, referencing the wasm service key
-#    Find the ext- service key from step 4
-kubectl patch wasmplugin kuadrant-istio-ingressgateway -n istio-system --type merge -p '
-  ... (add action with service: "ext-<hash from step 4>") ...'
-
-# 8. Send traffic — Authorino evaluates the request via the extension-registered service
-curl -v http://my-api.example.com/anything
-#    Authorino processes the request through the ext-authorino-...-50051 cluster
-
-# 9. Check Authorino logs for the request
-kubectl logs deploy/authorino -n kuadrant-system
-```
-
-### What the demo proves
-
-- **Part 1**: RegisterUpstreamMethod creates a new Envoy cluster (named from URL) and wasm service entry (keyed by config hash) pointing to an already-running service. The built-in `auth-service` is unaffected — both coexist. Cleanup works when the policy is deleted.
-- **Part 2**: The extension-registered service is callable from the data plane. The wasm-shim routes traffic to Authorino via the URL-derived cluster, independent of the built-in auth flow.
-- **No new services deployed**: The demo uses only infrastructure already present in a standard Kuadrant installation.
-
-**Note**: Part 2 requires manual action wiring. A future `RegisterAction` method on `KuadrantCtx` would allow extensions to automate this step.
+- An `ext-` prefixed Envoy cluster is created targeting the Authorino gRPC address
+- A corresponding `ext-` prefixed entry appears in the wasm config services map
+- The built-in `auth-service` is unaffected — both coexist
+- Deleting the DemoPolicy removes the cluster and wasm service entry (cleanup)
+- The upstream is callable from the data plane when an action is manually wired to reference it
 
 ## Execution
 

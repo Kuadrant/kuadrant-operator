@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - istio-tracing.yaml
+  - kuadrant-tracing.yaml
+  - limitador-operator-patch.yaml
+  - kuadrant-operator-patch.yaml
+  - istio-patch.yaml
+
+patches:
+  - path: istio-patch.yaml
+    target:
+      group: sailoperator.io
+      version: v1
+      kind: Istio
+      name: default
+  - path: kuadrant-tracing.yaml
+    target:
+      group: kuadrant.io
+      version: v1beta1
+      kind: Kuadrant
+      name: kuadrant
+  - path: limitador-operator-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: limitador-operator-controller-manager
+      namespace: kuadrant-system
+  - path: kuadrant-operator-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: kuadrant-operator-controller-manager
+      namespace: kuadrant-system

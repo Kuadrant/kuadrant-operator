@@ -188,6 +188,9 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
             [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
             [RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:latest] \
+            [RELATED_IMAGE_DEVELOPERPORTAL=quay.io/kuadrant/developer-portal-controller:latest] \
+            [RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=quay.io/kuadrant/console-plugin:latest] \
+            [RELATED_IMAGE_CONSOLE_PLUGIN_PF5=quay.io/kuadrant/console-plugin:v0.1.5] \
             [CHANNELS=alpha] \
             [DEFAULT_CHANNEL=alpha]
 ```

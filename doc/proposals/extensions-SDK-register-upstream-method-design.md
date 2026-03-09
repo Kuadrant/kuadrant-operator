@@ -1,5 +1,9 @@
 # Feature: Extension SDK RegisterUpstreamMethod
 
+## Summary
+
+Add a `RegisterUpstreamMethod` method to `KuadrantCtx` so that extensions can register arbitrary gRPC services with the data plane. The operator creates the corresponding Envoy cluster and wasm service entry, enabling extensions to introduce new upstream service integrations beyond the built-in auth, ratelimit, and tracing services.
+
 ## Key Points
 
 1. **New `RegisterUpstreamMethod` method on `KuadrantCtx`** — extensions call it with an `UpstreamConfig{URL, Service, Method}` to register an external gRPC service (Service and Method are reserved for future use)
@@ -11,10 +15,6 @@
 5. **Reachability check on registration** — operator performs a gRPC dial to the URL; returns `ErrUpstreamUnreachable` if it fails, allowing extensions to requeue
 6. **No new reconcilers** — extends existing `IstioExtensionReconciler` and `EnvoyGatewayExtensionReconciler` to handle cluster creation and wasm config injection
 7. **Future work** — `UpstreamReachable` (data plane reachability via metrics) and `dynamic` ServiceType are deferred
-
-## Summary
-
-Add a `RegisterUpstreamMethod` method to `KuadrantCtx` so that extensions can register arbitrary gRPC services with the data plane. The operator creates the corresponding Envoy cluster and wasm service entry, enabling extensions to introduce new upstream service integrations beyond the built-in auth, ratelimit, and tracing services.
 
 ## Goals
 
@@ -44,7 +44,7 @@ No breaking changes. `RegisterUpstreamMethod` is a new additive method on the `K
 Phase 1: Extension registers a service
 ──────────────────────────────────────
 
-Extension              SDK Client           Operator (gRPC server)
+Extension              SDK Client           kuadrant-operator (gRPC server)
    │                       │                        │
    │── RegisterUpstreamMethod  ──►│                        │
    │   (policy,            │── RegisterUpstreamMethod ────►│
@@ -58,7 +58,7 @@ Extension              SDK Client           Operator (gRPC server)
    │                       │                        │
 
 
-Phase 2: Operator reconciles the registered service
+Phase 2: Kuadrant-Operator reconciles the registered service
 ────────────────────────────────────────────────────
 
 RegisteredDataStore
@@ -379,6 +379,14 @@ The `UpstreamConfig` currently has no `Type` field — the operator hardcodes `a
 ### Upstream Method Routing
 
 `UpstreamConfig` already includes `Service` and `Method` fields (e.g. `envoy.service.auth.v3.Authorization` / `Check`), but they are currently unused by the operator. Once the wasm-shim supports dynamic service types, these fields will be used to configure method-level routing — telling the wasm-shim which gRPC service and method to invoke on the upstream, rather than relying on the hardcoded ext_authz protocol.
+
+### TLS and Token-Based Authentication
+
+Support connecting to upstreams over TLS and providing a bearer token for gRPC requests. This would allow extensions to register upstreams that require encrypted transport and/or authentication (e.g. external services outside the mesh, cloud-hosted APIs). `UpstreamConfig` would gain TLS configuration fields (CA cert, client cert/key) and an optional token (or token source reference such as a Kubernetes Secret).
+
+### Authenticated gRPC Upstreams
+
+Support registering upstreams that require authentication on the gRPC connection itself (e.g. upstreams that enforce per-RPC credentials, API keys, or OAuth tokens on incoming gRPC calls). This is distinct from TLS transport — it covers application-level auth that the upstream's gRPC server requires before accepting requests.
 
 ## Demo
 

@@ -1,4 +1,4 @@
-name: Schedule nightly build
+name: Build nightly images
 
 on:
   schedule:

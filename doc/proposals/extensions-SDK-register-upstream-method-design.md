@@ -406,8 +406,8 @@ The demo should show:
 
 - [ ] Extend RegisteredDataStore with service storage
   - [ ] Unit tests
-- [ ] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate
-  - [ ] Unit tests
+- [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate
+  - [x] Unit tests
 - [ ] Implement server-side RegisterUpstreamMethod handler
   - [ ] Unit tests
 - [ ] Extend IstioExtensionReconciler with registered service support
@@ -425,6 +425,9 @@ The demo should show:
   - [ ] Interactive demo script (`examples/demo-policy/demo.sh`) that walks through Part 1 and Part 2, pausing at each step for discussion
 
 ### Completed
+
+- [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate
+  - [x] Unit tests
 
 ## Change Log
 

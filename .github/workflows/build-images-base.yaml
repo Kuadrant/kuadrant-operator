@@ -37,7 +37,7 @@ on:
         type: string
       relatedImageConsolePluginPF5:
         description: Related image ConsolePlugin v0.1.5 (PatternFly 5)
-        default: quay.io/kuadrant/console-plugin:v0.1.5
+        default: quay.io/kuadrant/console-plugin:v0.1.5-2
         type: string
       consolePluginImageURL:
         description: ConsolePlugin image URL
@@ -91,7 +91,7 @@ on:
         type: string
       relatedImageConsolePluginPF5:
         description: Related image ConsolePlugin v0.1.5 (PatternFly 5)
-        default: quay.io/kuadrant/console-plugin:v0.1.5
+        default: quay.io/kuadrant/console-plugin:v0.1.5-2
         type: string
       consolePluginImageURL:
         description: ConsolePlugin image URL

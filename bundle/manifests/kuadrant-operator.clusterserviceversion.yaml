@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-03-04T13:41:08Z"
+    createdAt: "2026-03-09T15:29:31Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -748,7 +748,7 @@ spec:
                 - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
                   value: quay.io/kuadrant/console-plugin:latest
                 - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
-                  value: quay.io/kuadrant/console-plugin:v0.1.5
+                  value: quay.io/kuadrant/console-plugin:v0.1.5-2
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -904,6 +904,6 @@ spec:
     name: developerportal
   - image: quay.io/kuadrant/console-plugin:latest
     name: console-plugin-latest
-  - image: quay.io/kuadrant/console-plugin:v0.1.5
+  - image: quay.io/kuadrant/console-plugin:v0.1.5-2
     name: console-plugin-pf5
   version: 0.0.0

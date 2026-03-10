@@ -243,7 +243,7 @@ type RegisteredUpstreamKey struct {
 type RegisteredUpstreamEntry struct {
     URL         string       // original URL from the extension
     ClusterName string       // generated: ext-{host}-{port}
-    TargetRefs  []TargetRef  // extracted from the policy at registration time
+    TargetRef   TargetRef  // extracted from the policy at registration time
     FailureMode string
     Timeout     string
 }
@@ -256,7 +256,7 @@ type TargetRef struct {
 }
 ```
 
-The key contains the `Policy` identity; the entry does not duplicate it. `TargetRefs` are extracted from the policy's `GetTargetRefs()` at registration time and stored in the entry so that reconcilers can determine which gateway's wasm config should include the upstream — without needing to re-resolve the policy object. `ClearPolicyData` clears all entries matching the policy's `ResourceID`.
+The key contains the `Policy` identity; the entry does not duplicate it. The `TargetRef` is extracted from the policy at registration time and stored in the entry so that reconcilers can determine which gateway's wasm config should include the upstream — without needing to re-resolve the policy object. `ClearPolicyData` clears all entries matching the policy's `ResourceID`.
 
 #### 2. extensionService (internal/extension/manager.go)
 
@@ -265,8 +265,8 @@ New `RegisterUpstreamMethod` handler:
 - Performs a gRPC dial attempt to the URL with a 5-second timeout
 - If dial fails, returns gRPC status `Unavailable` with descriptive message
 - If dial succeeds, generates Envoy cluster name: `ext-` + host + port with invalid chars replaced by hyphens
-- Extracts `TargetRefs` from the policy in the request
-- Stores `RegisteredUpstreamEntry` (with `ClusterName` and `TargetRefs`) in `RegisteredDataStore` keyed by `(Policy, URL)`
+- Extracts the `TargetRef` from the policy in the request
+- Stores `RegisteredUpstreamEntry` (with `ClusterName` and `TargetRef`) in `RegisteredDataStore` keyed by `(Policy, URL)`
 - Triggers reconciliation via `changeNotifier`
 
 #### 3. MutatorRegistry — WasmConfig mutation (internal/extension/registry.go)
@@ -293,14 +293,14 @@ Multiple policies registering the same URL produce the same cluster name, and th
 #### 4. IstioExtensionReconciler (internal/controller/istio_extension_reconciler.go)
 
 Extend the existing reconciler to handle registered upstreams:
-- In `buildWasmConfigs`: read registered upstreams from `RegisteredDataStore`, filter by `TargetRefs` to include only entries whose targets resolve to the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
+- In `buildWasmConfigs`: read registered upstreams from `RegisteredDataStore`, filter by `TargetRef` to include only entries whose target resolves to the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
 - In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for upstreams targeting that gateway using `buildClusterPatch(entry.ClusterName, host, port, false, true)` (HTTP/2 enabled)
 - Cleanup: delete cluster EnvoyFilters when registered upstreams are removed
 
 #### 5. EnvoyGatewayExtensionReconciler (internal/controller/envoy_gateway_extension_reconciler.go)
 
 Same changes as the Istio variant:
-- In `buildWasmConfigs`: filter registered upstreams by `TargetRefs` for the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder`
+- In `buildWasmConfigs`: filter registered upstreams by `TargetRef` for the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder`
 - In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for upstreams targeting that gateway using `BuildEnvoyPatchPolicyClusterPatch` with `entry.ClusterName`
 
 #### 7. Extension Controller client side (pkg/extension/controller/controller.go)
@@ -404,29 +404,27 @@ The demo should show:
 
 ### Todo
 
-- [ ] Extend RegisteredDataStore with service storage
+- [ ] Extend RegisteredDataStore with upstream storage ([#1790](https://github.com/Kuadrant/kuadrant-operator/issues/1790))
   - [ ] Unit tests
-- [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate
-  - [x] Unit tests
-- [ ] Implement server-side RegisterUpstreamMethod handler
+- [ ] Implement server-side RegisterUpstreamMethod handler ([#1791](https://github.com/Kuadrant/kuadrant-operator/issues/1791))
   - [ ] Unit tests
-- [ ] Extend IstioExtensionReconciler with registered service support
+- [ ] Extend IstioExtensionReconciler with registered upstream support ([#1793](https://github.com/Kuadrant/kuadrant-operator/issues/1793))
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Extend EnvoyGatewayExtensionReconciler with registered service support
+- [ ] Extend EnvoyGatewayExtensionReconciler with registered upstream support ([#1794](https://github.com/Kuadrant/kuadrant-operator/issues/1794))
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Implement client-side RegisterUpstreamMethod on ExtensionController
+- [ ] Implement client-side RegisterUpstreamMethod on ExtensionController ([#1795](https://github.com/Kuadrant/kuadrant-operator/issues/1795))
   - [ ] Unit tests
-- [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type
-- [ ] Create demo entities and interactive demo script
+- [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type ([#1796](https://github.com/Kuadrant/kuadrant-operator/issues/1796))
+- [ ] Create demo entities and interactive demo script ([#1797](https://github.com/Kuadrant/kuadrant-operator/issues/1797))
   - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
   - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)
   - [ ] Interactive demo script (`examples/demo-policy/demo.sh`) that walks through Part 1 and Part 2, pausing at each step for discussion
 
 ### Completed
 
-- [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate
+- [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate ([#1792](https://github.com/Kuadrant/kuadrant-operator/issues/1792))
   - [x] Unit tests
 
 ## Change Log
@@ -437,11 +435,11 @@ The demo should show:
 - Both fields are currently unused — reserved for future method-level routing once wasm-shim supports dynamic service types
 - Updated future work: "Upstream Method Definitions" → "Upstream Method Routing" since the API surface is already in place
 
-### 2026-03-06 — Store TargetRefs, remove Policy from entry
+### 2026-03-06 — Store TargetRef, remove Policy from entry
 
 - Removed `Policy` from `RegisteredUpstreamEntry` — it's already in the `RegisteredUpstreamKey`, no need to duplicate
-- Added `TargetRefs` (group, kind, name, namespace) to `RegisteredUpstreamEntry`, extracted from the policy at registration time
-- Reconcilers filter registered upstreams by `TargetRefs` to determine which gateway's wasm config should include each upstream
+- Added `TargetRef` (group, kind, name, namespace) to `RegisteredUpstreamEntry`, extracted from the policy at registration time
+- Reconcilers filter registered upstreams by `TargetRef` to determine which gateway's wasm config should include each upstream
 - Added `TargetRef` struct to hold target reference identity
 
 ### 2026-03-05 — Rename to RegisterUpstreamMethod

@@ -186,7 +186,7 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 3 entries for target ref, got %d", len(entries))
 	}
 
-	clearedMutators, clearedSubscriptions := store.ClearPolicyData(testPolicy)
+	clearedMutators, clearedSubscriptions, _ := store.ClearPolicyData(testPolicy)
 
 	if clearedMutators != 2 {
 		t.Errorf("Expected 2 cleared mutators, got %d", clearedMutators)
@@ -249,7 +249,7 @@ func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 		t.Error("Expected policy data after adding entry")
 	}
 
-	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1"))
+	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1")) //nolint:dogsled
 
 	subscription := Subscription{
 		CAst: &cel.Ast{},
@@ -421,7 +421,7 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
 	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
 
-	_, cleared := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	_, cleared, _ := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if cleared != 2 {
 		t.Errorf("Expected 2 cleared subscriptions, got %d", cleared)
 	}
@@ -436,7 +436,7 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 		t.Errorf("Expected 1 subscription for other policy, got %d", len(subscriptions))
 	}
 
-	_, cleared = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
+	_, cleared, _ = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
 	if cleared != 0 {
 		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", cleared)
 	}
@@ -767,7 +767,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("clear empty target", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		cleared, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
+		cleared, _, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
 		if cleared != 0 {
 			t.Errorf("Expected 0 cleared entries, got %d", cleared)
 		}
@@ -895,4 +895,187 @@ func createMockHTTPRouteTargetRef() machinery.PolicyTargetReference {
 		},
 		PolicyNamespace: "test-namespace",
 	}
+}
+
+func TestRegisteredDataStore_SetUpstream_GetUpstream_DeleteUpstream(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	policy := testResourceID("DemoPolicy", "default", "demo-auth")
+	key := RegisteredUpstreamKey{Policy: policy, URL: "grpc://my-service:8081"}
+	entry := RegisteredUpstreamEntry{
+		URL:         "grpc://my-service:8081",
+		ClusterName: "ext-my-service-8081",
+		TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "my-api", Namespace: "default"},
+		FailureMode: "deny",
+		Timeout:     "100ms",
+	}
+
+	store.SetUpstream(key, entry)
+
+	retrieved, exists := store.GetUpstream(key)
+	if !exists {
+		t.Fatal("Expected upstream to exist")
+	}
+	if retrieved.ClusterName != "ext-my-service-8081" {
+		t.Errorf("Expected cluster name ext-my-service-8081, got %s", retrieved.ClusterName)
+	}
+	if retrieved.TargetRef.Name != "my-api" {
+		t.Errorf("Expected target ref name my-api, got %s", retrieved.TargetRef.Name)
+	}
+
+	all := store.GetAllUpstreams()
+	if len(all) != 1 {
+		t.Errorf("Expected 1 upstream, got %d", len(all))
+	}
+
+	deleted := store.DeleteUpstream(key)
+	if !deleted {
+		t.Error("Expected upstream to be deleted")
+	}
+
+	_, exists = store.GetUpstream(key)
+	if exists {
+		t.Error("Expected upstream to not exist after deletion")
+	}
+}
+
+func TestRegisteredDataStore_GetUpstreamsByTargetRef(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	targetRef1 := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "default"}
+	targetRef2 := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "default"}
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("Policy", "default", "p1"), URL: "grpc://svc1:8081"},
+		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef1},
+	)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("Policy", "default", "p2"), URL: "grpc://svc2:8082"},
+		RegisteredUpstreamEntry{URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082", TargetRef: targetRef1},
+	)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("Policy", "default", "p3"), URL: "grpc://svc3:8083"},
+		RegisteredUpstreamEntry{URL: "grpc://svc3:8083", ClusterName: "ext-svc3-8083", TargetRef: targetRef2},
+	)
+
+	results := store.GetUpstreamsByTargetRef(targetRef1)
+	if len(results) != 2 {
+		t.Errorf("Expected 2 upstreams for route-a, got %d", len(results))
+	}
+
+	results = store.GetUpstreamsByTargetRef(targetRef2)
+	if len(results) != 1 {
+		t.Errorf("Expected 1 upstream for route-b, got %d", len(results))
+	}
+
+	results = store.GetUpstreamsByTargetRef(TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "non-existent", Namespace: "default"})
+	if len(results) != 0 {
+		t.Errorf("Expected 0 upstreams for non-existent route, got %d", len(results))
+	}
+}
+
+func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	policy1 := testResourceID("DemoPolicy", "default", "demo-1")
+	policy2 := testResourceID("DemoPolicy", "default", "demo-2")
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "my-api", Namespace: "default"}
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc1:8081"},
+		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef},
+	)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc2:8082"},
+		RegisteredUpstreamEntry{URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082", TargetRef: targetRef},
+	)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policy2, URL: "grpc://svc3:8083"},
+		RegisteredUpstreamEntry{URL: "grpc://svc3:8083", ClusterName: "ext-svc3-8083", TargetRef: targetRef},
+	)
+
+	_, _, clearedUpstreams := store.ClearPolicyData(policy1)
+	if clearedUpstreams != 2 {
+		t.Errorf("Expected 2 cleared upstreams, got %d", clearedUpstreams)
+	}
+
+	all := store.GetAllUpstreams()
+	if len(all) != 1 {
+		t.Errorf("Expected 1 remaining upstream, got %d", len(all))
+	}
+
+	// Verify the remaining upstream belongs to policy2
+	key := RegisteredUpstreamKey{Policy: policy2, URL: "grpc://svc3:8083"}
+	_, exists := store.GetUpstream(key)
+	if !exists {
+		t.Error("Expected policy2 upstream to still exist")
+	}
+}
+
+func TestRegisteredDataStore_UpstreamConcurrentOperations(t *testing.T) {
+	store := NewRegisteredDataStore()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "my-api", Namespace: "default"}
+
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			key := RegisteredUpstreamKey{
+				Policy: testResourceID("Policy", "ns", "policy"),
+				URL:    fmt.Sprintf("grpc://svc%d:8081", index),
+			}
+			entry := RegisteredUpstreamEntry{
+				URL:         fmt.Sprintf("grpc://svc%d:8081", index),
+				ClusterName: fmt.Sprintf("ext-svc%d-8081", index),
+				TargetRef:   targetRef,
+			}
+			store.SetUpstream(key, entry)
+		}(i)
+	}
+	wg.Wait()
+
+	all := store.GetAllUpstreams()
+	if len(all) != 10 {
+		t.Errorf("Expected 10 upstreams, got %d", len(all))
+	}
+}
+
+func TestRegisteredDataStore_UpstreamEdgeCases(t *testing.T) {
+	t.Run("get from empty store", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "name"), URL: "grpc://svc:8081"}
+		_, exists := store.GetUpstream(key)
+		if exists {
+			t.Error("Expected get to return false for non-existent upstream")
+		}
+	})
+
+	t.Run("delete from empty store", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "name"), URL: "grpc://svc:8081"}
+		deleted := store.DeleteUpstream(key)
+		if deleted {
+			t.Error("Expected delete to return false for non-existent upstream")
+		}
+	})
+
+	t.Run("overwrite existing upstream", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "p1"), URL: "grpc://svc:8081"}
+		targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route", Namespace: "ns"}
+
+		store.SetUpstream(key, RegisteredUpstreamEntry{URL: "grpc://svc:8081", ClusterName: "ext-svc-8081", TargetRef: targetRef, Timeout: "100ms"})
+		store.SetUpstream(key, RegisteredUpstreamEntry{URL: "grpc://svc:8081", ClusterName: "ext-svc-8081", TargetRef: targetRef, Timeout: "200ms"})
+
+		entry, _ := store.GetUpstream(key)
+		if entry.Timeout != "200ms" {
+			t.Errorf("Expected overwritten timeout 200ms, got %s", entry.Timeout)
+		}
+
+		all := store.GetAllUpstreams()
+		if len(all) != 1 {
+			t.Errorf("Expected 1 upstream after overwrite, got %d", len(all))
+		}
+	})
 }

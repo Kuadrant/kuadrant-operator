@@ -307,6 +307,12 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 	return err
 }
 
+// RegisterUpstreamMethod is a stub implementation to satisfy the KuadrantCtx interface.
+// TODO: implement gRPC call to register the upstream method with the operator.
+func (ec *ExtensionController) RegisterUpstreamMethod(_ context.Context, _ exttypes.Policy, _ exttypes.UpstreamConfig) error {
+	return nil
+}
+
 // Manager returns the underlying controller-runtime Manager.
 func (ec *ExtensionController) Manager() ctrlruntime.Manager {
 	return ec.manager

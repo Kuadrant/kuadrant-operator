@@ -404,8 +404,6 @@ The demo should show:
 
 ### Todo
 
-- [ ] Extend RegisteredDataStore with upstream storage ([#1790](https://github.com/Kuadrant/kuadrant-operator/issues/1790))
-  - [ ] Unit tests
 - [ ] Implement server-side RegisterUpstreamMethod handler ([#1791](https://github.com/Kuadrant/kuadrant-operator/issues/1791))
   - [ ] Unit tests
 - [ ] Extend IstioExtensionReconciler with registered upstream support ([#1793](https://github.com/Kuadrant/kuadrant-operator/issues/1793))
@@ -424,6 +422,8 @@ The demo should show:
 
 ### Completed
 
+- [x] Extend RegisteredDataStore with upstream storage ([#1790](https://github.com/Kuadrant/kuadrant-operator/issues/1790))
+  - [x] Unit tests
 - [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate ([#1792](https://github.com/Kuadrant/kuadrant-operator/issues/1792))
   - [x] Unit tests
 

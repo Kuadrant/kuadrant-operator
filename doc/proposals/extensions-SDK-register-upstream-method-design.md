@@ -418,7 +418,7 @@ The demo should show:
   - [ ] Integration tests
 - [ ] Implement client-side RegisterUpstreamMethod on ExtensionController
   - [ ] Unit tests
-- [ ] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type
+- [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type
 - [ ] Create demo entities and interactive demo script
   - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
   - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)

@@ -166,6 +166,9 @@ The `make bundle` target accepts the following variables:
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` | `AUTHORINO_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL       | `quay.io/kuadrant/dns-operator-bundle:latest`       | `DNS_OPERATOR_BUNDLE_IMG` var could be used to build this, defaults to _latest_ if not provided    |
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `quay.io/kuadrant/wasm-shim:latest`                 | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
+| `RELATED_IMAGE_DEVELOPERPORTAL` | Developer portal controller image URL | `quay.io/kuadrant/developer-portal-controller:latest` | `DEVELOPERPORTAL_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST` | Console plugin image URL (PatternFly 6) | `quay.io/kuadrant/console-plugin:latest` | `CONSOLEPLUGIN_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `RELATED_IMAGE_CONSOLE_PLUGIN_PF5` | Console plugin image URL (PatternFly 5) | `quay.io/kuadrant/console-plugin:v0.1.5-2` | |
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`                                             |                                                                                                               |
 | `DEFAULT_CHANNEL`               | The default channel used in the bundle               | `alpha`                                             |                                                                                                               |
 
@@ -185,6 +188,9 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
             [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
             [RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:latest] \
+            [RELATED_IMAGE_DEVELOPERPORTAL=quay.io/kuadrant/developer-portal-controller:latest] \
+            [RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=quay.io/kuadrant/console-plugin:latest] \
+            [RELATED_IMAGE_CONSOLE_PLUGIN_PF5=quay.io/kuadrant/console-plugin:v0.1.5-2] \
             [CHANNELS=alpha] \
             [DEFAULT_CHANNEL=alpha]
 ```
@@ -324,6 +330,15 @@ Remove CRDs
 ```sh
 make uninstall
 ```
+
+## Image builds
+
+| Docker image | Tag | Expiration | When | Bundle reference to kuadrant operator | Bundle reference to dependent operators| Bundle reference to related images
+| --- | --- | --- | --- | --- | --- | --- |
+| latest image | `latest` | never | Push to `main` | `latest` | `latest` | `latest` |
+| branch images | `${{ github.ref_name }}` | 1w | Push to branch | `${{ github.ref_name }}`  | `latest` | `latest` |
+| nightly images | `${{ nightly-$(date +'%d-%m-%Y') }}` | 2w | Scheduled `cron: '0 4 * * *'` |  `${{ nightly-$(date +'%d-%m-%Y') }}` |  `${{ nightly-$(date +'%d-%m-%Y') }}` | digest sha of the `latest` docker image  |
+| release images | release version | never | release created | release tag | release tag | release tag |
 
 [git_tool]:https://git-scm.com/downloads
 [operator-sdk]:https://github.com/operator-framework/operator-sdk

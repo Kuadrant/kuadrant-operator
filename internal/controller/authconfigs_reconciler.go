@@ -72,102 +72,14 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
 	modifiedAuthConfigs := []string{}
 
-	tracer := controller.TracerFromContext(ctx)
-
 	for pathID, effectivePolicy := range effectivePoliciesMap {
-		_, _, _, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		if err != nil {
-			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
-				logger.V(1).Info("skipping authconfig reconcile for invalid path", "path", effectivePolicy.Path)
-			} else {
-				logger.Error(err, "failed to reconcile authconfig object", "path", effectivePolicy.Path)
-			}
-
+		authConfigName, modified := r.reconcileAuthConfigForPath(ctx, pathID, effectivePolicy, authConfigsNamespace, topology)
+		if authConfigName == "" {
 			continue
 		}
-		httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
-		httpRouteRuleKey := httpRouteRule.Name
-
-		spanCtx, span := tracer.Start(ctx, "authconfig")
-
-		authConfigName := AuthConfigNameForPath(pathID)
-		desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace)
-
-		defer span.End()
-		span.SetAttributes(
-			attribute.String("namespace", desiredAuthConfig.GetNamespace()),
-			attribute.String("name", desiredAuthConfig.GetName()),
-			attribute.StringSlice("sources", effectivePolicy.SourcePolicies),
-		)
-
-		desiredAuthConfigs[k8stypes.NamespacedName{Name: desiredAuthConfig.GetName(), Namespace: desiredAuthConfig.GetNamespace()}] = struct{}{}
-
-		resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
-
-		existingAuthConfigObj, found := lo.Find(topology.Objects().Children(httpRouteRule), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && child.GetName() == authConfigName && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredAuthConfig.GetLabels()))
-		})
-
-		// create
-		if !found {
+		desiredAuthConfigs[k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace}] = struct{}{}
+		if modified {
 			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
-			desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
-			if err != nil {
-				msg := "failed to destruct authconfig object"
-				logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
-				span.RecordError(err)
-				span.SetStatus(codes.Error, msg)
-				continue
-			}
-
-			if _, err = resource.Create(ctx, desiredAuthConfigUnstructured, metav1.CreateOptions{}); err != nil {
-				msg := "failed to create authconfig object"
-				logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
-				span.RecordError(err)
-				span.SetStatus(codes.Error, msg)
-				// TODO: handle error
-			}
-			continue
-		}
-
-		existingAuthConfig := existingAuthConfigObj.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
-
-		if equalAuthConfigs(existingAuthConfig, desiredAuthConfig) {
-			logger.V(1).Info("authconfig object is up to date, nothing to do")
-			continue
-		}
-
-		modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
-
-		// delete
-		if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
-			if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
-				msg := "failed to delete authconfig object"
-				logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
-				span.RecordError(err)
-				span.SetStatus(codes.Error, msg)
-				// TODO: handle error
-			}
-			continue
-		}
-
-		// update
-		existingAuthConfig.Spec = desiredAuthConfig.Spec
-
-		existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
-		if err != nil {
-			msg := "failed to destruct authconfig object"
-			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
-			span.RecordError(err)
-			span.SetStatus(codes.Error, msg)
-			continue
-		}
-		if _, err = resource.Update(ctx, existingAuthConfigUnstructured, metav1.UpdateOptions{}); err != nil {
-			msg := "failed to update authconfig object"
-			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
-			span.RecordError(err)
-			span.SetStatus(codes.Error, msg)
-			// TODO: handle error
 		}
 	}
 
@@ -188,6 +100,100 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	}
 
 	return nil
+}
+
+// reconcileAuthConfigForPath reconciles the AuthConfig for a single effective policy path.
+// It returns the authConfigName (empty if the path is invalid) and whether the object was modified.
+func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, pathID string, effectivePolicy EffectiveAuthPolicy, authConfigsNamespace string, topology *machinery.Topology) (string, bool) {
+	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler")
+
+	_, _, _, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+	if err != nil {
+		if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
+			logger.V(1).Info("skipping authconfig reconcile for invalid path", "path", effectivePolicy.Path)
+		} else {
+			logger.Error(err, "failed to reconcile authconfig object", "path", effectivePolicy.Path)
+		}
+		return "", false
+	}
+	httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
+	httpRouteRuleKey := httpRouteRule.Name
+
+	spanCtx, span := controller.TracerFromContext(ctx).Start(ctx, "authconfig")
+	defer span.End()
+
+	authConfigName := AuthConfigNameForPath(pathID)
+	desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace)
+
+	span.SetAttributes(
+		attribute.String("namespace", desiredAuthConfig.GetNamespace()),
+		attribute.String("name", desiredAuthConfig.GetName()),
+		attribute.StringSlice("sources", effectivePolicy.SourcePolicies),
+	)
+
+	resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
+
+	existingAuthConfigObj, found := lo.Find(topology.Objects().Children(httpRouteRule), func(child machinery.Object) bool {
+		return child.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && child.GetName() == authConfigName && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredAuthConfig.GetLabels()))
+	})
+
+	// create
+	if !found {
+		desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
+		if err != nil {
+			msg := "failed to destruct authconfig object"
+			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, msg)
+			return authConfigName, false
+		}
+		if _, err = resource.Create(ctx, desiredAuthConfigUnstructured, metav1.CreateOptions{}); err != nil {
+			msg := "failed to create authconfig object"
+			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, msg)
+			// TODO: handle error
+		}
+		return authConfigName, true
+	}
+
+	existingAuthConfig := existingAuthConfigObj.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
+
+	if equalAuthConfigs(existingAuthConfig, desiredAuthConfig) {
+		logger.V(1).Info("authconfig object is up to date, nothing to do")
+		return authConfigName, false
+	}
+
+	// delete
+	if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
+		if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+			msg := "failed to delete authconfig object"
+			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, msg)
+			// TODO: handle error
+		}
+		return authConfigName, true
+	}
+
+	// update
+	existingAuthConfig.Spec = desiredAuthConfig.Spec
+	existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
+	if err != nil {
+		msg := "failed to destruct authconfig object"
+		logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, msg)
+		return authConfigName, false
+	}
+	if _, err = resource.Update(ctx, existingAuthConfigUnstructured, metav1.UpdateOptions{}); err != nil {
+		msg := "failed to update authconfig object"
+		logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, msg)
+		// TODO: handle error
+	}
+	return authConfigName, true
 }
 
 func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta3.AuthConfig {

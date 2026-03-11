@@ -58,7 +58,7 @@ type UpstreamConfig struct {
 }
 
 // KuadrantCtx is passed to ReconcileFn providing access to CEL resolution,
-// mutator registration and object reconciliation helpers.
+// mutator registration, object reconciliation helpers and upstream registration.
 type KuadrantCtx interface {
 	Resolve(context.Context, Policy, string, bool) (celref.Val, error)
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)

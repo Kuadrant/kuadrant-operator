@@ -414,7 +414,6 @@ The demo should show:
   - [ ] Integration tests
 - [ ] Implement client-side RegisterUpstreamMethod on ExtensionController ([#1795](https://github.com/Kuadrant/kuadrant-operator/issues/1795))
   - [ ] Unit tests
-- [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type ([#1796](https://github.com/Kuadrant/kuadrant-operator/issues/1796))
 - [ ] Create demo entities and interactive demo script ([#1797](https://github.com/Kuadrant/kuadrant-operator/issues/1797))
   - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
   - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)
@@ -426,6 +425,7 @@ The demo should show:
   - [x] Unit tests
 - [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate ([#1792](https://github.com/Kuadrant/kuadrant-operator/issues/1792))
   - [x] Unit tests
+- [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type ([#1796](https://github.com/Kuadrant/kuadrant-operator/issues/1796))
 
 ## Change Log
 

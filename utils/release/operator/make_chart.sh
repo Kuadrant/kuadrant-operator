@@ -11,7 +11,7 @@ mod_version() {
 
 # Set desired Wasm-shim image
 wasm_shim_version=$(mod_version $(yq '.dependencies.wasm-shim' $env/release.yaml))
-wasm_shim_image="oci://quay.io/kuadrant/wasm-shim:$wasm_shim_version"
+wasm_shim_image="quay.io/kuadrant/wasm-shim:$wasm_shim_version"
 V=$wasm_shim_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 

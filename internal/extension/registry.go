@@ -175,18 +175,42 @@ type SubscriptionKey struct {
 	Expression string
 }
 
+type RegisteredUpstreamKey struct {
+	Policy ResourceID
+	URL    string
+}
+
+type RegisteredUpstreamEntry struct {
+	URL         string
+	ClusterName string
+	TargetRef   TargetRef
+	FailureMode string
+	Timeout     string
+}
+
+type TargetRef struct {
+	Group     string
+	Kind      string
+	Name      string
+	Namespace string
+}
+
 type RegisteredDataStore struct {
 	dataProviders map[DataProviderKey]DataProviderEntry
 	dataMutex     sync.RWMutex
 
 	subscriptions map[SubscriptionKey]Subscription
 	subsMutex     sync.RWMutex
+
+	registeredUpstreams map[RegisteredUpstreamKey]RegisteredUpstreamEntry
+	upstreamsMutex      sync.RWMutex
 }
 
 func NewRegisteredDataStore() *RegisteredDataStore {
 	return &RegisteredDataStore{
-		dataProviders: make(map[DataProviderKey]DataProviderEntry),
-		subscriptions: make(map[SubscriptionKey]Subscription),
+		dataProviders:       make(map[DataProviderKey]DataProviderEntry),
+		subscriptions:       make(map[SubscriptionKey]Subscription),
+		registeredUpstreams: make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry),
 	}
 }
 
@@ -344,11 +368,56 @@ func (r *RegisteredDataStore) DeleteSubscription(policy ResourceID, expression s
 	return existed
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int) {
+func (r *RegisteredDataStore) SetUpstream(key RegisteredUpstreamKey, entry RegisteredUpstreamEntry) {
+	r.upstreamsMutex.Lock()
+	defer r.upstreamsMutex.Unlock()
+	r.registeredUpstreams[key] = entry
+}
+
+func (r *RegisteredDataStore) GetUpstream(key RegisteredUpstreamKey) (RegisteredUpstreamEntry, bool) {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	entry, exists := r.registeredUpstreams[key]
+	return entry, exists
+}
+
+func (r *RegisteredDataStore) GetAllUpstreams() map[RegisteredUpstreamKey]RegisteredUpstreamEntry {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	result := make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry, len(r.registeredUpstreams))
+	maps.Copy(result, r.registeredUpstreams)
+	return result
+}
+
+func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstreamEntry {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	var result []RegisteredUpstreamEntry
+	for _, entry := range r.registeredUpstreams {
+		if entry.TargetRef == targetRef {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
+	r.upstreamsMutex.Lock()
+	defer r.upstreamsMutex.Unlock()
+	_, existed := r.registeredUpstreams[key]
+	if existed {
+		delete(r.registeredUpstreams, key)
+	}
+	return existed
+}
+
+func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
+	r.upstreamsMutex.Lock()
 	defer r.dataMutex.Unlock()
 	defer r.subsMutex.Unlock()
+	defer r.upstreamsMutex.Unlock()
 
 	// clear data providers
 	for key := range r.dataProviders {
@@ -365,7 +434,16 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 			clearedSubscriptions++
 		}
 	}
-	return clearedMutators, clearedSubscriptions
+
+	// clear registered upstreams
+	for key := range r.registeredUpstreams {
+		if key.Policy == policy {
+			delete(r.registeredUpstreams, key)
+			clearedUpstreams++
+		}
+	}
+
+	return clearedMutators, clearedSubscriptions, clearedUpstreams
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {

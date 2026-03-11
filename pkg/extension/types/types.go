@@ -49,6 +49,14 @@ type Policy interface {
 	GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName
 }
 
+// UpstreamConfig holds the configuration for an external gRPC service that an
+// extension wants to register with the data plane.
+type UpstreamConfig struct {
+	URL     string // e.g. "grpc://my-service:8081"
+	Service string // gRPC service name, e.g. "envoy.service.auth.v3.Authorization" (currently unused)
+	Method  string // gRPC method name, e.g. "Check" (currently unused)
+}
+
 // KuadrantCtx is passed to ReconcileFn providing access to CEL resolution,
 // mutator registration and object reconciliation helpers.
 type KuadrantCtx interface {
@@ -56,6 +64,7 @@ type KuadrantCtx interface {
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
 	AddDataTo(context.Context, Policy, Domain, string, string) error
 	ReconcileObject(context.Context, client.Object, client.Object, MutateFn) (client.Object, error)
+	RegisterUpstreamMethod(ctx context.Context, policy Policy, svc UpstreamConfig) error
 }
 
 // ReconcileFn defines the signature of an extension reconcile function.

@@ -95,6 +95,10 @@ func (m *mockKuadrantCtx) ReconcileObject(ctx context.Context, obj, desired clie
 	return nil, nil
 }
 
+func (m *mockKuadrantCtx) RegisterUpstreamMethod(_ context.Context, _ exttypes.Policy, _ exttypes.UpstreamConfig) error {
+	return nil
+}
+
 func TestGenericResolveSuccess(t *testing.T) {
 	mockCtx := &mockKuadrantCtx{
 		resolveFn: func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error) {

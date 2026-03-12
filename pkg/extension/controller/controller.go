@@ -9,6 +9,8 @@ import (
 	"github.com/google/cel-go/cel"
 	celtypes "github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
@@ -307,9 +309,25 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 	return err
 }
 
-// RegisterUpstreamMethod is a stub implementation to satisfy the KuadrantCtx interface.
-// TODO: implement gRPC call to register the upstream method with the operator.
-func (ec *ExtensionController) RegisterUpstreamMethod(_ context.Context, _ exttypes.Policy, _ exttypes.UpstreamConfig) error {
+// RegisterUpstreamMethod registers an external gRPC service with the operator
+// so that it becomes available to the data plane. The operator performs a
+// reachability check and, if successful, creates the necessary Envoy cluster
+// and wasm service entries.
+func (ec *ExtensionController) RegisterUpstreamMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.UpstreamConfig) error {
+	pbPolicy := convertPolicyToProtobuf(policy)
+
+	_, err := ec.extensionClient.client.RegisterUpstreamMethod(ctx, &extpb.RegisterUpstreamMethodRequest{
+		Policy:  pbPolicy,
+		Url:     svc.URL,
+		Service: svc.Service,
+		Method:  svc.Method,
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
+			return fmt.Errorf("%w: %s", exttypes.ErrUpstreamUnreachable, st.Message())
+		}
+		return err
+	}
 	return nil
 }
 

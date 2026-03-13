@@ -17,6 +17,7 @@ limitations under the License.
 package extension
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"maps"
 	"sync"
@@ -539,5 +540,34 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 
 	wasmConfig.RequestData = requestData
 
+	// Inject registered upstream services
+	allUpstreams := m.store.GetAllUpstreams()
+	for _, entry := range allUpstreams {
+		timeout := entry.Timeout
+		svc := wasm.Service{
+			Endpoint:    entry.ClusterName,
+			Type:        wasm.AuthServiceType,
+			FailureMode: wasm.FailureModeType(entry.FailureMode),
+			Timeout:     &timeout,
+		}
+		wasmServiceKey := "ext-" + HashUpstreamServiceConfig(svc)
+		if wasmConfig.Services == nil {
+			wasmConfig.Services = make(map[string]wasm.Service)
+		}
+		wasmConfig.Services[wasmServiceKey] = svc
+	}
+
 	return nil
+}
+
+// HashUpstreamServiceConfig produces a deterministic short hash from a wasm.Service
+// config. Identical configurations produce the same hash, providing natural deduplication.
+func HashUpstreamServiceConfig(svc wasm.Service) string {
+	timeout := ""
+	if svc.Timeout != nil {
+		timeout = *svc.Timeout
+	}
+	data := fmt.Sprintf("%s|%s|%s|%s", svc.Type, svc.Endpoint, svc.FailureMode, timeout)
+	h := sha256.Sum256([]byte(data))
+	return fmt.Sprintf("%x", h[:8])
 }

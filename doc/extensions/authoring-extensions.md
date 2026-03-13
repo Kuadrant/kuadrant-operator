@@ -1,16 +1,16 @@
-# Authoring Metapolicies with the Kuadrant Extensions Framework
+# Authoring Extensions with the Kuadrant Extensions Framework
 
 > **Note**: The Extensions Framework is a preview feature under active development. APIs and deployment models may evolve as we refine the architecture.
 
 ## Introduction
 
-**Metapolicies** are higher-level policy abstractions built on Kuadrant's core policies (AuthPolicy, RateLimitPolicy). They let you hide complex multi-policy configurations behind simple, domain-specific interfaces.
+**Extensions** let you build higher-level policy abstractions on top of Kuadrant's core policies (AuthPolicy, RateLimitPolicy). They let you hide complex multi-policy configurations behind simple, domain-specific interfaces.
 
-Instead of manually wiring together authentication flows or rate limiting logic, metapolicies package these workflows into purpose-built resources. You define a simple CRD, and your extension handles the orchestration behind the scenes.
+Instead of manually wiring together authentication flows or rate limiting logic, extensions package these workflows into purpose-built resources. You define a simple CRD, and your extension handles the orchestration behind the scenes.
 
-### Why Build Metapolicies?
+### Why Build Extensions?
 
-You might build a metapolicy when:
+You might build an extension when:
 
 - A workflow requires coordinating multiple Kuadrant policies behind a single interface (e.g., OIDCPolicy creates AuthPolicies + HTTPRoutes for OAuth)
 - You need information from the kuadrant topology to configure your implementation (e.g., extracting Gateway listener details, HTTPRoute configurations, or other policy states)
@@ -18,7 +18,7 @@ You might build a metapolicy when:
 
 ### Examples in This Repository
 
-We've built three metapolicies that demonstrate different patterns:
+We've built three extensions that demonstrate different patterns:
 
 - **PlanPolicy**: Maps user tiers to rate limits using CEL expressions evaluated at request time
 - **OIDCPolicy**: Orchestrates the OAuth Authorization Code Flow by creating HTTPRoutes and AuthPolicies
@@ -26,9 +26,9 @@ We've built three metapolicies that demonstrate different patterns:
 
 ## Architecture Overview
 
-### How Metapolicies Work
+### How Extensions Work
 
-Metapolicies are implemented as **extensions** that run as separate controller processes and communicate with the main Kuadrant operator via gRPC over Unix domain sockets. Each metapolicy extension:
+Extensions are controllers that run as separate processes and communicate with the main Kuadrant operator via gRPC over Unix domain sockets. Each extension:
 
 1. **Defines a Custom Resource Definition (CRD)** with a user-friendly spec
 2. **Runs as a separate controller process** (out-of-process from the operator) that reconciles instances of that CRD
@@ -47,7 +47,7 @@ The kuadrant-operator maintains an in-memory graph of Gateway API resources and 
 - `self.findAuthPolicies()` - what other AuthPolicies are related to my targets?
 - Access Gateway spec/status directly (listeners, addresses, protocols, etc.)
 
-This lets you build context-aware metapolicies that adapt to cluster state instead of requiring configuration to be duplicated in multiple places.
+This lets you build context-aware extensions that adapt to cluster state instead of requiring configuration to be duplicated in multiple places.
 
 #### Topology Access Without Direct Kubernetes API Calls
 
@@ -365,7 +365,7 @@ For extensions developed outside the Kuadrant operator repository, the architect
 3. **Network-based gRPC**: Connect to the operator's gRPC endpoint over the network
 4. **Minimal RBAC**: Extensions only need permissions for resources they create/manage
    - **No RBAC needed** for reading Gateways, HTTPRoutes, or policies—topology queries happen via gRPC
-5. **CRD installation**: Install your metapolicy CRD independently
+5. **CRD installation**: Install your extension's policy CRD independently
 
 This model would enable extensions to be developed, versioned, and deployed independently while accessing the full Kuadrant topology without requiring extensive cluster read permissions. Watch the Kuadrant repository for updates on separate-container deployment support.
 
@@ -373,10 +373,10 @@ This model would enable extensions to be developed, versioned, and deployed inde
 
 ### Targeting and Attachment
 
-Metapolicies use the Gateway API Policy Attachment pattern (GEP-713):
+Extensions use the Gateway API Policy Attachment pattern (GEP-713):
 
-- **Target Gateway API resources**: Your metapolicy attaches to Gateways or HTTPRoutes via `targetRef`
-- **Not tied to other policies**: While metapolicies often *create* Kuadrant policies (AuthPolicy, RateLimitPolicy), they don't attach to them—they attach to Gateway API resources
+- **Target Gateway API resources**: Your extension's policy attaches to Gateways or HTTPRoutes via `targetRef`
+- **Not tied to other policies**: While extensions often *create* Kuadrant policies (AuthPolicy, RateLimitPolicy), they don't attach to them—they attach to Gateway API resources
 - **Topology discovery**: Use `findGateways()` to discover which Gateway your policy applies to, then extract configuration like hostnames, protocols, listener details
 
 **Example**: OIDCPolicy targets an HTTPRoute. It uses `self.findGateways()[0]` to discover the parent Gateway, extracts the hostname and protocol, and uses that information to build OAuth redirect URLs.
@@ -384,8 +384,8 @@ Metapolicies use the Gateway API Policy Attachment pattern (GEP-713):
 ### Resource Ownership
 
 - **Set owner references** on all managed resources using `controllerutil.SetControllerReference()`
-- This ensures automatic garbage collection when the metapolicy is deleted
-- Both Kuadrant policies and Gateway API resources can be owned by your metapolicy
+- This ensures automatic garbage collection when the extension's policy is deleted
+- Both Kuadrant policies and Gateway API resources can be owned by your extension's policy
 
 ### Reconciliation Patterns
 
@@ -481,7 +481,7 @@ The Extensions Framework lets you wrap complex workflows (OAuth flows, tiered ra
 
 - Query Gateway and policy topology via CEL without touching the Kubernetes API
 - Inject request-time logic through data bindings (DomainAuth for Authorino, DomainRequest for Limitador)
-- Manage multiple resources from a single metapolicy CR
+- Manage multiple resources from a single extension CR
 - Minimal RBAC footprint—extensions only need permissions for resources they create
 
 **Next steps**:

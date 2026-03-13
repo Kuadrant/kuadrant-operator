@@ -167,7 +167,7 @@ When `RegisterUpstreamMethod` is called:
 2. Initiate gRPC reflection to `UpstreamConfig.URL`
 3. Fetch service descriptors for `UpstreamConfig.Service`
 4. Store in `ProtoCache` with key `(cluster_name, service)`
-5. Register upstream in `RegisteredDataStore` (Phase 1 behavior)
+5. Register upstream in `RegisteredDataStore` with service type `dynamic` (Phase 1 defaulted to `auth`)
 6. Return error if reflection fails (fail fast)
 
 ### Component Changes
@@ -196,7 +196,6 @@ type ProtoCache struct {
 // - Set(key ProtoCacheKey, fds *FileDescriptorSet): Store descriptor
 // - Get(key ProtoCacheKey) (*FileDescriptorSet, bool): Retrieve descriptor
 // - Delete(key ProtoCacheKey): Remove descriptor
-// - DeleteByCluster(clusterName string): Remove all descriptors for a cluster
 ```
 
 ##### 2. ReflectionClient (new: `internal/extension/reflection.go`)
@@ -219,8 +218,6 @@ type ReflectionClient struct {
 // - Returns error if reflection unsupported or service not found
 func (rc *ReflectionClient) FetchServiceDescriptors(ctx context.Context, url string, serviceName string) (*descriptorpb.FileDescriptorSet, error)
 ```
-
-**PoC Implementation**: See `internal/extension/reflection.go` for full recursive fetching logic.
 
 ##### 3. Modified RegisterUpstreamMethod Handler (`internal/extension/manager.go`)
 
@@ -256,7 +253,17 @@ func (es *extensionService) GetServiceDescriptors(ctx context.Context, req *kuad
 
 ##### 5. Cache Cleanup in ClearPolicyData (`internal/extension/registry.go`)
 
-When a policy is deleted, clean up proto cache by calling `ProtoCache.DeleteByCluster(clusterName)` for all cluster names associated with the policy's registered upstreams.
+When a policy is deleted, leverage `RegisteredDataStore` (from Phase 1) to determine if descriptors can be safely deleted from the cache.
+
+**Key behaviors**:
+- On `RegisterUpstreamMethod`: call `ProtoCache.Set(key, fds)` to store descriptor
+- On `ClearPolicyData`:
+  1. Get all upstreams registered by the policy being deleted
+  2. Remove policy from `RegisteredDataStore`
+  3. For each upstream, check if any other policies still reference it (query `RegisteredDataStore`)
+  4. If no other policies use the upstream, call `ProtoCache.Delete(key)`
+- This prevents premature deletion when multiple policies/extensions register the same upstream service
+- Reference tracking is handled by existing `RegisteredDataStore` infrastructure
 
 ##### 6. TCP Server Setup (`internal/extension/oop.go` and `manager.go`)
 
@@ -393,8 +400,6 @@ impl DynamicService {
 3. Encode message to bytes using `prost::Message::encode`
 4. Dispatch gRPC call via `ctx.dispatch_grpc_call`
 
-**PoC Reference**: See `wasm-shim` repo for full implementation.
-
 ##### 3. ServiceInstance Enum Update (`src/service/mod.rs`)
 
 ```rust
@@ -428,8 +433,6 @@ pub enum ServiceInstance {
    - For each Dynamic service, create `DynamicService` instance
    - Inject descriptor pool from `config.descriptor_pools.get(cluster_name)`
    - Fail configuration if descriptor pool not found
-
-**PoC Reference**: See `wasm-shim` repo DYNAMIC_GRPC_DESIGN.md for full async flow.
 
 ### Integration Flow
 

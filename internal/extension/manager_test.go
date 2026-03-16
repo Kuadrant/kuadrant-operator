@@ -4,6 +4,7 @@ package extension
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -11,9 +12,18 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
+func successDialer(_ context.Context, _ string) error {
+	return nil
+}
+
+func failDialer(_ context.Context, target string) error {
+	return fmt.Errorf("connection refused to %s", target)
+}
+
 func newTestExtensionService() *extensionService {
 	return &extensionService{
 		registeredData: NewRegisteredDataStore(),
+		upstreamDialer: successDialer,
 		logger:         logr.Discard(),
 	}
 }
@@ -35,6 +45,14 @@ func testTargetRef(group, kind, name, namespace string) *extpb.TargetRef {
 		Kind:      kind,
 		Name:      name,
 		Namespace: namespace,
+	}
+}
+
+func validRequest() *extpb.RegisterUpstreamMethodRequest {
+	return &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Url: "grpc://svc:8081",
 	}
 }
 
@@ -109,6 +127,40 @@ func TestRegisterUpstreamMethod_NoTargetRefs(t *testing.T) {
 	}
 }
 
+func TestRegisterUpstreamMethod_DialFailure(t *testing.T) {
+	svc := newTestExtensionService()
+	svc.upstreamDialer = failDialer
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), validRequest())
+	if err == nil {
+		t.Fatal("Expected error for unreachable upstream")
+	}
+}
+
+func TestRegisterUpstreamMethod_Success(t *testing.T) {
+	svc := newTestExtensionService()
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), validRequest())
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	key := RegisteredUpstreamKey{
+		Policy: ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:    "grpc://svc:8081",
+	}
+	entry, exists := svc.registeredData.GetUpstream(key)
+	if !exists {
+		t.Fatal("Expected upstream to be stored")
+	}
+	if entry.ClusterName != "ext-svc-8081" {
+		t.Errorf("Expected cluster name %q, got %q", "ext-svc-8081", entry.ClusterName)
+	}
+	if entry.TargetRef.Kind != "HTTPRoute" {
+		t.Errorf("Expected target ref kind %q, got %q", "HTTPRoute", entry.TargetRef.Kind)
+	}
+}
+
 func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -135,35 +187,29 @@ func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newTestExtensionService()
-			// The handler will fail at the dial step since services aren't running,
-			// so we test cluster name generation by checking the store after a
-			// successful registration. Since we can't dial in unit tests, we test
-			// the cluster name logic indirectly via the regex and format.
 
-			// Test the cluster name regex directly
-			host := ""
-			port := ""
-			switch tt.name {
-			case "simple host and port":
-				host = "my-service"
-				port = "8081"
-			case "FQDN with dots":
-				host = "auth.kuadrant-system.svc.cluster.local"
-				port = "50051"
-			case "no port":
-				host = "my-service"
+			req := &extpb.RegisterUpstreamMethodRequest{
+				Policy: testPolicy("DemoPolicy", "default", "demo",
+					testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+				Url: tt.url,
 			}
 
-			clusterName := "ext-" + invalidClusterNameChars.ReplaceAllString(host, "-")
-			if port != "" {
-				clusterName += "-" + port
+			_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
 			}
 
-			if clusterName != tt.expectedCluster {
-				t.Errorf("Expected cluster name %q, got %q", tt.expectedCluster, clusterName)
+			key := RegisteredUpstreamKey{
+				Policy: ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+				URL:    tt.url,
 			}
-
-			_ = svc // ensure service was created
+			entry, exists := svc.registeredData.GetUpstream(key)
+			if !exists {
+				t.Fatal("Expected upstream to be stored")
+			}
+			if entry.ClusterName != tt.expectedCluster {
+				t.Errorf("Expected cluster name %q, got %q", tt.expectedCluster, entry.ClusterName)
+			}
 		})
 	}
 }
@@ -177,28 +223,12 @@ func TestRegisterUpstreamMethod_ChangeNotifier(t *testing.T) {
 		return nil
 	}
 
-	// Store an upstream directly to test the notifier path
-	// (bypassing the dial check which requires a real service)
-	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
-	key := RegisteredUpstreamKey{Policy: policyID, URL: "grpc://svc:8081"}
-	entry := RegisteredUpstreamEntry{
-		URL:         "grpc://svc:8081",
-		ClusterName: "ext-svc-8081",
-		TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route", Namespace: "default"},
-		FailureMode: "deny",
-		Timeout:     "100ms",
-	}
-	svc.registeredData.SetUpstream(key, entry)
-
-	// Verify the upstream was stored
-	_, exists := svc.registeredData.GetUpstream(key)
-	if !exists {
-		t.Fatal("Expected upstream to be stored")
+	_, err := svc.RegisterUpstreamMethod(context.Background(), validRequest())
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	// The notifier would be called by the handler — test that field is wired
-	if svc.changeNotifier == nil {
-		t.Fatal("Expected change notifier to be set")
+	if !notified {
+		t.Fatal("Expected change notifier to have been called")
 	}
-	_ = notified
 }

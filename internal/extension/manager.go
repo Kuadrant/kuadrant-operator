@@ -239,10 +239,15 @@ func (m *Manager) HasSynced() bool {
 	return true
 }
 
+// UpstreamDialer checks reachability of an upstream gRPC target.
+// Returns nil on success or an error if the target is unreachable.
+type UpstreamDialer func(ctx context.Context, target string) error
+
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
 	registeredData *RegisteredDataStore
 	changeNotifier ChangeNotifier
+	upstreamDialer UpstreamDialer
 	logger         logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 }
@@ -253,10 +258,22 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
+func defaultUpstreamDialer(ctx context.Context, target string) error {
+	conn, err := grpc.DialContext(ctx, target, //nolint:staticcheck // intentional use for reachability check
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck // intentional use for reachability check
+	)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
 	service := &extensionService{
 		dag:            dag,
 		registeredData: NewRegisteredDataStore(),
+		upstreamDialer: defaultUpstreamDialer,
 		logger:         logger.WithName("extensionService"),
 	}
 
@@ -449,6 +466,16 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 
 var invalidClusterNameChars = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
+// generateClusterName builds an Envoy cluster name from a host and optional port.
+// Invalid characters are replaced with hyphens and the name is prefixed with "ext-".
+func generateClusterName(host, port string) string {
+	clusterName := "ext-" + invalidClusterNameChars.ReplaceAllString(host, "-")
+	if port != "" {
+		clusterName += "-" + port
+	}
+	return clusterName
+}
+
 func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
 	if request == nil {
 		return nil, errors.New("request cannot be nil")
@@ -491,20 +518,11 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer dialCancel()
 
-	conn, err := grpc.DialContext(dialCtx, dialTarget, //nolint:staticcheck // intentional use for reachability check
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck // intentional use for reachability check
-	)
-	if err != nil {
+	if err := s.upstreamDialer(dialCtx, dialTarget); err != nil {
 		return nil, grpcstatus.Errorf(codes.Unavailable, "upstream unreachable at %s: %v", dialTarget, err)
 	}
-	_ = conn.Close()
 
-	// Generate cluster name: ext-{host}-{port} with invalid chars replaced
-	clusterName := "ext-" + invalidClusterNameChars.ReplaceAllString(host, "-")
-	if port != "" {
-		clusterName += "-" + port
-	}
+	clusterName := generateClusterName(host, port)
 
 	policyID := ResourceID{
 		Kind:      request.Policy.Metadata.Kind,

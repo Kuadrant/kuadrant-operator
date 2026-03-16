@@ -514,9 +514,9 @@ pub enum ServiceInstance {
 
 ### Phase 2.1: Operator Reflection and Caching
 
-- [ ] Implement `ProtoCache` with thread-safe get/set/delete
-  - [ ] Unit test: concurrent access
-  - [ ] Unit test: delete by cluster
+- [x] Implement `ProtoCache` with thread-safe get/set/delete
+  - [x] Unit test: concurrent access
+  - [x] Unit test: delete by cluster
 - [ ] Implement `ReflectionClient` with recursive dependency fetching
   - [ ] Unit test: reflection failure (unreachable, no service)
   - [ ] Unit test: 30-second timeout prevents hanging on slow upstreams

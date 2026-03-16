@@ -404,16 +404,12 @@ The demo should show:
 
 ### Todo
 
-- [ ] Implement server-side RegisterUpstreamMethod handler ([#1791](https://github.com/Kuadrant/kuadrant-operator/issues/1791))
-  - [ ] Unit tests
 - [ ] Extend IstioExtensionReconciler with registered upstream support ([#1793](https://github.com/Kuadrant/kuadrant-operator/issues/1793))
   - [ ] Unit tests
   - [ ] Integration tests
 - [ ] Extend EnvoyGatewayExtensionReconciler with registered upstream support ([#1794](https://github.com/Kuadrant/kuadrant-operator/issues/1794))
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Implement client-side RegisterUpstreamMethod on ExtensionController ([#1795](https://github.com/Kuadrant/kuadrant-operator/issues/1795))
-  - [ ] Unit tests
 - [ ] Create demo entities and interactive demo script ([#1797](https://github.com/Kuadrant/kuadrant-operator/issues/1797))
   - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
   - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)
@@ -425,7 +421,11 @@ The demo should show:
   - [x] Unit tests
 - [x] Add RegisterUpstreamMethod RPC to gRPC proto and regenerate ([#1792](https://github.com/Kuadrant/kuadrant-operator/issues/1792))
   - [x] Unit tests
+- [x] Implement client-side RegisterUpstreamMethod on ExtensionController ([#1795](https://github.com/Kuadrant/kuadrant-operator/issues/1795))
+  - [x] Unit tests
 - [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type ([#1796](https://github.com/Kuadrant/kuadrant-operator/issues/1796))
+- [x] Implement server-side RegisterUpstreamMethod handler ([#1791](https://github.com/Kuadrant/kuadrant-operator/issues/1791))
+  - [x] Unit tests
 
 ## Change Log
 

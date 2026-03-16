@@ -21,8 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -31,6 +33,9 @@ import (
 	celtypes "github.com/google/cel-go/common/types"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -234,10 +239,15 @@ func (m *Manager) HasSynced() bool {
 	return true
 }
 
+// UpstreamDialer checks reachability of an upstream gRPC target.
+// Returns nil on success or an error if the target is unreachable.
+type UpstreamDialer func(ctx context.Context, target string) error
+
 type extensionService struct {
 	dag            *nilGuardedPointer[StateAwareDAG]
 	registeredData *RegisteredDataStore
 	changeNotifier ChangeNotifier
+	upstreamDialer UpstreamDialer
 	logger         logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 }
@@ -248,10 +258,22 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
+func defaultUpstreamDialer(ctx context.Context, target string) error {
+	conn, err := grpc.DialContext(ctx, target, //nolint:staticcheck // intentional use for reachability check
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck // intentional use for reachability check
+	)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
+}
+
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
 	service := &extensionService{
 		dag:            dag,
 		registeredData: NewRegisteredDataStore(),
+		upstreamDialer: defaultUpstreamDialer,
 		logger:         logger.WithName("extensionService"),
 	}
 
@@ -440,6 +462,111 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		ClearedMutators:      int32(clearedMutators),      // #nosec G115
 		ClearedSubscriptions: int32(clearedSubscriptions), // #nosec G115
 	}, nil
+}
+
+var invalidClusterNameChars = regexp.MustCompile(`[^a-zA-Z0-9-]`)
+
+// generateClusterName builds an Envoy cluster name from a host and optional port.
+// Invalid characters are replaced with hyphens and the name is prefixed with "ext-".
+func generateClusterName(host, port string) string {
+	clusterName := "ext-" + invalidClusterNameChars.ReplaceAllString(host, "-")
+	if port != "" {
+		clusterName += "-" + port
+	}
+	return clusterName
+}
+
+func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+	if request.Policy == nil {
+		return nil, errors.New("policy cannot be nil")
+	}
+	if request.Policy.Metadata == nil {
+		return nil, errors.New("policy metadata cannot be nil")
+	}
+	if request.Policy.Metadata.Kind == "" || request.Policy.Metadata.Namespace == "" || request.Policy.Metadata.Name == "" {
+		return nil, errors.New("policy kind, namespace, and name must be specified")
+	}
+	if request.Url == "" {
+		return nil, errors.New("url must be specified")
+	}
+	if len(request.Policy.TargetRefs) == 0 {
+		return nil, errors.New("policy must have target references")
+	}
+
+	// Parse URL — expect grpc:// scheme
+	parsed, err := url.Parse(request.Url)
+	if err != nil {
+		return nil, fmt.Errorf("invalid url %q: %w", request.Url, err)
+	}
+	if parsed.Scheme != "grpc" {
+		return nil, fmt.Errorf("url scheme must be \"grpc\", got %q", parsed.Scheme)
+	}
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if host == "" {
+		return nil, fmt.Errorf("url must contain a host: %q", request.Url)
+	}
+
+	// gRPC dial reachability check with 5s timeout
+	dialTarget := host
+	if port != "" {
+		dialTarget = host + ":" + port
+	}
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
+
+	if err := s.upstreamDialer(dialCtx, dialTarget); err != nil {
+		return nil, grpcstatus.Errorf(codes.Unavailable, "upstream unreachable at %s: %v", dialTarget, err)
+	}
+
+	clusterName := generateClusterName(host, port)
+
+	policyID := ResourceID{
+		Kind:      request.Policy.Metadata.Kind,
+		Namespace: request.Policy.Metadata.Namespace,
+		Name:      request.Policy.Metadata.Name,
+	}
+
+	// Use the first target ref from the policy
+	pbTargetRef := request.Policy.TargetRefs[0]
+	targetRef := TargetRef{
+		Group:     pbTargetRef.Group,
+		Kind:      pbTargetRef.Kind,
+		Name:      pbTargetRef.Name,
+		Namespace: pbTargetRef.Namespace,
+	}
+
+	key := RegisteredUpstreamKey{
+		Policy: policyID,
+		URL:    request.Url,
+	}
+	entry := RegisteredUpstreamEntry{
+		URL:         request.Url,
+		ClusterName: clusterName,
+		TargetRef:   targetRef,
+		FailureMode: string(wasm.FailureModeDeny),
+		Timeout:     "100ms",
+	}
+
+	s.registeredData.SetUpstream(key, entry)
+
+	s.logger.Info("registered upstream",
+		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
+		"url", request.Url,
+		"clusterName", clusterName)
+
+	// Trigger reconciliation
+	if s.changeNotifier != nil {
+		reason := fmt.Sprintf("upstream registered for policy %s/%s: %s", policyID.Namespace, policyID.Name, request.Url)
+		if err := s.changeNotifier(reason); err != nil {
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
+
+	return &emptypb.Empty{}, nil
 }
 
 // Creates a locator matching the definition in policy-machinery

@@ -11,6 +11,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	"github.com/kuadrant/policy-machinery/machinery"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -1078,4 +1079,116 @@ func TestRegisteredDataStore_UpstreamEdgeCases(t *testing.T) {
 			t.Errorf("Expected 1 upstream after overwrite, got %d", len(all))
 		}
 	})
+}
+
+func TestHashUpstreamServiceConfig(t *testing.T) {
+	timeout := "100ms"
+	svc := wasm.Service{
+		Endpoint:    "ext-my-service-8081",
+		Type:        wasm.AuthServiceType,
+		FailureMode: wasm.FailureModeDeny,
+		Timeout:     &timeout,
+	}
+
+	hash1 := HashUpstreamServiceConfig(svc)
+	hash2 := HashUpstreamServiceConfig(svc)
+	if hash1 != hash2 {
+		t.Errorf("Expected identical hashes for identical configs, got %s and %s", hash1, hash2)
+	}
+
+	// Different endpoint should produce a different hash
+	svc2 := svc
+	svc2.Endpoint = "ext-other-service-8082"
+	hash3 := HashUpstreamServiceConfig(svc2)
+	if hash1 == hash3 {
+		t.Errorf("Expected different hashes for different endpoints")
+	}
+
+	// Different timeout should produce a different hash
+	timeout2 := "200ms"
+	svc3 := svc
+	svc3.Timeout = &timeout2
+	hash4 := HashUpstreamServiceConfig(svc3)
+	if hash1 == hash4 {
+		t.Errorf("Expected different hashes for different timeouts")
+	}
+
+	// Nil timeout
+	svc4 := svc
+	svc4.Timeout = nil
+	hash5 := HashUpstreamServiceConfig(svc4)
+	if hash1 == hash5 {
+		t.Errorf("Expected different hash for nil timeout")
+	}
+}
+
+func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
+	store := NewRegisteredDataStore()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "my-gw", Namespace: "default"}
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-1"), URL: "grpc://svc1:8081"},
+		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-2"), URL: "grpc://svc2:8082"},
+		RegisteredUpstreamEntry{URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services: make(map[string]wasm.Service),
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(wasmConfig.Services) != 2 {
+		t.Errorf("Expected 2 services in wasm config, got %d", len(wasmConfig.Services))
+	}
+
+	// Verify all services have ext- prefix keys
+	for key, svc := range wasmConfig.Services {
+		if key[:4] != "ext-" {
+			t.Errorf("Expected service key to start with ext-, got %s", key)
+		}
+		if svc.Type != wasm.AuthServiceType {
+			t.Errorf("Expected auth service type, got %s", svc.Type)
+		}
+		if svc.FailureMode != wasm.FailureModeDeny {
+			t.Errorf("Expected deny failure mode, got %s", svc.FailureMode)
+		}
+	}
+}
+
+func TestMutateWasmConfig_DeduplicatesIdenticalUpstreams(t *testing.T) {
+	store := NewRegisteredDataStore()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "my-gw", Namespace: "default"}
+
+	// Two policies registering the same URL → same cluster name → same service config → same hash
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-1"), URL: "grpc://svc1:8081"},
+		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-2"), URL: "grpc://svc1:8081"},
+		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services: make(map[string]wasm.Service),
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Same service config → same hash key → deduplicated to 1
+	if len(wasmConfig.Services) != 1 {
+		t.Errorf("Expected 1 deduplicated service, got %d", len(wasmConfig.Services))
+	}
 }

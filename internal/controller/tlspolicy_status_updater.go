@@ -104,6 +104,7 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 		p.Status = *newStatus
 
 		resource := t.Client.Resource(kuadrantv1.TLSPoliciesResource).Namespace(policy.GetNamespace())
+
 		un, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy")
@@ -113,7 +114,7 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 			continue
 		}
 
-		_, err = resource.UpdateStatus(policyCtx, un, metav1.UpdateOptions{})
+		_, err = resource.ApplyStatus(policyCtx, un.GetName(), un, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil && !apierrors.IsConflict(err) {
 			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
 			span.RecordError(err)

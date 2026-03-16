@@ -126,7 +126,7 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1.RateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(policyCtx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.RateLimitPoliciesResource).Namespace(policy.GetNamespace()).ApplyStatus(policyCtx, obj.GetName(), obj, metav1.ApplyOptions{FieldManager: FieldManagerName})
 		if err != nil {
 			if strings.Contains(err.Error(), "StorageError: invalid object") {
 				logger.Info("possible error updating resource", "err", err, "possible_cause", "resource has being removed from the cluster already")

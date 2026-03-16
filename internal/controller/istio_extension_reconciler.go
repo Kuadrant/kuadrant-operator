@@ -106,48 +106,31 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 				continue
 			}
 			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when a wasmplugin is created, because updates won't change the status
-			desiredWasmPluginUnstructured, err := controller.Destruct(desiredWasmPlugin)
-			if err != nil {
-				logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPlugin)
+		} else {
+			existingWasmPlugin := existingWasmPluginObj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
+
+			// delete
+			if utils.IsObjectTaggedToDelete(desiredWasmPlugin) && !utils.IsObjectTaggedToDelete(existingWasmPlugin) {
+				if err := resource.Delete(ctx, existingWasmPlugin.GetName(), metav1.DeleteOptions{}); err != nil {
+					logger.Error(err, "failed to delete wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", fmt.Sprintf("%s/%s", existingWasmPlugin.GetNamespace(), existingWasmPlugin.GetName()))
+					// TODO: handle error
+				}
 				continue
 			}
-			if _, err = resource.Create(ctx, desiredWasmPluginUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPluginUnstructured.Object)
-				// TODO: handle error
+			logger.V(1).Info("wasmplugin object ", "desired", desiredWasmPlugin)
+			if equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
+				logger.V(1).Info("wasmplugin object is up to date, nothing to do")
+				continue
 			}
-			continue
 		}
 
-		existingWasmPlugin := existingWasmPluginObj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
-
-		// delete
-		if utils.IsObjectTaggedToDelete(desiredWasmPlugin) && !utils.IsObjectTaggedToDelete(existingWasmPlugin) {
-			if err := resource.Delete(ctx, existingWasmPlugin.GetName(), metav1.DeleteOptions{}); err != nil {
-				logger.Error(err, "failed to delete wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", fmt.Sprintf("%s/%s", existingWasmPlugin.GetNamespace(), existingWasmPlugin.GetName()))
-				// TODO: handle error
-			}
-			continue
-		}
-		logger.V(1).Info("wasmplugin object ", "desired", desiredWasmPlugin)
-		if equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
-			logger.V(1).Info("wasmplugin object is up to date, nothing to do")
-			continue
-		}
-
-		// update
-		existingWasmPlugin.Spec.Url = desiredWasmPlugin.Spec.Url
-		existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
-		existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
-		existingWasmPlugin.Spec.PluginConfig = desiredWasmPlugin.Spec.PluginConfig
-		existingWasmPlugin.Spec.ImagePullSecret = desiredWasmPlugin.Spec.ImagePullSecret
-
-		existingWasmPluginUnstructured, err := controller.Destruct(existingWasmPlugin)
+		desiredWasmPluginUnstructured, err := controller.Destruct(desiredWasmPlugin)
 		if err != nil {
-			logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPlugin)
+			logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPlugin)
 			continue
 		}
-		if _, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
+		if _, err = resource.Apply(ctx, desiredWasmPluginUnstructured.GetName(), desiredWasmPluginUnstructured, metav1.ApplyOptions{FieldManager: FieldManagerName}); err != nil {
+			logger.Error(err, "failed to apply wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPluginUnstructured.Object)
 			// TODO: handle error
 		}
 	}

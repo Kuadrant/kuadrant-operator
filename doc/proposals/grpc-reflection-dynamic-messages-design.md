@@ -517,9 +517,9 @@ pub enum ServiceInstance {
 - [x] Implement `ProtoCache` with thread-safe get/set/delete
   - [x] Unit test: concurrent access
   - [x] Unit test: delete by cluster
-- [ ] Implement `ReflectionClient` with recursive dependency fetching
-  - [ ] Unit test: reflection failure (unreachable, no service)
-  - [ ] Unit test: 30-second timeout prevents hanging on slow upstreams
+- [x] Implement `ReflectionClient` with recursive dependency fetching
+  - [x] Unit test: reflection failure (unreachable, no service)
+  - [x] Unit test: 30-second timeout prevents hanging on slow upstreams
 - [ ] Update `RegisterUpstreamMethod` handler to trigger reflection
   - [ ] Unit test: cache populated on success
   - [ ] Unit test: error returned on reflection failure

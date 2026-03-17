@@ -1163,6 +1163,109 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 	}
 }
 
+func TestGetAllRegisteredUpstreams(t *testing.T) {
+	// Save and restore GlobalMutatorRegistry
+	originalRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = originalRegistry }()
+
+	t.Run("empty registry", func(t *testing.T) {
+		GlobalMutatorRegistry = &MutatorRegistry{}
+
+		result := GetAllRegisteredUpstreams()
+		if len(result) != 0 {
+			t.Errorf("Expected 0 upstreams from empty registry, got %d", len(result))
+		}
+	})
+
+	t.Run("single store with upstreams", func(t *testing.T) {
+		GlobalMutatorRegistry = &MutatorRegistry{}
+
+		store := NewRegisteredDataStore()
+		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns1", "p1"), URL: "grpc://svc1:8081"}
+		entry := RegisteredUpstreamEntry{
+			URL:         "grpc://svc1:8081",
+			ClusterName: "ext-svc1-8081",
+			TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "ns1"},
+			FailureMode: "deny",
+			Timeout:     "100ms",
+		}
+		store.SetUpstream(key, entry)
+
+		mutator := NewRegisteredDataMutator[*wasm.Config](store)
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(mutator)
+
+		result := GetAllRegisteredUpstreams()
+		if len(result) != 1 {
+			t.Fatalf("Expected 1 upstream, got %d", len(result))
+		}
+		if result[key].ClusterName != "ext-svc1-8081" {
+			t.Errorf("Expected cluster name ext-svc1-8081, got %s", result[key].ClusterName)
+		}
+	})
+
+	t.Run("multiple stores aggregate upstreams", func(t *testing.T) {
+		GlobalMutatorRegistry = &MutatorRegistry{}
+
+		store1 := NewRegisteredDataStore()
+		key1 := RegisteredUpstreamKey{Policy: testResourceID("PolicyA", "ns1", "p1"), URL: "grpc://svc1:8081"}
+		store1.SetUpstream(key1, RegisteredUpstreamEntry{
+			URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081",
+			TargetRef: TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "ns1"},
+		})
+
+		store2 := NewRegisteredDataStore()
+		key2 := RegisteredUpstreamKey{Policy: testResourceID("PolicyB", "ns2", "p2"), URL: "grpc://svc2:8082"}
+		store2.SetUpstream(key2, RegisteredUpstreamEntry{
+			URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082",
+			TargetRef: TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "ns2"},
+		})
+
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store1))
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store2))
+
+		result := GetAllRegisteredUpstreams()
+		if len(result) != 2 {
+			t.Fatalf("Expected 2 upstreams from two stores, got %d", len(result))
+		}
+		if _, ok := result[key1]; !ok {
+			t.Error("Expected upstream from store1")
+		}
+		if _, ok := result[key2]; !ok {
+			t.Error("Expected upstream from store2")
+		}
+	})
+
+	t.Run("skips non-RegisteredDataMutator wasm mutators", func(t *testing.T) {
+		GlobalMutatorRegistry = &MutatorRegistry{}
+
+		// Register a mock wasm mutator that is NOT a RegisteredDataMutator
+		mockMutator := &mockWasmConfigMutator{
+			mutateFn: func(_ *wasm.Config, _ []machinery.PolicyTargetReference) error { return nil },
+		}
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(mockMutator)
+
+		// Also register a real one with data
+		store := NewRegisteredDataStore()
+		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "p1"), URL: "grpc://svc:8081"}
+		store.SetUpstream(key, RegisteredUpstreamEntry{URL: "grpc://svc:8081", ClusterName: "ext-svc-8081"})
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+		result := GetAllRegisteredUpstreams()
+		if len(result) != 1 {
+			t.Errorf("Expected 1 upstream (skipping mock mutator), got %d", len(result))
+		}
+	})
+}
+
+// Mock wasm config mutator (non-RegisteredDataMutator)
+type mockWasmConfigMutator struct {
+	mutateFn func(*wasm.Config, []machinery.PolicyTargetReference) error
+}
+
+func (m *mockWasmConfigMutator) Mutate(config *wasm.Config, targetRefs []machinery.PolicyTargetReference) error {
+	return m.mutateFn(config, targetRefs)
+}
+
 func TestMutateWasmConfig_DeduplicatesIdenticalUpstreams(t *testing.T) {
 	store := NewRegisteredDataStore()
 	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "my-gw", Namespace: "default"}

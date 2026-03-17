@@ -14,8 +14,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
+	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -154,7 +156,142 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 	state.Store(StateIstioExtensionsModified, modifiedGateways)
 
+	// Reconcile EnvoyFilter cluster patches for registered upstreams
+	r.reconcileUpstreamClusters(ctx, topology, gateways)
+
 	return nil
+}
+
+func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway) {
+	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("reconcileUpstreamClusters")
+
+	allUpstreams := extension.GetAllRegisteredUpstreams()
+	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
+
+	for _, gateway := range gateways {
+		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
+
+		var gatewayUpstreams []extension.RegisteredUpstreamEntry
+		for _, entry := range allUpstreams {
+			if upstreamTargetsGateway(entry, gateway) {
+				gatewayUpstreams = append(gatewayUpstreams, entry)
+			}
+		}
+
+		if len(gatewayUpstreams) == 0 {
+			continue
+		}
+
+		desiredEnvoyFilter, err := buildUpstreamEnvoyFilter(gateway, gatewayUpstreams)
+		if err != nil {
+			logger.Error(err, "failed to build upstream envoy filter", "gateway", gatewayKey.String())
+			continue
+		}
+		desiredEnvoyFilters[k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()}] = struct{}{}
+
+		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
+
+		existingObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
+			return child.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind &&
+				child.GetName() == desiredEnvoyFilter.GetName() &&
+				child.GetNamespace() == desiredEnvoyFilter.GetNamespace() &&
+				labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyFilter.GetLabels()))
+		})
+
+		if !found {
+			unstructured, err := controller.Destruct(desiredEnvoyFilter)
+			if err != nil {
+				logger.Error(err, "failed to destruct envoyfilter", "gateway", gatewayKey.String())
+				continue
+			}
+			if _, err = resource.Create(ctx, unstructured, metav1.CreateOptions{}); err != nil {
+				logger.Error(err, "failed to create upstream envoyfilter", "gateway", gatewayKey.String())
+			}
+			continue
+		}
+
+		existing := existingObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
+		if kuadrantistio.EqualEnvoyFilters(existing, desiredEnvoyFilter) {
+			continue
+		}
+
+		existing.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
+			TargetRefs:    desiredEnvoyFilter.Spec.TargetRefs,
+			ConfigPatches: desiredEnvoyFilter.Spec.ConfigPatches,
+		}
+		unstructured, err := controller.Destruct(existing)
+		if err != nil {
+			logger.Error(err, "failed to destruct envoyfilter", "gateway", gatewayKey.String())
+			continue
+		}
+		if _, err = resource.Update(ctx, unstructured, metav1.UpdateOptions{}); err != nil {
+			logger.Error(err, "failed to update upstream envoyfilter", "gateway", gatewayKey.String())
+		}
+	}
+
+	// Cleanup stale upstream EnvoyFilters
+	stale := topology.Objects().Items(func(o machinery.Object) bool {
+		_, desired := desiredEnvoyFilters[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
+		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind &&
+			labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(UpstreamObjectLabels()) &&
+			!desired
+	})
+	for _, ef := range stale {
+		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(ef.GetNamespace()).Delete(ctx, ef.GetName(), metav1.DeleteOptions{}); err != nil {
+			logger.Error(err, "failed to delete stale upstream envoyfilter", "envoyfilter", fmt.Sprintf("%s/%s", ef.GetNamespace(), ef.GetName()))
+		}
+	}
+}
+
+func buildUpstreamEnvoyFilter(gateway *machinery.Gateway, upstreams []extension.RegisteredUpstreamEntry) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
+			APIVersion: istioclientgonetworkingv1alpha3.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      UpstreamClusterName(gateway.GetName()),
+			Namespace: gateway.GetNamespace(),
+			Labels:    UpstreamObjectLabels(),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
+					Kind:               gateway.GroupVersionKind().Kind,
+					Name:               gateway.Name,
+					UID:                gateway.UID,
+					BlockOwnerDeletion: ptr.To(true),
+					Controller:         ptr.To(true),
+				},
+			},
+		},
+		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
+			TargetRefs: []*istiov1beta1.PolicyTargetReference{
+				{
+					Group: machinery.GatewayGroupKind.Group,
+					Kind:  machinery.GatewayGroupKind.Kind,
+					Name:  gateway.GetName(),
+				},
+			},
+		},
+	}
+
+	var allPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
+	for _, entry := range upstreams {
+		host, port, err := parseUpstreamURL(entry.URL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse upstream URL %q: %w", entry.URL, err)
+		}
+		patches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(host, port, false, func(h string, p int, _ bool) map[string]any {
+			return buildClusterPatch(entry.ClusterName, h, p, false)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to build cluster patch for %q: %w", entry.ClusterName, err)
+		}
+		allPatches = append(allPatches, patches...)
+	}
+	envoyFilter.Spec.ConfigPatches = allPatches
+
+	return envoyFilter, nil
 }
 
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies

@@ -1,0 +1,3 @@
+resources:
+  - bases/extensions.kuadrant.io_upstreampolicies.yaml
+#+kubebuilder:scaffold:crdkustomizeresource

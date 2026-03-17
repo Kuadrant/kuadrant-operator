@@ -130,6 +130,7 @@ rules:
   - oidcpolicies
   - planpolicies
   - telemetrypolicies
+  - upstreampolicies
   verbs:
   - get
   - list
@@ -142,6 +143,7 @@ rules:
   - oidcpolicies/finalizers
   - planpolicies/finalizers
   - telemetrypolicies/finalizers
+  - upstreampolicies/finalizers
   verbs:
   - update
 - apiGroups:
@@ -150,6 +152,7 @@ rules:
   - oidcpolicies/status
   - planpolicies/status
   - telemetrypolicies/status
+  - upstreampolicies/status
   verbs:
   - get
   - patch

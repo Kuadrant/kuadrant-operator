@@ -1,7 +1,8 @@
 package controllers
 
-// buildClusterPatch creates an Envoy cluster configuration patch with optional mTLS and HTTP/2 support
-func buildClusterPatch(clusterName, host string, port int, mTLS bool, useHTTP2 bool) map[string]any {
+// buildClusterPatch creates an Envoy cluster configuration patch with optional mTLS support.
+// HTTP/2 is always enabled since all current callers require it (gRPC upstreams).
+func buildClusterPatch(clusterName, host string, port int, mTLS bool) map[string]any {
 	base := map[string]any{
 		"name":            clusterName,
 		"type":            "STRICT_DNS",
@@ -28,10 +29,7 @@ func buildClusterPatch(clusterName, host string, port int, mTLS bool, useHTTP2 b
 		},
 	}
 
-	// Add HTTP/2 protocol options if needed
-	if useHTTP2 {
-		base["http2_protocol_options"] = map[string]any{}
-	}
+	base["http2_protocol_options"] = map[string]any{}
 
 	// Add mTLS configuration if needed
 	if mTLS {

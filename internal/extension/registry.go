@@ -571,3 +571,19 @@ func HashUpstreamServiceConfig(svc wasm.Service) string {
 	h := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", h[:8])
 }
+
+// GetAllRegisteredUpstreams returns all registered upstreams from all extension services.
+func GetAllRegisteredUpstreams() map[RegisteredUpstreamKey]RegisteredUpstreamEntry {
+	GlobalMutatorRegistry.mutex.RLock()
+	defer GlobalMutatorRegistry.mutex.RUnlock()
+
+	result := make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry)
+	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
+		if m, ok := mutator.(*RegisteredDataMutator[*wasm.Config]); ok {
+			for k, v := range m.store.GetAllUpstreams() {
+				result[k] = v
+			}
+		}
+	}
+	return result
+}

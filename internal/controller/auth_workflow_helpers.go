@@ -63,7 +63,7 @@ func AuthClusterName(gatewayName string) string {
 }
 
 func authClusterPatch(host string, port int, mTLS bool) map[string]any {
-	return buildClusterPatch(kuadrant.KuadrantAuthClusterName, host, port, mTLS, true)
+	return buildClusterPatch(kuadrant.KuadrantAuthClusterName, host, port, mTLS)
 }
 
 type authorinoServiceInfo struct {

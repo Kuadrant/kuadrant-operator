@@ -4,22 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: telemetrypolicies.extensions.kuadrant.io
+  name: upstreampolicies.extensions.kuadrant.io
 spec:
   group: extensions.kuadrant.io
   names:
-    kind: TelemetryPolicy
-    listKind: TelemetryPolicyList
-    plural: telemetrypolicies
-    singular: telemetrypolicy
+    kind: UpstreamPolicy
+    listKind: UpstreamPolicyList
+    plural: upstreampolicies
+    singular: upstreampolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
-          through the use of dynamically evaluated CEL expressions.
+        description: UpstreamPolicy registers an external gRPC upstream service with
+          the Kuadrant data plane.
         properties:
           apiVersion:
             description: |-
@@ -40,29 +39,8 @@ spec:
             type: object
           spec:
             properties:
-              metrics:
-                description: Metrics holds the telemetry metrics configuration
-                properties:
-                  default:
-                    description: Default metrics configuration that applies to all
-                      requests
-                    properties:
-                      labels:
-                        additionalProperties:
-                          type: string
-                        description: |-
-                          Labels to add to metrics, where keys are label names and values are CEL expressions.
-                          Only labels whose CEL expressions resolve successfully will be included.
-                        minProperties: 1
-                        type: object
-                    required:
-                    - labels
-                    type: object
-                required:
-                - default
-                type: object
               targetRef:
-                description: Reference to the object to which this policy applies.
+                description: Reference to the Gateway to which this policy applies.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -107,17 +85,18 @@ spec:
                   rule: self.group == 'gateway.networking.k8s.io'
                 - message: Invalid targetRef.kind. The only supported value is 'Gateway'
                   rule: self.kind == 'Gateway'
+              url:
+                description: URL of the upstream gRPC service, e.g. "grpc://my-service.namespace.svc.cluster.local:50051"
+                minLength: 1
+                type: string
             required:
-            - metrics
             - targetRef
+            - url
             type: object
           status:
-            description: TelemetryPolicyStatus defines the observed state of TelemetryPolicy
+            description: UpstreamPolicyStatus defines the observed state of UpstreamPolicy
             properties:
               conditions:
-                description: |-
-                  Represents the observations of a TelemetryPolicy's current state.
-                  Known .status.conditions.type are: "Accepted", "Enforced"
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -177,8 +156,6 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               observedGeneration:
-                description: ObservedGeneration reflects the generation of the most
-                  recently observed spec.
                 format: int64
                 type: integer
             type: object

@@ -182,8 +182,9 @@ type RegisteredUpstreamKey struct {
 }
 
 type RegisteredUpstreamEntry struct {
-	URL         string
 	ClusterName string
+	Host        string
+	Port        int
 	TargetRef   TargetRef
 	FailureMode string
 	Timeout     string
@@ -390,18 +391,6 @@ func (r *RegisteredDataStore) GetAllUpstreams() map[RegisteredUpstreamKey]Regist
 	return result
 }
 
-func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstreamEntry {
-	r.upstreamsMutex.RLock()
-	defer r.upstreamsMutex.RUnlock()
-	var result []RegisteredUpstreamEntry
-	for _, entry := range r.registeredUpstreams {
-		if entry.TargetRef == targetRef {
-			result = append(result, entry)
-		}
-	}
-	return result
-}
-
 func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 	r.upstreamsMutex.Lock()
 	defer r.upstreamsMutex.Unlock()
@@ -572,17 +561,22 @@ func HashUpstreamServiceConfig(svc wasm.Service) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
-// GetAllRegisteredUpstreams returns all registered upstreams from all extension services.
-func GetAllRegisteredUpstreams() map[RegisteredUpstreamKey]RegisteredUpstreamEntry {
+// GetRegisteredUpstreamsByTargetRef returns registered upstreams matching the given targetRef,
+// aggregated across all extension data stores in the GlobalMutatorRegistry.
+func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstreamEntry {
 	GlobalMutatorRegistry.mutex.RLock()
 	defer GlobalMutatorRegistry.mutex.RUnlock()
 
-	result := make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry)
+	var result []RegisteredUpstreamEntry
 	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
 		if m, ok := mutator.(*RegisteredDataMutator[*wasm.Config]); ok {
-			for k, v := range m.store.GetAllUpstreams() {
-				result[k] = v
+			m.store.upstreamsMutex.RLock()
+			for _, entry := range m.store.registeredUpstreams {
+				if entry.TargetRef == targetRef {
+					result = append(result, entry)
+				}
 			}
+			m.store.upstreamsMutex.RUnlock()
 		}
 	}
 	return result

@@ -70,8 +70,9 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 				URL:    "grpc://test-upstream.example.com:50051",
 			}
 			store.SetUpstream(upstreamKey, extension.RegisteredUpstreamEntry{
-				URL:         "grpc://test-upstream.example.com:50051",
 				ClusterName: "test-upstream-cluster",
+				Host:        "test-upstream.example.com",
+				Port:        50051,
 				TargetRef: extension.TargetRef{
 					Group:     "gateway.networking.k8s.io",
 					Kind:      "Gateway",

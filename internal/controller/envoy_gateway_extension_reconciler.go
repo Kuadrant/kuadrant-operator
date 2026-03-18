@@ -161,18 +161,17 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway) {
 	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("reconcileUpstreamClusters")
 
-	allUpstreams := extension.GetAllRegisteredUpstreams()
 	desiredPolicies := make(map[k8stypes.NamespacedName]struct{})
 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		var gatewayUpstreams []extension.RegisteredUpstreamEntry
-		for _, entry := range allUpstreams {
-			if upstreamTargetsGateway(entry, gateway) {
-				gatewayUpstreams = append(gatewayUpstreams, entry)
-			}
-		}
+		gatewayUpstreams := extension.GetRegisteredUpstreamsByTargetRef(extension.TargetRef{
+			Group:     "gateway.networking.k8s.io",
+			Kind:      "Gateway",
+			Name:      gateway.GetName(),
+			Namespace: gateway.GetNamespace(),
+		})
 
 		if len(gatewayUpstreams) == 0 {
 			continue
@@ -272,12 +271,13 @@ func buildUpstreamEnvoyPatchPolicy(gateway *machinery.Gateway, upstreams []exten
 	}
 
 	var allPatches []envoygatewayv1alpha1.EnvoyJSONPatchConfig
+	seen := make(map[string]struct{})
 	for _, entry := range upstreams {
-		host, port, err := parseUpstreamURL(entry.URL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse upstream URL %q: %w", entry.URL, err)
+		if _, exists := seen[entry.ClusterName]; exists {
+			continue
 		}
-		patches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(entry.ClusterName, host, port, false, func(h string, p int, _ bool) map[string]any {
+		seen[entry.ClusterName] = struct{}{}
+		patches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(entry.ClusterName, entry.Host, entry.Port, false, func(h string, p int, _ bool) map[string]any {
 			return buildClusterPatch(entry.ClusterName, h, p, false)
 		})
 		if err != nil {

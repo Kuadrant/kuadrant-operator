@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -468,10 +469,10 @@ var invalidClusterNameChars = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
 // generateClusterName builds an Envoy cluster name from a host and optional port.
 // Invalid characters are replaced with hyphens and the name is prefixed with "ext-".
-func generateClusterName(host, port string) string {
+func generateClusterName(host string, port int) string {
 	clusterName := "ext-" + invalidClusterNameChars.ReplaceAllString(host, "-")
-	if port != "" {
-		clusterName += "-" + port
+	if port != 0 {
+		clusterName += "-" + strconv.Itoa(port)
 	}
 	return clusterName
 }
@@ -505,15 +506,23 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 		return nil, fmt.Errorf("url scheme must be \"grpc\", got %q", parsed.Scheme)
 	}
 	host := parsed.Hostname()
-	port := parsed.Port()
+	portStr := parsed.Port()
 	if host == "" {
 		return nil, fmt.Errorf("url must contain a host: %q", request.Url)
+	}
+	var port int
+	if portStr != "" {
+		var err2 error
+		port, err2 = strconv.Atoi(portStr)
+		if err2 != nil {
+			return nil, fmt.Errorf("invalid port in url %q: %w", request.Url, err2)
+		}
 	}
 
 	// gRPC dial reachability check with 5s timeout
 	dialTarget := host
-	if port != "" {
-		dialTarget = host + ":" + port
+	if portStr != "" {
+		dialTarget = host + ":" + portStr
 	}
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer dialCancel()
@@ -544,8 +553,9 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 		URL:    request.Url,
 	}
 	entry := RegisteredUpstreamEntry{
-		URL:         request.Url,
 		ClusterName: clusterName,
+		Host:        host,
+		Port:        port,
 		TargetRef:   targetRef,
 		FailureMode: string(wasm.FailureModeDeny),
 		Timeout:     "100ms",

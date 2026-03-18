@@ -904,8 +904,9 @@ func TestRegisteredDataStore_SetUpstream_GetUpstream_DeleteUpstream(t *testing.T
 	policy := testResourceID("DemoPolicy", "default", "demo-auth")
 	key := RegisteredUpstreamKey{Policy: policy, URL: "grpc://my-service:8081"}
 	entry := RegisteredUpstreamEntry{
-		URL:         "grpc://my-service:8081",
 		ClusterName: "ext-my-service-8081",
+		Host:        "my-service",
+		Port:        8081,
 		TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "my-api", Namespace: "default"},
 		FailureMode: "deny",
 		Timeout:     "100ms",
@@ -940,41 +941,6 @@ func TestRegisteredDataStore_SetUpstream_GetUpstream_DeleteUpstream(t *testing.T
 	}
 }
 
-func TestRegisteredDataStore_GetUpstreamsByTargetRef(t *testing.T) {
-	store := NewRegisteredDataStore()
-
-	targetRef1 := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "default"}
-	targetRef2 := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "default"}
-
-	store.SetUpstream(
-		RegisteredUpstreamKey{Policy: testResourceID("Policy", "default", "p1"), URL: "grpc://svc1:8081"},
-		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef1},
-	)
-	store.SetUpstream(
-		RegisteredUpstreamKey{Policy: testResourceID("Policy", "default", "p2"), URL: "grpc://svc2:8082"},
-		RegisteredUpstreamEntry{URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082", TargetRef: targetRef1},
-	)
-	store.SetUpstream(
-		RegisteredUpstreamKey{Policy: testResourceID("Policy", "default", "p3"), URL: "grpc://svc3:8083"},
-		RegisteredUpstreamEntry{URL: "grpc://svc3:8083", ClusterName: "ext-svc3-8083", TargetRef: targetRef2},
-	)
-
-	results := store.GetUpstreamsByTargetRef(targetRef1)
-	if len(results) != 2 {
-		t.Errorf("Expected 2 upstreams for route-a, got %d", len(results))
-	}
-
-	results = store.GetUpstreamsByTargetRef(targetRef2)
-	if len(results) != 1 {
-		t.Errorf("Expected 1 upstream for route-b, got %d", len(results))
-	}
-
-	results = store.GetUpstreamsByTargetRef(TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "non-existent", Namespace: "default"})
-	if len(results) != 0 {
-		t.Errorf("Expected 0 upstreams for non-existent route, got %d", len(results))
-	}
-}
-
 func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
 	store := NewRegisteredDataStore()
 
@@ -984,15 +950,15 @@ func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
 
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc1:8081"},
-		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRef},
 	)
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc2:8082"},
-		RegisteredUpstreamEntry{URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082", TargetRef: targetRef},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc2-8082", Host: "svc2", Port: 8082, TargetRef: targetRef},
 	)
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: policy2, URL: "grpc://svc3:8083"},
-		RegisteredUpstreamEntry{URL: "grpc://svc3:8083", ClusterName: "ext-svc3-8083", TargetRef: targetRef},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc3-8083", Host: "svc3", Port: 8083, TargetRef: targetRef},
 	)
 
 	_, _, clearedUpstreams := store.ClearPolicyData(policy1)
@@ -1027,8 +993,9 @@ func TestRegisteredDataStore_UpstreamConcurrentOperations(t *testing.T) {
 				URL:    fmt.Sprintf("grpc://svc%d:8081", index),
 			}
 			entry := RegisteredUpstreamEntry{
-				URL:         fmt.Sprintf("grpc://svc%d:8081", index),
 				ClusterName: fmt.Sprintf("ext-svc%d-8081", index),
+				Host:        fmt.Sprintf("svc%d", index),
+				Port:        8081,
 				TargetRef:   targetRef,
 			}
 			store.SetUpstream(key, entry)
@@ -1066,8 +1033,8 @@ func TestRegisteredDataStore_UpstreamEdgeCases(t *testing.T) {
 		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "p1"), URL: "grpc://svc:8081"}
 		targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route", Namespace: "ns"}
 
-		store.SetUpstream(key, RegisteredUpstreamEntry{URL: "grpc://svc:8081", ClusterName: "ext-svc-8081", TargetRef: targetRef, Timeout: "100ms"})
-		store.SetUpstream(key, RegisteredUpstreamEntry{URL: "grpc://svc:8081", ClusterName: "ext-svc-8081", TargetRef: targetRef, Timeout: "200ms"})
+		store.SetUpstream(key, RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRef, Timeout: "100ms"})
+		store.SetUpstream(key, RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRef, Timeout: "200ms"})
 
 		entry, _ := store.GetUpstream(key)
 		if entry.Timeout != "200ms" {
@@ -1128,11 +1095,11 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-1"), URL: "grpc://svc1:8081"},
-		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
 	)
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-2"), URL: "grpc://svc2:8082"},
-		RegisteredUpstreamEntry{URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc2-8082", Host: "svc2", Port: 8082, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
 	)
 
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)
@@ -1163,94 +1130,111 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 	}
 }
 
-func TestGetAllRegisteredUpstreams(t *testing.T) {
+func TestGetRegisteredUpstreamsByTargetRef(t *testing.T) {
 	// Save and restore GlobalMutatorRegistry
 	originalRegistry := GlobalMutatorRegistry
 	defer func() { GlobalMutatorRegistry = originalRegistry }()
 
+	targetRefA := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw-a", Namespace: "ns1"}
+	targetRefB := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw-b", Namespace: "ns2"}
+
 	t.Run("empty registry", func(t *testing.T) {
 		GlobalMutatorRegistry = &MutatorRegistry{}
 
-		result := GetAllRegisteredUpstreams()
+		result := GetRegisteredUpstreamsByTargetRef(targetRefA)
 		if len(result) != 0 {
 			t.Errorf("Expected 0 upstreams from empty registry, got %d", len(result))
 		}
 	})
 
-	t.Run("single store with upstreams", func(t *testing.T) {
+	t.Run("single store filters by targetRef", func(t *testing.T) {
 		GlobalMutatorRegistry = &MutatorRegistry{}
 
 		store := NewRegisteredDataStore()
-		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns1", "p1"), URL: "grpc://svc1:8081"}
-		entry := RegisteredUpstreamEntry{
-			URL:         "grpc://svc1:8081",
-			ClusterName: "ext-svc1-8081",
-			TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "ns1"},
-			FailureMode: "deny",
-			Timeout:     "100ms",
-		}
-		store.SetUpstream(key, entry)
+		store.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns1", "p1"), URL: "grpc://svc1:8081"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRefA},
+		)
+		store.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns2", "p2"), URL: "grpc://svc2:8082"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc2-8082", Host: "svc2", Port: 8082, TargetRef: targetRefB},
+		)
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
-		mutator := NewRegisteredDataMutator[*wasm.Config](store)
-		GlobalMutatorRegistry.RegisterWasmConfigMutator(mutator)
-
-		result := GetAllRegisteredUpstreams()
+		result := GetRegisteredUpstreamsByTargetRef(targetRefA)
 		if len(result) != 1 {
-			t.Fatalf("Expected 1 upstream, got %d", len(result))
+			t.Fatalf("Expected 1 upstream for gw-a, got %d", len(result))
 		}
-		if result[key].ClusterName != "ext-svc1-8081" {
-			t.Errorf("Expected cluster name ext-svc1-8081, got %s", result[key].ClusterName)
+		if result[0].ClusterName != "ext-svc1-8081" {
+			t.Errorf("Expected cluster name ext-svc1-8081, got %s", result[0].ClusterName)
 		}
 	})
 
-	t.Run("multiple stores aggregate upstreams", func(t *testing.T) {
+	t.Run("multiple stores aggregate matching upstreams", func(t *testing.T) {
 		GlobalMutatorRegistry = &MutatorRegistry{}
 
 		store1 := NewRegisteredDataStore()
-		key1 := RegisteredUpstreamKey{Policy: testResourceID("PolicyA", "ns1", "p1"), URL: "grpc://svc1:8081"}
-		store1.SetUpstream(key1, RegisteredUpstreamEntry{
-			URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081",
-			TargetRef: TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "ns1"},
-		})
+		store1.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("PolicyA", "ns1", "p1"), URL: "grpc://svc1:8081"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRefA},
+		)
 
 		store2 := NewRegisteredDataStore()
-		key2 := RegisteredUpstreamKey{Policy: testResourceID("PolicyB", "ns2", "p2"), URL: "grpc://svc2:8082"}
-		store2.SetUpstream(key2, RegisteredUpstreamEntry{
-			URL: "grpc://svc2:8082", ClusterName: "ext-svc2-8082",
-			TargetRef: TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "ns2"},
-		})
+		store2.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("PolicyB", "ns1", "p2"), URL: "grpc://svc2:8082"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc2-8082", Host: "svc2", Port: 8082, TargetRef: targetRefA},
+		)
+		store2.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("PolicyC", "ns2", "p3"), URL: "grpc://svc3:8083"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc3-8083", Host: "svc3", Port: 8083, TargetRef: targetRefB},
+		)
 
 		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store1))
 		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store2))
 
-		result := GetAllRegisteredUpstreams()
+		result := GetRegisteredUpstreamsByTargetRef(targetRefA)
 		if len(result) != 2 {
-			t.Fatalf("Expected 2 upstreams from two stores, got %d", len(result))
+			t.Fatalf("Expected 2 upstreams for gw-a across stores, got %d", len(result))
 		}
-		if _, ok := result[key1]; !ok {
-			t.Error("Expected upstream from store1")
+
+		result = GetRegisteredUpstreamsByTargetRef(targetRefB)
+		if len(result) != 1 {
+			t.Fatalf("Expected 1 upstream for gw-b, got %d", len(result))
 		}
-		if _, ok := result[key2]; !ok {
-			t.Error("Expected upstream from store2")
+	})
+
+	t.Run("no match returns empty", func(t *testing.T) {
+		GlobalMutatorRegistry = &MutatorRegistry{}
+
+		store := NewRegisteredDataStore()
+		store.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns1", "p1"), URL: "grpc://svc1:8081"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRefA},
+		)
+		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+		result := GetRegisteredUpstreamsByTargetRef(targetRefB)
+		if len(result) != 0 {
+			t.Errorf("Expected 0 upstreams for non-matching ref, got %d", len(result))
 		}
 	})
 
 	t.Run("skips non-RegisteredDataMutator wasm mutators", func(t *testing.T) {
 		GlobalMutatorRegistry = &MutatorRegistry{}
 
-		// Register a mock wasm mutator that is NOT a RegisteredDataMutator
 		mockMutator := &mockWasmConfigMutator{
 			mutateFn: func(_ *wasm.Config, _ []machinery.PolicyTargetReference) error { return nil },
 		}
 		GlobalMutatorRegistry.RegisterWasmConfigMutator(mockMutator)
 
-		// Also register a real one with data
 		store := NewRegisteredDataStore()
-		key := RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "p1"), URL: "grpc://svc:8081"}
-		store.SetUpstream(key, RegisteredUpstreamEntry{URL: "grpc://svc:8081", ClusterName: "ext-svc-8081"})
+		store.SetUpstream(
+			RegisteredUpstreamKey{Policy: testResourceID("Policy", "ns", "p1"), URL: "grpc://svc:8081"},
+			RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRefA},
+		)
 		GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
-		result := GetAllRegisteredUpstreams()
+		result := GetRegisteredUpstreamsByTargetRef(targetRefA)
 		if len(result) != 1 {
 			t.Errorf("Expected 1 upstream (skipping mock mutator), got %d", len(result))
 		}
@@ -1273,11 +1257,11 @@ func TestMutateWasmConfig_DeduplicatesIdenticalUpstreams(t *testing.T) {
 	// Two policies registering the same URL → same cluster name → same service config → same hash
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-1"), URL: "grpc://svc1:8081"},
-		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
 	)
 	store.SetUpstream(
 		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-2"), URL: "grpc://svc1:8081"},
-		RegisteredUpstreamEntry{URL: "grpc://svc1:8081", ClusterName: "ext-svc1-8081", TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
 	)
 
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)

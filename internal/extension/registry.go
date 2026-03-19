@@ -391,6 +391,31 @@ func (r *RegisteredDataStore) GetAllUpstreams() map[RegisteredUpstreamKey]Regist
 	return result
 }
 
+func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstreamEntry {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	var result []RegisteredUpstreamEntry
+	for _, entry := range r.registeredUpstreams {
+		if entry.TargetRef == targetRef {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func (r *RegisteredDataStore) GetRelevantUpstreams(targetRefs []machinery.PolicyTargetReference) []RegisteredUpstreamEntry {
+	var result []RegisteredUpstreamEntry
+	for _, targetRef := range targetRefs {
+		result = append(result, r.GetUpstreamsByTargetRef(TargetRef{
+			Group:     targetRef.GroupVersionKind().Group,
+			Kind:      targetRef.GroupVersionKind().Kind,
+			Name:      targetRef.GetName(),
+			Namespace: targetRef.GetNamespace(),
+		})...)
+	}
+	return result
+}
+
 func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 	r.upstreamsMutex.Lock()
 	defer r.upstreamsMutex.Unlock()
@@ -529,9 +554,8 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 
 	wasmConfig.RequestData = requestData
 
-	// Inject registered upstream services
-	allUpstreams := m.store.GetAllUpstreams()
-	for _, entry := range allUpstreams {
+	// Inject registered upstream services matching the current target refs
+	for _, entry := range m.store.GetRelevantUpstreams(targetRefs) {
 		timeout := entry.Timeout
 		svc := wasm.Service{
 			Endpoint:    entry.ClusterName,
@@ -570,13 +594,7 @@ func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstream
 	var result []RegisteredUpstreamEntry
 	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
 		if m, ok := mutator.(*RegisteredDataMutator[*wasm.Config]); ok {
-			m.store.upstreamsMutex.RLock()
-			for _, entry := range m.store.registeredUpstreams {
-				if entry.TargetRef == targetRef {
-					result = append(result, entry)
-				}
-			}
-			m.store.upstreamsMutex.RUnlock()
+			result = append(result, m.store.GetUpstreamsByTargetRef(targetRef)...)
 		}
 	}
 	return result

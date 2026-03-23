@@ -68,6 +68,8 @@ var (
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/finalizers,verbs=update
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=grpcroutes,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=grpcroutes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
@@ -300,6 +302,11 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOpti
 		controller.WithRunnable("httproute watcher", controller.Watch(
 			&gwapiv1.HTTPRoute{},
 			controller.HTTPRoutesResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithRunnable("grpcroute watcher", controller.Watch(
+			&gwapiv1.GRPCRoute{},
+			controller.GRPCRoutesResource,
 			metav1.NamespaceAll,
 		)),
 	)

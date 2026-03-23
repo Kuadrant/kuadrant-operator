@@ -376,3 +376,369 @@ func TestObjectsInRequestPath(t *testing.T) {
 		})
 	}
 }
+
+func TestObjectsInGRPCRequestPath(t *testing.T) {
+	gatewayClass := func(mutate ...func(*machinery.GatewayClass)) *machinery.GatewayClass {
+		o := &machinery.GatewayClass{
+			GatewayClass: &gatewayapiv1.GatewayClass{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayapiv1.SchemeGroupVersion.String(),
+					Kind:       machinery.GatewayClassGroupKind.Kind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "kuadrant",
+				},
+				Spec: gatewayapiv1.GatewayClassSpec{
+					ControllerName: "kuadrant.io/policy-controller",
+				},
+			},
+		}
+		for _, m := range mutate {
+			m(o)
+		}
+		return o
+	}
+
+	gateway := func(gc *machinery.GatewayClass, mutate ...func(*machinery.Gateway)) *machinery.Gateway {
+		if gc == nil {
+			gc = gatewayClass()
+		}
+		o := &machinery.Gateway{
+			Gateway: &gatewayapiv1.Gateway{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayapiv1.SchemeGroupVersion.String(),
+					Kind:       machinery.GatewayGroupKind.Kind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kuadrant",
+					Namespace: "default",
+				},
+				Spec: gatewayapiv1.GatewaySpec{
+					GatewayClassName: gatewayapiv1.ObjectName(gc.GetName()),
+					Listeners: []gatewayapiv1.Listener{
+						{
+							Name:     "example",
+							Hostname: ptr.To(gatewayapiv1.Hostname("*.example.com")),
+						},
+						{
+							Name: "wildcard",
+						},
+					},
+				},
+			},
+		}
+		for _, m := range mutate {
+			m(o)
+		}
+		return o
+	}
+
+	listener := func(g *machinery.Gateway, mutate ...func(*machinery.Listener)) *machinery.Listener {
+		if g == nil {
+			g = gateway(nil)
+		}
+		o := &machinery.Listener{
+			Gateway:  g,
+			Listener: &g.Spec.Listeners[0],
+		}
+		for _, m := range mutate {
+			m(o)
+		}
+		return o
+	}
+
+	grpcRoute := func(l *machinery.Listener, mutate ...func(*machinery.GRPCRoute)) *machinery.GRPCRoute {
+		parentRef := gatewayapiv1.ParentReference{
+			Name:      gatewayapiv1.ObjectName(l.Gateway.GetName()),
+			Namespace: ptr.To(gatewayapiv1.Namespace(l.Gateway.GetNamespace())),
+		}
+		if l.Name != "" {
+			parentRef.SectionName = ptr.To(gatewayapiv1.SectionName(l.Name))
+		}
+		o := &machinery.GRPCRoute{
+			GRPCRoute: &gatewayapiv1.GRPCRoute{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: gatewayapiv1.SchemeGroupVersion.String(),
+					Kind:       machinery.GRPCRouteGroupKind.Kind,
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "example",
+					Namespace: "default",
+				},
+				Spec: gatewayapiv1.GRPCRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{parentRef},
+					},
+					Hostnames: []gatewayapiv1.Hostname{"*.example.com"},
+					Rules: []gatewayapiv1.GRPCRouteRule{
+						{
+							Matches: []gatewayapiv1.GRPCRouteMatch{
+								{
+									Method: &gatewayapiv1.GRPCMethodMatch{
+										Service: ptr.To("com.example.FooService"),
+										Method:  ptr.To("GetFoo"),
+									},
+								},
+							},
+							BackendRefs: []gatewayapiv1.GRPCBackendRef{
+								{
+									BackendRef: gatewayapiv1.BackendRef{
+										BackendObjectReference: gatewayapiv1.BackendObjectReference{
+											Name: "foo",
+										},
+									},
+								},
+							},
+						},
+						{
+							Matches: []gatewayapiv1.GRPCRouteMatch{
+								{
+									Method: &gatewayapiv1.GRPCMethodMatch{
+										Service: ptr.To("com.example.BarService"),
+										Method:  ptr.To("GetBar"),
+									},
+								},
+							},
+							BackendRefs: []gatewayapiv1.GRPCBackendRef{
+								{
+									BackendRef: gatewayapiv1.BackendRef{
+										BackendObjectReference: gatewayapiv1.BackendObjectReference{
+											Name: "bar",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		for _, m := range mutate {
+			m(o)
+		}
+		return o
+	}
+
+	grpcRouteRule := func(r *machinery.GRPCRoute, mutate ...func(*machinery.GRPCRouteRule)) *machinery.GRPCRouteRule {
+		if r == nil {
+			r = grpcRoute(nil)
+		}
+		o := &machinery.GRPCRouteRule{
+			Name:          "rule-1",
+			GRPCRoute:     r,
+			GRPCRouteRule: &r.Spec.Rules[0],
+		}
+		for _, m := range mutate {
+			m(o)
+		}
+		return o
+	}
+
+	gc := gatewayClass()
+	g := gateway(gc)
+	l := listener(g)
+	r := grpcRoute(l)
+	rr := grpcRouteRule(r)
+
+	routeWithSectionName := grpcRoute(l)
+	routeRuleWithSectionName := grpcRouteRule(routeWithSectionName)
+
+	otherGateway := gateway(nil, func(g *machinery.Gateway) {
+		g.ObjectMeta.Name = "other"
+		g.Spec.GatewayClassName = "other"
+	})
+	otherListener := listener(otherGateway)
+	otherRoute := grpcRoute(otherListener, func(r *machinery.GRPCRoute) {
+		r.ObjectMeta.Name = "other"
+	})
+	otherRouteRule := grpcRouteRule(otherRoute)
+
+	routeWithGatewayMatchingHostname := grpcRoute(l, func(r *machinery.GRPCRoute) {
+		r.Spec.Hostnames = []gatewayapiv1.Hostname{"foo.example.com"}
+	})
+	routeRuleWithGatewayMatchingHostname := grpcRouteRule(routeWithGatewayMatchingHostname)
+
+	routeWithStrictListenerMatchingHostname := grpcRoute(l, func(r *machinery.GRPCRoute) {
+		r.Spec.Hostnames = []gatewayapiv1.Hostname{"foo.example.com"}
+	})
+	routeRuleWithStrictListenerMatchingHostname := grpcRouteRule(routeWithStrictListenerMatchingHostname)
+
+	permissiveListener := listener(g, func(l *machinery.Listener) {
+		l.Listener = &g.Spec.Listeners[1]
+	})
+	routeWithPermissiveListenerMatchingHostname := grpcRoute(permissiveListener, func(r *machinery.GRPCRoute) {
+		r.Spec.Hostnames = []gatewayapiv1.Hostname{"other.org"}
+	})
+	routeRuleWithPermissiveListenerMatchingHostname := grpcRouteRule(routeWithPermissiveListenerMatchingHostname)
+
+	routeWithUnmatchingHostname := grpcRoute(l, func(r *machinery.GRPCRoute) {
+		r.Spec.Hostnames = []gatewayapiv1.Hostname{"other.org"}
+	})
+
+	testCase := []struct {
+		name                  string
+		path                  []machinery.Targetable
+		expectedGatewayClass  *machinery.GatewayClass
+		expectedGateway       *machinery.Gateway
+		expectedListener      *machinery.Listener
+		expectedGRPCRoute     *machinery.GRPCRoute
+		expectedGRPCRouteRule *machinery.GRPCRouteRule
+		expectedError         error
+	}{
+		{
+			name:          "nil path",
+			expectedError: NewErrInvalidPath("empty path"),
+		},
+		{
+			name:          "empty path",
+			path:          []machinery.Targetable{},
+			expectedError: NewErrInvalidPath("empty path"),
+		},
+		{
+			name:                  "valid path",
+			path:                  []machinery.Targetable{gc, g, l, r, rr},
+			expectedGatewayClass:  gc,
+			expectedGateway:       g,
+			expectedListener:      l,
+			expectedGRPCRoute:     r,
+			expectedGRPCRouteRule: rr,
+		},
+		{
+			name:                  "valid path with route with section name",
+			path:                  []machinery.Targetable{gc, g, l, routeWithSectionName, routeRuleWithSectionName},
+			expectedGatewayClass:  gc,
+			expectedGateway:       g,
+			expectedListener:      l,
+			expectedGRPCRoute:     routeWithSectionName,
+			expectedGRPCRouteRule: routeRuleWithSectionName,
+		},
+		{
+			name:                 "gateway does not belong to the gateway class",
+			path:                 []machinery.Targetable{gc, otherGateway, l, r, rr},
+			expectedError:        NewErrInvalidPath("gateway does not belong to the gateway class"),
+			expectedGatewayClass: gc,
+			expectedGateway:      otherGateway,
+		},
+		{
+			name:                 "listener does not belong to the gateway",
+			path:                 []machinery.Targetable{gc, g, otherListener, r, rr},
+			expectedError:        NewErrInvalidPath("listener does not belong to the gateway"),
+			expectedGatewayClass: gc,
+			expectedGateway:      g,
+			expectedListener:     otherListener,
+		},
+		{
+			name:                 "grpc route does not belong to the listener",
+			path:                 []machinery.Targetable{gc, g, l, otherRoute, otherRouteRule},
+			expectedError:        NewErrInvalidPath("grpc route does not belong to the listener"),
+			expectedGatewayClass: gc,
+			expectedGateway:      g,
+			expectedListener:     l,
+			expectedGRPCRoute:    otherRoute,
+		},
+		{
+			name:                  "route with gateway matching hostname",
+			path:                  []machinery.Targetable{gc, g, l, routeWithGatewayMatchingHostname, routeRuleWithGatewayMatchingHostname},
+			expectedGatewayClass:  gc,
+			expectedGateway:       g,
+			expectedListener:      l,
+			expectedGRPCRoute:     routeWithGatewayMatchingHostname,
+			expectedGRPCRouteRule: routeRuleWithGatewayMatchingHostname,
+		},
+		{
+			name:                  "route with strict listener matching hostname",
+			path:                  []machinery.Targetable{gc, g, l, routeWithStrictListenerMatchingHostname, routeRuleWithStrictListenerMatchingHostname},
+			expectedGatewayClass:  gc,
+			expectedGateway:       g,
+			expectedListener:      l,
+			expectedGRPCRoute:     routeWithStrictListenerMatchingHostname,
+			expectedGRPCRouteRule: routeRuleWithStrictListenerMatchingHostname,
+		},
+		{
+			name:                  "route with permissive listener matching hostname",
+			path:                  []machinery.Targetable{gc, g, permissiveListener, routeWithPermissiveListenerMatchingHostname, routeRuleWithPermissiveListenerMatchingHostname},
+			expectedGatewayClass:  gc,
+			expectedGateway:       g,
+			expectedListener:      permissiveListener,
+			expectedGRPCRoute:     routeWithPermissiveListenerMatchingHostname,
+			expectedGRPCRouteRule: routeRuleWithPermissiveListenerMatchingHostname,
+		},
+		{
+			name:                 "route with unmatching hostname",
+			path:                 []machinery.Targetable{gc, g, l, routeWithUnmatchingHostname, rr},
+			expectedError:        NewErrInvalidPath("grpc route does not belong to the listener"),
+			expectedGatewayClass: gc,
+			expectedGateway:      g,
+			expectedListener:     l,
+			expectedGRPCRoute:    routeWithUnmatchingHostname,
+		},
+		{
+			name:                  "grpc route rule does not belong to the grpc route",
+			path:                  []machinery.Targetable{gc, g, l, r, otherRouteRule},
+			expectedError:         NewErrInvalidPath("grpc route rule does not belong to the grpc route"),
+			expectedGatewayClass:  gc,
+			expectedGateway:       g,
+			expectedListener:      l,
+			expectedGRPCRoute:     r,
+			expectedGRPCRouteRule: otherRouteRule,
+		},
+		{
+			name:          "invalid gateway class",
+			path:          []machinery.Targetable{rr, g, l, r, rr},
+			expectedError: NewErrInvalidPath("index 0 is not a GatewayClass"),
+		},
+		{
+			name:                 "invalid gateway",
+			path:                 []machinery.Targetable{gc, rr, l, r, rr},
+			expectedError:        NewErrInvalidPath("index 1 is not a Gateway"),
+			expectedGatewayClass: gc,
+		},
+		{
+			name:                 "invalid listener",
+			path:                 []machinery.Targetable{gc, g, rr, r, rr},
+			expectedError:        NewErrInvalidPath("index 2 is not a Listener"),
+			expectedGatewayClass: gc,
+			expectedGateway:      g,
+		},
+		{
+			name:                 "invalid grpc route",
+			path:                 []machinery.Targetable{gc, g, l, rr, rr},
+			expectedError:        NewErrInvalidPath("index 3 is not a GRPCRoute"),
+			expectedGatewayClass: gc,
+			expectedGateway:      g,
+			expectedListener:     l,
+		},
+		{
+			name:                 "invalid grpc route rule",
+			path:                 []machinery.Targetable{gc, g, l, r, gc},
+			expectedError:        NewErrInvalidPath("index 4 is not a GRPCRouteRule"),
+			expectedGatewayClass: gc,
+			expectedGateway:      g,
+			expectedListener:     l,
+			expectedGRPCRoute:    r,
+		},
+	}
+	for _, tc := range testCase {
+		t.Run(tc.name, func(subT *testing.T) {
+			gatewayClass, gateway, listener, grpcRoute, grpcRouteRule, err := ObjectsInGRPCRequestPath(tc.path)
+			if err != tc.expectedError {
+				t.Errorf("expected error %v, got %v", tc.expectedError, err)
+			}
+			if gatewayClass != tc.expectedGatewayClass {
+				t.Errorf("expected gatewayClass %v, got %v", tc.expectedGatewayClass, gatewayClass)
+			}
+			if gateway != tc.expectedGateway {
+				t.Errorf("expected gateway %v, got %v", tc.expectedGateway, gateway)
+			}
+			if listener != tc.expectedListener {
+				t.Errorf("expected listener %v, got %v", tc.expectedListener, listener)
+			}
+			if grpcRoute != tc.expectedGRPCRoute {
+				t.Errorf("expected grpcRoute %v, got %v", tc.expectedGRPCRoute, grpcRoute)
+			}
+			if grpcRouteRule != tc.expectedGRPCRouteRule {
+				t.Errorf("expected grpcRouteRule %v, got %v", tc.expectedGRPCRouteRule, grpcRouteRule)
+			}
+		})
+	}
+}

@@ -27,9 +27,16 @@ func (e ErrInvalidPath) Error() string {
 	return fmt.Sprintf("invalid path: %s", e.message)
 }
 
-// ObjectsInRequestPath returns the objects in a data plane path converted to their respective types
+// ObjectsInRequestPath returns the objects in an HTTP data plane path converted to their respective types.
 // The last returned value is an error that indicates if the path is valid if present.
+// Deprecated: Use ObjectsInHTTPRequestPath for HTTP routes or ObjectsInGRPCRequestPath for gRPC routes.
 func ObjectsInRequestPath(path []machinery.Targetable) (*machinery.GatewayClass, *machinery.Gateway, *machinery.Listener, *machinery.HTTPRoute, *machinery.HTTPRouteRule, error) {
+	return ObjectsInHTTPRequestPath(path)
+}
+
+// ObjectsInHTTPRequestPath returns the objects in an HTTP data plane path converted to their respective types.
+// The last returned value is an error that indicates if the path is valid if present.
+func ObjectsInHTTPRequestPath(path []machinery.Targetable) (*machinery.GatewayClass, *machinery.Gateway, *machinery.Listener, *machinery.HTTPRoute, *machinery.HTTPRouteRule, error) {
 	if len(path) == 0 {
 		return nil, nil, nil, nil, nil, NewErrInvalidPath("empty path")
 	}
@@ -95,6 +102,76 @@ func ObjectsInRequestPath(path []machinery.Targetable) (*machinery.GatewayClass,
 	}
 
 	return gatewayClass, gateway, listener, httpRoute, httpRouteRule, nil
+}
+
+// ObjectsInGRPCRequestPath returns the objects in a gRPC data plane path converted to their respective types.
+// The last returned value is an error that indicates if the path is valid if present.
+func ObjectsInGRPCRequestPath(path []machinery.Targetable) (*machinery.GatewayClass, *machinery.Gateway, *machinery.Listener, *machinery.GRPCRoute, *machinery.GRPCRouteRule, error) {
+	if len(path) == 0 {
+		return nil, nil, nil, nil, nil, NewErrInvalidPath("empty path")
+	}
+
+	gatewayClass, ok := path[0].(*machinery.GatewayClass)
+	if !ok {
+		return nil, nil, nil, nil, nil, NewErrInvalidPath("index 0 is not a GatewayClass")
+	}
+
+	gateway, ok := path[1].(*machinery.Gateway)
+	if !ok {
+		return gatewayClass, nil, nil, nil, nil, NewErrInvalidPath("index 1 is not a Gateway")
+	}
+	if gateway.Spec.GatewayClassName != gatewayapiv1.ObjectName(gatewayClass.GetName()) {
+		return gatewayClass, gateway, nil, nil, nil, NewErrInvalidPath("gateway does not belong to the gateway class")
+	}
+
+	listener, ok := path[2].(*machinery.Listener)
+	if !ok {
+		return gatewayClass, gateway, nil, nil, nil, NewErrInvalidPath("index 2 is not a Listener")
+	}
+	if listener.Gateway == nil || listener.Gateway.GetNamespace() != gateway.GetNamespace() || listener.Gateway.GetName() != gateway.GetName() {
+		return gatewayClass, gateway, listener, nil, nil, NewErrInvalidPath("listener does not belong to the gateway")
+	}
+
+	grpcRoute, ok := path[3].(*machinery.GRPCRoute)
+	if !ok {
+		return gatewayClass, gateway, listener, nil, nil, NewErrInvalidPath("index 3 is not a GRPCRoute")
+	}
+	if !lo.ContainsBy(grpcRoute.Spec.ParentRefs, func(ref gatewayapiv1.ParentReference) bool {
+		gateway := listener.Gateway
+		defaultGroup := gatewayapiv1.Group(gatewayapiv1.GroupName)
+		defaultKind := gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind)
+		defaultNamespace := gatewayapiv1.Namespace(grpcRoute.GetNamespace())
+		if ptr.Deref(ref.Group, defaultGroup) != gatewayapiv1.Group(gateway.GroupVersionKind().Group) || ptr.Deref(ref.Kind, defaultKind) != gatewayapiv1.Kind(gateway.GroupVersionKind().Kind) || ptr.Deref(ref.Namespace, defaultNamespace) != gatewayapiv1.Namespace(gateway.GetNamespace()) || ref.Name != gatewayapiv1.ObjectName(gateway.GetName()) {
+			return false
+		}
+		if sectionName := ptr.Deref(ref.SectionName, gatewayapiv1.SectionName("")); sectionName != "" && sectionName != listener.Name {
+			return false
+		}
+		hostnameSupersets := []gatewayapiv1.Hostname{"*"}
+		if listener.Hostname != nil {
+			hostnameSupersets = []gatewayapiv1.Hostname{*(listener.Hostname)}
+		}
+		if len(grpcRoute.Spec.Hostnames) > 0 {
+			return lo.SomeBy(grpcRoute.Spec.Hostnames, func(routeHostname gatewayapiv1.Hostname) bool {
+				return lo.SomeBy(hostnameSupersets, func(hostnameSuperset gatewayapiv1.Hostname) bool {
+					return utils.Name(routeHostname).SubsetOf(utils.Name(hostnameSuperset))
+				})
+			})
+		}
+		return true
+	}) {
+		return gatewayClass, gateway, listener, grpcRoute, nil, NewErrInvalidPath("grpc route does not belong to the listener")
+	}
+
+	grpcRouteRule, ok := path[4].(*machinery.GRPCRouteRule)
+	if !ok {
+		return gatewayClass, gateway, listener, grpcRoute, nil, NewErrInvalidPath("index 4 is not a GRPCRouteRule")
+	}
+	if grpcRouteRule.GRPCRoute == nil || grpcRouteRule.GRPCRoute.GetNamespace() != grpcRoute.GetNamespace() || grpcRouteRule.GRPCRoute.GetName() != grpcRoute.GetName() {
+		return gatewayClass, gateway, listener, grpcRoute, grpcRouteRule, NewErrInvalidPath("grpc route rule does not belong to the grpc route")
+	}
+
+	return gatewayClass, gateway, listener, grpcRoute, grpcRouteRule, nil
 }
 
 // NamespacedNameFromLocator returns a k8s namespaced name from a Policy Machinery object locator

@@ -402,11 +402,6 @@ The demo shows:
 
 ## Execution
 
-### Todo
-
-- [ ] Create demo walkthrough and interactive demo script ([#1797](https://github.com/Kuadrant/kuadrant-operator/issues/1797))
-  - [ ] Interactive demo script or walkthrough document
-
 ### Completed
 
 - [x] Extend RegisteredDataStore with upstream storage ([#1790](https://github.com/Kuadrant/kuadrant-operator/issues/1790))

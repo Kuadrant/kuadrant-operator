@@ -102,7 +102,7 @@ func RateLimitClusterName(gatewayName string) string {
 }
 
 func rateLimitClusterPatch(host string, port int, mTLS bool) map[string]any {
-	return buildClusterPatch(kuadrant.KuadrantRateLimitClusterName, host, port, mTLS, true)
+	return buildClusterPatch(kuadrant.KuadrantRateLimitClusterName, host, port, mTLS)
 }
 
 // wasmActionFromLimit builds a wasm rate-limit action for a given limit.

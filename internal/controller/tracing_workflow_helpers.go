@@ -34,7 +34,7 @@ func TracingClusterName(gatewayName string) string {
 
 // tracingClusterPatch returns the Envoy cluster configuration for the tracing service
 func tracingClusterPatch(host string, port int, mTLS bool) map[string]any {
-	return buildClusterPatch(kuadrant.KuadrantTracingClusterName, host, port, mTLS, true)
+	return buildClusterPatch(kuadrant.KuadrantTracingClusterName, host, port, mTLS)
 }
 
 // parseTracingEndpoint parses a tracing endpoint URL and returns host and port

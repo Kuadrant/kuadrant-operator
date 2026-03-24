@@ -152,7 +152,142 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 	state.Store(StateEnvoyGatewayExtensionsModified, modifiedGateways)
 
+	// Reconcile EnvoyPatchPolicy cluster patches for registered upstreams
+	r.reconcileUpstreamClusters(ctx, topology, gateways)
+
 	return nil
+}
+
+func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway) {
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("reconcileUpstreamClusters")
+
+	desiredPolicies := make(map[k8stypes.NamespacedName]struct{})
+
+	for _, gateway := range gateways {
+		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
+
+		gatewayUpstreams := extension.GetRegisteredUpstreamsByTargetRef(extension.TargetRef{
+			Group:     "gateway.networking.k8s.io",
+			Kind:      "Gateway",
+			Name:      gateway.GetName(),
+			Namespace: gateway.GetNamespace(),
+		})
+
+		if len(gatewayUpstreams) == 0 {
+			continue
+		}
+
+		desiredPolicy, err := buildUpstreamEnvoyPatchPolicy(gateway, gatewayUpstreams)
+		if err != nil {
+			logger.Error(err, "failed to build upstream envoy patch policy", "gateway", gatewayKey.String())
+			continue
+		}
+		desiredPolicies[k8stypes.NamespacedName{Name: desiredPolicy.GetName(), Namespace: desiredPolicy.GetNamespace()}] = struct{}{}
+
+		resource := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(desiredPolicy.GetNamespace())
+
+		existingObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
+			return child.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind &&
+				child.GetName() == desiredPolicy.GetName() &&
+				child.GetNamespace() == desiredPolicy.GetNamespace() &&
+				labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredPolicy.GetLabels()))
+		})
+
+		if !found {
+			unstructured, err := controller.Destruct(desiredPolicy)
+			if err != nil {
+				logger.Error(err, "failed to destruct envoypatchpolicy", "gateway", gatewayKey.String())
+				continue
+			}
+			if _, err = resource.Create(ctx, unstructured, metav1.CreateOptions{}); err != nil {
+				logger.Error(err, "failed to create upstream envoypatchpolicy", "gateway", gatewayKey.String())
+			}
+			continue
+		}
+
+		existing := existingObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy)
+		if kuadrantenvoygateway.EqualEnvoyPatchPolicies(existing, desiredPolicy) {
+			continue
+		}
+
+		existing.Spec = envoygatewayv1alpha1.EnvoyPatchPolicySpec{
+			TargetRef:   desiredPolicy.Spec.TargetRef,
+			Type:        desiredPolicy.Spec.Type,
+			JSONPatches: desiredPolicy.Spec.JSONPatches,
+		}
+		unstructured, err := controller.Destruct(existing)
+		if err != nil {
+			logger.Error(err, "failed to destruct envoypatchpolicy", "gateway", gatewayKey.String())
+			continue
+		}
+		if _, err = resource.Update(ctx, unstructured, metav1.UpdateOptions{}); err != nil {
+			logger.Error(err, "failed to update upstream envoypatchpolicy", "gateway", gatewayKey.String())
+		}
+	}
+
+	// Cleanup stale upstream EnvoyPatchPolicies
+	stale := topology.Objects().Items(func(o machinery.Object) bool {
+		_, desired := desiredPolicies[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
+		return o.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind &&
+			labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(UpstreamObjectLabels()) &&
+			!desired
+	})
+	for _, pp := range stale {
+		if err := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(pp.GetNamespace()).Delete(ctx, pp.GetName(), metav1.DeleteOptions{}); err != nil {
+			logger.Error(err, "failed to delete stale upstream envoypatchpolicy", "envoypatchpolicy", fmt.Sprintf("%s/%s", pp.GetNamespace(), pp.GetName()))
+		}
+	}
+}
+
+func buildUpstreamEnvoyPatchPolicy(gateway *machinery.Gateway, upstreams []extension.RegisteredUpstreamEntry) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
+	policy := &envoygatewayv1alpha1.EnvoyPatchPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       kuadrantenvoygateway.EnvoyPatchPolicyGroupKind.Kind,
+			APIVersion: envoygatewayv1alpha1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      UpstreamClusterName(gateway.GetName()),
+			Namespace: gateway.GetNamespace(),
+			Labels:    UpstreamObjectLabels(),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
+					Kind:               gateway.GroupVersionKind().Kind,
+					Name:               gateway.Name,
+					UID:                gateway.UID,
+					BlockOwnerDeletion: ptr.To(true),
+					Controller:         ptr.To(true),
+				},
+			},
+		},
+		Spec: envoygatewayv1alpha1.EnvoyPatchPolicySpec{
+			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: gatewayapiv1alpha2.Group(machinery.GatewayGroupKind.Group),
+				Kind:  gatewayapiv1alpha2.Kind(machinery.GatewayGroupKind.Kind),
+				Name:  gatewayapiv1alpha2.ObjectName(gateway.GetName()),
+			},
+			Type: envoygatewayv1alpha1.JSONPatchEnvoyPatchType,
+		},
+	}
+
+	var allPatches []envoygatewayv1alpha1.EnvoyJSONPatchConfig
+	seen := make(map[string]struct{})
+	for _, entry := range upstreams {
+		if _, exists := seen[entry.ClusterName]; exists {
+			continue
+		}
+		seen[entry.ClusterName] = struct{}{}
+		patches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(entry.ClusterName, entry.Host, entry.Port, false, func(h string, p int, _ bool) map[string]any {
+			return buildClusterPatch(entry.ClusterName, h, p, false)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to build cluster patch for %q: %w", entry.ClusterName, err)
+		}
+		allPatches = append(allPatches, patches...)
+	}
+	policy.Spec.JSONPatches = allPatches
+
+	return policy, nil
 }
 
 // buildWasmConfigs returns a map of envoy gateway gateway locators to an ordered list of corresponding wasm policies

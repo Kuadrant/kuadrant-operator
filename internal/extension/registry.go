@@ -182,8 +182,9 @@ type RegisteredUpstreamKey struct {
 }
 
 type RegisteredUpstreamEntry struct {
-	URL         string
 	ClusterName string
+	Host        string
+	Port        int
 	TargetRef   TargetRef
 	FailureMode string
 	Timeout     string
@@ -402,6 +403,19 @@ func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []Reg
 	return result
 }
 
+func (r *RegisteredDataStore) GetRelevantUpstreams(targetRefs []machinery.PolicyTargetReference) []RegisteredUpstreamEntry {
+	var result []RegisteredUpstreamEntry
+	for _, targetRef := range targetRefs {
+		result = append(result, r.GetUpstreamsByTargetRef(TargetRef{
+			Group:     targetRef.GroupVersionKind().Group,
+			Kind:      targetRef.GroupVersionKind().Kind,
+			Name:      targetRef.GetName(),
+			Namespace: targetRef.GetNamespace(),
+		})...)
+	}
+	return result
+}
+
 func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 	r.upstreamsMutex.Lock()
 	defer r.upstreamsMutex.Unlock()
@@ -540,9 +554,8 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 
 	wasmConfig.RequestData = requestData
 
-	// Inject registered upstream services
-	allUpstreams := m.store.GetAllUpstreams()
-	for _, entry := range allUpstreams {
+	// Inject registered upstream services matching the current target refs
+	for _, entry := range m.store.GetRelevantUpstreams(targetRefs) {
 		timeout := entry.Timeout
 		svc := wasm.Service{
 			Endpoint:    entry.ClusterName,
@@ -570,4 +583,19 @@ func HashUpstreamServiceConfig(svc wasm.Service) string {
 	data := fmt.Sprintf("%s|%s|%s|%s", svc.Type, svc.Endpoint, svc.FailureMode, timeout)
 	h := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", h[:8])
+}
+
+// GetRegisteredUpstreamsByTargetRef returns registered upstreams matching the given targetRef,
+// aggregated across all extension data stores in the GlobalMutatorRegistry.
+func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstreamEntry {
+	GlobalMutatorRegistry.mutex.RLock()
+	defer GlobalMutatorRegistry.mutex.RUnlock()
+
+	var result []RegisteredUpstreamEntry
+	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
+		if m, ok := mutator.(*RegisteredDataMutator[*wasm.Config]); ok {
+			result = append(result, m.store.GetUpstreamsByTargetRef(targetRef)...)
+		}
+	}
+	return result
 }

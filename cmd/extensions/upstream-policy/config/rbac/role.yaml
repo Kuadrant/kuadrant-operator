@@ -1,0 +1,30 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: upstream-policy-manager-role
+rules:
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - upstreampolicies
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - upstreampolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - extensions.kuadrant.io
+  resources:
+  - upstreampolicies/status
+  verbs:
+  - get
+  - patch
+  - update

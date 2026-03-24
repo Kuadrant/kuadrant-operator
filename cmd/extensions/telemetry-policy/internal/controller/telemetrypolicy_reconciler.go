@@ -74,6 +74,7 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 			return calculateErrorStatus(pol, err), err
 		}
 	}
+
 	return calculateEnforcedStatus(pol, nil),
 		nil
 }

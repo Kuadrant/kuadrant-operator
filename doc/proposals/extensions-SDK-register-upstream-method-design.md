@@ -45,17 +45,17 @@ Phase 1: Extension registers a service
 ──────────────────────────────────────
 
 Extension              SDK Client           kuadrant-operator (gRPC server)
-   │                       │                        │
-   │── RegisterUpstreamMethod  ──►│                        │
-   │   (policy,            │── RegisterUpstreamMethod ────►│
-   │    UpstreamConfig)     │   RPC (unix socket)    │
-   │                       │                        │── Dial svc.URL (reachability check)
-   │                       │                        │── Parse svc.URL → host + port
-   │                       │                        │── Generate cluster name (from URL)
-   │                       │                        │── Store in RegisteredDataStore
-   │                       │◄── OK / Unavailable ───│
-   │◄── nil / error  ──────│                        │── Trigger reconciliation
-   │                       │                        │
+   │                              │                               │
+   │── RegisterUpstreamMethod  ──►│                               │
+   │   (policy,                   │── RegisterUpstreamMethod ────►│
+   │    UpstreamConfig)           │   RPC (unix socket)           │
+   │                              │                               │── Dial svc.URL (reachability check)
+   │                              │                               │── Parse svc.URL → host + port (stored on entry)
+   │                              │                               │── Generate cluster name (from host + port)
+   │                              │                               │── Store in RegisteredDataStore
+   │                              │◄── OK / Unavailable ──────────│
+   │◄── nil / error  ─────────────│                               │── Trigger reconciliation
+   │                              │                               │
 
 
 Phase 2: Kuadrant-Operator reconciles the registered service
@@ -241,8 +241,9 @@ type RegisteredUpstreamKey struct {
 }
 
 type RegisteredUpstreamEntry struct {
-    URL         string       // original URL from the extension
-    ClusterName string       // generated: ext-{host}-{port}
+    ClusterName string     // generated: ext-{host}-{port}
+    Host        string     // parsed from URL at registration time
+    Port        int        // parsed from URL at registration time (0 if unspecified)
     TargetRef   TargetRef  // extracted from the policy at registration time
     FailureMode string
     Timeout     string
@@ -256,17 +257,17 @@ type TargetRef struct {
 }
 ```
 
-The key contains the `Policy` identity; the entry does not duplicate it. The `TargetRef` is extracted from the policy at registration time and stored in the entry so that reconcilers can determine which gateway's wasm config should include the upstream — without needing to re-resolve the policy object. `ClearPolicyData` clears all entries matching the policy's `ResourceID`.
+The key contains the `Policy` identity; the entry does not duplicate it. The `Host` and `Port` are parsed from the URL at registration time so that reconcilers can build cluster patches without re-parsing. The `TargetRef` is extracted from the policy at registration time and stored in the entry so that reconcilers can determine which gateway's wasm config should include the upstream — without needing to re-resolve the policy object. `ClearPolicyData` clears all entries matching the policy's `ResourceID`.
 
 #### 2. extensionService (internal/extension/manager.go)
 
 New `RegisterUpstreamMethod` handler:
-- Parses `request.Url` to extract host and port
+- Parses `request.Url` to extract host and port (stored as `Host` string and `Port` int on the entry)
 - Performs a gRPC dial attempt to the URL with a 5-second timeout
 - If dial fails, returns gRPC status `Unavailable` with descriptive message
 - If dial succeeds, generates Envoy cluster name: `ext-` + host + port with invalid chars replaced by hyphens
 - Extracts the `TargetRef` from the policy in the request
-- Stores `RegisteredUpstreamEntry` (with `ClusterName` and `TargetRef`) in `RegisteredDataStore` keyed by `(Policy, URL)`
+- Stores `RegisteredUpstreamEntry` (with `ClusterName`, `Host`, `Port`, and `TargetRef`) in `RegisteredDataStore` keyed by `(Policy, URL)`
 - Triggers reconciliation via `changeNotifier`
 
 #### 3. MutatorRegistry — WasmConfig mutation (internal/extension/registry.go)
@@ -293,15 +294,15 @@ Multiple policies registering the same URL produce the same cluster name, and th
 #### 4. IstioExtensionReconciler (internal/controller/istio_extension_reconciler.go)
 
 Extend the existing reconciler to handle registered upstreams:
-- In `buildWasmConfigs`: read registered upstreams from `RegisteredDataStore`, filter by `TargetRef` to include only entries whose target resolves to the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
-- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches for upstreams targeting that gateway using `buildClusterPatch(entry.ClusterName, host, port, false, true)` (HTTP/2 enabled)
+- In `buildWasmConfigs`: call `GetRegisteredUpstreamsByTargetRef` to retrieve upstreams matching the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder` via `WithService(wasmServiceKey, service)` where `service.Endpoint = entry.ClusterName`
+- In `Reconcile`: for each gateway, also create/update an `EnvoyFilter` with cluster patches using `entry.Host` and `entry.Port` directly (no URL re-parsing). Duplicate `ClusterName` entries are deduplicated before building patches. HTTP/2 is always enabled.
 - Cleanup: delete cluster EnvoyFilters when registered upstreams are removed
 
 #### 5. EnvoyGatewayExtensionReconciler (internal/controller/envoy_gateway_extension_reconciler.go)
 
 Same changes as the Istio variant:
-- In `buildWasmConfigs`: filter registered upstreams by `TargetRef` for the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder`
-- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches for upstreams targeting that gateway using `BuildEnvoyPatchPolicyClusterPatch` with `entry.ClusterName`
+- In `buildWasmConfigs`: call `GetRegisteredUpstreamsByTargetRef` to retrieve upstreams matching the current gateway, generate wasm service keys by hashing config values, and add them to the `ServiceBuilder`
+- In `Reconcile`: create/update `EnvoyPatchPolicy` resources with cluster patches using `entry.Host` and `entry.Port` directly. Duplicate `ClusterName` entries are deduplicated before building patches.
 
 #### 7. Extension Controller client side (pkg/extension/controller/controller.go)
 
@@ -390,30 +391,21 @@ Support registering upstreams that require authentication on the gRPC connection
 
 ## Demo
 
-The demo uses the already-deployed Authorino instance (part of the standard Kuadrant stack) to verify RegisterUpstreamMethod without deploying any new services. A minimal `DemoPolicy` extension registers Authorino's `envoy.service.auth.v3.Authorization/Check` endpoint as an extension-managed upstream.
+The demo uses the already-deployed Authorino instance (part of the standard Kuadrant stack) to verify RegisterUpstreamMethod without deploying any new services. A sample `UpstreamPolicy` extension (`cmd/extensions/upstream-policy/`) registers a gRPC upstream specified in its spec as an extension-managed upstream.
 
-The demo should show:
+The demo shows:
 
-- An `ext-` prefixed Envoy cluster is created targeting the Authorino gRPC address
-- A corresponding `ext-` prefixed entry appears in the wasm config services map
-- The built-in `auth-service` is unaffected — both coexist
-- Deleting the DemoPolicy removes the cluster and wasm service entry (cleanup)
-- The upstream is callable from the data plane when an action is manually wired to reference it
+- An `ext-` prefixed Envoy cluster is created targeting the upstream gRPC address
+- The cluster is loaded and healthy in the Istio gateway proxy (verified via Envoy admin API)
+- Deleting the UpstreamPolicy removes the cluster (cleanup)
+- A corresponding `ext-` prefixed wasm service entry is injected when a data-plane policy (AuthPolicy/RateLimitPolicy) also targets the gateway — the WasmPlugin is only created when ActionSets exist
 
 ## Execution
 
 ### Todo
 
-- [ ] Extend IstioExtensionReconciler with registered upstream support ([#1793](https://github.com/Kuadrant/kuadrant-operator/issues/1793))
-  - [ ] Unit tests
-  - [ ] Integration tests
-- [ ] Extend EnvoyGatewayExtensionReconciler with registered upstream support ([#1794](https://github.com/Kuadrant/kuadrant-operator/issues/1794))
-  - [ ] Unit tests
-  - [ ] Integration tests
-- [ ] Create demo entities and interactive demo script ([#1797](https://github.com/Kuadrant/kuadrant-operator/issues/1797))
-  - [ ] DemoPolicy CRD and extension reconciler (`cmd/extensions/demo-policy/`)
-  - [ ] DemoPolicy manifest (`examples/demo-policy/demo-policy.yaml`)
-  - [ ] Interactive demo script (`examples/demo-policy/demo.sh`) that walks through Part 1 and Part 2, pausing at each step for discussion
+- [ ] Create demo walkthrough and interactive demo script ([#1797](https://github.com/Kuadrant/kuadrant-operator/issues/1797))
+  - [ ] Interactive demo script or walkthrough document
 
 ### Completed
 
@@ -426,8 +418,35 @@ The demo should show:
 - [x] Add RegisterUpstreamMethod to KuadrantCtx interface and UpstreamConfig type ([#1796](https://github.com/Kuadrant/kuadrant-operator/issues/1796))
 - [x] Implement server-side RegisterUpstreamMethod handler ([#1791](https://github.com/Kuadrant/kuadrant-operator/issues/1791))
   - [x] Unit tests
+- [x] Extend Istio and EnvoyGateway extension reconcilers with registered upstream support ([#1793](https://github.com/Kuadrant/kuadrant-operator/issues/1793))
+  - [x] Istio: EnvoyFilter cluster creation, wasm service injection via mutateWasmConfig
+  - [x] EnvoyGateway: EnvoyPatchPolicy cluster creation, wasm service injection via mutateWasmConfig
+  - [x] Sample `UpstreamPolicy` extension (`cmd/extensions/upstream-policy/`) for local verification
 
 ## Change Log
+
+### 2026-03-18 — Refactor upstream entry storage and deduplication
+
+- Replaced `URL` field on `RegisteredUpstreamEntry` with `Host` (string) and `Port` (int), parsed at registration time
+- Removed `parseUpstreamURL` from `upstream_workflow_helpers.go` — reconcilers now use `entry.Host` and `entry.Port` directly
+- Replaced `GetAllRegisteredUpstreams` and store-level `GetUpstreamsByTargetRef` with a single `GetRegisteredUpstreamsByTargetRef` that filters by `TargetRef` across all stores in the `GlobalMutatorRegistry`
+- Removed `upstreamTargetsGateway` helper — filtering now happens inside `GetRegisteredUpstreamsByTargetRef`
+- Added `ClusterName`-based deduplication in `buildUpstreamEnvoyFilter` and `buildUpstreamEnvoyPatchPolicy` to prevent duplicate cluster patches when multiple policies register the same upstream
+
+### 2026-03-17 — Complete reconciler implementation and sample extension
+
+- Implemented `reconcileUpstreamClusters` in both `IstioExtensionReconciler` and `EnvoyGatewayExtensionReconciler`
+- Added `mutateWasmConfig` upstream service injection with hash-based deduplication
+- Added `HashUpstreamServiceConfig` helper
+- Created shared helpers in `upstream_workflow_helpers.go` (label selectors)
+- Created sample `UpstreamPolicy` extension (`cmd/extensions/upstream-policy/`) for local verification
+- Updated Demo section: replaced `DemoPolicy` with `UpstreamPolicy`, clarified that wasm service entry only appears when a data-plane policy also targets the gateway (WasmPlugin requires ActionSets)
+- Moved #1793 to Completed, simplified #1797 todo to focus on walkthrough/demo script
+
+### 2026-03-16 — Merge Istio and EnvoyGateway reconciler issues
+
+- Closed #1794 (EnvoyGateway) and merged into #1793 (Istio) since the implementations are symmetric and can be delivered in a single PR
+- Updated #1793 title and checklist to cover both providers
 
 ### 2026-03-06 — Add Service and Method to UpstreamConfig
 

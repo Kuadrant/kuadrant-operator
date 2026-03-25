@@ -29,42 +29,45 @@ import (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// UpstreamPolicy registers an external gRPC upstream service with the Kuadrant data plane.
-type UpstreamPolicy struct {
+// ThreatPolicy attaches to HTTPRoutes or Gateways to enforce threat assessment
+// using an external ThreatAssessmentService.
+type ThreatPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   UpstreamPolicySpec   `json:"spec,omitempty"`
-	Status UpstreamPolicyStatus `json:"status,omitempty"`
+	Spec   ThreatPolicySpec   `json:"spec,omitempty"`
+	Status ThreatPolicyStatus `json:"status,omitempty"`
 }
 
-type UpstreamPolicySpec struct {
-	// Reference to the Gateway to which this policy applies.
+type ThreatPolicySpec struct {
+	// Reference to the Gateway API resource to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
-	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported value is 'Gateway'"
+	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
-	// URL of the upstream gRPC service, e.g. "grpc://my-service.namespace.svc.cluster.local:50051"
-	// +kubebuilder:validation:MinLength=1
-	URL string `json:"url"`
+	// Threshold is the threat level threshold (0-10) for blocking requests.
+	// Requests with a threat score at or above this threshold will be blocked.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=10
+	Threshold int `json:"threshold"`
 }
 
-func (p *UpstreamPolicy) GetName() string {
+func (p *ThreatPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *UpstreamPolicy) GetNamespace() string {
+func (p *ThreatPolicy) GetNamespace() string {
 	return p.Namespace
 }
 
-func (p *UpstreamPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+func (p *ThreatPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
 	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 		p.Spec.TargetRef,
 	}
 }
 
-// UpstreamPolicyStatus defines the observed state of UpstreamPolicy
-type UpstreamPolicyStatus struct {
+// ThreatPolicyStatus defines the observed state of ThreatPolicy
+type ThreatPolicyStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
@@ -75,7 +78,7 @@ type UpstreamPolicyStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-func (s *UpstreamPolicyStatus) Equals(other *UpstreamPolicyStatus, logger logr.Logger) bool {
+func (s *ThreatPolicyStatus) Equals(other *ThreatPolicyStatus, logger logr.Logger) bool {
 	if s.ObservedGeneration != other.ObservedGeneration {
 		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
 		logger.V(1).Info("status observedGeneration not equal", "difference", diff)
@@ -95,13 +98,13 @@ func (s *UpstreamPolicyStatus) Equals(other *UpstreamPolicyStatus, logger logr.L
 
 //+kubebuilder:object:root=true
 
-// UpstreamPolicyList contains a list of UpstreamPolicy
-type UpstreamPolicyList struct {
+// ThreatPolicyList contains a list of ThreatPolicy
+type ThreatPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []UpstreamPolicy `json:"items"`
+	Items           []ThreatPolicy `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&UpstreamPolicy{}, &UpstreamPolicyList{})
+	SchemeBuilder.Register(&ThreatPolicy{}, &ThreatPolicyList{})
 }

@@ -92,16 +92,22 @@ type UpstreamConfig struct {
     // Required when Dispatch is set.
     Callback string
 
-    // OnError specifies behavior when the upstream call fails (timeout / gRPC error).
-    // Accepted values: "allow" (pass — default), "deny" (block with 500),
-    // or a CEL expression using Allow()/Deny().
-    // Default: "allow"
+    // OnError is a CEL expression evaluated when the gRPC call fails at runtime
+    // (timeout, error status, network failure). Unlike FailureMode, this allows
+    // custom error codes and messages.
+    // Examples:
+    //   "Allow()"                              — fail-open (default)
+    //   "Deny(503, 'Threat service unavailable')" — fail with specific status
+    // Default: "Allow()"
     OnError string
 
     // Timeout overrides the default per-call timeout (default: "100ms").
     Timeout string
 
-    // FailureMode controls cluster-level failure (service unreachable at startup).
+    // FailureMode controls cluster-level failure at the wasm Service level —
+    // i.e. what happens if the Envoy cluster itself is unavailable (connection
+    // refused, DNS failure). This is coarser than OnError: binary allow/deny
+    // with no custom message.
     // Default: FailureModeAllow
     FailureMode FailureModeType
 }
@@ -159,8 +165,8 @@ type Action struct {
     // Must produce Allow() or Deny(code, message).
     Callback string `json:"callback,omitempty"`
 
-    // OnError is the behavior when the upstream call fails.
-    // "allow" | "deny" | CEL expression.
+    // OnError is a CEL expression evaluated when the upstream call fails at runtime.
+    // Supports custom status codes and messages e.g. Deny(503, "unavailable").
     OnError string `json:"onError,omitempty"`
 }
 ```
@@ -261,6 +267,67 @@ Completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828): `
 - `OnError: "deny"` (fail-closed) is the safer default for high-security policies; extensions should document their chosen default.
 - Wasm config is namespace-scoped; extensions cannot inject actions into gateways their policy does not target (enforced by `TargetRef` checks).
 
+## Alternatives Considered
+
+### Option A: Separate `AddUpstreamDispatch` method
+
+Keep `RegisterUpstreamMethod` for cluster registration only and introduce a second SDK method for dispatch configuration:
+
+```go
+kuadrantCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{URL: threatServiceURL})
+
+kuadrantCtx.AddUpstreamDispatch(ctx, policy, types.UpstreamDispatchConfig{
+    URL:      threatServiceURL,
+    Dispatch: `ThreatRequest{uri: request.path}`,
+    Callback: `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
+    OnError:  `Deny(503, "Threat service unavailable")`,
+})
+```
+
+**Rejected because:** The cluster registration and dispatch configuration are always needed together. Splitting them into two calls that must both be made adds ceremony without benefit. Extension authors would need to remember to call both, and the URL would be repeated as the linking key.
+
+### Option B: Functional options
+
+```go
+kuadrantCtx.RegisterUpstreamMethod(ctx, policy, "grpc://threat-service:8080",
+    types.WithGRPCDispatch("threat.v1.ThreatService", "Check",
+        `ThreatRequest{uri: request.path}`,
+        `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
+    ),
+    types.WithFailureMode(types.FailureModeAllow),
+    types.WithTimeout("150ms"),
+)
+```
+
+**Rejected because:** Functional options are extensible but obscure which fields are required vs optional. The compiler cannot enforce that `WithGRPCDispatch` is provided when needed. Option ordering can cause confusion around validation.
+
+### Option C: Upstream context handle (not chosen for this issue, preferred long-term)
+
+```go
+upstream, err := kuadrantCtx.RegisterUpstream(ctx, policy, "grpc://threat-service:8080")
+
+upstream.OnRequest(types.GRPCCall{
+    Service:  "threat.v1.ThreatService",
+    Method:   "Check",
+    Request:  `ThreatRequest{uri: request.path, identity: auth.identity}`,
+    Response: `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
+    OnError:  `Deny(503, "Threat service unavailable")`,
+})
+```
+
+This pattern naturally models the 1:N relationship between an upstream (one Envoy cluster / wasm Service entry) and multiple call configurations (multiple wasm Actions). It also cleanly separates request-phase and response-phase calls via `OnRequest`/`OnResponse`, enabling future use cases such as response enrichment (adding headers based on upstream response data) where the semantics differ from request-phase Allow/Deny decisions.
+
+**Not chosen for this issue because:** The current requirements are strictly request-phase, Allow/Deny only, with one dispatch per upstream. The upstream context adds statefulness and complexity that is not yet justified. Revisit if response-phase calls or multiple dispatch configurations per upstream become a requirement.
+
+### `OnError` vs `FailureMode`
+
+Both fields are kept because they operate at different levels:
+
+- `FailureMode` maps to the wasm `Service` entry — binary allow/deny at the cluster level (connection refused, DNS failure). Coarse but sufficient for infrastructure-level failures.
+- `OnError` maps to the wasm `Action` — a CEL expression evaluated when a specific gRPC call fails at runtime (timeout, error status). Supports custom HTTP status codes and messages: `Deny(503, "Threat service temporarily unavailable")`.
+
+Collapsing them into one field would either lose the expressiveness of CEL error responses or require CEL parsing at the Service level, which the wasm-shim does not support.
+
 ## Implementation Plan
 
 > Envoy cluster generation and wasm `Service` injection are done ([#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)). Remaining steps:
@@ -282,7 +349,7 @@ Completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828): `
 
 - **Wasm-shim changes**: Being implemented in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (draft). The `dynamic` service type, `grpcService`/`grpcMethod` fields, and descriptor fetching via `kuadrant.v1.DescriptorService` are all defined there. Operator work on `dispatch`/`callback` Action fields should coordinate with that PR.
 - **Proto reflection**: Resolved — wasm-shim uses `prost-reflect` with `DescriptorPool`s fetched at config activation time from a `kuadrant.v1.DescriptorService` sidecar. The operator does not need to know about proto types.
-- **Beyond Allow/Deny**: Should `Callback` support header mutation or redirect? Deferred — scope is Allow/Deny only for now.
+- **Response-phase calls and header mutation**: A natural follow-on is calling an upstream in the response phase (after the backend has responded) and mutating response headers based on the result — e.g. enriching the response with a threat score header. This requires different `Callback` semantics (`AddHeader`/`SetHeader` rather than `Allow`/`Deny`) and likely the upstream context pattern (Option C above). Deferred — out of scope for this issue.
 - **Multi-dispatch per policy**: Should a single policy be able to register multiple upstream calls (e.g., call threat service AND fraud service)? Current API allows multiple `RegisterUpstreamMethod` calls with different URLs; each generates its own Action. Ordering between actions is undefined — needs clarification.
 
 ## Execution
@@ -308,6 +375,13 @@ Completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828): `
 - [x] Envoy cluster generation (Istio + Envoy Gateway) and wasm `Service` entry injection — [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)
 
 ## Change Log
+
+### 2026-03-27 — Alternatives and OnError clarification
+
+- Added Alternatives Considered section covering Options A (separate method), B (functional options), and C (upstream context handle).
+- Noted upstream context (Option C) as the preferred long-term direction for response-phase and multi-dispatch use cases, deferred from this issue.
+- Clarified `OnError` vs `FailureMode`: `FailureMode` is binary cluster-level, `OnError` is a CEL expression with custom status codes/messages at the call level. Both are kept.
+- Updated "Beyond Allow/Deny" open question to specifically describe the response-phase enrichment use case.
 
 ### 2026-03-27 — Initial design
 

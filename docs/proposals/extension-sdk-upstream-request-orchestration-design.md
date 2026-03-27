@@ -46,8 +46,8 @@ wasm.Config
     ext_threat_default_api-protection:
       type: dynamic              ← new ServiceType (wasm-shim/316)
       endpoint: …
-      grpcService: threat.v1.ThreatService
-      grpcMethod: Check
+      grpcService: threat.v1.ThreatAssessmentService
+      grpcMethod: AssessRequest
       failureMode: allow
       timeout: 100ms
   actionSets:
@@ -56,7 +56,7 @@ wasm.Config
         - service: ext_threat_default_api-protection
           dispatch: "ThreatRequest{uri: request.path, …}"
           callback: "response.threat_level >= 5 ? Deny(403,'Blocked') : Allow()"
-          onError: "Allow()"
+          onError: "Deny(503, 'Threat assessment service unavailable')"
 ```
 
 Envoy cluster generation (EnvoyFilter / EnvoyPatchPolicy) and wasm `Service` entry injection were completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828). This design covers only the remaining `Action` layer.
@@ -187,15 +187,15 @@ func (r *ThreatPolicyReconciler) Reconcile(
     threshold := policy.Spec.ThreatThreshold // e.g., 5
 
     return reconcile.Result{}, kuadrantCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{
-        URL:         "grpc://threat-service.security.svc.cluster.local:8080",
-        GRPCService: "threat.v1.ThreatService",
-        GRPCMethod:  "Check",
+        URL:         "grpc://threat-assessment-service.security.svc.cluster.local:8080",
+        GRPCService: "threat.v1.ThreatAssessmentService",
+        GRPCMethod:  "AssessRequest",
         Dispatch:    `ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}`,
         Callback: fmt.Sprintf(
             `response.threat_level >= %d ? Deny(403, "Request blocked: threat level " + string(response.threat_level)) : Allow()`,
             threshold,
         ),
-        OnError:     "Allow()",
+        OnError:     `Deny(503, "Threat assessment service unavailable")`,
         Timeout:     "150ms",
         FailureMode: types.FailureModeAllow,
     })
@@ -207,11 +207,11 @@ func (r *ThreatPolicyReconciler) Reconcile(
 ```json
 {
   "services": {
-    "ext-threat-service-8080": {
+    "ext-threat-assessment-service-8080": {
       "type": "dynamic",
-      "endpoint": "ext-threat-service-8080",
-      "grpcService": "threat.v1.ThreatService",
-      "grpcMethod": "Check",
+      "endpoint": "ext-threat-assessment-service-8080",
+      "grpcService": "threat.v1.ThreatAssessmentService",
+      "grpcMethod": "AssessRequest",
       "failureMode": "allow",
       "timeout": "150ms"
     }
@@ -224,10 +224,10 @@ func (r *ThreatPolicyReconciler) Reconcile(
       },
       "actions": [
         {
-          "service": "ext-threat-service-8080",
+          "service": "ext-threat-assessment-service-8080",
           "dispatch": "ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}",
           "callback": "response.threat_level >= 5 ? Deny(403, \"Blocked: threat level \" + string(response.threat_level)) : Allow()",
-          "onError": "Allow()"
+          "onError": "Deny(503, \"Threat assessment service unavailable\")"
         }
       ]
     }
@@ -278,7 +278,7 @@ kuadrantCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{URL: threat
 
 kuadrantCtx.AddUpstreamDispatch(ctx, policy, types.UpstreamDispatchConfig{
     URL:      threatServiceURL,
-    Dispatch: `ThreatRequest{uri: request.path}`,
+    Dispatch: `ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}`,
     Callback: `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
     OnError:  `Deny(503, "Threat service unavailable")`,
 })
@@ -307,8 +307,8 @@ kuadrantCtx.RegisterUpstreamMethod(ctx, policy, "grpc://threat-service:8080",
 upstream, err := kuadrantCtx.RegisterUpstream(ctx, policy, "grpc://threat-service:8080")
 
 upstream.OnRequest(types.GRPCCall{
-    Service:  "threat.v1.ThreatService",
-    Method:   "Check",
+    Service:  "threat.v1.ThreatAssessmentService",
+    Method:   "AssessRequest",
     Request:  `ThreatRequest{uri: request.path, identity: auth.identity}`,
     Response: `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
     OnError:  `Deny(503, "Threat service unavailable")`,
@@ -396,3 +396,4 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - [kuadrant/kuadrant-operator#1838 — Extension SDK: API for Upstream Request Orchestration](https://github.com/Kuadrant/kuadrant-operator/issues/1838)
 - [GEP-713: Policy Attachment](https://gateway-api.sigs.k8s.io/geps/gep-713/)
 - [kuadrant/wasm-shim#316 — Supporting dynamically configured gRPC endpoints](https://github.com/Kuadrant/wasm-shim/pull/316)
+- [KevFan/threat-assessment-service — ThreatAssessmentService proto and example](https://github.com/KevFan/threat-assessment-service)

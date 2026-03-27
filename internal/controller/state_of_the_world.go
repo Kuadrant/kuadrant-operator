@@ -53,6 +53,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/observability"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
+	kuadranttrace "github.com/kuadrant/kuadrant-operator/internal/trace"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
@@ -83,7 +84,7 @@ var (
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
-func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*controller.Controller, error) {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, dynTraceProvider *kuadranttrace.DynamicProvider, opts ...controller.ControllerOption) (*controller.Controller, error) {
 	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
@@ -132,6 +133,25 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		controller.WithRunnable("tracing configmap watcher", controller.Watch(
+			&corev1.ConfigMap{},
+			controller.ConfigMapsResource,
+			operatorNamespace,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*corev1.ConfigMap]{
+				CreateFunc: func(e event.TypedCreateEvent[*corev1.ConfigMap]) bool {
+					return e.Object.GetName() == TracingConfigMapName
+				},
+				UpdateFunc: func(e event.TypedUpdateEvent[*corev1.ConfigMap]) bool {
+					return e.ObjectNew.GetName() == TracingConfigMapName
+				},
+				DeleteFunc: func(e event.TypedDeleteEvent[*corev1.ConfigMap]) bool {
+					return e.Object.GetName() == TracingConfigMapName
+				},
+				GenericFunc: func(e event.TypedGenericEvent[*corev1.ConfigMap]) bool {
+					return e.Object.GetName() == TracingConfigMapName
+				},
+			}),
+		)),
 		controller.WithRunnable("developer portal deployment watcher", controller.Watch(
 			&appsv1.Deployment{},
 			kuadrantv1beta1.DeploymentsResource,
@@ -170,7 +190,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 	controllerOpts = append(controllerOpts, opts...)
 
 	// Boot options and reconciler based on detected dependencies
-	bootOptions := NewBootOptionsBuilder(manager, client, logger)
+	bootOptions := NewBootOptionsBuilder(manager, client, logger, dynTraceProvider)
 	options, err := bootOptions.getOptions()
 	if err != nil {
 		return nil, err
@@ -183,18 +203,20 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 // NewBootOptionsBuilder is used to return a list of controller.ControllerOption and a controller.ReconcileFunc that depend
 // on if external dependent CRDs are installed at boot time
-func NewBootOptionsBuilder(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *BootOptionsBuilder {
+func NewBootOptionsBuilder(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, dynTraceProvider *kuadranttrace.DynamicProvider) *BootOptionsBuilder {
 	return &BootOptionsBuilder{
-		manager: manager,
-		client:  client,
-		logger:  logger,
+		manager:          manager,
+		client:           client,
+		logger:           logger,
+		dynTraceProvider: dynTraceProvider,
 	}
 }
 
 type BootOptionsBuilder struct {
-	logger  logr.Logger
-	manager ctrlruntime.Manager
-	client  *dynamic.DynamicClient
+	logger           logr.Logger
+	manager          ctrlruntime.Manager
+	client           *dynamic.DynamicClient
+	dynTraceProvider *kuadranttrace.DynamicProvider
 
 	// Internal configurations
 	isGatewayAPIInstalled         bool
@@ -717,7 +739,7 @@ func additionalMainTraceAttributes(resourceEvents []controller.ResourceEvent, _ 
 
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: traceReconcileFunc("workflow.init", initWorkflow(b.client).Run),
+		Precondition: traceReconcileFunc("workflow.init", initWorkflow(b.client, b.dynTraceProvider).Run),
 		Tasks: []controller.ReconcileFunc{
 			traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run),
 			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
@@ -794,11 +816,12 @@ func certManagerControllerOpts() []controller.ControllerOption {
 	}
 }
 
-func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+func initWorkflow(client *dynamic.DynamicClient, dynTraceProvider *kuadranttrace.DynamicProvider) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: traceReconcileFunc("init.event_logger", NewEventLogger().Log),
 		Tasks: []controller.ReconcileFunc{
 			traceReconcileFunc("init.topology_reconciler", NewTopologyReconciler(client, operatorNamespace).Reconcile),
+			traceReconcileFunc("init.tracing_config", NewTracingConfigMapReconciler(dynTraceProvider, operatorNamespace).Run),
 		},
 	}
 }

@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-03-17T13:43:23Z"
+    createdAt: "2026-03-26T11:15:52Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -275,6 +275,9 @@ spec:
       version: v1
     - kind: TelemetryPolicy
       name: telemetrypolicies.extensions.kuadrant.io
+      version: v1alpha1
+    - kind: ThreatPolicy
+      name: threatpolicies.extensions.kuadrant.io
       version: v1alpha1
     - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
         of tls certificates
@@ -505,7 +508,7 @@ spec:
           - oidcpolicies
           - planpolicies
           - telemetrypolicies
-          - upstreampolicies
+          - threatpolicies
           verbs:
           - get
           - list
@@ -518,7 +521,7 @@ spec:
           - oidcpolicies/finalizers
           - planpolicies/finalizers
           - telemetrypolicies/finalizers
-          - upstreampolicies/finalizers
+          - threatpolicies/finalizers
           verbs:
           - update
         - apiGroups:
@@ -527,7 +530,7 @@ spec:
           - oidcpolicies/status
           - planpolicies/status
           - telemetrypolicies/status
-          - upstreampolicies/status
+          - threatpolicies/status
           verbs:
           - get
           - patch

@@ -2,12 +2,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: upstream-policy-manager-role
+  name: threat-policy-manager-role
 rules:
 - apiGroups:
   - extensions.kuadrant.io
   resources:
-  - upstreampolicies
+  - threatpolicies
   verbs:
   - get
   - list
@@ -17,13 +17,13 @@ rules:
 - apiGroups:
   - extensions.kuadrant.io
   resources:
-  - upstreampolicies/finalizers
+  - threatpolicies/finalizers
   verbs:
   - update
 - apiGroups:
   - extensions.kuadrant.io
   resources:
-  - upstreampolicies/status
+  - threatpolicies/status
   verbs:
   - get
   - patch

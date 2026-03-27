@@ -1,0 +1,11 @@
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: ThreatPolicy
+metadata:
+  name: api-threat-protection
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: my-api-route
+  threshold: 5

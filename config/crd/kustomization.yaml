@@ -11,6 +11,7 @@ resources:
   - bases/extensions.kuadrant.io_oidcpolicies.yaml
   - bases/extensions.kuadrant.io_planpolicies.yaml
   - bases/extensions.kuadrant.io_telemetrypolicies.yaml
+  - bases/extensions.kuadrant.io_threatpolicies.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

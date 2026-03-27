@@ -41,7 +41,9 @@ RUN if [ "$WITH_EXTENSIONS" = "true" ]; then \
     mkdir -p extensions/plan-policy && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/plan-policy/plan-policy cmd/extensions/plan-policy/main.go && \
     mkdir -p extensions/telemetry-policy && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/telemetry-policy/telemetry-policy cmd/extensions/telemetry-policy/main.go; \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/telemetry-policy/telemetry-policy cmd/extensions/telemetry-policy/main.go && \
+    mkdir -p extensions/threat-policy && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/threat-policy/threat-policy cmd/extensions/threat-policy/main.go; \
     else \
     echo "Skipping extensions build"; \
     fi

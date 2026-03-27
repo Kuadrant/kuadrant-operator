@@ -7,8 +7,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/kuadrant/kuadrant-operator/cmd/extensions/upstream-policy/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/cmd/extensions/upstream-policy/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/threat-policy/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/threat-policy/internal/controller"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
 
@@ -21,12 +21,12 @@ func init() {
 }
 
 func main() {
-	reconciler := controller.NewUpstreamPolicyReconciler()
-	builder, logger := extcontroller.NewBuilder("upstream-policy-extension-controller")
+	reconciler := controller.NewThreatPolicyReconciler()
+	builder, logger := extcontroller.NewBuilder("threat-policy-extension-controller")
 	extController, err := builder.
 		WithScheme(scheme).
 		WithReconciler(reconciler.Reconcile).
-		For(&v1alpha1.UpstreamPolicy{}).
+		For(&v1alpha1.ThreatPolicy{}).
 		Build()
 	if err != nil {
 		logger.Error(err, "unable to create controller")

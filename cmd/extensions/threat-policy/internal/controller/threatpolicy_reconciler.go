@@ -10,47 +10,49 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/kuadrant/kuadrant-operator/cmd/extensions/upstream-policy/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/threat-policy/api/v1alpha1"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
-// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=upstreampolicies,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=upstreampolicies/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=upstreampolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies/finalizers,verbs=update
 
-type UpstreamPolicyReconciler struct {
+const threatServiceURL = "grpc://threat-service.security.svc.cluster.local:8080"
+
+type ThreatPolicyReconciler struct {
 	types.ExtensionBase
 }
 
-func NewUpstreamPolicyReconciler() *UpstreamPolicyReconciler {
-	return &UpstreamPolicyReconciler{}
+func NewThreatPolicyReconciler() *ThreatPolicyReconciler {
+	return &ThreatPolicyReconciler{}
 }
 
-func (r *UpstreamPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
+func (r *ThreatPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
 	if err := r.Configure(ctx); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to configure extension: %w", err)
 	}
-	r.Logger.Info("reconciling upstreampolicy started")
-	defer r.Logger.Info("reconciling upstreampolicy completed")
+	r.Logger.Info("reconciling threatpolicy started")
+	defer r.Logger.Info("reconciling threatpolicy completed")
 
-	upstreamPolicy := &v1alpha1.UpstreamPolicy{}
-	if err := r.Client.Get(ctx, request.NamespacedName, upstreamPolicy); err != nil {
+	threatPolicy := &v1alpha1.ThreatPolicy{}
+	if err := r.Client.Get(ctx, request.NamespacedName, threatPolicy); err != nil {
 		if errors.IsNotFound(err) {
-			r.Logger.Error(err, "upstreampolicy not found")
+			r.Logger.Error(err, "threatpolicy not found")
 			return reconcile.Result{}, nil
 		}
-		r.Logger.Error(err, "failed to retrieve upstreampolicy")
+		r.Logger.Error(err, "failed to retrieve threatpolicy")
 		return reconcile.Result{}, err
 	}
 
-	if upstreamPolicy.GetDeletionTimestamp() != nil {
-		r.Logger.Info("upstreampolicy marked for deletion")
+	if threatPolicy.GetDeletionTimestamp() != nil {
+		r.Logger.Info("threatpolicy marked for deletion")
 		return reconcile.Result{}, nil
 	}
 
-	policyStatus, specErr := r.reconcileSpec(ctx, upstreamPolicy, kuadrantCtx)
-	statusResult, statusErr := r.reconcileStatus(ctx, upstreamPolicy, policyStatus)
+	policyStatus, specErr := r.reconcileSpec(ctx, threatPolicy, kuadrantCtx)
+	statusResult, statusErr := r.reconcileStatus(ctx, threatPolicy, policyStatus)
 
 	if specErr != nil {
 		return reconcile.Result{}, specErr
@@ -67,21 +69,23 @@ func (r *UpstreamPolicyReconciler) Reconcile(ctx context.Context, request reconc
 	return reconcile.Result{}, nil
 }
 
-func (r *UpstreamPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.UpstreamPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.UpstreamPolicyStatus, error) {
-	r.Logger.Info("registering upstream", "url", pol.Spec.URL)
+func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.ThreatPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.ThreatPolicyStatus, error) {
+	r.Logger.Info("registering upstream", "url", threatServiceURL)
 
 	if err := kuadrantCtx.RegisterUpstreamMethod(ctx, pol, types.UpstreamConfig{
-		URL: pol.Spec.URL,
+		URL: threatServiceURL,
 	}); err != nil {
 		r.Logger.Error(err, "failed to register upstream")
 		return calculateErrorStatus(pol, err), err
 	}
 
-	r.Logger.Info("upstream registered successfully", "url", pol.Spec.URL)
+	r.Logger.Info("upstream registered successfully", "url", threatServiceURL)
+	// TODO: Next step - call Extension SDK API to define the gRPC call and response handling
+	// Will use pol.Spec.Threshold to build the callback CEL expression
 	return calculateEnforcedStatus(pol, nil), nil
 }
 
-func (r *UpstreamPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.UpstreamPolicy, newStatus *v1alpha1.UpstreamPolicyStatus) (ctrl.Result, error) {
+func (r *ThreatPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.ThreatPolicy, newStatus *v1alpha1.ThreatPolicyStatus) (ctrl.Result, error) {
 	equalStatus := pol.Status.Equals(newStatus, r.Logger)
 	r.Logger.Info("Status", "status is different", !equalStatus)
 	r.Logger.Info("Status", "generation is different", pol.Generation != pol.Status.ObservedGeneration)
@@ -104,8 +108,8 @@ func (r *UpstreamPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1a
 	return ctrl.Result{}, nil
 }
 
-func calculateErrorStatus(pol *v1alpha1.UpstreamPolicy, specErr error) *v1alpha1.UpstreamPolicyStatus {
-	newStatus := &v1alpha1.UpstreamPolicyStatus{
+func calculateErrorStatus(pol *v1alpha1.ThreatPolicy, specErr error) *v1alpha1.ThreatPolicyStatus {
+	newStatus := &v1alpha1.ThreatPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		Conditions:         slices.Clone(pol.Status.Conditions),
 	}
@@ -114,8 +118,8 @@ func calculateErrorStatus(pol *v1alpha1.UpstreamPolicy, specErr error) *v1alpha1
 	return newStatus
 }
 
-func calculateEnforcedStatus(pol *v1alpha1.UpstreamPolicy, enforcedErr error) *v1alpha1.UpstreamPolicyStatus {
-	newStatus := &v1alpha1.UpstreamPolicyStatus{
+func calculateEnforcedStatus(pol *v1alpha1.ThreatPolicy, enforcedErr error) *v1alpha1.ThreatPolicyStatus {
+	newStatus := &v1alpha1.ThreatPolicyStatus{
 		ObservedGeneration: pol.Generation,
 		Conditions:         slices.Clone(pol.Status.Conditions),
 	}

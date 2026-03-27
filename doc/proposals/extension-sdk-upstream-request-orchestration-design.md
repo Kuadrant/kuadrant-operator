@@ -276,10 +276,42 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
 Phase 2 already added: gRPC reflection to the upstream URL, storing the `FileDescriptorSet` in `ProtoCache` keyed by `ProtoCacheKey{ClusterName, GRPCService}`, and failing fast if reflection is unsupported or the service is unreachable.
 
-Phase 3 adds:
-- Parse and store `Dispatch`, `Callback`, `OnError` from `UpstreamConfig` into `RegisteredUpstreamEntry`.
-- **Reconcile-time CEL syntax validation**: call `cel.Parse(Dispatch)` and `cel.Parse(Callback)` using the existing `pkg/cel` library. On syntax error, return a gRPC status `InvalidArgument` so the extension reconciler can surface a policy condition immediately.
-- Semantic validation (correct field names, proto message type correctness) is deferred to runtime — the wasm-shim has the descriptor and can validate at dispatch time.
+Phase 3 adds CEL validation and storage of `Dispatch`, `Callback`, `OnError`. Because the `FileDescriptorSet` is already in `ProtoCache` by the time Phase 3 validation runs (same handler, same call), proto-structural validation is possible at reconcile time — going beyond pure syntax checking.
+
+**CEL validation strategy:**
+
+1. **`Dispatch`** — structural proto validation using the cached `FileDescriptorSet`:
+   - Build a CEL type environment from the descriptor (`cel.TypeDescs(fds)`)
+   - Validate that the message type referenced in the expression (e.g. `ThreatRequest`) exists in the descriptor
+   - Validate that all field names used exist on that message type
+   ```go
+   fds, _ := protoCache.Get(ProtoCacheKey{ClusterName: clusterName, Service: grpcService})
+   env, _ := cel.NewEnv(cel.TypeDescs(fds))
+   ast, issues := env.Compile(dispatchExpr)
+   if issues.Err() != nil {
+       return nil, status.Errorf(codes.InvalidArgument, "invalid dispatch expression: %v", issues.Err())
+   }
+   ```
+   **Note on field type checking:** The RHS values (e.g. `request.path`, `has(auth.identity)`) are Kuadrant context variables evaluated at request time by the wasm-shim, not by the operator. Type-checking field assignments against proto field types would require the operator to declare all Kuadrant context variable types in the CEL environment. This is possible (the types are stable) but couples validation to the wasm-shim's context model. Deferred — structural validation (message type + field name existence) is the initial scope.
+
+2. **`Callback`** — structural response field validation using the cached `FileDescriptorSet`:
+   - Derive the response message type from the method descriptor in the `FileDescriptorSet`
+   - Validate that fields referenced via `response.<field>` exist on the response type
+   - `Allow()` and `Deny()` are wasm-shim CEL functions, not operator functions. They can be registered as stubs in the operator's CEL environment purely for compilation purposes:
+   ```go
+   env, _ := cel.NewEnv(
+       cel.TypeDescs(fds),
+       cel.Variable("response", responseMessageType), // derived from GRPCMethod return type
+       cel.Function("Allow", cel.Overload("allow_0", nil, cel.BoolType)),
+       cel.Function("Deny",  cel.Overload("deny_2",  []*cel.Type{cel.IntType, cel.StringType}, cel.BoolType)),
+   )
+   ast, issues := env.Compile(callbackExpr)
+   ```
+   Catches: unknown response fields. Does not catch wasm-shim runtime semantics.
+
+3. **`OnError`** — syntax-only with `Allow()`/`Deny()` stubs registered. No proto types needed.
+
+If any validation fails, return `codes.InvalidArgument` with the compile error. The extension reconciler surfaces this as a `Ready=False` condition with `reason: InvalidCEL`.
 
 #### `internal/extension/manager.go` — wasm mutator
 
@@ -371,7 +403,7 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 > Prerequisite: Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)) must be merged. Phase 2 delivers gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, and static message building. Phase 3 builds on top.
 
 1. **Extend `UpstreamConfig` and `RegisteredUpstreamEntry`** with `Dispatch`, `Callback`, `OnError` fields.
-2. **Add reconcile-time CEL syntax validation** in `RegisterUpstreamMethod`.
+2. **Add reconcile-time proto-aware CEL compilation** in `RegisterUpstreamMethod`: full type-checking of `Dispatch` and `Callback` against the cached `FileDescriptorSet`; syntax-only for `OnError`.
 3. **Add `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` fields to `wasm.Action`** in `internal/wasm/types.go`. (`ServiceTypeDynamic` and wasm `Service` fields are added in Phase 2.)
 4. **Extend the wasm `WasmConfigMutator`** to emit `Action` entries with `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` for upstream entries with a non-empty `Dispatch`.
 5. **Coordinate with wasm-shim team** on moving `grpcService`/`grpcMethod` from `Service` to `Action` and adding CEL evaluation support for `dispatch`/`callback`.
@@ -380,7 +412,7 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 ## Testing Strategy
 
-- **Unit tests**: `RegisterUpstreamMethod` with valid/invalid CEL; wasm config mutator generating correct `Service`+`Action`; Action JSON marshalling of new fields.
+- **Unit tests**: `RegisterUpstreamMethod` with valid/invalid CEL — proto-structural checks (unknown message type, unknown field name) for `Dispatch`; response field existence checks for `Callback`; syntax-only for `OnError`; wasm config mutator generating correct `Action`; Action JSON marshalling of new fields.
 - **Integration tests**: Register ThreatPolicy against a mock gRPC upstream; verify generated wasm config JSON includes `dispatch`/`callback` in Action entries (cluster creation and Service injection covered by #1828 tests).
 - **E2E tests** (post wasm-shim support): Send HTTP request through gateway; mock threat service returns high threat level; assert client receives 403.
 
@@ -398,8 +430,13 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 - [ ] Extend `UpstreamConfig` struct with `Dispatch`, `Callback`, `OnError`, `Timeout`, `FailureMode` fields
   - [ ] Unit tests: field marshalling/unmarshalling
-- [ ] Store and validate new fields in `RegisterUpstreamMethod` (reconcile-time CEL syntax check)
-  - [ ] Unit tests: valid CEL passes, invalid CEL returns `InvalidArgument`
+- [ ] Store and validate new fields in `RegisterUpstreamMethod` with proto-structural CEL validation
+  - [ ] Unit tests: valid `Dispatch` with known message type and fields passes
+  - [ ] Unit tests: unknown message type in `Dispatch` returns `InvalidArgument`
+  - [ ] Unit tests: unknown field name in `Dispatch` returns `InvalidArgument`
+  - [ ] Unit tests: valid `Callback` referencing known response fields passes
+  - [ ] Unit tests: unknown response field in `Callback` returns `InvalidArgument`
+  - [ ] Unit tests: `OnError` syntax error returns `InvalidArgument`
 - [ ] Add `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` fields to `wasm.Action` (`ServiceTypeDynamic` and `Service` fields added in Phase 2)
   - [ ] Unit tests: JSON marshalling; omitempty behaviour
 - [ ] Extend `WasmConfigMutator` to emit `Action` for upstream entries with non-empty `Dispatch`
@@ -414,6 +451,13 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - [ ] Phase 2: gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, static message building — [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (in progress, prerequisite)
 
 ## Change Log
+
+### 2026-03-27 — Add proto-structural CEL validation strategy
+
+- `Dispatch`: validated at reconcile time using the `FileDescriptorSet` from `ProtoCache` — catches unknown message types and unknown field names. Field type checking (RHS expression type vs proto field type) deferred: requires declaring all Kuadrant context variable types in the operator CEL environment, which couples validation to the wasm-shim context model.
+- `Callback`: response fields validated against the response message type derived from the method descriptor. `Allow()`/`Deny()` are wasm-shim functions, not operator functions — registered as stubs for compilation purposes only.
+- `OnError`: syntax-only with `Allow()`/`Deny()` stubs.
+- Updated Implementation Plan, Todo, and Testing Strategy accordingly.
 
 ### 2026-03-27 — Frame as Phase 3; correct descriptor mechanism
 

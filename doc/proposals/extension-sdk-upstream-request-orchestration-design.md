@@ -46,14 +46,14 @@ wasm.Config
     ext_threat_default_api-protection:
       type: dynamic              ← new ServiceType (wasm-shim/316)
       endpoint: …
-      grpcService: threat.v1.ThreatAssessmentService
-      grpcMethod: AssessRequest
       failureMode: allow
       timeout: 100ms
   actionSets:
     - name: default/api-threat-protection
       actions:
         - service: ext_threat_default_api-protection
+          grpcService: threat.v1.ThreatAssessmentService  ← on Action, not Service
+          grpcMethod: AssessRequest
           dispatch: "ThreatRequest{uri: request.path, …}"
           callback: "response.threat_level >= 5 ? Deny(403,'Blocked') : Allow()"
           onError: "Deny(503, 'Threat assessment service unavailable')"
@@ -149,13 +149,22 @@ type RegisteredUpstreamEntry struct {
 // New service type for dynamically configured gRPC upstreams (matches wasm-shim "dynamic")
 const ServiceTypeDynamic ServiceType = "dynamic"
 
-// Action gains three optional fields:
+// Action gains five optional fields for dynamic upstream dispatch:
 type Action struct {
     ServiceName          string            `json:"service"`
     Scope                string            `json:"scope,omitempty"`
     Predicates           []string          `json:"predicates,omitempty"`
     ConditionalData      []ConditionalData `json:"data,omitempty"`
     SourcePolicyLocators []string          `json:"-"`
+
+    // GRPCService is the fully-qualified proto service name for this call.
+    // Placed on the Action (not Service) so that a single upstream endpoint can
+    // serve multiple proto services across different Actions.
+    // e.g. "threat.v1.ThreatAssessmentService"
+    GRPCService string `json:"grpcService,omitempty"`
+
+    // GRPCMethod is the RPC method to invoke. e.g. "AssessRequest"
+    GRPCMethod string `json:"grpcMethod,omitempty"`
 
     // Dispatch is a CEL expression that constructs the gRPC request message.
     // Evaluated at request time; result is serialised as protobuf via reflection.
@@ -210,8 +219,6 @@ func (r *ThreatPolicyReconciler) Reconcile(
     "ext-threat-assessment-service-8080": {
       "type": "dynamic",
       "endpoint": "ext-threat-assessment-service-8080",
-      "grpcService": "threat.v1.ThreatAssessmentService",
-      "grpcMethod": "AssessRequest",
       "failureMode": "allow",
       "timeout": "150ms"
     }
@@ -225,6 +232,8 @@ func (r *ThreatPolicyReconciler) Reconcile(
       "actions": [
         {
           "service": "ext-threat-assessment-service-8080",
+          "grpcService": "threat.v1.ThreatAssessmentService",
+          "grpcMethod": "AssessRequest",
           "dispatch": "ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}",
           "callback": "response.threat_level >= 5 ? Deny(403, \"Blocked: threat level \" + string(response.threat_level)) : Allow()",
           "onError": "Deny(503, \"Threat assessment service unavailable\")"
@@ -247,8 +256,8 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
 Extend the existing `WasmConfigMutator` that iterates `RegisteredUpstreamEntry` values:
 
-1. Always add `Service` entry with `type: dynamic`, `grpcService`, and `grpcMethod`.
-2. If `entry.Dispatch != ""`: also append an `Action` to every matching `ActionSet` (determined by `entry.TargetRef`), with `Dispatch`, `Callback`, `OnError`, and `SourcePolicyLocators` set.
+1. Always add `Service` entry with `type: dynamic`, `failureMode`, and `timeout`. `grpcService`/`grpcMethod` are intentionally omitted from the Service — they belong on the Action so that a single endpoint can serve multiple proto services.
+2. If `entry.Dispatch != ""`: also append an `Action` to every matching `ActionSet` (determined by `entry.TargetRef`), with `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError`, and `SourcePolicyLocators` set.
 3. Scope defaults to `"<namespace>/<policy-name>"`.
 
 #### `internal/controller/` — cluster generation
@@ -347,7 +356,8 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 ## Open Questions
 
-- **Wasm-shim changes**: Being implemented in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (draft). The `dynamic` service type, `grpcService`/`grpcMethod` fields, and descriptor fetching via `kuadrant.v1.DescriptorService` are all defined there. Operator work on `dispatch`/`callback` Action fields should coordinate with that PR.
+- **Wasm-shim changes**: Being implemented in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (draft). The `dynamic` service type and descriptor fetching via `kuadrant.v1.DescriptorService` are defined there. Operator work on `dispatch`/`callback` Action fields should coordinate with that PR.
+- **`grpcService`/`grpcMethod` placement — needs wasm-shim coordination**: This design places `grpcService` and `grpcMethod` on the wasm `Action` (not the `Service`), so that a single endpoint can serve multiple proto services/methods across different Actions without duplicating cluster config. wasm-shim#316 currently puts them on the `Service`. The shim will need to be updated to collect required `(endpoint, grpcService)` pairs from Actions at config activation time rather than from Service entries. This must be agreed with the wasm-shim team before implementation.
 - **Proto reflection**: Resolved — wasm-shim uses `prost-reflect` with `DescriptorPool`s fetched at config activation time from a `kuadrant.v1.DescriptorService` sidecar. The operator does not need to know about proto types.
 - **Response-phase calls and header mutation**: A natural follow-on is calling an upstream in the response phase (after the backend has responded) and mutating response headers based on the result — e.g. enriching the response with a threat score header. This requires different `Callback` semantics (`AddHeader`/`SetHeader` rather than `Allow`/`Deny`) and likely the upstream context pattern (Option C above). Deferred — out of scope for this issue.
 - **Multi-dispatch per policy**: Should a single policy be able to register multiple upstream calls (e.g., call threat service AND fraud service)? Current API allows multiple `RegisterUpstreamMethod` calls with different URLs; each generates its own Action. Ordering between actions is undefined — needs clarification.
@@ -375,6 +385,12 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - [x] Envoy cluster generation (Istio + Envoy Gateway) and wasm `Service` entry injection — [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)
 
 ## Change Log
+
+### 2026-03-27 — Move grpcService/grpcMethod to Action
+
+- `grpcService` and `grpcMethod` moved from wasm `Service` to wasm `Action` so that a single upstream endpoint can serve multiple proto services/methods across different Actions without requiring duplicate cluster entries.
+- Updated wasm config JSON example, architecture diagram, `Action` struct, and wasm mutator description accordingly.
+- Captured the required wasm-shim#316 coordination as an open question.
 
 ### 2026-03-27 — Alternatives and OnError clarification
 

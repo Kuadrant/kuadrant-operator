@@ -6,7 +6,7 @@
 
 Phase 2 delivered: static message building, basic response logging, operator-side gRPC reflection + `ProtoCache`, and the `kuadrant.v1.DescriptorService` that serves descriptors to the wasm-shim.
 
-Phase 3 (this doc) adds: CEL `Dispatch` expression for dynamic message construction, CEL `Callback` expression for Allow/Deny decisions based on response data, and CEL `OnError` expression for custom error handling.
+Phase 3 (this doc) adds: a typed `UpstreamHandle` returned by `RegisterUpstream`, a `GRPCCall` struct (holding `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError`) that is passed to `upstream.Call(...)`, proto-structural CEL validation at reconcile time, and wasm `Action` generation for dynamic gRPC dispatch.
 
 ## Goals
 
@@ -28,21 +28,36 @@ Phase 3 (this doc) adds: CEL `Dispatch` expression for dynamic message construct
 
 ### Backwards Compatibility
 
-`RegisterUpstreamMethod` gains optional fields. Callers that do not set `Dispatch`/`Callback` continue to work exactly as before — only an Envoy cluster is created and the service entry is added to wasm config. No breaking changes.
+`RegisterUpstream` is a new method on `KuadrantCtx`. The existing `RegisterUpstreamMethod` signature is unchanged; callers that do not use the new API continue to work exactly as before. No breaking changes.
 
 ### Architecture Changes
 
 ```
 Extension Reconciler
         │
-        │  RegisterUpstreamMethod(ctx, policy, UpstreamConfig{
-        │      URL, GRPCService, GRPCMethod, Dispatch, Callback, OnError, …
+        │  upstream, err := kuadrantCtx.RegisterUpstream(ctx, policy,
+        │      "grpc://threat-assessment-service.security.svc.cluster.local:8080",
+        │      types.WithTimeout("150ms"),
+        │      types.WithFailureMode(types.FailureModeAllow),
+        │  )
+        │
+        │  upstream.Call(types.GRPCCall{
+        │      GRPCService: "threat.v1.ThreatAssessmentService",
+        │      GRPCMethod:  "AssessRequest",
+        │      Dispatch:    `ThreatRequest{uri: request.path, …}`,
+        │      Callback:    `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
+        │      OnError:     `Deny(503, "Threat assessment service unavailable")`,
         │  })
         ▼
-extensionService.RegisterUpstreamMethod (internal/extension/manager.go)
-        │  [Phase 2] dials upstream, fetches FileDescriptorSet via gRPC reflection
+extensionService.RegisterUpstream (internal/extension/manager.go)
+        │  creates Envoy cluster + wasm Service entry for the URL
+        │  returns UpstreamHandle (wraps cluster name + ref to RegisteredDataStore)
+        ▼
+upstream.Call(GRPCCall) (internal/extension/manager.go)
+        │  [Phase 2] dials upstream, fetches FileDescriptorSet for (cluster, GRPCService)
         │  [Phase 2] caches in ProtoCache{ClusterName, GRPCService}
-        │  [Phase 3] stores Dispatch/Callback/OnError in RegisteredUpstreamEntry
+        │  [Phase 3] proto-structural CEL validation of Dispatch, Callback, OnError
+        │  [Phase 3] stores GRPCCall in RegisteredDataStore against the cluster entry
         │  triggers Kuadrant reconciliation
         ▼
 WasmConfigMutator (applied during policy reconciliation)
@@ -83,68 +98,88 @@ Request time: wasm evaluates Dispatch CEL → builds proto message → dispatche
 
 ### API Changes
 
-#### `UpstreamConfig` (extended)
+#### `KuadrantCtx` — new `RegisterUpstream` method
 
 ```go
-// pkg/extension/types/types.go (or internal/extension/types.go)
-type UpstreamConfig struct {
-    // URL is the gRPC service endpoint: grpc://host:port
-    URL string
+// RegisterUpstream creates the Envoy cluster and wasm Service entry for the given URL,
+// then returns an UpstreamHandle the caller uses to register individual gRPC calls.
+// Cluster and Service creation reuse the logic from RegisterUpstreamMethod.
+RegisterUpstream(
+    ctx context.Context,
+    policy client.Object,
+    url string,
+    opts ...types.UpstreamOption,
+) (types.UpstreamHandle, error)
+```
 
+#### `UpstreamHandle` interface
+
+```go
+// pkg/extension/types/types.go
+
+// UpstreamHandle is returned by RegisterUpstream.
+// It carries the cluster name and a reference to the RegisteredDataStore,
+// so Call() can store the validated GRPCCall against the right cluster entry.
+type UpstreamHandle interface {
+    // Call registers a gRPC call to be made at request time against this upstream.
+    // It triggers proto reflection for (cluster, GRPCCall.GRPCService) if not already
+    // cached in ProtoCache, then performs proto-structural CEL validation of the
+    // Dispatch and Callback expressions and syntax validation of OnError.
+    // Multiple Call invocations on the same handle are allowed — each generates a
+    // separate wasm Action targeting the same Service entry.
+    Call(call GRPCCall) error
+}
+```
+
+#### `GRPCCall` struct
+
+```go
+// GRPCCall specifies a single gRPC call to make at request time.
+type GRPCCall struct {
     // GRPCService is the fully-qualified protobuf service name.
     // e.g. "threat.v1.ThreatAssessmentService"
-    // The operator uses this (with URL) to fetch the FileDescriptorSet via gRPC
-    // reflection at RegisterUpstreamMethod time (Phase 2), caching it in ProtoCache
-    // keyed by (ClusterName, GRPCService). The wasm-shim later retrieves the cached
-    // descriptor from the operator's kuadrant.v1.DescriptorService.
-    // Required when Dispatch is set.
+    // Used (with the cluster name from the handle) to look up or fetch the
+    // FileDescriptorSet from ProtoCache for CEL validation.
     GRPCService string
 
     // GRPCMethod is the RPC method name within GRPCService.
     // e.g. "AssessRequest"
-    // Required when Dispatch is set.
     GRPCMethod string
 
-    // Dispatch is an optional CEL expression that constructs the protobuf
-    // request message sent to the upstream service.
+    // Dispatch is a CEL expression that constructs the protobuf request message
+    // sent to the upstream service.
     // Evaluated at request time by the wasm-shim using proto reflection.
     // Example: "ThreatRequest{uri: request.path, source_ip: request.source.address}"
-    // If empty, no Action is generated (cluster-only registration).
     Dispatch string
 
     // Callback is a CEL expression evaluated with the upstream response in scope.
     // Must return Allow() or Deny(code, message).
     // Example: "response.threat_level >= 5 ? Deny(403, 'Blocked') : Allow()"
-    // Required when Dispatch is set.
     Callback string
 
     // OnError is a CEL expression evaluated when the gRPC call fails at runtime
     // (timeout, error status, network failure). Unlike FailureMode, this allows
     // custom error codes and messages.
     // Examples:
-    //   "Allow()"                              — fail-open (default)
+    //   "Allow()"                                 — fail-open
     //   "Deny(503, 'Threat service unavailable')" — fail with specific status
     // Default: "Allow()"
     OnError string
-
-    // Timeout overrides the default per-call timeout (default: "100ms").
-    Timeout string
-
-    // FailureMode controls cluster-level failure at the wasm Service level —
-    // i.e. what happens if the Envoy cluster itself is unavailable (connection
-    // refused, DNS failure). This is coarser than OnError: binary allow/deny
-    // with no custom message.
-    // Default: FailureModeAllow
-    FailureMode FailureModeType
 }
 ```
 
-#### `KuadrantCtx.RegisterUpstreamMethod` (unchanged signature)
-
-The signature does not change; only `UpstreamConfig` gains fields.
+#### `UpstreamOption` and cluster-level options
 
 ```go
-RegisterUpstreamMethod(ctx context.Context, policy client.Object, cfg types.UpstreamConfig) error
+// UpstreamOption configures cluster/Service-level settings for RegisterUpstream.
+type UpstreamOption func(*upstreamOptions)
+
+// WithTimeout overrides the default per-cluster timeout (default: "100ms").
+func WithTimeout(d string) UpstreamOption { ... }
+
+// WithFailureMode sets the wasm Service failureMode (binary cluster-level allow/deny).
+// Default: FailureModeAllow
+func WithFailureMode(m FailureModeType) UpstreamOption { ... }
 ```
 
 #### `RegisteredUpstreamEntry` (extended, internal)
@@ -158,12 +193,16 @@ type RegisteredUpstreamEntry struct {
     FailureMode string
     Timeout     string
 
-    // NEW
-    GRPCService string // fully-qualified proto service name
-    GRPCMethod  string // RPC method name
-    Dispatch    string // CEL, empty → no Action generated
-    Callback    string // CEL
-    OnError     string // "allow" | "deny" | CEL
+    // NEW: one entry per upstream.Call() invocation
+    Calls []RegisteredGRPCCall
+}
+
+type RegisteredGRPCCall struct {
+    GRPCService string
+    GRPCMethod  string
+    Dispatch    string
+    Callback    string
+    OnError     string
 }
 ```
 
@@ -221,8 +260,16 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
     threshold := policy.Spec.ThreatThreshold // e.g., 5
 
-    return reconcile.Result{}, kuadrantCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{
-        URL:         "grpc://threat-assessment-service.security.svc.cluster.local:8080",
+    upstream, err := kuadrantCtx.RegisterUpstream(ctx, policy,
+        "grpc://threat-assessment-service.security.svc.cluster.local:8080",
+        types.WithTimeout("150ms"),
+        types.WithFailureMode(types.FailureModeAllow),
+    )
+    if err != nil {
+        return reconcile.Result{}, err
+    }
+
+    return reconcile.Result{}, upstream.Call(types.GRPCCall{
         GRPCService: "threat.v1.ThreatAssessmentService",
         GRPCMethod:  "AssessRequest",
         Dispatch:    `ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}`,
@@ -230,9 +277,7 @@ func (r *ThreatPolicyReconciler) Reconcile(
             `response.threat_level >= %d ? Deny(403, "Request blocked: threat level " + string(response.threat_level)) : Allow()`,
             threshold,
         ),
-        OnError:     `Deny(503, "Threat assessment service unavailable")`,
-        Timeout:     "150ms",
-        FailureMode: types.FailureModeAllow,
+        OnError: `Deny(503, "Threat assessment service unavailable")`,
     })
 }
 ```
@@ -272,11 +317,17 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
 ### Component Changes
 
-#### `internal/extension/manager.go` — `RegisterUpstreamMethod`
+#### `internal/extension/manager.go` — `RegisterUpstream`
 
-Phase 2 already added: gRPC reflection to the upstream URL, storing the `FileDescriptorSet` in `ProtoCache` keyed by `ProtoCacheKey{ClusterName, GRPCService}`, and failing fast if reflection is unsupported or the service is unreachable.
+`RegisterUpstream` performs the cluster and wasm Service entry creation that `RegisterUpstreamMethod` performs today, then returns an `UpstreamHandle` that wraps the cluster name and a reference to the `RegisteredDataStore`.
 
-Phase 3 adds CEL validation and storage of `Dispatch`, `Callback`, `OnError`. Because the `FileDescriptorSet` is already in `ProtoCache` by the time Phase 3 validation runs (same handler, same call), proto-structural validation is possible at reconcile time — going beyond pure syntax checking.
+#### `internal/extension/manager.go` — `UpstreamHandle.Call`
+
+`upstream.Call(GRPCCall)` is where reflection and validation happen:
+
+Phase 2 already added to `RegisterUpstreamMethod`: gRPC reflection to the upstream URL, storing the `FileDescriptorSet` in `ProtoCache` keyed by `ProtoCacheKey{ClusterName, GRPCService}`. `Call` reuses this mechanism — if `(cluster, GRPCCall.GRPCService)` is not yet in the cache, it fetches it; otherwise it reuses the cached descriptor.
+
+Phase 3 adds CEL validation and storage of the `GRPCCall` in `RegisteredDataStore`.
 
 **CEL validation strategy:**
 
@@ -285,11 +336,11 @@ Phase 3 adds CEL validation and storage of `Dispatch`, `Callback`, `OnError`. Be
    - Validate that the message type referenced in the expression (e.g. `ThreatRequest`) exists in the descriptor
    - Validate that all field names used exist on that message type
    ```go
-   fds, _ := protoCache.Get(ProtoCacheKey{ClusterName: clusterName, Service: grpcService})
+   fds, _ := protoCache.Get(ProtoCacheKey{ClusterName: clusterName, Service: call.GRPCService})
    env, _ := cel.NewEnv(cel.TypeDescs(fds))
-   ast, issues := env.Compile(dispatchExpr)
+   ast, issues := env.Compile(call.Dispatch)
    if issues.Err() != nil {
-       return nil, status.Errorf(codes.InvalidArgument, "invalid dispatch expression: %v", issues.Err())
+       return status.Errorf(codes.InvalidArgument, "invalid dispatch expression: %v", issues.Err())
    }
    ```
    **Note on field type checking:** The RHS values (e.g. `request.path`, `has(auth.identity)`) are Kuadrant context variables evaluated at request time by the wasm-shim, not by the operator. Type-checking field assignments against proto field types would require the operator to declare all Kuadrant context variable types in the CEL environment. This is possible (the types are stable) but couples validation to the wasm-shim's context model. Deferred — structural validation (message type + field name existence) is the initial scope.
@@ -305,20 +356,20 @@ Phase 3 adds CEL validation and storage of `Dispatch`, `Callback`, `OnError`. Be
        cel.Function("Allow", cel.Overload("allow_0", nil, cel.BoolType)),
        cel.Function("Deny",  cel.Overload("deny_2",  []*cel.Type{cel.IntType, cel.StringType}, cel.BoolType)),
    )
-   ast, issues := env.Compile(callbackExpr)
+   ast, issues := env.Compile(call.Callback)
    ```
    Catches: unknown response fields. Does not catch wasm-shim runtime semantics.
 
 3. **`OnError`** — syntax-only with `Allow()`/`Deny()` stubs registered. No proto types needed.
 
-If any validation fails, return `codes.InvalidArgument` with the compile error. The extension reconciler surfaces this as a `Ready=False` condition with `reason: InvalidCEL`.
+If any validation fails, `Call` returns an error. The extension reconciler surfaces this as a `Ready=False` condition with `reason: InvalidCEL`.
 
 #### `internal/extension/manager.go` — wasm mutator
 
 Extend the existing `WasmConfigMutator` that iterates `RegisteredUpstreamEntry` values:
 
 1. Always add `Service` entry with `type: dynamic`, `failureMode`, and `timeout`. `grpcService`/`grpcMethod` are intentionally omitted from the Service — they belong on the Action so that a single endpoint can serve multiple proto services.
-2. If `entry.Dispatch != ""`: also append an `Action` to every matching `ActionSet` (determined by `entry.TargetRef`), with `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError`, and `SourcePolicyLocators` set.
+2. For each `entry.Calls` item with non-empty `Dispatch`: append an `Action` to every matching `ActionSet` (determined by `entry.TargetRef`), with `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError`, and `SourcePolicyLocators` set.
 3. Scope defaults to `"<namespace>/<policy-name>"`.
 
 #### `internal/controller/` — cluster generation
@@ -327,7 +378,7 @@ Completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828): `
 
 #### Status / conditions
 
-- If CEL syntax validation fails, the extension should set a `Ready=False` condition on the policy with `reason: InvalidCEL` and the parse error.
+- If CEL validation fails in `upstream.Call(...)`, the extension should set a `Ready=False` condition on the policy with `reason: InvalidCEL` and the parse error.
 - If the upstream is unreachable at registration time, the existing `Unavailable` gRPC error propagates; extension reconcilers should surface this as a policy condition.
 
 ### Security Considerations
@@ -356,7 +407,7 @@ kuadrantCtx.AddUpstreamDispatch(ctx, policy, types.UpstreamDispatchConfig{
 
 **Rejected because:** The cluster registration and dispatch configuration are always needed together. Splitting them into two calls that must both be made adds ceremony without benefit. Extension authors would need to remember to call both, and the URL would be repeated as the linking key.
 
-### Option B: Functional options
+### Option B: Functional options on `RegisterUpstreamMethod`
 
 ```go
 kuadrantCtx.RegisterUpstreamMethod(ctx, policy, "grpc://threat-service:8080",
@@ -371,30 +422,36 @@ kuadrantCtx.RegisterUpstreamMethod(ctx, policy, "grpc://threat-service:8080",
 
 **Rejected because:** Functional options are extensible but obscure which fields are required vs optional. The compiler cannot enforce that `WithGRPCDispatch` is provided when needed. Option ordering can cause confusion around validation.
 
-### Option C: Upstream context handle (not chosen for this issue, preferred long-term)
+### Option D: Flat struct extension on `UpstreamConfig` (previous design, not chosen)
+
+All call-level fields (`GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError`) were merged directly into `UpstreamConfig`:
 
 ```go
-upstream, err := kuadrantCtx.RegisterUpstream(ctx, policy, "grpc://threat-service:8080")
-
-upstream.OnRequest(types.GRPCCall{
-    Service:  "threat.v1.ThreatAssessmentService",
-    Method:   "AssessRequest",
-    Request:  `ThreatRequest{uri: request.path, identity: auth.identity}`,
-    Response: `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
-    OnError:  `Deny(503, "Threat service unavailable")`,
+kuadrantCtx.RegisterUpstreamMethod(ctx, policy, types.UpstreamConfig{
+    URL:         "grpc://threat-assessment-service.security.svc.cluster.local:8080",
+    GRPCService: "threat.v1.ThreatAssessmentService",
+    GRPCMethod:  "AssessRequest",
+    Dispatch:    `ThreatRequest{uri: request.path, …}`,
+    Callback:    `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
+    OnError:     `Deny(503, "Threat service unavailable")`,
+    Timeout:     "150ms",
+    FailureMode: types.FailureModeAllow,
 })
 ```
 
-This pattern naturally models the 1:N relationship between an upstream (one Envoy cluster / wasm Service entry) and multiple call configurations (multiple wasm Actions). It also cleanly separates request-phase and response-phase calls via `OnRequest`/`OnResponse`, enabling future use cases such as response enrichment (adding headers based on upstream response data) where the semantics differ from request-phase Allow/Deny decisions.
+**Rejected because:**
 
-**Not chosen for this issue because:** The current requirements are strictly request-phase, Allow/Deny only, with one dispatch per upstream. The upstream context adds statefulness and complexity that is not yet justified. Revisit if response-phase calls or multiple dispatch configurations per upstream become a requirement.
+1. **Structurally conflates cluster (Service) config with call (Action) config.** `Timeout` and `FailureMode` are Service-level; `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` are Action-level. A single struct for both levels obscures the distinction.
+2. **Multi-call is awkward.** If a policy needs two dispatch calls to the same upstream (e.g., after auth resolves an identity, call the threat service with identity context), the flat struct offers no natural way to express this — callers would have to call `RegisterUpstreamMethod` twice with the same URL, which is semantically wrong (two clusters) or requires special deduplication logic.
+3. **`grpcService`/`grpcMethod` end up in the wrong place.** Placing them on `UpstreamConfig` encourages wiring them to the wasm `Service`, but they must be on the wasm `Action` (so a single endpoint can serve multiple proto services). The handle design makes this structurally correct: `GRPCCall.GRPCService` is a call attribute, not a cluster attribute.
+4. **Reflection timing is unclear.** With a flat struct, it is not obvious whether reflection runs at `RegisterUpstreamMethod` time or at wasm config mutation time. With the handle, `Call(GRPCCall)` is the natural trigger for reflection — it is the first point where `GRPCService` is known.
 
 ### `OnError` vs `FailureMode`
 
 Both fields are kept because they operate at different levels:
 
-- `FailureMode` maps to the wasm `Service` entry — binary allow/deny at the cluster level (connection refused, DNS failure). Coarse but sufficient for infrastructure-level failures.
-- `OnError` maps to the wasm `Action` — a CEL expression evaluated when a specific gRPC call fails at runtime (timeout, error status). Supports custom HTTP status codes and messages: `Deny(503, "Threat service temporarily unavailable")`.
+- `FailureMode` (on `UpstreamOption`) maps to the wasm `Service` entry — binary allow/deny at the cluster level (connection refused, DNS failure). Coarse but sufficient for infrastructure-level failures.
+- `OnError` (on `GRPCCall`) maps to the wasm `Action` — a CEL expression evaluated when a specific gRPC call fails at runtime (timeout, error status). Supports custom HTTP status codes and messages: `Deny(503, "Threat service temporarily unavailable")`.
 
 Collapsing them into one field would either lose the expressiveness of CEL error responses or require CEL parsing at the Service level, which the wasm-shim does not support.
 
@@ -402,17 +459,17 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 > Prerequisite: Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)) must be merged. Phase 2 delivers gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, and static message building. Phase 3 builds on top.
 
-1. **Extend `UpstreamConfig` and `RegisteredUpstreamEntry`** with `Dispatch`, `Callback`, `OnError` fields.
-2. **Add reconcile-time proto-aware CEL compilation** in `RegisterUpstreamMethod`: full type-checking of `Dispatch` and `Callback` against the cached `FileDescriptorSet`; syntax-only for `OnError`.
+1. **Add `RegisterUpstream`/`UpstreamHandle`/`GRPCCall` API** to `pkg/extension/types/` and wire `RegisterUpstream` in `internal/extension/manager.go` (cluster + Service creation reused from `RegisterUpstreamMethod`).
+2. **Implement `UpstreamHandle.Call`**: proto reflection (reusing `ReflectionClient`), ProtoCache lookup/store, proto-structural CEL compilation of `Dispatch` and `Callback`, syntax-only validation of `OnError`, storage of `RegisteredGRPCCall` in `RegisteredUpstreamEntry.Calls`.
 3. **Add `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` fields to `wasm.Action`** in `internal/wasm/types.go`. (`ServiceTypeDynamic` and wasm `Service` fields are added in Phase 2.)
-4. **Extend the wasm `WasmConfigMutator`** to emit `Action` entries with `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` for upstream entries with a non-empty `Dispatch`.
+4. **Extend the wasm `WasmConfigMutator`** to emit one `Action` per `RegisteredGRPCCall` for upstream entries, omitting `grpcService`/`grpcMethod` from the `Service` entry.
 5. **Coordinate with wasm-shim team** on moving `grpcService`/`grpcMethod` from `Service` to `Action` and adding CEL evaluation support for `dispatch`/`callback`.
 6. **Write ThreatPolicy example extension** demonstrating the full flow end-to-end.
 7. **Integration test**: deploy ThreatPolicy extension in test env, send requests, verify Allow/Deny decisions.
 
 ## Testing Strategy
 
-- **Unit tests**: `RegisterUpstreamMethod` with valid/invalid CEL — proto-structural checks (unknown message type, unknown field name) for `Dispatch`; response field existence checks for `Callback`; syntax-only for `OnError`; wasm config mutator generating correct `Action`; Action JSON marshalling of new fields.
+- **Unit tests**: `RegisterUpstream` creates correct cluster+Service entry; `upstream.Call` with valid/invalid CEL — proto-structural checks (unknown message type, unknown field name) for `Dispatch`; response field existence checks for `Callback`; syntax-only for `OnError`; wasm config mutator generating correct `Action` per `Calls` entry; Action JSON marshalling of new fields; no Action generated when `Dispatch` is empty.
 - **Integration tests**: Register ThreatPolicy against a mock gRPC upstream; verify generated wasm config JSON includes `dispatch`/`callback` in Action entries (cluster creation and Service injection covered by #1828 tests).
 - **E2E tests** (post wasm-shim support): Send HTTP request through gateway; mock threat service returns high threat level; assert client receives 403.
 
@@ -420,27 +477,29 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 - **Wasm-shim CEL support**: The wasm-shim needs to evaluate `dispatch` and `callback` CEL expressions at request time using the `DescriptorPool` built from Phase 2's descriptor fetching. This is not yet in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (which covers static message building only). Phase 3 operator work on `dispatch`/`callback` Action fields should coordinate with the wasm-shim team on this extension.
 - **`grpcService`/`grpcMethod` placement — needs wasm-shim coordination**: This design places `grpcService` and `grpcMethod` on the wasm `Action` (not the `Service`), so that a single endpoint can serve multiple proto services/methods across different Actions without duplicating cluster config. Phase 2's wasm-shim design ([wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)) and the Phase 2 operator design ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)) currently put them on the `Service`. The shim will need to be updated to collect required `(endpoint, grpcService)` pairs from Actions at config activation time rather than from Service entries. This must be agreed with the wasm-shim team before implementation.
-- **Proto reflection mechanism**: Resolved in Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)). The **operator** fetches `FileDescriptorSet` via gRPC server reflection when `RegisterUpstreamMethod` is called, caches it in `ProtoCache` keyed by `(ClusterName, GRPCService)`, and serves it to the wasm-shim via a dedicated TCP `kuadrant.v1.DescriptorService` on port 50051. The wasm-shim calls this service at config activation time, builds a `DescriptorPool` using `prost-reflect`, and uses it to construct proto messages at request time.
-- **Response-phase calls and header mutation**: A natural follow-on is calling an upstream in the response phase (after the backend has responded) and mutating response headers based on the result — e.g. enriching the response with a threat score header. This requires different `Callback` semantics (`AddHeader`/`SetHeader` rather than `Allow`/`Deny`) and likely the upstream context pattern (Option C above). Deferred — out of scope for this issue.
-- **Multi-dispatch per policy**: Should a single policy be able to register multiple upstream calls (e.g., call threat service AND fraud service)? Current API allows multiple `RegisterUpstreamMethod` calls with different URLs; each generates its own Action. Ordering between actions is undefined — needs clarification.
+- **Proto reflection mechanism**: Resolved in Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)). The **operator** fetches `FileDescriptorSet` via gRPC server reflection when `upstream.Call(...)` is invoked (or at `RegisterUpstreamMethod` time if the Phase 2 path is used), caches it in `ProtoCache` keyed by `(ClusterName, GRPCService)`, and serves it to the wasm-shim via a dedicated TCP `kuadrant.v1.DescriptorService` on port 50051. The wasm-shim calls this service at config activation time, builds a `DescriptorPool` using `prost-reflect`, and uses it to construct proto messages at request time.
+- **Response-phase calls and header mutation**: A natural follow-on is calling an upstream in the response phase (after the backend has responded) and mutating response headers based on the result — e.g. enriching the response with a threat score header. This requires different `Callback` semantics (`AddHeader`/`SetHeader` rather than `Allow`/`Deny`). The `UpstreamHandle` pattern accommodates this naturally: a future `upstream.CallOnResponse(GRPCCall{...})` method or a `Phase` field on `GRPCCall` would be the extension point. Deferred — out of scope for this issue.
+- **Multi-dispatch per policy**: Multiple `upstream.Call(...)` invocations on the same handle each generate a separate wasm Action targeting the same Service entry. Ordering between actions within an ActionSet is undefined — needs clarification with the wasm-shim team.
 
 ## Execution
 
 ### Todo
 
-- [ ] Extend `UpstreamConfig` struct with `Dispatch`, `Callback`, `OnError`, `Timeout`, `FailureMode` fields
+- [ ] Add `UpstreamHandle` interface, `GRPCCall` struct, `UpstreamOption` helpers to `pkg/extension/types/`
   - [ ] Unit tests: field marshalling/unmarshalling
-- [ ] Store and validate new fields in `RegisterUpstreamMethod` with proto-structural CEL validation
+- [ ] Implement `RegisterUpstream` in `internal/extension/manager.go` (cluster + Service creation)
+  - [ ] Unit tests: cluster name derived from URL; Service entry created correctly
+- [ ] Implement `UpstreamHandle.Call`: reflection, ProtoCache lookup, proto-structural CEL validation, storage of `RegisteredGRPCCall`
   - [ ] Unit tests: valid `Dispatch` with known message type and fields passes
-  - [ ] Unit tests: unknown message type in `Dispatch` returns `InvalidArgument`
-  - [ ] Unit tests: unknown field name in `Dispatch` returns `InvalidArgument`
+  - [ ] Unit tests: unknown message type in `Dispatch` returns error
+  - [ ] Unit tests: unknown field name in `Dispatch` returns error
   - [ ] Unit tests: valid `Callback` referencing known response fields passes
-  - [ ] Unit tests: unknown response field in `Callback` returns `InvalidArgument`
-  - [ ] Unit tests: `OnError` syntax error returns `InvalidArgument`
+  - [ ] Unit tests: unknown response field in `Callback` returns error
+  - [ ] Unit tests: `OnError` syntax error returns error
 - [ ] Add `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` fields to `wasm.Action` (`ServiceTypeDynamic` and `Service` fields added in Phase 2)
   - [ ] Unit tests: JSON marshalling; omitempty behaviour
-- [ ] Extend `WasmConfigMutator` to emit `Action` for upstream entries with non-empty `Dispatch`
-  - [ ] Unit tests: mutator produces correct Config with Service+Action; no Action when Dispatch empty
+- [ ] Extend `WasmConfigMutator` to emit one `Action` per `RegisteredGRPCCall`; omit `grpcService`/`grpcMethod` from `Service`
+  - [ ] Unit tests: mutator produces correct Config with Service + one Action per Call; no Action when Calls is empty
 - [ ] Write ThreatPolicy example extension using new API
   - [ ] Integration tests: wasm config contains dispatch/callback; cluster exists
 - [ ] E2E test: HTTP request blocked by mock threat service (pending wasm-shim support)
@@ -451,6 +510,16 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - [ ] Phase 2: gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, static message building — [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (in progress, prerequisite)
 
 ## Change Log
+
+### 2026-03-27 — Adopt Option C: upstream context handle as chosen design
+
+- Replaced the flat `UpstreamConfig` approach (now "Option D" in Alternatives) with the upstream context handle pattern.
+- `KuadrantCtx` gains `RegisterUpstream(ctx, policy, url, ...opts) (UpstreamHandle, error)`.
+- `UpstreamHandle.Call(GRPCCall)` is the new entry point for proto reflection, CEL validation, and Action config storage. Each `Call` invocation produces one wasm `Action`.
+- `GRPCCall` struct holds `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` — structurally placing all call-level fields at the Action level, naturally resolving the `grpcService`/`grpcMethod` placement question.
+- Cluster/Service-level options (`Timeout`, `FailureMode`) moved to `UpstreamOption` functional options on `RegisterUpstream`.
+- `RegisteredUpstreamEntry` gains `Calls []RegisteredGRPCCall` to support multiple dispatch calls per upstream.
+- Updated architecture diagram, ThreatPolicy example, wasm mutator description, Implementation Plan, Todo, and open questions accordingly.
 
 ### 2026-03-27 — Add proto-structural CEL validation strategy
 
@@ -482,7 +551,7 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 ### 2026-03-27 — Initial design
 
-- Chose to extend `UpstreamConfig` (Option C) rather than introduce a separate `AddUpstreamDispatch` call, keeping the API surface minimal.
+- Chose to extend `UpstreamConfig` (Option D, later superseded) rather than introduce a separate `AddUpstreamDispatch` call, keeping the API surface minimal.
 - Decided on reconcile-time CEL **syntax** validation only; semantic validation deferred to wasm-shim runtime to avoid duplicating proto type knowledge in the operator.
 - `OnError` defaults to `"allow"` (fail-open) to match the existing upstream registration `FailureMode` default.
 - Scoped initial callback actions to Allow/Deny only; header mutation deferred.

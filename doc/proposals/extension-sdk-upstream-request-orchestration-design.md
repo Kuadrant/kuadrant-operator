@@ -6,7 +6,7 @@
 
 Phase 2 delivered: static message building, basic response logging, operator-side gRPC reflection + `ProtoCache`, and the `kuadrant.v1.DescriptorService` that serves descriptors to the wasm-shim.
 
-Phase 3 (this doc) adds: a typed `UpstreamHandle` returned by `RegisterUpstream`, a `GRPCCall` struct (holding `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError`) that is passed to `upstream.Call(...)`, proto-structural CEL validation at reconcile time, and wasm `Action` generation for dynamic gRPC dispatch.
+Phase 3 (this doc) adds: a typed `UpstreamHandle` returned by `RegisterUpstream`, a `GRPCCall` struct (holding `Service`, `Method`, `Dispatch`, `Callback`, `OnError`) that is passed to `upstream.Call(...)`, proto-structural CEL validation at reconcile time, and wasm `Action` generation for dynamic gRPC dispatch.
 
 ## Goals
 
@@ -42,8 +42,8 @@ Extension Reconciler
         │  )
         │
         │  upstream.Call(types.GRPCCall{
-        │      GRPCService: "threat.v1.ThreatAssessmentService",
-        │      GRPCMethod:  "AssessRequest",
+        │      Service:  "threat.v1.ThreatAssessmentService",
+        │      Method:   "AssessRequest",
         │      Dispatch:    `ThreatRequest{uri: request.path, …}`,
         │      Callback:    `response.threat_level >= 5 ? Deny(403, "Blocked") : Allow()`,
         │      OnError:     `Deny(503, "Threat assessment service unavailable")`,
@@ -54,8 +54,8 @@ extensionService.RegisterUpstream (internal/extension/manager.go)
         │  returns UpstreamHandle (wraps cluster name + ref to RegisteredDataStore)
         ▼
 upstream.Call(GRPCCall) (internal/extension/manager.go)
-        │  [Phase 2] dials upstream, fetches FileDescriptorSet for (cluster, GRPCService)
-        │  [Phase 2] caches in ProtoCache{ClusterName, GRPCService}
+        │  [Phase 2] dials upstream, fetches FileDescriptorSet for (cluster, Service)
+        │  [Phase 2] caches in ProtoCache{ClusterName, Service}
         │  [Phase 3] proto-structural CEL validation of Dispatch, Callback, OnError
         │  [Phase 3] stores GRPCCall in RegisteredDataStore against the cluster entry
         │  triggers Kuadrant reconciliation
@@ -100,12 +100,12 @@ RegisterUpstream(
 // so Call() can store the validated GRPCCall against the right cluster entry.
 type UpstreamHandle interface {
     // Call registers a gRPC call to be made at request time against this upstream.
-    // It triggers proto reflection for (cluster, GRPCCall.GRPCService) if not already
+    // It triggers proto reflection for (cluster, GRPCCall.Service) if not already
     // cached in ProtoCache, then performs proto-structural CEL validation of the
     // Dispatch and Callback expressions and syntax validation of OnError.
     // Multiple Call invocations on the same handle are allowed — each generates a
     // separate wasm Action targeting the same Service entry.
-    // Returns an error if GRPCService, GRPCMethod, Dispatch, or Callback are empty,
+    // Returns an error if Service, Method, Dispatch, or Callback are empty,
     // or if any CEL expression fails validation. These errors are permanent and will
     // not resolve on retry; callers should surface them as a status condition rather
     // than returning the error directly to the reconciler.
@@ -118,15 +118,15 @@ type UpstreamHandle interface {
 ```go
 // GRPCCall specifies a single gRPC call to make at request time.
 type GRPCCall struct {
-    // GRPCService is the fully-qualified protobuf service name.
+    // Service is the fully-qualified protobuf service name.
     // e.g. "threat.v1.ThreatAssessmentService"
     // Used (with the cluster name from the handle) to look up or fetch the
     // FileDescriptorSet from ProtoCache for CEL validation.
-    GRPCService string
+    Service string
 
-    // GRPCMethod is the RPC method name within GRPCService.
+    // Method is the RPC method name within Service.
     // e.g. "AssessRequest"
-    GRPCMethod string
+    Method string
 
     // Dispatch is a CEL expression that constructs the protobuf request message
     // sent to the upstream service.
@@ -228,9 +228,9 @@ func (r *ThreatPolicyReconciler) Reconcile(
     // resolve on retry. Surface them as a status condition on the policy rather than
     // returning the error directly.
     return reconcile.Result{}, upstream.Call(types.GRPCCall{
-        GRPCService: "threat.v1.ThreatAssessmentService",
-        GRPCMethod:  "AssessRequest",
-        Dispatch:    `ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}`,
+        Service:  "threat.v1.ThreatAssessmentService",
+        Method:   "AssessRequest",
+        Dispatch: `ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}`,
         Callback: fmt.Sprintf(
             `response.threat_level >= %d ? Deny(403, "Request blocked: threat level " + string(response.threat_level)) : Allow()`,
             threshold,
@@ -293,11 +293,11 @@ type RegisteredUpstreamEntry struct {
 }
 
 type RegisteredGRPCCall struct {
-    GRPCService string
-    GRPCMethod  string
-    Dispatch    string
-    Callback    string
-    OnError     string
+    Service  string
+    Method   string
+    Dispatch string
+    Callback string
+    OnError  string
 }
 ```
 
@@ -308,7 +308,7 @@ type RegisteredGRPCCall struct {
    - Validate that the message type referenced in the expression (e.g. `ThreatRequest`) exists in the descriptor
    - Validate that all field names used exist on that message type
    ```go
-   fds, _ := protoCache.Get(ProtoCacheKey{ClusterName: clusterName, Service: call.GRPCService})
+   fds, _ := protoCache.Get(ProtoCacheKey{ClusterName: clusterName, Service: call.Service})
    env, _ := cel.NewEnv(cel.TypeDescs(fds))
    ast, issues := env.Compile(call.Dispatch)
    if issues.Err() != nil {

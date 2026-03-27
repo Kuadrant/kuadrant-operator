@@ -61,35 +61,13 @@ upstream.Call(GRPCCall) (internal/extension/manager.go)
         │  triggers Kuadrant reconciliation
         ▼
 WasmConfigMutator (applied during policy reconciliation)
-        │  iterates RegisteredDataStore.upstreams
-        │  for each entry: updates Service entry + appends Action to wasm.Config
+        │  produces wasm.Config — see "Generated wasm config" in API Changes
         ▼
-wasm.Config
-  services:
-    ext-threat-assessment-service-8080:
-      type: dynamic        ← Phase 2
-      endpoint: …
-      failureMode: allow
-      timeout: 150ms
-  actionSets:
-    - name: default/api-threat-protection
-      actions:
-        - service: ext-threat-assessment-service-8080
-          grpcService: threat.v1.ThreatAssessmentService  ← Phase 3, on Action not Service
-          grpcMethod: AssessRequest
-          dispatch: "ThreatRequest{uri: request.path, …}"  ← Phase 3
-          callback: "response.threat_level >= 5 ? Deny(403,'Blocked') : Allow()"
-          onError: "Deny(503, 'Threat assessment service unavailable')"
-
-        ▼ (wasm-shim config activation — Phase 2)
-
-Wasm-shim calls kuadrant.v1.DescriptorService (operator TCP:50051)
-        │  GetServiceDescriptors(cluster, grpcService)
-        │  operator serves cached FileDescriptorSet from ProtoCache
-        │  wasm builds DescriptorPool → initialises DynamicService
+Wasm-shim loads config → calls kuadrant.v1.DescriptorService (operator TCP:50051)
+        │  fetches cached FileDescriptorSet from ProtoCache
+        │  builds DescriptorPool → initialises DynamicService
         ▼
-Request time: wasm evaluates Dispatch CEL → builds proto message → dispatches gRPC
-              wasm evaluates Callback CEL on response → Allow or Deny
+Request time: Dispatch CEL → proto message → gRPC call → Callback CEL → Allow/Deny
 ```
 
 - Envoy cluster generation (EnvoyFilter / EnvoyPatchPolicy): completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828).
@@ -103,7 +81,7 @@ Request time: wasm evaluates Dispatch CEL → builds proto message → dispatche
 ```go
 // RegisterUpstream creates the Envoy cluster and wasm Service entry for the given URL,
 // then returns an UpstreamHandle the caller uses to register individual gRPC calls.
-// Cluster and Service creation reuse the logic from RegisterUpstreamMethod.
+// Calling RegisterUpstream without any subsequent Call is valid for cluster-only registration.
 RegisterUpstream(
     ctx context.Context,
     policy client.Object,
@@ -161,15 +139,10 @@ type GRPCCall struct {
     // Example: "response.threat_level >= 5 ? Deny(403, 'Blocked') : Allow()"
     Callback string
 
-    // OnError is an optional CEL expression evaluated when the gRPC call fails at
-    // runtime (timeout, error status, network failure). Unlike FailureMode, this
-    // allows custom error codes and messages.
-    // Examples:
-    //   "Allow()"                                 — fail-open
-    //   "Deny(503, 'Threat service unavailable')" — fail with specific status
-    // If empty, the field is omitted from the wasm Action and the wasm-shim falls
-    // back to the Service-level FailureMode (binary allow/deny). Use OnError only
-    // when you need behaviour that differs from FailureMode or a custom status code.
+    // OnError is an optional CEL expression for call-level failures (timeout, error
+    // status). If empty, the wasm-shim falls back to the Service-level FailureMode.
+    // Use only when a custom status code or message is needed beyond FailureMode.
+    // Example: "Deny(503, 'Threat service unavailable')"
     OnError string
 }
 ```
@@ -186,30 +159,6 @@ func WithTimeout(d string) UpstreamOption { ... }
 // WithFailureMode sets the wasm Service failureMode (binary cluster-level allow/deny).
 // Default: FailureModeAllow
 func WithFailureMode(m FailureModeType) UpstreamOption { ... }
-```
-
-#### `RegisteredUpstreamEntry` (extended, internal)
-
-```go
-type RegisteredUpstreamEntry struct {
-    ClusterName string
-    Host        string
-    Port        string
-    TargetRef   gatewayapiv1.LocalPolicyTargetReference
-    FailureMode string
-    Timeout     string
-
-    // NEW: one entry per upstream.Call() invocation
-    Calls []RegisteredGRPCCall
-}
-
-type RegisteredGRPCCall struct {
-    GRPCService string
-    GRPCMethod  string
-    Dispatch    string
-    Callback    string
-    OnError     string
-}
 ```
 
 #### Wasm types (extended)
@@ -326,19 +275,31 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
 ### Component Changes
 
-#### `internal/extension/manager.go` — `RegisterUpstream`
+#### `internal/extension/manager.go` — `RegisterUpstream` and `UpstreamHandle.Call`
 
-`RegisterUpstream` performs the cluster and wasm Service entry creation that `RegisterUpstreamMethod` performed, then returns an `UpstreamHandle` that wraps the cluster name and a reference to the `RegisteredDataStore`. `RegisterUpstreamMethod` is removed as part of this implementation.
+`RegisterUpstream` extracts the cluster and wasm Service entry creation logic from `RegisterUpstreamMethod` (which is removed), returning an `UpstreamHandle`. Calling `RegisterUpstream` without any subsequent `Call` is valid for cluster-only registration.
 
-Calling `RegisterUpstream` without any subsequent `upstream.Call(...)` is valid — the Envoy cluster and wasm Service entry are created, but no Action is generated. This covers the cluster-only registration use case that `RegisterUpstreamMethod` previously served.
+`upstream.Call(GRPCCall)` fetches or reuses the `FileDescriptorSet` from `ProtoCache` keyed by `(ClusterName, GRPCService)`, validates the CEL expressions, then stores the call in `RegisteredUpstreamEntry.Calls`:
 
-#### `internal/extension/manager.go` — `UpstreamHandle.Call`
+```go
+type RegisteredUpstreamEntry struct {
+    ClusterName string
+    Host        string
+    Port        string
+    TargetRef   gatewayapiv1.LocalPolicyTargetReference
+    FailureMode string
+    Timeout     string
+    Calls       []RegisteredGRPCCall
+}
 
-`upstream.Call(GRPCCall)` is where reflection and validation happen:
-
-Phase 2 already added to `RegisterUpstreamMethod`: gRPC reflection to the upstream URL, storing the `FileDescriptorSet` in `ProtoCache` keyed by `ProtoCacheKey{ClusterName, GRPCService}`. `Call` reuses this mechanism — if `(cluster, GRPCCall.GRPCService)` is not yet in the cache, it fetches it; otherwise it reuses the cached descriptor.
-
-Phase 3 adds CEL validation and storage of the `GRPCCall` in `RegisteredDataStore`.
+type RegisteredGRPCCall struct {
+    GRPCService string
+    GRPCMethod  string
+    Dispatch    string
+    Callback    string
+    OnError     string
+}
+```
 
 **CEL validation strategy:**
 

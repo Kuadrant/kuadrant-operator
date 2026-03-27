@@ -28,7 +28,7 @@ Phase 3 (this doc) adds: a typed `UpstreamHandle` returned by `RegisterUpstream`
 
 ### Backwards Compatibility
 
-`RegisterUpstream` is a new method on `KuadrantCtx`. The existing `RegisterUpstreamMethod` signature is unchanged; callers that do not use the new API continue to work exactly as before. No breaking changes.
+`RegisterUpstream` supersedes `RegisterUpstreamMethod`. As there are no external callers of `RegisterUpstreamMethod` yet (it is a preliminary internal API), it will be removed as part of this implementation. No external breaking changes.
 
 ### Architecture Changes
 
@@ -127,6 +127,10 @@ type UpstreamHandle interface {
     // Dispatch and Callback expressions and syntax validation of OnError.
     // Multiple Call invocations on the same handle are allowed — each generates a
     // separate wasm Action targeting the same Service entry.
+    // Returns an error if GRPCService, GRPCMethod, or Dispatch are empty, or if any
+    // CEL expression fails validation. These errors are permanent and will not resolve
+    // on retry; callers should surface them as a status condition rather than
+    // returning the error directly to the reconciler.
     Call(call GRPCCall) error
 }
 ```
@@ -269,6 +273,9 @@ func (r *ThreatPolicyReconciler) Reconcile(
         return reconcile.Result{}, err
     }
 
+    // Note: errors from Call (e.g. CEL validation failures) are permanent and will not
+    // resolve on retry. Surface them as a status condition on the policy rather than
+    // returning the error directly.
     return reconcile.Result{}, upstream.Call(types.GRPCCall{
         GRPCService: "threat.v1.ThreatAssessmentService",
         GRPCMethod:  "AssessRequest",
@@ -319,7 +326,9 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
 #### `internal/extension/manager.go` — `RegisterUpstream`
 
-`RegisterUpstream` performs the cluster and wasm Service entry creation that `RegisterUpstreamMethod` performs today, then returns an `UpstreamHandle` that wraps the cluster name and a reference to the `RegisteredDataStore`.
+`RegisterUpstream` performs the cluster and wasm Service entry creation that `RegisterUpstreamMethod` performed, then returns an `UpstreamHandle` that wraps the cluster name and a reference to the `RegisteredDataStore`. `RegisterUpstreamMethod` is removed as part of this implementation.
+
+Calling `RegisterUpstream` without any subsequent `upstream.Call(...)` is valid — the Envoy cluster and wasm Service entry are created, but no Action is generated. This covers the cluster-only registration use case that `RegisterUpstreamMethod` previously served.
 
 #### `internal/extension/manager.go` — `UpstreamHandle.Call`
 

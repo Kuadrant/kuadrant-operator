@@ -1,0 +1,14 @@
+---
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec:
+  observability:
+    enable: true
+    tracing:
+      defaultEndpoint: rpc://jaeger.observability.svc.cluster.local:4317
+      insecure: true
+    dataPlane:
+      httpHeaderIdentifier: x-request-id

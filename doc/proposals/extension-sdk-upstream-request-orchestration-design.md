@@ -2,7 +2,11 @@
 
 ## Summary
 
-Define the Extension SDK API that enables extensions to dispatch gRPC calls to registered upstream services during request processing, and define data-plane behavior based on the response. Closes [kuadrant/kuadrant-operator#1838](https://github.com/Kuadrant/kuadrant-operator/issues/1838).
+**Phase 3** of the extension SDK phased design (see [Phase 2 design](grpc-reflection-dynamic-messages-design.md) and [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)). Builds on the gRPC reflection, proto caching, and descriptor serving established in Phase 2 to add CEL-based message construction and response-based Allow/Deny decisions. Closes [kuadrant/kuadrant-operator#1838](https://github.com/Kuadrant/kuadrant-operator/issues/1838).
+
+Phase 2 delivered: static message building, basic response logging, operator-side gRPC reflection + `ProtoCache`, and the `kuadrant.v1.DescriptorService` that serves descriptors to the wasm-shim.
+
+Phase 3 (this doc) adds: CEL `Dispatch` expression for dynamic message construction, CEL `Callback` expression for Allow/Deny decisions based on response data, and CEL `OnError` expression for custom error handling.
 
 ## Goals
 
@@ -13,9 +17,11 @@ Define the Extension SDK API that enables extensions to dispatch gRPC calls to r
 
 ## Non-Goals
 
-- Implementing wasm-shim support for `dispatch`/`callback` semantics (tracked separately — this doc captures the contract).
+- Implementing wasm-shim support for `dispatch`/`callback` CEL semantics (tracked separately — this doc captures the contract).
+- Static message building (delivered in Phase 2).
+- Operator gRPC reflection, proto caching, and descriptor service (delivered in Phase 2 — [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)).
 - Supporting non-gRPC (HTTP/REST) upstream calls.
-- Supporting response-body modification (initial scope: Allow or Deny only).
+- Supporting response-phase calls or header mutation (initial scope: request-phase Allow/Deny only).
 - Designing multi-step orchestration pipelines with intermediate state.
 
 ## Design
@@ -30,36 +36,50 @@ Define the Extension SDK API that enables extensions to dispatch gRPC calls to r
 Extension Reconciler
         │
         │  RegisterUpstreamMethod(ctx, policy, UpstreamConfig{
-        │      URL, Dispatch, Callback, OnError, …
+        │      URL, GRPCService, GRPCMethod, Dispatch, Callback, OnError, …
         │  })
         ▼
 extensionService.RegisterUpstreamMethod (internal/extension/manager.go)
-        │  stores RegisteredUpstreamEntry (with Dispatch/Callback/OnError)
+        │  [Phase 2] dials upstream, fetches FileDescriptorSet via gRPC reflection
+        │  [Phase 2] caches in ProtoCache{ClusterName, GRPCService}
+        │  [Phase 3] stores Dispatch/Callback/OnError in RegisteredUpstreamEntry
         │  triggers Kuadrant reconciliation
         ▼
 WasmConfigMutator (applied during policy reconciliation)
         │  iterates RegisteredDataStore.upstreams
-        │  for each entry: adds Service + Action to wasm.Config
+        │  for each entry: updates Service entry + appends Action to wasm.Config
         ▼
 wasm.Config
   services:
-    ext_threat_default_api-protection:
-      type: dynamic              ← new ServiceType (wasm-shim/316)
+    ext-threat-assessment-service-8080:
+      type: dynamic        ← Phase 2
       endpoint: …
       failureMode: allow
-      timeout: 100ms
+      timeout: 150ms
   actionSets:
     - name: default/api-threat-protection
       actions:
-        - service: ext_threat_default_api-protection
-          grpcService: threat.v1.ThreatAssessmentService  ← on Action, not Service
+        - service: ext-threat-assessment-service-8080
+          grpcService: threat.v1.ThreatAssessmentService  ← Phase 3, on Action not Service
           grpcMethod: AssessRequest
-          dispatch: "ThreatRequest{uri: request.path, …}"
+          dispatch: "ThreatRequest{uri: request.path, …}"  ← Phase 3
           callback: "response.threat_level >= 5 ? Deny(403,'Blocked') : Allow()"
           onError: "Deny(503, 'Threat assessment service unavailable')"
+
+        ▼ (wasm-shim config activation — Phase 2)
+
+Wasm-shim calls kuadrant.v1.DescriptorService (operator TCP:50051)
+        │  GetServiceDescriptors(cluster, grpcService)
+        │  operator serves cached FileDescriptorSet from ProtoCache
+        │  wasm builds DescriptorPool → initialises DynamicService
+        ▼
+Request time: wasm evaluates Dispatch CEL → builds proto message → dispatches gRPC
+              wasm evaluates Callback CEL on response → Allow or Deny
 ```
 
-Envoy cluster generation (EnvoyFilter / EnvoyPatchPolicy) and wasm `Service` entry injection were completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828). This design covers only the remaining `Action` layer.
+- Envoy cluster generation (EnvoyFilter / EnvoyPatchPolicy): completed in [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828).
+- Wasm `Service` entry injection, gRPC reflection, `ProtoCache`, and `kuadrant.v1.DescriptorService`: completed in Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822), [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)).
+- This design (Phase 3) covers the `Action` layer: `Dispatch`, `Callback`, `OnError`, and the `grpcService`/`grpcMethod` placement on Action.
 
 ### API Changes
 
@@ -72,11 +92,17 @@ type UpstreamConfig struct {
     URL string
 
     // GRPCService is the fully-qualified protobuf service name.
-    // Required when Dispatch is set (e.g. "threat.v1.ThreatService").
-    // Used by the wasm-shim to fetch proto descriptors via kuadrant.v1.DescriptorService.
+    // e.g. "threat.v1.ThreatAssessmentService"
+    // The operator uses this (with URL) to fetch the FileDescriptorSet via gRPC
+    // reflection at RegisterUpstreamMethod time (Phase 2), caching it in ProtoCache
+    // keyed by (ClusterName, GRPCService). The wasm-shim later retrieves the cached
+    // descriptor from the operator's kuadrant.v1.DescriptorService.
+    // Required when Dispatch is set.
     GRPCService string
 
-    // GRPCMethod is the RPC method name within GRPCService (e.g. "Check").
+    // GRPCMethod is the RPC method name within GRPCService.
+    // e.g. "AssessRequest"
+    // Required when Dispatch is set.
     GRPCMethod string
 
     // Dispatch is an optional CEL expression that constructs the protobuf
@@ -248,9 +274,12 @@ func (r *ThreatPolicyReconciler) Reconcile(
 
 #### `internal/extension/manager.go` — `RegisterUpstreamMethod`
 
+Phase 2 already added: gRPC reflection to the upstream URL, storing the `FileDescriptorSet` in `ProtoCache` keyed by `ProtoCacheKey{ClusterName, GRPCService}`, and failing fast if reflection is unsupported or the service is unreachable.
+
+Phase 3 adds:
 - Parse and store `Dispatch`, `Callback`, `OnError` from `UpstreamConfig` into `RegisteredUpstreamEntry`.
-- **Reconcile-time CEL syntax validation**: after storing, call `cel.Parse(Dispatch)` and `cel.Parse(Callback)` using the existing `pkg/cel` library. On syntax error, return a gRPC status `InvalidArgument` so the extension reconciler can surface a policy condition immediately.
-- Semantic validation (correct field names, proto message existence) is deferred to runtime; the wasm-shim reports unknown-field errors back via its health/status API.
+- **Reconcile-time CEL syntax validation**: call `cel.Parse(Dispatch)` and `cel.Parse(Callback)` using the existing `pkg/cel` library. On syntax error, return a gRPC status `InvalidArgument` so the extension reconciler can surface a policy condition immediately.
+- Semantic validation (correct field names, proto message type correctness) is deferred to runtime — the wasm-shim has the descriptor and can validate at dispatch time.
 
 #### `internal/extension/manager.go` — wasm mutator
 
@@ -339,14 +368,15 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 ## Implementation Plan
 
-> Envoy cluster generation and wasm `Service` injection are done ([#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)). Remaining steps:
+> Prerequisite: Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)) must be merged. Phase 2 delivers gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, and static message building. Phase 3 builds on top.
 
 1. **Extend `UpstreamConfig` and `RegisteredUpstreamEntry`** with `Dispatch`, `Callback`, `OnError` fields.
 2. **Add reconcile-time CEL syntax validation** in `RegisterUpstreamMethod`.
-3. **Add `ServiceTypeDynamic`** and the new `Service` fields (`GRPCService`, `GRPCMethod`) and `Action` fields (`Dispatch`, `Callback`, `OnError`) to `internal/wasm/types.go`.
-4. **Extend the wasm `WasmConfigMutator`** to emit `Action` entries for upstream entries with a non-empty `Dispatch`.
-5. **Write ThreatPolicy example extension** demonstrating the full flow end-to-end.
-6. **Integration test**: deploy ThreatPolicy extension in test env, send requests, verify Allow/Deny decisions.
+3. **Add `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` fields to `wasm.Action`** in `internal/wasm/types.go`. (`ServiceTypeDynamic` and wasm `Service` fields are added in Phase 2.)
+4. **Extend the wasm `WasmConfigMutator`** to emit `Action` entries with `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` for upstream entries with a non-empty `Dispatch`.
+5. **Coordinate with wasm-shim team** on moving `grpcService`/`grpcMethod` from `Service` to `Action` and adding CEL evaluation support for `dispatch`/`callback`.
+6. **Write ThreatPolicy example extension** demonstrating the full flow end-to-end.
+7. **Integration test**: deploy ThreatPolicy extension in test env, send requests, verify Allow/Deny decisions.
 
 ## Testing Strategy
 
@@ -356,9 +386,9 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 
 ## Open Questions
 
-- **Wasm-shim changes**: Being implemented in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (draft). The `dynamic` service type and descriptor fetching via `kuadrant.v1.DescriptorService` are defined there. Operator work on `dispatch`/`callback` Action fields should coordinate with that PR.
-- **`grpcService`/`grpcMethod` placement — needs wasm-shim coordination**: This design places `grpcService` and `grpcMethod` on the wasm `Action` (not the `Service`), so that a single endpoint can serve multiple proto services/methods across different Actions without duplicating cluster config. wasm-shim#316 currently puts them on the `Service`. The shim will need to be updated to collect required `(endpoint, grpcService)` pairs from Actions at config activation time rather than from Service entries. This must be agreed with the wasm-shim team before implementation.
-- **Proto reflection**: Resolved — wasm-shim uses `prost-reflect` with `DescriptorPool`s fetched at config activation time from a `kuadrant.v1.DescriptorService` sidecar. The operator does not need to know about proto types.
+- **Wasm-shim CEL support**: The wasm-shim needs to evaluate `dispatch` and `callback` CEL expressions at request time using the `DescriptorPool` built from Phase 2's descriptor fetching. This is not yet in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (which covers static message building only). Phase 3 operator work on `dispatch`/`callback` Action fields should coordinate with the wasm-shim team on this extension.
+- **`grpcService`/`grpcMethod` placement — needs wasm-shim coordination**: This design places `grpcService` and `grpcMethod` on the wasm `Action` (not the `Service`), so that a single endpoint can serve multiple proto services/methods across different Actions without duplicating cluster config. Phase 2's wasm-shim design ([wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)) and the Phase 2 operator design ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)) currently put them on the `Service`. The shim will need to be updated to collect required `(endpoint, grpcService)` pairs from Actions at config activation time rather than from Service entries. This must be agreed with the wasm-shim team before implementation.
+- **Proto reflection mechanism**: Resolved in Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)). The **operator** fetches `FileDescriptorSet` via gRPC server reflection when `RegisterUpstreamMethod` is called, caches it in `ProtoCache` keyed by `(ClusterName, GRPCService)`, and serves it to the wasm-shim via a dedicated TCP `kuadrant.v1.DescriptorService` on port 50051. The wasm-shim calls this service at config activation time, builds a `DescriptorPool` using `prost-reflect`, and uses it to construct proto messages at request time.
 - **Response-phase calls and header mutation**: A natural follow-on is calling an upstream in the response phase (after the backend has responded) and mutating response headers based on the result — e.g. enriching the response with a threat score header. This requires different `Callback` semantics (`AddHeader`/`SetHeader` rather than `Allow`/`Deny`) and likely the upstream context pattern (Option C above). Deferred — out of scope for this issue.
 - **Multi-dispatch per policy**: Should a single policy be able to register multiple upstream calls (e.g., call threat service AND fraud service)? Current API allows multiple `RegisterUpstreamMethod` calls with different URLs; each generates its own Action. Ordering between actions is undefined — needs clarification.
 
@@ -370,9 +400,7 @@ Collapsing them into one field would either lose the expressiveness of CEL error
   - [ ] Unit tests: field marshalling/unmarshalling
 - [ ] Store and validate new fields in `RegisterUpstreamMethod` (reconcile-time CEL syntax check)
   - [ ] Unit tests: valid CEL passes, invalid CEL returns `InvalidArgument`
-- [ ] Add `ServiceTypeDynamic = "dynamic"` and `GRPCService`/`GRPCMethod` fields to `Service` in `internal/wasm/types.go`
-  - [ ] Unit tests: JSON serialisation of new service type and fields
-- [ ] Add `Dispatch`, `Callback`, `OnError` fields to `wasm.Action`
+- [ ] Add `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` fields to `wasm.Action` (`ServiceTypeDynamic` and `Service` fields added in Phase 2)
   - [ ] Unit tests: JSON marshalling; omitempty behaviour
 - [ ] Extend `WasmConfigMutator` to emit `Action` for upstream entries with non-empty `Dispatch`
   - [ ] Unit tests: mutator produces correct Config with Service+Action; no Action when Dispatch empty
@@ -383,8 +411,17 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 ### Completed
 
 - [x] Envoy cluster generation (Istio + Envoy Gateway) and wasm `Service` entry injection — [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)
+- [ ] Phase 2: gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, static message building — [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (in progress, prerequisite)
 
 ## Change Log
+
+### 2026-03-27 — Frame as Phase 3; correct descriptor mechanism
+
+- Framed this design as Phase 3, building on Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)).
+- Corrected the proto reflection description: the **operator** fetches `FileDescriptorSet` via gRPC server reflection and caches it in `ProtoCache`; the wasm-shim calls the operator's `kuadrant.v1.DescriptorService` TCP endpoint at config activation time. The wasm-shim does not perform reflection itself.
+- Updated Non-Goals to explicitly exclude Phase 2 deliverables (reflection, proto caching, descriptor service, static message building).
+- Updated Implementation Plan to note Phase 2 as a prerequisite and remove `ServiceTypeDynamic` (already added in Phase 2).
+- Updated Open Questions to accurately describe the descriptor mechanism and distinguish wasm-shim CEL support (new work) from descriptor fetching (Phase 2).
 
 ### 2026-03-27 — Move grpcService/grpcMethod to Action
 
@@ -405,11 +442,13 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - Decided on reconcile-time CEL **syntax** validation only; semantic validation deferred to wasm-shim runtime to avoid duplicating proto type knowledge in the operator.
 - `OnError` defaults to `"allow"` (fail-open) to match the existing upstream registration `FailureMode` default.
 - Scoped initial callback actions to Allow/Deny only; header mutation deferred.
-- Adopted `"dynamic"` as the wasm service type (not `"extension"`) based on [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316); added `GRPCService`/`GRPCMethod` fields to `UpstreamConfig` and wasm `Service`. Proto reflection resolved — wasm-shim fetches descriptors via `kuadrant.v1.DescriptorService` at config activation time.
+- Adopted `"dynamic"` as the wasm service type (not `"extension"`) based on [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316); added `GRPCService`/`GRPCMethod` fields to `UpstreamConfig`. Proto reflection mechanism clarified: the **operator** fetches descriptors via gRPC server reflection at `RegisterUpstreamMethod` time (Phase 2, [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)), caches them in `ProtoCache`, and serves them to the wasm-shim via a TCP `kuadrant.v1.DescriptorService`; the wasm-shim does not perform reflection itself.
 
 ## References
 
 - [kuadrant/kuadrant-operator#1838 — Extension SDK: API for Upstream Request Orchestration](https://github.com/Kuadrant/kuadrant-operator/issues/1838)
 - [GEP-713: Policy Attachment](https://gateway-api.sigs.k8s.io/geps/gep-713/)
 - [kuadrant/wasm-shim#316 — Supporting dynamically configured gRPC endpoints](https://github.com/Kuadrant/wasm-shim/pull/316)
+- [kuadrant/kuadrant-operator#1822 — Extensions gRPC proto cache and client (Phase 2)](https://github.com/Kuadrant/kuadrant-operator/pull/1822)
+- [Phase 2 design — gRPC Reflection and Dynamic Message Building](grpc-reflection-dynamic-messages-design.md)
 - [KevFan/threat-assessment-service — ThreatAssessmentService proto and example](https://github.com/KevFan/threat-assessment-service)

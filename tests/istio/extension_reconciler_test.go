@@ -257,24 +257,23 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			// ensure imagePullsecret is empty as expected
-			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
 			// update the WASMPlugin imagePullSecret directly, it should get reconciled back to empty when RLP is reconciled next
-			existingWasmPlugin.Spec.ImagePullSecret = "shouldntbehere"
-			err = testClient().Update(ctx, existingWasmPlugin)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				// ensure imagePullsecret is empty as expected
+				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
+				existingWasmPlugin.Spec.ImagePullSecret = "shouldntbehere"
+				g.Expect(testClient().Update(ctx, existingWasmPlugin)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 			// update the RLP to trigger reconcile
-			Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
-			original := rlp.DeepCopy()
-			if rlp.Annotations == nil {
-				rlp.Annotations = map[string]string{}
-			}
-			rlp.Annotations["test"] = "2"
-			patch := client.MergeFrom(original)
-			Expect(testClient().Patch(ctx, rlp, patch)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
+				if rlp.Annotations == nil {
+					rlp.Annotations = map[string]string{}
+				}
+				rlp.Annotations["test"] = "2"
+				g.Expect(testClient().Update(ctx, rlp)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())

@@ -427,6 +427,28 @@ func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 	return existed
 }
 
+func (r *RegisteredDataStore) GetUpstreamsForPolicy(policy ResourceID) []RegisteredUpstreamEntry {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+
+	filtered := lo.PickBy(r.registeredUpstreams, func(key RegisteredUpstreamKey, _ RegisteredUpstreamEntry) bool {
+		return key.Policy == policy
+	})
+	return lo.Values(filtered)
+}
+
+func (r *RegisteredDataStore) HasUpstreamForCacheKey(cacheKey ProtoCacheKey) bool {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+
+	for _, entry := range r.registeredUpstreams {
+		if entry.ClusterName == cacheKey.ClusterName && entry.Service == cacheKey.Service {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()

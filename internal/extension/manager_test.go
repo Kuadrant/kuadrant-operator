@@ -263,3 +263,73 @@ func TestRegisterUpstreamMethod_ChangeNotifier(t *testing.T) {
 		t.Fatal("Expected change notifier to have been called")
 	}
 }
+
+func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
+	svc := newTestExtensionService()
+
+	// Register the same upstream service from two different policies
+	policy1Req := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "policy1",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route1", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "Method1",
+	}
+
+	policy2Req := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "policy2",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route2", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "Method2",
+	}
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), policy1Req)
+	if err != nil {
+		t.Fatalf("Failed to register policy1: %v", err)
+	}
+
+	_, err = svc.RegisterUpstreamMethod(context.Background(), policy2Req)
+	if err != nil {
+		t.Fatalf("Failed to register policy2: %v", err)
+	}
+
+	cacheKey := ProtoCacheKey{
+		ClusterName: "ext-svc-8081",
+		Service:     "example.v1.ExampleService",
+	}
+
+	// Verify cache entry exists
+	_, exists := svc.protoCache.Get(cacheKey)
+	if !exists {
+		t.Fatal("Expected cache entry to exist after registration")
+	}
+
+	// Clear policy1
+	_, err = svc.ClearPolicy(context.Background(), &extpb.ClearPolicyRequest{
+		Policy: policy1Req.Policy,
+	})
+	if err != nil {
+		t.Fatalf("Failed to clear policy1: %v", err)
+	}
+
+	// Cache entry should still exist because policy2 references it
+	_, exists = svc.protoCache.Get(cacheKey)
+	if !exists {
+		t.Fatal("Expected cache entry to still exist after clearing policy1")
+	}
+
+	// Clear policy2
+	_, err = svc.ClearPolicy(context.Background(), &extpb.ClearPolicyRequest{
+		Policy: policy2Req.Policy,
+	})
+	if err != nil {
+		t.Fatalf("Failed to clear policy2: %v", err)
+	}
+
+	// Cache entry should now be deleted
+	_, exists = svc.protoCache.Get(cacheKey)
+	if exists {
+		t.Fatal("Expected cache entry to be deleted after clearing all referencing policies")
+	}
+}

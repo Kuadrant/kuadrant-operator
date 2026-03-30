@@ -440,7 +440,22 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		Name:      request.Policy.Metadata.Name,
 	}
 
+	upstreamsToCheck := s.registeredData.GetUpstreamsForPolicy(policyID)
 	clearedMutators, clearedSubscriptions, clearedUpstreams := s.registeredData.ClearPolicyData(policyID)
+
+	// Clean up proto cache for upstreams that are no longer referenced
+	for _, upstream := range upstreamsToCheck {
+		cacheKey := ProtoCacheKey{
+			ClusterName: upstream.ClusterName,
+			Service:     upstream.Service,
+		}
+		if !s.registeredData.HasUpstreamForCacheKey(cacheKey) {
+			s.protoCache.Delete(cacheKey)
+			s.logger.V(1).Info("removed cached descriptors",
+				"clusterName", cacheKey.ClusterName,
+				"service", cacheKey.Service)
+		}
+	}
 
 	// Trigger notifier when mutators or upstreams are cleared
 	if (clearedMutators > 0 || clearedUpstreams > 0) && s.changeNotifier != nil {

@@ -544,8 +544,8 @@ pub enum ServiceInstance {
   - [x] Populate `GrpcService` and `GrpcMethod` fields from registered upstreams
   - [x] Set `DescriptorService` field when dynamic services present
   - [x] Unit test: wasm config includes dynamic services
-- [ ] Update `ClearPolicyData` to clean up proto cache
-  - [ ] Unit test: cache entries deleted when policy removed
+- [x] Update `ClearPolicyData` to clean up proto cache
+  - [x] Unit test: cache entries deleted when policy removed
 
 ### Phase 2.2: Operator Descriptor Service
 

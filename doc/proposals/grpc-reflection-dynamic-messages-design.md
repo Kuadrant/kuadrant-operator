@@ -123,6 +123,7 @@ Phase 2 introduces a **separate gRPC service** for descriptor serving to isolate
   - Exposed via Kubernetes Service: `kuadrant-operator-grpc.kuadrant-system.svc.cluster.local:50051`
 
 **Why separate services?**
+
 - Security boundary: wasm should not have access to `Resolve`, `AddDataTo`, or other control plane APIs
 - Different transports: Unix socket (extensions) vs TCP (wasm in Envoy)
 - Different lifecycle: extension client lifecycle tied to controller, wasm client lifecycle tied to Envoy config
@@ -163,6 +164,7 @@ message ServiceDescriptor {
 **Modified RegisterUpstreamMethod** (no proto changes, behavior changes only):
 
 When `RegisterUpstreamMethod` is called:
+
 1. Validate that `UpstreamConfig.Service` and `UpstreamConfig.Method` are set
 2. Initiate gRPC reflection to `UpstreamConfig.URL`
 3. Fetch service descriptors for `UpstreamConfig.Service`
@@ -228,6 +230,7 @@ func (es *extensionService) RegisterUpstreamMethod(ctx context.Context, req *kua
 ```
 
 **Key behaviors**:
+
 1. Validate that `UpstreamConfig.Service` and `UpstreamConfig.Method` are set
 2. Call `ReflectionClient.FetchServiceDescriptors(url, service)`
 3. Generate cluster name (Phase 1 logic)
@@ -245,6 +248,7 @@ func (es *extensionService) GetServiceDescriptors(ctx context.Context, req *kuad
 ```
 
 **Key behaviors**:
+
 1. Batch fetch: iterate over `req.Services`
 2. For each service, lookup in `ProtoCache` using `ProtoCacheKey{ClusterName, Service}`
 3. Return error if descriptor not found (fail wasm configuration)
@@ -256,6 +260,7 @@ func (es *extensionService) GetServiceDescriptors(ctx context.Context, req *kuad
 When a policy is deleted, leverage `RegisteredDataStore` (from Phase 1) to determine if descriptors can be safely deleted from the cache.
 
 **Key behaviors**:
+
 - On `RegisterUpstreamMethod`: call `ProtoCache.Set(key, fds)` to store descriptor
 - On `ClearPolicyData`:
   1. Get all upstreams registered by the policy being deleted
@@ -274,6 +279,7 @@ func StartDescriptorServer(es *extensionService, port int) error
 ```
 
 **Key behaviors**:
+
 - Listen on TCP port (default: 50051)
 - Register `DescriptorServiceServer` (not full `ExtensionServiceServer`)
 - Run in goroutine alongside Unix socket extension service
@@ -294,10 +300,10 @@ metadata:
   namespace: system
 spec:
   ports:
-  - name: grpc
-    port: 50051
-    protocol: TCP
-    targetPort: grpc
+    - name: grpc
+      port: 50051
+      protocol: TCP
+      targetPort: grpc
   selector:
     control-plane: controller-manager
 ```
@@ -307,11 +313,13 @@ spec:
 The operator must generate gateway-specific Envoy cluster configuration for the descriptor service.
 
 **Design Note**: Use existing Phase 1 upstream cluster generation code (`istio_extension_reconciler.go`, `envoy_gateway_extension_reconciler.go`). When an extension policy targets a Gateway, ensure both:
+
 1. Upstream cluster for the registered service (Phase 1)
-2. Descriptor service cluster: `kuadrant-descriptor-service` → `kuadrant-operator-grpc.kuadrant-system.svc.cluster.local:50051`
+2. Descriptor service cluster: `kuadrant-operator-grpc` → `kuadrant-operator-grpc.kuadrant-system.svc.cluster.local:50051`
 
 **Cluster Requirements**:
-- Name: `kuadrant-descriptor-service`
+
+- Name: `kuadrant-operator-grpc`
 - Target: Kubernetes Service on port 50051
 - Protocol: HTTP/2 (gRPC)
 - Scope: Gateway-specific
@@ -395,6 +403,7 @@ impl DynamicService {
 ```
 
 **Key behaviors** (dispatch_dynamic):
+
 1. Lookup method descriptor in `DescriptorPool` using `service_name` and `method`
 2. Deserialize JSON string into `DynamicMessage` using `prost-reflect`'s serde support
 3. Encode message to bytes using `prost::Message::encode`
@@ -419,7 +428,7 @@ pub enum ServiceInstance {
 
 1. **on_configure**:
    - Identify Dynamic services in configuration
-   - Call `dispatch_grpc_call("kuadrant-descriptor-service", "kuadrant.v1.DescriptorService", "GetServiceDescriptors", ...)`
+   - Call `dispatch_grpc_call("kuadrant-operator-grpc", "kuadrant.v1.DescriptorService", "GetServiceDescriptors", ...)`
    - Store pending configuration and token
    - Return true (wait for async response)
 
@@ -439,6 +448,7 @@ pub enum ServiceInstance {
 **End-to-End Flow Example** (using Limitador):
 
 1. **Extension registers upstream**:
+
    ```go
    ctx.RegisterUpstreamMethod(kuadrant.UpstreamConfig{
        URL:     "limitador-limitador.kuadrant-system.svc.cluster.local:8081",
@@ -461,7 +471,7 @@ pub enum ServiceInstance {
 
 4. **Wasm reconfigures**:
    - `on_configure` detects `Dynamic` service type
-   - Calls `GetServiceDescriptors` to operator via cluster `kuadrant-descriptor-service` (port 50051)
+   - Calls `GetServiceDescriptors` to operator via cluster `kuadrant-operator-grpc` (port 50051)
    - Receives serialized `FileDescriptorSet`
    - Builds `DescriptorPool` using `prost-reflect`
    - Initializes `DynamicService` with descriptor pool
@@ -476,21 +486,25 @@ pub enum ServiceInstance {
 ### Error Handling
 
 **Reflection Failures**:
+
 - **When**: During `RegisterUpstreamMethod` if upstream doesn't support reflection or is unreachable
 - **Behavior**: Return error to extension, fail the policy reconciliation
 - **Rationale**: Fail fast to alert extension authors of misconfiguration
 
 **Descriptor Fetch Failures (Wasm)**:
+
 - **When**: Wasm calls `GetServiceDescriptors` but descriptor not found in cache
-- **Behavior**: Log error, increment metric `kuadrant_descriptor_fetch_failures_total`
-- **Rationale**: Don't crash Envoy, but surface observability for debugging
+- **Behavior**: Log error, retries on tick
+- **Rationale**: Don't crash Envoy; metrics deferred to future work (consistent with Phase 1)
 
 **Upstream Unreachable at Request Time**:
+
 - **When**: Wasm dispatches gRPC but upstream is down
 - **Behavior**: Defer to `failureMode` setting (allow/deny)
 - **Rationale**: Consistent with existing wasm failure modes
 
 **Descriptor Pool Build Failures**:
+
 - **When**: Wasm receives malformed `FileDescriptorSet`
 - **Behavior**: Log error, skip that service, continue with others
 - **Rationale**: Partial degradation is better than total failure
@@ -498,15 +512,18 @@ pub enum ServiceInstance {
 ### Security Considerations
 
 **Service Separation**:
+
 - Extension service (Unix socket) and descriptor service (TCP) are isolated
 - Wasm cannot access control plane APIs (`Resolve`, `AddDataTo`, etc.)
 - Only `GetServiceDescriptors` is exposed to wasm
 
 **No mTLS in Phase 2**:
+
 - Reflection calls to upstreams are insecure (future work: mTLS)
 - Descriptor service is ClusterIP (future work: mTLS for wasm clients)
 
 **Cache Poisoning**:
+
 - ProtoCache is only written by operator (trusted)
 - No external API to inject descriptors
 
@@ -547,24 +564,22 @@ pub enum ServiceInstance {
 
 ### Phase 2.3: Wasm Dynamic Service Type
 
-- [ ] Add `Dynamic` variant to `ServiceType` enum
-  - [ ] Unit test: deserialization of dynamic service config
-- [ ] Extend `Service` struct with `grpc_service` and `grpc_method` fields
-  - [ ] Unit test: config parsing
-- [ ] Implement `DynamicService` struct with descriptor pool
-  - [ ] Unit test: message building from static data
-  - [ ] Unit test: error on missing fields
-- [ ] Update `ServiceInstance` enum to include `Dynamic`
+- [x] Add `Dynamic` variant to `ServiceType` enum
+  - [x] Unit test: deserialization of dynamic service config
+- [x] Extend `Service` struct with `grpc_service` and `grpc_method` fields
+  - [x] Unit test: config parsing
+- [x] Implement `DynamicService` struct with descriptor pool
+  - [x] Unit test: message building from static data
+- [x] Update `ServiceInstance` enum to include `Dynamic`
 
 ### Phase 2.4: Wasm Descriptor Fetching
 
-- [ ] Implement `fetch_descriptors` in `on_configure`
-  - [ ] Unit test: request serialization
-- [ ] Implement descriptor fetch response handling in `on_grpc_call_response`
-  - [ ] Unit test: DescriptorPool built from FileDescriptorSet
-  - [ ] Unit test: graceful handling of missing descriptors
-- [ ] Update `PipelineFactory::try_from` to inject descriptor pools
-  - [ ] Unit test: dynamic service initialized with pool
+- [x] Implement `fetch_descriptors` in `on_configure`
+- [x] Implement descriptor fetch response handling in `on_grpc_call_response`
+  - [x] Unit test: graceful handling of missing descriptors
+- [x] Update `PipelineFactory::try_from` to inject descriptor pools
+  - [x] Unit test: dynamic service initialized with pool
+- [x] e2e test: full descriptor fetch and activation flow
 
 ### Phase 2.5: Integration and Testing
 
@@ -693,8 +708,7 @@ pub enum ServiceInstance {
 - Defined Phase 2 scope: static messages only (no CEL), basic response logging (no extraction)
 - Clarified backwards compatibility: only affects RegisterUpstreamMethod (core policies unchanged)
 - Documented recursive dependency fetching with circular dependency protection from PoC
-- Added 30-second reflection timeout to prevent 
-- hanging on slow/unreachable upstreams
+- Added 30-second reflection timeout to prevent hanging on slow/unreachable upstreams
 - Updated proto definition to match PoC implementation (list-based GetServiceDescriptorsResponse)
 - Added EnvoyFilter/EnvoyPatchPolicy generation requirements for descriptor service cluster
 - Updated examples to use realistic services (Limitador's envoy.service.ratelimit.v3.RateLimitService)

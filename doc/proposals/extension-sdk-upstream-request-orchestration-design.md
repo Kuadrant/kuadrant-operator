@@ -132,6 +132,12 @@ type GRPCCall struct {
     // sent to the upstream service.
     // Evaluated at request time by the wasm-shim using proto reflection.
     // Example: "ThreatRequest{uri: request.path, source_ip: request.source.address}"
+    //
+    // Note: use of auth.* context variables (e.g. auth.identity) in Dispatch
+    // requires a defined ActionSet ordering between AuthPolicy and extension-generated
+    // ActionSets. This ordering is currently unresolved — see Open Questions.
+    // Until it is clarified, limit Dispatch to request-phase fields only
+    // (e.g. request.path, request.source.address, request.headers).
     Dispatch string
 
     // Callback is a CEL expression evaluated with the upstream response in scope.
@@ -172,10 +178,10 @@ const ServiceTypeDynamic ServiceType = "dynamic"
 // Action gains five optional fields for dynamic upstream dispatch:
 type Action struct {
     ServiceName          string            `json:"service"`
-    Scope                string            `json:"scope,omitempty"`
+    Scope                string            `json:"scope"`
     Predicates           []string          `json:"predicates,omitempty"`
-    ConditionalData      []ConditionalData `json:"data,omitempty"`
-    SourcePolicyLocators []string          `json:"-"`
+    ConditionalData      []ConditionalData `json:"conditionalData,omitempty"`
+    SourcePolicyLocators []string          `json:"sources,omitempty"`
 
     // GRPCService is the fully-qualified proto service name for this call.
     // Placed on the Action (not Service) so that a single upstream endpoint can
@@ -227,16 +233,29 @@ func (r *ThreatPolicyReconciler) Reconcile(
     // Note: errors from Call (e.g. CEL validation failures) are permanent and will not
     // resolve on retry. Surface them as a status condition on the policy rather than
     // returning the error directly.
-    return reconcile.Result{}, upstream.Call(types.GRPCCall{
+    if err := upstream.Call(types.GRPCCall{
         Service:  "threat.v1.ThreatAssessmentService",
         Method:   "AssessRequest",
-        Dispatch: `ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}`,
+        Dispatch: `ThreatRequest{uri: request.path, source_ip: request.source.address}`,
         Callback: fmt.Sprintf(
             `response.threat_level >= %d ? Deny(403, "Request blocked: threat level " + string(response.threat_level)) : Allow()`,
             threshold,
         ),
         OnError: `Deny(503, "Threat assessment service unavailable")`,
-    })
+    }); err != nil {
+        meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
+            Type:    "Ready",
+            Status:  metav1.ConditionFalse,
+            Reason:  "InvalidCEL",
+            Message: err.Error(),
+        })
+        if updateErr := r.Client.Status().Update(ctx, policy); updateErr != nil {
+            return reconcile.Result{}, updateErr
+        }
+        return reconcile.Result{}, nil
+    }
+
+    return reconcile.Result{}, nil
 }
 ```
 
@@ -263,7 +282,7 @@ func (r *ThreatPolicyReconciler) Reconcile(
           "service": "ext-threat-assessment-service-8080",
           "grpcService": "threat.v1.ThreatAssessmentService",
           "grpcMethod": "AssessRequest",
-          "dispatch": "ThreatRequest{uri: request.path, is_authenticated: has(auth.identity), source_ip: request.source.address}",
+          "dispatch": "ThreatRequest{uri: request.path, source_ip: request.source.address}",
           "callback": "response.threat_level >= 5 ? Deny(403, \"Blocked: threat level \" + string(response.threat_level)) : Allow()",
           "onError": "Deny(503, \"Threat assessment service unavailable\")"
         }
@@ -285,8 +304,8 @@ func (r *ThreatPolicyReconciler) Reconcile(
 type RegisteredUpstreamEntry struct {
     ClusterName string
     Host        string
-    Port        string
-    TargetRef   gatewayapiv1.LocalPolicyTargetReference
+    Port        int
+    TargetRef   TargetRef
     FailureMode string
     Timeout     string
     Calls       []RegisteredGRPCCall
@@ -425,7 +444,7 @@ Both fields are kept because they operate at different levels:
 - `FailureMode` (on `UpstreamOption`) maps to the wasm `Service` entry — binary allow/deny at the cluster level (connection refused, DNS failure). Coarse but sufficient for infrastructure-level failures.
 - `OnError` (on `GRPCCall`) maps to the wasm `Action` — an optional CEL expression evaluated when a specific gRPC call fails at runtime (timeout, error status). Supports custom HTTP status codes and messages: `Deny(503, "Threat service temporarily unavailable")`.
 
-`FailureMode` is the default failure behaviour. If `OnError` is absent from a `GRPCCall`, the wasm-shim falls back to the Service's `FailureMode` for call-level failures too. `OnError` is only needed when the desired call-level failure behaviour differs from `FailureMode` (e.g. a custom status code or message). This keeps `FailureMode` as the single source of truth for failure handling unless explicitly overridden.
+`FailureMode` is the default failure behaviour. The proposed behaviour is that when `OnError` is absent from a `GRPCCall`, the wasm-shim falls back to the Service's `FailureMode` for call-level failures too — pending confirmation with the wasm-shim team (see Open Questions). `OnError` is only needed when the desired call-level failure behaviour differs from `FailureMode` (e.g. a custom status code or message). This keeps `FailureMode` as the single source of truth for failure handling unless explicitly overridden.
 
 Collapsing them into one field would either lose the expressiveness of CEL error responses or require CEL parsing at the Service level, which the wasm-shim does not support.
 
@@ -452,10 +471,13 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - **`OnError` fallback to `FailureMode`**: This design specifies that when `onError` is absent from an Action, the wasm-shim falls back to the Service's `failureMode` for call-level failures. This contract needs confirming with the wasm-shim team — the current wasm-shim behaviour when `onError` is absent is unspecified.
 - **Wasm-shim CEL support**: The wasm-shim needs to evaluate `dispatch` and `callback` CEL expressions at request time using the `DescriptorPool` built from Phase 2's descriptor fetching. This is not yet in [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (which covers static message building only). Phase 3 operator work on `dispatch`/`callback` Action fields should coordinate with the wasm-shim team on this extension.
 - **`grpcService`/`grpcMethod` placement — needs wasm-shim coordination**: This design places `grpcService` and `grpcMethod` on the wasm `Action` (not the `Service`), so that a single endpoint can serve multiple proto services/methods across different Actions without duplicating cluster config. Phase 2's wasm-shim design ([wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316)) and the Phase 2 operator design ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)) currently put them on the `Service`. The shim will need to be updated to collect required `(endpoint, grpcService)` pairs from Actions at config activation time rather than from Service entries. This must be agreed with the wasm-shim team before implementation.
-- **Proto reflection mechanism**: Resolved in Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)). The **operator** fetches `FileDescriptorSet` via gRPC server reflection when `upstream.Call(...)` is invoked (or at `RegisterUpstreamMethod` time if the Phase 2 path is used), caches it in `ProtoCache` keyed by `(ClusterName, GRPCService)`, and serves it to the wasm-shim via a dedicated TCP `kuadrant.v1.DescriptorService` on port 50051. The wasm-shim calls this service at config activation time, builds a `DescriptorPool` using `prost-reflect`, and uses it to construct proto messages at request time.
 - **Response-phase calls and header mutation**: A natural follow-on is calling an upstream in the response phase (after the backend has responded) and mutating response headers based on the result — e.g. enriching the response with a threat score header. This requires different `Callback` semantics (`AddHeader`/`SetHeader` rather than `Allow`/`Deny`). The `UpstreamHandle` pattern accommodates this naturally: a future `upstream.CallOnResponse(GRPCCall{...})` method or a `Phase` field on `GRPCCall` would be the extension point. Deferred — out of scope for this issue.
 - **Multi-dispatch per policy**: Multiple `upstream.Call(...)` invocations on the same handle each generate a separate wasm Action targeting the same Service entry. Ordering between actions within an ActionSet is undefined — needs clarification with the wasm-shim team.
 - **ActionSet ordering across policies and `auth.*` context availability**: The ThreatPolicy example references `auth.identity` in its `Dispatch` expression. If a user also applies an AuthPolicy to the same route, both policies contribute ActionSets to the wasm config. The order in which those ActionSets are processed by the wasm-shim determines whether `auth.identity` is populated when the ThreatPolicy dispatch fires. It is unclear how ActionSet ordering is determined across independently-authored policies (AuthPolicy vs extension-generated ThreatPolicy), and whether the extension SDK needs to expose a mechanism for declaring ordering dependencies between ActionSets. This must be clarified before extensions can reliably consume `auth.*` context variables in their dispatch expressions.
+
+## Resolved Questions
+
+- **Proto reflection mechanism** — Resolved in Phase 2 ([#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822)). See Architecture Changes for the full description.
 
 ## Execution
 
@@ -489,6 +511,15 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - [x] Envoy cluster generation (Istio + Envoy Gateway) and wasm `Service` entry injection — [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)
 
 ## Change Log
+
+### 2026-03-30 — Doc accuracy fixes and consistency corrections
+
+- Corrected `RegisteredUpstreamEntry` code snippet: `Port` type `string` → `int`; `TargetRef` type `gatewayapiv1.LocalPolicyTargetReference` → `TargetRef`, matching `internal/extension/registry.go`.
+- Corrected `wasm.Action` code snippet to match `internal/wasm/types.go`: removed `omitempty` from `Scope` tag; corrected `ConditionalData` json key to `conditionalData`; corrected `SourcePolicyLocators` json key to `sources,omitempty`.
+- Fixed ThreatPolicy example: `Call()` error now surfaces as a `Ready=False/InvalidCEL` status condition instead of being returned directly, consistent with the comment immediately above it.
+- Removed `auth.identity` from all `Dispatch` examples (ThreatPolicy code and generated wasm config); added caveat to `GRPCCall.Dispatch` doc comment that `auth.*` use requires a resolved ActionSet ordering mechanism (see Open Questions).
+- Changed definitive `OnError`/`FailureMode` fallback statement to conditional language ("The proposed behaviour is that…") and added cross-reference to Open Questions, resolving the contradiction between the Alternatives section and the open question.
+- Moved the "Proto reflection mechanism" entry from Open Questions to a new Resolved Questions subsection, since it was already marked resolved in Phase 2.
 
 ### 2026-03-27 — Adopt Option C: upstream context handle as chosen design
 

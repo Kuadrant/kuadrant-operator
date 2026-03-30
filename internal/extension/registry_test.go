@@ -1162,8 +1162,8 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 		if key[:4] != "ext-" {
 			t.Errorf("Expected service key to start with ext-, got %s", key)
 		}
-		if svc.Type != wasm.AuthServiceType {
-			t.Errorf("Expected auth service type, got %s", svc.Type)
+		if svc.Type != wasm.DynamicServiceType {
+			t.Errorf("Expected dynamic service type, got %s", svc.Type)
 		}
 		if svc.FailureMode != wasm.FailureModeDeny {
 			t.Errorf("Expected deny failure mode, got %s", svc.FailureMode)

@@ -4,27 +4,31 @@ package extension
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/go-logr/logr"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
-func successDialer(_ context.Context, _ string) error {
-	return nil
-}
-
-func failDialer(_ context.Context, target string) error {
-	return fmt.Errorf("connection refused to %s", target)
+func successReflectionFetcher(_ context.Context, _, _ string) (*descriptorpb.FileDescriptorSet, error) {
+	return &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			{
+				Name: proto.String("test.proto"),
+			},
+		},
+	}, nil
 }
 
 func newTestExtensionService() *extensionService {
 	return &extensionService{
-		registeredData: NewRegisteredDataStore(),
-		upstreamDialer: successDialer,
-		logger:         logr.Discard(),
+		registeredData:    NewRegisteredDataStore(),
+		protoCache:        NewProtoCache(),
+		reflectionFetcher: successReflectionFetcher,
+		logger:            logr.Discard(),
 	}
 }
 
@@ -52,7 +56,9 @@ func validRequest() *extpb.RegisterUpstreamMethodRequest {
 	return &extpb.RegisterUpstreamMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
-		Url: "grpc://svc:8081",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
 	}
 }
 
@@ -106,34 +112,57 @@ func TestRegisterUpstreamMethod_MissingURL(t *testing.T) {
 
 func TestRegisterUpstreamMethod_InvalidScheme(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), &extpb.RegisterUpstreamMethodRequest{
-		Policy: testPolicy("DemoPolicy", "default", "demo",
-			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
-		Url: "http://svc:8081",
-	})
+	req := validRequest()
+	req.Url = "http://svc:8081"
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for non-grpc scheme")
+	}
+	if !strings.Contains(err.Error(), "scheme must be") {
+		t.Errorf("Expected scheme error, got: %v", err)
 	}
 }
 
 func TestRegisterUpstreamMethod_NoTargetRefs(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), &extpb.RegisterUpstreamMethodRequest{
-		Policy: testPolicy("DemoPolicy", "default", "demo"),
-		Url:    "grpc://svc:8081",
-	})
+	req := validRequest()
+	req.Policy.TargetRefs = nil
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for no target refs")
 	}
+	if !strings.Contains(err.Error(), "target references") {
+		t.Errorf("Expected target refs error, got: %v", err)
+	}
 }
 
-func TestRegisterUpstreamMethod_DialFailure(t *testing.T) {
+func TestRegisterUpstreamMethod_MissingService(t *testing.T) {
 	svc := newTestExtensionService()
-	svc.upstreamDialer = failDialer
+	req := validRequest()
+	req.Service = ""
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), validRequest())
+	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
 	if err == nil {
-		t.Fatal("Expected error for unreachable upstream")
+		t.Fatal("Expected error for missing service")
+	}
+	if !strings.Contains(err.Error(), "service must be specified") {
+		t.Errorf("Expected service error, got: %v", err)
+	}
+}
+
+func TestRegisterUpstreamMethod_MissingMethod(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Method = ""
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for missing method")
+	}
+	if !strings.Contains(err.Error(), "method must be specified") {
+		t.Errorf("Expected method error, got: %v", err)
 	}
 }
 
@@ -191,7 +220,9 @@ func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
 			req := &extpb.RegisterUpstreamMethodRequest{
 				Policy: testPolicy("DemoPolicy", "default", "demo",
 					testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
-				Url: tt.url,
+				Url:     tt.url,
+				Service: "example.v1.ExampleService",
+				Method:  "ExampleMethod",
 			}
 
 			_, err := svc.RegisterUpstreamMethod(context.Background(), req)

@@ -26,6 +26,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantmachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -186,6 +187,8 @@ type RegisteredUpstreamEntry struct {
 	Host        string
 	Port        int
 	TargetRef   TargetRef
+	Service     string
+	Method      string
 	FailureMode string
 	Timeout     string
 }
@@ -404,16 +407,14 @@ func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []Reg
 }
 
 func (r *RegisteredDataStore) GetRelevantUpstreams(targetRefs []machinery.PolicyTargetReference) []RegisteredUpstreamEntry {
-	var result []RegisteredUpstreamEntry
-	for _, targetRef := range targetRefs {
-		result = append(result, r.GetUpstreamsByTargetRef(TargetRef{
+	return lo.FlatMap(targetRefs, func(targetRef machinery.PolicyTargetReference, _ int) []RegisteredUpstreamEntry {
+		return r.GetUpstreamsByTargetRef(TargetRef{
 			Group:     targetRef.GroupVersionKind().Group,
 			Kind:      targetRef.GroupVersionKind().Kind,
 			Name:      targetRef.GetName(),
 			Namespace: targetRef.GetNamespace(),
-		})...)
-	}
-	return result
+		})
+	})
 }
 
 func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
@@ -555,19 +556,27 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	wasmConfig.RequestData = requestData
 
 	// Inject registered upstream services matching the current target refs
-	for _, entry := range m.store.GetRelevantUpstreams(targetRefs) {
+	relevantUpstreams := m.store.GetRelevantUpstreams(targetRefs)
+	for _, entry := range relevantUpstreams {
 		timeout := entry.Timeout
 		svc := wasm.Service{
 			Endpoint:    entry.ClusterName,
-			Type:        wasm.AuthServiceType,
+			Type:        wasm.DynamicServiceType,
 			FailureMode: wasm.FailureModeType(entry.FailureMode),
 			Timeout:     &timeout,
+			GrpcService: &entry.Service,
+			GrpcMethod:  &entry.Method,
 		}
 		wasmServiceKey := "ext-" + HashUpstreamServiceConfig(svc)
 		if wasmConfig.Services == nil {
 			wasmConfig.Services = make(map[string]wasm.Service)
 		}
 		wasmConfig.Services[wasmServiceKey] = svc
+	}
+
+	// Set descriptor service cluster name if there are any dynamic services
+	if len(relevantUpstreams) > 0 {
+		wasmConfig.DescriptorService = "kuadrant-operator-grpc"
 	}
 
 	return nil
@@ -580,7 +589,15 @@ func HashUpstreamServiceConfig(svc wasm.Service) string {
 	if svc.Timeout != nil {
 		timeout = *svc.Timeout
 	}
-	data := fmt.Sprintf("%s|%s|%s|%s", svc.Type, svc.Endpoint, svc.FailureMode, timeout)
+	grpcService := ""
+	if svc.GrpcService != nil {
+		grpcService = *svc.GrpcService
+	}
+	grpcMethod := ""
+	if svc.GrpcMethod != nil {
+		grpcMethod = *svc.GrpcMethod
+	}
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s", svc.Type, svc.Endpoint, svc.FailureMode, timeout, grpcService, grpcMethod)
 	h := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", h[:8])
 }

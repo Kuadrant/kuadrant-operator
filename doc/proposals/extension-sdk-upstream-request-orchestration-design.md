@@ -480,10 +480,13 @@ Collapsing them into one field would either lose the expressiveness of CEL error
   - [ ] Integration tests: wasm config contains dispatch/callback; cluster exists
 - [ ] E2E test: HTTP request blocked by mock threat service (pending wasm-shim support)
 
+### In Progress
+
+- [ ] Phase 2: gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, static message building — [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (prerequisite)
+
 ### Completed
 
 - [x] Envoy cluster generation (Istio + Envoy Gateway) and wasm `Service` entry injection — [#1828](https://github.com/Kuadrant/kuadrant-operator/pull/1828)
-- [ ] Phase 2: gRPC reflection, `ProtoCache`, `kuadrant.v1.DescriptorService`, `ServiceTypeDynamic`, static message building — [#1822](https://github.com/Kuadrant/kuadrant-operator/pull/1822) + [wasm-shim#316](https://github.com/Kuadrant/wasm-shim/pull/316) (in progress, prerequisite)
 
 ## Change Log
 
@@ -492,7 +495,7 @@ Collapsing them into one field would either lose the expressiveness of CEL error
 - Replaced the flat `UpstreamConfig` approach (now "Option D" in Alternatives) with the upstream context handle pattern.
 - `KuadrantCtx` gains `RegisterUpstream(ctx, policy, url, ...opts) (UpstreamHandle, error)`.
 - `UpstreamHandle.Call(GRPCCall)` is the new entry point for proto reflection, CEL validation, and Action config storage. Each `Call` invocation produces one wasm `Action`.
-- `GRPCCall` struct holds `GRPCService`, `GRPCMethod`, `Dispatch`, `Callback`, `OnError` — structurally placing all call-level fields at the Action level, naturally resolving the `grpcService`/`grpcMethod` placement question.
+- `GRPCCall` struct holds `Service`, `Method`, `Dispatch`, `Callback`, `OnError` — structurally placing all call-level fields at the Action level, naturally resolving the `grpcService`/`grpcMethod` placement question.
 - Cluster/Service-level options (`Timeout`, `FailureMode`) moved to `UpstreamOption` functional options on `RegisterUpstream`.
 - `RegisteredUpstreamEntry` gains `Calls []RegisteredGRPCCall` to support multiple dispatch calls per upstream.
 - Updated architecture diagram, ThreatPolicy example, wasm mutator description, Implementation Plan, Todo, and open questions accordingly.

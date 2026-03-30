@@ -35,8 +35,8 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -240,16 +240,16 @@ func (m *Manager) HasSynced() bool {
 	return true
 }
 
-// UpstreamDialer checks reachability of an upstream gRPC target.
-// Returns nil on success or an error if the target is unreachable.
-type UpstreamDialer func(ctx context.Context, target string) error
+// ReflectionFetcher fetches service descriptors via gRPC reflection.
+type ReflectionFetcher func(ctx context.Context, url, serviceName string) (*descriptorpb.FileDescriptorSet, error)
 
 type extensionService struct {
-	dag            *nilGuardedPointer[StateAwareDAG]
-	registeredData *RegisteredDataStore
-	changeNotifier ChangeNotifier
-	upstreamDialer UpstreamDialer
-	logger         logr.Logger
+	dag               *nilGuardedPointer[StateAwareDAG]
+	registeredData    *RegisteredDataStore
+	protoCache        *ProtoCache
+	reflectionFetcher ReflectionFetcher
+	changeNotifier    ChangeNotifier
+	logger            logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 }
 
@@ -259,23 +259,14 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func defaultUpstreamDialer(ctx context.Context, target string) error {
-	conn, err := grpc.DialContext(ctx, target, //nolint:staticcheck // intentional use for reachability check
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck // intentional use for reachability check
-	)
-	if err != nil {
-		return err
-	}
-	return conn.Close()
-}
-
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
+	reflectionClient := NewReflectionClient()
 	service := &extensionService{
-		dag:            dag,
-		registeredData: NewRegisteredDataStore(),
-		upstreamDialer: defaultUpstreamDialer,
-		logger:         logger.WithName("extensionService"),
+		dag:               dag,
+		registeredData:    NewRegisteredDataStore(),
+		protoCache:        NewProtoCache(),
+		reflectionFetcher: reflectionClient.FetchServiceDescriptors,
+		logger:            logger.WithName("extensionService"),
 	}
 
 	authMutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](service.registeredData)
@@ -477,7 +468,7 @@ func generateClusterName(host string, port int) string {
 	return clusterName
 }
 
-func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
+func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
 	if request == nil {
 		return nil, errors.New("request cannot be nil")
 	}
@@ -493,6 +484,12 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 	if request.Url == "" {
 		return nil, errors.New("url must be specified")
 	}
+	if request.Service == "" {
+		return nil, errors.New("service must be specified")
+	}
+	if request.Method == "" {
+		return nil, errors.New("method must be specified")
+	}
 	if len(request.Policy.TargetRefs) == 0 {
 		return nil, errors.New("policy must have target references")
 	}
@@ -506,32 +503,32 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 		return nil, fmt.Errorf("url scheme must be \"grpc\", got %q", parsed.Scheme)
 	}
 	host := parsed.Hostname()
-	portStr := parsed.Port()
 	if host == "" {
 		return nil, fmt.Errorf("url must contain a host: %q", request.Url)
 	}
 	var port int
-	if portStr != "" {
-		var err2 error
-		port, err2 = strconv.Atoi(portStr)
-		if err2 != nil {
-			return nil, fmt.Errorf("invalid port in url %q: %w", request.Url, err2)
+	if portStr := parsed.Port(); portStr != "" {
+		var err error
+		port, err = strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port in url %q: %w", request.Url, err)
 		}
 	}
 
-	// gRPC dial reachability check with 5s timeout
-	dialTarget := host
-	if portStr != "" {
-		dialTarget = host + ":" + portStr
-	}
-	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer dialCancel()
-
-	if err := s.upstreamDialer(dialCtx, dialTarget); err != nil {
-		return nil, grpcstatus.Errorf(codes.Unavailable, "upstream unreachable at %s: %v", dialTarget, err)
-	}
-
 	clusterName := generateClusterName(host, port)
+
+	// Fetch service descriptors via reflection
+	fds, err := s.reflectionFetcher(ctx, parsed.Host, request.Service)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch service descriptors for %s: %v", request.Service, err)
+	}
+
+	// Store descriptors in cache
+	cacheKey := ProtoCacheKey{
+		ClusterName: clusterName,
+		Service:     request.Service,
+	}
+	s.protoCache.Set(cacheKey, fds)
 
 	policyID := ResourceID{
 		Kind:      request.Policy.Metadata.Kind,
@@ -557,6 +554,8 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 		Host:        host,
 		Port:        port,
 		TargetRef:   targetRef,
+		Service:     request.Service,
+		Method:      request.Method,
 		FailureMode: string(wasm.FailureModeDeny),
 		Timeout:     "100ms",
 	}
@@ -566,6 +565,8 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 	s.logger.Info("registered upstream",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
 		"url", request.Url,
+		"service", request.Service,
+		"method", request.Method,
 		"clusterName", clusterName)
 
 	// Trigger reconciliation

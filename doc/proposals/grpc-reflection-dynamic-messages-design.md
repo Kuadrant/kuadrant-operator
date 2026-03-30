@@ -537,9 +537,13 @@ pub enum ServiceInstance {
 - [x] Implement `ReflectionClient` with recursive dependency fetching
   - [x] Unit test: reflection failure (unreachable, no service)
   - [x] Unit test: 30-second timeout prevents hanging on slow upstreams
-- [ ] Update `RegisterUpstreamMethod` handler to trigger reflection
-  - [ ] Unit test: cache populated on success
-  - [ ] Unit test: error returned on reflection failure
+- [x] Update `RegisterUpstreamMethod` handler to trigger reflection
+  - [x] Unit test: cache populated on success
+  - [x] Unit test: error returned on reflection failure
+- [x] Update wasm config generation to use dynamic service type
+  - [x] Populate `GrpcService` and `GrpcMethod` fields from registered upstreams
+  - [x] Set `DescriptorService` field when dynamic services present
+  - [x] Unit test: wasm config includes dynamic services
 - [ ] Update `ClearPolicyData` to clean up proto cache
   - [ ] Unit test: cache entries deleted when policy removed
 

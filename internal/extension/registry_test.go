@@ -1152,7 +1152,12 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 		t.Errorf("Expected 2 services in wasm config, got %d", len(wasmConfig.Services))
 	}
 
-	// Verify all services have ext- prefix keys
+	// Verify descriptor service is set
+	if wasmConfig.DescriptorService == "" {
+		t.Error("Expected DescriptorService to be set on wasm config")
+	}
+
+	// Verify all services have ext- prefix keys and correct gRPC wiring
 	for key, svc := range wasmConfig.Services {
 		if key[:4] != "ext-" {
 			t.Errorf("Expected service key to start with ext-, got %s", key)
@@ -1162,6 +1167,22 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 		}
 		if svc.FailureMode != wasm.FailureModeDeny {
 			t.Errorf("Expected deny failure mode, got %s", svc.FailureMode)
+		}
+
+		// Verify gRPC service and method wiring
+		if svc.GrpcService == nil {
+			t.Errorf("Expected GrpcService to be set for service %s", key)
+		} else if *svc.GrpcService != "test.Service" {
+			t.Errorf("Expected GrpcService to be 'test.Service', got %s for service %s", *svc.GrpcService, key)
+		}
+
+		if svc.GrpcMethod == nil {
+			t.Errorf("Expected GrpcMethod to be set for service %s", key)
+		} else {
+			// Each service should have either Method1 or Method2
+			if *svc.GrpcMethod != "Method1" && *svc.GrpcMethod != "Method2" {
+				t.Errorf("Expected GrpcMethod to be 'Method1' or 'Method2', got %s for service %s", *svc.GrpcMethod, key)
+			}
 		}
 	}
 }

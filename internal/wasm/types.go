@@ -13,10 +13,11 @@ import (
 )
 
 type Config struct {
-	RequestData   map[string]string  `json:"requestData,omitempty"`
-	Services      map[string]Service `json:"services"`
-	ActionSets    []ActionSet        `json:"actionSets"`
-	Observability *Observability     `json:"observability,omitempty"`
+	RequestData       map[string]string  `json:"requestData,omitempty"`
+	Services          map[string]Service `json:"services"`
+	ActionSets        []ActionSet        `json:"actionSets"`
+	Observability     *Observability     `json:"observability,omitempty"`
+	DescriptorService string             `json:"descriptorService,omitempty"`
 }
 
 func (c *Config) ToStruct() (*_struct.Struct, error) {
@@ -43,6 +44,10 @@ func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
 
 func (c *Config) EqualTo(other *Config) bool {
 	if len(c.RequestData) != len(other.RequestData) || len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
+		return false
+	}
+
+	if c.DescriptorService != other.DescriptorService {
 		return false
 	}
 
@@ -79,6 +84,8 @@ type Service struct {
 	Type        ServiceType     `json:"type"`
 	FailureMode FailureModeType `json:"failureMode"`
 	Timeout     *string         `json:"timeout,omitempty"`
+	GrpcService *string         `json:"grpcService,omitempty"`
+	GrpcMethod  *string         `json:"grpcMethod,omitempty"`
 }
 
 func (s Service) EqualTo(other Service) bool {
@@ -86,13 +93,17 @@ func (s Service) EqualTo(other Service) bool {
 		s.Type != other.Type ||
 		s.FailureMode != other.FailureMode ||
 		((s.Timeout == nil) != (other.Timeout == nil)) ||
-		(s.Timeout != nil && other.Timeout != nil && *s.Timeout != *other.Timeout) {
+		(s.Timeout != nil && other.Timeout != nil && *s.Timeout != *other.Timeout) ||
+		((s.GrpcService == nil) != (other.GrpcService == nil)) ||
+		(s.GrpcService != nil && other.GrpcService != nil && *s.GrpcService != *other.GrpcService) ||
+		((s.GrpcMethod == nil) != (other.GrpcMethod == nil)) ||
+		(s.GrpcMethod != nil && other.GrpcMethod != nil && *s.GrpcMethod != *other.GrpcMethod) {
 		return false
 	}
 	return true
 }
 
-// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing
+// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing;dynamic
 type ServiceType string
 
 const (
@@ -101,6 +112,7 @@ const (
 	RateLimitReportServiceType ServiceType = "ratelimit-report"
 	AuthServiceType            ServiceType = "auth"
 	TracingServiceType         ServiceType = "tracing"
+	DynamicServiceType         ServiceType = "dynamic"
 )
 
 // +kubebuilder:validation:Enum:=deny;allow

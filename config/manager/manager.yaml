@@ -34,7 +34,7 @@ spec:
             - name: EXTENSIONS_DIR
               value: "/extensions"
             - name: RELATED_IMAGE_WASMSHIM
-              value: "quay.io/kuadrant/wasm-shim:v0.12.1"
+              value: "quay.io/kuadrant/wasm-shim:v0.12.2"
             - name: RELATED_IMAGE_DEVELOPERPORTAL
               value: "quay.io/kuadrant/developer-portal-controller:v0.1.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST

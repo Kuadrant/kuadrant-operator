@@ -549,8 +549,8 @@ pub enum ServiceInstance {
 
 ### Phase 2.2: Operator Descriptor Service
 
-- [ ] Define `descriptor_service.proto` with `GetServiceDescriptors` RPC
-  - [ ] Run `make generate` to generate Go code
+- [x] Define `descriptor_service.proto` with `GetServiceDescriptors` RPC
+  - [x] Run `make generate` to generate Go code
 - [ ] Implement `GetServiceDescriptors` handler
   - [ ] Unit test: batch fetch returns multiple descriptors
   - [ ] Unit test: missing descriptors return error

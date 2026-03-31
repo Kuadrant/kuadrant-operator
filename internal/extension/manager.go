@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -36,11 +37,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -53,12 +56,13 @@ var ErrNoExtensionsFound = errors.New("no extensions found")
 type ChangeNotifier func(reason string) error
 
 type Manager struct {
-	extensions []Extension
-	service    extpb.ExtensionServiceServer
-	dag        *nilGuardedPointer[StateAwareDAG]
-	logger     logr.Logger
-	sync       io.Writer
-	client     dynamic.Interface
+	extensions       []Extension
+	service          extpb.ExtensionServiceServer
+	dag              *nilGuardedPointer[StateAwareDAG]
+	logger           logr.Logger
+	sync             io.Writer
+	client           dynamic.Interface
+	descriptorServer *grpc.Server
 }
 
 type Extension interface {
@@ -92,17 +96,22 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	}
 
 	return Manager{
-		extensions,
-		service,
-		BlockingDAG,
-		logger,
-		sync,
-		client,
+		extensions: extensions,
+		service:    service,
+		dag:        BlockingDAG,
+		logger:     logger,
+		sync:       sync,
+		client:     client,
 	}, err
 }
 
 func (m *Manager) Start() error {
 	var err error
+
+	if e := m.startDescriptorServer(); e != nil {
+		m.logger.Error(e, "failed to start descriptor server")
+		err = fmt.Errorf("descriptor server: %w", e)
+	}
 
 	for _, extension := range m.extensions {
 		if e := extension.Start(); e != nil {
@@ -120,6 +129,8 @@ func (m *Manager) Start() error {
 func (m *Manager) Stop() error {
 	var err error
 
+	m.stopDescriptorServer()
+
 	for _, extension := range m.extensions {
 		if e := extension.Stop(); e != nil {
 			if err == nil {
@@ -131,6 +142,65 @@ func (m *Manager) Stop() error {
 	}
 
 	return err
+}
+
+func (m *Manager) startDescriptorServer() error {
+	const defaultPort = 50051
+	descriptorPort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", defaultPort)
+	if portErr != nil {
+		m.logger.Error(portErr, "invalid EXTENSIONS_DESCRIPTOR_SERVICE_PORT, using default", "default", defaultPort)
+		descriptorPort = defaultPort
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", descriptorPort))
+	if err != nil {
+		return fmt.Errorf("failed to listen on port %d: %w", descriptorPort, err)
+	}
+
+	server := grpc.NewServer()
+
+	if svc, ok := m.service.(extpb.DescriptorServiceServer); ok {
+		extpb.RegisterDescriptorServiceServer(server, svc)
+	} else {
+		lis.Close()
+		return fmt.Errorf("service does not implement DescriptorServiceServer")
+	}
+
+	m.descriptorServer = server
+
+	go func() {
+		m.logger.Info("starting descriptor service", "port", descriptorPort)
+		if err := server.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			m.logger.Error(err, "descriptor server failed")
+		}
+	}()
+
+	return nil
+}
+
+func (m *Manager) stopDescriptorServer() {
+	if m.descriptorServer == nil {
+		return
+	}
+
+	m.logger.Info("stopping descriptor service")
+
+	done := make(chan struct{})
+	go func() {
+		m.descriptorServer.GracefulStop()
+		close(done)
+	}()
+
+	timeout := 5 * time.Second
+	select {
+	case <-done:
+		m.logger.Info("descriptor service stopped gracefully")
+	case <-time.After(timeout):
+		m.logger.Info("descriptor service graceful stop timed out, forcing stop")
+		m.descriptorServer.Stop()
+	}
+
+	m.descriptorServer = nil
 }
 
 func (m *Manager) SetChangeNotifier(notifier ChangeNotifier) {
@@ -251,11 +321,57 @@ type extensionService struct {
 	changeNotifier    ChangeNotifier
 	logger            logr.Logger
 	extpb.UnimplementedExtensionServiceServer
+	extpb.UnimplementedDescriptorServiceServer
 }
 
 func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb.PongResponse, error) {
 	return &extpb.PongResponse{
 		In: timestamppb.New(time.Now()),
+	}, nil
+}
+
+func (s *extensionService) GetServiceDescriptors(_ context.Context, request *extpb.GetServiceDescriptorsRequest) (*extpb.GetServiceDescriptorsResponse, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+
+	descriptors := make([]*extpb.ServiceDescriptor, 0, len(request.Services))
+
+	for _, serviceRef := range request.Services {
+		if serviceRef == nil {
+			return nil, fmt.Errorf("service reference must be provided for all services")
+		}
+		if serviceRef.ClusterName == "" {
+			return nil, fmt.Errorf("cluster_name must be specified for all services")
+		}
+		if serviceRef.Service == "" {
+			return nil, fmt.Errorf("service must be specified for all services")
+		}
+
+		cacheKey := ProtoCacheKey{
+			ClusterName: serviceRef.ClusterName,
+			Service:     serviceRef.Service,
+		}
+
+		fds, found := s.protoCache.Get(cacheKey)
+		if !found {
+			return nil, fmt.Errorf("descriptors not found for cluster=%q service=%q", serviceRef.ClusterName, serviceRef.Service)
+		}
+
+		fdsBytes, err := proto.Marshal(fds)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal descriptors for cluster=%q service=%q: %w", serviceRef.ClusterName, serviceRef.Service, err)
+		}
+
+		descriptors = append(descriptors, &extpb.ServiceDescriptor{
+			ClusterName:       serviceRef.ClusterName,
+			Service:           serviceRef.Service,
+			FileDescriptorSet: fdsBytes,
+		})
+	}
+
+	return &extpb.GetServiceDescriptorsResponse{
+		Descriptors: descriptors,
 	}, nil
 }
 

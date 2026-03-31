@@ -551,11 +551,13 @@ pub enum ServiceInstance {
 
 - [x] Define `descriptor_service.proto` with `GetServiceDescriptors` RPC
   - [x] Run `make generate` to generate Go code
-- [ ] Implement `GetServiceDescriptors` handler
-  - [ ] Unit test: batch fetch returns multiple descriptors
-  - [ ] Unit test: missing descriptors return error
-- [ ] Implement `StartDescriptorServer` TCP server
-  - [ ] Unit test: server starts and handles requests
+- [x] Implement `GetServiceDescriptors` handler
+  - [x] Unit test: batch fetch returns multiple descriptors
+  - [x] Unit test: missing descriptors return error
+- [x] Implement TCP server for descriptor service
+  - [x] Start server on port 50051 in Manager.Start()
+  - [x] Stop server gracefully in Manager.Stop()
+  - [x] Register only DescriptorServiceServer (security boundary)
 - [ ] Add Kubernetes Service manifest (`config/manager/grpc_service.yaml`)
 - [ ] Update operator deployment to expose port 50051
   - [ ] Integration test: verify service is reachable from pod

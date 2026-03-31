@@ -14,6 +14,7 @@ var (
 	AuthConfigsResource = authorinov1beta3.GroupVersion.WithResource("authconfigs")
 
 	AuthConfigHTTPRouteRuleAnnotation = machinery.HTTPRouteRuleGroupKind.String()
+	AuthConfigGRPCRouteRuleAnnotation = machinery.GRPCRouteRuleGroupKind.String()
 )
 
 func LinkHTTPRouteRuleToAuthConfig(objs controller.Store) machinery.LinkFunc {
@@ -30,6 +31,25 @@ func LinkHTTPRouteRuleToAuthConfig(objs controller.Store) machinery.LinkFunc {
 				authConfig := child.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
 				annotations := authConfig.GetAnnotations()
 				return httpRouteRule, annotations != nil && annotations[AuthConfigHTTPRouteRuleAnnotation] == httpRouteRule.GetLocator()
+			})
+		},
+	}
+}
+
+func LinkGRPCRouteRuleToAuthConfig(objs controller.Store) machinery.LinkFunc {
+	grpcRoutes := lo.Map(objs.FilterByGroupKind(machinery.GRPCRouteGroupKind), controller.ObjectAs[*gatewayapiv1.GRPCRoute])
+	grpcRouteRules := lo.FlatMap(lo.Map(grpcRoutes, func(r *gatewayapiv1.GRPCRoute, _ int) *machinery.GRPCRoute {
+		return &machinery.GRPCRoute{GRPCRoute: r}
+	}), machinery.GRPCRouteRulesFromGRPCRouteRule)
+
+	return machinery.LinkFunc{
+		From: machinery.GRPCRouteRuleGroupKind,
+		To:   AuthConfigGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.FilterMap(grpcRouteRules, func(grpcRouteRule *machinery.GRPCRouteRule, _ int) (machinery.Object, bool) {
+				authConfig := child.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
+				annotations := authConfig.GetAnnotations()
+				return grpcRouteRule, annotations != nil && annotations[AuthConfigGRPCRouteRuleAnnotation] == grpcRouteRule.GetLocator()
 			})
 		},
 	}

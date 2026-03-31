@@ -259,6 +259,97 @@ func BuildMultipleRulesHttpRoute(routeName, gwName, ns string, hostnames []strin
 	return route
 }
 
+// BuildBasicGrpcRoute creates a basic GRPCRoute with a single rule matching a gRPC service
+func BuildBasicGrpcRoute(routeName, gwName, ns string, hostnames []string, mutateFns ...func(*gatewayapiv1.GRPCRoute)) *gatewayapiv1.GRPCRoute {
+	route := &gatewayapiv1.GRPCRoute{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "GRPCRoute",
+			APIVersion: gatewayapiv1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      routeName,
+			Namespace: ns,
+			Labels:    CommonLabels,
+		},
+		Spec: gatewayapiv1.GRPCRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1.ParentReference{
+					{
+						Name:      gatewayapiv1.ObjectName(gwName),
+						Namespace: ptr.To(gatewayapiv1.Namespace(ns)),
+					},
+				},
+			},
+			Hostnames: utils.Map(hostnames, func(hostname string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(hostname) }),
+			Rules: []gatewayapiv1.GRPCRouteRule{
+				{
+					Matches: []gatewayapiv1.GRPCRouteMatch{
+						{
+							Method: &gatewayapiv1.GRPCMethodMatch{
+								Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+								Service: ptr.To("grpcbin.GRPCBin"),
+								Method:  ptr.To("SayHello"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, mutateFn := range mutateFns {
+		mutateFn(route)
+	}
+	return route
+}
+
+// GRPCRouteIsAccepted checks if a GRPCRoute has been accepted by checking its status conditions
+func GRPCRouteIsAccepted(ctx context.Context, cl client.Client, routeKey client.ObjectKey) func() bool {
+	return func() bool {
+		route := &gatewayapiv1.GRPCRoute{}
+		err := cl.Get(ctx, routeKey, route)
+
+		if err != nil {
+			logf.Log.V(1).Info("grpcRoute not read", "route", routeKey, "error", err)
+			return false
+		}
+
+		if !kuadrantgatewayapi.IsGRPCRouteAccepted(route) {
+			logf.Log.V(1).Info("grpcRoute not accepted", "route", routeKey)
+			return false
+		}
+
+		return true
+	}
+}
+
+// BuildMultipleRulesGrpcRoute creates a GRPCRoute with multiple rules for different gRPC services/methods
+func BuildMultipleRulesGrpcRoute(routeName, gwName, ns string, hostnames []string) *gatewayapiv1.GRPCRoute {
+	route := BuildBasicGrpcRoute(routeName, gwName, ns, hostnames)
+	route.Spec.Rules = []gatewayapiv1.GRPCRouteRule{
+		{ // grpcbin.GRPCBin service (any method)
+			Matches: []gatewayapiv1.GRPCRouteMatch{
+				{
+					Method: &gatewayapiv1.GRPCMethodMatch{
+						Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+						Service: ptr.To("grpcbin.GRPCBin"),
+					},
+				},
+			},
+		},
+		{ // Any service's SayHello method
+			Matches: []gatewayapiv1.GRPCRouteMatch{
+				{
+					Method: &gatewayapiv1.GRPCMethodMatch{
+						Type:   ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+						Method: ptr.To("SayHello"),
+					},
+				},
+			},
+		},
+	}
+	return route
+}
+
 func DeleteKuadrantCR(ctx context.Context, cl client.Client, namespace string) {
 	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: namespace}}
 	Eventually(func(g Gomega) {

@@ -40,6 +40,7 @@ func (r *IstioAuthClusterReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		},
@@ -73,8 +74,11 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	}
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
-		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
+		parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
+		if err != nil {
+			return nil, false
+		}
+		return parsed.Gateway, lo.Contains(istioGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName)
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

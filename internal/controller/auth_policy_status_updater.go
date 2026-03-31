@@ -50,6 +50,7 @@ func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
@@ -175,12 +176,20 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 	overridingPolicies := map[string][]string{}                     // policyRuleKey → locators of policies overriding the policy rule
 	affectedGateways := map[string]affectedGateway{}                // Gateway locator → {GatewayClass, Gateway}
 	affectedHTTPRouteRules := map[string]*machinery.HTTPRouteRule{} // pathID → HTTPRouteRule
-	setAffectedObjects := func(pathID string, gatewayClass *machinery.GatewayClass, gateway *machinery.Gateway, httpRouteRule *machinery.HTTPRouteRule) {
+	affectedGRPCRouteRules := map[string]*machinery.GRPCRouteRule{} // pathID → GRPCRouteRule
+	setAffectedHTTPObjects := func(pathID string, gatewayClass *machinery.GatewayClass, gateway *machinery.Gateway, httpRouteRule *machinery.HTTPRouteRule) {
 		affectedGateways[gateway.GetLocator()] = affectedGateway{
 			gateway:      gateway,
 			gatewayClass: gatewayClass,
 		}
 		affectedHTTPRouteRules[pathID] = httpRouteRule
+	}
+	setAffectedGRPCObjects := func(pathID string, gatewayClass *machinery.GatewayClass, gateway *machinery.Gateway, grpcRouteRule *machinery.GRPCRouteRule) {
+		affectedGateways[gateway.GetLocator()] = affectedGateway{
+			gateway:      gateway,
+			gatewayClass: gatewayClass,
+		}
+		affectedGRPCRouteRules[pathID] = grpcRouteRule
 	}
 
 	var celValidationErrors []error
@@ -204,7 +213,7 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 			}
 		}
 
-		gatewayClass, gateway, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
 		if err != nil {
 			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
 				logger.V(1).Info("skipping effectivePolicy for invalid path", "path", effectivePolicy.Path)
@@ -213,12 +222,29 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 			}
 			continue
 		}
-		if gatewayClass.GetDeletionTimestamp() != nil || gateway.GetDeletionTimestamp() != nil || httpRoute.GetDeletionTimestamp() != nil {
+
+		// Check for deletion timestamps
+		if parsed.GatewayClass.GetDeletionTimestamp() != nil || parsed.Gateway.GetDeletionTimestamp() != nil {
 			continue
 		}
-		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.Spec.ControllerName) {
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && parsed.HTTPRoute.GetDeletionTimestamp() != nil {
 			continue
 		}
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeGRPC && parsed.GRPCRoute.GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		// Check listener and route readiness
+		if !kuadrantgatewayapi.IsListenerReady(parsed.Listener.Listener, parsed.Gateway.Gateway) {
+			continue
+		}
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && !kuadrantgatewayapi.IsHTTPRouteReady(parsed.HTTPRoute.HTTPRoute, parsed.Gateway.Gateway, parsed.GatewayClass.Spec.ControllerName) {
+			continue
+		}
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeGRPC && !kuadrantgatewayapi.IsGRPCRouteReady(parsed.GRPCRoute.GRPCRoute, parsed.Gateway.Gateway, parsed.Listener.Listener, parsed.GatewayClass.Spec.ControllerName) {
+			continue
+		}
+
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
 		if len(effectivePolicyRules) > 0 {
 			for _, policyRuleKey := range policyRuleKeys {
@@ -233,13 +259,21 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 					}
 					continue
 				}
-				// policy rule is in the effective policy, track the Gateway and the HTTPRouteRule affected by the policy
-				setAffectedObjects(pathID, gatewayClass, gateway, httpRouteRule)
+				// policy rule is in the effective policy, track the Gateway and the route rule affected by the policy
+				if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP {
+					setAffectedHTTPObjects(pathID, parsed.GatewayClass, parsed.Gateway, parsed.HTTPRouteRule)
+				} else {
+					setAffectedGRPCObjects(pathID, parsed.GatewayClass, parsed.Gateway, parsed.GRPCRouteRule)
+				}
 			}
 			continue
 		}
-		// effective policy has no rules, track the Gateway and the HTTPRouteRule affected by the policy
-		setAffectedObjects(pathID, gatewayClass, gateway, httpRouteRule)
+		// effective policy has no rules, track the Gateway and the route rule affected by the policy
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP {
+			setAffectedHTTPObjects(pathID, parsed.GatewayClass, parsed.Gateway, parsed.HTTPRouteRule)
+		} else {
+			setAffectedGRPCObjects(pathID, parsed.GatewayClass, parsed.Gateway, parsed.GRPCRouteRule)
+		}
 	}
 
 	if len(affectedGateways) == 0 { // no rules of the policy found in the effective policies
@@ -265,11 +299,22 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		componentsToSync = append(componentsToSync, kuadrantv1beta1.AuthorinoGroupKind.Kind)
 	}
 
-	// check status of the authconfigs
+	// check status of the authconfigs for HTTP routes
 	isAuthConfigReady := authConfigReadyStatusFunc(state)
 	for pathID, httpRouteRule := range affectedHTTPRouteRules {
 		authConfigName := AuthConfigNameForPath(pathID)
 		authConfig, found := lo.Find(topology.Objects().Children(httpRouteRule), func(authConfig machinery.Object) bool {
+			return authConfig.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && authConfig.GetName() == authConfigName
+		})
+		if !found || !isAuthConfigReady(authConfig.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)) {
+			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s)", kuadrantauthorino.AuthConfigGroupKind.Kind, authConfigName))
+		}
+	}
+
+	// check status of the authconfigs for gRPC routes
+	for pathID, grpcRouteRule := range affectedGRPCRouteRules {
+		authConfigName := AuthConfigNameForPath(pathID)
+		authConfig, found := lo.Find(topology.Objects().Children(grpcRouteRule), func(authConfig machinery.Object) bool {
 			return authConfig.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && authConfig.GetName() == authConfigName
 		})
 		if !found || !isAuthConfigReady(authConfig.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)) {

@@ -40,6 +40,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) Subscription() controller.Subscripti
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		},
@@ -73,8 +74,11 @@ func (r *EnvoyGatewayAuthClusterReconciler) Reconcile(ctx context.Context, _ []c
 	}
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
-		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-		return gateway, lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName)
+		parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
+		if err != nil {
+			return nil, false
+		}
+		return parsed.Gateway, lo.Contains(envoyGatewayGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName)
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
 	})

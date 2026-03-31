@@ -232,12 +232,19 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 	}
 }
 
+// BuildActionSetsForPath builds action sets for both HTTP and gRPC routes.
+//
+// Note: Returns HTTPRouteMatchConfig for both HTTP and gRPC routes. For gRPC routes,
+// GRPCRouteMatch is converted to HTTPRouteMatch format because gRPC runs on HTTP/2 and
+// gRPC methods map to HTTP/2 paths (/{service}/{method}). This conversion enables sorting
+// with HTTP routes and reflects the wire-level protocol. The actual predicates sent to
+// the WASM plugin are generated from the original GRPCRouteMatch.
 func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	tracer := controller.TracerFromContext(ctx)
 	_, span := tracer.Start(ctx, "wasm.BuildActionSetsForPath")
 	defer span.End()
 
-	_, _, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to extract objects from request path")
@@ -255,61 +262,168 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 		span.SetAttributes(attribute.StringSlice("action_types", actionTypes))
 	}
 
-	configs := lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
-		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
-			// Create a span for each ActionSet being created
-			_, actionSetSpan := tracer.Start(ctx, "wasm.ActionSet.create")
-			actionSetSpan.SetAttributes(
-				attribute.String("hostname", string(hostname)),
-				attribute.Int("match_index", j),
-			)
+	var configs []kuadrantgatewayapi.HTTPRouteMatchConfig
 
-			if httpRouteMatch.Path != nil && httpRouteMatch.Path.Value != nil {
-				actionSetSpan.SetAttributes(attribute.String("path", *httpRouteMatch.Path.Value))
+	switch parsed.RouteType {
+	case kuadrantpolicymachinery.RouteTypeHTTP:
+		configs = lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(parsed.Listener.Listener, parsed.HTTPRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
+			// If Matches is empty or nil, use a default catch-all match (matches all requests with PathPrefix "/")
+			matches := parsed.HTTPRouteRule.Matches
+			if len(matches) == 0 {
+				matches = []gatewayapiv1.HTTPRouteMatch{
+					{
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/"),
+						},
+					},
+				}
 			}
+			return lo.Map(matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
+				// Create a span for each ActionSet being created
+				_, actionSetSpan := tracer.Start(ctx, "wasm.ActionSet.create")
+				actionSetSpan.SetAttributes(
+					attribute.String("hostname", string(hostname)),
+					attribute.Int("match_index", j),
+				)
 
-			actionSet := ActionSet{
-				Name:    ActionSetNameForPath(pathID, j, string(hostname)),
-				Actions: actions,
-			}
-			routeRuleConditions := RouteRuleConditions{
-				Hostnames: []string{string(hostname)},
-			}
-			if predicates := PredicatesFromHTTPRouteMatch(httpRouteMatch); len(predicates) > 0 {
-				routeRuleConditions.Predicates = predicates
-				actionSetSpan.SetAttributes(attribute.Int("predicate_count", len(predicates)))
-			}
-			actionSet.RouteRuleConditions = routeRuleConditions
+				if httpRouteMatch.Path != nil && httpRouteMatch.Path.Value != nil {
+					actionSetSpan.SetAttributes(attribute.String("path", *httpRouteMatch.Path.Value))
+				}
 
-			// Count actions by service type to understand policy composition for this specific match
-			actionsByService := lo.GroupBy(actions, func(a Action) string {
-				return a.ServiceName
+				actionSet := ActionSet{
+					Name:    ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions: actions,
+				}
+				routeRuleConditions := RouteRuleConditions{
+					Hostnames: []string{string(hostname)},
+				}
+				if predicates := PredicatesFromHTTPRouteMatch(httpRouteMatch); len(predicates) > 0 {
+					routeRuleConditions.Predicates = predicates
+					actionSetSpan.SetAttributes(attribute.Int("predicate_count", len(predicates)))
+				}
+				actionSet.RouteRuleConditions = routeRuleConditions
+
+				// Count actions by service type to understand policy composition for this specific match
+				actionsByService := lo.GroupBy(actions, func(a Action) string {
+					return a.ServiceName
+				})
+
+				actionSetSpan.SetAttributes(
+					attribute.String("actionset.name", actionSet.Name),
+					attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
+					attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
+					attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
+					attribute.Int("actionset.ratelimit_report_actions", len(actionsByService[RateLimitReportServiceName])),
+				)
+				actionSetSpan.SetStatus(codes.Ok, "")
+				actionSetSpan.End()
+
+				return kuadrantgatewayapi.HTTPRouteMatchConfig{
+					Hostname:          string(hostname),
+					HTTPRouteMatch:    httpRouteMatch,
+					CreationTimestamp: parsed.HTTPRoute.GetCreationTimestamp(),
+					Namespace:         parsed.HTTPRoute.GetNamespace(),
+					Name:              parsed.HTTPRoute.GetName(),
+					Config:            actionSet,
+				}
 			})
-
-			actionSetSpan.SetAttributes(
-				attribute.String("actionset.name", actionSet.Name),
-				attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
-				attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
-				attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
-				attribute.Int("actionset.ratelimit_report_actions", len(actionsByService[RateLimitReportServiceName])),
-			)
-			actionSetSpan.SetStatus(codes.Ok, "")
-			actionSetSpan.End()
-
-			return kuadrantgatewayapi.HTTPRouteMatchConfig{
-				Hostname:          string(hostname),
-				HTTPRouteMatch:    httpRouteMatch,
-				CreationTimestamp: httpRoute.GetCreationTimestamp(),
-				Namespace:         httpRoute.GetNamespace(),
-				Name:              httpRoute.GetName(),
-				Config:            actionSet,
-			}
 		})
-	})
+
+	case kuadrantpolicymachinery.RouteTypeGRPC:
+		hostnames := kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(parsed.Listener.Listener, &gatewayapiv1.HTTPRoute{
+			Spec: gatewayapiv1.HTTPRouteSpec{
+				Hostnames: parsed.GRPCRoute.Spec.Hostnames,
+			},
+		})
+
+		// If no matches are specified, use a default empty match (matches all requests)
+		matches := parsed.GRPCRouteRule.Matches
+		if len(matches) == 0 {
+			matches = []gatewayapiv1.GRPCRouteMatch{{}}
+		}
+
+		configs = lo.FlatMap(hostnames, func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
+			return lo.Map(matches, func(grpcRouteMatch gatewayapiv1.GRPCRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
+				// Create a span for each ActionSet being created
+				_, actionSetSpan := tracer.Start(ctx, "wasm.ActionSet.create")
+				actionSetSpan.SetAttributes(
+					attribute.String("hostname", string(hostname)),
+					attribute.Int("match_index", j),
+				)
+
+				if grpcRouteMatch.Method != nil && grpcRouteMatch.Method.Service != nil {
+					actionSetSpan.SetAttributes(attribute.String("grpc_service", *grpcRouteMatch.Method.Service))
+				}
+				if grpcRouteMatch.Method != nil && grpcRouteMatch.Method.Method != nil {
+					actionSetSpan.SetAttributes(attribute.String("grpc_method", *grpcRouteMatch.Method.Method))
+				}
+
+				actionSet := ActionSet{
+					Name:    ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions: actions,
+				}
+				routeRuleConditions := RouteRuleConditions{
+					Hostnames: []string{string(hostname)},
+				}
+				if predicates := PredicatesFromGRPCRouteMatch(grpcRouteMatch); len(predicates) > 0 {
+					routeRuleConditions.Predicates = predicates
+					actionSetSpan.SetAttributes(attribute.Int("predicate_count", len(predicates)))
+				}
+				actionSet.RouteRuleConditions = routeRuleConditions
+
+				// Count actions by service type to understand policy composition for this specific match
+				actionsByService := lo.GroupBy(actions, func(a Action) string {
+					return a.ServiceName
+				})
+
+				actionSetSpan.SetAttributes(
+					attribute.String("actionset.name", actionSet.Name),
+					attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
+					attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
+					attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
+					attribute.Int("actionset.ratelimit_report_actions", len(actionsByService[RateLimitReportServiceName])),
+				)
+				actionSetSpan.SetStatus(codes.Ok, "")
+				actionSetSpan.End()
+
+				// IMPORTANT: Why we use HTTPRouteMatch for gRPC routes
+				//
+				// gRPC is built on HTTP/2. At the wire level, a gRPC call is an HTTP/2 POST request
+				// to a path /{service}/{method}. For example:
+				//   gRPC: Service="foo.Bar", Method="Baz"
+				//   → HTTP/2: POST /foo.Bar/Baz
+				//
+				// We convert GRPCRouteMatch to HTTPRouteMatch to:
+				// 1. Represent the underlying HTTP/2 structure of gRPC traffic
+				// 2. Reuse the existing SortableHTTPRouteMatchConfigs comparator which implements
+				//    Gateway API's specificity rules (internal/gatewayapi/types.go)
+				// 3. Allow HTTP and gRPC matches to be sorted together by hostname/specificity
+				//
+				// Note: The actual predicates sent to the WASM plugin at runtime are generated
+				// from the original GRPCRouteMatch via PredicatesFromGRPCRouteMatch(). This HTTP
+				// representation is used for sorting and reflects the HTTP/2 wire format.
+				httpRouteMatch := ConvertGRPCRouteMatchToHTTP(grpcRouteMatch)
+
+				// Return HTTPRouteMatchConfig for sorting with HTTP routes.
+				// The HTTPRouteMatch represents the HTTP/2 wire format of the gRPC call.
+				// The Config field (actionSet) contains the actual WASM configuration
+				// with predicates generated from the original GRPCRouteMatch.
+				return kuadrantgatewayapi.HTTPRouteMatchConfig{
+					Hostname:          string(hostname),
+					HTTPRouteMatch:    httpRouteMatch,
+					CreationTimestamp: parsed.GRPCRoute.GetCreationTimestamp(),
+					Namespace:         parsed.GRPCRoute.GetNamespace(),
+					Name:              parsed.GRPCRoute.GetName(),
+					Config:            actionSet,
+				}
+			})
+		})
+	}
 
 	span.SetStatus(codes.Ok, "")
 
-	return configs, err
+	return configs, nil
 }
 
 func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname string) string {
@@ -381,6 +495,29 @@ func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []string {
 	return predicates
 }
 
+// PredicatesFromGRPCRouteMatch generates CEL predicates from a GRPCRouteMatch.
+// GRPCRouteMatch fields map to CEL as follows:
+//   - method.service and method.method combine to form request.url_path patterns
+//   - headers use the same predicate generation as HTTPRoute (predicateFromHeader)
+func PredicatesFromGRPCRouteMatch(match gatewayapiv1.GRPCRouteMatch) []string {
+	predicates := make([]string, 0)
+
+	// method (service + method)
+	if match.Method != nil {
+		if predicate := predicateFromGRPCMethod(*match.Method); predicate != "" {
+			predicates = append(predicates, predicate)
+		}
+	}
+
+	// headers
+	for _, headerMatch := range match.Headers {
+		// Multiple match values are ANDed together
+		predicates = append(predicates, predicateFromGRPCHeader(headerMatch))
+	}
+
+	return predicates
+}
+
 func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 	var (
 		attr          = "request.url_path"
@@ -419,7 +556,151 @@ func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) string {
 		strings.ToLower(string(headerMatch.Name)), headerMatch.Value)
 }
 
+func predicateFromGRPCHeader(headerMatch gatewayapiv1.GRPCHeaderMatch) string {
+	// As for gateway api v1, the only operation type with core support is Exact match.
+	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCHeaderMatch
+	// GRPCHeaderMatch has the same structure as HTTPHeaderMatch
+	return fmt.Sprintf("request.headers.exists(h, h.lowerAscii() == '%s' && request.headers[h] == '%s')",
+		strings.ToLower(string(headerMatch.Name)), headerMatch.Value)
+}
+
 func predicateFromQueryParam(queryParam gatewayapiv1.HTTPQueryParamMatch) string {
 	return fmt.Sprintf("'%s' in queryMap(request.query) ? queryMap(request.query)['%s'] == '%s' : false",
 		queryParam.Name, queryParam.Name, queryParam.Value)
+}
+
+// predicateFromGRPCMethod generates a CEL predicate for gRPC service/method matching.
+// gRPC requests have URL paths in the format: /package.Service/Method
+// The predicate uses request.url_path to match against this pattern.
+//
+// Per Gateway API spec, at least one of Service or Method MUST be non-empty.
+// Match types default to Exact if not specified.
+func predicateFromGRPCMethod(methodMatch gatewayapiv1.GRPCMethodMatch) string {
+	var (
+		service     = methodMatch.Service
+		method      = methodMatch.Method
+		serviceType = ptr.Deref(methodMatch.Type, gatewayapiv1.GRPCMethodMatchExact)
+		attr        = "request.url_path"
+	)
+
+	// Handle all combinations of service/method presence and match types
+	hasService := service != nil && *service != ""
+	hasMethod := method != nil && *method != ""
+
+	if !hasService && !hasMethod {
+		// Empty match - should not happen per spec, but handle gracefully
+		return ""
+	}
+
+	// Exact match type (default)
+	if serviceType == gatewayapiv1.GRPCMethodMatchExact {
+		if hasService && hasMethod {
+			// Exact service + exact method: exact path match
+			return fmt.Sprintf("%s == '/%s/%s'", attr, *service, *method)
+		}
+		if hasService {
+			// Exact service only: prefix match with trailing slash
+			return fmt.Sprintf("%s.startsWith('/%s/')", attr, *service)
+		}
+		// Exact method only: regex to match any service with specific method
+		return fmt.Sprintf("%s.matches('^/[^/]+/%s$')", attr, *method)
+	}
+
+	// RegularExpression match type
+	if hasService && hasMethod {
+		// Regex service + regex method
+		return fmt.Sprintf("%s.matches('^/%s/%s$')", attr, *service, *method)
+	}
+	if hasService {
+		// Regex service only
+		return fmt.Sprintf("%s.matches('^/%s/.*$')", attr, *service)
+	}
+	// Regex method only
+	return fmt.Sprintf("%s.matches('^/[^/]+/%s$')", attr, *method)
+}
+
+// ConvertGRPCRouteMatchToHTTP converts a GRPCRouteMatch to an HTTPRouteMatch for sorting purposes.
+//
+// This conversion is necessary because gRPC is built on HTTP/2 and gRPC methods map directly to
+// HTTP/2 paths (/{service}/{method}). By converting to HTTPRouteMatch, we can:
+// 1. Reuse the existing HTTPRouteMatch sorting logic
+// 2. Correctly represent gRPC method specificity using HTTP path match types
+// 3. Sort HTTP and gRPC routes together by hostname and specificity
+//
+// The conversion encodes gRPC method specificity into HTTP path matches:
+// - Service+Method → Exact match (most specific)
+// - Service only → PathPrefix (medium specific)
+// - Method only → PathPrefix (less specific, shorter path)
+func ConvertGRPCRouteMatchToHTTP(grpcRouteMatch gatewayapiv1.GRPCRouteMatch) gatewayapiv1.HTTPRouteMatch {
+	httpRouteMatch := gatewayapiv1.HTTPRouteMatch{
+		Headers: lo.Map(grpcRouteMatch.Headers, func(h gatewayapiv1.GRPCHeaderMatch, _ int) gatewayapiv1.HTTPHeaderMatch {
+			return gatewayapiv1.HTTPHeaderMatch{
+				Type:  (*gatewayapiv1.HeaderMatchType)(h.Type),
+				Name:  gatewayapiv1.HTTPHeaderName(h.Name),
+				Value: h.Value,
+			}
+		}),
+	}
+
+	// Encode gRPC method specificity into the Path field.
+	// The sorting algorithm ranks by:
+	// 1. Path match type: Exact > RegularExpression > PathPrefix
+	// 2. Path length: longer paths are more specific within the same match type
+	if grpcRouteMatch.Method != nil {
+		service := ptr.Deref(grpcRouteMatch.Method.Service, "")
+		method := ptr.Deref(grpcRouteMatch.Method.Method, "")
+		matchType := ptr.Deref(grpcRouteMatch.Method.Type, gatewayapiv1.GRPCMethodMatchExact)
+
+		// Handle RegularExpression match type
+		if matchType == gatewayapiv1.GRPCMethodMatchRegularExpression {
+			if service != "" && method != "" {
+				// Both service and method: regex match
+				pathValue := "^/" + service + "/" + method + "$"
+				httpRouteMatch.Path = &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+					Value: &pathValue,
+				}
+			} else if service != "" {
+				// Service only: regex prefix
+				pathValue := "^/" + service
+				httpRouteMatch.Path = &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+					Value: &pathValue,
+				}
+			} else if method != "" {
+				// Method only: regex
+				pathValue := "^/" + method
+				httpRouteMatch.Path = &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+					Value: &pathValue,
+				}
+			}
+		} else {
+			// Exact match type (default)
+			if service != "" && method != "" {
+				// Both service and method specified: most specific (Exact match)
+				pathValue := "/" + service + "/" + method
+				httpRouteMatch.Path = &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchExact),
+					Value: &pathValue,
+				}
+			} else if service != "" {
+				// Only service specified: medium specific (PathPrefix)
+				pathValue := "/" + service
+				httpRouteMatch.Path = &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: &pathValue,
+				}
+			} else if method != "" {
+				// Only method specified: less specific (shorter PathPrefix)
+				pathValue := "/" + method
+				httpRouteMatch.Path = &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: &pathValue,
+				}
+			}
+		}
+	}
+
+	return httpRouteMatch
 }

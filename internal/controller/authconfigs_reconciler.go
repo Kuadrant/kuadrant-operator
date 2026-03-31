@@ -43,6 +43,7 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 		},
@@ -107,7 +108,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, pathID string, effectivePolicy EffectiveAuthPolicy, authConfigsNamespace string, topology *machinery.Topology) (string, bool) {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler")
 
-	_, _, _, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
 	if err != nil {
 		if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
 			logger.V(1).Info("skipping authconfig reconcile for invalid path", "path", effectivePolicy.Path)
@@ -116,14 +117,22 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 		}
 		return "", false
 	}
-	httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
-	httpRouteRuleKey := httpRouteRule.Name
+
+	routeKey := parsed.GetRouteNamespacedName()
+	routeRuleKey := parsed.GetRouteRuleName()
+	routeRule := parsed.GetRouteRule()
+	routeRuleLocator := parsed.GetRouteRuleLocator()
+	annotationKey := authConfigAnnotationKeyForRouteType(parsed.RouteType)
+	if annotationKey == "" {
+		logger.Error(fmt.Errorf("unexpected route type: %v", parsed.RouteType), "unsupported route type for AuthConfig annotation", "path", effectivePolicy.Path, "routeType", parsed.RouteType)
+		return "", false
+	}
 
 	spanCtx, span := controller.TracerFromContext(ctx).Start(ctx, "authconfig")
 	defer span.End()
 
 	authConfigName := AuthConfigNameForPath(pathID)
-	desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace)
+	desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace, annotationKey, routeRuleLocator)
 
 	span.SetAttributes(
 		attribute.String("namespace", desiredAuthConfig.GetNamespace()),
@@ -133,7 +142,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 
 	resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
 
-	existingAuthConfigObj, found := lo.Find(topology.Objects().Children(httpRouteRule), func(child machinery.Object) bool {
+	existingAuthConfigObj, found := lo.Find(topology.Objects().Children(routeRule), func(child machinery.Object) bool {
 		return child.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && child.GetName() == authConfigName && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredAuthConfig.GetLabels()))
 	})
 
@@ -142,14 +151,14 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 		desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
 		if err != nil {
 			msg := "failed to destruct authconfig object"
-			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
+			logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", desiredAuthConfig)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, msg)
 			return authConfigName, false
 		}
 		if _, err = resource.Create(ctx, desiredAuthConfigUnstructured, metav1.CreateOptions{}); err != nil {
 			msg := "failed to create authconfig object"
-			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
+			logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, msg)
 			// TODO: handle error
@@ -168,7 +177,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 	if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
 		if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
 			msg := "failed to delete authconfig object"
-			logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
+			logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, msg)
 			// TODO: handle error
@@ -177,18 +186,18 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 	}
 
 	// update
-	existingAuthConfig.Spec = desiredAuthConfig.Spec
+	applyAuthConfigUpdate(existingAuthConfig, desiredAuthConfig)
 	existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
 	if err != nil {
 		msg := "failed to destruct authconfig object"
-		logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
+		logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", existingAuthConfig)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, msg)
 		return authConfigName, false
 	}
 	if _, err = resource.Update(ctx, existingAuthConfigUnstructured, metav1.UpdateOptions{}); err != nil {
 		msg := "failed to update authconfig object"
-		logger.Error(err, msg, "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
+		logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, msg)
 		// TODO: handle error
@@ -196,9 +205,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 	return authConfigName, true
 }
 
-func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta3.AuthConfig {
-	_, _, _, _, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-
+func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effectivePolicy EffectiveAuthPolicy, name, namespace string, annotationKey, routeRuleLocator string) *authorinov1beta3.AuthConfig {
 	authConfig := &authorinov1beta3.AuthConfig{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthConfig",
@@ -208,7 +215,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effe
 			Name:      name,
 			Namespace: namespace,
 			Annotations: map[string]string{
-				kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: httpRouteRule.GetLocator(),
+				annotationKey: routeRuleLocator,
 			},
 			Labels: AuthObjectLabels(),
 		},
@@ -312,10 +319,17 @@ func authorinoSpecsFromConfigs[T, U any](configs map[string]U, extractAuthorinoS
 }
 
 func equalAuthConfigs(existing, desired *authorinov1beta3.AuthConfig) bool {
-	// httprouterule back ref annotation
+	// route rule back ref annotation (either HTTP or gRPC)
 	existingAnnotations := existing.GetAnnotations()
 	desiredAnnotations := desired.GetAnnotations()
-	if existingAnnotations == nil || desiredAnnotations == nil || existingAnnotations[kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation] != desiredAnnotations[kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation] {
+	if existingAnnotations == nil || desiredAnnotations == nil {
+		return false
+	}
+	// Both annotation values should match (including empty values)
+	if existingAnnotations[kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation] != desiredAnnotations[kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation] {
+		return false
+	}
+	if existingAnnotations[kuadrantauthorino.AuthConfigGRPCRouteRuleAnnotation] != desiredAnnotations[kuadrantauthorino.AuthConfigGRPCRouteRuleAnnotation] {
 		return false
 	}
 
@@ -328,4 +342,41 @@ func equalAuthConfigs(existing, desired *authorinov1beta3.AuthConfig) bool {
 
 	// spec
 	return reflect.DeepEqual(existing.Spec, desired.Spec)
+}
+
+// authConfigAnnotationKeyForRouteType returns the appropriate annotation key for the given route type.
+// Returns empty string for unknown route types (which should not occur if ParseTopologyPath validates properly).
+func authConfigAnnotationKeyForRouteType(routeType kuadrantpolicymachinery.RouteType) string {
+	switch routeType {
+	case kuadrantpolicymachinery.RouteTypeHTTP:
+		return kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation
+	case kuadrantpolicymachinery.RouteTypeGRPC:
+		return kuadrantauthorino.AuthConfigGRPCRouteRuleAnnotation
+	default:
+		// This should not happen as ParseTopologyPath validates route types,
+		// but handle defensively to avoid silently treating unknown types as gRPC
+		return ""
+	}
+}
+
+// applyAuthConfigUpdate applies the desired state to an existing AuthConfig.
+// It updates the spec, labels, and route-rule annotations while preserving other annotations.
+func applyAuthConfigUpdate(existing, desired *authorinov1beta3.AuthConfig) {
+	existing.Spec = desired.Spec
+	existing.Labels = desired.Labels
+
+	// Update route-rule back-ref annotations
+	if existing.Annotations == nil {
+		existing.Annotations = map[string]string{}
+	}
+	for _, key := range []string{
+		kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation,
+		kuadrantauthorino.AuthConfigGRPCRouteRuleAnnotation,
+	} {
+		if value, ok := desired.Annotations[key]; ok {
+			existing.Annotations[key] = value
+		} else {
+			delete(existing.Annotations, key)
+		}
+	}
 }

@@ -571,6 +571,7 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
 			authorino.LinkHTTPRouteRuleToAuthConfig,
+			authorino.LinkGRPCRouteRuleToAuthConfig,
 		),
 	)
 

@@ -51,6 +51,7 @@ func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
@@ -348,10 +349,13 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		pathID := paths[i].Key
 		path := paths[i].Value
 
-		gatewayClass, gateway, listener, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+		parsed, pathErr := kuadrantpolicymachinery.ParseTopologyPath(path)
+		if pathErr != nil {
+			continue
+		}
 
 		// ignore if not an envoy gateway gateway
-		if !lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName) {
+		if !lo.Contains(envoyGatewayGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName) {
 			continue
 		}
 
@@ -359,13 +363,13 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		pathCtx, pathSpan := tracer.Start(ctx, "wasm.BuildConfigForPath")
 		pathSpan.SetAttributes(
 			attribute.String("path_id", pathID),
-			attribute.String("gateway.name", gateway.GetName()),
-			attribute.String("gateway.namespace", gateway.GetNamespace()),
-			attribute.String("listener.name", string(listener.Name)),
-			attribute.String("httproute.name", httpRoute.GetName()),
-			attribute.String("httproute.namespace", httpRoute.GetNamespace()),
+			attribute.String("route_type", parsed.RouteType.String()),
+			attribute.String("gateway.name", parsed.Gateway.GetName()),
+			attribute.String("gateway.namespace", parsed.Gateway.GetNamespace()),
+			attribute.String("listener.name", string(parsed.Listener.Name)),
+			attribute.String("route.name", parsed.GetRouteName()),
+			attribute.String("route.namespace", parsed.GetRouteNamespace()),
 		)
-
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		var actions []wasm.Action
@@ -466,7 +470,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		pathSpan.SetStatus(codes.Ok, "")
 		pathSpan.End()
 
-		wasmActionSets.Add(gateway.GetLocator(), wasmActionSetsForPath...)
+		wasmActionSets.Add(parsed.Gateway.GetLocator(), wasmActionSetsForPath...)
 	}
 
 	if !celValidationIssues.IsEmpty() {

@@ -300,3 +300,118 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 		t.Fatal("Expected cache entry to be deleted after clearing all referencing policies")
 	}
 }
+
+func TestGetServiceDescriptors_Success(t *testing.T) {
+	svc := newTestExtensionService()
+
+	// Populate cache with test descriptors
+	cacheKey1 := ProtoCacheKey{
+		ClusterName: "ext-svc1-8081",
+		Service:     "example.v1.Service1",
+	}
+	cacheKey2 := ProtoCacheKey{
+		ClusterName: "ext-svc2-8082",
+		Service:     "example.v1.Service2",
+	}
+	fds1 := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			{Name: proto.String("service1.proto")},
+		},
+	}
+	fds2 := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			{Name: proto.String("service2.proto")},
+		},
+	}
+	svc.protoCache.Set(cacheKey1, fds1)
+	svc.protoCache.Set(cacheKey2, fds2)
+
+	req := &extpb.GetServiceDescriptorsRequest{
+		Services: []*extpb.ServiceRef{
+			{ClusterName: "ext-svc1-8081", Service: "example.v1.Service1"},
+			{ClusterName: "ext-svc2-8082", Service: "example.v1.Service2"},
+		},
+	}
+
+	resp, err := svc.GetServiceDescriptors(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if len(resp.Descriptors) != 2 {
+		t.Fatalf("Expected 2 descriptors, got %d", len(resp.Descriptors))
+	}
+
+	// Verify first descriptor
+	if resp.Descriptors[0].ClusterName != "ext-svc1-8081" {
+		t.Errorf("Expected cluster name %q, got %q", "ext-svc1-8081", resp.Descriptors[0].ClusterName)
+	}
+	if resp.Descriptors[0].Service != "example.v1.Service1" {
+		t.Errorf("Expected service %q, got %q", "example.v1.Service1", resp.Descriptors[0].Service)
+	}
+	if len(resp.Descriptors[0].FileDescriptorSet) == 0 {
+		t.Error("Expected non-empty file descriptor set")
+	}
+
+	// Verify second descriptor
+	if resp.Descriptors[1].ClusterName != "ext-svc2-8082" {
+		t.Errorf("Expected cluster name %q, got %q", "ext-svc2-8082", resp.Descriptors[1].ClusterName)
+	}
+	if resp.Descriptors[1].Service != "example.v1.Service2" {
+		t.Errorf("Expected service %q, got %q", "example.v1.Service2", resp.Descriptors[1].Service)
+	}
+}
+
+func TestGetServiceDescriptors_NotFound(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := &extpb.GetServiceDescriptorsRequest{
+		Services: []*extpb.ServiceRef{
+			{ClusterName: "ext-nonexistent-8081", Service: "example.v1.NonexistentService"},
+		},
+	}
+
+	_, err := svc.GetServiceDescriptors(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for missing descriptor")
+	}
+}
+
+func TestGetServiceDescriptors_NilRequest(t *testing.T) {
+	svc := newTestExtensionService()
+
+	_, err := svc.GetServiceDescriptors(context.Background(), nil)
+	if err == nil {
+		t.Fatal("Expected error for nil request")
+	}
+}
+
+func TestGetServiceDescriptors_MissingClusterName(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := &extpb.GetServiceDescriptorsRequest{
+		Services: []*extpb.ServiceRef{
+			{Service: "example.v1.Service1"},
+		},
+	}
+
+	_, err := svc.GetServiceDescriptors(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for missing cluster_name")
+	}
+}
+
+func TestGetServiceDescriptors_MissingService(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := &extpb.GetServiceDescriptorsRequest{
+		Services: []*extpb.ServiceRef{
+			{ClusterName: "ext-svc1-8081"},
+		},
+	}
+
+	_, err := svc.GetServiceDescriptors(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for missing service")
+	}
+}

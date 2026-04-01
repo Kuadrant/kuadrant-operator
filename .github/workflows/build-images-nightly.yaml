@@ -2,7 +2,10 @@ name: Build nightly images
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    # Runs at 01:07 UTC
+    # Local Winter (CET): 02:07 AM
+    # Local Summer (CEST): 03:07 AM
+    - cron: "7 1 * * *"
   workflow_dispatch: {}
 
 jobs:

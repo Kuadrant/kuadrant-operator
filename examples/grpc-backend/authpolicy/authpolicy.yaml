@@ -1,0 +1,20 @@
+---
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: grpcbin
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpcbin
+  rules:
+    authentication:
+      "apikey":
+        apiKey:
+          selector:
+            matchLabels:
+              app: grpcbin
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY

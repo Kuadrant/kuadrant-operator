@@ -26,7 +26,7 @@ spec:
       "certificate-attributes":
         patternMatching:
           patterns:
-          - predicate: "auth.identity.Organization[0] == 'Kuadrant'"
+          - predicate: "size(auth.identity.Organization) > 0 && auth.identity.Organization[0] == 'Kuadrant'"
     response:
       success:
         headers:

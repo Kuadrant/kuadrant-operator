@@ -22,7 +22,7 @@ Tier 1 of [RFC 0015](https://github.com/Kuadrant/architecture/blob/main/rfcs/001
 
 ## Prerequisites
 
-- Kubernetes 1.35+ (required for Gateway API v1.5 CEL validation rules in CRDs)
+- Kubernetes 1.31+ (required for Gateway API v1.5 CEL validation rules in CRDs)
 - Gateway API v1.5+ with `spec.tls.frontend.default.validation` support
 - Istio v1.27+ or compatible Gateway implementation supporting XFCC header forwarding
   - For local testing with `make local-setup`, use `ISTIO_INSTALL_SAIL=false` to install upstream Istio
@@ -150,7 +150,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: api-route
+    name: httpbin-route
   rules:
 
     # Authentication based on client certificate

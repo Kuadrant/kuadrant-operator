@@ -173,6 +173,21 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 			Namespace: gateway.GetNamespace(),
 		})
 
+		// Also collect upstreams registered for HTTPRoutes attached to this gateway
+		for _, child := range topology.Targetables().Children(gateway) {
+			for _, grandchild := range topology.Targetables().Children(child) {
+				if httpRoute, ok := grandchild.(*machinery.HTTPRoute); ok {
+					routeUpstreams := extension.GetRegisteredUpstreamsByTargetRef(extension.TargetRef{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      httpRoute.GetName(),
+						Namespace: httpRoute.GetNamespace(),
+					})
+					gatewayUpstreams = append(gatewayUpstreams, routeUpstreams...)
+				}
+			}
+		}
+
 		if len(gatewayUpstreams) == 0 {
 			continue
 		}

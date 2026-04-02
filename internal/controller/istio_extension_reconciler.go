@@ -178,19 +178,7 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 		})
 
 		// Also collect upstreams registered for HTTPRoutes attached to this gateway
-		for _, child := range topology.Targetables().Children(gateway) {
-			for _, grandchild := range topology.Targetables().Children(child) {
-				if httpRoute, ok := grandchild.(*machinery.HTTPRoute); ok {
-					routeUpstreams := extension.GetRegisteredUpstreamsByTargetRef(extension.TargetRef{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      httpRoute.GetName(),
-						Namespace: httpRoute.GetNamespace(),
-					})
-					gatewayUpstreams = append(gatewayUpstreams, routeUpstreams...)
-				}
-			}
-		}
+		gatewayUpstreams = append(gatewayUpstreams, extension.CollectHTTPRouteUpstreams(topology, gateway)...)
 
 		if len(gatewayUpstreams) == 0 {
 			continue

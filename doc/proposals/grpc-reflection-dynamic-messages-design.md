@@ -560,10 +560,10 @@ pub enum ServiceInstance {
   - [x] Register only DescriptorServiceServer (security boundary)
 - [x] Add Kubernetes Service manifest (`config/manager/grpc_service.yaml`)
 - [x] Update operator deployment to expose port 50051
-- [ ] Implement EnvoyFilter generation for Istio (`istio_extension_reconciler.go`)
+- [x] Implement EnvoyFilter generation for Istio (`istio_extension_reconciler.go`)
   - [ ] Unit test: EnvoyFilter created with correct cluster config
   - [ ] Integration test: verify cluster accessible from gateway pod
-- [ ] Implement EnvoyPatchPolicy generation for Envoy Gateway (`envoy_gateway_extension_reconciler.go`)
+- [x] Implement EnvoyPatchPolicy generation for Envoy Gateway (`envoy_gateway_extension_reconciler.go`)
   - [ ] Unit test: EnvoyPatchPolicy created with correct cluster config
   - [ ] Integration test: verify cluster accessible from gateway pod
 

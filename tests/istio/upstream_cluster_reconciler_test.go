@@ -93,18 +93,47 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				g.Expect(testClient().Get(ctx, efKey, existingEF)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Verify the patch contains the correct cluster configuration
-			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(1))
-			Expect(existingEF.Spec.ConfigPatches[0].Patch).NotTo(BeNil())
-			Expect(existingEF.Spec.ConfigPatches[0].Patch.Value).NotTo(BeNil())
+			// Verify the patches contain both descriptor service and upstream cluster
+			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(2))
 
-			patchValueRaw, err := json.Marshal(existingEF.Spec.ConfigPatches[0].Patch.Value)
-			Expect(err).ToNot(HaveOccurred())
-			var patchValue map[string]any
-			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
+			// Extract cluster names from patches
+			var clusterNames []string
+			for _, patch := range existingEF.Spec.ConfigPatches {
+				Expect(patch.Patch).NotTo(BeNil())
+				Expect(patch.Patch.Value).NotTo(BeNil())
 
-			Expect(patchValue["name"]).To(Equal("test-upstream-cluster"))
-			Expect(patchValue["type"]).To(Equal("STRICT_DNS"))
+				patchValueRaw, err := json.Marshal(patch.Patch.Value)
+				Expect(err).ToNot(HaveOccurred())
+				var patchValue map[string]any
+				Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
+
+				clusterName := patchValue["name"].(string)
+				clusterNames = append(clusterNames, clusterName)
+				Expect(patchValue["type"]).To(Equal("STRICT_DNS"))
+
+				// Verify descriptor service endpoint configuration
+				if clusterName == "kuadrant-operator-grpc" {
+					loadAssignment := patchValue["load_assignment"].(map[string]any)
+					endpoints := loadAssignment["endpoints"].([]any)
+					Expect(endpoints).To(HaveLen(1))
+
+					endpoint := endpoints[0].(map[string]any)
+					lbEndpoints := endpoint["lb_endpoints"].([]any)
+					Expect(lbEndpoints).To(HaveLen(1))
+
+					lbEndpoint := lbEndpoints[0].(map[string]any)
+					endpointAddr := lbEndpoint["endpoint"].(map[string]any)
+					address := endpointAddr["address"].(map[string]any)
+					socketAddress := address["socket_address"].(map[string]any)
+
+					Expect(socketAddress["address"]).To(Equal("kuadrant-operator-grpc.kuadrant-system.svc.cluster.local"))
+					Expect(socketAddress["port_value"]).To(BeNumerically("==", 50051))
+				}
+			}
+
+			// Verify both clusters are present
+			Expect(clusterNames).To(ContainElement("test-upstream-cluster"))
+			Expect(clusterNames).To(ContainElement("kuadrant-operator-grpc"))
 
 			// Verify the upstream EnvoyFilter has the correct labels
 			Expect(existingEF.Labels).To(HaveKeyWithValue("kuadrant.io/upstream", "true"))

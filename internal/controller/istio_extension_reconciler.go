@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -67,6 +69,16 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	logger.V(1).Info("building istio extension ", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building istio extension")
 
+	// reconcile for each gateway based on the desired wasm plugin policies calculated before
+	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
+		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
+	}), func(g machinery.Targetable, _ int) *machinery.Gateway {
+		return g.(*machinery.Gateway)
+	})
+
+	// Reconcile EnvoyFilter cluster patches for registered upstreams
+	r.reconcileUpstreamClusters(ctx, topology, gateways)
+
 	// build wasm plugin configs for each gateway
 	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
 	if err != nil {
@@ -76,13 +88,6 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			return err
 		}
 	}
-
-	// reconcile for each gateway based on the desired wasm plugin policies calculated before
-	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
-		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
-	}), func(g machinery.Targetable, _ int) *machinery.Gateway {
-		return g.(*machinery.Gateway)
-	})
 
 	var modifiedGateways []string
 
@@ -157,9 +162,6 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 	state.Store(StateIstioExtensionsModified, modifiedGateways)
 
-	// Reconcile EnvoyFilter cluster patches for registered upstreams
-	r.reconcileUpstreamClusters(ctx, topology, gateways)
-
 	return nil
 }
 
@@ -169,6 +171,19 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
 
 	for _, gateway := range gateways {
+		// Skip non-Istio gateways
+		gatewayClassName := string(gateway.Spec.GatewayClassName)
+		gatewayClassObj, found := lo.Find(topology.Objects().Items(), func(o machinery.Object) bool {
+			return o.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind && o.GetName() == gatewayClassName
+		})
+		if !found {
+			continue
+		}
+		gatewayClass := gatewayClassObj.(*machinery.GatewayClass)
+		if !lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName) {
+			continue
+		}
+
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
 		gatewayUpstreams := extension.GetRegisteredUpstreamsByTargetRef(extension.TargetRef{
@@ -182,7 +197,7 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 			continue
 		}
 
-		desiredEnvoyFilter, err := buildUpstreamEnvoyFilter(gateway, gatewayUpstreams)
+		desiredEnvoyFilter, err := buildUpstreamEnvoyFilter(logger, gateway, gatewayUpstreams)
 		if err != nil {
 			logger.Error(err, "failed to build upstream envoy filter", "gateway", gatewayKey.String())
 			continue
@@ -243,7 +258,7 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 	}
 }
 
-func buildUpstreamEnvoyFilter(gateway *machinery.Gateway, upstreams []extension.RegisteredUpstreamEntry) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+func buildUpstreamEnvoyFilter(logger logr.Logger, gateway *machinery.Gateway, upstreams []extension.RegisteredUpstreamEntry) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
@@ -290,6 +305,25 @@ func buildUpstreamEnvoyFilter(gateway *machinery.Gateway, upstreams []extension.
 		}
 		allPatches = append(allPatches, patches...)
 	}
+
+	// Add descriptor service cluster (can not conflict with extension upstreams due to ext- prefix)
+	operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+	descriptorServiceHost := fmt.Sprintf("kuadrant-operator-grpc.%s.svc.cluster.local", operatorNamespace)
+	const defaultDescriptorPort = 50051
+	descriptorServicePort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", defaultDescriptorPort)
+	if portErr != nil {
+		logger.Error(portErr, "invalid EXTENSIONS_DESCRIPTOR_SERVICE_PORT, using default", "default", defaultDescriptorPort)
+		descriptorServicePort = defaultDescriptorPort
+	}
+
+	descriptorPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(descriptorServiceHost, descriptorServicePort, false, func(h string, p int, _ bool) map[string]any {
+		return buildClusterPatch("kuadrant-operator-grpc", h, p, false)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build cluster patch for descriptor service: %w", err)
+	}
+	allPatches = append(allPatches, descriptorPatches...)
+
 	envoyFilter.Spec.ConfigPatches = allPatches
 
 	return envoyFilter, nil

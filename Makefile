@@ -392,7 +392,7 @@ test-unit: VERBOSE_FLAG = -v
 endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
 	mkdir -p $(PROJECT_PATH)/coverage/unit
-	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out --race -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
+	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -race -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
 
 ##@ Build
 
@@ -407,7 +407,7 @@ run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet ## Run a controller from your host.
-	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" --race ./cmd/main.go
+	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -race ./cmd/main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")

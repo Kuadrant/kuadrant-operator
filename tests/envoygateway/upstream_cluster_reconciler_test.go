@@ -131,4 +131,66 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
+
+	Context("with registered upstream targeting HTTPRoute", func() {
+		It("creates EnvoyPatchPolicy on the parent gateway for HTTPRoute-targeted upstreams", func(ctx SpecContext) {
+			// Create an HTTPRoute first so it is in the topology
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{gwHost})
+			Expect(testClient().Create(ctx, route)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+
+			// Register an upstream targeting the HTTPRoute (not the Gateway)
+			upstreamKey := extension.RegisteredUpstreamKey{
+				Policy: policyID,
+				URL:    "grpc://route-upstream.example.com:50051",
+			}
+			store.SetUpstream(upstreamKey, extension.RegisteredUpstreamEntry{
+				ClusterName: "route-upstream-cluster",
+				Host:        "route-upstream.example.com",
+				Port:        50051,
+				TargetRef: extension.TargetRef{
+					Group:     "gateway.networking.k8s.io",
+					Kind:      "HTTPRoute",
+					Name:      TestHTTPRouteName,
+					Namespace: testNamespace,
+				},
+				FailureMode: "deny",
+				Timeout:     "10s",
+			})
+
+			// Trigger reconciliation by updating the route
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(route), route)
+				g.Expect(err).NotTo(HaveOccurred())
+				if route.Annotations == nil {
+					route.Annotations = map[string]string{}
+				}
+				route.Annotations["test-trigger"] = "httproute-upstream"
+				g.Expect(testClient().Update(ctx, route)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			// Verify the upstream EnvoyPatchPolicy is created on the parent gateway
+			patchKey := client.ObjectKey{
+				Name:      controllers.UpstreamClusterName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+			patch := &egv1alpha1.EnvoyPatchPolicy{}
+			Eventually(func(g Gomega, ctx context.Context) {
+				g.Expect(testClient().Get(ctx, patchKey, patch)).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
+
+			// Verify the patch contains the correct cluster configuration
+			Expect(patch.Spec.JSONPatches).To(HaveLen(1))
+			Expect(patch.Spec.JSONPatches[0].Name).To(Equal("route-upstream-cluster"))
+
+			// Clean up
+			store.ClearPolicyData(policyID)
+			Expect(testClient().Delete(ctx, route)).To(Succeed())
+
+			Eventually(func() bool {
+				err := testClient().Get(ctx, patchKey, &egv1alpha1.EnvoyPatchPolicy{})
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
 })

@@ -103,18 +103,48 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 			Expect(patch.Spec.TargetRef.Kind).To(Equal(gatewayapiv1.Kind("Gateway")))
 			Expect(patch.Spec.TargetRef.Name).To(Equal(gatewayapiv1.ObjectName(gateway.Name)))
 			Expect(patch.Spec.Type).To(Equal(egv1alpha1.JSONPatchEnvoyPatchType))
-			Expect(patch.Spec.JSONPatches).To(HaveLen(1))
-			Expect(patch.Spec.JSONPatches[0].Type).To(Equal(egv1alpha1.ClusterEnvoyResourceType))
-			Expect(patch.Spec.JSONPatches[0].Name).To(Equal("test-upstream-cluster"))
-			Expect(patch.Spec.JSONPatches[0].Operation.Op).To(Equal(egv1alpha1.JSONPatchOperationType("add")))
 
-			// Verify the patch value contains the correct cluster configuration
-			patchValueBytes, err := patch.Spec.JSONPatches[0].Operation.Value.MarshalJSON()
-			Expect(err).ToNot(HaveOccurred())
-			var patchValue map[string]any
-			Expect(json.Unmarshal(patchValueBytes, &patchValue)).ToNot(HaveOccurred())
-			Expect(patchValue["name"]).To(Equal("test-upstream-cluster"))
-			Expect(patchValue["type"]).To(Equal("STRICT_DNS"))
+			// Verify the patches contain both descriptor service and upstream cluster
+			Expect(patch.Spec.JSONPatches).To(HaveLen(2))
+
+			// Extract cluster names and verify cluster configuration
+			var clusterNames []string
+			for _, jsonPatch := range patch.Spec.JSONPatches {
+				Expect(jsonPatch.Type).To(Equal(egv1alpha1.ClusterEnvoyResourceType))
+				Expect(jsonPatch.Operation.Op).To(Equal(egv1alpha1.JSONPatchOperationType("add")))
+
+				patchValueBytes, err := jsonPatch.Operation.Value.MarshalJSON()
+				Expect(err).ToNot(HaveOccurred())
+				var patchValue map[string]any
+				Expect(json.Unmarshal(patchValueBytes, &patchValue)).ToNot(HaveOccurred())
+
+				clusterName := patchValue["name"].(string)
+				clusterNames = append(clusterNames, clusterName)
+				Expect(patchValue["type"]).To(Equal("STRICT_DNS"))
+
+				// Verify descriptor service endpoint configuration
+				if clusterName == "kuadrant-operator-grpc" {
+					loadAssignment := patchValue["load_assignment"].(map[string]any)
+					endpoints := loadAssignment["endpoints"].([]any)
+					Expect(endpoints).To(HaveLen(1))
+
+					endpoint := endpoints[0].(map[string]any)
+					lbEndpoints := endpoint["lb_endpoints"].([]any)
+					Expect(lbEndpoints).To(HaveLen(1))
+
+					lbEndpoint := lbEndpoints[0].(map[string]any)
+					endpointAddr := lbEndpoint["endpoint"].(map[string]any)
+					address := endpointAddr["address"].(map[string]any)
+					socketAddress := address["socket_address"].(map[string]any)
+
+					Expect(socketAddress["address"]).To(Equal("kuadrant-operator-grpc.kuadrant-system.svc.cluster.local"))
+					Expect(socketAddress["port_value"]).To(BeNumerically("==", 50051))
+				}
+			}
+
+			// Verify both clusters are present
+			Expect(clusterNames).To(ContainElement("test-upstream-cluster"))
+			Expect(clusterNames).To(ContainElement("kuadrant-operator-grpc"))
 
 			// Verify the upstream EnvoyPatchPolicy has the correct labels
 			Expect(patch.Labels).To(HaveKeyWithValue("kuadrant.io/upstream", "true"))

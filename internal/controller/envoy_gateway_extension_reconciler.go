@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -66,6 +68,16 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
+	// reconcile for each gateway based on the desired wasm plugin policies calculated before
+	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
+		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
+	}), func(g machinery.Targetable, _ int) *machinery.Gateway {
+		return g.(*machinery.Gateway)
+	})
+
+	// Reconcile EnvoyPatchPolicy cluster patches for registered upstreams
+	r.reconcileUpstreamClusters(ctx, topology, gateways)
+
 	// build wasm plugin configs for each gateway
 	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
 	if err != nil {
@@ -75,13 +87,6 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			return err
 		}
 	}
-
-	// reconcile for each gateway based on the desired wasm plugin policies calculated before
-	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
-		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
-	}), func(g machinery.Targetable, _ int) *machinery.Gateway {
-		return g.(*machinery.Gateway)
-	})
 
 	var modifiedGateways []string
 
@@ -153,9 +158,6 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 	state.Store(StateEnvoyGatewayExtensionsModified, modifiedGateways)
 
-	// Reconcile EnvoyPatchPolicy cluster patches for registered upstreams
-	r.reconcileUpstreamClusters(ctx, topology, gateways)
-
 	return nil
 }
 
@@ -165,6 +167,18 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 	desiredPolicies := make(map[k8stypes.NamespacedName]struct{})
 
 	for _, gateway := range gateways {
+		// Skip non-Envoy Gateway gateways
+		gatewayClassObjs := topology.Targetables().Parents(gateway)
+		gatewayClassObj, found := lo.Find(gatewayClassObjs, func(obj machinery.Targetable) bool {
+			return obj.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind
+		})
+		if found {
+			gatewayClass := gatewayClassObj.(*machinery.GatewayClass)
+			if !lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName) {
+				continue
+			}
+		}
+
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
 		gatewayUpstreams := extension.GetRegisteredUpstreamsByTargetRef(extension.TargetRef{
@@ -178,7 +192,7 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 			continue
 		}
 
-		desiredPolicy, err := buildUpstreamEnvoyPatchPolicy(gateway, gatewayUpstreams)
+		desiredPolicy, err := buildUpstreamEnvoyPatchPolicy(logger, gateway, gatewayUpstreams)
 		if err != nil {
 			logger.Error(err, "failed to build upstream envoy patch policy", "gateway", gatewayKey.String())
 			continue
@@ -240,7 +254,7 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 	}
 }
 
-func buildUpstreamEnvoyPatchPolicy(gateway *machinery.Gateway, upstreams []extension.RegisteredUpstreamEntry) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
+func buildUpstreamEnvoyPatchPolicy(logger logr.Logger, gateway *machinery.Gateway, upstreams []extension.RegisteredUpstreamEntry) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
 	policy := &envoygatewayv1alpha1.EnvoyPatchPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyPatchPolicyGroupKind.Kind,
@@ -286,6 +300,25 @@ func buildUpstreamEnvoyPatchPolicy(gateway *machinery.Gateway, upstreams []exten
 		}
 		allPatches = append(allPatches, patches...)
 	}
+
+	// Add descriptor service cluster (can not conflict with extension upstreams due to ext- prefix)
+	operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+	descriptorServiceHost := fmt.Sprintf("kuadrant-operator-grpc.%s.svc.cluster.local", operatorNamespace)
+	const defaultDescriptorPort = 50051
+	descriptorServicePort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", defaultDescriptorPort)
+	if portErr != nil {
+		logger.Error(portErr, "invalid EXTENSIONS_DESCRIPTOR_SERVICE_PORT, using default", "default", defaultDescriptorPort)
+		descriptorServicePort = defaultDescriptorPort
+	}
+
+	descriptorPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch("kuadrant-operator-grpc", descriptorServiceHost, descriptorServicePort, false, func(h string, p int, _ bool) map[string]any {
+		return buildClusterPatch("kuadrant-operator-grpc", h, p, false)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build cluster patch for descriptor service: %w", err)
+	}
+	allPatches = append(allPatches, descriptorPatches...)
+
 	policy.Spec.JSONPatches = allPatches
 
 	return policy, nil

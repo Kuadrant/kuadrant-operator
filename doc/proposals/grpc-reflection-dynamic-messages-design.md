@@ -558,9 +558,8 @@ pub enum ServiceInstance {
   - [x] Start server on port 50051 in Manager.Start()
   - [x] Stop server gracefully in Manager.Stop()
   - [x] Register only DescriptorServiceServer (security boundary)
-- [ ] Add Kubernetes Service manifest (`config/manager/grpc_service.yaml`)
-- [ ] Update operator deployment to expose port 50051
-  - [ ] Integration test: verify service is reachable from pod
+- [x] Add Kubernetes Service manifest (`config/manager/grpc_service.yaml`)
+- [x] Update operator deployment to expose port 50051
 - [ ] Implement EnvoyFilter generation for Istio (`istio_extension_reconciler.go`)
   - [ ] Unit test: EnvoyFilter created with correct cluster config
   - [ ] Integration test: verify cluster accessible from gateway pod

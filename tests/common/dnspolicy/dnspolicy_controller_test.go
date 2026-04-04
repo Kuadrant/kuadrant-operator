@@ -625,10 +625,10 @@ var _ = Describe("DNSPolicy controller", func() {
 		})
 
 		It("should not create a dns record", func(ctx SpecContext) {
-			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
+			Consistently(func(g Gomega) []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
 				dnsRecords := kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, &dnsRecords, client.InNamespace(dnsPolicy.GetNamespace()))
-				Expect(err).ToNot(HaveOccurred())
+				g.Expect(err).ToNot(HaveOccurred())
 				return dnsRecords.Items
 			}, time.Second*15, time.Second).Should(BeEmpty())
 		}, testTimeOut)

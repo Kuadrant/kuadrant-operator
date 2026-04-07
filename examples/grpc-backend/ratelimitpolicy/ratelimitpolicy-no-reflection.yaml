@@ -1,0 +1,20 @@
+---
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: grpcbin-rlp-no-reflection
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpcbin
+  defaults:
+    limits:
+      "non-reflection-calls":
+        rates:
+        - limit: 10
+          window: 10s
+        when:
+        # Only apply rate limit to non-reflection requests
+        # This excludes gRPC reflection service calls
+        - predicate: "!request.path.startsWith('/grpc.reflection.')"

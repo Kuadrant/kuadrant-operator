@@ -1003,7 +1003,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute', 'GRPCRoute' and 'Gateway'")).To(BeTrue())
 		}, testTimeOut)
 	})
 

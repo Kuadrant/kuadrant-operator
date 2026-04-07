@@ -38,6 +38,7 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
@@ -139,8 +140,12 @@ func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context
 
 func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index) {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processPolicyRules").WithValues("context", ctx)
-	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
-	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
+	if err != nil {
+		logger.Error(err, "failed to parse request path", "pathID", pathID)
+		return
+	}
+	limitsNamespace := parsed.GetRouteNamespacedName().String()
 
 	limitRules := lo.Filter(lo.Entries(rules),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {

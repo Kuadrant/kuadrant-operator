@@ -56,7 +56,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		return nil
 	}
 
-	desiredLimits := r.buildLimitadorLimits(ctx, state)
+	desiredLimits, sources := r.buildLimitadorLimits(ctx, state)
 
 	if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
 		logger.Info("limitador object is up to date, nothing to do", "status", "skipping")
@@ -73,6 +73,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	span.SetAttributes(
 		attribute.String("namespace", limitador.Namespace),
 		attribute.String("name", limitador.Name),
+		attribute.StringSlice("sources", lo.Uniq(sources)),
 	)
 
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(limitador.Annotations))
@@ -97,20 +98,20 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	return nil
 }
 
-func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) []limitadorv1alpha1.RateLimit {
+func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, []string) {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("buildLimitadorLimits").WithValues("context", ctx)
 
 	rateLimitIndex := ratelimit.NewIndex()
 
 	// both RateLimitPolicies and TokenRateLimitPolicies together
-	r.processEffectivePolicies(ctx, state, rateLimitIndex)
+	sources := r.processEffectivePolicies(ctx, state, rateLimitIndex)
 
 	logger.V(1).Info("finished building limitador limits", "limits", rateLimitIndex.Len())
 
-	return rateLimitIndex.ToRateLimits()
+	return rateLimitIndex.ToRateLimits(), sources
 }
 
-func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index) {
+func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index) []string {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processEffectivePolicies").WithValues("context", ctx)
 	var sources []string
 	// RateLimitPolicies
@@ -133,10 +134,7 @@ func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context
 		}
 	}
 
-	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attribute.StringSlice("sources", lo.Uniq(sources)),
-	)
+	return sources
 }
 
 func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index) {

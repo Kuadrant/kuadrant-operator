@@ -29,6 +29,7 @@ func (r *RateLimitPolicyValidator) Subscription() controller.Subscription {
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 		},
@@ -72,6 +73,8 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 				res = controller.GatewaysResource.GroupResource()
 			case machinery.HTTPRouteGroupKind.Kind:
 				res = controller.HTTPRoutesResource.GroupResource()
+			case machinery.GRPCRouteGroupKind.Kind:
+				res = controller.GRPCRoutesResource.GroupResource()
 			}
 			err = kuadrant.NewErrPolicyTargetNotFound(kuadrantv1.RateLimitPolicyGroupKind.Kind, ref, apierrors.NewNotFound(res, ref.GetName()))
 			span.RecordError(err)

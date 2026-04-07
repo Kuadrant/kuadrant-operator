@@ -49,6 +49,7 @@ var (
 		{Kind: &machinery.GatewayClassGroupKind},
 		{Kind: &machinery.GatewayGroupKind},
 		{Kind: &machinery.HTTPRouteGroupKind},
+		{Kind: &machinery.GRPCRouteGroupKind},
 		{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 		{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 		{Kind: &kuadrantv1beta1.LimitadorGroupKind},

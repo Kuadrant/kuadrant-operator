@@ -325,8 +325,12 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
-	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
-	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
+	if err != nil {
+		// If the path is invalid, return empty actions
+		return []wasm.Action{}
+	}
+	limitsNamespace := parsed.GetRouteNamespacedName().String()
 
 	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
@@ -376,8 +380,12 @@ func buildWasmActionsForAnyRateLimit(
 ) []wasm.Action {
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
-	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
-	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
+	if err != nil {
+		// If the path is invalid, return empty actions
+		return []wasm.Action{}
+	}
+	limitsNamespace := parsed.GetRouteNamespacedName().String()
 
 	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {

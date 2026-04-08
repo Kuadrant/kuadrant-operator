@@ -24,8 +24,10 @@ Tier 1 of [RFC 0015](https://github.com/Kuadrant/architecture/blob/main/rfcs/001
 
 - Kubernetes 1.31+ (required for Gateway API v1.5 CEL validation rules in CRDs)
 - Gateway API v1.5+ with `spec.tls.frontend.default.validation` support
-- Istio v1.27+ or compatible Gateway implementation supporting XFCC header forwarding
-  - For local testing with `make local-setup`, use `ISTIO_INSTALL_SAIL=false` to install upstream Istio
+- Istio v1.28+ or compatible Gateway implementation supporting XFCC header forwarding and frontend TLS validation (GEP-91)
+  - **Sail Operator**: Requires Sail v1.28.0+ with Istio v1.28.0+ configured in the Istio CR
+  - **Upstream Istio**: Requires Istio v1.28.0+ installed via `istioctl`
+  - **Note**: Istio 1.27.x and earlier do NOT support Gateway API v1.5's `spec.tls.frontend` field
 - Kuadrant Operator installed
 - Kuadrant instance deployed
 

@@ -276,8 +276,7 @@ GATEWAY_IP=$(kubectl get gateway mtls-gateway -n gateway-system -o jsonpath='{.s
 # Make request with client certificate
 curl -ik https://httpbin.$GATEWAY_IP.nip.io/get \
   --cert /tmp/client.crt \
-  --key /tmp/client.key \
-  --cacert /tmp/ca.crt
+  --key /tmp/client.key
 ```
 
 **Expected Result**: Request succeeds (HTTP 200) because both gateway and Authorino validation pass.
@@ -285,8 +284,7 @@ curl -ik https://httpbin.$GATEWAY_IP.nip.io/get \
 ### Test without Certificate
 
 ```sh
-curl -ik https://httpbin.$GATEWAY_IP.nip.io/get \
-  --cacert /tmp/ca.crt
+curl -ik https://httpbin.$GATEWAY_IP.nip.io/get
 ```
 
 **Expected Result**: TLS handshake fails. Gateway rejects connection because no client certificate was provided.
@@ -302,8 +300,7 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 # Try to connect with untrusted certificate
 curl -ik https://httpbin.$GATEWAY_IP.nip.io/get \
   --cert /tmp/untrusted.crt \
-  --key /tmp/untrusted.key \
-  --cacert /tmp/ca.crt
+  --key /tmp/untrusted.key
 ```
 
 **Expected Result**: TLS handshake fails. Gateway rejects connection because the certificate is not signed by a trusted CA.
@@ -329,8 +326,7 @@ openssl x509 -req -sha512 \
 # Try to connect with unauthorized certificate
 curl -ik https://httpbin.$GATEWAY_IP.nip.io/get \
   --cert /tmp/unauthorized-client.crt \
-  --key /tmp/unauthorized-client.key \
-  --cacert /tmp/ca.crt
+  --key /tmp/unauthorized-client.key
 ```
 
 **Expected Result**: Request fails (HTTP 403) because Authorino rejects the certificate based on unauthorized attribute (Organization).

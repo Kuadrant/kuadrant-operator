@@ -171,18 +171,18 @@ spec:
       "certificate-attributes":
         patternMatching:
           patterns:
-          - predicate: "auth.identity.Subject.Organization[0] == 'Kuadrant'"
+          - predicate: "size(auth.identity.Organization) > 0 && auth.identity.Organization[0] == 'Kuadrant'"
     response:
       success:
         headers:
           # Extract the Common Name (CN) from the certificate
           "x-client-cn":
             plain:
-              expression: auth.identity.Subject.CommonName
+              expression: auth.identity.CommonName
           # Extract the Organization (O) from the certificate
           "x-client-org":
             plain:
-              expression: auth.identity.Subject.Organization[0]
+              expression: auth.identity.Organization[0]
 ```
 
 **Certificate Source Options:**

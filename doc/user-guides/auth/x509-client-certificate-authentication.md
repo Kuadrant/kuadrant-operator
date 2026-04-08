@@ -110,6 +110,7 @@ graph TB
 
     subgraph "gateway-system namespace"
         GW[Gateway<br/>mtls-gateway]
+        TP[TLSPolicy<br/>gateway-tls-policy]
         CACM[(ConfigMap<br/>client-ca-bundle)]
         TLSCERT[(Secret<br/>gateway-tls-cert)]
     end
@@ -126,6 +127,8 @@ graph TB
     end
 
     Client -->|"1. mTLS handshake<br/>(client cert)"| GW
+    TP -.->|attached to| GW
+    TP -.->|manages cert| TLSCERT
     GW -.->|validates against| CACM
     GW -.->|server cert| TLSCERT
     GW -->|"2. XFCC header"| HR
@@ -135,6 +138,7 @@ graph TB
     AP -.->|validates cert via<br/>label selector| CASEC
 
     style GW fill:none,stroke:#000,color:#000
+    style TP fill:none,stroke:#000,color:#000
     style HR fill:none,stroke:#000,color:#000
     style AP fill:none,stroke:#000,color:#000
     style CACM fill:none,stroke:#000,color:#000

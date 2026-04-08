@@ -37,7 +37,7 @@ spec:
       serviceAccountName: httpbin
       containers:
       - name: httpbin
-        image: docker.io/kennethreitz/httpbin
+        image: quay.io/kuadrant/httpbin@sha256:2865a9ac6596340135fc3cd82cbc543c4050124afb10361e36f727abe4f71900
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80

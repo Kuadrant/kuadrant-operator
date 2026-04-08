@@ -99,6 +99,59 @@ This creates:
 
 ## Configuration Details
 
+### Topology Overview
+
+The following diagram illustrates the architecture and relationships between components:
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#fff','primaryTextColor':'#000','primaryBorderColor':'#000','lineColor':'#000','secondaryColor':'#fff','tertiaryColor':'#fff','clusterBkg':'#fff','clusterBorder':'#000','edgeLabelBackground':'#fff'}}}%%
+graph TB
+    Client([Client with<br/>X.509 Certificate])
+
+    subgraph "gateway-system namespace"
+        GW[Gateway<br/>mtls-gateway]
+        CACM[(ConfigMap<br/>client-ca-bundle)]
+        TLSCERT[(Secret<br/>gateway-tls-cert)]
+    end
+
+    subgraph "default namespace"
+        HR[HTTPRoute<br/>httpbin-route]
+        AP[AuthPolicy<br/>x509-auth-policy]
+        SVC[Service<br/>httpbin]
+        POD[Deployment<br/>httpbin]
+    end
+
+    subgraph "kuadrant-system namespace"
+        CASEC[(Secret<br/>trusted-client-ca)]
+    end
+
+    Client -->|"1. mTLS handshake<br/>(client cert)"| GW
+    GW -.->|validates against| CACM
+    GW -.->|server cert| TLSCERT
+    GW -->|"2. XFCC header"| HR
+    HR -->|routes to| SVC
+    SVC --> POD
+    AP -.->|attached to| HR
+    AP -.->|validates cert via<br/>label selector| CASEC
+
+    style GW fill:none,stroke:#000,color:#000
+    style HR fill:none,stroke:#000,color:#000
+    style AP fill:none,stroke:#000,color:#000
+    style CACM fill:none,stroke:#000,color:#000
+    style CASEC fill:none,stroke:#000,color:#000
+    style TLSCERT fill:none,stroke:#000,color:#000
+    style SVC fill:none,stroke:#000,color:#000
+    style POD fill:none,stroke:#000,color:#000
+    style Client fill:none,stroke:#000,color:#000
+```
+
+**Component Interactions:**
+
+1. **TLS Layer (L4)**: Client presents certificate → Gateway validates against `client-ca-bundle` ConfigMap
+2. **Application Layer (L7)**: Gateway forwards XFCC header → AuthPolicy validates against `trusted-client-ca` Secret using label selectors
+3. **Routing**: HTTPRoute connects the Gateway listener to the httpbin Service
+4. **Policy Attachment**: AuthPolicy attaches to HTTPRoute for fine-grained certificate validation
+
 ### Gateway Configuration
 
 The Gateway uses `spec.tls.frontend.default.validation` for client certificate validation:

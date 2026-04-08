@@ -112,7 +112,7 @@ graph TB
 
     subgraph "gateway-system namespace"
         GW[Gateway<br/>mtls-gateway]
-        TP[TLSPolicy<br/>gateway-tls-policy]
+        TP[TLSPolicy<br/>mtls-gateway-tls]
         CACM[(ConfigMap<br/>client-ca-bundle)]
         TLSCERT[(Secret<br/>gateway-tls-cert)]
     end

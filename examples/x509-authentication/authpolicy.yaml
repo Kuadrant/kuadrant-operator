@@ -1,0 +1,40 @@
+---
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: x509-auth-policy
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: httpbin-route
+  rules:
+    authentication:
+      "x509-client-cert":
+        x509:
+          # Extract certificate from XFCC header
+          # The gateway populates this header after validating the client certificate
+          source:
+            # Name of the XFCC header (Envoy's X-Forwarded-Client-Cert standard)
+            # This is the default header name used by Istio/Envoy
+            xfccHeader: "x-forwarded-client-cert"
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: trusted-client
+    authorization:
+      "certificate-attributes":
+        patternMatching:
+          patterns:
+          - predicate: "size(auth.identity.Organization) > 0 && auth.identity.Organization[0] == 'Kuadrant'"
+    response:
+      success:
+        headers:
+          # Extract the Common Name (CN) from the certificate
+          "x-client-common-name":
+            plain:
+              expression: auth.identity.CommonName
+          # Extract the Organization (O) from the certificate
+          "x-client-org":
+            plain:
+              expression: auth.identity.Organization[0]

@@ -15,7 +15,7 @@ endif
 
 # istioctl tool
 ISTIOCTL ?= $(LOCALBIN)/istioctl
-ISTIOCTL_VERSION ?= 1.27.1
+ISTIOCTL_VERSION ?= 1.29.1
 ISTIOCTL_V_BINARY := $(LOCALBIN)/istioctl-$(ISTIOCTL_VERSION)
 
 .PHONY: istioctl
@@ -31,7 +31,7 @@ istioctl-install: istioctl ## Install istio.
 istioctl-uninstall: istioctl ## Uninstall istio.
 	$(ISTIOCTL) uninstall -y --purge
 
-SAIL_VERSION = 1.27.1
+SAIL_VERSION = 1.29.1
 .PHONY: sail-install
 sail-install: helm
 	$(HELM) install sail-operator \

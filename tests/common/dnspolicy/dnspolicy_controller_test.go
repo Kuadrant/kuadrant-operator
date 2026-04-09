@@ -303,7 +303,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			})
 			err = k8sClient.Update(ctx, dnsPolicy)
 			g.Expect(err).To(HaveOccurred())
-			g.Expect(err).To(MatchError(ContainSubstring("spec.providerRefs: Too many: 2: must have at most 1 items")))
+			g.Expect(err).To(MatchError(ContainSubstring("spec.providerRefs: Too many: 2: must have at most 1 item")))
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 	}, testTimeOut)
 

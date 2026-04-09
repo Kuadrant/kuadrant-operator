@@ -3,30 +3,23 @@ kind: Istio
 metadata:
   name: default
 spec:
-  # Supported values for sail-operator v1.27.1 are:
+  # Supported values for sail-operator v1.29.1 are:
+  # - v1.29-latest
+  # - v1.29.1
+  # - v1.29.0
+  # - v1.28-latest
+  # - v1.28.5
+  # - v1.28.4
+  # - v1.28.3
+  # - v1.28.2
+  # - v1.28.1
+  # - v1.28.0
   # - v1.27-latest
-  # - v1.27.1
-  # - v1.27.0
-  # - v1.26-latest
-  # - v1.26.4
-  # - v1.26.3
-  # - v1.26.2
-  # - v1.26.0
-  # - v1.25-latest
-  # - v1.25.5
-  # - v1.25.4
-  # - v1.25.3
-  # - v1.25.2
-  # - v1.25.1
-  # - v1.24-latest
-  # - v1.24.6
-  # - v1.24.5
-  # - v1.24.4
-  # - v1.24.3
-  # - v1.24.2
-  # - v1.24.1
-  # - v1.24.0
-  version: v1.27.1
+  # - v1.27.8
+  # - v1.27.7
+  # - v1.27.6
+  # Minimum version for Gateway API v1.5 spec.tls.frontend support: v1.28.0
+  version: v1.29.1
   namespace: istio-system
   # Disable autoscaling to reduce dev resources
   values:

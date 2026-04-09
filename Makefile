@@ -260,7 +260,7 @@ CONTROLLER_GEN_VERSION ?= v0.19.0
 KUSTOMIZE_VERSION ?= v4.5.5
 YQ_VERSION ?= v4.34.2
 OPM_VERSION ?= v1.48.0
-KIND_VERSION ?= v0.23.0
+KIND_VERSION ?= v0.31.0
 ACT_VERSION ?= latest
 HELM_VERSION ?= v3.15.0
 GOLANGCI_LINT_VERSION ?= v2.7.2
@@ -427,7 +427,7 @@ docker-push: ## Push docker image with the manager.
 kind-load-image: ## Load image to local cluster
 	$(eval TMP_DIR := $(shell mktemp -d))
 	$(CONTAINER_ENGINE) save -o $(TMP_DIR)/image.tar $(IMG) \
-	   && KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive $(TMP_DIR)/image.tar $(IMG) --name $(KIND_CLUSTER_NAME) ; \
+	   && KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive $(TMP_DIR)/image.tar --name $(KIND_CLUSTER_NAME) ; \
 	   EXITVAL=$$? ; \
 	   rm -rf $(TMP_DIR) ;\
 	   exit $${EXITVAL}

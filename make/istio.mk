@@ -15,7 +15,7 @@ endif
 
 # istioctl tool
 ISTIOCTL ?= $(LOCALBIN)/istioctl
-ISTIOCTL_VERSION ?= 1.27.1
+ISTIOCTL_VERSION ?= 1.29.1
 ISTIOCTL_V_BINARY := $(LOCALBIN)/istioctl-$(ISTIOCTL_VERSION)
 
 .PHONY: istioctl

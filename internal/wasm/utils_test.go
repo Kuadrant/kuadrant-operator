@@ -4,6 +4,7 @@ package wasm
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -17,6 +18,8 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml"
+
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 )
 
 var (
@@ -338,6 +341,152 @@ func TestPredicatesFromHTTPRouteMatch(t *testing.T) {
 	assert.Equal(t, predicates[3], "'foo' in queryMap(request.query) ? queryMap(request.query)['foo'] == 'bar' : false")
 	assert.Equal(t, predicates[4], "'kua' in queryMap(request.query) ? queryMap(request.query)['kua'] == 'drant' : false")
 	assert.Equal(t, len(predicates), 5)
+}
+
+func TestPredicatesFromGRPCRouteMatch(t *testing.T) {
+	testCases := []struct {
+		name               string
+		match              gatewayapiv1.GRPCRouteMatch
+		expectedPredicates []string
+	}{
+		{
+			name: "exact service + exact method",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Service: ptr.To("com.example.UserService"),
+					Method:  ptr.To("GetUser"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path == '/com.example.UserService/GetUser'",
+			},
+		},
+		{
+			name: "exact service only",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Service: ptr.To("com.example.UserService"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path.startsWith('/com.example.UserService/')",
+			},
+		},
+		{
+			name: "exact method only",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:   ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Method: ptr.To("GetUser"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path.matches('^/[^/]+/GetUser$')",
+			},
+		},
+		{
+			name: "regex service + regex method",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Service: ptr.To("com\\.example\\..*Service"),
+					Method:  ptr.To("Get.*"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path.matches('^/com\\.example\\..*Service/Get.*$')",
+			},
+		},
+		{
+			name: "regex service only",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Service: ptr.To("com\\.example\\..*"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path.matches('^/com\\.example\\..*/.*$')",
+			},
+		},
+		{
+			name: "regex method only",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:   ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Method: ptr.To("Get.*"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path.matches('^/[^/]+/Get.*$')",
+			},
+		},
+		{
+			name: "default match type (Exact) with service and method",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Service: ptr.To("example.Service"),
+					Method:  ptr.To("Echo"),
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path == '/example.Service/Echo'",
+			},
+		},
+		{
+			name: "with headers",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Service: ptr.To("example.Service"),
+					Method:  ptr.To("Echo"),
+				},
+				Headers: []gatewayapiv1.GRPCHeaderMatch{
+					{
+						Type:  ptr.To(gatewayapiv1.GRPCHeaderMatchExact),
+						Name:  "x-tenant",
+						Value: "acme",
+					},
+					{
+						Type:  ptr.To(gatewayapiv1.GRPCHeaderMatchExact),
+						Name:  "x-env",
+						Value: "prod",
+					},
+				},
+			},
+			expectedPredicates: []string{
+				"request.url_path == '/example.Service/Echo'",
+				"request.headers.exists(h, h.lowerAscii() == 'x-tenant' && request.headers[h] == 'acme')",
+				"request.headers.exists(h, h.lowerAscii() == 'x-env' && request.headers[h] == 'prod')",
+			},
+		},
+		{
+			name: "headers only (no method match)",
+			match: gatewayapiv1.GRPCRouteMatch{
+				Headers: []gatewayapiv1.GRPCHeaderMatch{
+					{
+						Type:  ptr.To(gatewayapiv1.GRPCHeaderMatchExact),
+						Name:  "x-api-key",
+						Value: "secret",
+					},
+				},
+			},
+			expectedPredicates: []string{
+				"request.headers.exists(h, h.lowerAscii() == 'x-api-key' && request.headers[h] == 'secret')",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			predicates := PredicatesFromGRPCRouteMatch(tc.match)
+			assert.Equal(t, len(tc.expectedPredicates), len(predicates), "number of predicates mismatch")
+			for i, expected := range tc.expectedPredicates {
+				assert.Equal(t, expected, predicates[i])
+			}
+		})
+	}
 }
 
 func TestBuildObservabilityConfig(t *testing.T) {
@@ -1497,6 +1646,309 @@ func TestBuildConfigForActionSetWithObservability(t *testing.T) {
 			assert.Assert(subT, config.Services[AuthServiceName] != Service{}, "auth service should be present")
 			assert.Assert(subT, config.Services[RateLimitCheckServiceName] != Service{}, "ratelimit check service should be present")
 			assert.Assert(subT, config.Services[RateLimitReportServiceName] != Service{}, "ratelimit report service should be present")
+		})
+	}
+}
+
+func TestGRPCMethodSpecificityEncoding(t *testing.T) {
+	tests := []struct {
+		name                     string
+		service                  *string
+		method                   *string
+		expectedPathType         *gatewayapiv1.PathMatchType
+		expectedPathValue        string
+		expectedMoreSpecificThan []int // indices of less specific matches
+	}{
+		{
+			name:                     "service and method specified - most specific",
+			service:                  ptr.To("s"),
+			method:                   ptr.To("LongMethodName"),
+			expectedPathType:         ptr.To(gatewayapiv1.PathMatchExact),
+			expectedPathValue:        "/s/LongMethodName",
+			expectedMoreSpecificThan: []int{1, 2}, // More specific than both PathPrefix cases (Exact > PathPrefix)
+		},
+		{
+			name:                     "service only - least specific",
+			service:                  ptr.To("s"),
+			method:                   nil,
+			expectedPathType:         ptr.To(gatewayapiv1.PathMatchPathPrefix),
+			expectedPathValue:        "/s",
+			expectedMoreSpecificThan: []int{}, // Least specific: shortest PathPrefix path
+		},
+		{
+			name:                     "method only - medium specific",
+			service:                  nil,
+			method:                   ptr.To("LongMethodName"),
+			expectedPathType:         ptr.To(gatewayapiv1.PathMatchPathPrefix),
+			expectedPathValue:        "/LongMethodName",
+			expectedMoreSpecificThan: []int{1}, // More specific than service-only: same PathPrefix type but longer path
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			grpcRouteMatch := gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Service: tt.service,
+					Method:  tt.method,
+				},
+			}
+
+			// Use the production conversion function
+			httpRouteMatch := ConvertGRPCRouteMatchToHTTP(grpcRouteMatch)
+
+			// Verify path type
+			if tt.expectedPathType != nil {
+				assert.Assert(t, httpRouteMatch.Path != nil, "path should be set")
+				assert.Assert(t, httpRouteMatch.Path.Type != nil, "path type should be set")
+				assert.Equal(t, *tt.expectedPathType, *httpRouteMatch.Path.Type)
+			}
+
+			// Verify path value
+			if tt.expectedPathValue != "" {
+				assert.Assert(t, httpRouteMatch.Path != nil, "path should be set")
+				assert.Assert(t, httpRouteMatch.Path.Value != nil, "path value should be set")
+				assert.Equal(t, tt.expectedPathValue, *httpRouteMatch.Path.Value)
+			}
+
+			// Verify specificity ordering
+			// This test verifies that the current match is more specific than the referenced ones
+			for _, lessSpecificIdx := range tt.expectedMoreSpecificThan {
+				lessSpecificTest := tests[lessSpecificIdx]
+				t.Run(fmt.Sprintf("more_specific_than_%s", lessSpecificTest.name), func(t *testing.T) {
+					// Create HTTPRouteMatchConfig for both matches
+					currentConfig := kuadrantgatewayapi.HTTPRouteMatchConfig{
+						Hostname:       "test.example.com",
+						HTTPRouteMatch: httpRouteMatch,
+					}
+
+					lessSpecificGRPCMatch := gatewayapiv1.GRPCRouteMatch{
+						Method: &gatewayapiv1.GRPCMethodMatch{
+							Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+							Service: lessSpecificTest.service,
+							Method:  lessSpecificTest.method,
+						},
+					}
+
+					// Use the production conversion function
+					lessSpecificHTTPMatch := ConvertGRPCRouteMatchToHTTP(lessSpecificGRPCMatch)
+
+					lessSpecificConfig := kuadrantgatewayapi.HTTPRouteMatchConfig{
+						Hostname:       "test.example.com",
+						HTTPRouteMatch: lessSpecificHTTPMatch,
+					}
+
+					// Verify sorting: current should be Less (more specific) than lessSpecific
+					configs := kuadrantgatewayapi.SortableHTTPRouteMatchConfigs{currentConfig, lessSpecificConfig}
+					isMoreSpecific := configs.Less(0, 1)
+					assert.Assert(t, isMoreSpecific,
+						fmt.Sprintf("Test %d (%s) should be more specific than test %d (%s)",
+							i, tt.name, lessSpecificIdx, lessSpecificTest.name))
+				})
+			}
+		})
+	}
+}
+
+// TestConvertGRPCRouteMatchToHTTP tests the ConvertGRPCRouteMatchToHTTP function
+// with various GRPCRouteMatch configurations including Exact and RegularExpression match types.
+func TestConvertGRPCRouteMatchToHTTP(t *testing.T) {
+	tests := []struct {
+		name            string
+		grpcRouteMatch  gatewayapiv1.GRPCRouteMatch
+		expectedPath    *gatewayapiv1.HTTPPathMatch // nil means no path expected
+		expectedHeaders int                         // number of headers expected
+	}{
+		// Exact match type tests (default behavior)
+		{
+			name: "exact: service and method",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Service: ptr.To("example.Service"),
+					Method:  ptr.To("Method"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchExact),
+				Value: ptr.To("/example.Service/Method"),
+			},
+		},
+		{
+			name: "exact: service only",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Service: ptr.To("example.Service"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+				Value: ptr.To("/example.Service"),
+			},
+		},
+		{
+			name: "exact: method only",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:   ptr.To(gatewayapiv1.GRPCMethodMatchExact),
+					Method: ptr.To("Method"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+				Value: ptr.To("/Method"),
+			},
+		},
+		// Nil type defaults to Exact
+		{
+			name: "nil type defaults to exact: service and method",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    nil, // Should default to Exact
+					Service: ptr.To("example.Service"),
+					Method:  ptr.To("Method"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchExact),
+				Value: ptr.To("/example.Service/Method"),
+			},
+		},
+		{
+			name: "nil type defaults to exact: service only",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    nil,
+					Service: ptr.To("example.Service"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+				Value: ptr.To("/example.Service"),
+			},
+		},
+		// RegularExpression match type tests
+		{
+			name: "regex: service and method",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Service: ptr.To("com\\.example\\..*Service"),
+					Method:  ptr.To("Get.*"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+				Value: ptr.To("^/com\\.example\\..*Service/Get.*$"),
+			},
+		},
+		{
+			name: "regex: service only",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Service: ptr.To("com\\.example\\..*"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+				Value: ptr.To("^/com\\.example\\..*"),
+			},
+		},
+		{
+			name: "regex: method only",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:   ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Method: ptr.To("Get.*"),
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+				Value: ptr.To("^/Get.*"),
+			},
+		},
+		// Empty/nil method tests
+		{
+			name: "nil method results in no path",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: nil,
+			},
+			expectedPath: nil,
+		},
+		{
+			name:           "empty GRPCRouteMatch results in no path",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{},
+			expectedPath:   nil,
+		},
+		// Header conversion tests
+		{
+			name: "exact match with headers",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Service: ptr.To("example.Service"),
+					Method:  ptr.To("Method"),
+				},
+				Headers: []gatewayapiv1.GRPCHeaderMatch{
+					{
+						Type:  ptr.To(gatewayapiv1.GRPCHeaderMatchExact),
+						Name:  "x-test",
+						Value: "value",
+					},
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchExact),
+				Value: ptr.To("/example.Service/Method"),
+			},
+			expectedHeaders: 1,
+		},
+		{
+			name: "regex match with regex headers",
+			grpcRouteMatch: gatewayapiv1.GRPCRouteMatch{
+				Method: &gatewayapiv1.GRPCMethodMatch{
+					Type:    ptr.To(gatewayapiv1.GRPCMethodMatchRegularExpression),
+					Service: ptr.To(".*\\.Service"),
+					Method:  ptr.To("Get.*"),
+				},
+				Headers: []gatewayapiv1.GRPCHeaderMatch{
+					{
+						Type:  ptr.To(gatewayapiv1.GRPCHeaderMatchRegularExpression),
+						Name:  "x-.*",
+						Value: "val.*",
+					},
+				},
+			},
+			expectedPath: &gatewayapiv1.HTTPPathMatch{
+				Type:  ptr.To(gatewayapiv1.PathMatchRegularExpression),
+				Value: ptr.To("^/.*\\.Service/Get.*$"),
+			},
+			expectedHeaders: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call the actual production function
+			httpRouteMatch := ConvertGRPCRouteMatchToHTTP(tt.grpcRouteMatch)
+
+			// Verify path
+			if tt.expectedPath == nil {
+				assert.Assert(t, httpRouteMatch.Path == nil, "expected no path")
+			} else {
+				assert.Assert(t, httpRouteMatch.Path != nil, "path should be set")
+				assert.Assert(t, httpRouteMatch.Path.Type != nil, "path type should be set")
+				assert.Equal(t, *tt.expectedPath.Type, *httpRouteMatch.Path.Type, "path type mismatch")
+				if tt.expectedPath.Value != nil {
+					assert.Assert(t, httpRouteMatch.Path.Value != nil, "path value should be set")
+					assert.Equal(t, *tt.expectedPath.Value, *httpRouteMatch.Path.Value, "path value mismatch")
+				}
+			}
+
+			// Verify headers
+			assert.Equal(t, tt.expectedHeaders, len(httpRouteMatch.Headers), "headers count mismatch")
 		})
 	}
 }

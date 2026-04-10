@@ -52,7 +52,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			mGateway,
 			&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
 			mHTTPRoute,
-			&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[httpRouteRuleIndex], Name: "rule-1"},
+			&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[httpRouteRuleIndex], Name: gatewayapiv1.SectionName(fmt.Sprintf("rule-%d", httpRouteRuleIndex+1))},
 		}))
 		return types.NamespacedName{Name: authConfigName, Namespace: kuadrantInstallationNS}
 	}
@@ -961,6 +961,14 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			Expect(err).To(BeNil())
 		})
 
+		It("Valid policy targeting GRPCRoute", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "GRPCRoute"
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(BeNil())
+		})
+
 		It("Invalid Target Ref Group", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
@@ -976,7 +984,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute', 'GRPCRoute', and 'Gateway'")).To(BeTrue())
 		})
 	})
 

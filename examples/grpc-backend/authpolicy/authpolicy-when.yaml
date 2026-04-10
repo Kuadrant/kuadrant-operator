@@ -1,0 +1,91 @@
+---
+# This example demonstrates CEL 'when' predicates for conditional authentication on gRPC services.
+#
+# NOTE: These predicates use request.url_path (the HTTP/2 :path pseudo-header) to match gRPC methods.
+# In the future, Authorino will support well-known gRPC attributes like request.grpc.service and
+# request.grpc.method for more natural matching. See: https://github.com/Kuadrant/authorino/issues/584
+#
+# gRPC method paths follow the pattern: /<package>.<service>/<method>
+# Example: /grpcbin.GRPCBin/DummyUnary
+#   - Service: grpcbin.GRPCBin
+#   - Method: DummyUnary
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: grpcbin-when
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpcbin
+  rules:
+    authentication:
+      # SERVICE-LEVEL MATCHING: Match all methods on grpc.reflection service
+      # Pattern: startsWith('/<service>/')
+      # Future: request.grpc.service == 'grpc.reflection.v1alpha.ServerReflection'
+      "reflection-standard":
+        apiKey:
+          selector:
+            matchLabels:
+              app: grpcbin
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY
+        when:
+          - predicate: "request.url_path.startsWith('/grpc.reflection.')"
+
+      # SERVICE-LEVEL MATCHING with admin credentials
+      "reflection-admin":
+        apiKey:
+          selector:
+            matchLabels:
+              app: grpcbin
+              role: admin
+        credentials:
+          authorizationHeader:
+            prefix: ADMIN
+        when:
+          - predicate: "request.url_path.startsWith('/grpc.reflection.')"
+
+      # EXACT SERVICE+METHOD MATCHING: Specific method on specific service
+      # Pattern: == '/<service>/<method>'
+      # Future: request.grpc.service == 'grpcbin.GRPCBin' && request.grpc.method == 'DummyUnary'
+      "admin-methods":
+        apiKey:
+          selector:
+            matchLabels:
+              app: grpcbin
+              role: admin
+        credentials:
+          authorizationHeader:
+            prefix: ADMIN
+        when:
+          - predicate: "request.url_path == '/grpcbin.GRPCBin/DummyUnary'"
+
+      # COMBINED CONDITIONS: Method match AND header check
+      # Future: request.grpc.method == 'HeadersUnary' && request.headers.exists(...)
+      "header-gated-methods":
+        apiKey:
+          selector:
+            matchLabels:
+              app: grpcbin
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY
+        when:
+          - predicate: "request.url_path == '/grpcbin.GRPCBin/HeadersUnary'"
+          - predicate: "request.headers.exists(h, h.lowerAscii() == 'x-grpc-test' && request.headers[h] == 'true')"
+
+      # METHOD-ONLY MATCHING: Specific method on ANY service
+      # Pattern: matches('^/[^/]+/<method>$')
+      # Future: request.grpc.method == 'Index'
+      "index-methods":
+        apiKey:
+          selector:
+            matchLabels:
+              app: grpcbin
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY
+        when:
+          - predicate: "request.url_path.matches('^/[^/]+/Index$')"

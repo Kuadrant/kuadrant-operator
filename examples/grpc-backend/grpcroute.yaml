@@ -1,0 +1,16 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpcbin
+  labels:
+    app: grpcbin
+spec:
+  parentRefs:
+    - name: kuadrant-ingressgateway
+      namespace: gateway-system
+  hostnames: ["grpcbin.local"]
+  rules:
+    - backendRefs:
+        - name: grpcbin
+          port: 9000

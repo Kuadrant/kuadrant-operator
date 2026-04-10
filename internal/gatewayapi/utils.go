@@ -1,8 +1,6 @@
 package gatewayapi
 
 import (
-	"reflect"
-
 	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
@@ -16,6 +14,40 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
+
+// normalizeParentReference applies Gateway API defaults to a ParentReference for comparison purposes.
+// Per Gateway API spec:
+// - Group defaults to "gateway.networking.k8s.io"
+// - Kind defaults to "Gateway"
+// - Namespace defaults to the Route's namespace
+func normalizeParentReference(ref gatewayapiv1.ParentReference, routeNamespace string) gatewayapiv1.ParentReference {
+	normalized := ref.DeepCopy()
+	if normalized.Group == nil {
+		normalized.Group = ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName))
+	}
+	if normalized.Kind == nil {
+		normalized.Kind = ptr.To(gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind))
+	}
+	if normalized.Namespace == nil {
+		normalized.Namespace = ptr.To(gatewayapiv1.Namespace(routeNamespace))
+	}
+	return *normalized
+}
+
+// parentReferencesMatch compares two ParentReferences after normalizing defaults.
+// It compares the full identifying key (group, kind, namespace, name) plus SectionName and Port
+// to properly distinguish between multiple ParentRefs pointing to the same Gateway but different sections.
+func parentReferencesMatch(a, b gatewayapiv1.ParentReference, routeNamespace string) bool {
+	normA := normalizeParentReference(a, routeNamespace)
+	normB := normalizeParentReference(b, routeNamespace)
+
+	return ptr.Deref(normA.Group, "") == ptr.Deref(normB.Group, "") &&
+		ptr.Deref(normA.Kind, "") == ptr.Deref(normB.Kind, "") &&
+		ptr.Deref(normA.Namespace, "") == ptr.Deref(normB.Namespace, "") &&
+		normA.Name == normB.Name &&
+		ptr.Deref(normA.SectionName, "") == ptr.Deref(normB.SectionName, "") &&
+		ptr.Deref(normA.Port, gatewayapiv1.PortNumber(0)) == ptr.Deref(normB.Port, gatewayapiv1.PortNumber(0))
+}
 
 func HostnamesFromListenerAndHTTPRoute(listener *gatewayapiv1.Listener, httpRoute *gatewayapiv1.HTTPRoute) []gatewayapiv1.Hostname {
 	hostname := listener.Hostname
@@ -34,7 +66,7 @@ func HostnamesFromListenerAndHTTPRoute(listener *gatewayapiv1.Listener, httpRout
 // IsHTTPRouteAccepted returns true if a given HTTPRoute has the Accepted status condition added by any of its
 // parentRefs; otherwise, it returns false
 func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
-	acceptedParentRefs := GetRouteAcceptedParentRefs(httpRoute)
+	acceptedParentRefs := GetHTTPRouteAcceptedParentRefs(httpRoute)
 
 	if len(acceptedParentRefs) == 0 {
 		return false
@@ -43,15 +75,43 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	return len(acceptedParentRefs) == len(httpRoute.Spec.ParentRefs)
 }
 
-// GetRouteAcceptedParentRefs returns the list of parentRefs for which a given route has the Accepted status condition
-func GetRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
+// IsGRPCRouteAccepted returns true if a given GRPCRoute has the Accepted status condition added by any of its
+// parentRefs; otherwise, it returns false
+func IsGRPCRouteAccepted(grpcRoute *gatewayapiv1.GRPCRoute) bool {
+	acceptedParentRefs := GetGRPCRouteAcceptedParentRefs(grpcRoute)
+
+	if len(acceptedParentRefs) == 0 {
+		return false
+	}
+
+	return len(acceptedParentRefs) == len(grpcRoute.Spec.ParentRefs)
+}
+
+// GetHTTPRouteAcceptedParentRefs returns the list of parentRefs for which a given HTTPRoute has the Accepted status condition
+func GetHTTPRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
 	if route == nil {
 		return nil
 	}
 
 	return utils.Filter(route.Spec.ParentRefs, func(p gatewayapiv1.ParentReference) bool {
 		for _, parentStatus := range route.Status.Parents {
-			if reflect.DeepEqual(parentStatus.ParentRef, p) && meta.IsStatusConditionTrue(parentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
+			if parentReferencesMatch(parentStatus.ParentRef, p, route.GetNamespace()) && meta.IsStatusConditionTrue(parentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// GetGRPCRouteAcceptedParentRefs returns the list of parentRefs for which a given GRPCRoute has the Accepted status condition
+func GetGRPCRouteAcceptedParentRefs(route *gatewayapiv1.GRPCRoute) []gatewayapiv1.ParentReference {
+	if route == nil {
+		return nil
+	}
+
+	return utils.Filter(route.Spec.ParentRefs, func(p gatewayapiv1.ParentReference) bool {
+		for _, parentStatus := range route.Status.Parents {
+			if parentReferencesMatch(parentStatus.ParentRef, p, route.GetNamespace()) && meta.IsStatusConditionTrue(parentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
 				return true
 			}
 		}
@@ -67,6 +127,34 @@ func IsHTTPRouteReady(httpRoute *gatewayapiv1.HTTPRoute, gateway *gatewayapiv1.G
 			ptr.Deref(ref.Kind, gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind)) == gatewayapiv1.Kind(gateway.GroupVersionKind().Kind) &&
 			ptr.Deref(ref.Namespace, gatewayapiv1.Namespace(httpRoute.GetNamespace())) == gatewayapiv1.Namespace(gateway.GetNamespace()) &&
 			ref.Name == gatewayapiv1.ObjectName(gateway.GetName())
+	})
+	if !found {
+		return false
+	}
+	return meta.IsStatusConditionTrue(routeStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted))
+}
+
+func IsGRPCRouteReady(grpcRoute *gatewayapiv1.GRPCRoute, gateway *gatewayapiv1.Gateway, listener *gatewayapiv1.Listener, controllerName gatewayapiv1.GatewayController) bool {
+	routeStatus, found := lo.Find(grpcRoute.Status.Parents, func(s gatewayapiv1.RouteParentStatus) bool {
+		ref := s.ParentRef
+		if s.ControllerName != controllerName {
+			return false
+		}
+		// Match gateway identity
+		if ptr.Deref(ref.Group, gatewayapiv1.Group(gatewayapiv1.GroupName)) != gatewayapiv1.Group(gateway.GroupVersionKind().Group) ||
+			ptr.Deref(ref.Kind, gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind)) != gatewayapiv1.Kind(gateway.GroupVersionKind().Kind) ||
+			ptr.Deref(ref.Namespace, gatewayapiv1.Namespace(grpcRoute.GetNamespace())) != gatewayapiv1.Namespace(gateway.GetNamespace()) ||
+			ref.Name != gatewayapiv1.ObjectName(gateway.GetName()) {
+			return false
+		}
+		// Match listener-specific fields (SectionName and Port) if specified in the ParentRef
+		if ref.SectionName != nil && *ref.SectionName != listener.Name {
+			return false
+		}
+		if ref.Port != nil && *ref.Port != listener.Port {
+			return false
+		}
+		return true
 	})
 	if !found {
 		return false

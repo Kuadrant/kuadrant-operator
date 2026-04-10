@@ -61,6 +61,7 @@ func TestAPIs(t *testing.T) {
 const (
 	TestGatewayName   = "test-placed-gateway"
 	TestHTTPRouteName = "toystore-route"
+	TestGRPCRouteName = "grpcbin-route"
 )
 
 var _ = SynchronizedBeforeSuite(func() []byte {

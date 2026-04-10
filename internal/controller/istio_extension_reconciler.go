@@ -52,6 +52,7 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
@@ -344,6 +345,11 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 	// unique paths by key
 	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
+	logger.V(1).Info("processing paths for wasm config", "totalPaths", len(paths))
+
+	authPathIDs := lo.Keys(effectiveAuthPoliciesMap)
+	logger.V(1).Info("effective auth policy pathIDs", "count", len(authPathIDs), "pathIDs", authPathIDs)
+
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 	celValidationIssues := celvalidator.NewIssueCollection()
 
@@ -354,10 +360,16 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		pathID := paths[i].Key
 		path := paths[i].Value
 
-		gatewayClass, gateway, listener, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
+		logger.V(1).Info("processing path", "pathID", pathID, "pathLength", len(path))
+
+		parsed, pathErr := kuadrantpolicymachinery.ParseTopologyPath(path)
+		if pathErr != nil {
+			logger.V(1).Info("skipping path - failed to parse", "pathID", pathID, "error", pathErr)
+			continue
+		}
 
 		// ignore if not an istio gateway
-		if !lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName) {
+		if !lo.Contains(istioGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName) {
 			continue
 		}
 
@@ -365,11 +377,12 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		pathCtx, pathSpan := tracer.Start(ctx, "wasm.BuildConfigForPath")
 		pathSpan.SetAttributes(
 			attribute.String("path_id", pathID),
-			attribute.String("gateway.name", gateway.GetName()),
-			attribute.String("gateway.namespace", gateway.GetNamespace()),
-			attribute.String("listener.name", string(listener.Name)),
-			attribute.String("httproute.name", httpRoute.GetName()),
-			attribute.String("httproute.namespace", httpRoute.GetNamespace()),
+			attribute.String("route_type", parsed.RouteType.String()),
+			attribute.String("gateway.name", parsed.Gateway.GetName()),
+			attribute.String("gateway.namespace", parsed.Gateway.GetNamespace()),
+			attribute.String("listener.name", string(parsed.Listener.Name)),
+			attribute.String("route.name", parsed.GetRouteName()),
+			attribute.String("route.namespace", parsed.GetRouteNamespace()),
 		)
 
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
@@ -478,7 +491,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		pathSpan.SetStatus(codes.Ok, "")
 		pathSpan.End()
 
-		wasmActionSets.Add(gateway.GetLocator(), wasmActionSetsForPath...)
+		wasmActionSets.Add(parsed.Gateway.GetLocator(), wasmActionSetsForPath...)
 	}
 
 	if !celValidationIssues.IsEmpty() {

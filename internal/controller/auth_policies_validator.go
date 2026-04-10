@@ -29,6 +29,7 @@ func (r *AuthPolicyValidator) Subscription() controller.Subscription {
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 		},
@@ -72,6 +73,8 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 				res = controller.GatewaysResource.GroupResource()
 			case machinery.HTTPRouteGroupKind.Kind:
 				res = controller.HTTPRoutesResource.GroupResource()
+			case machinery.GRPCRouteGroupKind.Kind:
+				res = controller.GRPCRoutesResource.GroupResource()
 			}
 			err = kuadrant.NewErrPolicyTargetNotFound(kuadrantv1.AuthPolicyGroupKind.Kind, ref, apierrors.NewNotFound(res, ref.GetName()))
 			span.RecordError(err)

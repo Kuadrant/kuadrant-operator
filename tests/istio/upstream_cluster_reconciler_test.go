@@ -5,6 +5,7 @@ package istio_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -13,6 +14,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -63,14 +65,17 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 			// to trigger reconciliation. The gateway is already in the topology
 			// (created in BeforeEach).
 			upstreamKey := extension.RegisteredUpstreamKey{
-				Policy: policyID,
-				URL:    "grpc://test-upstream.example.com:50051",
+				Policy:  policyID,
+				URL:     "grpc://test-upstream.example.com:50051",
+				Service: "test.Service",
+				Method:  "TestMethod",
 			}
 			store.SetUpstream(upstreamKey, extension.RegisteredUpstreamEntry{
-				ClusterName: "test-upstream-cluster",
+				ClusterName: "ext-test-upstream-cluster",
 				Host:        "test-upstream.example.com",
 				Port:        50051,
 				Service:     "test.Service",
+				Method:      "TestMethod",
 				TargetRef: extension.TargetRef{
 					Group:     "gateway.networking.k8s.io",
 					Kind:      "Gateway",
@@ -133,13 +138,17 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 					address := endpointAddr["address"].(map[string]any)
 					socketAddress := address["socket_address"].(map[string]any)
 
-					Expect(socketAddress["address"]).To(Equal("kuadrant-operator-grpc.kuadrant-system.svc.cluster.local"))
-					Expect(socketAddress["port_value"]).To(BeNumerically("==", 50051))
+					operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+					descriptorServicePort, _ := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", 50051)
+					expectedHost := fmt.Sprintf("kuadrant-operator-grpc.%s.svc.cluster.local", operatorNamespace)
+
+					Expect(socketAddress["address"]).To(Equal(expectedHost))
+					Expect(socketAddress["port_value"]).To(BeNumerically("==", descriptorServicePort))
 				}
 			}
 
 			// Verify both clusters are present
-			Expect(clusterNames).To(ContainElement("test-upstream-cluster"))
+			Expect(clusterNames).To(ContainElement("ext-test-upstream-cluster"))
 			Expect(clusterNames).To(ContainElement("kuadrant-operator-grpc"))
 
 			// Verify the upstream EnvoyFilter has the correct labels

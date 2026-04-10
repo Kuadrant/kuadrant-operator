@@ -316,7 +316,6 @@ type ReflectionFetcher func(ctx context.Context, url, serviceName string) (*desc
 type extensionService struct {
 	dag               *nilGuardedPointer[StateAwareDAG]
 	registeredData    *RegisteredDataStore
-	protoCache        *ProtoCache
 	reflectionFetcher ReflectionFetcher
 	changeNotifier    ChangeNotifier
 	logger            logr.Logger
@@ -353,7 +352,7 @@ func (s *extensionService) GetServiceDescriptors(_ context.Context, request *ext
 			Service:     serviceRef.Service,
 		}
 
-		fds, found := s.protoCache.Get(cacheKey)
+		fds, found := s.registeredData.GetProtoDescriptor(cacheKey)
 		if !found {
 			return nil, fmt.Errorf("descriptors not found for cluster=%q service=%q", serviceRef.ClusterName, serviceRef.Service)
 		}
@@ -380,7 +379,6 @@ func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logg
 	service := &extensionService{
 		dag:               dag,
 		registeredData:    NewRegisteredDataStore(),
-		protoCache:        NewProtoCache(),
 		reflectionFetcher: reflectionClient.FetchServiceDescriptors,
 		logger:            logger.WithName("extensionService"),
 	}
@@ -556,22 +554,7 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		Name:      request.Policy.Metadata.Name,
 	}
 
-	upstreamsToCheck := s.registeredData.GetUpstreamsForPolicy(policyID)
 	clearedMutators, clearedSubscriptions, clearedUpstreams := s.registeredData.ClearPolicyData(policyID)
-
-	// Clean up proto cache for upstreams that are no longer referenced
-	for _, upstream := range upstreamsToCheck {
-		cacheKey := ProtoCacheKey{
-			ClusterName: upstream.ClusterName,
-			Service:     upstream.Service,
-		}
-		if !s.registeredData.HasUpstreamForCacheKey(cacheKey) {
-			s.protoCache.Delete(cacheKey)
-			s.logger.V(1).Info("removed cached descriptors",
-				"clusterName", cacheKey.ClusterName,
-				"service", cacheKey.Service)
-		}
-	}
 
 	// Trigger notifier when mutators or upstreams are cleared
 	if (clearedMutators > 0 || clearedUpstreams > 0) && s.changeNotifier != nil {
@@ -654,13 +637,6 @@ func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch service descriptors for %s: %v", request.Service, err)
 	}
 
-	// Store descriptors in cache
-	cacheKey := ProtoCacheKey{
-		ClusterName: clusterName,
-		Service:     request.Service,
-	}
-	s.protoCache.Set(cacheKey, fds)
-
 	policyID := ResourceID{
 		Kind:      request.Policy.Metadata.Kind,
 		Namespace: request.Policy.Metadata.Namespace,
@@ -691,7 +667,7 @@ func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *
 		Timeout:     "100ms",
 	}
 
-	s.registeredData.SetUpstream(key, entry)
+	s.registeredData.SetUpstream(key, entry, fds)
 
 	s.logger.Info("registered upstream",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),

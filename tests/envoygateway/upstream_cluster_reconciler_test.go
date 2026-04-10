@@ -11,6 +11,8 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,6 +75,7 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 				ClusterName: "test-upstream-cluster",
 				Host:        "test-upstream.example.com",
 				Port:        50051,
+				Service:     "test.Service",
 				TargetRef: extension.TargetRef{
 					Group:     "gateway.networking.k8s.io",
 					Kind:      "Gateway",
@@ -81,6 +84,10 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 				},
 				FailureMode: "deny",
 				Timeout:     "10s",
+			}, &descriptorpb.FileDescriptorSet{
+				File: []*descriptorpb.FileDescriptorProto{
+					{Name: proto.String("test.proto")},
+				},
 			})
 
 			// Create an HTTPRoute to trigger the data plane policies workflow

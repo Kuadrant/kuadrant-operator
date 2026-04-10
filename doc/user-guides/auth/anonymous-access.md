@@ -53,7 +53,8 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches: # rule-1
+  - name: cars
+    matches:
     - method: GET
       path:
         type: PathPrefix
@@ -61,7 +62,8 @@ spec:
     backendRefs:
     - name: toystore
       port: 80
-  - matches: # rule-2
+  - name: public
+    matches:
     - method: GET
       path:
         type: PathPrefix
@@ -144,7 +146,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-    sectionName: rule-2
+    sectionName: public
   defaults:
     rules:
       authentication:

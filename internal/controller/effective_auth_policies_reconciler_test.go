@@ -100,6 +100,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 			},
 			Rules: []gatewayapiv1.HTTPRouteRule{
 				{
+					Name: ptr.To(gatewayapiv1.SectionName("get-rule")),
 					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{
 							Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
@@ -116,6 +117,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 					},
 				},
 				{
+					Name: ptr.To(gatewayapiv1.SectionName("post-rule")),
 					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{
 							Method: ptr.To(gatewayapiv1.HTTPMethod("POST")),
@@ -226,7 +228,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 				Kind:  gatewayapiv1alpha2.Kind(machinery.HTTPRouteGroupKind.Kind),
 				Name:  routeName,
 			},
-			SectionName: ptr.To(gatewayapiv1.SectionName("rule-1")),
+			SectionName: ptr.To(gatewayapiv1.SectionName("get-rule")),
 		}
 		p.Spec.AuthPolicySpecProper = kuadrantv1.AuthPolicySpecProper{
 			AuthScheme: &kuadrantv1.AuthSchemeSpec{
@@ -282,31 +284,31 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 		t.Fatalf("expected 2 effective auth policies, got %d", len(effectiveAuthPolicies))
 	}
 
-	// rule-1
+	// get-rule
 	effectivePolicy, found := lo.Find(lo.Values(effectiveAuthPolicies), func(ep EffectiveAuthPolicy) bool {
-		return len(ep.Path) > 0 && ep.Path[len(ep.Path)-1].GetName() == fmt.Sprintf("%s#rule-1", routeName)
+		return len(ep.Path) > 0 && ep.Path[len(ep.Path)-1].GetName() == fmt.Sprintf("%s#get-rule", routeName)
 	})
 	if !found {
-		t.Fatalf("expected effective policy for rule-1, got none")
+		t.Fatalf("expected effective policy for get-rule, got none")
 	}
 	if authn := effectivePolicy.Spec.Spec.Proper().AuthScheme.Authentication; len(authn) == 0 || !lo.HasKey(authn, "jwt") {
-		t.Fatalf("expected effective policy for rule-1 to have authentication 'jwt'")
+		t.Fatalf("expected effective policy for get-rule to have authentication 'jwt'")
 	}
 	if authz := effectivePolicy.Spec.Spec.Proper().AuthScheme.Authorization; len(authz) == 0 || !lo.HasKey(authz, "admins-or-privileged") {
-		t.Fatalf("expected effective policy for rule-1 to have authorization 'admins-or-privileged'")
+		t.Fatalf("expected effective policy for get-rule to have authorization 'admins-or-privileged'")
 	}
 
-	// rule-2
+	// post-rule
 	effectivePolicy, found = lo.Find(lo.Values(effectiveAuthPolicies), func(ep EffectiveAuthPolicy) bool {
-		return len(ep.Path) > 0 && ep.Path[len(ep.Path)-1].GetName() == fmt.Sprintf("%s#rule-2", routeName)
+		return len(ep.Path) > 0 && ep.Path[len(ep.Path)-1].GetName() == fmt.Sprintf("%s#post-rule", routeName)
 	})
 	if !found {
-		t.Fatalf("expected effective policy for rule-2, got none")
+		t.Fatalf("expected effective policy for post-rule, got none")
 	}
 	if authn := effectivePolicy.Spec.Spec.Proper().AuthScheme.Authentication; len(authn) == 0 || !lo.HasKey(authn, "jwt") {
-		t.Fatalf("expected effective policy for rule-2 to have authentication 'jwt'")
+		t.Fatalf("expected effective policy for post-rule to have authentication 'jwt'")
 	}
 	if authz := effectivePolicy.Spec.Spec.Proper().AuthScheme.Authorization; len(authz) == 0 || !lo.HasKey(authz, "admins-only") {
-		t.Fatalf("expected effective policy for rule-2 to have authorization 'admins-only'")
+		t.Fatalf("expected effective policy for post-rule to have authorization 'admins-only'")
 	}
 }

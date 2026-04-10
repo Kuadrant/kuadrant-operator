@@ -85,7 +85,8 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches:
+  - name: get-toys
+    matches:
     - method: GET
       path:
         type: PathPrefix
@@ -93,7 +94,8 @@ spec:
     backendRefs:
     - name: toystore
       port: 80
-  - matches: # it has to be a separate HTTPRouteRule so we do not rate limit other endpoints
+  - name: create-toy
+    matches: # it has to be a separate HTTPRouteRule so we do not rate limit other endpoints
     - method: POST
       path:
         type: Exact
@@ -148,7 +150,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-    sectionName: rule-2
+    sectionName: create-toy
   limits:
     "create-toy":
       rates:

@@ -28,7 +28,7 @@ Topology:
                       ▲                ▲
             ┌─────────┴───────┐ ┌──────┴──────────┐
             | (HTTPRouteRule) | | (HTTPRouteRule) |   ┌─────────────────┐
-            |     rule-1      | |     rule-2      |◄──│   (AuthPolicy)  │
+            |      toys       | |     admins      |◄──│   (AuthPolicy)  │
             |                 | |                 |   │ toystore-admins │
             | - GET /cars*    | | - /admins*      |   └─────────────────┘
             | - GET /dolls*   | └─────────────────┘
@@ -96,7 +96,7 @@ Create the namespace for the toystore API:
 ```bash
 kubectl create ns ${KUADRANT_DEVELOPER_NS}
 ```
-Deploy the Toy store 
+Deploy the Toy store
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/toystore/toystore.yaml -n ${KUADRANT_DEVELOPER_NS}
 ```
@@ -119,7 +119,8 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches: # rule-1
+  - name: toys
+    matches:
     - method: GET
       path:
         type: PathPrefix
@@ -131,7 +132,8 @@ spec:
     backendRefs:
     - name: toystore
       port: 80
-  - matches: # rule-2
+  - name: admins
+    matches:
     - path:
         type: PathPrefix
         value: "/admin"
@@ -211,7 +213,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-    sectionName: rule-2
+    sectionName: admins
   rules:
     authorization:
       "only-admins":

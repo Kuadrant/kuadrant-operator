@@ -653,8 +653,10 @@ func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *
 	}
 
 	key := RegisteredUpstreamKey{
-		Policy: policyID,
-		URL:    request.Url,
+		Policy:  policyID,
+		URL:     request.Url,
+		Service: request.Service,
+		Method:  request.Method,
 	}
 	entry := RegisteredUpstreamEntry{
 		ClusterName: clusterName,

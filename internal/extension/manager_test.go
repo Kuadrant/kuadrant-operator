@@ -162,8 +162,10 @@ func TestRegisterUpstreamMethod_Success(t *testing.T) {
 	}
 
 	key := RegisteredUpstreamKey{
-		Policy: ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
-		URL:    "grpc://svc:8081",
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
 	}
 	entry, exists := svc.registeredData.GetUpstream(key)
 	if !exists {
@@ -218,8 +220,10 @@ func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
 			}
 
 			key := RegisteredUpstreamKey{
-				Policy: ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
-				URL:    tt.url,
+				Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+				URL:     tt.url,
+				Service: "example.v1.ExampleService",
+				Method:  "ExampleMethod",
 			}
 			entry, exists := svc.registeredData.GetUpstream(key)
 			if !exists {

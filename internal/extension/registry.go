@@ -179,8 +179,10 @@ type SubscriptionKey struct {
 }
 
 type RegisteredUpstreamKey struct {
-	Policy ResourceID
-	URL    string
+	Policy  ResourceID
+	URL     string
+	Service string
+	Method  string
 }
 
 type RegisteredUpstreamEntry struct {

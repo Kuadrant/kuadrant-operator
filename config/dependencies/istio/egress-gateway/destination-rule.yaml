@@ -1,0 +1,11 @@
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: httpbin-external
+spec:
+  host: httpbin.org
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: httpbin.org

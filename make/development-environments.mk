@@ -111,6 +111,17 @@ local-setup: kind ## Run local Kubernetes cluster and deploy kuadrant operator (
 	$(MAKE) local-env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
 	$(MAKE) local-deploy
 
+.PHONY: local-setup-egress
+local-setup-egress: ## Run local Kubernetes cluster with Istio egress gateway environment
+	$(MAKE) local-setup GATEWAYAPI_PROVIDER=istio
+	$(MAKE) deploy-istio-egress-gateway
+	@echo
+	@echo "Egress gateway environment is ready."
+	@echo "Test connectivity:"
+	@echo "  EGRESS_IP=\$$(kubectl get gtw kuadrant-egressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')"
+	@echo "  kubectl exec test-client -n egress-test -- curl -s -H \"Host: httpbin.org\" http://\$$EGRESS_IP/get"
+	@echo
+
 .PHONY: local-cleanup
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster

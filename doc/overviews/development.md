@@ -69,6 +69,33 @@ The `make local-setup` target accepts the following variables:
 | --- | --- |--- |
 | `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio* \| *envoygateway*] | *istio* |
 
+## Deploy with Istio egress gateway
+
+Set up a local environment with an Istio egress gateway for testing Kuadrant policies on outbound traffic to external services.
+
+```shell
+make local-setup-egress
+```
+
+This extends `local-setup` with an egress gateway environment that includes:
+- An egress Gateway (`kuadrant-egressgateway`) in `gateway-system`
+- A ServiceEntry and DestinationRule for `httpbin.org` with TLS origination
+- An HTTPRoute routing egress traffic through the gateway to the external service
+- A test-client pod in `egress-test` namespace for verifying connectivity
+
+Once the setup is complete, verify egress connectivity:
+
+```shell
+EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
+kubectl exec test-client -n egress-test -- curl -s -H "Host: httpbin.org" http://$EGRESS_IP/get
+```
+
+You can also deploy the egress gateway resources independently on an existing Istio cluster:
+
+```shell
+make deploy-istio-egress-gateway
+```
+
 ## Run as a local process
 
 Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy *all* dependencies in a single command.

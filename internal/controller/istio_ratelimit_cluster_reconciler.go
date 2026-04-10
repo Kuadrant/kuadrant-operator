@@ -72,8 +72,11 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	effectiveRateLimitPolicies, rlpOk := state.Load(StateEffectiveRateLimitPolicies)
 	if rlpOk && effectiveRateLimitPolicies != nil {
 		rlpGateways := lo.FilterMap(lo.Values(effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-			gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-			return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
+			parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
+			if err != nil {
+				return nil, false
+			}
+			return parsed.Gateway, lo.Contains(istioGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName)
 		})
 		gateways = append(gateways, rlpGateways...)
 	}
@@ -82,8 +85,11 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	effectiveTokenRateLimitPolicies, trlpOk := state.Load(StateEffectiveTokenRateLimitPolicies)
 	if trlpOk && effectiveTokenRateLimitPolicies != nil {
 		trlpGateways := lo.FilterMap(lo.Values(effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)), func(effectivePolicy EffectiveTokenRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-			gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-			return gateway, lo.Contains(istioGatewayControllerNames, gatewayClass.Spec.ControllerName)
+			parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
+			if err != nil {
+				return nil, false
+			}
+			return parsed.Gateway, lo.Contains(istioGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName)
 		})
 		gateways = append(gateways, trlpGateways...)
 	}

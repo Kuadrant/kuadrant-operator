@@ -1,0 +1,16 @@
+---
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: grpcbin-rlp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpcbin
+  defaults:
+    limits:
+      "global":
+        rates:
+        - limit: 10
+          window: 10s

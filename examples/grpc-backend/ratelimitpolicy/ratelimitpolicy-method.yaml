@@ -1,0 +1,24 @@
+---
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: grpcbin-method-rlp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: grpcbin
+  defaults:
+    limits:
+      "unary-method":
+        rates:
+        - limit: 5
+          window: 10s
+        when:
+        - predicate: "request.path == '/grpcbin.GRPCBin/DummyUnary'"
+      "streaming-method":
+        rates:
+        - limit: 2
+          window: 10s
+        when:
+        - predicate: "request.path == '/grpcbin.GRPCBin/DummyServerStream'"

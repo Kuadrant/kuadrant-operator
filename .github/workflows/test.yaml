@@ -361,12 +361,29 @@ jobs:
         run: |
           make verify-go-mod
 
+  verify-manifests:
+    name: Verify manifests
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+        id: go
+      - name: Verify manifests
+        run: |
+          make verify-manifests
+
   required-checks:
     name: Test Required Checks
     # This check adds a list of checks to one job to simplify adding settings to the repo.
     # If a new check is added in this file, and it should be retested on entry to the merge queue,
     # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
-    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-fmt, test-scripts, verify-generate, verify-go-mod ]
+    needs: [ unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-fmt, test-scripts, verify-generate, verify-go-mod, verify-manifests ]
     if: always()
     runs-on: ubuntu-latest
     steps:

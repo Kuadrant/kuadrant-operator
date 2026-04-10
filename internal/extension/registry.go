@@ -585,6 +585,36 @@ func HashUpstreamServiceConfig(svc wasm.Service) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
+// CollectHTTPRouteUpstreams traverses the topology from a gateway through its listeners
+// to find all attached HTTPRoutes, then returns registered upstreams for those routes.
+// Routes are deduplicated by namespace/name to avoid duplicate entries when a route
+// appears under multiple listeners.
+func CollectHTTPRouteUpstreams(topology *machinery.Topology, gateway *machinery.Gateway) []RegisteredUpstreamEntry {
+	var result []RegisteredUpstreamEntry
+	seen := make(map[string]bool)
+
+	for _, child := range topology.Targetables().Children(gateway) {
+		for _, grandchild := range topology.Targetables().Children(child) {
+			if httpRoute, ok := grandchild.(*machinery.HTTPRoute); ok {
+				routeKey := httpRoute.GetNamespace() + "/" + httpRoute.GetName()
+				if seen[routeKey] {
+					continue
+				}
+				seen[routeKey] = true
+
+				routeUpstreams := GetRegisteredUpstreamsByTargetRef(TargetRef{
+					Group:     "gateway.networking.k8s.io",
+					Kind:      "HTTPRoute",
+					Name:      httpRoute.GetName(),
+					Namespace: httpRoute.GetNamespace(),
+				})
+				result = append(result, routeUpstreams...)
+			}
+		}
+	}
+	return result
+}
+
 // GetRegisteredUpstreamsByTargetRef returns registered upstreams matching the given targetRef,
 // aggregated across all extension data stores in the GlobalMutatorRegistry.
 func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstreamEntry {

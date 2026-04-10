@@ -26,7 +26,6 @@ func successReflectionFetcher(_ context.Context, _, _ string) (*descriptorpb.Fil
 func newTestExtensionService() *extensionService {
 	return &extensionService{
 		registeredData:    NewRegisteredDataStore(),
-		protoCache:        NewProtoCache(),
 		reflectionFetcher: successReflectionFetcher,
 		logger:            logr.Discard(),
 	}
@@ -267,7 +266,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	}
 
 	// Verify cache entry exists
-	_, exists := svc.protoCache.Get(cacheKey)
+	_, exists := svc.registeredData.GetProtoDescriptor(cacheKey)
 	if !exists {
 		t.Fatal("Expected cache entry to exist after registration")
 	}
@@ -281,7 +280,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	}
 
 	// Cache entry should still exist because policy2 references it
-	_, exists = svc.protoCache.Get(cacheKey)
+	_, exists = svc.registeredData.GetProtoDescriptor(cacheKey)
 	if !exists {
 		t.Fatal("Expected cache entry to still exist after clearing policy1")
 	}
@@ -295,7 +294,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	}
 
 	// Cache entry should now be deleted
-	_, exists = svc.protoCache.Get(cacheKey)
+	_, exists = svc.registeredData.GetProtoDescriptor(cacheKey)
 	if exists {
 		t.Fatal("Expected cache entry to be deleted after clearing all referencing policies")
 	}
@@ -323,8 +322,8 @@ func TestGetServiceDescriptors_Success(t *testing.T) {
 			{Name: proto.String("service2.proto")},
 		},
 	}
-	svc.protoCache.Set(cacheKey1, fds1)
-	svc.protoCache.Set(cacheKey2, fds2)
+	svc.registeredData.protoCache.Set(cacheKey1, fds1)
+	svc.registeredData.protoCache.Set(cacheKey2, fds2)
 
 	req := &extpb.GetServiceDescriptorsRequest{
 		Services: []*extpb.ServiceRef{

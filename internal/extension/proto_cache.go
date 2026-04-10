@@ -17,8 +17,6 @@ limitations under the License.
 package extension
 
 import (
-	"sync"
-
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -28,7 +26,6 @@ type ProtoCacheKey struct {
 }
 
 type ProtoCache struct {
-	mu    sync.RWMutex
 	cache map[ProtoCacheKey]*descriptorpb.FileDescriptorSet
 }
 
@@ -39,21 +36,15 @@ func NewProtoCache() *ProtoCache {
 }
 
 func (pc *ProtoCache) Set(key ProtoCacheKey, fds *descriptorpb.FileDescriptorSet) {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
 	pc.cache[key] = fds
 }
 
 func (pc *ProtoCache) Get(key ProtoCacheKey) (*descriptorpb.FileDescriptorSet, bool) {
-	pc.mu.RLock()
-	defer pc.mu.RUnlock()
 	fds, exists := pc.cache[key]
 	return fds, exists
 }
 
 func (pc *ProtoCache) Delete(key ProtoCacheKey) bool {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
 	_, existed := pc.cache[key]
 	if existed {
 		delete(pc.cache, key)

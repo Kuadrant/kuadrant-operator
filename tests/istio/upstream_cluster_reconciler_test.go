@@ -9,6 +9,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -68,6 +70,7 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				ClusterName: "test-upstream-cluster",
 				Host:        "test-upstream.example.com",
 				Port:        50051,
+				Service:     "test.Service",
 				TargetRef: extension.TargetRef{
 					Group:     "gateway.networking.k8s.io",
 					Kind:      "Gateway",
@@ -76,6 +79,10 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				},
 				FailureMode: "deny",
 				Timeout:     "10s",
+			}, &descriptorpb.FileDescriptorSet{
+				File: []*descriptorpb.FileDescriptorProto{
+					{Name: proto.String("test.proto")},
+				},
 			})
 
 			// Create an HTTPRoute to trigger the data plane policies workflow

@@ -4,23 +4,44 @@ package extension
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
-func successReflectionFetcher(_ context.Context, _, _ string) (*descriptorpb.FileDescriptorSet, error) {
-	return &descriptorpb.FileDescriptorSet{
+func successReflectionFetcher(_ context.Context, _, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error) {
+	fds := &descriptorpb.FileDescriptorSet{
 		File: []*descriptorpb.FileDescriptorProto{
 			{
-				Name: proto.String("test.proto"),
+				Name:    proto.String("test.proto"),
+				Package: proto.String("example.v1"),
+				Service: []*descriptorpb.ServiceDescriptorProto{
+					{
+						Name: proto.String("ExampleService"),
+						Method: []*descriptorpb.MethodDescriptorProto{
+							{Name: proto.String("ExampleMethod")},
+							{Name: proto.String("AnotherMethod")},
+						},
+					},
+				},
 			},
 		},
-	}, nil
+	}
+
+	// Validate method exists if method name is provided
+	if methodName != "" && !validateMethodExists(fds, serviceName, methodName) {
+		return nil, fmt.Errorf("method %q not found in service %q", methodName, serviceName)
+	}
+
+	return fds, nil
 }
 
 func newTestExtensionService() *extensionService {
@@ -230,6 +251,30 @@ func TestRegisterUpstreamMethod_ChangeNotifier(t *testing.T) {
 	}
 }
 
+func TestRegisterUpstreamMethod_InvalidMethod(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := &extpb.RegisterUpstreamMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "NonExistentMethod",
+	}
+
+	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for non-existent method")
+	}
+
+	if grpcstatus.Code(err) != codes.FailedPrecondition {
+		t.Errorf("Expected FailedPrecondition status code, got: %v", grpcstatus.Code(err))
+	}
+	if !strings.Contains(err.Error(), "method \"NonExistentMethod\" not found") {
+		t.Errorf("Expected error message about method not found, got: %v", err)
+	}
+}
+
 func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	svc := newTestExtensionService()
 
@@ -239,7 +284,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route1", "default")),
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
-		Method:  "Method1",
+		Method:  "ExampleMethod",
 	}
 
 	policy2Req := &extpb.RegisterUpstreamMethodRequest{
@@ -247,7 +292,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route2", "default")),
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
-		Method:  "Method2",
+		Method:  "AnotherMethod",
 	}
 
 	_, err := svc.RegisterUpstreamMethod(context.Background(), policy1Req)

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/samber/lo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
@@ -45,7 +46,7 @@ func (rc *ReflectionClient) WithTimeout(timeout time.Duration) *ReflectionClient
 	return rc
 }
 
-func (rc *ReflectionClient) FetchServiceDescriptors(ctx context.Context, url, serviceName string) (*descriptorpb.FileDescriptorSet, error) {
+func (rc *ReflectionClient) FetchServiceDescriptors(ctx context.Context, url, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error) {
 	ctx, cancel := context.WithTimeout(ctx, rc.timeout)
 	defer cancel()
 
@@ -70,7 +71,14 @@ func (rc *ReflectionClient) FetchServiceDescriptors(ctx context.Context, url, se
 		return nil, fmt.Errorf("failed to fetch service %s: %w", serviceName, err)
 	}
 
-	return &descriptorpb.FileDescriptorSet{File: allFiles}, nil
+	fds := &descriptorpb.FileDescriptorSet{File: allFiles}
+
+	// Validate method exists if method name is provided
+	if methodName != "" && !validateMethodExists(fds, serviceName, methodName) {
+		return nil, fmt.Errorf("method %q not found in service %q", methodName, serviceName)
+	}
+
+	return fds, nil
 }
 
 func (rc *ReflectionClient) fetchFileContainingSymbol(
@@ -152,4 +160,24 @@ func (rc *ReflectionClient) processReflectionResponse(
 	}
 
 	return nil
+}
+
+// validateMethodExists checks if a method exists within a service in the FileDescriptorSet.
+func validateMethodExists(fds *descriptorpb.FileDescriptorSet, serviceName, methodName string) bool {
+	for _, file := range fds.File {
+		service, found := lo.Find(file.Service, func(svc *descriptorpb.ServiceDescriptorProto) bool {
+			fullServiceName := svc.GetName()
+			if file.Package != nil && *file.Package != "" {
+				fullServiceName = *file.Package + "." + svc.GetName()
+			}
+			return fullServiceName == serviceName
+		})
+
+		if found {
+			return lo.ContainsBy(service.Method, func(method *descriptorpb.MethodDescriptorProto) bool {
+				return method.GetName() == methodName
+			})
+		}
+	}
+	return false
 }

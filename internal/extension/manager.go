@@ -311,7 +311,7 @@ func (m *Manager) HasSynced() bool {
 }
 
 // ReflectionFetcher fetches service descriptors via gRPC reflection.
-type ReflectionFetcher func(ctx context.Context, url, serviceName string) (*descriptorpb.FileDescriptorSet, error)
+type ReflectionFetcher func(ctx context.Context, url, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error)
 
 type extensionService struct {
 	dag               *nilGuardedPointer[StateAwareDAG]
@@ -631,10 +631,10 @@ func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *
 
 	clusterName := generateClusterName(host, port)
 
-	// Fetch service descriptors via reflection
-	fds, err := s.reflectionFetcher(ctx, parsed.Host, request.Service)
+	// Fetch service descriptors via reflection and validate method exists
+	fds, err := s.reflectionFetcher(ctx, parsed.Host, request.Service, request.Method)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch service descriptors for %s: %v", request.Service, err)
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch and validate service %s method %s: %v", request.Service, request.Method, err)
 	}
 
 	policyID := ResourceID{

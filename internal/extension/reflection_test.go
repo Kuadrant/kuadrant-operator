@@ -22,6 +22,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 func TestReflectionClient_Creation(t *testing.T) {
@@ -56,7 +59,7 @@ func TestReflectionClient_FetchServiceDescriptors_InvalidURL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := client.FetchServiceDescriptors(ctx, tc.url, "test.Service")
+			_, err := client.FetchServiceDescriptors(ctx, tc.url, "test.Service", "")
 			if err == nil {
 				t.Errorf("Expected error for %s, got nil", tc.name)
 			}
@@ -71,8 +74,94 @@ func TestReflectionClient_FetchServiceDescriptors_Timeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := client.FetchServiceDescriptors(ctx, "grpc://localhost:50051", "test.Service")
+	_, err := client.FetchServiceDescriptors(ctx, "grpc://localhost:50051", "test.Service", "")
 	if err == nil {
 		t.Error("Expected error for cancelled context")
+	}
+}
+
+func TestValidateMethodExists(t *testing.T) {
+	fds := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			{
+				Name:    proto.String("test.proto"),
+				Package: proto.String("example.v1"),
+				Service: []*descriptorpb.ServiceDescriptorProto{
+					{
+						Name: proto.String("ExampleService"),
+						Method: []*descriptorpb.MethodDescriptorProto{
+							{Name: proto.String("ExampleMethod")},
+							{Name: proto.String("AnotherMethod")},
+						},
+					},
+					{
+						Name: proto.String("OtherService"),
+						Method: []*descriptorpb.MethodDescriptorProto{
+							{Name: proto.String("OtherMethod")},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	testCases := []struct {
+		name        string
+		fds         *descriptorpb.FileDescriptorSet
+		serviceName string
+		methodName  string
+		expected    bool
+	}{
+		{
+			name:        "method exists",
+			fds:         fds,
+			serviceName: "example.v1.ExampleService",
+			methodName:  "ExampleMethod",
+			expected:    true,
+		},
+		{
+			name:        "another method exists in same service",
+			fds:         fds,
+			serviceName: "example.v1.ExampleService",
+			methodName:  "AnotherMethod",
+			expected:    true,
+		},
+		{
+			name:        "method does not exist in service",
+			fds:         fds,
+			serviceName: "example.v1.ExampleService",
+			methodName:  "NonExistentMethod",
+			expected:    false,
+		},
+		{
+			name:        "service does not exist",
+			fds:         fds,
+			serviceName: "example.v1.NonExistentService",
+			methodName:  "ExampleMethod",
+			expected:    false,
+		},
+		{
+			name:        "method exists in different service",
+			fds:         fds,
+			serviceName: "example.v1.OtherService",
+			methodName:  "OtherMethod",
+			expected:    true,
+		},
+		{
+			name:        "empty file descriptor set",
+			fds:         &descriptorpb.FileDescriptorSet{},
+			serviceName: "example.v1.ExampleService",
+			methodName:  "ExampleMethod",
+			expected:    false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := validateMethodExists(tc.fds, tc.serviceName, tc.methodName)
+			if result != tc.expected {
+				t.Errorf("Expected %v, got %v", tc.expected, result)
+			}
+		})
 	}
 }

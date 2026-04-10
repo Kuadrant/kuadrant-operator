@@ -24,6 +24,7 @@ import (
 
 var (
 	testBasicConfig = &Config{
+		DescriptorService: "kuadrant-operator-grpc",
 		RequestData: map[string]string{
 			"metrics.labels.user":  "auth.identity.user",
 			"metrics.labels.group": "auth.identity.group",
@@ -52,6 +53,14 @@ var (
 				Endpoint:    "kuadrant-ratelimit-service",
 				FailureMode: "allow",
 				Timeout:     ptr.To("100ms"),
+			},
+			"ext-dynamic-service": {
+				Type:        "dynamic",
+				Endpoint:    "ext-upstream-cluster",
+				FailureMode: "deny",
+				Timeout:     ptr.To("100ms"),
+				GrpcService: ptr.To("example.v1.ExampleService"),
+				GrpcMethod:  ptr.To("ExampleMethod"),
 			},
 		},
 		ActionSets: []ActionSet{
@@ -144,8 +153,9 @@ var (
 			},
 		},
 	}
-	testBasicConfigJSON = `{"requestData":{"metrics.labels.group":"auth.identity.group","metrics.labels.user":"auth.identity.user"},"services":{"auth-service":{"type":"auth","endpoint":"kuadrant-auth-service","failureMode":"deny","timeout":"200ms"},"ratelimit-service":{"type":"ratelimit","endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms"},"ratelimit-check-service":{"type":"ratelimit-check","endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms"},"ratelimit-report-service":{"type":"ratelimit-report","endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms"}},"actionSets":[{"name":"5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab","routeRuleConditions":{"hostnames":["other.example.com"],"predicates":["request.url_path.startsWith('/')"]},"actions":[{"service":"ratelimit-service","scope":"default/other","conditionalData":[{"predicates":["source.address != \"127.0.0.1\""],"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}]}]}]},{"name":"21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8","routeRuleConditions":{"hostnames":["*"],"predicates":["request.method == 'GET'","request.url_path.startsWith('/')"]},"actions":[{"service":"auth-service","scope":"e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138"},{"service":"ratelimit-service","scope":"default/toystore","conditionalData":[{"data":[{"static":{"key":"limit.specific__69ea4d2d","value":"1"}}]}]},{"service":"ratelimit-service","scope":"default/toystore","conditionalData":[{"predicates":["source.address != \"127.0.0.1\""],"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}]}]}]}]}`
+	testBasicConfigJSON = `{"actionSets":[{"actions":[{"conditionalData":[{"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}],"predicates":["source.address != \"127.0.0.1\""]}],"scope":"default/other","service":"ratelimit-service"}],"name":"5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab","routeRuleConditions":{"hostnames":["other.example.com"],"predicates":["request.url_path.startsWith('/')"]}},{"actions":[{"scope":"e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138","service":"auth-service"},{"conditionalData":[{"data":[{"static":{"key":"limit.specific__69ea4d2d","value":"1"}}]}],"scope":"default/toystore","service":"ratelimit-service"},{"conditionalData":[{"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}],"predicates":["source.address != \"127.0.0.1\""]}],"scope":"default/toystore","service":"ratelimit-service"}],"name":"21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8","routeRuleConditions":{"hostnames":["*"],"predicates":["request.method == 'GET'","request.url_path.startsWith('/')"]}}],"descriptorService":"kuadrant-operator-grpc","requestData":{"metrics.labels.group":"auth.identity.group","metrics.labels.user":"auth.identity.user"},"services":{"auth-service":{"endpoint":"kuadrant-auth-service","failureMode":"deny","timeout":"200ms","type":"auth"},"ext-dynamic-service":{"endpoint":"ext-upstream-cluster","failureMode":"deny","grpcMethod":"ExampleMethod","grpcService":"example.v1.ExampleService","timeout":"100ms","type":"dynamic"},"ratelimit-check-service":{"endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms","type":"ratelimit-check"},"ratelimit-report-service":{"endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms","type":"ratelimit-report"},"ratelimit-service":{"endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms","type":"ratelimit"}}}`
 	testBasicConfigYAML = `
+descriptorService: kuadrant-operator-grpc
 requestData:
   metrics.labels.user: auth.identity.user
   metrics.labels.group: auth.identity.group
@@ -170,6 +180,13 @@ services:
     endpoint: kuadrant-ratelimit-service
     failureMode: allow
     timeout: 100ms
+  ext-dynamic-service:
+    type: dynamic
+    endpoint: ext-upstream-cluster
+    failureMode: deny
+    timeout: 100ms
+    grpcService: example.v1.ExampleService
+    grpcMethod: ExampleMethod
 actionSets:
   - name: 5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab
     routeRuleConditions:

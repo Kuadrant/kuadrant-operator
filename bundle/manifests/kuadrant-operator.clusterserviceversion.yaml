@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-04-01T10:49:00Z"
+    createdAt: "2026-04-02T12:51:54Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -749,6 +749,8 @@ spec:
                 env:
                 - name: EXTENSIONS_DIR
                   value: /extensions
+                - name: EXTENSIONS_DESCRIPTOR_SERVICE_PORT
+                  value: "50051"
                 - name: RELATED_IMAGE_WASMSHIM
                   value: quay.io/kuadrant/wasm-shim:latest
                 - name: RELATED_IMAGE_DEVELOPERPORTAL
@@ -772,6 +774,9 @@ spec:
                 ports:
                 - containerPort: 8080
                   name: metrics
+                - containerPort: 50051
+                  name: grpc
+                  protocol: TCP
                 readinessProbe:
                   httpGet:
                     path: /readyz

@@ -14285,6 +14285,25 @@ metadata:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
     control-plane: controller-manager
+  name: kuadrant-operator-grpc
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  ports:
+  - name: grpc
+    port: 50051
+    protocol: TCP
+    targetPort: grpc
+  selector:
+    app: kuadrant
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kuadrant
+    app.kubernetes.io/managed-by: helm
+    control-plane: controller-manager
   name: kuadrant-operator-metrics
   namespace: '{{ .Release.Namespace }}'
 spec:
@@ -14326,6 +14345,8 @@ spec:
         env:
         - name: EXTENSIONS_DIR
           value: /extensions
+        - name: EXTENSIONS_DESCRIPTOR_SERVICE_PORT
+          value: "50051"
         - name: RELATED_IMAGE_WASMSHIM
           value: quay.io/kuadrant/wasm-shim:latest
         - name: RELATED_IMAGE_DEVELOPERPORTAL
@@ -14349,6 +14370,9 @@ spec:
         ports:
         - containerPort: 8080
           name: metrics
+        - containerPort: 50051
+          name: grpc
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz

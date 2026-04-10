@@ -5,12 +5,16 @@ package istio_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -61,13 +65,17 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 			// to trigger reconciliation. The gateway is already in the topology
 			// (created in BeforeEach).
 			upstreamKey := extension.RegisteredUpstreamKey{
-				Policy: policyID,
-				URL:    "grpc://test-upstream.example.com:50051",
+				Policy:  policyID,
+				URL:     "grpc://test-upstream.example.com:50051",
+				Service: "test.Service",
+				Method:  "TestMethod",
 			}
 			store.SetUpstream(upstreamKey, extension.RegisteredUpstreamEntry{
-				ClusterName: "test-upstream-cluster",
+				ClusterName: "ext-test-upstream-cluster",
 				Host:        "test-upstream.example.com",
 				Port:        50051,
+				Service:     "test.Service",
+				Method:      "TestMethod",
 				TargetRef: extension.TargetRef{
 					Group:     "gateway.networking.k8s.io",
 					Kind:      "Gateway",
@@ -76,6 +84,10 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				},
 				FailureMode: "deny",
 				Timeout:     "10s",
+			}, &descriptorpb.FileDescriptorSet{
+				File: []*descriptorpb.FileDescriptorProto{
+					{Name: proto.String("test.proto")},
+				},
 			})
 
 			// Create an HTTPRoute to trigger the data plane policies workflow
@@ -93,18 +105,51 @@ var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
 				g.Expect(testClient().Get(ctx, efKey, existingEF)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Verify the patch contains the correct cluster configuration
-			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(1))
-			Expect(existingEF.Spec.ConfigPatches[0].Patch).NotTo(BeNil())
-			Expect(existingEF.Spec.ConfigPatches[0].Patch.Value).NotTo(BeNil())
+			// Verify the patches contain both descriptor service and upstream cluster
+			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(2))
 
-			patchValueRaw, err := json.Marshal(existingEF.Spec.ConfigPatches[0].Patch.Value)
-			Expect(err).ToNot(HaveOccurred())
-			var patchValue map[string]any
-			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
+			// Extract cluster names from patches
+			var clusterNames []string
+			for _, patch := range existingEF.Spec.ConfigPatches {
+				Expect(patch.Patch).NotTo(BeNil())
+				Expect(patch.Patch.Value).NotTo(BeNil())
 
-			Expect(patchValue["name"]).To(Equal("test-upstream-cluster"))
-			Expect(patchValue["type"]).To(Equal("STRICT_DNS"))
+				patchValueRaw, err := json.Marshal(patch.Patch.Value)
+				Expect(err).ToNot(HaveOccurred())
+				var patchValue map[string]any
+				Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
+
+				clusterName := patchValue["name"].(string)
+				clusterNames = append(clusterNames, clusterName)
+				Expect(patchValue["type"]).To(Equal("STRICT_DNS"))
+
+				// Verify descriptor service endpoint configuration
+				if clusterName == "kuadrant-operator-grpc" {
+					loadAssignment := patchValue["load_assignment"].(map[string]any)
+					endpoints := loadAssignment["endpoints"].([]any)
+					Expect(endpoints).To(HaveLen(1))
+
+					endpoint := endpoints[0].(map[string]any)
+					lbEndpoints := endpoint["lb_endpoints"].([]any)
+					Expect(lbEndpoints).To(HaveLen(1))
+
+					lbEndpoint := lbEndpoints[0].(map[string]any)
+					endpointAddr := lbEndpoint["endpoint"].(map[string]any)
+					address := endpointAddr["address"].(map[string]any)
+					socketAddress := address["socket_address"].(map[string]any)
+
+					operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+					descriptorServicePort, _ := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", 50051)
+					expectedHost := fmt.Sprintf("kuadrant-operator-grpc.%s.svc.cluster.local", operatorNamespace)
+
+					Expect(socketAddress["address"]).To(Equal(expectedHost))
+					Expect(socketAddress["port_value"]).To(BeNumerically("==", descriptorServicePort))
+				}
+			}
+
+			// Verify both clusters are present
+			Expect(clusterNames).To(ContainElement("ext-test-upstream-cluster"))
+			Expect(clusterNames).To(ContainElement("kuadrant-operator-grpc"))
 
 			// Verify the upstream EnvoyFilter has the correct labels
 			Expect(existingEF.Labels).To(HaveKeyWithValue("kuadrant.io/upstream", "true"))

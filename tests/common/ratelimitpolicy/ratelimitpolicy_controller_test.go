@@ -921,6 +921,55 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			)).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
+
+	Context("Limitador trace annotations", func() {
+		BeforeEach(func(ctx SpecContext) {
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			rlp := policyFactory()
+			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, client.ObjectKeyFromObject(rlp))).WithContext(ctx).Should(BeTrue())
+		})
+
+		It("Clears stale trace annotations from Limitador on limits update when tracing is disabled", func(ctx SpecContext) {
+			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
+
+			// Patch Limitador with both stale trace annotations and a spurious extra limit in a
+			// single update. The spurious limit makes the reconciler detect a limits diff and take
+			// the update path — where stale annotations are cleared before the desired state is
+			// written. This simulates annotations left over from a previous reconcile when tracing
+			// was enabled, now being cleaned up after tracing is disabled.
+			Eventually(func(g Gomega) {
+				existing := &limitadorv1alpha1.Limitador{}
+				g.Expect(testClient().Get(ctx, limitadorKey, existing)).To(Succeed())
+				original := existing.DeepCopy()
+				if existing.Annotations == nil {
+					existing.Annotations = make(map[string]string)
+				}
+				existing.Annotations["traceparent"] = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+				existing.Annotations["tracestate"] = "rojo=00f067aa0ba902b7"
+				existing.Spec.Limits = append(existing.Spec.Limits, limitadorv1alpha1.RateLimit{
+					Name:       "stale-limit",
+					Namespace:  "stale-namespace",
+					MaxValue:   1,
+					Seconds:    60,
+					Conditions: []string{`descriptors[0]["stale"] == "1"`},
+					Variables:  []string{},
+				})
+				g.Expect(testClient().Patch(ctx, existing, client.MergeFrom(original))).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			// Stale trace annotations must be cleared; no fresh ones injected (tracing disabled in tests).
+			Eventually(func(g Gomega) {
+				existing := &limitadorv1alpha1.Limitador{}
+				g.Expect(testClient().Get(ctx, limitadorKey, existing)).To(Succeed())
+				g.Expect(existing.Annotations).NotTo(HaveKey("traceparent"))
+				g.Expect(existing.Annotations).NotTo(HaveKey("tracestate"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
 })
 
 var _ = Describe("RateLimitPolicy CEL Validations", func() {

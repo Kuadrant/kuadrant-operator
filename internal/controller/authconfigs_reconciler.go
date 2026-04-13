@@ -186,7 +186,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 	}
 
 	// update
-	applyAuthConfigUpdate(existingAuthConfig, desiredAuthConfig)
+	applyAuthConfigUpdate(spanCtx, existingAuthConfig, desiredAuthConfig)
 	existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
 	if err != nil {
 		msg := "failed to destruct authconfig object"
@@ -361,7 +361,7 @@ func authConfigAnnotationKeyForRouteType(routeType kuadrantpolicymachinery.Route
 
 // applyAuthConfigUpdate applies the desired state to an existing AuthConfig.
 // It updates the spec, labels, and route-rule annotations while preserving other annotations.
-func applyAuthConfigUpdate(existing, desired *authorinov1beta3.AuthConfig) {
+func applyAuthConfigUpdate(ctx context.Context, existing, desired *authorinov1beta3.AuthConfig) {
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 
@@ -379,4 +379,9 @@ func applyAuthConfigUpdate(existing, desired *authorinov1beta3.AuthConfig) {
 			delete(existing.Annotations, key)
 		}
 	}
+
+	// Clear stale trace annotations then inject fresh ones (no-op if tracing is disabled)
+	delete(existing.Annotations, "traceparent")
+	delete(existing.Annotations, "tracestate")
+	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(existing.Annotations))
 }

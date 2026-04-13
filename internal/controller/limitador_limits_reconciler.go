@@ -76,6 +76,9 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		attribute.StringSlice("sources", lo.Uniq(sources)),
 	)
 
+	// Clear stale trace annotations then inject fresh ones (no-op if tracing is disabled)
+	delete(limitador.Annotations, "traceparent")
+	delete(limitador.Annotations, "tracestate")
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(limitador.Annotations))
 
 	limitador.Spec.Limits = desiredLimits

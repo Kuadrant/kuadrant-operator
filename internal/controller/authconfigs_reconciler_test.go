@@ -3,6 +3,7 @@
 package controllers
 
 import (
+	"context"
 	"testing"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
@@ -306,7 +307,7 @@ func TestApplyAuthConfigUpdate(t *testing.T) {
 			}
 
 			// Apply the update
-			applyAuthConfigUpdate(tt.existing, tt.desired)
+			applyAuthConfigUpdate(context.Background(), tt.existing, tt.desired)
 
 			// Run validation
 			tt.validate(t, tt.existing, tt.desired)

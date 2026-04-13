@@ -42,4 +42,4 @@ verify-manifests: ## Verify manifests update.
 .PHONY: verify-prepare-release ## Verify set of manifests based on release.yaml file.
 verify-prepare-release: prepare-release
 	git diff --exit-code .
-
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory .)" ]

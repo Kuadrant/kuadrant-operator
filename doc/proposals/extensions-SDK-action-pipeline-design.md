@@ -8,7 +8,7 @@ Reference: [Kuadrant/kuadrant-operator#1889](https://github.com/Kuadrant/kuadran
 
 ## Goals
 
-- Extension authors can register a named gRPC upstream method and invoke it from the data plane during request processing
+- Extension authors can register a named gRPC action method and invoke it from the data plane during request processing
 - Extension authors can compose ordered pipelines of actions that run on inbound requests and outbound responses
 - Request-phase actions can call a gRPC service and allow or deny the request based on the response, or allow/deny based on request attributes alone
 - Response-phase actions can add headers or override the HTTP status code

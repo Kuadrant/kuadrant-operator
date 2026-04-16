@@ -8,11 +8,12 @@ Reference: [Kuadrant/kuadrant-operator#1889](https://github.com/Kuadrant/kuadran
 
 ## Goals
 
-- Rename `RegisterUpstreamMethod` to `RegisterActionMethod` with an explicit name and message template
-- Provide a `Pipeline` API with `OnRequest` and `OnResponse` phases that send actions immediately via gRPC
-- Support multiple action types: `GRPCMethodAction`, `AllowAction`, `AddHeadersAction`, `WithResponseCodeAction`
-- Translate pipeline actions into wasm `Action` entries with an explicit `ActionType` discriminator field
-- Validate CEL intention expressions against gRPC response proto schemas at registration time using Phase 2 ProtoCache
+- Extension authors can register a named gRPC upstream method and invoke it from the data plane during request processing
+- Extension authors can compose ordered pipelines of actions that run on inbound requests and outbound responses
+- Request-phase actions can call a gRPC service and allow or deny the request based on the response, or allow/deny based on request attributes alone
+- Response-phase actions can add headers or override the HTTP status code
+- Invalid CEL expressions and schema mismatches are caught when registered, not at request time
+- Demo: a ThreatPolicy extension registers a threat-scoring gRPC service, calls it on each request, denies requests that exceed a threshold, and adds a response header confirming the check ran
 
 ## Non-Goals
 

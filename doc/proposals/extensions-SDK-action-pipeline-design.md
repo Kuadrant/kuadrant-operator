@@ -30,7 +30,7 @@ The [issue metacode](https://github.com/Kuadrant/kuadrant-operator/issues/1889) 
 #### 1. `NewPipeline()` becomes `NewPipeline(policy)`
 
 The issue uses a no-arg constructor:
-```
+```text
 pipeline = kCtx.NewPipeline()
 ```
 
@@ -44,7 +44,7 @@ pipeline := kCtx.NewPipeline(policy)
 #### 2. `OnRequest` / `OnResponse` return `error` and take `ctx`
 
 The issue uses fire-and-forget calls:
-```
+```text
 pipeline.OnRequest(AllowAction{...})
 pipeline.OnResponse(AddHeadersAction{...})
 ```
@@ -64,7 +64,7 @@ if err := pipeline.OnRequest(ctx, GRPCMethodAction{...}); err != nil {
 
 ### Architecture Changes
 
-```
+```text
 Extension Controller                    Operator (gRPC server)
    │                                       │
    │── RegisterActionMethod ──────────────►│── Validate name uniqueness (per-policy)
@@ -189,8 +189,8 @@ type AllowAction struct {
 
 // AddHeadersAction adds headers to the response. Implements ResponseAction.
 type AddHeadersAction struct {
-    Predicate    []string          // CEL predicates — if any is false, skip this action
-    HeadersToAdd map[string]string // Header name → value (or CEL expression)
+    Predicate    []string // CEL predicates — if any is false, skip this action
+    HeadersToAdd string   // CEL expression evaluating to a map of headers to add
 }
 
 // WithResponseCodeAction modifies the HTTP response code. Implements ResponseAction.
@@ -241,7 +241,7 @@ message PipelineOnResponseRequest {
   kuadrant.v1.Policy policy = 1;
   ActionType action_type = 2;
   repeated string predicates = 3;
-  map<string, string> headers_to_add = 4;  // AddHeadersAction only
+  string headers_to_add = 4;               // CEL expression evaluating to a map of headers (AddHeadersAction only)
   int32 new_response_code = 5;             // WithResponseCodeAction only
 }
 ```
@@ -290,7 +290,7 @@ type Action struct {
     // New fields for pipeline actions
     Intention       string            `json:"intention,omitempty"`        // CEL expression
     ActionMethod    string            `json:"actionMethod,omitempty"`     // registered method name
-    HeadersToAdd    map[string]string `json:"headersToAdd,omitempty"`     // for add_headers
+    HeadersToAdd    string            `json:"headersToAdd,omitempty"`     // CEL expression → map of headers
     NewResponseCode *int              `json:"newResponseCode,omitempty"`  // for with_response_code
 
     SourcePolicyLocators []string `json:"sources,omitempty"`
@@ -384,8 +384,12 @@ New store for pipeline actions, ordered per-policy:
 type PipelineActionKey struct {
     Policy ResourceID
     Phase  PipelinePhase // "request" or "response"
-    Index  int           // insertion order
+    Index  int           // insertion order — assigned atomically per (Policy, Phase)
 }
+
+// Index allocation is atomic per (Policy, Phase) pair. The store maintains
+// a mutex-protected counter map keyed by (Policy, Phase) so that concurrent
+// OnRequest/OnResponse calls cannot produce duplicate or out-of-order indices.
 
 type PipelinePhase string
 
@@ -399,7 +403,7 @@ type PipelineActionEntry struct {
     Predicates      []string
     Intention       string            // GRPCMethodAction, AllowAction
     ActionMethod    string            // GRPCMethodAction only
-    HeadersToAdd    map[string]string // AddHeadersAction only
+    HeadersToAdd    string            // CEL expression → map of headers (AddHeadersAction only)
     NewResponseCode *int              // WithResponseCodeAction only
 }
 ```
@@ -502,7 +506,7 @@ func (p *PipelineImpl) OnResponse(ctx context.Context, action types.ResponseActi
             Policy:       convertPolicyToProtobuf(p.policy),
             ActionType:   extpb.ACTION_TYPE_ADD_HEADERS,
             Predicates:   a.Predicate,
-            HeadersToAdd: a.HeadersToAdd,
+            HeadersToAdd: a.HeadersToAdd, // CEL expression string
         })
         return err
     case types.WithResponseCodeAction:
@@ -563,7 +567,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
     // cross-action data flow is future work)
     if err := pipeline.OnResponse(ctx, types.AddHeadersAction{
         Predicate:    []string{"response.headers['check_threat'] == ''"},
-        HeadersToAdd: map[string]string{"x-threat-checked": "true"},
+        HeadersToAdd: "{'x-threat-checked': 'true'}",
     }); err != nil {
         return calculateErrorStatus(pol, err), err
     }
@@ -576,7 +580,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 - **Name validation**: Action method names are validated to contain only alphanumeric characters, hyphens, and underscores, preventing injection of crafted identifiers into wasm config
 - **CEL validation at registration time**: Intention expressions are validated against proto schemas before being stored, preventing malformed CEL from reaching the wasm-shim
-- **Policy-scoped lifecycle**: Action methods and pipeline actions are tied to their owning policy and cleaned up via `ClearPolicy`
+- **Policy-scoped lifecycle**: Action methods and pipeline actions are tied to their owning policy and cleaned up via `ClearPolicyData`
 - **No user-controlled names in Envoy/wasm service config**: Cluster names and wasm service keys remain operator-generated (Phase 1 design)
 - **ActionType validation**: The operator rejects unknown action types; the wasm-shim ignores actions with unrecognised types
 

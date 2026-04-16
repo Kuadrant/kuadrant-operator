@@ -51,12 +51,12 @@ pipeline.OnResponse(AddHeadersAction{...})
 
 This design uses Go error handling:
 ```go
-if err := pipeline.OnRequest(ctx, GRPCMethodAction{...}); err != nil {
+if err := pipeline.OnRequest(ctx, GRPCMethodAction{...}, AllowAction{...}); err != nil {
     return reconcile.Result{}, err
 }
 ```
 
-**Why:** Each `OnRequest`/`OnResponse` call sends a gRPC message to the operator immediately. The operator may reject the action (e.g. invalid CEL expression, unknown action method name). Go idiom requires surfacing these errors to the caller rather than silently swallowing them. The `ctx` parameter carries cancellation and deadline semantics for the gRPC call. There is no separate `Register()` step — each call is immediately effective.
+**Why:** Each `OnRequest`/`OnResponse` call sends a gRPC message to the operator immediately with all supplied actions. The operator may reject the batch (e.g. invalid CEL expression, unknown action method name). Go idiom requires surfacing these errors to the caller rather than silently swallowing them. The `ctx` parameter carries cancellation and deadline semantics for the gRPC call. There is no separate `Register()` step — each call is immediately effective.
 
 ### Backwards Compatibility
 
@@ -75,13 +75,13 @@ Extension Controller                    Operator (gRPC server)
    │                                       │
    │── NewPipeline(policy) ─── (local) ───►│  (no I/O — creates PipelineImpl)
    │                                       │
-   │── pipeline.OnRequest(ctx, action) ───►│── Validate action (predicates, intention CEL)
-   │                                       │── Validate intention against proto schema (ProtoCache)
-   │                                       │── Store pipeline action for policy
+   │── pipeline.OnRequest(ctx, actions...) ►│── Validate each action (predicates, intention CEL)
+   │                                       │── Validate intentions against proto schema (ProtoCache)
+   │                                       │── Store pipeline actions for policy
    │                                       │── Trigger reconciliation
    │◄── nil / error ───────────────────────│
    │                                       │
-   │── pipeline.OnResponse(ctx, action) ──►│── Same validation and storage
+   │── pipeline.OnResponse(ctx, actions...)►│── Same validation and storage
    │◄── nil / error ───────────────────────│
    │                                       │
 
@@ -137,11 +137,11 @@ type KuadrantCtx interface {
 // pkg/extension/types/types.go
 
 // Pipeline provides a builder for composing ordered actions on request
-// and response phases. Each OnRequest/OnResponse call sends a gRPC
-// message to the operator immediately.
+// and response phases. Each OnRequest/OnResponse call sends a single gRPC
+// message to the operator containing all supplied actions.
 type Pipeline interface {
-    OnRequest(ctx context.Context, action RequestAction) error
-    OnResponse(ctx context.Context, action ResponseAction) error
+    OnRequest(ctx context.Context, actions ...RequestAction) error
+    OnResponse(ctx context.Context, actions ...ResponseAction) error
 }
 ```
 
@@ -200,51 +200,16 @@ type WithResponseCodeAction struct {
 }
 ```
 
+**Why separate `RequestAction` and `ResponseAction` interfaces?** Request-phase actions can deny the request — a failed `Intention` expression stops the request from reaching the backend. Response-phase actions cannot deny; the response has already been produced by the backend, so actions can only modify it (add headers, change status code). This fundamental difference in gating semantics means the two phases accept different action types. Separate interfaces enforce this at compile time. An action type that makes sense in both phases can implement both interfaces.
+
 #### gRPC Proto Changes
 
-```protobuf
-// pkg/extension/grpc/v1/kuadrant.proto
+The gRPC proto (`pkg/extension/grpc/v1/kuadrant.proto`) requires the following changes:
 
-service ExtensionService {
-  // ... existing RPCs ...
-  rpc RegisterActionMethod(RegisterActionMethodRequest) returns (google.protobuf.Empty) {}  // renamed
-  rpc PipelineOnRequest(PipelineOnRequestRequest) returns (google.protobuf.Empty) {}        // new
-  rpc PipelineOnResponse(PipelineOnResponseRequest) returns (google.protobuf.Empty) {}      // new
-}
-
-message RegisterActionMethodRequest {
-  kuadrant.v1.Policy policy = 1;
-  string name = 2;               // Unique per-policy identifier
-  string url = 3;                // e.g. "grpc://threat-service:8080"
-  string service = 4;            // gRPC service name
-  string method = 5;             // gRPC method name
-  string message_template = 6;   // CEL/JSON template for the request message
-}
-
-enum ActionType {
-  ACTION_TYPE_UNSPECIFIED = 0;
-  ACTION_TYPE_GRPC_METHOD = 1;
-  ACTION_TYPE_ALLOW = 2;
-  ACTION_TYPE_ADD_HEADERS = 3;
-  ACTION_TYPE_WITH_RESPONSE_CODE = 4;
-}
-
-message PipelineOnRequestRequest {
-  kuadrant.v1.Policy policy = 1;
-  ActionType action_type = 2;
-  repeated string predicates = 3;
-  string intention = 4;                    // CEL expression (GRPCMethodAction, AllowAction)
-  string method = 5;                       // ActionMethod name (GRPCMethodAction only)
-}
-
-message PipelineOnResponseRequest {
-  kuadrant.v1.Policy policy = 1;
-  ActionType action_type = 2;
-  repeated string predicates = 3;
-  string headers_to_add = 4;               // CEL expression evaluating to a map of headers (AddHeadersAction only)
-  int32 new_response_code = 5;             // WithResponseCodeAction only
-}
-```
+- **Rename** `RegisterUpstreamMethod` RPC to `RegisterActionMethod` — request message gains `name` and `message_template` fields
+- **New** `PipelineOnRequest` RPC — accepts a policy and a repeated list of request action entries (each with `action_type`, `predicates`, `intention`, `method`)
+- **New** `PipelineOnResponse` RPC — accepts a policy and a repeated list of response action entries (each with `action_type`, `predicates`, `headers_to_add`, `new_response_code`)
+- **New** `ActionType` enum — `GRPC_METHOD`, `ALLOW`, `ADD_HEADERS`, `WITH_RESPONSE_CODE`
 
 ### Action Method Name Scoping
 
@@ -263,39 +228,13 @@ Two `ThreatPolicy` instances targeting the same Gateway both register `"checkThr
 
 #### New ActionType Field
 
-The wasm `Action` struct gains an explicit `ActionType` discriminator field. The wasm-shim dispatches based on the `ActionType` value, not by inspecting which fields are present (duck-typing).
+The wasm `Action` struct (`internal/wasm/types.go`) gains an explicit `ActionType` discriminator field. The wasm-shim dispatches based on the `ActionType` value, not by inspecting which fields are present (duck-typing). New fields are added for pipeline actions:
 
-```go
-// internal/wasm/types.go — extended Action struct
-
-type ActionType string
-
-const (
-    ActionTypeGRPCMethod       ActionType = "grpc_method"
-    ActionTypeAllow            ActionType = "allow"
-    ActionTypeAddHeaders       ActionType = "add_headers"
-    ActionTypeWithResponseCode ActionType = "with_response_code"
-)
-
-type Action struct {
-    ServiceName string     `json:"service"`
-    Scope       string     `json:"scope"`
-    ActionType  ActionType `json:"actionType,omitempty"` // new — wasm-shim dispatches on this
-
-    Predicates []string `json:"predicates,omitempty"`
-
-    // Existing fields for auth/ratelimit actions
-    ConditionalData []ConditionalData `json:"conditionalData,omitempty"`
-
-    // New fields for pipeline actions
-    Intention       string            `json:"intention,omitempty"`        // CEL expression
-    ActionMethod    string            `json:"actionMethod,omitempty"`     // registered method name
-    HeadersToAdd    string            `json:"headersToAdd,omitempty"`     // CEL expression → map of headers
-    NewResponseCode *int              `json:"newResponseCode,omitempty"`  // for with_response_code
-
-    SourcePolicyLocators []string `json:"sources,omitempty"`
-}
-```
+- `ActionType` — one of `grpc_method`, `allow`, `add_headers`, `with_response_code`
+- `Intention` — CEL expression (for `grpc_method` and `allow`)
+- `ActionMethod` — registered method name (for `grpc_method`)
+- `HeadersToAdd` — CEL expression evaluating to a map of headers (for `add_headers`)
+- `NewResponseCode` — HTTP status code (for `with_response_code`)
 
 **Why an explicit discriminator?** The wasm-shim needs to know unambiguously how to process each action. With duck-typing (checking which fields are set), adding a new action type in the future could create ambiguity if its fields overlap with an existing type. An explicit `ActionType` field makes dispatch deterministic and extensible.
 
@@ -353,60 +292,13 @@ This catches typos and schema mismatches at reconcile time rather than at reques
 
 #### 1. ActionMethodStore (internal/extension/registry.go)
 
-Replaces the `registeredUpstreams` map from Phase 1. Stores action method registrations keyed by `{PolicyResourceID, Name}`:
-
-```go
-type ActionMethodKey struct {
-    Policy ResourceID
-    Name   string
-}
-
-type ActionMethodEntry struct {
-    ClusterName     string    // generated: ext-{host}-{port} (from Phase 1)
-    Host            string    // parsed from URL
-    Port            int       // parsed from URL
-    TargetRef       TargetRef // from the policy
-    Service         string    // gRPC service name
-    Method          string    // gRPC method name
-    MessageTemplate string    // CEL/JSON template
-    FailureMode     string
-    Timeout         string
-}
-```
-
-`ClearPolicyData` clears all entries matching the policy's `ResourceID`, consistent with Phase 1 behaviour.
+Replaces the `registeredUpstreams` map from Phase 1. Stores action method registrations keyed by `{PolicyResourceID, Name}`. Each entry holds the generated cluster name, parsed host/port, target ref, gRPC service/method names, message template, failure mode, and timeout. `ClearPolicyData` clears all entries matching the policy's `ResourceID`, consistent with Phase 1 behaviour.
 
 #### 2. PipelineActionStore (internal/extension/registry.go)
 
-New store for pipeline actions, ordered per-policy:
+New store for pipeline actions, ordered per-policy. Keyed by `{PolicyResourceID, Phase, Index}` where Phase is `request` or `response` and Index is the insertion order. Each entry holds the action type, predicates, intention, action method name, headers-to-add CEL expression, or response code as appropriate for the action type.
 
-```go
-type PipelineActionKey struct {
-    Policy ResourceID
-    Phase  PipelinePhase // "request" or "response"
-    Index  int           // insertion order — assigned atomically per (Policy, Phase)
-}
-
-// Index allocation is atomic per (Policy, Phase) pair. The store maintains
-// a mutex-protected counter map keyed by (Policy, Phase) so that concurrent
-// OnRequest/OnResponse calls cannot produce duplicate or out-of-order indices.
-
-type PipelinePhase string
-
-const (
-    PipelinePhaseRequest  PipelinePhase = "request"
-    PipelinePhaseResponse PipelinePhase = "response"
-)
-
-type PipelineActionEntry struct {
-    ActionType      ActionType
-    Predicates      []string
-    Intention       string            // GRPCMethodAction, AllowAction
-    ActionMethod    string            // GRPCMethodAction only
-    HeadersToAdd    string            // CEL expression → map of headers (AddHeadersAction only)
-    NewResponseCode *int              // WithResponseCodeAction only
-}
-```
+Index allocation is atomic per `(Policy, Phase)` pair — the store maintains a mutex-protected counter so that concurrent `OnRequest`/`OnResponse` calls cannot produce duplicate or out-of-order indices.
 
 #### 3. Server-Side Handlers (internal/extension/manager.go)
 
@@ -419,109 +311,28 @@ type PipelineActionEntry struct {
 - Triggers reconciliation
 
 **PipelineOnRequest handler:**
-- Validates the action type is a valid request-phase type (`grpc_method`, `allow`)
+- Iterates over the `actions` list in order
+- For each action, validates the action type is a valid request-phase type (`grpc_method`, `allow`)
 - For `grpc_method`: validates `Method` references a registered action method for this policy
 - For `grpc_method`: validates `Intention` CEL against the response proto schema (ProtoCache)
 - Validates predicate CEL expressions
-- Appends to `PipelineActionStore` with the next index for this policy's request phase
+- If any action fails validation, the entire request is rejected (no partial writes)
+- Appends all actions to `PipelineActionStore` with sequential indices for this policy's request phase
 - Triggers reconciliation
 
 **PipelineOnResponse handler:**
-- Validates the action type is a valid response-phase type (`add_headers`, `with_response_code`)
+- Iterates over the `actions` list in order
+- For each action, validates the action type is a valid response-phase type (`add_headers`, `with_response_code`)
 - Validates predicate CEL expressions
-- Appends to `PipelineActionStore` with the next index for this policy's response phase
+- If any action fails validation, the entire request is rejected (no partial writes)
+- Appends all actions to `PipelineActionStore` with sequential indices for this policy's response phase
 - Triggers reconciliation
 
 #### 4. Client-Side Implementation (pkg/extension/controller/controller.go)
 
-**RegisterActionMethod:**
-```go
-func (ec *ExtensionController) RegisterActionMethod(ctx context.Context, policy types.Policy, cfg types.ActionMethodConfig) error {
-    request := &extpb.RegisterActionMethodRequest{
-        Policy:          convertPolicyToProtobuf(policy),
-        Name:            cfg.Name,
-        Url:             cfg.URL,
-        Service:         cfg.Service,
-        Method:          cfg.Method,
-        MessageTemplate: cfg.MessageTemplate,
-    }
-    _, err := ec.extensionClient.client.RegisterActionMethod(ctx, request)
-    if err != nil {
-        if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
-            return fmt.Errorf("%w: %s", types.ErrUpstreamUnreachable, st.Message())
-        }
-        return err
-    }
-    return nil
-}
-```
-
-**NewPipeline:**
-```go
-func (ec *ExtensionController) NewPipeline(policy types.Policy) types.Pipeline {
-    return &PipelineImpl{
-        policy: policy,
-        client: ec.extensionClient.client,
-    }
-}
-```
-
-`NewPipeline` performs no I/O. It captures the policy and gRPC client reference so that subsequent `OnRequest`/`OnResponse` calls can send RPCs with the correct policy identity.
-
-**PipelineImpl:**
-```go
-type PipelineImpl struct {
-    policy types.Policy
-    client extpb.ExtensionServiceClient
-}
-
-func (p *PipelineImpl) OnRequest(ctx context.Context, action types.RequestAction) error {
-    switch a := action.(type) {
-    case types.GRPCMethodAction:
-        _, err := p.client.PipelineOnRequest(ctx, &extpb.PipelineOnRequestRequest{
-            Policy:     convertPolicyToProtobuf(p.policy),
-            ActionType: extpb.ACTION_TYPE_GRPC_METHOD,
-            Predicates: a.Predicate,
-            Intention:  a.Intention,
-            Method:     a.Method,
-        })
-        return err
-    case types.AllowAction:
-        _, err := p.client.PipelineOnRequest(ctx, &extpb.PipelineOnRequestRequest{
-            Policy:     convertPolicyToProtobuf(p.policy),
-            ActionType: extpb.ACTION_TYPE_ALLOW,
-            Predicates: a.Predicate,
-            Intention:  a.Intention,
-        })
-        return err
-    default:
-        return fmt.Errorf("unsupported request action type: %T", action)
-    }
-}
-
-func (p *PipelineImpl) OnResponse(ctx context.Context, action types.ResponseAction) error {
-    switch a := action.(type) {
-    case types.AddHeadersAction:
-        _, err := p.client.PipelineOnResponse(ctx, &extpb.PipelineOnResponseRequest{
-            Policy:       convertPolicyToProtobuf(p.policy),
-            ActionType:   extpb.ACTION_TYPE_ADD_HEADERS,
-            Predicates:   a.Predicate,
-            HeadersToAdd: a.HeadersToAdd, // CEL expression string
-        })
-        return err
-    case types.WithResponseCodeAction:
-        _, err := p.client.PipelineOnResponse(ctx, &extpb.PipelineOnResponseRequest{
-            Policy:          convertPolicyToProtobuf(p.policy),
-            ActionType:      extpb.ACTION_TYPE_WITH_RESPONSE_CODE,
-            Predicates:      a.Predicate,
-            NewResponseCode: int32(a.NewResponseCode),
-        })
-        return err
-    default:
-        return fmt.Errorf("unsupported response action type: %T", action)
-    }
-}
-```
+- **`RegisterActionMethod`** on `ExtensionController` — converts `ActionMethodConfig` to the proto request, sends the RPC, and translates gRPC `Unavailable` status to `types.ErrUpstreamUnreachable`
+- **`NewPipeline`** on `ExtensionController` — creates a `PipelineImpl` bound to the policy and gRPC client. Performs no I/O.
+- **`PipelineImpl`** — `OnRequest` converts each `RequestAction` to a proto `RequestActionEntry`, sends them all in a single `PipelineOnRequestRequest` RPC. `OnResponse` does the same with `ResponseActionEntry` and `PipelineOnResponseRequest`. Unknown action types return an error before the RPC is sent.
 
 #### 5. Extension Reconcilers (internal/controller/)
 
@@ -555,20 +366,28 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
     pipeline := kCtx.NewPipeline(pol)
 
     // Request phase: call the threat service and evaluate the response
-    if err := pipeline.OnRequest(ctx, types.GRPCMethodAction{
-        Predicate: []string{"request.headers['check_threat'] == '1'"},
-        Method:    "checkThreatLevel",
-        Intention: "checkThreatLevelResponse.HeatLevel == 5",
-    }); err != nil {
+    if err := pipeline.OnRequest(ctx,
+        types.GRPCMethodAction{
+            Predicate: []string{"request.headers['check_threat'] == '1'"},
+            Method:    "checkThreatLevel",
+            Intention: "checkThreatLevelResponse.HeatLevel == 5",
+        },
+        types.AllowAction{
+            Predicate: []string{"request.headers['x-bypass'] == 'true'"},
+            Intention: "request.auth.identity.admin == true",
+        },
+    ); err != nil {
         return calculateErrorStatus(pol, err), err
     }
 
     // Response phase: add a header (using a static value for now —
     // cross-action data flow is future work)
-    if err := pipeline.OnResponse(ctx, types.AddHeadersAction{
-        Predicate:    []string{"response.headers['check_threat'] == ''"},
-        HeadersToAdd: "{'x-threat-checked': 'true'}",
-    }); err != nil {
+    if err := pipeline.OnResponse(ctx,
+        types.AddHeadersAction{
+            Predicate:    []string{"response.headers['check_threat'] == ''"},
+            HeadersToAdd: "{'x-threat-checked': 'true'}",
+        },
+    ); err != nil {
         return calculateErrorStatus(pol, err), err
     }
 
@@ -637,6 +456,15 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 ### Completed
 
 ## Change Log
+
+### 2026-04-16 — OnRequest/OnResponse accept multiple actions
+
+- Changed `OnRequest` and `OnResponse` from single-action to variadic (`...RequestAction`, `...ResponseAction`)
+- Proto messages use `repeated RequestActionEntry` / `repeated ResponseActionEntry` sub-messages
+- All actions in a single call are validated atomically — if any fails, the entire batch is rejected
+- `HeadersToAdd` changed from `map[string]string` to `string` (CEL expression evaluating to a map)
+- Standardized cleanup API name to `ClearPolicyData`
+- Added atomic index allocation guarantee for `PipelineActionStore`
 
 ### 2026-04-15 — Initial design
 

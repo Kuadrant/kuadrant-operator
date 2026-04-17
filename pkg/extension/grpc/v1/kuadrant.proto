@@ -24,8 +24,8 @@ service ExtensionService {
   rpc RegisterMutator(RegisterMutatorRequest) returns (google.protobuf.Empty) {}
   // Clear all subscriptions and registered mutators for a policy
   rpc ClearPolicy(ClearPolicyRequest) returns (ClearPolicyResponse) {}
-  // Register an upstream gRPC service for a policy
-  rpc RegisterUpstreamMethod(RegisterUpstreamMethodRequest) returns (google.protobuf.Empty) {}
+  // Register a named gRPC action method for a policy
+  rpc RegisterActionMethod(RegisterActionMethodRequest) returns (google.protobuf.Empty) {}
 }
 
 // The request message containing the time the request was dispatched.
@@ -85,7 +85,7 @@ message ClearPolicyResponse {
   int32 cleared_mutators = 2;
 }
 
-message RegisterUpstreamMethodRequest {
+message RegisterActionMethodRequest {
   kuadrant.v1.Policy policy = 1;
   string url = 2;               // e.g. "grpc://my-service:8081"
   string service = 3;           // gRPC service name (currently unused, reserved for future routing)

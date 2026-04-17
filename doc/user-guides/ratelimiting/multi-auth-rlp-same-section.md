@@ -1,6 +1,6 @@
 # Multi authenticated Rate Limiting for an Application
 
-This tutorial walks you through an example of how to configure multiple authenticated rate limiting for an application using Kuadrant. 
+This tutorial walks you through an example of how to configure multiple authenticated rate limiting for an application using Kuadrant.
 
 Authenticated rate limiting, rate limits the traffic directed to an application based on attributes of the client user, who is authenticated by some authentication method. A few examples of authenticated rate limiting use cases are:
 
@@ -92,7 +92,8 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches:
+  - name: get-toys
+    matches:
     - path:
         type: Exact
         value: "/toy"
@@ -231,7 +232,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-    sectionName: rule-1
+    sectionName: get-toys
   defaults:
     strategy: merge
     limits:
@@ -257,7 +258,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-    sectionName: rule-1
+    sectionName: get-toys
   defaults:
     strategy: merge
     limits:

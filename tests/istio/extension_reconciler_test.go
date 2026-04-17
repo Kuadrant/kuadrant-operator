@@ -286,6 +286,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.toystore.acme.com", "api.toystore.io"})
 			httpRoute.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
 				{
+					Name: ptr.To(gatewayapiv1.SectionName("rule-1")),
 					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{ // get /toys*
 							Path: &gatewayapiv1.HTTPPathMatch{
@@ -304,6 +305,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 				},
 				{
+					Name: ptr.To(gatewayapiv1.SectionName("rule-2")),
 					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{ // /assets
 							Path: &gatewayapiv1.HTTPPathMatch{

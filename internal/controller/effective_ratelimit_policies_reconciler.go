@@ -59,14 +59,21 @@ func (r *EffectiveRateLimitPolicyReconciler) calculateEffectivePolicies(ctx cont
 		_, ok := o.(*machinery.HTTPRouteRule)
 		return ok
 	})
+	grpcRouteRules := targetables.Items(func(o machinery.Object) bool {
+		_, ok := o.(*machinery.GRPCRouteRule)
+		return ok
+	})
 
-	logger.V(1).Info("calculating effective rate limit policies", "httpRouteRules", len(httpRouteRules))
+	logger.V(1).Info("calculating effective rate limit policies", "httpRouteRules", len(httpRouteRules), "grpcRouteRules", len(grpcRouteRules))
 
 	effectivePolicies := EffectiveRateLimitPolicies{}
 
+	// Combine HTTP and gRPC route rules
+	allRouteRules := append(httpRouteRules, grpcRouteRules...)
+
 	for _, gatewayClass := range gatewayClasses {
-		for _, httpRouteRule := range httpRouteRules {
-			paths := targetables.Paths(gatewayClass, httpRouteRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
+		for _, routeRule := range allRouteRules {
+			paths := targetables.Paths(gatewayClass, routeRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
 			for i := range paths {
 				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1.RateLimitPolicy](paths[i], isRateLimitPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])

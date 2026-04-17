@@ -48,6 +48,7 @@ func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
@@ -194,7 +195,7 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 			}
 		}
 
-		gatewayClass, gateway, listener, httpRoute, _, err := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
+		parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
 		if err != nil {
 			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
 				logger.V(1).Info("skipping effectivePolicy for invalid path", "path", effectivePolicy.Path)
@@ -204,10 +205,25 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 			continue
 		}
 
-		if gatewayClass.GetDeletionTimestamp() != nil || gateway.GetDeletionTimestamp() != nil || httpRoute.GetDeletionTimestamp() != nil {
+		// Check for deletion timestamps
+		if parsed.GatewayClass.GetDeletionTimestamp() != nil || parsed.Gateway.GetDeletionTimestamp() != nil {
 			continue
 		}
-		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.Spec.ControllerName) {
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && parsed.HTTPRoute.GetDeletionTimestamp() != nil {
+			continue
+		}
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeGRPC && parsed.GRPCRoute.GetDeletionTimestamp() != nil {
+			continue
+		}
+
+		// Check listener and route readiness
+		if !kuadrantgatewayapi.IsListenerReady(parsed.Listener.Listener, parsed.Gateway.Gateway) {
+			continue
+		}
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && !kuadrantgatewayapi.IsHTTPRouteReady(parsed.HTTPRoute.HTTPRoute, parsed.Gateway.Gateway, parsed.GatewayClass.Spec.ControllerName) {
+			continue
+		}
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeGRPC && !kuadrantgatewayapi.IsGRPCRouteReady(parsed.GRPCRoute.GRPCRoute, parsed.Gateway.Gateway, parsed.Listener.Listener, parsed.GatewayClass.Spec.ControllerName) {
 			continue
 		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
@@ -224,9 +240,9 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 				continue
 			}
 			// policy rule is in the effective policy, track the Gateway affected by the policy
-			affectedGateways[gateway.GetLocator()] = affectedGateway{
-				gateway:      gateway,
-				gatewayClass: gatewayClass,
+			affectedGateways[parsed.Gateway.GetLocator()] = affectedGateway{
+				gateway:      parsed.Gateway,
+				gatewayClass: parsed.GatewayClass,
 			}
 		}
 	}

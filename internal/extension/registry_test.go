@@ -861,6 +861,60 @@ func TestRegisteredDataMutatorLookup(t *testing.T) {
 			t.Error("Expected 'global' property from Gateway-level policy")
 		}
 	})
+
+	t.Run("mutator lookup with GRPCRoute and Gateway", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		mutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](store)
+
+		grpcRouteEntry := DataProviderEntry{
+			Policy:     testResourceID("PlanPolicy", "ns1", "plan1"),
+			Binding:    "plan",
+			Expression: `"premium"`,
+			CAst:       nil,
+		}
+		grpcRouteTargetRef := createMockGRPCRouteTargetRef()
+		store.Set(grpcRouteEntry.Policy, grpcRouteTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "plan", grpcRouteEntry)
+
+		gatewayEntry := DataProviderEntry{
+			Policy:     testResourceID("GlobalPolicy", "ns1", "global1"),
+			Binding:    "global",
+			Expression: `"enterprise"`,
+			CAst:       nil,
+		}
+		gatewayTargetRef := createMockGatewayTargetRef()
+		store.Set(gatewayEntry.Policy, gatewayTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH, "global", gatewayEntry)
+
+		authConfig := &authorinov1beta3.AuthConfig{}
+		targetRefs := []machinery.PolicyTargetReference{
+			grpcRouteTargetRef,
+			gatewayTargetRef,
+		}
+
+		err := mutator.Mutate(authConfig, targetRefs)
+		if err != nil {
+			t.Errorf("Expected no error with mutator lookup: %v", err)
+		}
+
+		if authConfig.Spec.Response == nil {
+			t.Error("Expected response spec to be set")
+		}
+		if authConfig.Spec.Response.Success.DynamicMetadata == nil {
+			t.Error("Expected dynamic metadata to be set")
+		}
+		kuadrantData, exists := authConfig.Spec.Response.Success.DynamicMetadata[KuadrantDataNamespace]
+		if !exists {
+			t.Error("Expected kuadrant data namespace to exist")
+		}
+		if kuadrantData.Json == nil || kuadrantData.Json.Properties == nil {
+			t.Error("Expected JSON properties to be set")
+		}
+		if _, exists := kuadrantData.Json.Properties["plan"]; !exists {
+			t.Error("Expected 'plan' property from GRPCRoute-level policy")
+		}
+		if _, exists := kuadrantData.Json.Properties["global"]; !exists {
+			t.Error("Expected 'global' property from Gateway-level policy")
+		}
+	})
 }
 
 // Mock mutator
@@ -892,6 +946,19 @@ func createMockHTTPRouteTargetRef() machinery.PolicyTargetReference {
 				Group: "gateway.networking.k8s.io",
 				Kind:  "HTTPRoute",
 				Name:  "test-route",
+			},
+		},
+		PolicyNamespace: "test-namespace",
+	}
+}
+
+func createMockGRPCRouteTargetRef() machinery.PolicyTargetReference {
+	return machinery.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: "gateway.networking.k8s.io",
+				Kind:  "GRPCRoute",
+				Name:  "test-grpc-route",
 			},
 		},
 		PolicyNamespace: "test-namespace",

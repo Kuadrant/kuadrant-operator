@@ -363,9 +363,10 @@ spec:
                 x-kubernetes-validations:
                 - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
                   rule: self.group == 'gateway.networking.k8s.io'
-                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
-                    and 'Gateway'
-                  rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
+                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute',
+                    'GRPCRoute' and 'Gateway'
+                  rule: self.kind == 'HTTPRoute' || self.kind == 'GRPCRoute' || self.kind
+                    == 'Gateway'
               when:
                 description: |-
                   Overall conditions for the policy to be enforced.

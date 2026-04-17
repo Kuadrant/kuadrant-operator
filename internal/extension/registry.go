@@ -63,34 +63,53 @@ func (r *MutatorRegistry) RegisterWasmConfigMutator(mutator WasmConfigMutator) {
 }
 
 func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, path []machinery.Targetable) error {
-	_, gateway, _, httpRoute, _, err := kuadrantmachinery.ObjectsInRequestPath(path)
+	parsed, err := kuadrantmachinery.ParseTopologyPath(path)
 	if err != nil {
 		return err
 	}
 
 	targetRefs := []machinery.PolicyTargetReference{
-		// HTTPRoute - for extension policies targeting this specific route
-		machinery.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
-					Kind:  gatewayapiv1alpha2.Kind("HTTPRoute"),
-					Name:  gatewayapiv1alpha2.ObjectName(httpRoute.GetName()),
-				},
-			},
-			PolicyNamespace: httpRoute.GetNamespace(),
-		},
 		// Gateway - for extension policies targeting the parent gateway
 		machinery.LocalPolicyTargetReferenceWithSectionName{
 			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
 					Kind:  gatewayapiv1alpha2.Kind("Gateway"),
-					Name:  gatewayapiv1alpha2.ObjectName(gateway.GetName()),
+					Name:  gatewayapiv1alpha2.ObjectName(parsed.Gateway.GetName()),
 				},
 			},
-			PolicyNamespace: gateway.GetNamespace(),
+			PolicyNamespace: parsed.Gateway.GetNamespace(),
 		},
+	}
+
+	// Add route-specific targetRef based on route type
+	switch parsed.RouteType {
+	case kuadrantmachinery.RouteTypeHTTP:
+		if parsed.HTTPRoute != nil {
+			targetRefs = append(targetRefs, machinery.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+						Kind:  gatewayapiv1alpha2.Kind("HTTPRoute"),
+						Name:  gatewayapiv1alpha2.ObjectName(parsed.HTTPRoute.GetName()),
+					},
+				},
+				PolicyNamespace: parsed.HTTPRoute.GetNamespace(),
+			})
+		}
+	case kuadrantmachinery.RouteTypeGRPC:
+		if parsed.GRPCRoute != nil {
+			targetRefs = append(targetRefs, machinery.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+						Kind:  gatewayapiv1alpha2.Kind("GRPCRoute"),
+						Name:  gatewayapiv1alpha2.ObjectName(parsed.GRPCRoute.GetName()),
+					},
+				},
+				PolicyNamespace: parsed.GRPCRoute.GetNamespace(),
+			})
+		}
 	}
 
 	return r.applyMutatorsWithTargetRefs(authConfig, targetRefs)

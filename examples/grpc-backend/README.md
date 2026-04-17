@@ -142,3 +142,19 @@ Expected output:
 }
 ```
 
+## Rate Limiting gRPC Traffic
+
+Kuadrant's `RateLimitPolicy` can be applied to GRPCRoutes to rate limit gRPC traffic. See the [ratelimitpolicy directory](./ratelimitpolicy/README.md) for examples of:
+
+- Basic rate limiting for all gRPC methods
+- Method-specific rate limits using CEL expressions
+- Combining rate limiting with authentication
+
+Example:
+
+```bash
+kubectl apply -f examples/grpc-backend/ratelimitpolicy/ratelimitpolicy.yaml -n default
+```
+
+This applies a rate limit of 10 requests per 10 seconds to all traffic on the grpcbin GRPCRoute.
+

@@ -30,9 +30,9 @@ import (
 )
 
 type mockKuadrantCtx struct {
-	resolveFn                func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error)
-	resolvePolicyFn          func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error)
-	addDataToFn              func(ctx context.Context, policy exttypes.Policy, domain exttypes.Domain, binding string, expression string) error
+	resolveFn              func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (ref.Val, error)
+	resolvePolicyFn        func(ctx context.Context, policy exttypes.Policy, expression string, subscribe bool) (exttypes.Policy, error)
+	addDataToFn            func(ctx context.Context, policy exttypes.Policy, domain exttypes.Domain, binding string, expression string) error
 	registerActionMethodFn func(ctx context.Context, policy exttypes.Policy, svc exttypes.ActionMethodConfig) error
 }
 

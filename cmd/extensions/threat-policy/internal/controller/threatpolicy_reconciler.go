@@ -72,7 +72,7 @@ func (r *ThreatPolicyReconciler) Reconcile(ctx context.Context, request reconcil
 func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.ThreatPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.ThreatPolicyStatus, error) {
 	r.Logger.Info("registering upstream", "url", threatServiceURL)
 
-	if err := kuadrantCtx.RegisterUpstreamMethod(ctx, pol, types.UpstreamConfig{
+	if err := kuadrantCtx.RegisterActionMethod(ctx, pol, types.ActionMethodConfig{
 		URL: threatServiceURL,
 	}); err != nil {
 		r.Logger.Error(err, "failed to register upstream")

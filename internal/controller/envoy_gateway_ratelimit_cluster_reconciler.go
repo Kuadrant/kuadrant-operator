@@ -41,6 +41,7 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Subscription() controller.Subsc
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &machinery.GRPCRouteGroupKind},
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
@@ -75,8 +76,11 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	effectiveRateLimitPolicies, rlpOk := state.Load(StateEffectiveRateLimitPolicies)
 	if rlpOk && effectiveRateLimitPolicies != nil {
 		rlpGateways := lo.FilterMap(lo.Values(effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-			gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-			return gateway, lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName)
+			parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
+			if err != nil {
+				return nil, false
+			}
+			return parsed.Gateway, lo.Contains(envoyGatewayGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName)
 		})
 		gateways = append(gateways, rlpGateways...)
 	}
@@ -85,8 +89,11 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	effectiveTokenRateLimitPolicies, trlpOk := state.Load(StateEffectiveTokenRateLimitPolicies)
 	if trlpOk && effectiveTokenRateLimitPolicies != nil {
 		trlpGateways := lo.FilterMap(lo.Values(effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)), func(effectivePolicy EffectiveTokenRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-			gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
-			return gateway, lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.Spec.ControllerName)
+			parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
+			if err != nil {
+				return nil, false
+			}
+			return parsed.Gateway, lo.Contains(envoyGatewayGatewayControllerNames, parsed.GatewayClass.Spec.ControllerName)
 		})
 		gateways = append(gateways, trlpGateways...)
 	}

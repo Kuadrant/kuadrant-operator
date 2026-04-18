@@ -58,7 +58,7 @@ The Cluster Operator manages cluster-level resources and establishes governance 
   - Viewing DNS records (`dnsrecords`) - automatically created by the operator
   - DNS provider credentials (Secrets)
 - Managing TLS policies (`tlspolicies`)
-- Managing cert-manager resources (Issuers, ClusterIssuers)
+- Viewing cert-manager resources (Certificates, Issuers, ClusterIssuers)
 - Managing Gateway-level policies (policies that target Gateways):
   - Authentication policies (`authpolicies`) targeting Gateways
   - Rate limiting policies (`ratelimitpolicies`) targeting Gateways
@@ -230,6 +230,20 @@ rules:
   verbs:
   - get
   - list
+  - watch
+
+# DNS provider credentials (Secrets)
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
   - watch
 
 # Gateway management
@@ -777,9 +791,8 @@ This user can now:
 
 - Create and manage DNSPolicy resources
 - View DNSRecord resources created by the operator
+- Create and manage DNS provider secrets (containing cloud credentials)
 - Monitor DNS health and status across all gateways
-
-**Note**: DNS provider secrets (containing cloud credentials) should be created by Infrastructure Providers. The Cluster Operator role does not include secret management permissions.
 
 ### Example 4: Application Developer Creating Routes and Policies
 
@@ -844,7 +857,7 @@ spec:
       - limit: 100
         window: 1m
       counters:
-      - expression: request.headers.user-id
+      - expression: request.headers['user-id']
 ```
 
 Note: The Application Developer:

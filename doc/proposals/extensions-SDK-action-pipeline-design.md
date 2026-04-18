@@ -431,27 +431,27 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 ### Todo
 
-- [ ] Rename `RegisterUpstreamMethod` to `RegisterActionMethod` across proto, SDK, server, and client
+- [ ] [Rename `RegisterUpstreamMethod` to `RegisterActionMethod`](https://github.com/Kuadrant/kuadrant-operator/issues/1899)
   - [ ] Unit tests
-- [ ] Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields
+- [ ] [Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields](https://github.com/Kuadrant/kuadrant-operator/issues/1900)
   - [ ] Unit tests
-- [ ] Define action types and `Pipeline` interface in `pkg/extension/types/`
+- [ ] [Define action types and `Pipeline` interface](https://github.com/Kuadrant/kuadrant-operator/issues/1901)
   - [ ] Unit tests
-- [ ] Add `PipelineOnRequest` and `PipelineOnResponse` RPCs to gRPC proto
+- [ ] [Add `PipelineOnRequest` and `PipelineOnResponse` RPCs to gRPC proto](https://github.com/Kuadrant/kuadrant-operator/issues/1902)
   - [ ] Unit tests
-- [ ] Implement `PipelineActionStore`
+- [ ] [Implement `PipelineActionStore`](https://github.com/Kuadrant/kuadrant-operator/issues/1903)
   - [ ] Unit tests
-- [ ] Implement server-side pipeline handlers with CEL intention validation
-  - [ ] Unit tests
-  - [ ] Integration tests
-- [ ] Implement client-side `NewPipeline` and `PipelineImpl`
-  - [ ] Unit tests
-- [ ] Add `ActionType` discriminator to wasm `Action` struct
-  - [ ] Unit tests
-- [ ] Extend extension reconcilers for pipeline action → wasm Action translation
+- [ ] [Implement server-side pipeline handlers with CEL intention validation](https://github.com/Kuadrant/kuadrant-operator/issues/1904)
   - [ ] Unit tests
   - [ ] Integration tests
-- [ ] Update wasm-shim to dispatch on `ActionType`
+- [ ] [Implement client-side `NewPipeline` and `PipelineImpl`](https://github.com/Kuadrant/kuadrant-operator/issues/1905)
+  - [ ] Unit tests
+- [ ] [Add `ActionType` discriminator to wasm `Action` struct](https://github.com/Kuadrant/kuadrant-operator/issues/1906)
+  - [ ] Unit tests
+- [ ] [Extend extension reconcilers for pipeline action → wasm Action translation](https://github.com/Kuadrant/kuadrant-operator/issues/1907)
+  - [ ] Unit tests
+  - [ ] Integration tests
+- [ ] [Update wasm-shim to dispatch on `ActionType`](https://github.com/Kuadrant/kuadrant-operator/issues/1908)
   - [ ] Unit tests
 
 ### Completed

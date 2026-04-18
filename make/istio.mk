@@ -54,3 +54,12 @@ istio-install:
 .PHONY: deploy-istio-gateway
 deploy-istio-gateway: kustomize ## Deploy Gateway API gateway with gatewayclass set to Istio
 	$(KUSTOMIZE) build config/dependencies/istio/gateway | kubectl apply -f -
+
+.PHONY: deploy-istio-egress-gateway
+deploy-istio-egress-gateway: kustomize ## Deploy Istio egress gateway with ServiceEntry, DestinationRule and HTTPRoute for external service
+	$(KUSTOMIZE) build config/dependencies/istio/egress-gateway | kubectl apply -f -
+	kubectl wait --timeout=5m -n gateway-system gateway/kuadrant-egressgateway --for=condition=Programmed
+	@echo
+	@echo "Egress gateway is ready."
+	@echo "Deploy a test client: kubectl apply -f examples/egress-gateway/test-client.yaml"
+	@echo

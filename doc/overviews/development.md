@@ -69,6 +69,35 @@ The `make local-setup` target accepts the following variables:
 | --- | --- |--- |
 | `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio* \| *envoygateway*] | *istio* |
 
+## Deploy with Istio egress gateway
+
+Set up an Istio egress gateway environment for testing Kuadrant policies on outbound traffic to external services. First create a local cluster, then deploy the egress resources:
+
+```shell
+make local-setup GATEWAYAPI_PROVIDER=istio
+make deploy-istio-egress-gateway
+```
+
+This deploys:
+- An egress Gateway (`kuadrant-egressgateway`) in `gateway-system`
+- A ServiceEntry and DestinationRule for `httpbin.org` with TLS origination
+- An HTTPRoute routing egress traffic through the gateway to the external service
+
+To deploy a test-client pod for verifying connectivity:
+
+```shell
+kubectl apply -f examples/egress-gateway/test-client.yaml
+kubectl wait --timeout=2m -n egress-test pod/test-client --for=condition=Ready
+EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
+kubectl exec test-client -n egress-test -- curl -s -H "Host: httpbin.org" http://$EGRESS_IP/get
+```
+
+For a full egress environment with Vault-based credential injection, use the setup script (works on any cluster with Kuadrant and Istio):
+
+```shell
+./hack/setup-egress.sh
+```
+
 ## Run as a local process
 
 Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy *all* dependencies in a single command.

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package kuadrant.v1;
+
+option go_package = "/v1";
+
+// DescriptorService allows wasm components to retrieve cached protobuf descriptors
+// for registered upstream gRPC services.
+service DescriptorService {
+  rpc GetServiceDescriptors(GetServiceDescriptorsRequest) returns (GetServiceDescriptorsResponse) {}
+}
+
+message GetServiceDescriptorsRequest {
+  repeated ServiceRef services = 1;
+}
+
+message ServiceRef {
+  string cluster_name = 1;
+  string service = 2;
+}
+
+message GetServiceDescriptorsResponse {
+  repeated ServiceDescriptor descriptors = 1;
+}
+
+message ServiceDescriptor {
+  string cluster_name = 1;
+  string service = 2;
+  bytes file_descriptor_set = 3;
+}

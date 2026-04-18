@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -35,12 +36,14 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -53,12 +56,13 @@ var ErrNoExtensionsFound = errors.New("no extensions found")
 type ChangeNotifier func(reason string) error
 
 type Manager struct {
-	extensions []Extension
-	service    extpb.ExtensionServiceServer
-	dag        *nilGuardedPointer[StateAwareDAG]
-	logger     logr.Logger
-	sync       io.Writer
-	client     dynamic.Interface
+	extensions       []Extension
+	service          extpb.ExtensionServiceServer
+	dag              *nilGuardedPointer[StateAwareDAG]
+	logger           logr.Logger
+	sync             io.Writer
+	client           dynamic.Interface
+	descriptorServer *grpc.Server
 }
 
 type Extension interface {
@@ -92,17 +96,22 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	}
 
 	return Manager{
-		extensions,
-		service,
-		BlockingDAG,
-		logger,
-		sync,
-		client,
+		extensions: extensions,
+		service:    service,
+		dag:        BlockingDAG,
+		logger:     logger,
+		sync:       sync,
+		client:     client,
 	}, err
 }
 
 func (m *Manager) Start() error {
 	var err error
+
+	if e := m.startDescriptorServer(); e != nil {
+		m.logger.Error(e, "failed to start descriptor server")
+		err = fmt.Errorf("descriptor server: %w", e)
+	}
 
 	for _, extension := range m.extensions {
 		if e := extension.Start(); e != nil {
@@ -120,6 +129,8 @@ func (m *Manager) Start() error {
 func (m *Manager) Stop() error {
 	var err error
 
+	m.stopDescriptorServer()
+
 	for _, extension := range m.extensions {
 		if e := extension.Stop(); e != nil {
 			if err == nil {
@@ -131,6 +142,65 @@ func (m *Manager) Stop() error {
 	}
 
 	return err
+}
+
+func (m *Manager) startDescriptorServer() error {
+	const defaultPort = 50051
+	descriptorPort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", defaultPort)
+	if portErr != nil {
+		m.logger.Error(portErr, "invalid EXTENSIONS_DESCRIPTOR_SERVICE_PORT, using default", "default", defaultPort)
+		descriptorPort = defaultPort
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", descriptorPort))
+	if err != nil {
+		return fmt.Errorf("failed to listen on port %d: %w", descriptorPort, err)
+	}
+
+	server := grpc.NewServer()
+
+	if svc, ok := m.service.(extpb.DescriptorServiceServer); ok {
+		extpb.RegisterDescriptorServiceServer(server, svc)
+	} else {
+		lis.Close()
+		return fmt.Errorf("service does not implement DescriptorServiceServer")
+	}
+
+	m.descriptorServer = server
+
+	go func() {
+		m.logger.Info("starting descriptor service", "port", descriptorPort)
+		if err := server.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			m.logger.Error(err, "descriptor server failed")
+		}
+	}()
+
+	return nil
+}
+
+func (m *Manager) stopDescriptorServer() {
+	if m.descriptorServer == nil {
+		return
+	}
+
+	m.logger.Info("stopping descriptor service")
+
+	done := make(chan struct{})
+	go func() {
+		m.descriptorServer.GracefulStop()
+		close(done)
+	}()
+
+	timeout := 5 * time.Second
+	select {
+	case <-done:
+		m.logger.Info("descriptor service stopped gracefully")
+	case <-time.After(timeout):
+		m.logger.Info("descriptor service graceful stop timed out, forcing stop")
+		m.descriptorServer.Stop()
+	}
+
+	m.descriptorServer = nil
 }
 
 func (m *Manager) SetChangeNotifier(notifier ChangeNotifier) {
@@ -240,17 +310,17 @@ func (m *Manager) HasSynced() bool {
 	return true
 }
 
-// UpstreamDialer checks reachability of an upstream gRPC target.
-// Returns nil on success or an error if the target is unreachable.
-type UpstreamDialer func(ctx context.Context, target string) error
+// ReflectionFetcher fetches service descriptors via gRPC reflection.
+type ReflectionFetcher func(ctx context.Context, url, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error)
 
 type extensionService struct {
-	dag            *nilGuardedPointer[StateAwareDAG]
-	registeredData *RegisteredDataStore
-	changeNotifier ChangeNotifier
-	upstreamDialer UpstreamDialer
-	logger         logr.Logger
+	dag               *nilGuardedPointer[StateAwareDAG]
+	registeredData    *RegisteredDataStore
+	reflectionFetcher ReflectionFetcher
+	changeNotifier    ChangeNotifier
+	logger            logr.Logger
 	extpb.UnimplementedExtensionServiceServer
+	extpb.UnimplementedDescriptorServiceServer
 }
 
 func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb.PongResponse, error) {
@@ -259,23 +329,58 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func defaultUpstreamDialer(ctx context.Context, target string) error {
-	conn, err := grpc.DialContext(ctx, target, //nolint:staticcheck // intentional use for reachability check
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck // intentional use for reachability check
-	)
-	if err != nil {
-		return err
+func (s *extensionService) GetServiceDescriptors(_ context.Context, request *extpb.GetServiceDescriptorsRequest) (*extpb.GetServiceDescriptorsResponse, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
 	}
-	return conn.Close()
+
+	descriptors := make([]*extpb.ServiceDescriptor, 0, len(request.Services))
+
+	for _, serviceRef := range request.Services {
+		if serviceRef == nil {
+			return nil, fmt.Errorf("service reference must be provided for all services")
+		}
+		if serviceRef.ClusterName == "" {
+			return nil, fmt.Errorf("cluster_name must be specified for all services")
+		}
+		if serviceRef.Service == "" {
+			return nil, fmt.Errorf("service must be specified for all services")
+		}
+
+		cacheKey := ProtoCacheKey{
+			ClusterName: serviceRef.ClusterName,
+			Service:     serviceRef.Service,
+		}
+
+		fds, found := s.registeredData.GetProtoDescriptor(cacheKey)
+		if !found {
+			return nil, fmt.Errorf("descriptors not found for cluster=%q service=%q", serviceRef.ClusterName, serviceRef.Service)
+		}
+
+		fdsBytes, err := proto.Marshal(fds)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal descriptors for cluster=%q service=%q: %w", serviceRef.ClusterName, serviceRef.Service, err)
+		}
+
+		descriptors = append(descriptors, &extpb.ServiceDescriptor{
+			ClusterName:       serviceRef.ClusterName,
+			Service:           serviceRef.Service,
+			FileDescriptorSet: fdsBytes,
+		})
+	}
+
+	return &extpb.GetServiceDescriptorsResponse{
+		Descriptors: descriptors,
+	}, nil
 }
 
 func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
+	reflectionClient := NewReflectionClient()
 	service := &extensionService{
-		dag:            dag,
-		registeredData: NewRegisteredDataStore(),
-		upstreamDialer: defaultUpstreamDialer,
-		logger:         logger.WithName("extensionService"),
+		dag:               dag,
+		registeredData:    NewRegisteredDataStore(),
+		reflectionFetcher: reflectionClient.FetchServiceDescriptors,
+		logger:            logger.WithName("extensionService"),
 	}
 
 	authMutator := NewRegisteredDataMutator[*authorinov1beta3.AuthConfig](service.registeredData)
@@ -477,7 +582,7 @@ func generateClusterName(host string, port int) string {
 	return clusterName
 }
 
-func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
+func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
 	if request == nil {
 		return nil, errors.New("request cannot be nil")
 	}
@@ -493,6 +598,12 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 	if request.Url == "" {
 		return nil, errors.New("url must be specified")
 	}
+	if request.Service == "" {
+		return nil, errors.New("service must be specified")
+	}
+	if request.Method == "" {
+		return nil, errors.New("method must be specified")
+	}
 	if len(request.Policy.TargetRefs) == 0 {
 		return nil, errors.New("policy must have target references")
 	}
@@ -506,32 +617,25 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 		return nil, fmt.Errorf("url scheme must be \"grpc\", got %q", parsed.Scheme)
 	}
 	host := parsed.Hostname()
-	portStr := parsed.Port()
 	if host == "" {
 		return nil, fmt.Errorf("url must contain a host: %q", request.Url)
 	}
 	var port int
-	if portStr != "" {
-		var err2 error
-		port, err2 = strconv.Atoi(portStr)
-		if err2 != nil {
-			return nil, fmt.Errorf("invalid port in url %q: %w", request.Url, err2)
+	if portStr := parsed.Port(); portStr != "" {
+		var err error
+		port, err = strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port in url %q: %w", request.Url, err)
 		}
 	}
 
-	// gRPC dial reachability check with 5s timeout
-	dialTarget := host
-	if portStr != "" {
-		dialTarget = host + ":" + portStr
-	}
-	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer dialCancel()
-
-	if err := s.upstreamDialer(dialCtx, dialTarget); err != nil {
-		return nil, grpcstatus.Errorf(codes.Unavailable, "upstream unreachable at %s: %v", dialTarget, err)
-	}
-
 	clusterName := generateClusterName(host, port)
+
+	// Fetch service descriptors via reflection and validate method exists
+	fds, err := s.reflectionFetcher(ctx, parsed.Host, request.Service, request.Method)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch and validate service %s method %s: %v", request.Service, request.Method, err)
+	}
 
 	policyID := ResourceID{
 		Kind:      request.Policy.Metadata.Kind,
@@ -549,23 +653,29 @@ func (s *extensionService) RegisterUpstreamMethod(_ context.Context, request *ex
 	}
 
 	key := RegisteredUpstreamKey{
-		Policy: policyID,
-		URL:    request.Url,
+		Policy:  policyID,
+		URL:     request.Url,
+		Service: request.Service,
+		Method:  request.Method,
 	}
 	entry := RegisteredUpstreamEntry{
 		ClusterName: clusterName,
 		Host:        host,
 		Port:        port,
 		TargetRef:   targetRef,
+		Service:     request.Service,
+		Method:      request.Method,
 		FailureMode: string(wasm.FailureModeDeny),
 		Timeout:     "100ms",
 	}
 
-	s.registeredData.SetUpstream(key, entry)
+	s.registeredData.SetUpstream(key, entry, fds)
 
 	s.logger.Info("registered upstream",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
 		"url", request.Url,
+		"service", request.Service,
+		"method", request.Method,
 		"clusterName", clusterName)
 
 	// Trigger reconciliation

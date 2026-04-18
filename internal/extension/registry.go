@@ -26,6 +26,8 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
+	"google.golang.org/protobuf/types/descriptorpb"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantmachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
@@ -177,8 +179,10 @@ type SubscriptionKey struct {
 }
 
 type RegisteredUpstreamKey struct {
-	Policy ResourceID
-	URL    string
+	Policy  ResourceID
+	URL     string
+	Service string
+	Method  string
 }
 
 type RegisteredUpstreamEntry struct {
@@ -186,6 +190,8 @@ type RegisteredUpstreamEntry struct {
 	Host        string
 	Port        int
 	TargetRef   TargetRef
+	Service     string
+	Method      string
 	FailureMode string
 	Timeout     string
 }
@@ -205,6 +211,7 @@ type RegisteredDataStore struct {
 	subsMutex     sync.RWMutex
 
 	registeredUpstreams map[RegisteredUpstreamKey]RegisteredUpstreamEntry
+	protoCache          *ProtoCache
 	upstreamsMutex      sync.RWMutex
 }
 
@@ -213,6 +220,7 @@ func NewRegisteredDataStore() *RegisteredDataStore {
 		dataProviders:       make(map[DataProviderKey]DataProviderEntry),
 		subscriptions:       make(map[SubscriptionKey]Subscription),
 		registeredUpstreams: make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry),
+		protoCache:          NewProtoCache(),
 	}
 }
 
@@ -370,10 +378,15 @@ func (r *RegisteredDataStore) DeleteSubscription(policy ResourceID, expression s
 	return existed
 }
 
-func (r *RegisteredDataStore) SetUpstream(key RegisteredUpstreamKey, entry RegisteredUpstreamEntry) {
+func (r *RegisteredDataStore) SetUpstream(key RegisteredUpstreamKey, entry RegisteredUpstreamEntry, fds *descriptorpb.FileDescriptorSet) {
 	r.upstreamsMutex.Lock()
 	defer r.upstreamsMutex.Unlock()
 	r.registeredUpstreams[key] = entry
+	cacheKey := ProtoCacheKey{
+		ClusterName: entry.ClusterName,
+		Service:     entry.Service,
+	}
+	r.protoCache.Set(cacheKey, fds)
 }
 
 func (r *RegisteredDataStore) GetUpstream(key RegisteredUpstreamKey) (RegisteredUpstreamEntry, bool) {
@@ -404,16 +417,14 @@ func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []Reg
 }
 
 func (r *RegisteredDataStore) GetRelevantUpstreams(targetRefs []machinery.PolicyTargetReference) []RegisteredUpstreamEntry {
-	var result []RegisteredUpstreamEntry
-	for _, targetRef := range targetRefs {
-		result = append(result, r.GetUpstreamsByTargetRef(TargetRef{
+	return lo.FlatMap(targetRefs, func(targetRef machinery.PolicyTargetReference, _ int) []RegisteredUpstreamEntry {
+		return r.GetUpstreamsByTargetRef(TargetRef{
 			Group:     targetRef.GroupVersionKind().Group,
 			Kind:      targetRef.GroupVersionKind().Kind,
 			Name:      targetRef.GetName(),
 			Namespace: targetRef.GetNamespace(),
-		})...)
-	}
-	return result
+		})
+	})
 }
 
 func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
@@ -424,6 +435,22 @@ func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 		delete(r.registeredUpstreams, key)
 	}
 	return existed
+}
+
+func (r *RegisteredDataStore) GetUpstreamsForPolicy(policy ResourceID) []RegisteredUpstreamEntry {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+
+	filtered := lo.PickBy(r.registeredUpstreams, func(key RegisteredUpstreamKey, _ RegisteredUpstreamEntry) bool {
+		return key.Policy == policy
+	})
+	return lo.Values(filtered)
+}
+
+func (r *RegisteredDataStore) GetProtoDescriptor(cacheKey ProtoCacheKey) (*descriptorpb.FileDescriptorSet, bool) {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	return r.protoCache.Get(cacheKey)
 }
 
 func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
@@ -450,11 +477,38 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 		}
 	}
 
+	// Collect upstreams to check for cache cleanup
+	var upstreamsToCheck []RegisteredUpstreamEntry
+	for key, entry := range r.registeredUpstreams {
+		if key.Policy == policy {
+			upstreamsToCheck = append(upstreamsToCheck, entry)
+		}
+	}
+
 	// clear registered upstreams
 	for key := range r.registeredUpstreams {
 		if key.Policy == policy {
 			delete(r.registeredUpstreams, key)
 			clearedUpstreams++
+		}
+	}
+
+	// Clean up proto cache for upstreams that are no longer referenced
+	for _, upstream := range upstreamsToCheck {
+		cacheKey := ProtoCacheKey{
+			ClusterName: upstream.ClusterName,
+			Service:     upstream.Service,
+		}
+		// Check if any other upstream still references this cache entry
+		stillReferenced := false
+		for _, entry := range r.registeredUpstreams {
+			if entry.ClusterName == cacheKey.ClusterName && entry.Service == cacheKey.Service {
+				stillReferenced = true
+				break
+			}
+		}
+		if !stillReferenced {
+			r.protoCache.Delete(cacheKey)
 		}
 	}
 
@@ -555,19 +609,27 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	wasmConfig.RequestData = requestData
 
 	// Inject registered upstream services matching the current target refs
-	for _, entry := range m.store.GetRelevantUpstreams(targetRefs) {
+	relevantUpstreams := m.store.GetRelevantUpstreams(targetRefs)
+	for _, entry := range relevantUpstreams {
 		timeout := entry.Timeout
 		svc := wasm.Service{
 			Endpoint:    entry.ClusterName,
-			Type:        wasm.AuthServiceType,
+			Type:        wasm.DynamicServiceType,
 			FailureMode: wasm.FailureModeType(entry.FailureMode),
 			Timeout:     &timeout,
+			GrpcService: &entry.Service,
+			GrpcMethod:  &entry.Method,
 		}
 		wasmServiceKey := "ext-" + HashUpstreamServiceConfig(svc)
 		if wasmConfig.Services == nil {
 			wasmConfig.Services = make(map[string]wasm.Service)
 		}
 		wasmConfig.Services[wasmServiceKey] = svc
+	}
+
+	// Set descriptor service cluster name if there are any dynamic services
+	if len(relevantUpstreams) > 0 {
+		wasmConfig.DescriptorService = "kuadrant-operator-grpc"
 	}
 
 	return nil
@@ -580,7 +642,15 @@ func HashUpstreamServiceConfig(svc wasm.Service) string {
 	if svc.Timeout != nil {
 		timeout = *svc.Timeout
 	}
-	data := fmt.Sprintf("%s|%s|%s|%s", svc.Type, svc.Endpoint, svc.FailureMode, timeout)
+	grpcService := ""
+	if svc.GrpcService != nil {
+		grpcService = *svc.GrpcService
+	}
+	grpcMethod := ""
+	if svc.GrpcMethod != nil {
+		grpcMethod = *svc.GrpcMethod
+	}
+	data := fmt.Sprintf("%s|%s|%s|%s|%s|%s", svc.Type, svc.Endpoint, svc.FailureMode, timeout, grpcService, grpcMethod)
 	h := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", h[:8])
 }

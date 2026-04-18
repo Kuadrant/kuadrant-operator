@@ -19,7 +19,7 @@ import (
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies/finalizers,verbs=update
 
-const threatServiceURL = "grpc://threat-service.security.svc.cluster.local:8080"
+const threatServiceURL = "grpc://threat-assessment-service.security.svc.cluster.local:8080"
 
 type ThreatPolicyReconciler struct {
 	types.ExtensionBase
@@ -73,7 +73,9 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 	r.Logger.Info("registering upstream", "url", threatServiceURL)
 
 	if err := kuadrantCtx.RegisterUpstreamMethod(ctx, pol, types.UpstreamConfig{
-		URL: threatServiceURL,
+		URL:     threatServiceURL,
+		Service: "threat.v1.ThreatAssessmentService",
+		Method:  "AssessRequest",
 	}); err != nil {
 		r.Logger.Error(err, "failed to register upstream")
 		return calculateErrorStatus(pol, err), err

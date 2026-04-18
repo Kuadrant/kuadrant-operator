@@ -154,6 +154,16 @@ func TestConfigEqual(t *testing.T) {
 			config2:  &Config{},
 			expected: false,
 		},
+		{
+			name: "different descriptor service",
+			config1: &Config{
+				DescriptorService: "kuadrant-operator-grpc",
+			},
+			config2: &Config{
+				DescriptorService: "different-descriptor-service",
+			},
+			expected: false,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {

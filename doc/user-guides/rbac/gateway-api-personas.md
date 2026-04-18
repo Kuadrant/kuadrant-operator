@@ -332,9 +332,10 @@ rules:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: chihiro-cluster-operator
+  namespace: gateway-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -525,23 +526,6 @@ subjects:
 - kind: ServiceAccount
   name: app-deployment-sa
   namespace: my-application
-```
-
-For cluster-wide permissions (multi-namespace applications):
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: platform-team-application-developer
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kuadrant-application-developer
-subjects:
-- kind: Group
-  name: platform-team
-  apiGroup: rbac.authorization.k8s.io
 ```
 
 ## Viewer Roles
@@ -773,10 +757,12 @@ Grant Cluster Operator permissions:
 
 ```yaml
 ---
+# RoleBinding scopes Secret permissions to gateway-system namespace only
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: dns-admin
+  namespace: gateway-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -902,7 +888,7 @@ This service account can deploy HTTPRoutes, AuthPolicies, and RateLimitPolicies 
 ### Principle of Least Privilege
 
 - Grant only the minimum permissions necessary for each role
-- Use namespace-scoped RoleBindings when possible instead of ClusterRoleBindings
+- Use namespace-scoped RoleBindings to limit permissions to specific namespaces
 - Separate cluster-level infrastructure management from application policy management
 
 ### Resource Management Separation
@@ -916,7 +902,7 @@ This service account can deploy HTTPRoutes, AuthPolicies, and RateLimitPolicies 
 **Policy Attachment Restrictions:**
 
 - Application Developers should NOT be able to create or modify Gateways
-- Application Developers should NOT be able to create policies targeting Gateways (only HTTPRoutes/GRPCRoutes)
+- Application Developers should create policies targeting only HTTPRoutes/GRPCRoutes
 - Cluster Operators can create both Gateway-level and Route-level policies
 - Use Gateway API's ReferenceGrant for cross-namespace route attachment
 
@@ -956,9 +942,9 @@ This service account can deploy HTTPRoutes, AuthPolicies, and RateLimitPolicies 
 
 If a user receives "forbidden" errors when creating policies:
 
-1. Verify the user has the correct ClusterRole or Role assigned
-2. Check that the RoleBinding or ClusterRoleBinding references the correct subject
-3. Ensure the namespace matches (for RoleBindings)
+1. Verify the user has the correct ClusterRole assigned
+2. Check that the RoleBinding references the correct subject
+3. Ensure the namespace matches
 4. Use `kubectl auth can-i` to test permissions:
 
 ```bash

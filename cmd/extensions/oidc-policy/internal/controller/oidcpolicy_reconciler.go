@@ -303,7 +303,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		for k, v := range claims {
 			authPatterns = append(authPatterns, authorinov1beta3.PatternExpressionOrRef{
 				CelPredicate: authorinov1beta3.CelPredicate{
-					Predicate: fmt.Sprintf(`"%s" in auth.identity.%s`, v, k),
+					Predicate: fmt.Sprintf(`auth.identity.%s == "%s"`, k, v),
 				},
 			})
 		}

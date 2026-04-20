@@ -563,7 +563,7 @@ func (s *extensionService) RegisterActionMethod(_ context.Context, request *extp
 
 	s.registeredData.SetUpstream(key, entry)
 
-	s.logger.Info("registered upstream",
+	s.logger.Info("registered action method",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
 		"url", request.Url,
 		"clusterName", clusterName)

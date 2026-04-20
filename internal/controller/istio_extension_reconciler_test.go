@@ -637,3 +637,142 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 		assert.ErrorContains(t, err, "duplicate key '' with different values")
 	})
 }
+
+func TestMergeAndVerifyExtensionActions(t *testing.T) {
+	tests := []struct {
+		name        string
+		actions     []wasm.Action
+		expectedLen int
+		description string
+		validate    func(*testing.T, []wasm.Action)
+	}{
+		{
+			name: "extension action before auth - preserved order",
+			actions: []wasm.Action{
+				{
+					ServiceName:       "ext-a1b2c3",
+					Scope:             "threat-assess",
+					Dispatch:          `threat.v1.AssessRequest{uri: request.url_path}`,
+					ResponsePredicate: "service.response.threat_level < 5",
+					DenialResponse: &wasm.DenialResponse{
+						StatusCode: 403,
+						Headers:    map[string]string{"X-Deny-Reason": "threat-level-exceeded"},
+						Body:       "blocked",
+					},
+					SourcePolicyLocators: []string{"ThreatPolicy/default/my-policy"},
+				},
+				{
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "auth-scope",
+				},
+			},
+			expectedLen: 2,
+			description: "extension action should remain before auth action",
+			validate: func(t *testing.T, result []wasm.Action) {
+				assert.Equal(t, "ext-a1b2c3", result[0].ServiceName)
+				assert.Equal(t, wasm.AuthServiceName, result[1].ServiceName)
+			},
+		},
+		{
+			name: "extension action + auth + ratelimit - ordering preserved",
+			actions: []wasm.Action{
+				{
+					ServiceName:          "ext-a1b2c3",
+					Scope:                "threat-assess",
+					Dispatch:             `threat.v1.AssessRequest{uri: request.url_path}`,
+					ResponsePredicate:    "service.response.threat_level < 5",
+					SourcePolicyLocators: []string{"ThreatPolicy/default/my-policy"},
+				},
+				{
+					ServiceName: wasm.AuthServiceName,
+					Scope:       "auth-scope",
+				},
+				{
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       "rl-scope",
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "limit.key", Value: "1"}}},
+							},
+						},
+					},
+				},
+			},
+			expectedLen: 3,
+			description: "all three action types should remain in order",
+			validate: func(t *testing.T, result []wasm.Action) {
+				assert.Equal(t, "ext-a1b2c3", result[0].ServiceName)
+				assert.Equal(t, wasm.AuthServiceName, result[1].ServiceName)
+				assert.Equal(t, wasm.RateLimitServiceName, result[2].ServiceName)
+			},
+		},
+		{
+			name: "two extension actions with different scopes - not merged",
+			actions: []wasm.Action{
+				{
+					ServiceName:          "ext-a1b2c3",
+					Scope:                "threat-assess",
+					Dispatch:             `threat.v1.AssessRequest{uri: request.url_path}`,
+					ResponsePredicate:    "service.response.threat_level < 5",
+					SourcePolicyLocators: []string{"ThreatPolicy/default/policy-1"},
+				},
+				{
+					ServiceName:          "ext-d4e5f6",
+					Scope:                "fraud-check",
+					Dispatch:             `fraud.v1.CheckRequest{user_id: request.headers["x-user-id"]}`,
+					ResponsePredicate:    "service.response.fraud_score < 80",
+					SourcePolicyLocators: []string{"FraudPolicy/default/policy-2"},
+				},
+			},
+			expectedLen: 2,
+			description: "extension actions with different scopes and services stay separate",
+			validate: func(t *testing.T, result []wasm.Action) {
+				assert.Equal(t, "ext-a1b2c3", result[0].ServiceName)
+				assert.Equal(t, "ext-d4e5f6", result[1].ServiceName)
+				assert.Equal(t, "threat-assess", result[0].Scope)
+				assert.Equal(t, "fraud-check", result[1].Scope)
+			},
+		},
+		{
+			name: "multiple extension actions from different policies with own source locators",
+			actions: []wasm.Action{
+				{
+					ServiceName:          "ext-a1b2c3",
+					Scope:                "threat-assess-1",
+					Dispatch:             `threat.v1.AssessRequest{uri: request.url_path}`,
+					ResponsePredicate:    "service.response.threat_level < 5",
+					SourcePolicyLocators: []string{"ThreatPolicy/ns1/policy-a"},
+				},
+				{
+					ServiceName:          "ext-a1b2c3",
+					Scope:                "threat-assess-2",
+					Dispatch:             `threat.v1.AssessRequest{uri: request.url_path}`,
+					ResponsePredicate:    "service.response.threat_level < 3",
+					SourcePolicyLocators: []string{"ThreatPolicy/ns2/policy-b"},
+				},
+			},
+			expectedLen: 2,
+			description: "two extension actions from different policies stay separate with their own source locators",
+			validate: func(t *testing.T, result []wasm.Action) {
+				assert.Equal(t, 1, len(result[0].SourcePolicyLocators))
+				assert.Equal(t, "ThreatPolicy/ns1/policy-a", result[0].SourcePolicyLocators[0])
+				assert.Equal(t, 1, len(result[1].SourcePolicyLocators))
+				assert.Equal(t, "ThreatPolicy/ns2/policy-b", result[1].SourcePolicyLocators[0])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mergeAndVerify(context.TODO(), tt.actions)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assert.Equal(t, tt.expectedLen, len(result), tt.description)
+			if tt.validate != nil {
+				tt.validate(t, result)
+			}
+		})
+	}
+}

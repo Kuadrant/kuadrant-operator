@@ -92,7 +92,7 @@ func (s Service) EqualTo(other Service) bool {
 	return true
 }
 
-// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing
+// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing;dynamic
 type ServiceType string
 
 const (
@@ -101,6 +101,7 @@ const (
 	RateLimitReportServiceType ServiceType = "ratelimit-report"
 	AuthServiceType            ServiceType = "auth"
 	TracingServiceType         ServiceType = "tracing"
+	DynamicServiceType         ServiceType = "dynamic"
 )
 
 // +kubebuilder:validation:Enum:=deny;allow
@@ -173,12 +174,41 @@ type Action struct {
 	// +optional
 	ConditionalData []ConditionalData `json:"conditionalData,omitempty"`
 
+	// Dispatch is a CEL expression that constructs the gRPC request message for dynamic service actions.
+	// The expression must evaluate to a protobuf message type matching the service's method input type.
+	// +optional
+	Dispatch string `json:"dispatch,omitempty"`
+
+	// ResponsePredicate is a CEL boolean expression evaluated against the gRPC response.
+	// If true, the request is allowed; if false, the request is denied with the DenialResponse.
+	// +optional
+	ResponsePredicate string `json:"responsePredicate,omitempty"`
+
+	// DenialResponse configures the HTTP response sent when ResponsePredicate evaluates to false.
+	// +optional
+	DenialResponse *DenialResponse `json:"denialResponse,omitempty"`
+
 	// SourcePolicyLocators tracks all policies that contributed to this action.
 	// This is important for policies that can be merged (e.g., Gateway-level + HTTPRoute-level).
 	// For atomic merge strategies or individual rules, this may contain a single entry.
 	// Serialized to wasm config as "sources" for observability and debugging.
 	// Format: "kind/namespace/name"
 	SourcePolicyLocators []string `json:"sources,omitempty"`
+}
+
+// DenialResponse configures the HTTP response sent to the downstream client
+// when a dynamic action's ResponsePredicate evaluates to false.
+type DenialResponse struct {
+	// StatusCode is the HTTP status code (e.g., 403, 429).
+	StatusCode uint32 `json:"statusCode"`
+
+	// Headers are additional HTTP headers to include in the denial response.
+	// +optional
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// Body is the response body sent on denial.
+	// +optional
+	Body string `json:"body,omitempty"`
 }
 
 type ConditionalData struct {
@@ -234,6 +264,8 @@ func (c *ConditionalData) EqualTo(other ConditionalData) bool {
 func (a *Action) EqualTo(other Action) bool {
 	if a.Scope != other.Scope ||
 		a.ServiceName != other.ServiceName ||
+		a.Dispatch != other.Dispatch ||
+		a.ResponsePredicate != other.ResponsePredicate ||
 		len(a.ConditionalData) != len(other.ConditionalData) {
 		return false
 	}
@@ -246,12 +278,40 @@ func (a *Action) EqualTo(other Action) bool {
 		return false
 	}
 
+	if (a.DenialResponse == nil) != (other.DenialResponse == nil) {
+		return false
+	}
+	if a.DenialResponse != nil && other.DenialResponse != nil && !a.DenialResponse.EqualTo(other.DenialResponse) {
+		return false
+	}
+
 	for i := range a.ConditionalData {
 		if !a.ConditionalData[i].EqualTo(other.ConditionalData[i]) {
 			return false
 		}
 	}
 
+	return true
+}
+
+func (d *DenialResponse) EqualTo(other *DenialResponse) bool {
+	if d == nil && other == nil {
+		return true
+	}
+	if d == nil || other == nil {
+		return false
+	}
+	if d.StatusCode != other.StatusCode || d.Body != other.Body {
+		return false
+	}
+	if len(d.Headers) != len(other.Headers) {
+		return false
+	}
+	for k, v := range d.Headers {
+		if ov, ok := other.Headers[k]; !ok || v != ov {
+			return false
+		}
+	}
 	return true
 }
 

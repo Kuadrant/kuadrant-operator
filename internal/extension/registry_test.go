@@ -187,7 +187,7 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 3 entries for target ref, got %d", len(entries))
 	}
 
-	clearedMutators, clearedSubscriptions, _ := store.ClearPolicyData(testPolicy)
+	clearedMutators, clearedSubscriptions, _, _ := store.ClearPolicyData(testPolicy)
 
 	if clearedMutators != 2 {
 		t.Errorf("Expected 2 cleared mutators, got %d", clearedMutators)
@@ -250,7 +250,7 @@ func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 		t.Error("Expected policy data after adding entry")
 	}
 
-	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1")) //nolint:dogsled
+	_, _, _, _ = store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1"))
 
 	subscription := Subscription{
 		CAst: &cel.Ast{},
@@ -422,7 +422,7 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
 	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
 
-	_, cleared, _ := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	_, cleared, _, _ := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if cleared != 2 {
 		t.Errorf("Expected 2 cleared subscriptions, got %d", cleared)
 	}
@@ -437,7 +437,7 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 		t.Errorf("Expected 1 subscription for other policy, got %d", len(subscriptions))
 	}
 
-	_, cleared, _ = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
+	_, cleared, _, _ = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
 	if cleared != 0 {
 		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", cleared)
 	}
@@ -768,7 +768,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("clear empty target", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		cleared, _, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
+		cleared, _, _, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
 		if cleared != 0 {
 			t.Errorf("Expected 0 cleared entries, got %d", cleared)
 		}
@@ -996,7 +996,7 @@ func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
 		RegisteredUpstreamEntry{ClusterName: "ext-svc3-8083", Host: "svc3", Port: 8083, TargetRef: targetRef},
 	)
 
-	_, _, clearedUpstreams := store.ClearPolicyData(policy1)
+	_, _, clearedUpstreams, _ := store.ClearPolicyData(policy1)
 	if clearedUpstreams != 2 {
 		t.Errorf("Expected 2 cleared upstreams, got %d", clearedUpstreams)
 	}
@@ -1121,6 +1121,27 @@ func TestHashUpstreamServiceConfig(t *testing.T) {
 	hash5 := HashUpstreamServiceConfig(svc4)
 	if hash1 == hash5 {
 		t.Errorf("Expected different hash for nil timeout")
+	}
+
+	// Dynamic service type produces deterministic hash
+	dynamicSvc := wasm.Service{
+		Endpoint:    "ext-threat-service-8080",
+		Type:        wasm.DynamicServiceType,
+		FailureMode: wasm.FailureModeDeny,
+		Timeout:     &timeout,
+	}
+	dynamicHash1 := HashUpstreamServiceConfig(dynamicSvc)
+	dynamicHash2 := HashUpstreamServiceConfig(dynamicSvc)
+	if dynamicHash1 != dynamicHash2 {
+		t.Errorf("Expected identical hashes for identical dynamic service configs, got %s and %s", dynamicHash1, dynamicHash2)
+	}
+
+	// Dynamic vs auth type with same endpoint produce different hashes
+	authSvc := dynamicSvc
+	authSvc.Type = wasm.AuthServiceType
+	authHash := HashUpstreamServiceConfig(authSvc)
+	if dynamicHash1 == authHash {
+		t.Errorf("Expected different hashes for dynamic vs auth type with same endpoint, both got %s", dynamicHash1)
 	}
 }
 
@@ -1284,6 +1305,521 @@ type mockWasmConfigMutator struct {
 
 func (m *mockWasmConfigMutator) Mutate(config *wasm.Config, targetRefs []machinery.PolicyTargetReference) error {
 	return m.mutateFn(config, targetRefs)
+}
+
+// =============================================================================
+// Layer 2.1: ActionStore CRUD Tests
+// =============================================================================
+
+func TestRegisteredDataStore_SetAction_GetAction_DeleteAction(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	policy := testResourceID("ThreatPolicy", "default", "my-threat-policy")
+	key := RegisteredActionKey{Policy: policy, Scope: "threat-assess"}
+	entry := RegisteredActionEntry{
+		ServiceName:         "ext-threat-svc-8080",
+		Scope:               "threat-assess",
+		Dispatch:            `threat.v1.AssessRequest{uri: request.url_path}`,
+		ResponsePredicate:   "service.response.threat_level < 5",
+		DenialResponse:      &ActionDenialResponse{StatusCode: 403, Headers: map[string]string{"X-Deny-Reason": "threat-level-exceeded"}, Body: "blocked"},
+		TargetRef:           TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "my-gw", Namespace: "default"},
+		SourcePolicyLocator: "ThreatPolicy/default/my-threat-policy",
+		FailureMode:         "deny",
+		Timeout:             "100ms",
+	}
+
+	store.SetAction(key, entry)
+
+	retrieved, exists := store.GetAction(key)
+	if !exists {
+		t.Fatal("Expected action to exist")
+	}
+	if retrieved.ServiceName != "ext-threat-svc-8080" {
+		t.Errorf("Expected service name ext-threat-svc-8080, got %s", retrieved.ServiceName)
+	}
+	if retrieved.Dispatch != `threat.v1.AssessRequest{uri: request.url_path}` {
+		t.Errorf("Expected dispatch expression, got %s", retrieved.Dispatch)
+	}
+	if retrieved.ResponsePredicate != "service.response.threat_level < 5" {
+		t.Errorf("Expected response predicate, got %s", retrieved.ResponsePredicate)
+	}
+	if retrieved.DenialResponse == nil {
+		t.Fatal("Expected denial response to be set")
+	}
+	if retrieved.DenialResponse.StatusCode != 403 {
+		t.Errorf("Expected status code 403, got %d", retrieved.DenialResponse.StatusCode)
+	}
+	if retrieved.SourcePolicyLocator != "ThreatPolicy/default/my-threat-policy" {
+		t.Errorf("Expected source policy locator, got %s", retrieved.SourcePolicyLocator)
+	}
+
+	all := store.GetAllActions()
+	if len(all) != 1 {
+		t.Errorf("Expected 1 action, got %d", len(all))
+	}
+
+	deleted := store.DeleteAction(key)
+	if !deleted {
+		t.Error("Expected action to be deleted")
+	}
+
+	_, exists = store.GetAction(key)
+	if exists {
+		t.Error("Expected action to not exist after deletion")
+	}
+}
+
+func TestRegisteredDataStore_GetActionsByTargetRef(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	gwTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "my-gw", Namespace: "default"}
+	routeTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "my-route", Namespace: "default"}
+
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("ThreatPolicy", "default", "tp-1"), Scope: "threat-assess"},
+		RegisteredActionEntry{ServiceName: "ext-threat-8080", Scope: "threat-assess", TargetRef: gwTargetRef, SourcePolicyLocator: "ThreatPolicy/default/tp-1"},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("FraudPolicy", "default", "fp-1"), Scope: "fraud-check"},
+		RegisteredActionEntry{ServiceName: "ext-fraud-8081", Scope: "fraud-check", TargetRef: gwTargetRef, SourcePolicyLocator: "FraudPolicy/default/fp-1"},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("ThreatPolicy", "other", "tp-2"), Scope: "threat-assess"},
+		RegisteredActionEntry{ServiceName: "ext-threat-8080", Scope: "threat-assess", TargetRef: routeTargetRef, SourcePolicyLocator: "ThreatPolicy/other/tp-2"},
+	)
+
+	// Gateway should return 2 actions
+	results := store.GetActionsByTargetRef(gwTargetRef)
+	if len(results) != 2 {
+		t.Errorf("Expected 2 actions for Gateway, got %d", len(results))
+	}
+
+	// HTTPRoute should return 1 action
+	results = store.GetActionsByTargetRef(routeTargetRef)
+	if len(results) != 1 {
+		t.Errorf("Expected 1 action for HTTPRoute, got %d", len(results))
+	}
+
+	// Non-existent target ref should return empty
+	results = store.GetActionsByTargetRef(TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "non-existent", Namespace: "default"})
+	if len(results) != 0 {
+		t.Errorf("Expected 0 actions for non-existent target, got %d", len(results))
+	}
+}
+
+func TestRegisteredDataStore_SetAction_Idempotent(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	policy := testResourceID("ThreatPolicy", "default", "tp-1")
+	key := RegisteredActionKey{Policy: policy, Scope: "threat-assess"}
+
+	store.SetAction(key, RegisteredActionEntry{
+		ServiceName:       "ext-threat-8080",
+		Scope:             "threat-assess",
+		ResponsePredicate: "service.response.threat_level < 5",
+		TargetRef:         TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw", Namespace: "default"},
+	})
+
+	// Same key, updated predicate
+	store.SetAction(key, RegisteredActionEntry{
+		ServiceName:       "ext-threat-8080",
+		Scope:             "threat-assess",
+		ResponsePredicate: "service.response.threat_level < 3",
+		TargetRef:         TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw", Namespace: "default"},
+	})
+
+	all := store.GetAllActions()
+	if len(all) != 1 {
+		t.Errorf("Expected 1 action after idempotent set, got %d", len(all))
+	}
+
+	entry, _ := store.GetAction(key)
+	if entry.ResponsePredicate != "service.response.threat_level < 3" {
+		t.Errorf("Expected updated predicate, got %s", entry.ResponsePredicate)
+	}
+}
+
+func TestRegisteredDataStore_ClearPolicyData_WithActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+
+	policy1 := testResourceID("ThreatPolicy", "default", "tp-1")
+	policy2 := testResourceID("ThreatPolicy", "default", "tp-2")
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw", Namespace: "default"}
+
+	store.SetAction(
+		RegisteredActionKey{Policy: policy1, Scope: "scope-a"},
+		RegisteredActionEntry{ServiceName: "ext-a", Scope: "scope-a", TargetRef: targetRef},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: policy1, Scope: "scope-b"},
+		RegisteredActionEntry{ServiceName: "ext-b", Scope: "scope-b", TargetRef: targetRef},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: policy2, Scope: "scope-c"},
+		RegisteredActionEntry{ServiceName: "ext-c", Scope: "scope-c", TargetRef: targetRef},
+	)
+
+	// Also register an upstream for policy1 to verify both are cleared
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc:8080"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8080", Host: "svc", Port: 8080, TargetRef: targetRef},
+	)
+
+	_, _, clearedUpstreams, clearedActions := store.ClearPolicyData(policy1)
+
+	if clearedActions != 2 {
+		t.Errorf("Expected 2 cleared actions, got %d", clearedActions)
+	}
+	if clearedUpstreams != 1 {
+		t.Errorf("Expected 1 cleared upstream, got %d", clearedUpstreams)
+	}
+
+	// policy2's action should remain
+	all := store.GetAllActions()
+	if len(all) != 1 {
+		t.Errorf("Expected 1 remaining action, got %d", len(all))
+	}
+
+	_, exists := store.GetAction(RegisteredActionKey{Policy: policy2, Scope: "scope-c"})
+	if !exists {
+		t.Error("Expected policy2 action to still exist")
+	}
+}
+
+func TestRegisteredDataStore_ActionEdgeCases(t *testing.T) {
+	t.Run("get from empty store", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		key := RegisteredActionKey{Policy: testResourceID("Policy", "ns", "name"), Scope: "scope"}
+		_, exists := store.GetAction(key)
+		if exists {
+			t.Error("Expected get to return false for non-existent action")
+		}
+	})
+
+	t.Run("delete from empty store", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		key := RegisteredActionKey{Policy: testResourceID("Policy", "ns", "name"), Scope: "scope"}
+		deleted := store.DeleteAction(key)
+		if deleted {
+			t.Error("Expected delete to return false for non-existent action")
+		}
+	})
+
+	t.Run("GetActionsByTargetRef on empty store", func(t *testing.T) {
+		store := NewRegisteredDataStore()
+		results := store.GetActionsByTargetRef(TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw", Namespace: "default"})
+		if results != nil && len(results) != 0 {
+			t.Errorf("Expected empty slice or nil, got %d entries", len(results))
+		}
+	})
+}
+
+func TestRegisteredDataStore_ActionConcurrentOperations(t *testing.T) {
+	store := NewRegisteredDataStore()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "gw", Namespace: "default"}
+
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			key := RegisteredActionKey{
+				Policy: testResourceID("Policy", "ns", fmt.Sprintf("policy-%d", index)),
+				Scope:  fmt.Sprintf("scope-%d", index),
+			}
+			entry := RegisteredActionEntry{
+				ServiceName:         fmt.Sprintf("ext-svc-%d", index),
+				Scope:               fmt.Sprintf("scope-%d", index),
+				TargetRef:           targetRef,
+				SourcePolicyLocator: fmt.Sprintf("Policy/ns/policy-%d", index),
+			}
+			store.SetAction(key, entry)
+		}(i)
+	}
+	wg.Wait()
+
+	all := store.GetAllActions()
+	if len(all) != 10 {
+		t.Errorf("Expected 10 actions, got %d", len(all))
+	}
+
+	results := store.GetActionsByTargetRef(targetRef)
+	if len(results) != 10 {
+		t.Errorf("Expected 10 actions for target ref, got %d", len(results))
+	}
+}
+
+// =============================================================================
+// Layer 2.3: WasmConfig Mutator — Action Injection Tests
+// =============================================================================
+
+func TestMutateWasmConfig_InjectsActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+
+	// Register an upstream and an action for the same gateway
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("ThreatPolicy", "default", "tp-1"), URL: "grpc://threat-svc:8080"},
+		RegisteredUpstreamEntry{ClusterName: "ext-threat-svc-8080", Host: "threat-svc", Port: 8080, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("ThreatPolicy", "default", "tp-1"), Scope: "threat-assess"},
+		RegisteredActionEntry{
+			ServiceName:         "ext-threat-svc-8080",
+			Scope:               "threat-assess",
+			Dispatch:            `threat.v1.AssessRequest{uri: request.url_path}`,
+			ResponsePredicate:   "service.response.threat_level < 5",
+			DenialResponse:      &ActionDenialResponse{StatusCode: 403, Headers: map[string]string{"X-Deny-Reason": "threat-level-exceeded"}, Body: "blocked"},
+			TargetRef:           targetRef,
+			SourcePolicyLocator: "ThreatPolicy/default/tp-1",
+			FailureMode:         "deny",
+			Timeout:             "100ms",
+		},
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services:   make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{{Name: "existing-actionset", Actions: []wasm.Action{}}},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verify service was injected (this already works from upstream registration)
+	if len(wasmConfig.Services) < 1 {
+		t.Errorf("Expected at least 1 service, got %d", len(wasmConfig.Services))
+	}
+
+	// Verify actions were injected into action sets
+	// This test will fail until mutateWasmConfig is extended to inject actions
+	foundAction := false
+	for _, actionSet := range wasmConfig.ActionSets {
+		for _, action := range actionSet.Actions {
+			if action.Dispatch != "" {
+				foundAction = true
+				if action.Dispatch != `threat.v1.AssessRequest{uri: request.url_path}` {
+					t.Errorf("Expected dispatch expression, got %s", action.Dispatch)
+				}
+				if action.ResponsePredicate != "service.response.threat_level < 5" {
+					t.Errorf("Expected response predicate, got %s", action.ResponsePredicate)
+				}
+				if action.DenialResponse == nil {
+					t.Error("Expected denial response to be set")
+				} else if action.DenialResponse.StatusCode != 403 {
+					t.Errorf("Expected status code 403, got %d", action.DenialResponse.StatusCode)
+				}
+				if len(action.SourcePolicyLocators) != 1 || action.SourcePolicyLocators[0] != "ThreatPolicy/default/tp-1" {
+					t.Errorf("Expected source policy locator, got %v", action.SourcePolicyLocators)
+				}
+			}
+		}
+	}
+	if !foundAction {
+		t.Error("Expected extension action to be injected into wasm config action sets")
+	}
+}
+
+func TestMutateWasmConfig_NoMatchingActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+
+	// Register action for a different gateway
+	otherTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "other-gw", Namespace: "other-ns"}
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("ThreatPolicy", "other-ns", "tp-1"), Scope: "threat-assess"},
+		RegisteredActionEntry{
+			ServiceName: "ext-threat-8080",
+			Scope:       "threat-assess",
+			TargetRef:   otherTargetRef,
+		},
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services:   make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{{Name: "test-actionset", Actions: []wasm.Action{}}},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// No actions should be injected for our gateway
+	for _, actionSet := range wasmConfig.ActionSets {
+		if len(actionSet.Actions) != 0 {
+			t.Errorf("Expected no actions injected for non-matching gateway, got %d", len(actionSet.Actions))
+		}
+	}
+}
+
+func TestMutateWasmConfig_TwoActionsSameUpstream(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+
+	// One upstream, two actions from different policies
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("ThreatPolicy", "default", "tp-1"), URL: "grpc://threat-svc:8080"},
+		RegisteredUpstreamEntry{ClusterName: "ext-threat-svc-8080", Host: "threat-svc", Port: 8080, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("ThreatPolicy", "default", "tp-1"), Scope: "threat-assess-1"},
+		RegisteredActionEntry{
+			ServiceName:         "ext-threat-svc-8080",
+			Scope:               "threat-assess-1",
+			Dispatch:            `threat.v1.AssessRequest{uri: request.url_path}`,
+			ResponsePredicate:   "service.response.threat_level < 5",
+			TargetRef:           targetRef,
+			SourcePolicyLocator: "ThreatPolicy/default/tp-1",
+		},
+	)
+	store.SetAction(
+		RegisteredActionKey{Policy: testResourceID("ThreatPolicy", "default", "tp-2"), Scope: "threat-assess-2"},
+		RegisteredActionEntry{
+			ServiceName:         "ext-threat-svc-8080",
+			Scope:               "threat-assess-2",
+			Dispatch:            `threat.v1.AssessRequest{uri: request.url_path}`,
+			ResponsePredicate:   "service.response.threat_level < 3",
+			TargetRef:           targetRef,
+			SourcePolicyLocator: "ThreatPolicy/default/tp-2",
+		},
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services:   make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{{Name: "test-actionset", Actions: []wasm.Action{}}},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should have 1 service entry (deduplicated)
+	if len(wasmConfig.Services) != 1 {
+		t.Errorf("Expected 1 service (deduplicated), got %d", len(wasmConfig.Services))
+	}
+
+	// Should have 2 actions injected
+	totalActions := 0
+	for _, actionSet := range wasmConfig.ActionSets {
+		for _, action := range actionSet.Actions {
+			if action.Dispatch != "" {
+				totalActions++
+			}
+		}
+	}
+	if totalActions != 2 {
+		t.Errorf("Expected 2 actions from two policies using same upstream, got %d", totalActions)
+	}
+}
+
+func TestMutateWasmConfig_UpstreamOnlyNoAction(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+
+	// Upstream registered but no action — should still have service, but no actions injected
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo-1"), URL: "grpc://svc:8080"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8080", Host: "svc", Port: 8080, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms"},
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services:   make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{{Name: "test-actionset", Actions: []wasm.Action{}}},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Service should be injected
+	if len(wasmConfig.Services) != 1 {
+		t.Errorf("Expected 1 service from upstream-only registration, got %d", len(wasmConfig.Services))
+	}
+
+	// No extension actions should be injected
+	for _, actionSet := range wasmConfig.ActionSets {
+		for _, action := range actionSet.Actions {
+			if action.Dispatch != "" {
+				t.Error("Expected no extension actions when only upstream is registered")
+			}
+		}
+	}
+}
+
+// =============================================================================
+// Layer 2.2: Error Type Tests
+// =============================================================================
+
+func TestErrServiceNotRegistered(t *testing.T) {
+	err := &ErrServiceNotRegistered{
+		ServiceName: "my-service",
+		Registered:  []string{"svc-a", "svc-b"},
+	}
+
+	msg := err.Error()
+	if msg == "" {
+		t.Fatal("Expected non-empty error message")
+	}
+
+	// Should contain the service name
+	if !containsString(msg, "my-service") {
+		t.Errorf("Expected error to contain service name, got: %s", msg)
+	}
+
+	// Should contain registered services
+	if !containsString(msg, "svc-a") || !containsString(msg, "svc-b") {
+		t.Errorf("Expected error to contain registered service names, got: %s", msg)
+	}
+}
+
+func TestErrInvalidCELExpression(t *testing.T) {
+	inner := fmt.Errorf("syntax error at position 5")
+	err := &ErrInvalidCELExpression{
+		Field:      "dispatch",
+		Expression: "invalid{{{",
+		Err:        inner,
+	}
+
+	msg := err.Error()
+	if msg == "" {
+		t.Fatal("Expected non-empty error message")
+	}
+
+	if !containsString(msg, "dispatch") {
+		t.Errorf("Expected error to contain field name, got: %s", msg)
+	}
+	if !containsString(msg, "invalid{{{") {
+		t.Errorf("Expected error to contain expression, got: %s", msg)
+	}
+
+	// Unwrap should return the inner error
+	if err.Unwrap() != inner {
+		t.Errorf("Expected Unwrap to return inner error")
+	}
+}
+
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && stringContains(s, substr))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMutateWasmConfig_DeduplicatesIdenticalUpstreams(t *testing.T) {

@@ -449,11 +449,11 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		Name:      request.Policy.Metadata.Name,
 	}
 
-	clearedMutators, clearedSubscriptions, clearedUpstreams := s.registeredData.ClearPolicyData(policyID)
+	clearedMutators, clearedSubscriptions, clearedUpstreams, clearedActions := s.registeredData.ClearPolicyData(policyID)
 
-	// Trigger notifier when mutators or upstreams are cleared
-	if (clearedMutators > 0 || clearedUpstreams > 0) && s.changeNotifier != nil {
-		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, clearedMutators, clearedUpstreams)
+	// Trigger notifier when mutators, upstreams, or actions are cleared
+	if (clearedMutators > 0 || clearedUpstreams > 0 || clearedActions > 0) && s.changeNotifier != nil {
+		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d, actions: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, clearedMutators, clearedUpstreams, clearedActions)
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}

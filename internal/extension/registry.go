@@ -197,6 +197,56 @@ type TargetRef struct {
 	Namespace string
 }
 
+type RegisteredActionKey struct {
+	Policy ResourceID
+	Scope  string
+}
+
+type RegisteredActionEntry struct {
+	ServiceName         string
+	Scope               string
+	Dispatch            string
+	ResponsePredicate   string
+	DenialResponse      *ActionDenialResponse
+	TargetRef           TargetRef
+	SourcePolicyLocator string
+	FailureMode         string
+	Timeout             string
+}
+
+type ActionDenialResponse struct {
+	StatusCode uint32
+	Headers    map[string]string
+	Body       string
+}
+
+// ErrServiceNotRegistered is returned when RegisterAction references an upstream
+// that has not been registered via RegisterUpstreamMethod.
+type ErrServiceNotRegistered struct {
+	ServiceName string
+	Registered  []string
+}
+
+func (e *ErrServiceNotRegistered) Error() string {
+	return fmt.Sprintf("service %q not registered; registered services: %v", e.ServiceName, e.Registered)
+}
+
+// ErrInvalidCELExpression is returned when a CEL expression in RegisterAction
+// fails to parse or type-check.
+type ErrInvalidCELExpression struct {
+	Field      string
+	Expression string
+	Err        error
+}
+
+func (e *ErrInvalidCELExpression) Error() string {
+	return fmt.Sprintf("invalid CEL expression in field %q: %s (expression: %s)", e.Field, e.Err, e.Expression)
+}
+
+func (e *ErrInvalidCELExpression) Unwrap() error {
+	return e.Err
+}
+
 type RegisteredDataStore struct {
 	dataProviders map[DataProviderKey]DataProviderEntry
 	dataMutex     sync.RWMutex
@@ -206,6 +256,9 @@ type RegisteredDataStore struct {
 
 	registeredUpstreams map[RegisteredUpstreamKey]RegisteredUpstreamEntry
 	upstreamsMutex      sync.RWMutex
+
+	registeredActions map[RegisteredActionKey]RegisteredActionEntry
+	actionsMutex      sync.RWMutex
 }
 
 func NewRegisteredDataStore() *RegisteredDataStore {
@@ -213,6 +266,7 @@ func NewRegisteredDataStore() *RegisteredDataStore {
 		dataProviders:       make(map[DataProviderKey]DataProviderEntry),
 		subscriptions:       make(map[SubscriptionKey]Subscription),
 		registeredUpstreams: make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry),
+		registeredActions:   make(map[RegisteredActionKey]RegisteredActionEntry),
 	}
 }
 
@@ -426,13 +480,58 @@ func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 	return existed
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
+func (r *RegisteredDataStore) SetAction(key RegisteredActionKey, entry RegisteredActionEntry) {
+	r.actionsMutex.Lock()
+	defer r.actionsMutex.Unlock()
+	r.registeredActions[key] = entry
+}
+
+func (r *RegisteredDataStore) GetAction(key RegisteredActionKey) (RegisteredActionEntry, bool) {
+	r.actionsMutex.RLock()
+	defer r.actionsMutex.RUnlock()
+	entry, exists := r.registeredActions[key]
+	return entry, exists
+}
+
+func (r *RegisteredDataStore) GetAllActions() map[RegisteredActionKey]RegisteredActionEntry {
+	r.actionsMutex.RLock()
+	defer r.actionsMutex.RUnlock()
+	result := make(map[RegisteredActionKey]RegisteredActionEntry, len(r.registeredActions))
+	maps.Copy(result, r.registeredActions)
+	return result
+}
+
+func (r *RegisteredDataStore) GetActionsByTargetRef(targetRef TargetRef) []RegisteredActionEntry {
+	r.actionsMutex.RLock()
+	defer r.actionsMutex.RUnlock()
+	var result []RegisteredActionEntry
+	for _, entry := range r.registeredActions {
+		if entry.TargetRef == targetRef {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func (r *RegisteredDataStore) DeleteAction(key RegisteredActionKey) bool {
+	r.actionsMutex.Lock()
+	defer r.actionsMutex.Unlock()
+	_, existed := r.registeredActions[key]
+	if existed {
+		delete(r.registeredActions, key)
+	}
+	return existed
+}
+
+func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int, clearedActions int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	r.upstreamsMutex.Lock()
+	r.actionsMutex.Lock()
 	defer r.dataMutex.Unlock()
 	defer r.subsMutex.Unlock()
 	defer r.upstreamsMutex.Unlock()
+	defer r.actionsMutex.Unlock()
 
 	// clear data providers
 	for key := range r.dataProviders {
@@ -458,7 +557,15 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 		}
 	}
 
-	return clearedMutators, clearedSubscriptions, clearedUpstreams
+	// clear registered actions
+	for key := range r.registeredActions {
+		if key.Policy == policy {
+			delete(r.registeredActions, key)
+			clearedActions++
+		}
+	}
+
+	return clearedMutators, clearedSubscriptions, clearedUpstreams, clearedActions
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {

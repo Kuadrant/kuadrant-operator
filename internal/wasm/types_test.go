@@ -549,3 +549,1415 @@ func TestActionEqualTo_LegacyUnchanged(t *testing.T) {
 		t.Fatal("legacy actions without new fields should be equal")
 	}
 }
+
+func TestConditionalData_EqualTo(t *testing.T) {
+	testCases := []struct {
+		name     string
+		cd1      ConditionalData
+		cd2      ConditionalData
+		expected bool
+	}{
+		{
+			name: "equal conditional data - same predicates and data",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "empty conditional data - both empty",
+			cd1:      ConditionalData{},
+			cd2:      ConditionalData{},
+			expected: true,
+		},
+		{
+			name: "different predicates - different values",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '192.168.1.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different data - different values",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "2",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different number of predicates",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different number of data items",
+			cd1: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.user__abc123",
+								Value: "5",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "same predicates but different order - should not be equal",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"request.method == 'GET'",
+					"source.address != '127.0.0.1'",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "multiple predicates and data - all equal",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.user",
+								Value: "auth.identity.user",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.user",
+								Value: "auth.identity.user",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "only predicates, no data - equal",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "only data, no predicates - equal",
+			cd1: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "one has predicates, other doesn't",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+			},
+			cd2:      ConditionalData{},
+			expected: false,
+		},
+		{
+			name: "one has data, other doesn't",
+			cd1: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global__f63bec56",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			cd2:      ConditionalData{},
+			expected: false,
+		},
+		{
+			name: "empty predicates slice vs nil predicates - not equal with reflect.DeepEqual",
+			cd1: ConditionalData{
+				Predicates: []string{},
+			},
+			cd2:      ConditionalData{},
+			expected: false,
+		},
+		{
+			name: "empty data slice vs nil data",
+			cd1: ConditionalData{
+				Data: []DataType{},
+			},
+			cd2:      ConditionalData{},
+			expected: true,
+		},
+		{
+			name: "complex predicates with CEL expressions",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.headers['user-agent'].startsWith('Mozilla')",
+					"auth.identity.user != ''",
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.headers['user-agent'].startsWith('Mozilla')",
+					"auth.identity.user != ''",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "different data types in data slice",
+			cd1: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global",
+								Value: "1",
+							},
+						},
+					},
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.user",
+								Value: "auth.identity.user",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global",
+								Value: "1",
+							},
+						},
+					},
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.user",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "same data different order - ordering matters",
+			cd1: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global",
+								Value: "1",
+							},
+						},
+					},
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.user",
+								Value: "5",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Data: []DataType{
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.user",
+								Value: "5",
+							},
+						},
+					},
+					{
+						Value: &Static{
+							Static: StaticSpec{
+								Key:   "limit.global",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "single predicate with special characters",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"request.headers['X-Custom-Header'] == 'value-with-dashes'",
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"request.headers['X-Custom-Header'] == 'value-with-dashes'",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "multiple data with expressions",
+			cd1: ConditionalData{
+				Predicates: []string{
+					"auth.identity.user != ''",
+				},
+				Data: []DataType{
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.user",
+								Value: "auth.identity.user",
+							},
+						},
+					},
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.group",
+								Value: "auth.identity.group",
+							},
+						},
+					},
+				},
+			},
+			cd2: ConditionalData{
+				Predicates: []string{
+					"auth.identity.user != ''",
+				},
+				Data: []DataType{
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.user",
+								Value: "auth.identity.user",
+							},
+						},
+					},
+					{
+						Value: &Expression{
+							ExpressionItem: ExpressionItem{
+								Key:   "limit.group",
+								Value: "auth.identity.group",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.cd1.EqualTo(tc.cd2)
+			if result != tc.expected {
+				diff := cmp.Diff(tc.cd1, tc.cd2)
+				subT.Fatalf("unexpected ConditionalData equality result. Expected %v, got %v. Diff (-want +got):\n%s", tc.expected, result, diff)
+			}
+		})
+	}
+}
+
+func TestDataType_EqualTo(t *testing.T) {
+	testCases := []struct {
+		name     string
+		dt1      DataType
+		dt2      DataType
+		expected bool
+	}{
+		{
+			name: "equal static data types - same key and value",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "different static data types - different value",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "2",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different static data types - different key",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__different",
+						Value: "1",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different static data types - different key and value",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__different",
+						Value: "2",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "equal expression data types - same key and expression",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "different expression data types - different expression value",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.group",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different expression data types - different key",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__different",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different expression data types - different key and expression",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__different",
+						Value: "auth.identity.group",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "static vs expression - should not be equal",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "expression vs static - should not be equal",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "1",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "static with empty key - equal",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "",
+						Value: "1",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "static with empty value - equal",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global__f63bec56",
+						Value: "",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "static with empty key and value - equal",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "",
+						Value: "",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "",
+						Value: "",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "expression with empty key - equal",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "",
+						Value: "auth.identity.user",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "expression with empty expression value - equal",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.global__f63bec56",
+						Value: "",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "expression with empty key and value - equal",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "",
+						Value: "",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "",
+						Value: "",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "static with special characters in key",
+			dt1: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global/special:key_with-chars",
+						Value: "1",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Static{
+					Static: StaticSpec{
+						Key:   "limit.global/special:key_with-chars",
+						Value: "1",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "expression with complex CEL expression",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.user",
+						Value: "auth.identity.user != '' ? auth.identity.user : 'anonymous'",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.user",
+						Value: "auth.identity.user != '' ? auth.identity.user : 'anonymous'",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "different complex CEL expressions",
+			dt1: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.user",
+						Value: "auth.identity.user != '' ? auth.identity.user : 'anonymous'",
+					},
+				},
+			},
+			dt2: DataType{
+				Value: &Expression{
+					ExpressionItem: ExpressionItem{
+						Key:   "limit.user",
+						Value: "auth.identity.user != '' ? auth.identity.user : 'guest'",
+					},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.dt1.EqualTo(tc.dt2)
+			if result != tc.expected {
+				diff := cmp.Diff(tc.dt1, tc.dt2)
+				subT.Fatalf("unexpected DataType equality result. Expected %v, got %v. Diff (-want +got):\n%s", tc.expected, result, diff)
+			}
+		})
+	}
+}
+
+func TestAction_EqualTo(t *testing.T) {
+	testCases := []struct {
+		name     string
+		action1  Action
+		action2  Action
+		expected bool
+	}{
+		{
+			name: "equal actions - identical",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				ConditionalData: []ConditionalData{
+					{
+						Predicates: []string{
+							"request.method == 'GET'",
+						},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+				},
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/my-policy",
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+				ConditionalData: []ConditionalData{
+					{
+						Predicates: []string{
+							"request.method == 'GET'",
+						},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+				},
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/my-policy",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "different scope",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/different",
+			},
+			expected: false,
+		},
+		{
+			name: "different service name",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			action2: Action{
+				ServiceName: "auth-service",
+				Scope:       "default/other",
+			},
+			expected: false,
+		},
+		{
+			name: "same predicates different order - should NOT be equal (order matters)",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.method == 'GET'",
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates: []string{
+					"request.method == 'GET'",
+					"source.address != '127.0.0.1'",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "same source policy locators different order - should NOT be equal (order matters)",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/policy1",
+					"RateLimitPolicy/default/policy2",
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/policy2",
+					"RateLimitPolicy/default/policy1",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "same conditional data different order - SHOULD be equal (order doesn't matter)",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Predicates: []string{"request.method == 'GET'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+					{
+						Predicates: []string{"request.method == 'POST'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.user",
+										Value: "5",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Predicates: []string{"request.method == 'POST'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.user",
+										Value: "5",
+									},
+								},
+							},
+						},
+					},
+					{
+						Predicates: []string{"request.method == 'GET'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "different conditional data - different values",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "2",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "different number of conditional data items",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+					{
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.user",
+										Value: "5",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "empty actions - both empty",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			expected: true,
+		},
+		{
+			name: "complex action with multiple conditional data - different order but equal",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/complex",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.headers['user-agent'] != ''",
+				},
+				ConditionalData: []ConditionalData{
+					{
+						Predicates: []string{"auth.identity.user != ''"},
+						Data: []DataType{
+							{
+								Value: &Expression{
+									ExpressionItem: ExpressionItem{
+										Key:   "limit.user",
+										Value: "auth.identity.user",
+									},
+								},
+							},
+						},
+					},
+					{
+						Predicates: []string{"request.method == 'GET'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "100",
+									},
+								},
+							},
+						},
+					},
+					{
+						Predicates: []string{"request.method == 'POST'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "50",
+									},
+								},
+							},
+						},
+					},
+				},
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/gateway-policy",
+					"RateLimitPolicy/default/route-policy",
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/complex",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+					"request.headers['user-agent'] != ''",
+				},
+				ConditionalData: []ConditionalData{
+					{
+						Predicates: []string{"request.method == 'POST'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "50",
+									},
+								},
+							},
+						},
+					},
+					{
+						Predicates: []string{"auth.identity.user != ''"},
+						Data: []DataType{
+							{
+								Value: &Expression{
+									ExpressionItem: ExpressionItem{
+										Key:   "limit.user",
+										Value: "auth.identity.user",
+									},
+								},
+							},
+						},
+					},
+					{
+						Predicates: []string{"request.method == 'GET'"},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "100",
+									},
+								},
+							},
+						},
+					},
+				},
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/gateway-policy",
+					"RateLimitPolicy/default/route-policy",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "one has predicates, other doesn't",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates: []string{
+					"source.address != '127.0.0.1'",
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			expected: false,
+		},
+		{
+			name: "one has source policy locators, other doesn't",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				SourcePolicyLocators: []string{
+					"RateLimitPolicy/default/my-policy",
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			expected: false,
+		},
+		{
+			name: "one has conditional data, other doesn't",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				ConditionalData: []ConditionalData{
+					{
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.global",
+										Value: "1",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+			},
+			expected: false,
+		},
+		{
+			name: "nil vs empty predicates slice",
+			action1: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates:  nil,
+			},
+			action2: Action{
+				ServiceName: "ratelimit-service",
+				Scope:       "default/other",
+				Predicates:  []string{},
+			},
+			expected: false,
+		},
+		{
+			name: "nil vs empty source policy locators - slices.Equal treats as equal",
+			action1: Action{
+				ServiceName:          "ratelimit-service",
+				Scope:                "default/other",
+				SourcePolicyLocators: nil,
+			},
+			action2: Action{
+				ServiceName:          "ratelimit-service",
+				Scope:                "default/other",
+				SourcePolicyLocators: []string{},
+			},
+			expected: true, // slices.Equal treats nil and empty slice as equal
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			result := tc.action1.EqualTo(tc.action2)
+			if result != tc.expected {
+				diff := cmp.Diff(tc.action1, tc.action2)
+				subT.Fatalf("unexpected Action equality result. Expected %v, got %v. Diff (-want +got):\n%s", tc.expected, result, diff)
+			}
+		})
+	}
+}

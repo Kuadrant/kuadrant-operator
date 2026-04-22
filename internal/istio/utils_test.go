@@ -211,6 +211,283 @@ func TestEqualEnvoyFilters(t *testing.T) {
 	})
 }
 
+func TestEqualTargetRefs(t *testing.T) {
+
+	t.Run("equal target refs", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, EqualTargetRefs(a, b))
+	})
+
+	t.Run("empty slices are equal", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{}
+		b := []*istiov1beta1.PolicyTargetReference{}
+		assert.Assert(subT, EqualTargetRefs(a, b))
+	})
+
+	t.Run("nil slices are equal", func(subT *testing.T) {
+		var a []*istiov1beta1.PolicyTargetReference
+		var b []*istiov1beta1.PolicyTargetReference
+		assert.Assert(subT, EqualTargetRefs(a, b))
+	})
+
+	t.Run("different lengths", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw2",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+
+	t.Run("different group", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     "different.group",
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+
+	t.Run("different kind", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "HTTPRoute",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+
+	t.Run("different name", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw2",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+
+	t.Run("different namespace", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns2",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+
+	t.Run("order independent - same refs different order", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw2",
+				Namespace: "ns2",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw2",
+				Namespace: "ns2",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, EqualTargetRefs(a, b))
+	})
+
+	t.Run("multiple refs with one different", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw2",
+				Namespace: "ns2",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw3",
+				Namespace: "ns2",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+
+	t.Run("duplicate refs in both slices", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, EqualTargetRefs(a, b))
+	})
+
+	t.Run("empty string fields", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     "",
+				Kind:      "",
+				Name:      "",
+				Namespace: "",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     "",
+				Kind:      "",
+				Name:      "",
+				Namespace: "",
+			},
+		}
+		assert.Assert(subT, EqualTargetRefs(a, b))
+	})
+
+	t.Run("empty vs non-empty string fields", func(subT *testing.T) {
+		a := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     "",
+				Kind:      "",
+				Name:      "",
+				Namespace: "",
+			},
+		}
+		b := []*istiov1beta1.PolicyTargetReference{
+			{
+				Group:     gwapiv1.SchemeGroupVersion.Group,
+				Kind:      "Gateway",
+				Name:      "gw1",
+				Namespace: "ns1",
+			},
+		}
+		assert.Assert(subT, !EqualTargetRefs(a, b))
+	})
+}
+
 func TestLinkKuadrantToPeerAuthentication(t *testing.T) {
 	t.Run("empty store", func(subT *testing.T) {
 		link := LinkKuadrantToPeerAuthentication(controller.Store{})

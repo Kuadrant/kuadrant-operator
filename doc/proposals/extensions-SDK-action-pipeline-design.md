@@ -229,7 +229,7 @@ Two `ThreatPolicy` instances targeting the same Gateway both register `"checkThr
 
 #### New ActionType Field
 
-The wasm service definition gains a `messageTemplate` field — a JSON object where keys are proto field names and values are CEL expressions. The wasm-shim evaluates these expressions against the request context at request time to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
+The wasm service definition gains a `messageTemplate` field — a JSON string where keys are proto field names and values are CEL expressions. The operator passes this string through to the wasm config as-is (after validation). The wasm-shim parses the JSON, evaluates the CEL expressions against the request context at request time, and uses the results to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
 
 The wasm `Action` struct (`internal/wasm/types.go`) gains an explicit `ActionType` discriminator field. The wasm-shim dispatches based on the `ActionType` value, not by inspecting which fields are present (duck-typing). New fields are added for pipeline actions:
 
@@ -253,10 +253,7 @@ services:
     timeout: 100ms
     grpcService: "threat.ThreatService"
     grpcMethod: "CheckThreatLevel"
-    messageTemplate:
-      uri: "request.path"
-      is_authenticated: "has(auth.identity)"
-      source_ip: "source.address"
+    messageTemplate: '{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}'
 
 actionSets:
   - name: "abc123-hash"
@@ -299,11 +296,11 @@ The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim co
 
 In the Extension Author Usage example, `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}` instructs the wasm-shim to populate the `uri`, `is_authenticated`, and `source_ip` fields of the `CheckThreatLevel` request message using the corresponding CEL expressions. Proto fields omitted from the template retain their protobuf default values.
 
-**Operator (registration time):** The operator parses the JSON and validates each value as a syntactically correct CEL expression. If Phase 2 ProtoCache has the method's input message descriptor available, the operator also validates that the template keys correspond to valid fields on the input message type. The validated template is stored in the `ActionMethodStore` alongside the method's service, cluster, and connection details.
+**Operator (registration time):** The operator parses the JSON and validates each value as a syntactically correct CEL expression. If Phase 2 ProtoCache has the method's input message descriptor available, the operator also validates that the template keys correspond to valid fields on the input message type. The validated template string is stored in the `ActionMethodStore` alongside the method's service, cluster, and connection details.
 
-**Operator (reconciliation):** The reconciler includes the message template in the wasm service configuration, so the wasm-shim has access to it without a back-channel to the operator.
+**Operator (reconciliation):** The reconciler passes the message template string through to the wasm service configuration as-is. The template is opaque to the wasm config layer — the operator has already validated it at registration time, so no further parsing or transformation is needed. This keeps the config serialization simple and means changes to the template format only require updates to the SDK and wasm-shim, not the operator reconciler.
 
-**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim looks up the referenced service's `messageTemplate`, evaluates each CEL value against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the evaluated values and the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
+**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim parses the `messageTemplate` JSON string, evaluates each CEL value against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the evaluated values and the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
 
 ### Component Changes
 
@@ -474,6 +471,12 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 ### Completed
 
 ## Change Log
+
+### 2026-04-22 — messageTemplate passed through as opaque string
+
+- Changed `messageTemplate` in wasm config from a structured map (field → CEL pairs) to an opaque JSON string passed through from the SDK
+- Operator validates the template at registration time but does not decompose it for the wasm config — the wasm-shim parses it at request time
+- Rationale: fewer transformations between SDK and wasm-shim, simpler config serialization, and template format changes only affect SDK + wasm-shim (not operator reconciler)
 
 ### 2026-04-16 — OnRequest/OnResponse accept multiple actions
 

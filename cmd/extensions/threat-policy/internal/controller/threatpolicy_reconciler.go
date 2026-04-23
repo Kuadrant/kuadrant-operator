@@ -19,7 +19,7 @@ import (
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=threatpolicies/finalizers,verbs=update
 
-const threatServiceURL = "grpc://threat-assessment-service.security.svc.cluster.local:8080"
+const threatServiceURL = "grpc://threat-service.security.svc.cluster.local:8080"
 
 type ThreatPolicyReconciler struct {
 	types.ExtensionBase
@@ -70,18 +70,16 @@ func (r *ThreatPolicyReconciler) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.ThreatPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.ThreatPolicyStatus, error) {
-	r.Logger.Info("registering upstream", "url", threatServiceURL)
+	r.Logger.Info("registering action method", "url", threatServiceURL)
 
-	if err := kuadrantCtx.RegisterUpstreamMethod(ctx, pol, types.UpstreamConfig{
-		URL:     threatServiceURL,
-		Service: "threat.v1.ThreatAssessmentService",
-		Method:  "AssessRequest",
+	if err := kuadrantCtx.RegisterActionMethod(ctx, pol, types.ActionMethodConfig{
+		URL: threatServiceURL,
 	}); err != nil {
-		r.Logger.Error(err, "failed to register upstream")
+		r.Logger.Error(err, "failed to register action method")
 		return calculateErrorStatus(pol, err), err
 	}
 
-	r.Logger.Info("upstream registered successfully", "url", threatServiceURL)
+	r.Logger.Info("action method registered successfully", "url", threatServiceURL)
 	// TODO: Next step - call Extension SDK API to define the gRPC call and response handling
 	// Will use pol.Spec.Threshold to build the callback CEL expression
 	return calculateEnforcedStatus(pol, nil), nil

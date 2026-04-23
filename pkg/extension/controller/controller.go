@@ -309,14 +309,14 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 	return err
 }
 
-// RegisterUpstreamMethod registers an external gRPC service with the operator
+// RegisterActionMethod registers an external gRPC service with the operator
 // so that it becomes available to the data plane. The operator performs a
 // reachability check and, if successful, creates the necessary Envoy cluster
 // and wasm service entries.
-func (ec *ExtensionController) RegisterUpstreamMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.UpstreamConfig) error {
+func (ec *ExtensionController) RegisterActionMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.ActionMethodConfig) error {
 	pbPolicy := convertPolicyToProtobuf(policy)
 
-	_, err := ec.extensionClient.client.RegisterUpstreamMethod(ctx, &extpb.RegisterUpstreamMethodRequest{
+	_, err := ec.extensionClient.client.RegisterActionMethod(ctx, &extpb.RegisterActionMethodRequest{
 		Policy:  pbPolicy,
 		Url:     svc.URL,
 		Service: svc.Service,

@@ -448,8 +448,8 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 ### Todo
 
-- [ ] [Rename `RegisterUpstreamMethod` to `RegisterActionMethod`](https://github.com/Kuadrant/kuadrant-operator/issues/1899)
-  - [ ] Unit tests
+- [x] [Rename `RegisterUpstreamMethod` to `RegisterActionMethod`](https://github.com/Kuadrant/kuadrant-operator/issues/1899)
+  - [x] Unit tests
 - [ ] [Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields](https://github.com/Kuadrant/kuadrant-operator/issues/1900)
   - [ ] Unit tests
 - [ ] [Define action types and `Pipeline` interface](https://github.com/Kuadrant/kuadrant-operator/issues/1901)

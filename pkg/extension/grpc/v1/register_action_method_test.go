@@ -22,7 +22,7 @@ import (
 	"testing"
 )
 
-func TestRegisterUpstreamMethodRequest_FieldAccessors(t *testing.T) {
+func TestRegisterActionMethodRequest_FieldAccessors(t *testing.T) {
 	policy := &Policy{
 		Metadata: &Metadata{
 			Kind:      "MyPolicy",
@@ -31,7 +31,7 @@ func TestRegisterUpstreamMethodRequest_FieldAccessors(t *testing.T) {
 		},
 	}
 
-	req := &RegisterUpstreamMethodRequest{
+	req := &RegisterActionMethodRequest{
 		Policy:  policy,
 		Url:     "grpc://my-service.my-ns.svc.cluster.local:8081",
 		Service: "envoy.service.auth.v3.Authorization",
@@ -52,8 +52,8 @@ func TestRegisterUpstreamMethodRequest_FieldAccessors(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethodRequest_NilSafeGetters(t *testing.T) {
-	var req *RegisterUpstreamMethodRequest
+func TestRegisterActionMethodRequest_NilSafeGetters(t *testing.T) {
+	var req *RegisterActionMethodRequest
 
 	if req.GetPolicy() != nil {
 		t.Errorf("GetPolicy() on nil receiver should return nil")
@@ -69,8 +69,8 @@ func TestRegisterUpstreamMethodRequest_NilSafeGetters(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethodRequest_ZeroValues(t *testing.T) {
-	req := &RegisterUpstreamMethodRequest{}
+func TestRegisterActionMethodRequest_ZeroValues(t *testing.T) {
+	req := &RegisterActionMethodRequest{}
 
 	if req.GetPolicy() != nil {
 		t.Errorf("GetPolicy() on zero-value request should return nil")
@@ -86,9 +86,9 @@ func TestRegisterUpstreamMethodRequest_ZeroValues(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_FullMethodName(t *testing.T) {
-	expected := "/kuadrant.v1.ExtensionService/RegisterUpstreamMethod"
-	if ExtensionService_RegisterUpstreamMethod_FullMethodName != expected {
-		t.Errorf("FullMethodName = %q, want %q", ExtensionService_RegisterUpstreamMethod_FullMethodName, expected)
+func TestRegisterActionMethod_FullMethodName(t *testing.T) {
+	expected := "/kuadrant.v1.ExtensionService/RegisterActionMethod"
+	if ExtensionService_RegisterActionMethod_FullMethodName != expected {
+		t.Errorf("FullMethodName = %q, want %q", ExtensionService_RegisterActionMethod_FullMethodName, expected)
 	}
 }

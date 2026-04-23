@@ -582,7 +582,7 @@ func generateClusterName(host string, port int) string {
 	return clusterName
 }
 
-func (s *extensionService) RegisterUpstreamMethod(ctx context.Context, request *extpb.RegisterUpstreamMethodRequest) (*emptypb.Empty, error) {
+func (s *extensionService) RegisterActionMethod(ctx context.Context, request *extpb.RegisterActionMethodRequest) (*emptypb.Empty, error) {
 	if request == nil {
 		return nil, errors.New("request cannot be nil")
 	}

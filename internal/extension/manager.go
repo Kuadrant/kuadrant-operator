@@ -595,6 +595,9 @@ func (s *extensionService) RegisterActionMethod(ctx context.Context, request *ex
 	if request.Policy.Metadata.Kind == "" || request.Policy.Metadata.Namespace == "" || request.Policy.Metadata.Name == "" {
 		return nil, errors.New("policy kind, namespace, and name must be specified")
 	}
+	if strings.TrimSpace(request.Name) == "" {
+		return nil, errors.New("name must be specified")
+	}
 	if request.Url == "" {
 		return nil, errors.New("url must be specified")
 	}
@@ -631,20 +634,36 @@ func (s *extensionService) RegisterActionMethod(ctx context.Context, request *ex
 
 	clusterName := generateClusterName(host, port)
 
-	// Fetch service descriptors via reflection and validate method exists
-	fds, err := s.reflectionFetcher(ctx, parsed.Host, request.Service, request.Method)
-	if err != nil {
-		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch and validate service %s method %s: %v", request.Service, request.Method, err)
-	}
-
 	policyID := ResourceID{
 		Kind:      request.Policy.Metadata.Kind,
 		Namespace: request.Policy.Metadata.Namespace,
 		Name:      request.Policy.Metadata.Name,
 	}
 
+	key := RegisteredUpstreamKey{
+		Policy:  policyID,
+		Name:    request.Name,
+		URL:     request.Url,
+		Service: request.Service,
+		Method:  request.Method,
+	}
+
+	// Fast-path rejection: avoid the expensive reflection call when the name is already taken
+	if s.registeredData.IsUpstreamNameTaken(key) {
+		return nil, grpcstatus.Errorf(codes.AlreadyExists, "action method name %q is already registered for policy %s/%s", request.Name, policyID.Namespace, policyID.Name)
+	}
+
+	// Fetch service descriptors via reflection and validate method exists
+	fds, err := s.reflectionFetcher(ctx, parsed.Host, request.Service, request.Method)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "failed to fetch and validate service %s method %s: %v", request.Service, request.Method, err)
+	}
+
 	// Use the first target ref from the policy
 	pbTargetRef := request.Policy.TargetRefs[0]
+	if pbTargetRef == nil {
+		return nil, errors.New("first target reference in policy is nil")
+	}
 	targetRef := TargetRef{
 		Group:     pbTargetRef.Group,
 		Kind:      pbTargetRef.Kind,
@@ -652,27 +671,26 @@ func (s *extensionService) RegisterActionMethod(ctx context.Context, request *ex
 		Namespace: pbTargetRef.Namespace,
 	}
 
-	key := RegisteredUpstreamKey{
-		Policy:  policyID,
-		URL:     request.Url,
-		Service: request.Service,
-		Method:  request.Method,
-	}
 	entry := RegisteredUpstreamEntry{
-		ClusterName: clusterName,
-		Host:        host,
-		Port:        port,
-		TargetRef:   targetRef,
-		Service:     request.Service,
-		Method:      request.Method,
-		FailureMode: string(wasm.FailureModeDeny),
-		Timeout:     "100ms",
+		ClusterName:     clusterName,
+		Host:            host,
+		Port:            port,
+		TargetRef:       targetRef,
+		Service:         request.Service,
+		Method:          request.Method,
+		FailureMode:     string(wasm.FailureModeDeny),
+		Timeout:         "100ms",
+		MessageTemplate: request.MessageTemplate,
 	}
 
-	s.registeredData.SetUpstream(key, entry, fds)
+	// Atomically check name uniqueness and store the upstream
+	if !s.registeredData.SetUpstreamIfNameAvailable(key, entry, fds) {
+		return nil, grpcstatus.Errorf(codes.AlreadyExists, "action method name %q is already registered for policy %s/%s", request.Name, policyID.Namespace, policyID.Name)
+	}
 
-	s.logger.Info("registered upstream",
+	s.logger.Info("registered action method",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
+		"name", request.Name,
 		"url", request.Url,
 		"service", request.Service,
 		"method", request.Method,
@@ -680,7 +698,7 @@ func (s *extensionService) RegisterActionMethod(ctx context.Context, request *ex
 
 	// Trigger reconciliation
 	if s.changeNotifier != nil {
-		reason := fmt.Sprintf("upstream registered for policy %s/%s: %s", policyID.Namespace, policyID.Name, request.Url)
+		reason := fmt.Sprintf("action method %q registered for policy %s/%s: %s", request.Name, policyID.Namespace, policyID.Name, request.Url)
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}

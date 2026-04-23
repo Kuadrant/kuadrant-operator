@@ -317,10 +317,12 @@ func (ec *ExtensionController) RegisterActionMethod(ctx context.Context, policy 
 	pbPolicy := convertPolicyToProtobuf(policy)
 
 	_, err := ec.extensionClient.client.RegisterActionMethod(ctx, &extpb.RegisterActionMethodRequest{
-		Policy:  pbPolicy,
-		Url:     svc.URL,
-		Service: svc.Service,
-		Method:  svc.Method,
+		Policy:          pbPolicy,
+		Name:            svc.Name,
+		Url:             svc.URL,
+		Service:         svc.Service,
+		Method:          svc.Method,
+		MessageTemplate: svc.MessageTemplate,
 	})
 	if err != nil {
 		if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {

@@ -69,7 +69,7 @@ if err := pipeline.OnRequest(ctx, GRPCMethodAction{...}, AllowAction{...}); err 
 Extension Controller                    Operator (gRPC server)
    │                                       │
    │── RegisterActionMethod ──────────────►│── Validate name uniqueness (per-policy)
-   │   (policy, ActionMethodConfig)        │── Validate CEL message template
+   │   (policy, ActionMethodConfig)        │── Store message template (opaque)
    │                                       │── Store in ActionMethodStore
    │                                       │── Trigger reconciliation
    │◄── nil / error ───────────────────────│
@@ -111,7 +111,7 @@ type ActionMethodConfig struct {
     URL             string // e.g. "grpc://threat-service:8080"
     Service         string // gRPC service name, e.g. "threat.ThreatService"
     Method          string // gRPC method name, e.g. "CheckThreatLevel"
-    MessageTemplate string // CEL/JSON template for building the request message
+    MessageTemplate string // Opaque template string for building the request message
 }
 ```
 
@@ -229,7 +229,7 @@ Two `ThreatPolicy` instances targeting the same Gateway both register `"checkThr
 
 #### New ActionType Field
 
-The wasm service definition gains a `messageTemplate` field — a JSON object where keys are proto field names and values are CEL expressions. The wasm-shim evaluates these expressions against the request context at request time to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
+The wasm service definition gains a `messageTemplate` field — an opaque string passed through from the operator to the wasm-shim. The operator does not parse or validate this field; interpretation is owned by the wasm-shim. The wasm-shim evaluates this template against the request context at request time to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
 
 The wasm `Action` struct (`internal/wasm/types.go`) gains an explicit `ActionType` discriminator field. The wasm-shim dispatches based on the `ActionType` value, not by inspecting which fields are present (duck-typing). New fields are added for pipeline actions:
 
@@ -253,10 +253,7 @@ services:
     timeout: 100ms
     grpcService: "threat.ThreatService"
     grpcMethod: "CheckThreatLevel"
-    messageTemplate:
-      uri: "request.path"
-      is_authenticated: "has(auth.identity)"
-      source_ip: "source.address"
+    messageTemplate: "CheckThreatLevelRequest { uri: request.path, is_authenticated: has(auth.identity), source_ip: source.address }"
 
 actionSets:
   - name: "abc123-hash"
@@ -295,15 +292,13 @@ This catches typos and schema mismatches at reconcile time rather than at reques
 
 ### Message Template Processing
 
-The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim constructs the gRPC request message at request time. The template is a JSON object where keys are proto field names and values are CEL expressions evaluated against the request context.
+The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim constructs the gRPC request message at request time. The operator treats this as an opaque string — interpretation is owned by the wasm-shim.
 
-In the Extension Author Usage example, `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}` instructs the wasm-shim to populate the `uri`, `is_authenticated`, and `source_ip` fields of the `CheckThreatLevel` request message using the corresponding CEL expressions. Proto fields omitted from the template retain their protobuf default values.
-
-**Operator (registration time):** The operator parses the JSON and validates each value as a syntactically correct CEL expression. If Phase 2 ProtoCache has the method's input message descriptor available, the operator also validates that the template keys correspond to valid fields on the input message type. The validated template is stored in the `ActionMethodStore` alongside the method's service, cluster, and connection details.
+**Operator (registration time):** The operator stores the `MessageTemplate` as an opaque string alongside the method's service, cluster, and connection details. No parsing or validation of the template content is performed — interpretation is owned by the wasm-shim.
 
 **Operator (reconciliation):** The reconciler includes the message template in the wasm service configuration, so the wasm-shim has access to it without a back-channel to the operator.
 
-**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim looks up the referenced service's `messageTemplate`, evaluates each CEL value against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the evaluated values and the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
+**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim looks up the referenced service's `messageTemplate`, parses and evaluates it against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
 
 ### Component Changes
 
@@ -322,10 +317,10 @@ Index allocation is atomic per `(Policy, Phase)` pair — the store maintains a 
 **RegisterActionMethod handler:**
 - Validates `Name` is non-empty and unique for this policy
 - Validates `URL`, `Service`, `Method` are set
-- Validates `MessageTemplate` is valid JSON with syntactically correct CEL expression values; if the ProtoCache has the input message descriptor, validates that template keys match field names on the input message type
+- Stores `MessageTemplate` as an opaque string (interpreted by the wasm-shim, not the operator)
 - Performs gRPC dial reachability check (from Phase 1)
 - Triggers gRPC reflection and caches descriptors (from Phase 2)
-- Stores `ActionMethodEntry` (including validated message template) in `ActionMethodStore`
+- Stores `ActionMethodEntry` (including message template) in `ActionMethodStore`
 - Triggers reconciliation
 
 **PipelineOnRequest handler:**
@@ -371,7 +366,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
         URL:             threatServiceURL,
         Service:         "threat.ThreatService",
         Method:          "CheckThreatLevel",
-        MessageTemplate: `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}`,
+        MessageTemplate: `CheckThreatLevelRequest { uri: request.path, is_authenticated: has(auth.identity), source_ip: source.address }`,
     })
     if errors.Is(err, types.ErrUpstreamUnreachable) {
         return calculateErrorStatus(pol, err), err
@@ -450,8 +445,8 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 - [x] [Rename `RegisterUpstreamMethod` to `RegisterActionMethod`](https://github.com/Kuadrant/kuadrant-operator/issues/1899)
   - [x] Unit tests
-- [ ] [Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields](https://github.com/Kuadrant/kuadrant-operator/issues/1900)
-  - [ ] Unit tests
+- [x] [Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields](https://github.com/Kuadrant/kuadrant-operator/issues/1900)
+  - [x] Unit tests
 - [ ] [Define action types and `Pipeline` interface](https://github.com/Kuadrant/kuadrant-operator/issues/1901)
   - [ ] Unit tests
 - [ ] [Add `PipelineOnRequest` and `PipelineOnResponse` RPCs to gRPC proto](https://github.com/Kuadrant/kuadrant-operator/issues/1902)
@@ -474,6 +469,13 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 ### Completed
 
 ## Change Log
+
+### 2026-04-22 — MessageTemplate as opaque string
+
+- `MessageTemplate` changed from structured JSON map (field→CEL pairs) to an opaque string
+- Operator stores and passes through `MessageTemplate` without parsing or validation; interpretation is owned by the wasm-shim
+- Updated wasm config example and extension author usage to use CEL struct syntax
+- Removed operator-side JSON parsing and CEL validation of template content from handler description
 
 ### 2026-04-16 — OnRequest/OnResponse accept multiple actions
 

@@ -73,7 +73,10 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 	r.Logger.Info("registering action method", "url", threatServiceURL)
 
 	if err := kuadrantCtx.RegisterActionMethod(ctx, pol, types.ActionMethodConfig{
-		URL: threatServiceURL,
+		Name:    "assess-threat",
+		URL:     threatServiceURL,
+		Service: "threat.ThreatService",
+		Method:  "CheckThreatLevel",
 	}); err != nil {
 		r.Logger.Error(err, "failed to register action method")
 		return calculateErrorStatus(pol, err), err

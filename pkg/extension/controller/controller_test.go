@@ -337,16 +337,20 @@ func TestRegisterActionMethod_Success(t *testing.T) {
 	ec := newTestExtensionController(mock)
 	policy := &mockPolicy{name: "my-policy", namespace: "default"}
 	svc := exttypes.ActionMethodConfig{
-		URL:     "grpc://my-service:8081",
-		Service: "my.Service",
-		Method:  "DoSomething",
+		Name:            "assess-threat",
+		URL:             "grpc://my-service:8081",
+		Service:         "my.Service",
+		Method:          "DoSomething",
+		MessageTemplate: `ThreatRequest { uri: request.path }`,
 	}
 
 	err := ec.RegisterActionMethod(context.Background(), policy, svc)
 	assert.NilError(t, err)
+	assert.Equal(t, capturedReq.Name, "assess-threat")
 	assert.Equal(t, capturedReq.Url, "grpc://my-service:8081")
 	assert.Equal(t, capturedReq.Service, "my.Service")
 	assert.Equal(t, capturedReq.Method, "DoSomething")
+	assert.Equal(t, capturedReq.MessageTemplate, `ThreatRequest { uri: request.path }`)
 	assert.Equal(t, capturedReq.Policy.Metadata.Name, "my-policy")
 	assert.Equal(t, capturedReq.Policy.Metadata.Namespace, "default")
 }

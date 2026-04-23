@@ -575,13 +575,15 @@ func (x *ClearPolicyResponse) GetClearedMutators() int32 {
 }
 
 type RegisterActionMethodRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Policy        *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
-	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`         // e.g. "grpc://my-service:8081"
-	Service       string                 `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"` // gRPC service name (currently unused, reserved for future routing)
-	Method        string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`   // gRPC method name (currently unused, reserved for future routing)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Policy          *Policy                `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	Url             string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`                                                // e.g. "grpc://my-service:8081"
+	Service         string                 `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`                                        // gRPC service name
+	Method          string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`                                          // gRPC method name
+	Name            string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`                                              // Per-policy unique identifier for this action method
+	MessageTemplate string                 `protobuf:"bytes,6,opt,name=message_template,json=messageTemplate,proto3" json:"message_template,omitempty"` // Opaque template string for building the gRPC request message
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RegisterActionMethodRequest) Reset() {
@@ -642,6 +644,20 @@ func (x *RegisterActionMethodRequest) GetMethod() string {
 	return ""
 }
 
+func (x *RegisterActionMethodRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RegisterActionMethodRequest) GetMessageTemplate() string {
+	if x != nil {
+		return x.MessageTemplate
+	}
+	return ""
+}
+
 var File_v1_kuadrant_proto protoreflect.FileDescriptor
 
 const file_v1_kuadrant_proto_rawDesc = "" +
@@ -679,12 +695,14 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\"u\n" +
 	"\x13ClearPolicyResponse\x123\n" +
 	"\x15cleared_subscriptions\x18\x01 \x01(\x05R\x14clearedSubscriptions\x12)\n" +
-	"\x10cleared_mutators\x18\x02 \x01(\x05R\x0fclearedMutators\"\x8e\x01\n" +
+	"\x10cleared_mutators\x18\x02 \x01(\x05R\x0fclearedMutators\"\xcd\x01\n" +
 	"\x1bRegisterActionMethodRequest\x12+\n" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x18\n" +
 	"\aservice\x18\x03 \x01(\tR\aservice\x12\x16\n" +
-	"\x06method\x18\x04 \x01(\tR\x06method*E\n" +
+	"\x06method\x18\x04 \x01(\tR\x06method\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\x12)\n" +
+	"\x10message_template\x18\x06 \x01(\tR\x0fmessageTemplate*E\n" +
 	"\x06Domain\x12\x16\n" +
 	"\x12DOMAIN_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vDOMAIN_AUTH\x10\x01\x12\x12\n" +

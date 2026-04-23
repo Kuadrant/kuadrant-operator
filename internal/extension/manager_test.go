@@ -76,6 +76,7 @@ func validRequest() *extpb.RegisterActionMethodRequest {
 	return &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -124,6 +125,7 @@ func TestRegisterActionMethod_MissingURL(t *testing.T) {
 	_, err := svc.RegisterActionMethod(context.Background(), &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name: "assess-threat",
 	})
 	if err == nil {
 		t.Fatal("Expected error for missing URL")
@@ -155,6 +157,20 @@ func TestRegisterActionMethod_NoTargetRefs(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "target references") {
 		t.Errorf("Expected target refs error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_NilTargetRefElement(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Policy.TargetRefs = []*extpb.TargetRef{nil}
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for nil target ref element")
+	}
+	if !strings.Contains(err.Error(), "first target reference in policy is nil") {
+		t.Errorf("Expected nil target ref error, got: %v", err)
 	}
 }
 
@@ -196,6 +212,7 @@ func TestRegisterActionMethod_Success(t *testing.T) {
 
 	key := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -242,6 +259,7 @@ func TestRegisterActionMethod_ClusterNameGeneration(t *testing.T) {
 			req := &extpb.RegisterActionMethodRequest{
 				Policy: testPolicy("DemoPolicy", "default", "demo",
 					testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+				Name:    "assess-threat",
 				Url:     tt.url,
 				Service: "example.v1.ExampleService",
 				Method:  "ExampleMethod",
@@ -254,6 +272,7 @@ func TestRegisterActionMethod_ClusterNameGeneration(t *testing.T) {
 
 			key := RegisteredUpstreamKey{
 				Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+				Name:    "assess-threat",
 				URL:     tt.url,
 				Service: "example.v1.ExampleService",
 				Method:  "ExampleMethod",
@@ -294,6 +313,7 @@ func TestRegisterActionMethod_InvalidMethod(t *testing.T) {
 	req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "NonExistentMethod",
@@ -319,6 +339,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	policy1Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "policy1",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route1", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -327,6 +348,7 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	policy2Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "policy2",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route2", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "AnotherMethod",
@@ -503,6 +525,7 @@ func TestRegisterActionMethod_MultipleMethodsSamePolicy(t *testing.T) {
 	method1Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -511,6 +534,7 @@ func TestRegisterActionMethod_MultipleMethodsSamePolicy(t *testing.T) {
 	method2Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "another-action",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "AnotherMethod",
@@ -529,6 +553,7 @@ func TestRegisterActionMethod_MultipleMethodsSamePolicy(t *testing.T) {
 	// Verify both methods are stored independently
 	key1 := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -540,6 +565,7 @@ func TestRegisterActionMethod_MultipleMethodsSamePolicy(t *testing.T) {
 
 	key2 := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "another-action",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "AnotherMethod",
@@ -599,6 +625,7 @@ func TestRegisterActionMethod_ReregistrationIdempotent(t *testing.T) {
 	// Verify only one entry exists (not duplicated)
 	key := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -629,6 +656,7 @@ func TestRegisterActionMethod_PartialFailure(t *testing.T) {
 	validReq := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -647,6 +675,7 @@ func TestRegisterActionMethod_PartialFailure(t *testing.T) {
 	invalidReq := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "invalid-action",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "NonExistentMethod",
@@ -665,6 +694,7 @@ func TestRegisterActionMethod_PartialFailure(t *testing.T) {
 	// Verify first registration is still intact
 	validKey := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -677,6 +707,7 @@ func TestRegisterActionMethod_PartialFailure(t *testing.T) {
 	// Verify failed registration left no partial entry
 	invalidKey := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "invalid-action",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "NonExistentMethod",
@@ -684,5 +715,160 @@ func TestRegisterActionMethod_PartialFailure(t *testing.T) {
 	_, exists = svc.registeredData.GetUpstream(invalidKey)
 	if exists {
 		t.Fatal("Failed registration should not leave any entry in storage")
+	}
+}
+
+func TestRegisterActionMethod_MissingName(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Name = ""
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for missing name")
+	}
+	if !strings.Contains(err.Error(), "name must be specified") {
+		t.Errorf("Expected name error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_WhitespaceOnlyName(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Name = "   "
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for whitespace-only name")
+	}
+	if !strings.Contains(err.Error(), "name must be specified") {
+		t.Errorf("Expected name error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_DuplicateNameSamePolicy(t *testing.T) {
+	svc := newTestExtensionService()
+
+	// First registration succeeds
+	req1 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	_, err := svc.RegisterActionMethod(context.Background(), req1)
+	if err != nil {
+		t.Fatalf("First registration should succeed: %v", err)
+	}
+
+	// Second registration with same name but different method should fail
+	req2 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "AnotherMethod",
+	}
+
+	_, err = svc.RegisterActionMethod(context.Background(), req2)
+	if err == nil {
+		t.Fatal("Expected error for duplicate name within same policy")
+	}
+	if st, ok := grpcstatus.FromError(err); !ok || st.Code() != codes.AlreadyExists {
+		t.Errorf("Expected AlreadyExists gRPC status, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "already registered") {
+		t.Errorf("Expected duplicate name error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_SameNameDifferentPolicies(t *testing.T) {
+	svc := newTestExtensionService()
+
+	// Two different policies can use the same name
+	req1 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "policy1",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route1", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	req2 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "policy2",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route2", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	_, err := svc.RegisterActionMethod(context.Background(), req1)
+	if err != nil {
+		t.Fatalf("First policy registration should succeed: %v", err)
+	}
+
+	_, err = svc.RegisterActionMethod(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("Second policy with same name should succeed: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_MessageTemplatePassthrough(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := validRequest()
+	req.MessageTemplate = `ThreatRequest { uri: request.path, method: request.method }`
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	key := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	entry, exists := svc.registeredData.GetUpstream(key)
+	if !exists {
+		t.Fatal("Expected upstream to be stored")
+	}
+	if entry.MessageTemplate != `ThreatRequest { uri: request.path, method: request.method }` {
+		t.Errorf("Expected MessageTemplate to be stored as-is, got %q", entry.MessageTemplate)
+	}
+}
+
+func TestRegisterActionMethod_EmptyMessageTemplate(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := validRequest()
+	// MessageTemplate is optional, empty is allowed
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Expected no error with empty MessageTemplate, got %v", err)
+	}
+
+	key := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	entry, exists := svc.registeredData.GetUpstream(key)
+	if !exists {
+		t.Fatal("Expected upstream to be stored")
+	}
+	if entry.MessageTemplate != "" {
+		t.Errorf("Expected empty MessageTemplate, got %q", entry.MessageTemplate)
 	}
 }

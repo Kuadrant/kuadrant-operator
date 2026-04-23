@@ -88,6 +88,8 @@ message ClearPolicyResponse {
 message RegisterActionMethodRequest {
   kuadrant.v1.Policy policy = 1;
   string url = 2;               // e.g. "grpc://my-service:8081"
-  string service = 3;           // gRPC service name (currently unused, reserved for future routing)
-  string method = 4;            // gRPC method name (currently unused, reserved for future routing)
+  string service = 3;           // gRPC service name
+  string method = 4;            // gRPC method name
+  string name = 5;              // Per-policy unique identifier for this action method
+  string message_template = 6;  // Opaque template string for building the gRPC request message
 }

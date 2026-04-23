@@ -52,9 +52,11 @@ type Policy interface {
 // ActionMethodConfig holds the configuration for an external gRPC service that an
 // extension wants to register with the data plane.
 type ActionMethodConfig struct {
-	URL     string // e.g. "grpc://my-service:8081"
-	Service string // gRPC service name, e.g. "envoy.service.auth.v3.Authorization" (currently unused)
-	Method  string // gRPC method name, e.g. "Check" (currently unused)
+	Name            string // Per-policy unique identifier for this action method
+	URL             string // e.g. "grpc://my-service:8081"
+	Service         string // gRPC service name
+	Method          string // gRPC method name
+	MessageTemplate string // Opaque template string for building the gRPC request message
 }
 
 // KuadrantCtx is passed to ReconcileFn providing access to CEL resolution,

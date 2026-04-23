@@ -180,20 +180,22 @@ type SubscriptionKey struct {
 
 type RegisteredUpstreamKey struct {
 	Policy  ResourceID
+	Name    string
 	URL     string
 	Service string
 	Method  string
 }
 
 type RegisteredUpstreamEntry struct {
-	ClusterName string
-	Host        string
-	Port        int
-	TargetRef   TargetRef
-	Service     string
-	Method      string
-	FailureMode string
-	Timeout     string
+	ClusterName     string
+	Host            string
+	Port            int
+	TargetRef       TargetRef
+	Service         string
+	Method          string
+	FailureMode     string
+	Timeout         string
+	MessageTemplate string
 }
 
 type TargetRef struct {
@@ -387,6 +389,43 @@ func (r *RegisteredDataStore) SetUpstream(key RegisteredUpstreamKey, entry Regis
 		Service:     entry.Service,
 	}
 	r.protoCache.Set(cacheKey, fds)
+}
+
+// IsUpstreamNameTaken returns true when another key for the same policy already
+// uses the given name. This is a cheap read-lock check intended as a fast-path
+// rejection before expensive operations; the authoritative check remains in
+// SetUpstreamIfNameAvailable.
+func (r *RegisteredDataStore) IsUpstreamNameTaken(key RegisteredUpstreamKey) bool {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	for k := range r.registeredUpstreams {
+		if k.Policy == key.Policy && k.Name == key.Name && k != key {
+			return true
+		}
+	}
+	return false
+}
+
+// SetUpstreamIfNameAvailable atomically checks that no other key for the same
+// policy already uses the given name, then writes the upstream and proto cache
+// entries. Returns true on success; false when a name conflict was detected.
+func (r *RegisteredDataStore) SetUpstreamIfNameAvailable(key RegisteredUpstreamKey, entry RegisteredUpstreamEntry, fds *descriptorpb.FileDescriptorSet) bool {
+	r.upstreamsMutex.Lock()
+	defer r.upstreamsMutex.Unlock()
+
+	for k := range r.registeredUpstreams {
+		if k.Policy == key.Policy && k.Name == key.Name && k != key {
+			return false
+		}
+	}
+
+	r.registeredUpstreams[key] = entry
+	cacheKey := ProtoCacheKey{
+		ClusterName: entry.ClusterName,
+		Service:     entry.Service,
+	}
+	r.protoCache.Set(cacheKey, fds)
+	return true
 }
 
 func (r *RegisteredDataStore) GetUpstream(key RegisteredUpstreamKey) (RegisteredUpstreamEntry, bool) {

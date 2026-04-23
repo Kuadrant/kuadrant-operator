@@ -32,10 +32,12 @@ func TestRegisterActionMethodRequest_FieldAccessors(t *testing.T) {
 	}
 
 	req := &RegisterActionMethodRequest{
-		Policy:  policy,
-		Url:     "grpc://my-service.my-ns.svc.cluster.local:8081",
-		Service: "envoy.service.auth.v3.Authorization",
-		Method:  "Check",
+		Policy:          policy,
+		Url:             "grpc://my-service.my-ns.svc.cluster.local:8081",
+		Service:         "envoy.service.auth.v3.Authorization",
+		Method:          "Check",
+		Name:            "assess-threat",
+		MessageTemplate: `ThreatRequest { uri: request.path }`,
 	}
 
 	if req.GetPolicy() != policy {
@@ -49,6 +51,12 @@ func TestRegisterActionMethodRequest_FieldAccessors(t *testing.T) {
 	}
 	if req.GetMethod() != "Check" {
 		t.Errorf("GetMethod() = %q, want %q", req.GetMethod(), "Check")
+	}
+	if req.GetName() != "assess-threat" {
+		t.Errorf("GetName() = %q, want %q", req.GetName(), "assess-threat")
+	}
+	if req.GetMessageTemplate() != `ThreatRequest { uri: request.path }` {
+		t.Errorf("GetMessageTemplate() = %q, want %q", req.GetMessageTemplate(), `ThreatRequest { uri: request.path }`)
 	}
 }
 
@@ -67,6 +75,12 @@ func TestRegisterActionMethodRequest_NilSafeGetters(t *testing.T) {
 	if req.GetMethod() != "" {
 		t.Errorf("GetMethod() on nil receiver should return empty string")
 	}
+	if req.GetName() != "" {
+		t.Errorf("GetName() on nil receiver should return empty string")
+	}
+	if req.GetMessageTemplate() != "" {
+		t.Errorf("GetMessageTemplate() on nil receiver should return empty string")
+	}
 }
 
 func TestRegisterActionMethodRequest_ZeroValues(t *testing.T) {
@@ -83,6 +97,12 @@ func TestRegisterActionMethodRequest_ZeroValues(t *testing.T) {
 	}
 	if req.GetMethod() != "" {
 		t.Errorf("GetMethod() on zero-value request should return empty string")
+	}
+	if req.GetName() != "" {
+		t.Errorf("GetName() on zero-value request should return empty string")
+	}
+	if req.GetMessageTemplate() != "" {
+		t.Errorf("GetMessageTemplate() on zero-value request should return empty string")
 	}
 }
 

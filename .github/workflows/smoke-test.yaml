@@ -1,7 +1,7 @@
 name: E2E Smoke Test
 
 on:
-  pull_request:
+  pull_request_target: # runs in base repo context, granting access to secrets for fork PRs
     branches: ['main']
   merge_group:
     types: [checks_requested]
@@ -23,8 +23,10 @@ jobs:
 
   smoke-tests:
     name: Smoke Tests
-    if: needs.pre-job.outputs.should_skip != 'true' && github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
+    if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
+    # Require maintainer approval for fork PRs to access secrets
+    environment: ${{ github.event.pull_request.head.repo.fork && 'e2e-smoke-test' || '' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,6 +34,9 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+        with:
+          # pull_request_target checks out base branch by default; override to get PR code
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6

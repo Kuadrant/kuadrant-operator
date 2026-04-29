@@ -15,7 +15,7 @@ install-metallb: kustomize yq ## Installs the metallb load balancer allowing use
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
 	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
-	./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} ${CIDR} ${NUM_IPS} | kubectl apply -n metallb-system -f -
+	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./utils/docker-network-ipaddresspool.sh kind $(YQ) ${SUBNET_OFFSET} ${CIDR} ${NUM_IPS} | kubectl apply -n metallb-system -f -
 
 .PHONY: install-observability-crds
 install-observability-crds: kustomize yq

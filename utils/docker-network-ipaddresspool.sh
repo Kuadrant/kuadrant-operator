@@ -17,6 +17,11 @@ CONTAINER_ENGINE="${CONTAINER_ENGINE:-docker}"
 
 ## Parse kind network subnet
 ## Take only IPv4 subnets, exclude IPv6
+if [[ "$CONTAINER_ENGINE" != "podman" && "$CONTAINER_ENGINE" != "docker" ]]; then
+  echo "Error: invalid CONTAINER_ENGINE='$CONTAINER_ENGINE' for network '$networkName'. Must be 'podman' or 'docker'." >&2
+  exit 1
+fi
+
 SUBNET=""
 set +e
 if [[ "$CONTAINER_ENGINE" == "podman" ]]; then

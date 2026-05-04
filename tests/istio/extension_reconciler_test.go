@@ -259,7 +259,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:                string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -530,7 +530,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].Scope).To(Equal(string(controllers.LimitsNamespaceFromRoute(httpRoute))))
 			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
 			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
@@ -588,7 +588,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].Scope).To(Equal(string(controllers.LimitsNamespaceFromRoute(httpRoute))))
 			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
 			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
@@ -646,7 +646,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].Scope).To(Equal(string(controllers.LimitsNamespaceFromRoute(httpRoute))))
 			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
 			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
@@ -703,7 +703,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].Scope).To(Equal(string(controllers.LimitsNamespaceFromRoute(httpRoute))))
 			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
 			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
@@ -761,7 +761,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].Scope).To(Equal(string(controllers.LimitsNamespaceFromRoute(httpRoute))))
 			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
 			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
@@ -819,7 +819,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
+			Expect(actionSet.Actions[1].Scope).To(Equal(String(controllers.LimitsNamespaceFromRoute(httpRoute))))
 			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
 			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
 				[]wasm.ConditionalData{
@@ -968,7 +968,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:                string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -1214,7 +1214,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1443,7 +1443,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1590,7 +1590,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1811,7 +1811,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1921,7 +1921,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteB)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2117,7 +2117,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2245,7 +2245,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2477,7 +2477,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2602,7 +2602,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2633,7 +2633,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteB)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2793,7 +2793,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:                string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -2890,7 +2890,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{

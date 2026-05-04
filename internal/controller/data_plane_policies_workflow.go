@@ -89,7 +89,7 @@ var (
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagetagmirrorsets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagecontentpolicies,verbs=get;list;watch
 
-func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
+func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled, isIDMSInstalled, isITMSInstalled, isICPInstalled bool) *controller.Workflow {
 	isGatewayProviderInstalled := isIstioInstalled || isEnvoyGatewayInstalled
 	dataPlanePoliciesValidation := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
@@ -121,7 +121,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.istio_tracing_cluster", (&IstioTracingClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
-			traceReconcileFunc("reconciler.istio_extension", (&IstioExtensionReconciler{client: client, restMapper: mgr.GetRESTMapper()}).Subscription().Reconcile))
+			traceReconcileFunc("reconciler.istio_extension", (&IstioExtensionReconciler{client: client, isIDMSInstalled: isIDMSInstalled, isITMSInstalled: isITMSInstalled, isICPInstalled: isICPInstalled}).Subscription().Reconcile))
 	}
 
 	if isEnvoyGatewayInstalled {
@@ -132,7 +132,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.envoy_gateway_tracing_cluster", (&EnvoyGatewayTracingClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
-			traceReconcileFunc("reconciler.envoy_gateway_extension", (&EnvoyGatewayExtensionReconciler{client: client, restMapper: mgr.GetRESTMapper()}).Subscription().Reconcile))
+			traceReconcileFunc("reconciler.envoy_gateway_extension", (&EnvoyGatewayExtensionReconciler{client: client, isIDMSInstalled: isIDMSInstalled, isITMSInstalled: isITMSInstalled, isICPInstalled: isICPInstalled}).Subscription().Reconcile))
 	}
 
 	if isIstioInstalled && isAuthorinoOperatorInstalled && isLimitadorOperatorInstalled {

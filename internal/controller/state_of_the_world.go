@@ -210,6 +210,9 @@ type BootOptionsBuilder struct {
 	isAuthorinoOperatorInstalled  bool
 	isPrometheusOperatorInstalled bool
 	isUsingExtensions             bool
+	isIDMSInstalled               bool
+	isITMSInstalled               bool
+	isICPInstalled                bool
 }
 
 func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
@@ -473,12 +476,13 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 
 func (b *BootOptionsBuilder) getImageMirrorOptions() ([]controller.ControllerOption, error) {
 	var opts []controller.ControllerOption
+	var err error
 
-	idmsInstalled, err := openshift.IsImageDigestMirrorSetInstalled(b.manager.GetRESTMapper())
+	b.isIDMSInstalled, err = openshift.IsImageDigestMirrorSetInstalled(b.manager.GetRESTMapper())
 	if err != nil {
 		return nil, err
 	}
-	if idmsInstalled {
+	if b.isIDMSInstalled {
 		opts = append(opts,
 			controller.WithRunnable("imagedigestmirrorset watcher", controller.Watch(
 				&configv1.ImageDigestMirrorSet{},
@@ -489,11 +493,11 @@ func (b *BootOptionsBuilder) getImageMirrorOptions() ([]controller.ControllerOpt
 		)
 	}
 
-	itmsInstalled, err := openshift.IsImageTagMirrorSetInstalled(b.manager.GetRESTMapper())
+	b.isITMSInstalled, err = openshift.IsImageTagMirrorSetInstalled(b.manager.GetRESTMapper())
 	if err != nil {
 		return nil, err
 	}
-	if itmsInstalled {
+	if b.isITMSInstalled {
 		opts = append(opts,
 			controller.WithRunnable("imagetagmirrorset watcher", controller.Watch(
 				&configv1.ImageTagMirrorSet{},
@@ -504,11 +508,11 @@ func (b *BootOptionsBuilder) getImageMirrorOptions() ([]controller.ControllerOpt
 		)
 	}
 
-	icpInstalled, err := openshift.IsImageContentPolicyInstalled(b.manager.GetRESTMapper())
+	b.isICPInstalled, err = openshift.IsImageContentPolicyInstalled(b.manager.GetRESTMapper())
 	if err != nil {
 		return nil, err
 	}
-	if icpInstalled {
+	if b.isICPInstalled {
 		opts = append(opts,
 			controller.WithRunnable("imagecontentpolicy watcher", controller.Watch(
 				&configv1.ImageContentPolicy{},
@@ -787,7 +791,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		Tasks: []controller.ReconcileFunc{
 			traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run),
 			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
-			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
+			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled, b.isIDMSInstalled, b.isITMSInstalled, b.isICPInstalled).Run),
 			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
 			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
 		},

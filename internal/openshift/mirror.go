@@ -55,15 +55,10 @@ type mirrorRule struct {
 	mirrors []string
 }
 
-func ResolveImageURL(ctx context.Context, client dynamic.Interface, restMapper meta.RESTMapper, imageURL string, logger logr.Logger) string {
+func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL string, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) string {
 	var rules []mirrorRule
 
-	idmsInstalled, err := IsImageDigestMirrorSetInstalled(restMapper)
-	if err != nil {
-		logger.V(1).Info("failed to check ImageDigestMirrorSet CRD", "error", err)
-		return imageURL
-	}
-	if idmsInstalled {
+	if isIDMSInstalled {
 		idmsRules, err := collectIDMSRules(ctx, client)
 		if err != nil {
 			logger.V(1).Info("failed to list ImageDigestMirrorSets", "error", err)
@@ -72,12 +67,7 @@ func ResolveImageURL(ctx context.Context, client dynamic.Interface, restMapper m
 		}
 	}
 
-	itmsInstalled, err := IsImageTagMirrorSetInstalled(restMapper)
-	if err != nil {
-		logger.V(1).Info("failed to check ImageTagMirrorSet CRD", "error", err)
-		return imageURL
-	}
-	if itmsInstalled {
+	if isITMSInstalled {
 		itmsRules, err := collectITMSRules(ctx, client)
 		if err != nil {
 			logger.V(1).Info("failed to list ImageTagMirrorSets", "error", err)
@@ -86,12 +76,7 @@ func ResolveImageURL(ctx context.Context, client dynamic.Interface, restMapper m
 		}
 	}
 
-	icpInstalled, err := IsImageContentPolicyInstalled(restMapper)
-	if err != nil {
-		logger.V(1).Info("failed to check ImageContentPolicy CRD", "error", err)
-		return imageURL
-	}
-	if icpInstalled {
+	if isICPInstalled {
 		icpRules, err := collectICPRules(ctx, client)
 		if err != nil {
 			logger.V(1).Info("failed to list ImageContentPolicies", "error", err)

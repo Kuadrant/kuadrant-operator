@@ -19,7 +19,6 @@ import (
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -44,8 +43,10 @@ import (
 
 // IstioExtensionReconciler reconciles Istio WasmPlugin custom resources
 type IstioExtensionReconciler struct {
-	client     *dynamic.DynamicClient
-	restMapper meta.RESTMapper
+	client         *dynamic.DynamicClient
+	isIDMSInstalled bool
+	isITMSInstalled bool
+	isICPInstalled  bool
 }
 
 // IstioExtensionReconciler subscribes to events with potential impact on the Istio WasmPlugin custom resources
@@ -69,7 +70,7 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithValues("context", ctx)
 
-	resolvedImageURL := openshift.ResolveImageURL(ctx, r.client, r.restMapper, WASMFilterImageURL, logger)
+	resolvedImageURL := openshift.ResolveImageURL(ctx, r.client, WASMFilterImageURL, r.isIDMSInstalled, r.isITMSInstalled, r.isICPInstalled, logger)
 	logger.V(1).Info("building istio extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building istio extension")
 

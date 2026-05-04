@@ -55,6 +55,26 @@ type mirrorRule struct {
 	mirrors []string
 }
 
+// ResolveImageURL resolves a container image URL through OpenShift mirror configurations.
+//
+// In disconnected (air-gapped) clusters, images are served from internal mirror registries
+// instead of their original source registries. OpenShift exposes this mapping via three
+// cluster-scoped CRDs:
+//   - ImageDigestMirrorSet (IDMS) — config.openshift.io/v1, for digest-based pulls (preferred)
+//   - ImageTagMirrorSet (ITMS) — config.openshift.io/v1, for tag-based pulls
+//   - ImageContentPolicy (ICP) — config.openshift.io/v1, legacy equivalent of ICSP
+//
+// This function collects mirror rules from all three sources, finds the most specific
+// source prefix match, and rewrites the image URL to point to the mirror. This is
+// necessary because Istio and Envoy Gateway pull wasm-shim images directly and do not
+// honor OpenShift's node-level mirror configuration (registries.conf / CRI-O).
+//
+// The resolution logic follows the same prefix-matching semantics used by:
+//   - openshift/oc: pkg/cli/image/strategy (alternativeImageSourcesIDMS)
+//   - openshift/runtime-utils: pkg/registries (EditRegistriesConfig)
+//   - containers/image: pkg/sysregistriesv2 (FindRegistry / PullSourcesFromReference)
+//
+// Returns the original URL unchanged if no mirrors match or on non-OpenShift clusters.
 func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL string, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) string {
 	var rules []mirrorRule
 
@@ -96,6 +116,18 @@ func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL str
 	return resolved
 }
 
+// resolveFromMirrors finds the best mirror for an image URL using most-specific-prefix matching.
+//
+// The matching follows the containers/image registries.conf semantics: the source with the
+// longest matching prefix wins, and the match must align on a repository boundary
+// ('/', ':', '@') to prevent partial hostname matches (e.g., "registry.io" must not match
+// "registry.io.evil.com"). The first mirror in the winning rule is used.
+//
+// Example: for image "registry.redhat.io/kuadrant/wasm-shim@sha256:abc" with rules:
+//   - source: "registry.redhat.io"         -> mirrors: ["mirror.local"]
+//   - source: "registry.redhat.io/kuadrant" -> mirrors: ["mirror.local/kuadrant-mirror"]
+//
+// The second rule wins (longer prefix), producing "mirror.local/kuadrant-mirror/wasm-shim@sha256:abc".
 func resolveFromMirrors(imageURL string, rules []mirrorRule) string {
 	var bestMatch mirrorRule
 	bestLen := 0
@@ -104,8 +136,6 @@ func resolveFromMirrors(imageURL string, rules []mirrorRule) string {
 		if len(rule.mirrors) == 0 {
 			continue
 		}
-		// The source must be a prefix of the image URL, followed by either
-		// end-of-string, '/', ':', or '@' to ensure we match on a repository boundary.
 		if !strings.HasPrefix(imageURL, rule.source) {
 			continue
 		}

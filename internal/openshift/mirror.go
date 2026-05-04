@@ -50,9 +50,20 @@ func IsImageContentPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
 	return utils.IsCRDInstalled(restMapper, ImageContentPolicyGVK.Group, ImageContentPolicyGVK.Kind, ImageContentPolicyGVK.Version)
 }
 
+// pullType distinguishes digest-based from tag-based image references.
+// IDMS rules only apply to digest references, ITMS rules only to tag references,
+// matching the semantics enforced by CRI-O via the pull-from-mirror field in registries.conf.
+type pullType int
+
+const (
+	pullTypeDigest pullType = iota
+	pullTypeTag
+)
+
 type mirrorRule struct {
-	source  string
-	mirrors []string
+	source   string
+	mirrors  []string
+	pullType pullType
 }
 
 // ResolveImageURL resolves a container image URL through OpenShift mirror configurations.
@@ -60,19 +71,24 @@ type mirrorRule struct {
 // In disconnected (air-gapped) clusters, images are served from internal mirror registries
 // instead of their original source registries. OpenShift exposes this mapping via three
 // cluster-scoped CRDs:
-//   - ImageDigestMirrorSet (IDMS) — config.openshift.io/v1, for digest-based pulls (preferred)
+//   - ImageDigestMirrorSet (IDMS) — config.openshift.io/v1, for digest-based pulls
 //   - ImageTagMirrorSet (ITMS) — config.openshift.io/v1, for tag-based pulls
-//   - ImageContentPolicy (ICP) — config.openshift.io/v1, legacy equivalent of ICSP
+//   - ImageContentPolicy (ICP) — config.openshift.io/v1, legacy equivalent of ICSP (digest-only)
 //
 // This function collects mirror rules from all three sources, finds the most specific
 // source prefix match, and rewrites the image URL to point to the mirror. This is
 // necessary because Istio and Envoy Gateway pull wasm-shim images directly and do not
 // honor OpenShift's node-level mirror configuration (registries.conf / CRI-O).
 //
-// The resolution logic follows the same prefix-matching semantics used by:
+// The resolution logic follows the prefix-matching semantics used by:
+//   - containers/image: pkg/sysregistriesv2 (refMatchingPrefix, refMatchingSubdomainPrefix)
 //   - openshift/oc: pkg/cli/image/strategy (alternativeImageSourcesIDMS)
 //   - openshift/runtime-utils: pkg/registries (EditRegistriesConfig)
-//   - containers/image: pkg/sysregistriesv2 (FindRegistry / PullSourcesFromReference)
+//
+// Supports both exact prefix sources (e.g., "registry.redhat.io/kuadrant") and wildcard
+// subdomain sources (e.g., "*.redhat.io") as defined in the IDMS/ITMS CRD specs.
+// IDMS rules are only applied to digest references (@sha256:...), ITMS rules only to tag
+// references (:tag), matching the pull-from-mirror semantics that CRI-O enforces.
 //
 // Returns the original URL unchanged if no mirrors match or on non-OpenShift clusters.
 func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL string, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) string {
@@ -118,34 +134,61 @@ func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL str
 
 // resolveFromMirrors finds the best mirror for an image URL using most-specific-prefix matching.
 //
-// The matching follows the containers/image registries.conf semantics: the source with the
-// longest matching prefix wins, and the match must align on a repository boundary
-// ('/', ':', '@') to prevent partial hostname matches (e.g., "registry.io" must not match
-// "registry.io.evil.com"). The first mirror in the winning rule is used.
+// The matching follows the containers/image registries.conf semantics
+// (refMatchingPrefix / refMatchingSubdomainPrefix):
+//   - Exact prefix sources: the source must be a prefix of the image URL, and the match
+//     must align on a repository boundary ('/', ':', '@') to prevent partial hostname
+//     matches (e.g., "registry.io" must not match "registry.io.evil.com").
+//   - Wildcard sources ("*.example.com"): match any subdomain of example.com. The wildcard
+//     is replaced with the actual hostname when rewriting, following the IDMS/ITMS spec:
+//     "the mirrored location is obtained by replacing the part of the input reference that
+//     matches source by the mirrors entry."
 //
-// Example: for image "registry.redhat.io/kuadrant/wasm-shim@sha256:abc" with rules:
-//   - source: "registry.redhat.io"         -> mirrors: ["mirror.local"]
-//   - source: "registry.redhat.io/kuadrant" -> mirrors: ["mirror.local/kuadrant-mirror"]
+// The source with the longest matching prefix wins. The first mirror in the winning rule
+// is used (mirrors are ordered by admin-specified priority in the CRD).
 //
-// The second rule wins (longer prefix), producing "mirror.local/kuadrant-mirror/wasm-shim@sha256:abc".
+// IDMS and ICP rules (pullTypeDigest) are only applied to digest references (@sha256:...).
+// ITMS rules (pullTypeTag) are only applied to tag references (:tag).
+// This matches the pull-from-mirror semantics enforced by CRI-O at the node level.
 func resolveFromMirrors(imageURL string, rules []mirrorRule) string {
+	isDigest := strings.Contains(imageURL, "@")
+
 	var bestMatch mirrorRule
 	bestLen := 0
+	// Wildcard matches are scored lower than exact prefix matches of the same specificity,
+	// so we track whether the best match is a wildcard to allow exact matches to win.
+	bestIsWildcard := false
 
 	for _, rule := range rules {
 		if len(rule.mirrors) == 0 {
 			continue
 		}
-		if !strings.HasPrefix(imageURL, rule.source) {
+
+		// IDMS/ICP rules only apply to digest refs, ITMS rules only to tag refs.
+		if rule.pullType == pullTypeDigest && !isDigest {
 			continue
 		}
-		rest := imageURL[len(rule.source):]
-		if len(rest) > 0 && rest[0] != '/' && rest[0] != ':' && rest[0] != '@' {
+		if rule.pullType == pullTypeTag && isDigest {
 			continue
 		}
-		if len(rule.source) > bestLen {
-			bestLen = len(rule.source)
+
+		source := strings.TrimRight(rule.source, "/")
+
+		if strings.HasPrefix(source, "*.") {
+			matchLen := matchWildcard(imageURL, source)
+			if matchLen > 0 && (matchLen > bestLen || (matchLen == bestLen && bestIsWildcard)) {
+				bestLen = matchLen
+				bestMatch = rule
+				bestIsWildcard = true
+			}
+			continue
+		}
+
+		matchLen := matchPrefix(imageURL, source)
+		if matchLen > 0 && (matchLen > bestLen || (matchLen == bestLen && bestIsWildcard)) {
+			bestLen = matchLen
 			bestMatch = rule
+			bestIsWildcard = false
 		}
 	}
 
@@ -153,7 +196,90 @@ func resolveFromMirrors(imageURL string, rules []mirrorRule) string {
 		return imageURL
 	}
 
-	return bestMatch.mirrors[0] + imageURL[bestLen:]
+	mirror := strings.TrimRight(bestMatch.mirrors[0], "/")
+	source := strings.TrimRight(bestMatch.source, "/")
+
+	if strings.HasPrefix(source, "*.") {
+		return rewriteWildcard(imageURL, source, mirror)
+	}
+
+	return mirror + imageURL[len(source):]
+}
+
+// matchPrefix checks if imageURL starts with the given source on a repository boundary.
+// Returns the match length, or 0 if no match.
+//
+// Boundary characters ('/', ':', '@') prevent partial hostname matches.
+// This matches the behavior of containers/image's refMatchingPrefix().
+func matchPrefix(imageURL, source string) int {
+	if !strings.HasPrefix(imageURL, source) {
+		return 0
+	}
+	if len(imageURL) == len(source) {
+		return len(source)
+	}
+	next := imageURL[len(source)]
+	if next == '/' || next == ':' || next == '@' {
+		return len(source)
+	}
+	return 0
+}
+
+// matchWildcard checks if imageURL matches a wildcard source like "*.example.com".
+// The wildcard matches any single hostname that is a subdomain of the domain suffix.
+// Returns the match length (hostname portion length), or 0 if no match.
+//
+// This follows containers/image's refMatchingSubdomainPrefix() semantics:
+// "*.example.com" matches "sub.example.com/foo" but not "example.com/foo"
+// or "sub.sub.example.com/foo" (only single-level subdomain).
+//
+// Per the IDMS CRD spec, the format is "[*.]host" where the wildcard matches subdomains.
+func matchWildcard(imageURL, wildcardSource string) int {
+	// "*.example.com" -> ".example.com"
+	domainSuffix := wildcardSource[1:]
+
+	// Find the hostname portion of the image URL (everything before the first '/')
+	hostname := imageURL
+	pathStart := strings.IndexByte(imageURL, '/')
+	if pathStart >= 0 {
+		hostname = imageURL[:pathStart]
+	}
+
+	// Strip port from hostname for matching
+	hostnameWithoutPort := hostname
+	if portIdx := strings.LastIndexByte(hostname, ':'); portIdx >= 0 {
+		hostnameWithoutPort = hostname[:portIdx]
+	}
+
+	// The hostname must end with the domain suffix (e.g., "sub.example.com" ends with ".example.com")
+	if !strings.HasSuffix(hostnameWithoutPort, domainSuffix) {
+		return 0
+	}
+
+	// The part before the suffix must not contain dots (single-level subdomain only)
+	prefix := hostnameWithoutPort[:len(hostnameWithoutPort)-len(domainSuffix)]
+	if len(prefix) == 0 || strings.ContainsRune(prefix, '.') {
+		return 0
+	}
+
+	return len(hostname)
+}
+
+// rewriteWildcard rewrites an image URL matched by a wildcard source.
+//
+// Per the IDMS/ITMS spec: "the mirrored location is obtained by replacing the part of the
+// input reference that matches source by the mirrors entry, e.g. for
+// registry.redhat.io/product/repo reference, a (source, mirror) pair *.redhat.io,
+// mirror.local/redhat causes a mirror.local/redhat/product/repo repository to be used."
+//
+// The wildcard source's domain suffix is replaced with the mirror, preserving the path.
+func rewriteWildcard(imageURL, wildcardSource, mirror string) string {
+	// Find where the hostname ends (first '/')
+	pathStart := strings.IndexByte(imageURL, '/')
+	if pathStart < 0 {
+		return mirror
+	}
+	return mirror + imageURL[pathStart:]
 }
 
 func collectIDMSRules(ctx context.Context, client dynamic.Interface) ([]mirrorRule, error) {
@@ -173,7 +299,7 @@ func collectIDMSRules(ctx context.Context, client dynamic.Interface) ([]mirrorRu
 			for i, mirror := range m.Mirrors {
 				mirrors[i] = string(mirror)
 			}
-			rules = append(rules, mirrorRule{source: m.Source, mirrors: mirrors})
+			rules = append(rules, mirrorRule{source: m.Source, mirrors: mirrors, pullType: pullTypeDigest})
 		}
 	}
 	return rules, nil
@@ -196,7 +322,7 @@ func collectITMSRules(ctx context.Context, client dynamic.Interface) ([]mirrorRu
 			for i, mirror := range m.Mirrors {
 				mirrors[i] = string(mirror)
 			}
-			rules = append(rules, mirrorRule{source: m.Source, mirrors: mirrors})
+			rules = append(rules, mirrorRule{source: m.Source, mirrors: mirrors, pullType: pullTypeTag})
 		}
 	}
 	return rules, nil
@@ -219,7 +345,8 @@ func collectICPRules(ctx context.Context, client dynamic.Interface) ([]mirrorRul
 			for i, mirror := range m.Mirrors {
 				mirrors[i] = string(mirror)
 			}
-			rules = append(rules, mirrorRule{source: m.Source, mirrors: mirrors})
+			// ICP (legacy ICSP) is digest-only by design
+			rules = append(rules, mirrorRule{source: m.Source, mirrors: mirrors, pullType: pullTypeDigest})
 		}
 	}
 	return rules, nil

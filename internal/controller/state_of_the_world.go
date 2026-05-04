@@ -247,6 +247,13 @@ func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error)
 		return opts, optionErr
 	}
 	opts = append(opts, consoleOpts...)
+
+	imageMirrorOpts, optionErr := b.getImageMirrorOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, imageMirrorOpts...)
+
 	opts = append(opts, b.getExtensionsOptions()...)
 
 	dnsOpts, optionErr := b.getDNSOperatorOptions()
@@ -460,6 +467,57 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		)),
 		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
 	)
+
+	return opts, nil
+}
+
+func (b *BootOptionsBuilder) getImageMirrorOptions() ([]controller.ControllerOption, error) {
+	var opts []controller.ControllerOption
+
+	idmsInstalled, err := openshift.IsImageDigestMirrorSetInstalled(b.manager.GetRESTMapper())
+	if err != nil {
+		return nil, err
+	}
+	if idmsInstalled {
+		opts = append(opts,
+			controller.WithRunnable("imagedigestmirrorset watcher", controller.Watch(
+				&configv1.ImageDigestMirrorSet{},
+				openshift.ImageDigestMirrorSetResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithObjectKinds(openshift.ImageDigestMirrorSetGVK.GroupKind()),
+		)
+	}
+
+	itmsInstalled, err := openshift.IsImageTagMirrorSetInstalled(b.manager.GetRESTMapper())
+	if err != nil {
+		return nil, err
+	}
+	if itmsInstalled {
+		opts = append(opts,
+			controller.WithRunnable("imagetagmirrorset watcher", controller.Watch(
+				&configv1.ImageTagMirrorSet{},
+				openshift.ImageTagMirrorSetResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithObjectKinds(openshift.ImageTagMirrorSetGVK.GroupKind()),
+		)
+	}
+
+	icpInstalled, err := openshift.IsImageContentPolicyInstalled(b.manager.GetRESTMapper())
+	if err != nil {
+		return nil, err
+	}
+	if icpInstalled {
+		opts = append(opts,
+			controller.WithRunnable("imagecontentpolicy watcher", controller.Watch(
+				&configv1.ImageContentPolicy{},
+				openshift.ImageContentPolicyResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithObjectKinds(openshift.ImageContentPolicyGVK.GroupKind()),
+		)
+	}
 
 	return opts, nil
 }

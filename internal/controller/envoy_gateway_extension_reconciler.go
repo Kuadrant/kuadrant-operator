@@ -15,6 +15,7 @@ import (
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -32,6 +33,7 @@ import (
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -41,7 +43,8 @@ import (
 
 // EnvoyGatewayExtensionReconciler reconciles Envoy Gateway EnvoyExtensionPolicy custom resources
 type EnvoyGatewayExtensionReconciler struct {
-	client *dynamic.DynamicClient
+	client     *dynamic.DynamicClient
+	restMapper meta.RESTMapper
 }
 
 // EnvoyGatewayExtensionReconciler subscribes to events with potential impact on the Envoy Gateway EnvoyExtensionPolicy custom resources
@@ -65,7 +68,8 @@ func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription
 func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithValues("context", ctx)
 
-	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL)
+	resolvedImageURL := openshift.ResolveImageURL(ctx, r.client, r.restMapper, WASMFilterImageURL, logger)
+	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
@@ -99,7 +103,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, resolvedImageURL)
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 

@@ -24,6 +24,7 @@ import (
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -43,6 +44,10 @@ var (
 	StateIstioExtensionsModified        = "IstioExtensionsModified"
 	StateEnvoyGatewayExtensionsModified = "EnvoyGatewayExtensionsModified"
 
+	ImageDigestMirrorSetGroupKind  = openshift.ImageDigestMirrorSetGVK.GroupKind()
+	ImageTagMirrorSetGroupKind    = openshift.ImageTagMirrorSetGVK.GroupKind()
+	ImageContentPolicyGroupKind   = openshift.ImageContentPolicyGVK.GroupKind()
+
 	// Event matchers to match events with potential impact on effective data plane policies (auth or rate limit)
 	dataPlaneEffectivePoliciesEventMatchers = []controller.ResourceEventMatcher{
 		{Kind: &kuadrantv1beta1.KuadrantGroupKind},
@@ -59,6 +64,9 @@ var (
 		{Kind: &kuadrantistio.WasmPluginGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
+		{Kind: &ImageDigestMirrorSetGroupKind},
+		{Kind: &ImageTagMirrorSetGroupKind},
+		{Kind: &ImageContentPolicyGroupKind},
 	}
 
 	istioGatewayControllerNames        = getGatewayControllerNames("ISTIO_GATEWAY_CONTROLLER_NAMES", defaultIstioGatewayControllerName)
@@ -76,6 +84,10 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tokenratelimitpolicies,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tokenratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tokenratelimitpolicies/finalizers,verbs=update
+
+//+kubebuilder:rbac:groups=config.openshift.io,resources=imagedigestmirrorsets,verbs=get;list;watch
+//+kubebuilder:rbac:groups=config.openshift.io,resources=imagetagmirrorsets,verbs=get;list;watch
+//+kubebuilder:rbac:groups=config.openshift.io,resources=imagecontentpolicies,verbs=get;list;watch
 
 func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
 	isGatewayProviderInstalled := isIstioInstalled || isEnvoyGatewayInstalled
@@ -109,7 +121,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.istio_tracing_cluster", (&IstioTracingClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
-			traceReconcileFunc("reconciler.istio_extension", (&IstioExtensionReconciler{client: client}).Subscription().Reconcile))
+			traceReconcileFunc("reconciler.istio_extension", (&IstioExtensionReconciler{client: client, restMapper: mgr.GetRESTMapper()}).Subscription().Reconcile))
 	}
 
 	if isEnvoyGatewayInstalled {
@@ -120,7 +132,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
 			traceReconcileFunc("reconciler.envoy_gateway_tracing_cluster", (&EnvoyGatewayTracingClusterReconciler{client: client}).Subscription().Reconcile))
 		effectiveDataPlanePoliciesWorkflow.Tasks = append(effectiveDataPlanePoliciesWorkflow.Tasks,
-			traceReconcileFunc("reconciler.envoy_gateway_extension", (&EnvoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile))
+			traceReconcileFunc("reconciler.envoy_gateway_extension", (&EnvoyGatewayExtensionReconciler{client: client, restMapper: mgr.GetRESTMapper()}).Subscription().Reconcile))
 	}
 
 	if isIstioInstalled && isAuthorinoOperatorInstalled && isLimitadorOperatorInstalled {

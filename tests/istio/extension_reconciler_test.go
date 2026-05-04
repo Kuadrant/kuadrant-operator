@@ -190,7 +190,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:                string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -897,7 +897,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:                string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -1143,7 +1143,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1372,7 +1372,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1519,7 +1519,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1740,7 +1740,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -1850,7 +1850,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteB)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2046,7 +2046,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2174,7 +2174,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2406,7 +2406,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2531,7 +2531,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteA)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2562,7 +2562,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
+									Scope:       string(controllers.LimitsNamespaceFromRoute(httpRouteB)),
 									ConditionalData: []wasm.ConditionalData{
 										{
 											Data: []wasm.DataType{
@@ -2722,7 +2722,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:                string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -2819,7 +2819,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Actions: []wasm.Action{
 							{
 								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Scope:       string(controllers.LimitsNamespaceFromRoute(httpRoute)),
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{

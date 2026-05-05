@@ -204,5 +204,5 @@ internal/controller/
 ├── data_plane_policies_workflow.go       # Constants, RBAC markers, workflow wiring
 ├── istio_extension_reconciler.go         # Istio reconciler (uses ReconcileWasmPluginPullSecret)
 ├── envoy_gateway_extension_reconciler.go # Envoy Gateway reconciler (same pattern)
-└── disconnected_cluster_e2e_test.go      # E2e flow tests with fake clients
+└── disconnected_cluster_test.go           # Flow tests with fake clients
 ```

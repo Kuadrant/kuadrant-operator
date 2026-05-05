@@ -20,16 +20,16 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-func newE2EScheme() *runtime.Scheme {
+func newTestScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	_ = configv1.Install(s)
 	_ = corev1.AddToScheme(s)
 	return s
 }
 
-// TestDisconnectedCluster_IstioE2EFlow exercises the full chain:
+// TestDisconnectedCluster_IstioFlow exercises the full chain:
 // IDMS mirror resolution → credential discovery → secret management → wasm plugin construction
-func TestDisconnectedCluster_IstioE2EFlow(t *testing.T) {
+func TestDisconnectedCluster_IstioFlow(t *testing.T) {
 	const (
 		originalImage = "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:abc123"
 		mirrorHost    = "mirror.disconnected.local:8443"
@@ -37,7 +37,7 @@ func TestDisconnectedCluster_IstioE2EFlow(t *testing.T) {
 		gatewayNs     = "gateway-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s,
 		// IDMS: registry.redhat.io → mirror.disconnected.local:8443
 		&configv1.ImageDigestMirrorSet{
@@ -124,8 +124,8 @@ func TestDisconnectedCluster_IstioE2EFlow(t *testing.T) {
 	}
 }
 
-// TestDisconnectedCluster_EnvoyGatewayE2EFlow exercises the same chain for Envoy Gateway.
-func TestDisconnectedCluster_EnvoyGatewayE2EFlow(t *testing.T) {
+// TestDisconnectedCluster_EnvoyGatewayFlow exercises the same chain for Envoy Gateway.
+func TestDisconnectedCluster_EnvoyGatewayFlow(t *testing.T) {
 	const (
 		originalImage = "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:abc123"
 		mirrorHost    = "mirror.disconnected.local:8443"
@@ -133,7 +133,7 @@ func TestDisconnectedCluster_EnvoyGatewayE2EFlow(t *testing.T) {
 		gatewayNs     = "eg-gateway-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s,
 		&configv1.ImageDigestMirrorSet{
 			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
@@ -205,7 +205,7 @@ func TestDisconnectedCluster_NonOpenShift(t *testing.T) {
 		gatewayNs     = "non-ocp-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s)
 
 	ctx := context.Background()
@@ -260,7 +260,7 @@ func TestDisconnectedCluster_KillSwitch(t *testing.T) {
 
 	t.Setenv("DISABLE_IMAGE_MIRROR_RESOLUTION", "true")
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s,
 		&configv1.ImageDigestMirrorSet{
 			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
@@ -322,7 +322,7 @@ func TestDisconnectedCluster_ProtectedRegistryFallback(t *testing.T) {
 		gatewayNs = "fallback-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s)
 
 	ctx := context.Background()
@@ -368,7 +368,7 @@ func TestDisconnectedCluster_UserSecretNotOverwritten(t *testing.T) {
 		gatewayNs     = "user-secret-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s,
 		&configv1.ImageDigestMirrorSet{
 			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
@@ -448,7 +448,7 @@ func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
 		gatewayNs     = "unified-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s,
 		&configv1.ImageDigestMirrorSet{
 			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
@@ -516,7 +516,7 @@ func TestDisconnectedCluster_ReconcileNoCreds(t *testing.T) {
 		gatewayNs = "no-creds-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s)
 
 	ctx := context.Background()
@@ -540,7 +540,7 @@ func TestDisconnectedCluster_AdditionalPullSecretOverride(t *testing.T) {
 		gatewayNs     = "override-ns"
 	)
 
-	s := newE2EScheme()
+	s := newTestScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s,
 		&configv1.ImageDigestMirrorSet{
 			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},

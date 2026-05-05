@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -14,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -32,6 +34,12 @@ type dockerConfigJSON struct {
 	Auths map[string]json.RawMessage `json:"auths"`
 }
 
+// GatewayOwnerRef identifies a Gateway for owner reference purposes.
+type GatewayOwnerRef struct {
+	Name string
+	UID  types.UID
+}
+
 // PullSecretReconcileConfig holds the parameters for ReconcileWasmPluginPullSecret.
 type PullSecretReconcileConfig struct {
 	Client          dynamic.Interface
@@ -42,6 +50,7 @@ type PullSecretReconcileConfig struct {
 	IsIDMSInstalled bool
 	IsITMSInstalled bool
 	IsICPInstalled  bool
+	GatewayOwner    GatewayOwnerRef
 	Logger          logr.Logger
 }
 
@@ -56,14 +65,14 @@ func ReconcileWasmPluginPullSecret(ctx context.Context, cfg PullSecretReconcileC
 		return false, nil
 	}
 	if !cfg.Active {
-		return ensureWasmPluginPullSecret(ctx, cfg.Client, cfg.Namespace, cfg.SecretName, nil, cfg.Logger)
+		return ensureWasmPluginPullSecret(ctx, cfg.Client, cfg.Namespace, cfg.SecretName, nil, cfg.GatewayOwner, cfg.Logger)
 	}
 	registryHost := extractRegistryHost(cfg.ImageURL)
 	registryCreds, err := resolveRegistryCredentials(ctx, cfg.Client, registryHost, cfg.Logger)
 	if err != nil {
 		cfg.Logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", err)
 	}
-	return ensureWasmPluginPullSecret(ctx, cfg.Client, cfg.Namespace, cfg.SecretName, registryCreds, cfg.Logger)
+	return ensureWasmPluginPullSecret(ctx, cfg.Client, cfg.Namespace, cfg.SecretName, registryCreds, cfg.GatewayOwner, cfg.Logger)
 }
 
 // extractRegistryHost extracts the registry hostname (with optional port) from a container image URL.
@@ -159,7 +168,7 @@ func buildFilteredDockerConfigJSON(auths map[string]json.RawMessage, registryHos
 // sets the imagePullSecret reference on the WasmPlugin / EnvoyExtensionPolicy.
 //
 // Returns true if the imagePullSecret reference should be set.
-func ensureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, namespace, secretName string, dockerConfigData []byte, logger logr.Logger) (bool, error) {
+func ensureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, namespace, secretName string, dockerConfigData []byte, owner GatewayOwnerRef, logger logr.Logger) (bool, error) {
 	resource := client.Resource(secretsResource).Namespace(namespace)
 
 	existing, err := resource.Get(ctx, secretName, metav1.GetOptions{})
@@ -183,6 +192,16 @@ func ensureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 
 	if dockerConfigData == nil {
 		if secretExists && isManaged {
+			owners := removeOwnerRef(existing.GetOwnerReferences(), owner.UID)
+			if len(owners) > 0 {
+				existing.SetOwnerReferences(owners)
+				if _, err := resource.Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
+					return false, fmt.Errorf("failed to update owner references on secret %s/%s: %w", namespace, secretName, err)
+				}
+				logger.V(1).Info("removed gateway owner reference from managed pull secret",
+					"namespace", namespace, "secret", secretName, "gateway", owner.Name)
+				return false, nil
+			}
 			if err := resource.Delete(ctx, secretName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
 				return false, fmt.Errorf("failed to delete managed secret %s/%s: %w", namespace, secretName, err)
 			}
@@ -191,8 +210,11 @@ func ensureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 		return false, nil
 	}
 
+	ownerRef := gatewayOwnerReference(owner)
+
 	if !secretExists {
 		desiredObj := buildSecretUnstructured(namespace, secretName, dockerConfigData)
+		desiredObj.SetOwnerReferences([]metav1.OwnerReference{ownerRef})
 		if _, err := resource.Create(ctx, desiredObj, metav1.CreateOptions{}); err != nil {
 			return false, fmt.Errorf("failed to create secret %s/%s: %w", namespace, secretName, err)
 		}
@@ -200,24 +222,59 @@ func ensureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 		return true, nil
 	}
 
-	// Secret exists and is managed — update only if the logical content changed.
-	// Deserialize both sides to compare semantically, so formatting differences
-	// (key order, whitespace) don't trigger unnecessary API writes.
+	// Secret exists and is managed — check if data or owner references need updating.
 	var existingSecret corev1.Secret
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(existing.Object, &existingSecret); err != nil {
 		return false, fmt.Errorf("failed to parse existing secret %s/%s: %w", namespace, secretName, err)
 	}
-	if dockerConfigEqual(existingSecret.Data[corev1.DockerConfigJsonKey], dockerConfigData) {
+
+	dataChanged := !dockerConfigEqual(existingSecret.Data[corev1.DockerConfigJsonKey], dockerConfigData)
+	ownersChanged := addOwnerRef(existing, ownerRef)
+
+	if !dataChanged && !ownersChanged {
 		return true, nil
 	}
 
-	desiredObj := buildSecretUnstructured(namespace, secretName, dockerConfigData)
-	desiredObj.SetResourceVersion(existing.GetResourceVersion())
-	if _, err := resource.Update(ctx, desiredObj, metav1.UpdateOptions{}); err != nil {
-		return false, fmt.Errorf("failed to update secret %s/%s: %w", namespace, secretName, err)
+	if dataChanged {
+		desiredObj := buildSecretUnstructured(namespace, secretName, dockerConfigData)
+		desiredObj.SetResourceVersion(existing.GetResourceVersion())
+		desiredObj.SetOwnerReferences(existing.GetOwnerReferences())
+		if _, err := resource.Update(ctx, desiredObj, metav1.UpdateOptions{}); err != nil {
+			return false, fmt.Errorf("failed to update secret %s/%s: %w", namespace, secretName, err)
+		}
+		logger.Info("updated managed pull secret", "namespace", namespace, "secret", secretName)
+	} else {
+		if _, err := resource.Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
+			return false, fmt.Errorf("failed to update owner references on secret %s/%s: %w", namespace, secretName, err)
+		}
 	}
-	logger.Info("updated managed pull secret", "namespace", namespace, "secret", secretName)
 	return true, nil
+}
+
+func gatewayOwnerReference(owner GatewayOwnerRef) metav1.OwnerReference {
+	return metav1.OwnerReference{
+		APIVersion: "gateway.networking.k8s.io/v1",
+		Kind:       "Gateway",
+		Name:       owner.Name,
+		UID:        owner.UID,
+	}
+}
+
+func addOwnerRef(obj *unstructured.Unstructured, ref metav1.OwnerReference) bool {
+	owners := obj.GetOwnerReferences()
+	for _, o := range owners {
+		if o.UID == ref.UID {
+			return false
+		}
+	}
+	obj.SetOwnerReferences(append(owners, ref))
+	return true
+}
+
+func removeOwnerRef(owners []metav1.OwnerReference, uid types.UID) []metav1.OwnerReference {
+	return slices.DeleteFunc(owners, func(o metav1.OwnerReference) bool {
+		return o.UID == uid
+	})
 }
 
 // dockerConfigEqual compares two dockerconfigjson blobs semantically.

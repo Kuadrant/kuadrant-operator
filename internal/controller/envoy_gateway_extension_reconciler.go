@@ -113,6 +113,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			IsIDMSInstalled: r.isIDMSInstalled,
 			IsITMSInstalled: r.isITMSInstalled,
 			IsICPInstalled:  r.isICPInstalled,
+			GatewayOwner:    openshift.GatewayOwnerRef{Name: gateway.GetName(), UID: gateway.GetUID()},
 			Logger:          logger,
 		})
 		if secretErr != nil {

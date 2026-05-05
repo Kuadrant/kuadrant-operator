@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	dfake "k8s.io/client-go/dynamic/fake"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -18,6 +19,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/policy-machinery/machinery"
 )
+
+var testGatewayOwner = openshift.GatewayOwnerRef{Name: "test-gw", UID: types.UID("test-gw-uid")}
 
 func newTestScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
@@ -80,6 +83,7 @@ func TestDisconnectedCluster_IstioFlow(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	})
 	if err != nil {
@@ -139,6 +143,7 @@ func TestDisconnectedCluster_EnvoyGatewayFlow(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	})
 	if err != nil {
@@ -193,8 +198,9 @@ func TestDisconnectedCluster_NonOpenShift(t *testing.T) {
 		ImageURL:   resolvedURL,
 		Namespace:  gatewayNs,
 		SecretName: RegistryPullSecretName,
-		Active:     true,
-		Logger:     logger,
+		Active:       true,
+		GatewayOwner: testGatewayOwner,
+		Logger:       logger,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -248,6 +254,7 @@ func TestDisconnectedCluster_KillSwitch(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	})
 	if err != nil {
@@ -292,8 +299,9 @@ func TestDisconnectedCluster_ProtectedRegistryFallback(t *testing.T) {
 		ImageURL:   resolvedURL,
 		Namespace:  gatewayNs,
 		SecretName: RegistryPullSecretName,
-		Active:     true,
-		Logger:     logger,
+		Active:       true,
+		GatewayOwner: testGatewayOwner,
+		Logger:       logger,
 	})
 
 	// PROTECTED_REGISTRY fallback (same logic as production reconcilers)
@@ -350,6 +358,7 @@ func TestDisconnectedCluster_UserSecretNotOverwritten(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	})
 	if err != nil {
@@ -404,6 +413,7 @@ func TestDisconnectedCluster_Idempotent(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	}
 
@@ -446,6 +456,7 @@ func TestDisconnectedCluster_CleanupWhenInactive(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	}
 
@@ -530,6 +541,7 @@ func TestDisconnectedCluster_AdditionalPullSecretOverride(t *testing.T) {
 		SecretName:      RegistryPullSecretName,
 		Active:          true,
 		IsIDMSInstalled: true,
+		GatewayOwner:    testGatewayOwner,
 		Logger:          logger,
 	})
 	if err != nil {

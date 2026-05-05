@@ -39,13 +39,18 @@ func makeDockerConfigSecret(namespace, name string, auths map[string]string) *co
 	}
 }
 
-func makeManagedSecret(namespace, name string, dockerConfigData []byte) *corev1.Secret {
+func makeManagedSecret(namespace, name string, dockerConfigData []byte, owners ...GatewayOwnerRef) *corev1.Secret {
+	var ownerRefs []metav1.OwnerReference
+	for _, o := range owners {
+		ownerRefs = append(ownerRefs, gatewayOwnerReference(o))
+	}
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			Labels:    map[string]string{managedLabelKey: managedLabelValue},
+			Name:            name,
+			Namespace:       namespace,
+			Labels:          map[string]string{managedLabelKey: managedLabelValue},
+			OwnerReferences: ownerRefs,
 		},
 		Type: corev1.SecretTypeDockerConfigJson,
 		Data: map[string][]byte{corev1.DockerConfigJsonKey: dockerConfigData},
@@ -60,6 +65,8 @@ func makeUserSecret(namespace, name string) *corev1.Secret {
 		Data:       map[string][]byte{corev1.DockerConfigJsonKey: []byte(`{"auths":{"user.registry.io":{"auth":"dXNlcg=="}}}`)},
 	}
 }
+
+var testOwner = GatewayOwnerRef{Name: "test-gw", UID: "test-uid-123"}
 
 // --- extractRegistryHost tests ---
 
@@ -367,7 +374,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s)
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -389,7 +396,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s)
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -403,7 +410,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		userSecret := makeUserSecret(namespace, secretName)
 		fakeClient := dfake.NewSimpleDynamicClient(s, userSecret)
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -423,7 +430,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		userSecret := makeUserSecret(namespace, secretName)
 		fakeClient := dfake.NewSimpleDynamicClient(s, userSecret)
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -437,7 +444,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds)
 		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -456,7 +463,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds)
 		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -467,7 +474,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 
 	t.Run("no-op when managed secret data is unchanged", func(t *testing.T) {
 		s := newPullSecretScheme()
-		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds)
+		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds, testOwner)
 		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
 
 		var updateCalled bool
@@ -476,7 +483,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 			return false, nil, nil
 		})
 
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -492,7 +499,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		s := newPullSecretScheme()
 		// Existing secret uses formatted JSON with different key order and whitespace
 		existingData := []byte(`{ "auths" : { "mirror.local:8443" : { "auth" : "bWlycm9y" } } }`)
-		managedSecret := makeManagedSecret(namespace, secretName, existingData)
+		managedSecret := makeManagedSecret(namespace, secretName, existingData, testOwner)
 		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
 
 		var updateCalled bool
@@ -502,7 +509,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 		})
 
 		// Desired data is compact JSON — same logical content
-		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -521,7 +528,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "server error"}
 		})
 
-		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -534,7 +541,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "create failed"}
 		})
 
-		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error on create failure, got nil")
 		}
@@ -548,7 +555,7 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "delete failed"}
 		})
 
-		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, testOwner, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error on delete failure, got nil")
 		}
@@ -562,9 +569,93 @@ func Test_ensureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "update failed"}
 		})
 
-		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, testOwner, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error on update failure, got nil")
+		}
+	})
+
+
+	t.Run("creates secret with owner reference", func(t *testing.T) {
+		s := newPullSecretScheme()
+		fakeClient := dfake.NewSimpleDynamicClient(s)
+
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, testOwner, logr.Discard())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		created, _ := fakeClient.Resource(secretsResource).Namespace(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
+		owners := created.GetOwnerReferences()
+		if len(owners) != 1 {
+			t.Fatalf("expected 1 owner reference, got %d", len(owners))
+		}
+		if owners[0].Name != testOwner.Name || owners[0].UID != testOwner.UID {
+			t.Errorf("owner ref mismatch: got name=%q uid=%q", owners[0].Name, owners[0].UID)
+		}
+	})
+
+	t.Run("adds second gateway owner reference", func(t *testing.T) {
+		s := newPullSecretScheme()
+		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds, testOwner)
+		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
+
+		secondOwner := GatewayOwnerRef{Name: "second-gw", UID: "second-gw-uid"}
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, secondOwner, logr.Discard())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		updated, _ := fakeClient.Resource(secretsResource).Namespace(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
+		owners := updated.GetOwnerReferences()
+		if len(owners) != 2 {
+			t.Fatalf("expected 2 owner references, got %d", len(owners))
+		}
+	})
+
+	t.Run("cleanup removes only one gateway owner, keeps secret", func(t *testing.T) {
+		s := newPullSecretScheme()
+		secondOwner := GatewayOwnerRef{Name: "second-gw", UID: "second-gw-uid"}
+		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds, testOwner, secondOwner)
+		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
+
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, testOwner, logr.Discard())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if shouldSet {
+			t.Error("expected shouldSet=false for the cleaned-up gateway")
+		}
+
+		existing, err := fakeClient.Resource(secretsResource).Namespace(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal("secret should still exist (other gateway owns it)")
+		}
+		owners := existing.GetOwnerReferences()
+		if len(owners) != 1 {
+			t.Fatalf("expected 1 remaining owner reference, got %d", len(owners))
+		}
+		if owners[0].UID != secondOwner.UID {
+			t.Errorf("expected remaining owner to be %q, got %q", secondOwner.UID, owners[0].UID)
+		}
+	})
+
+	t.Run("cleanup deletes secret when last owner removed", func(t *testing.T) {
+		s := newPullSecretScheme()
+		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds, testOwner)
+		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
+
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, testOwner, logr.Discard())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if shouldSet {
+			t.Error("expected shouldSet=false after cleanup")
+		}
+
+		_, err = fakeClient.Resource(secretsResource).Namespace(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
+		if err == nil {
+			t.Fatal("expected secret to be deleted when last owner removed")
 		}
 	})
 }
@@ -781,7 +872,7 @@ func Test_ensureWasmPluginPullSecret_UnparseableExistingSecret(t *testing.T) {
 	})
 
 	sampleCreds := []byte(`{"auths":{"mirror.local:8443":{"auth":"bWlycm9y"}}}`)
-	_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, "test-ns", "wasm-plugin-pull-secret", sampleCreds, logr.Discard())
+	_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, "test-ns", "wasm-plugin-pull-secret", sampleCreds, testOwner, logr.Discard())
 	if err == nil {
 		t.Fatal("expected error when existing secret cannot be parsed, got nil")
 	}

@@ -104,7 +104,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL, resolvedImageURL)
+		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, resolvedImageURL)
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
@@ -528,7 +528,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 }
 
 // buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, originalImageURL, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -584,11 +584,11 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 		if wasm.Code.Image.PullSecretRef != nil {
 			wasm.Code.Image.PullSecretRef = nil
 		}
-		// Check both the resolved and original image URLs against the protected registry.
-		// In disconnected clusters, IDMS/ITMS mirror resolution rewrites the original URL
-		// (e.g. registry.redhat.io/...) to a mirror (e.g. mirror.local/...), but the mirror
-		// still requires authentication via the pull secret.
-		if protectedRegistry != "" && (strings.Contains(imageURL, protectedRegistry) || strings.Contains(originalImageURL, protectedRegistry)) {
+		// Only check the resolved (post-mirror-resolution) image URL against PROTECTED_REGISTRY.
+		// In disconnected clusters, users must set PROTECTED_REGISTRY to the mirror hostname
+		// so it matches the resolved URL. Checking the pre-resolution URL would risk referencing
+		// a pull secret that doesn't exist (e.g. when the mirror is unauthenticated).
+		if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
 			wasm.Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
 		}
 	}

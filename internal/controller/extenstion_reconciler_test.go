@@ -39,15 +39,13 @@ var (
 func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 	testCases := []struct {
 		Name                    string
-		OriginalImageURL        string
-		ResolvedImageURL        string
+		ImageURL                string
 		ProtectedRegistryPrefix string
 		Assert                  func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin)
 	}{
 		{
 			Name:                    "ensure image pull secret is set in wasmPlugin for protected registry",
-			OriginalImageURL:        protectedRegImage,
-			ResolvedImageURL:        protectedRegImage,
+			ImageURL:                protectedRegImage,
 			ProtectedRegistryPrefix: registry,
 			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
 				if plugin == nil {
@@ -59,9 +57,8 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:             "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
-			OriginalImageURL: WASMFilterImageURL,
-			ResolvedImageURL: WASMFilterImageURL,
+			Name:     "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
+			ImageURL: WASMFilterImageURL,
 			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
 				if plugin == nil {
 					t.Fatalf("Expected a wasmplugin")
@@ -72,16 +69,15 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:                    "ensure image pull secret is set when original URL matches protected registry but resolved URL does not",
-			OriginalImageURL:        protectedRegImage,
-			ResolvedImageURL:        mirrorResolvedImage,
+			Name:                    "ensure image pull secret is NOT set when resolved URL does not match protected registry",
+			ImageURL:                mirrorResolvedImage,
 			ProtectedRegistryPrefix: registry,
 			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
 				if plugin == nil {
 					t.Fatalf("Expected a wasmplugin")
 				}
-				if plugin.Spec.ImagePullSecret != RegistryPullSecretName {
-					t.Fatalf("Expected wasm plugin to have imagePullSecret %s but got %s", RegistryPullSecretName, plugin.Spec.ImagePullSecret)
+				if plugin.Spec.ImagePullSecret != "" {
+					t.Fatalf("Expected wasm plugin to NOT have imagePullSecret but got %v", plugin.Spec.ImagePullSecret)
 				}
 				if plugin.Spec.Url != mirrorResolvedImage {
 					t.Fatalf("Expected wasm plugin URL to be %s but got %s", mirrorResolvedImage, plugin.Spec.Url)
@@ -92,7 +88,7 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			plugin := buildIstioWasmPluginForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, testCase.OriginalImageURL, testCase.ResolvedImageURL)
+			plugin := buildIstioWasmPluginForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, testCase.ImageURL)
 			testCase.Assert(t, plugin)
 		})
 	}
@@ -102,15 +98,13 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 	testCases := []struct {
 		Name                    string
-		OriginalImageURL        string
-		ResolvedImageURL        string
+		ImageURL                string
 		ProtectedRegistryPrefix string
 		Assert                  func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy)
 	}{
 		{
 			Name:                    "ensure image pull secret is set in ExtensionPolicy for protected registry",
-			OriginalImageURL:        protectedRegImage,
-			ResolvedImageURL:        protectedRegImage,
+			ImageURL:                protectedRegImage,
 			ProtectedRegistryPrefix: registry,
 			Assert: func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy) {
 				if policy == nil {
@@ -127,9 +121,8 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:             "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
-			OriginalImageURL: defaultWasmImage,
-			ResolvedImageURL: defaultWasmImage,
+			Name:     "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
+			ImageURL: defaultWasmImage,
 			Assert: func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy) {
 				if policy == nil {
 					t.Fatalf("Expected a wasmplugin")
@@ -142,20 +135,16 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:                    "ensure image pull secret is set when original URL matches protected registry but resolved URL does not",
-			OriginalImageURL:        protectedRegImage,
-			ResolvedImageURL:        mirrorResolvedImage,
+			Name:                    "ensure image pull secret is NOT set when resolved URL does not match protected registry",
+			ImageURL:                mirrorResolvedImage,
 			ProtectedRegistryPrefix: registry,
 			Assert: func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy) {
 				if policy == nil {
 					t.Fatalf("Expected a wasmplugin")
 				}
 				for _, w := range policy.Spec.Wasm {
-					if w.Code.Image.PullSecretRef == nil {
-						t.Fatalf("Expected extension to have imagePullSecret %v but no pullSecretRef", RegistryPullSecretName)
-					}
-					if w.Code.Image.PullSecretRef.Name != v1.ObjectName(RegistryPullSecretName) {
-						t.Fatalf("expected the pull secret name to be %s but got %v", RegistryPullSecretName, w.Code.Image.PullSecretRef.Name)
+					if w.Code.Image.PullSecretRef != nil {
+						t.Fatalf("Expected extension to NOT have imagePullSecret but got %v", w.Code.Image.PullSecretRef)
 					}
 					if w.Code.Image.URL != mirrorResolvedImage {
 						t.Fatalf("Expected extension image URL to be %s but got %s", mirrorResolvedImage, w.Code.Image.URL)
@@ -167,7 +156,7 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			policy := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, testCase.OriginalImageURL, testCase.ResolvedImageURL)
+			policy := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, testCase.ImageURL)
 			testCase.Assert(t, policy)
 		})
 	}

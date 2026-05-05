@@ -105,7 +105,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL, resolvedImageURL)
+		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfig, ProtectedRegistry, resolvedImageURL)
 
 		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
 
@@ -558,7 +558,7 @@ func hasAuthAccess(actionSet []wasm.Action) bool {
 }
 
 // buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config
-func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, originalImageURL, imageURL string) *istioclientgoextensionv1alpha1.WasmPlugin {
+func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *istioclientgoextensionv1alpha1.WasmPlugin {
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.WasmPluginGroupKind.Kind,
@@ -593,11 +593,11 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 		},
 	}
 	wasmPlugin.Spec.ImagePullSecret = ""
-	// Check both the resolved and original image URLs against the protected registry.
-	// In disconnected clusters, IDMS/ITMS mirror resolution rewrites the original URL
-	// (e.g. registry.redhat.io/...) to a mirror (e.g. mirror.local/...), but the mirror
-	// still requires authentication via the pull secret.
-	if protectedRegistry != "" && (strings.Contains(imageURL, protectedRegistry) || strings.Contains(originalImageURL, protectedRegistry)) {
+	// Only check the resolved (post-mirror-resolution) image URL against PROTECTED_REGISTRY.
+	// In disconnected clusters, users must set PROTECTED_REGISTRY to the mirror hostname
+	// so it matches the resolved URL. Checking the pre-resolution URL would risk referencing
+	// a pull secret that doesn't exist (e.g. when the mirror is unauthenticated).
+	if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
 		wasmPlugin.Spec.ImagePullSecret = RegistryPullSecretName
 	}
 

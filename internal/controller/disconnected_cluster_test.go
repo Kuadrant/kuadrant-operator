@@ -481,7 +481,7 @@ func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
 	}
 
 	// Single call: discovers creds and creates/manages the secret
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, logger)
 	if err != nil {
 		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
 	}
@@ -499,7 +499,7 @@ func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
 	}
 
 	// Idempotent: calling again should succeed without error
-	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, logger)
+	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, logger)
 	if err != nil {
 		t.Fatalf("second ReconcileWasmPluginPullSecret failed: %v", err)
 	}
@@ -522,7 +522,7 @@ func TestDisconnectedCluster_ReconcileNoCreds(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
 
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, imageURL, gatewayNs, RegistryPullSecretName, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, imageURL, gatewayNs, RegistryPullSecretName, true, logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

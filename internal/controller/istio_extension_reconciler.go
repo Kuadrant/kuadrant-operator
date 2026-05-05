@@ -109,17 +109,10 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 		var useImagePullSecret bool
 		if pullSecretEnabled {
-			if len(wasmConfig.ActionSets) > 0 {
-				var secretErr error
-				useImagePullSecret, secretErr = openshift.ReconcileWasmPluginPullSecret(ctx, r.client, resolvedImageURL, gateway.GetNamespace(), RegistryPullSecretName, logger)
-				if secretErr != nil {
-					logger.Error(secretErr, "failed to reconcile pull secret", "gateway", gatewayKey.String())
-				}
-			} else {
-				// No active policies — clean up any managed pull secret
-				if _, secretErr := openshift.EnsureWasmPluginPullSecret(ctx, r.client, gateway.GetNamespace(), RegistryPullSecretName, nil, logger); secretErr != nil {
-					logger.Error(secretErr, "failed to clean up pull secret", "gateway", gatewayKey.String())
-				}
+			var secretErr error
+			useImagePullSecret, secretErr = openshift.ReconcileWasmPluginPullSecret(ctx, r.client, resolvedImageURL, gateway.GetNamespace(), RegistryPullSecretName, len(wasmConfig.ActionSets) > 0, logger)
+			if secretErr != nil {
+				logger.Error(secretErr, "failed to reconcile pull secret", "gateway", gatewayKey.String())
 			}
 		}
 		// Fallback: PROTECTED_REGISTRY for backward compatibility (non-OpenShift or manual override)

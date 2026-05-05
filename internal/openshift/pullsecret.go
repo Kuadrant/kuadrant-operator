@@ -37,8 +37,14 @@ type dockerConfigJSON struct {
 // This is the single entry point for the reconciler — it encapsulates credential
 // discovery and secret lifecycle management.
 //
+// When active is true (gateway has wasm configs), it discovers credentials and
+// creates/updates the pull secret. When false, it cleans up any managed pull secret.
+//
 // Returns true if the WasmPlugin/EnvoyExtensionPolicy should reference a pull secret.
-func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, imageURL, namespace, secretName string, logger logr.Logger) (bool, error) {
+func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, imageURL, namespace, secretName string, active bool, logger logr.Logger) (bool, error) {
+	if !active {
+		return EnsureWasmPluginPullSecret(ctx, client, namespace, secretName, nil, logger)
+	}
 	registryHost := ExtractRegistryHost(imageURL)
 	registryCreds, err := ResolveRegistryCredentials(ctx, client, registryHost, logger)
 	if err != nil {

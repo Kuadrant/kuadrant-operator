@@ -598,6 +598,9 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 	// In disconnected clusters, users must set PROTECTED_REGISTRY to the mirror hostname
 	// so it matches the resolved URL. Checking the pre-resolution URL would risk referencing
 	// a pull secret that doesn't exist (e.g. when the mirror is unauthenticated).
+	// We don't verify the secret exists at runtime because the controller lacks cluster-wide
+	// RBAC for secrets, and Istio surfaces missing-secret errors only at the data-plane level,
+	// making runtime checks unreliable without RBAC escalation.
 	if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
 		wasmPlugin.Spec.ImagePullSecret = RegistryPullSecretName
 	}

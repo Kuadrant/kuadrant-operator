@@ -10,6 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stesting "k8s.io/client-go/testing"
 
@@ -723,5 +724,65 @@ func TestBuildSecretUnstructured(t *testing.T) {
 	}
 	if obj.GetKind() != "Secret" {
 		t.Errorf("expected kind Secret, got %s", obj.GetKind())
+	}
+}
+
+// --- readAndMerge FromUnstructured error path ---
+
+func TestResolveRegistryCredentials_UnparseableSecret(t *testing.T) {
+	s := newPullSecretScheme()
+	fakeClient := dfake.NewSimpleDynamicClient(s)
+
+	// Return an unstructured object that cannot be converted to corev1.Secret
+	fakeClient.PrependReactor("get", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		getAction := action.(k8stesting.GetAction)
+		if getAction.GetName() == ClusterPullSecretName {
+			return true, &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Secret",
+					"metadata":   map[string]interface{}{"name": ClusterPullSecretName, "namespace": OpenshiftConfigNamespace},
+					"data":       "not-a-map",
+				},
+			}, nil
+		}
+		return false, nil, nil
+	})
+
+	creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if creds != nil {
+		t.Fatalf("expected nil when secret is unparseable, got %s", string(creds))
+	}
+}
+
+// --- EnsureWasmPluginPullSecret FromUnstructured error on existing secret ---
+
+func TestEnsureWasmPluginPullSecret_UnparseableExistingSecret(t *testing.T) {
+	s := newPullSecretScheme()
+	fakeClient := dfake.NewSimpleDynamicClient(s)
+
+	// Return an unstructured object with the managed label but corrupt data field
+	fakeClient.PrependReactor("get", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Secret",
+				"metadata": map[string]interface{}{
+					"name":      "wasm-plugin-pull-secret",
+					"namespace": "test-ns",
+					"labels":    map[string]interface{}{ManagedLabelKey: ManagedLabelValue},
+				},
+				"data": "not-a-map",
+			},
+		}, nil
+	})
+
+	sampleCreds := []byte(`{"auths":{"mirror.local:8443":{"auth":"bWlycm9y"}}}`)
+	_, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, "test-ns", "wasm-plugin-pull-secret", sampleCreds, logr.Discard())
+	if err == nil {
+		t.Fatal("expected error when existing secret cannot be parsed, got nil")
 	}
 }

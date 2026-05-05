@@ -9,6 +9,7 @@ import (
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stesting "k8s.io/client-go/testing"
@@ -710,6 +711,122 @@ func TestResolveImageURLMultipleIDMSObjects(t *testing.T) {
 }
 
 // Verify GVR constants match what the dynamic client expects
+func TestResolveImageURLKillSwitch(t *testing.T) {
+	s := newScheme()
+	fakeClient := dfake.NewSimpleDynamicClient(s,
+		&configv1.ImageDigestMirrorSet{
+			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "test-idms"},
+			Spec: configv1.ImageDigestMirrorSetSpec{
+				ImageDigestMirrors: []configv1.ImageDigestMirrors{
+					{
+						Source:  "registry.redhat.io",
+						Mirrors: []configv1.ImageMirror{"mirror.disconnected.local"},
+					},
+				},
+			},
+		},
+	)
+
+	t.Setenv("DISABLE_IMAGE_MIRROR_RESOLUTION", "true")
+
+	result := ResolveImageURL(
+		context.Background(),
+		fakeClient,
+		realDigestRef,
+		true, false, false,
+		logr.Discard(),
+	)
+
+	if result != realDigestRef {
+		t.Errorf("expected original URL when kill-switch is enabled, got %q", result)
+	}
+}
+
+// malformedObject returns an unstructured object with a type mismatch at
+// .metadata (string instead of map) which causes FromUnstructured to fail.
+func malformedObject() map[string]interface{} {
+	return map[string]interface{}{
+		"apiVersion": "config.openshift.io/v1",
+		"metadata":   "not-a-map",
+	}
+}
+
+func TestCollectRulesConversionErrorITMS(t *testing.T) {
+	s := newScheme()
+	fakeClient := dfake.NewSimpleDynamicClient(s)
+
+	fakeClient.PrependReactor("list", "imagetagmirrorsets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &unstructured.UnstructuredList{
+			Object: map[string]interface{}{
+				"apiVersion": "config.openshift.io/v1",
+				"kind":       "ImageTagMirrorSetList",
+			},
+			Items: []unstructured.Unstructured{
+				{Object: malformedObject()},
+			},
+		}, nil
+	})
+
+	rules, err := collectITMSRules(context.Background(), fakeClient)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules from malformed object, got %d", len(rules))
+	}
+}
+
+func TestCollectRulesConversionErrorICP(t *testing.T) {
+	s := newScheme()
+	fakeClient := dfake.NewSimpleDynamicClient(s)
+
+	fakeClient.PrependReactor("list", "imagecontentpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &unstructured.UnstructuredList{
+			Object: map[string]interface{}{
+				"apiVersion": "config.openshift.io/v1",
+				"kind":       "ImageContentPolicyList",
+			},
+			Items: []unstructured.Unstructured{
+				{Object: malformedObject()},
+			},
+		}, nil
+	})
+
+	rules, err := collectICPRules(context.Background(), fakeClient)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules from malformed object, got %d", len(rules))
+	}
+}
+
+func TestCollectRulesConversionErrorIDMSMalformed(t *testing.T) {
+	s := newScheme()
+	fakeClient := dfake.NewSimpleDynamicClient(s)
+
+	fakeClient.PrependReactor("list", "imagedigestmirrorsets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &unstructured.UnstructuredList{
+			Object: map[string]interface{}{
+				"apiVersion": "config.openshift.io/v1",
+				"kind":       "ImageDigestMirrorSetList",
+			},
+			Items: []unstructured.Unstructured{
+				{Object: malformedObject()},
+			},
+		}, nil
+	})
+
+	rules, err := collectIDMSRules(context.Background(), fakeClient)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Errorf("expected 0 rules from malformed object, got %d", len(rules))
+	}
+}
+
 func TestMirrorResourceGVRs(t *testing.T) {
 	expected := []struct {
 		name string

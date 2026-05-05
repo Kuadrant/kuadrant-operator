@@ -32,25 +32,38 @@ type dockerConfigJSON struct {
 	Auths map[string]json.RawMessage `json:"auths"`
 }
 
+// PullSecretReconcileConfig holds the parameters for ReconcileWasmPluginPullSecret.
+type PullSecretReconcileConfig struct {
+	Client          dynamic.Interface
+	ImageURL        string
+	Namespace       string
+	SecretName      string
+	Active          bool
+	IsIDMSInstalled bool
+	IsITMSInstalled bool
+	IsICPInstalled  bool
+	Logger          logr.Logger
+}
+
 // ReconcileWasmPluginPullSecret is the single entry point for pull secret automation.
 // It checks whether the feature is enabled (kill-switch off and at least one mirror CRD
 // installed), then either discovers credentials and manages the secret (when active) or
 // cleans up any managed secret (when not active).
 //
 // Returns true if the WasmPlugin/EnvoyExtensionPolicy should reference a pull secret.
-func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, imageURL, namespace, secretName string, active, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) (bool, error) {
-	if IsImageMirrorResolutionDisabled() || (!isIDMSInstalled && !isITMSInstalled && !isICPInstalled) {
+func ReconcileWasmPluginPullSecret(ctx context.Context, cfg PullSecretReconcileConfig) (bool, error) {
+	if IsImageMirrorResolutionDisabled() || (!cfg.IsIDMSInstalled && !cfg.IsITMSInstalled && !cfg.IsICPInstalled) {
 		return false, nil
 	}
-	if !active {
-		return ensureWasmPluginPullSecret(ctx, client, namespace, secretName, nil, logger)
+	if !cfg.Active {
+		return ensureWasmPluginPullSecret(ctx, cfg.Client, cfg.Namespace, cfg.SecretName, nil, cfg.Logger)
 	}
-	registryHost := extractRegistryHost(imageURL)
-	registryCreds, err := resolveRegistryCredentials(ctx, client, registryHost, logger)
+	registryHost := extractRegistryHost(cfg.ImageURL)
+	registryCreds, err := resolveRegistryCredentials(ctx, cfg.Client, registryHost, cfg.Logger)
 	if err != nil {
-		logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", err)
+		cfg.Logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", err)
 	}
-	return ensureWasmPluginPullSecret(ctx, client, namespace, secretName, registryCreds, logger)
+	return ensureWasmPluginPullSecret(ctx, cfg.Client, cfg.Namespace, cfg.SecretName, registryCreds, cfg.Logger)
 }
 
 // extractRegistryHost extracts the registry hostname (with optional port) from a container image URL.

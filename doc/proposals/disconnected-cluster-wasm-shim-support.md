@@ -54,30 +54,29 @@ The feature integrates into the existing data-plane reconciliation loop. Each re
 │                          │  match, rewrite URL  │                   │
 │                          └─────────────────────┘                    │
 │                                                                     │
-│  2. Compute pullSecretEnabled                                       │
-│     = !IsImageMirrorResolutionDisabled()                            │
-│       && (isIDMSInstalled || isITMSInstalled || isICPInstalled)     │
-│                                                                     │
-│  3. For each gateway:                                               │
+│  2. For each gateway:                                               │
 │     ┌─────────────────────────────────────────────────────────┐     │
 │     │  Build wasmConfig for this gateway                      │     │
 │     │                                                         │     │
-│     │  if pullSecretEnabled:                                  │     │
-│     │    if wasmConfig has ActionSets:                         │     │
-│     │      ReconcileWasmPluginPullSecret(resolvedURL, ns)     │     │
-│     │        ├─ ExtractRegistryHost(resolvedURL)               │     │
-│     │        ├─ ResolveRegistryCredentials(registryHost)       │     │
-│     │        │    ├─ Read pull-secret from openshift-config    │     │
-│     │        │    ├─ Read additional-pull-secret (overrides)   │     │
-│     │        │    └─ Filter to matching registry host          │     │
-│     │        └─ EnsureWasmPluginPullSecret(ns, creds)          │     │
-│     │             ├─ User secret exists? → leave it, return ✓  │     │
-│     │             ├─ Creds nil? → delete managed secret if any │     │
-│     │             ├─ No existing? → create managed secret      │     │
-│     │             └─ Existing managed? → update if changed     │     │
-│     │    else (no ActionSets):                                 │     │
-│     │      EnsureWasmPluginPullSecret(ns, nil)                 │     │
-│     │        └─ Clean up managed secret (no longer needed)     │     │
+│     │  ReconcileWasmPluginPullSecret(ctx, cfg)                │     │
+│     │    cfg = PullSecretReconcileConfig{                     │     │
+│     │      Client, ImageURL, Namespace, SecretName,           │     │
+│     │      Active: len(ActionSets) > 0,                       │     │
+│     │      IsIDMSInstalled, IsITMSInstalled, IsICPInstalled,  │     │
+│     │      Logger,                                            │     │
+│     │    }                                                    │     │
+│     │    ├─ Kill-switch or no CRDs? → return false            │     │
+│     │    ├─ !Active? → cleanup managed secret, return false   │     │
+│     │    ├─ extractRegistryHost(imageURL)                     │     │
+│     │    ├─ resolveRegistryCredentials(registryHost)           │     │
+│     │    │    ├─ Read pull-secret from openshift-config        │     │
+│     │    │    ├─ Read additional-pull-secret (overrides)       │     │
+│     │    │    └─ Filter to matching registry host              │     │
+│     │    └─ ensureWasmPluginPullSecret(ns, creds)              │     │
+│     │         ├─ User secret exists? → leave it, return ✓     │     │
+│     │         ├─ Creds nil? → delete managed secret if any    │     │
+│     │         ├─ No existing? → create managed secret         │     │
+│     │         └─ Existing managed? → update if changed        │     │
 │     │                                                         │     │
 │     │  Fallback: PROTECTED_REGISTRY check                     │     │
 │     │    (backward compat for non-OpenShift)                   │     │

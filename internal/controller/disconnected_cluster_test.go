@@ -73,7 +73,15 @@ func TestDisconnectedCluster_IstioFlow(t *testing.T) {
 		t.Fatalf("mirror resolution: expected %q, got %q", mirrorImage, resolvedURL)
 	}
 
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	})
 	if err != nil {
 		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
 	}
@@ -124,7 +132,15 @@ func TestDisconnectedCluster_EnvoyGatewayFlow(t *testing.T) {
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
 
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	})
 	if err != nil {
 		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
 	}
@@ -172,7 +188,14 @@ func TestDisconnectedCluster_NonOpenShift(t *testing.T) {
 	}
 
 	// No CRDs installed — returns false immediately, no API calls
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, false, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:     fakeClient,
+		ImageURL:   resolvedURL,
+		Namespace:  gatewayNs,
+		SecretName: RegistryPullSecretName,
+		Active:     true,
+		Logger:     logger,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +241,15 @@ func TestDisconnectedCluster_KillSwitch(t *testing.T) {
 	}
 
 	// ReconcileWasmPluginPullSecret returns false (kill-switch active)
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -256,7 +287,14 @@ func TestDisconnectedCluster_ProtectedRegistryFallback(t *testing.T) {
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, imageURL, false, false, false, logger)
 
 	// No CRDs → ReconcileWasmPluginPullSecret returns false
-	useImagePullSecret, _ := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, false, false, false, logger)
+	useImagePullSecret, _ := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:     fakeClient,
+		ImageURL:   resolvedURL,
+		Namespace:  gatewayNs,
+		SecretName: RegistryPullSecretName,
+		Active:     true,
+		Logger:     logger,
+	})
 
 	// PROTECTED_REGISTRY fallback (same logic as production reconcilers)
 	if !useImagePullSecret && ProtectedRegistry != "" && strings.Contains(resolvedURL, ProtectedRegistry) {
@@ -305,7 +343,15 @@ func TestDisconnectedCluster_UserSecretNotOverwritten(t *testing.T) {
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
 
 	// ReconcileWasmPluginPullSecret should return true (user secret exists) without modifying it
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -351,7 +397,17 @@ func TestDisconnectedCluster_Idempotent(t *testing.T) {
 		t.Fatalf("mirror resolution: expected %q, got %q", mirrorImage, resolvedURL)
 	}
 
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	cfg := openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	}
+
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, cfg)
 	if err != nil {
 		t.Fatalf("first call failed: %v", err)
 	}
@@ -359,7 +415,7 @@ func TestDisconnectedCluster_Idempotent(t *testing.T) {
 		t.Fatal("expected useImagePullSecret=true on first call")
 	}
 
-	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, cfg)
 	if err != nil {
 		t.Fatalf("second call failed: %v", err)
 	}
@@ -383,8 +439,18 @@ func TestDisconnectedCluster_CleanupWhenInactive(t *testing.T) {
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
 
+	cfg := openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	}
+
 	// First: create managed secret
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, cfg)
 	if err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
@@ -393,7 +459,8 @@ func TestDisconnectedCluster_CleanupWhenInactive(t *testing.T) {
 	}
 
 	// Second: clean up (active=false)
-	useImagePullSecret, err = openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, false, true, false, false, logger)
+	cfg.Active = false
+	useImagePullSecret, err = openshift.ReconcileWasmPluginPullSecret(ctx, cfg)
 	if err != nil {
 		t.Fatalf("cleanup failed: %v", err)
 	}
@@ -456,7 +523,15 @@ func TestDisconnectedCluster_AdditionalPullSecretOverride(t *testing.T) {
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
 
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+		Client:          fakeClient,
+		ImageURL:        resolvedURL,
+		Namespace:       gatewayNs,
+		SecretName:      RegistryPullSecretName,
+		Active:          true,
+		IsIDMSInstalled: true,
+		Logger:          logger,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

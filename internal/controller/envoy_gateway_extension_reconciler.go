@@ -104,7 +104,17 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		useImagePullSecret, secretErr := openshift.ReconcileWasmPluginPullSecret(ctx, r.client, resolvedImageURL, gateway.GetNamespace(), RegistryPullSecretName, len(wasmConfig.ActionSets) > 0, r.isIDMSInstalled, r.isITMSInstalled, r.isICPInstalled, logger)
+		useImagePullSecret, secretErr := openshift.ReconcileWasmPluginPullSecret(ctx, openshift.PullSecretReconcileConfig{
+			Client:          r.client,
+			ImageURL:        resolvedImageURL,
+			Namespace:       gateway.GetNamespace(),
+			SecretName:      RegistryPullSecretName,
+			Active:          len(wasmConfig.ActionSets) > 0,
+			IsIDMSInstalled: r.isIDMSInstalled,
+			IsITMSInstalled: r.isITMSInstalled,
+			IsICPInstalled:  r.isICPInstalled,
+			Logger:          logger,
+		})
 		if secretErr != nil {
 			logger.Error(secretErr, "failed to reconcile pull secret", "gateway", gatewayKey.String())
 		}

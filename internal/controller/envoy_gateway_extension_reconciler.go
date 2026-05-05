@@ -104,7 +104,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, resolvedImageURL)
+		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL, resolvedImageURL)
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
@@ -528,7 +528,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 }
 
 // buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, originalImageURL, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -586,7 +586,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 			wasm.Code.Image.PullSecretRef = nil
 		}
 		// if we are in a protected registry set the object
-		if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
+		if protectedRegistry != "" && (strings.Contains(imageURL, protectedRegistry) || strings.Contains(originalImageURL, protectedRegistry)) {
 			wasm.Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
 		}
 	}

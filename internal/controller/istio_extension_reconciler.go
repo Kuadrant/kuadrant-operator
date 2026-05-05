@@ -105,7 +105,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfig, ProtectedRegistry, resolvedImageURL)
+		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL, resolvedImageURL)
 
 		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
 
@@ -558,7 +558,7 @@ func hasAuthAccess(actionSet []wasm.Action) bool {
 }
 
 // buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config
-func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *istioclientgoextensionv1alpha1.WasmPlugin {
+func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, originalImageURL, imageURL string) *istioclientgoextensionv1alpha1.WasmPlugin {
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.WasmPluginGroupKind.Kind,
@@ -595,7 +595,7 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 	// reset to empty to allow fo the image having moved to a public registry
 	wasmPlugin.Spec.ImagePullSecret = ""
 	// only set to pull secret if we are in a protected registry
-	if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
+	if protectedRegistry != "" && (strings.Contains(imageURL, protectedRegistry) || strings.Contains(originalImageURL, protectedRegistry)) {
 		wasmPlugin.Spec.ImagePullSecret = RegistryPullSecretName
 	}
 

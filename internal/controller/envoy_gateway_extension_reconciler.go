@@ -582,10 +582,12 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 	}
 	for _, wasm := range envoyPolicy.Spec.Wasm {
 		if wasm.Code.Image.PullSecretRef != nil {
-			//reset it to empty this will remove it if the image is now public registry
 			wasm.Code.Image.PullSecretRef = nil
 		}
-		// if we are in a protected registry set the object
+		// Check both the resolved and original image URLs against the protected registry.
+		// In disconnected clusters, IDMS/ITMS mirror resolution rewrites the original URL
+		// (e.g. registry.redhat.io/...) to a mirror (e.g. mirror.local/...), but the mirror
+		// still requires authentication via the pull secret.
 		if protectedRegistry != "" && (strings.Contains(imageURL, protectedRegistry) || strings.Contains(originalImageURL, protectedRegistry)) {
 			wasm.Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
 		}

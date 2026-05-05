@@ -592,9 +592,11 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 			Phase:        istioextensionsv1alpha1.PluginPhase_STATS, // insert the plugin before Istio stats filters and after Istio authorization filters.
 		},
 	}
-	// reset to empty to allow fo the image having moved to a public registry
 	wasmPlugin.Spec.ImagePullSecret = ""
-	// only set to pull secret if we are in a protected registry
+	// Check both the resolved and original image URLs against the protected registry.
+	// In disconnected clusters, IDMS/ITMS mirror resolution rewrites the original URL
+	// (e.g. registry.redhat.io/...) to a mirror (e.g. mirror.local/...), but the mirror
+	// still requires authentication via the pull secret.
 	if protectedRegistry != "" && (strings.Contains(imageURL, protectedRegistry) || strings.Contains(originalImageURL, protectedRegistry)) {
 		wasmPlugin.Spec.ImagePullSecret = RegistryPullSecretName
 	}

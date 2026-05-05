@@ -151,6 +151,33 @@ func TestResolveFromMirrors(t *testing.T) {
 			expected: "mirror.local:8080/rhcl-1/wasm-shim-rhel9:v1.0",
 		},
 
+		// --- Mirror with port and path-based source ---
+		{
+			name:     "mirror port preserved with path-based source and digest ref",
+			imageURL: "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:4b8cd7dea4d9cd3c7170af872c229e206155691e7dbb4a90c64699ccecc7ccbb",
+			rules: []mirrorRule{
+				{source: "registry.redhat.io/rhcl-1", mirrors: []string{"bastion.example.com:8443/rhcl-1"}, pullType: pullTypeDigest},
+			},
+			expected: "bastion.example.com:8443/rhcl-1/wasm-shim-rhel9@sha256:4b8cd7dea4d9cd3c7170af872c229e206155691e7dbb4a90c64699ccecc7ccbb",
+		},
+		{
+			name:     "mirror port preserved with path-based source and tag ref",
+			imageURL: "registry.redhat.io/rhcl-1/wasm-shim-rhel9:v0.12.3",
+			rules: []mirrorRule{
+				{source: "registry.redhat.io/rhcl-1", mirrors: []string{"bastion.example.com:8443/rhcl-1"}, pullType: pullTypeTag},
+			},
+			expected: "bastion.example.com:8443/rhcl-1/wasm-shim-rhel9:v0.12.3",
+		},
+		{
+			name:     "dual source registries with port-bearing mirror",
+			imageURL: "registry.access.redhat.com/rhcl-1/wasm-shim-rhel9@sha256:abc123",
+			rules: []mirrorRule{
+				{source: "registry.redhat.io/rhcl-1", mirrors: []string{"bastion.example.com:8443/rhcl-1"}, pullType: pullTypeDigest},
+				{source: "registry.access.redhat.com/rhcl-1", mirrors: []string{"bastion.example.com:8443/rhcl-1"}, pullType: pullTypeDigest},
+			},
+			expected: "bastion.example.com:8443/rhcl-1/wasm-shim-rhel9@sha256:abc123",
+		},
+
 		// --- Boundary checking (security) ---
 		{
 			name:     "source must match on boundary - partial host match rejected",

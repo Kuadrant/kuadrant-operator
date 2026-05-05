@@ -3,6 +3,7 @@
 package openshift
 
 import (
+	"os"
 	"testing"
 )
 
@@ -481,6 +482,32 @@ func TestRewriteWildcard(t *testing.T) {
 			result := rewriteWildcard(tt.imageURL, tt.wildcardSource, tt.mirror)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestIsImageMirrorResolutionDisabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected bool
+	}{
+		{"disabled when true", "true", true},
+		{"enabled when false", "false", false},
+		{"enabled when empty", "", false},
+		{"enabled when arbitrary", "yes", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envValue != "" {
+				t.Setenv("DISABLE_IMAGE_MIRROR_RESOLUTION", tt.envValue)
+			} else {
+				os.Unsetenv("DISABLE_IMAGE_MIRROR_RESOLUTION")
+			}
+			if got := IsImageMirrorResolutionDisabled(); got != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, got)
 			}
 		})
 	}

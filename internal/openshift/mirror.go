@@ -92,8 +92,15 @@ type mirrorRule struct {
 // references (:tag), matching the pull-from-mirror semantics that CRI-O enforces.
 //
 // Returns the original URL unchanged if no mirrors match or on non-OpenShift clusters.
+// IsImageMirrorResolutionDisabled returns true when the DISABLE_IMAGE_MIRROR_RESOLUTION
+// env var is set to "true". This disables all disconnected-cluster support: mirror URL
+// rewriting, registry credential discovery, and pull secret management.
+func IsImageMirrorResolutionDisabled() bool {
+	return os.Getenv("DISABLE_IMAGE_MIRROR_RESOLUTION") == "true"
+}
+
 func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL string, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) string {
-	if os.Getenv("DISABLE_IMAGE_MIRROR_RESOLUTION") == "true" {
+	if IsImageMirrorResolutionDisabled() {
 		logger.V(1).Info("image mirror resolution disabled via DISABLE_IMAGE_MIRROR_RESOLUTION")
 		return imageURL
 	}

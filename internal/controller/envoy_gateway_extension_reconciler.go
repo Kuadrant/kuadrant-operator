@@ -73,6 +73,13 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
+	// Auto-discover registry credentials from OpenShift cluster pull secrets
+	registryHost := openshift.ExtractRegistryHost(resolvedImageURL)
+	registryCreds, err := openshift.ResolveRegistryCredentials(ctx, r.client, registryHost, logger)
+	if err != nil {
+		logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", err)
+	}
+
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
 	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
@@ -104,7 +111,17 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, resolvedImageURL)
+		// Manage the pull secret in the gateway namespace.
+		useImagePullSecret, secretErr := openshift.EnsureWasmPluginPullSecret(ctx, r.client, gateway.GetNamespace(), RegistryPullSecretName, registryCreds, logger)
+		if secretErr != nil {
+			logger.Error(secretErr, "failed to ensure pull secret", "gateway", gatewayKey.String())
+		}
+		// Fallback: PROTECTED_REGISTRY for backward compatibility (non-OpenShift or manual override)
+		if !useImagePullSecret && ProtectedRegistry != "" && strings.Contains(resolvedImageURL, ProtectedRegistry) {
+			useImagePullSecret = true
+		}
+
+		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, resolvedImageURL, useImagePullSecret)
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
@@ -528,7 +545,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 }
 
 // buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, imageURL string, useImagePullSecret bool) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -585,14 +602,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 		if wasm.Code.Image.PullSecretRef != nil {
 			wasm.Code.Image.PullSecretRef = nil
 		}
-		// Only check the resolved (post-mirror-resolution) image URL against PROTECTED_REGISTRY.
-		// In disconnected clusters, users must set PROTECTED_REGISTRY to the mirror hostname
-		// so it matches the resolved URL. Checking the pre-resolution URL would risk referencing
-		// a pull secret that doesn't exist (e.g. when the mirror is unauthenticated).
-		// We don't verify the secret exists at runtime because the controller lacks cluster-wide
-		// RBAC for secrets, and Istio surfaces missing-secret errors only at the data-plane level,
-		// making runtime checks unreliable without RBAC escalation.
-		if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
+		if useImagePullSecret {
 			wasm.Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
 		}
 	}

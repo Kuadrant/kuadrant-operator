@@ -3,7 +3,6 @@
 package controllers
 
 import (
-	"fmt"
 	"testing"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -15,11 +14,7 @@ import (
 )
 
 var (
-	defaultWasmImage    = WASMFilterImageURL
-	registry            = "protected.registry.io"
-	protectedRegImage   = fmt.Sprintf("%s/kuadrant/wasm-shim:latest", registry)
-	mirrorResolvedImage = "mirror.disconnected.local/kuadrant/wasm-shim:latest"
-	testGateway         = &machinery.Gateway{
+	testGateway = &machinery.Gateway{
 		Gateway: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test",
@@ -38,15 +33,15 @@ var (
 
 func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 	testCases := []struct {
-		Name                    string
-		ImageURL                string
-		ProtectedRegistryPrefix string
-		Assert                  func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin)
+		Name               string
+		ImageURL           string
+		UseImagePullSecret bool
+		Assert             func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin)
 	}{
 		{
-			Name:                    "ensure image pull secret is set in wasmPlugin for protected registry",
-			ImageURL:                protectedRegImage,
-			ProtectedRegistryPrefix: registry,
+			Name:               "ensure image pull secret is set when useImagePullSecret is true",
+			ImageURL:           "registry.redhat.io/rhcl-1/wasm-shim-rhel9:latest",
+			UseImagePullSecret: true,
 			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
 				if plugin == nil {
 					t.Fatalf("Expected a wasmplugin")
@@ -57,8 +52,9 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:     "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
-			ImageURL: WASMFilterImageURL,
+			Name:               "ensure image pull secret is NOT set when useImagePullSecret is false",
+			ImageURL:           WASMFilterImageURL,
+			UseImagePullSecret: false,
 			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
 				if plugin == nil {
 					t.Fatalf("Expected a wasmplugin")
@@ -69,9 +65,9 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:                    "ensure image pull secret is NOT set when resolved URL does not match protected registry",
-			ImageURL:                mirrorResolvedImage,
-			ProtectedRegistryPrefix: registry,
+			Name:               "ensure image URL is set correctly regardless of pull secret",
+			ImageURL:           "mirror.disconnected.local/kuadrant/wasm-shim:latest",
+			UseImagePullSecret: false,
 			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
 				if plugin == nil {
 					t.Fatalf("Expected a wasmplugin")
@@ -79,8 +75,8 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 				if plugin.Spec.ImagePullSecret != "" {
 					t.Fatalf("Expected wasm plugin to NOT have imagePullSecret but got %v", plugin.Spec.ImagePullSecret)
 				}
-				if plugin.Spec.Url != mirrorResolvedImage {
-					t.Fatalf("Expected wasm plugin URL to be %s but got %s", mirrorResolvedImage, plugin.Spec.Url)
+				if plugin.Spec.Url != "mirror.disconnected.local/kuadrant/wasm-shim:latest" {
+					t.Fatalf("Expected wasm plugin URL to be %s but got %s", "mirror.disconnected.local/kuadrant/wasm-shim:latest", plugin.Spec.Url)
 				}
 			},
 		},
@@ -88,7 +84,7 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			plugin := buildIstioWasmPluginForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, testCase.ImageURL)
+			plugin := buildIstioWasmPluginForGateway(testGateway, testWasmConfig, testCase.ImageURL, testCase.UseImagePullSecret)
 			testCase.Assert(t, plugin)
 		})
 	}
@@ -97,18 +93,18 @@ func Test_buildIstioWasmPluginForGateway(t *testing.T) {
 
 func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 	testCases := []struct {
-		Name                    string
-		ImageURL                string
-		ProtectedRegistryPrefix string
-		Assert                  func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy)
+		Name               string
+		ImageURL           string
+		UseImagePullSecret bool
+		Assert             func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy)
 	}{
 		{
-			Name:                    "ensure image pull secret is set in ExtensionPolicy for protected registry",
-			ImageURL:                protectedRegImage,
-			ProtectedRegistryPrefix: registry,
+			Name:               "ensure image pull secret is set when useImagePullSecret is true",
+			ImageURL:           "registry.redhat.io/rhcl-1/wasm-shim-rhel9:latest",
+			UseImagePullSecret: true,
 			Assert: func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy) {
 				if policy == nil {
-					t.Fatalf("Expected a wasmplugin")
+					t.Fatalf("Expected an extension policy")
 				}
 				for _, w := range policy.Spec.Wasm {
 					if w.Code.Image.PullSecretRef == nil {
@@ -121,11 +117,12 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:     "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
-			ImageURL: defaultWasmImage,
+			Name:               "ensure image pull secret is NOT set when useImagePullSecret is false",
+			ImageURL:           WASMFilterImageURL,
+			UseImagePullSecret: false,
 			Assert: func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy) {
 				if policy == nil {
-					t.Fatalf("Expected a wasmplugin")
+					t.Fatalf("Expected an extension policy")
 				}
 				for _, w := range policy.Spec.Wasm {
 					if w.Code.Image.PullSecretRef != nil {
@@ -135,19 +132,19 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 			},
 		},
 		{
-			Name:                    "ensure image pull secret is NOT set when resolved URL does not match protected registry",
-			ImageURL:                mirrorResolvedImage,
-			ProtectedRegistryPrefix: registry,
+			Name:               "ensure image URL is set correctly regardless of pull secret",
+			ImageURL:           "mirror.disconnected.local/kuadrant/wasm-shim:latest",
+			UseImagePullSecret: false,
 			Assert: func(t *testing.T, policy *envoygatewayv1alpha1.EnvoyExtensionPolicy) {
 				if policy == nil {
-					t.Fatalf("Expected a wasmplugin")
+					t.Fatalf("Expected an extension policy")
 				}
 				for _, w := range policy.Spec.Wasm {
 					if w.Code.Image.PullSecretRef != nil {
 						t.Fatalf("Expected extension to NOT have imagePullSecret but got %v", w.Code.Image.PullSecretRef)
 					}
-					if w.Code.Image.URL != mirrorResolvedImage {
-						t.Fatalf("Expected extension image URL to be %s but got %s", mirrorResolvedImage, w.Code.Image.URL)
+					if w.Code.Image.URL != "mirror.disconnected.local/kuadrant/wasm-shim:latest" {
+						t.Fatalf("Expected extension image URL to be %s but got %s", "mirror.disconnected.local/kuadrant/wasm-shim:latest", w.Code.Image.URL)
 					}
 				}
 			},
@@ -156,7 +153,7 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			policy := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, testCase.ImageURL)
+			policy := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ImageURL, testCase.UseImagePullSecret)
 			testCase.Assert(t, policy)
 		})
 	}

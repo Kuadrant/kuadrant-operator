@@ -589,8 +589,10 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 			},
 		},
 	}
-	if useImagePullSecret {
-		envoyPolicy.Spec.Wasm[0].Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
+	for i := range envoyPolicy.Spec.Wasm {
+		if useImagePullSecret {
+			envoyPolicy.Spec.Wasm[i].Code.Image.PullSecretRef = &gwapiv1b1.SecretObjectReference{Name: v1.ObjectName(RegistryPullSecretName)}
+		}
 	}
 
 	if len(wasmConfig.ActionSets) == 0 {

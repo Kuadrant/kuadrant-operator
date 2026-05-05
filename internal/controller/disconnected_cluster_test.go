@@ -3,7 +3,6 @@
 package controllers
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -27,19 +26,9 @@ func newTestScheme() *runtime.Scheme {
 	return s
 }
 
-// TestDisconnectedCluster_IstioFlow exercises the full chain:
-// IDMS mirror resolution → credential discovery → secret management → wasm plugin construction
-func TestDisconnectedCluster_IstioFlow(t *testing.T) {
-	const (
-		originalImage = "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:abc123"
-		mirrorHost    = "mirror.disconnected.local:8443"
-		mirrorImage   = mirrorHost + "/rhcl-1/wasm-shim-rhel9@sha256:abc123"
-		gatewayNs     = "gateway-ns"
-	)
-
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s,
-		// IDMS: registry.redhat.io → mirror.disconnected.local:8443
+func newMirrorFakeClient(t *testing.T, mirrorHost string, extraObjects ...runtime.Object) *dfake.FakeDynamicClient {
+	t.Helper()
+	objects := []runtime.Object{
 		&configv1.ImageDigestMirrorSet{
 			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "wasm-mirror"},
@@ -52,7 +41,6 @@ func TestDisconnectedCluster_IstioFlow(t *testing.T) {
 				},
 			},
 		},
-		// Cluster pull secret with credentials for the mirror registry
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 			ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: "openshift-config"},
@@ -61,38 +49,36 @@ func TestDisconnectedCluster_IstioFlow(t *testing.T) {
 				corev1.DockerConfigJsonKey: []byte(`{"auths":{"` + mirrorHost + `":{"auth":"bWlycm9yOnNlY3JldA=="}}}`),
 			},
 		},
+	}
+	objects = append(objects, extraObjects...)
+	return dfake.NewSimpleDynamicClient(newTestScheme(), objects...)
+}
+
+// TestDisconnectedCluster_IstioFlow exercises the full chain:
+// mirror resolution → ReconcileWasmPluginPullSecret → wasm plugin construction
+func TestDisconnectedCluster_IstioFlow(t *testing.T) {
+	const (
+		originalImage = "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:abc123"
+		mirrorHost    = "mirror.disconnected.local:8443"
+		mirrorImage   = mirrorHost + "/rhcl-1/wasm-shim-rhel9@sha256:abc123"
+		gatewayNs     = "gateway-ns"
 	)
 
-	ctx := context.Background()
+	fakeClient := newMirrorFakeClient(t, mirrorHost)
+	ctx := t.Context()
 	logger := logr.Discard()
 
-	// Step 1: Mirror resolution
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
 	if resolvedURL != mirrorImage {
 		t.Fatalf("mirror resolution: expected %q, got %q", mirrorImage, resolvedURL)
 	}
 
-	// Step 2: Registry credential discovery
-	registryHost := openshift.ExtractRegistryHost(resolvedURL)
-	if registryHost != mirrorHost {
-		t.Fatalf("registry host extraction: expected %q, got %q", mirrorHost, registryHost)
-	}
-
-	registryCreds, err := openshift.ResolveRegistryCredentials(ctx, fakeClient, registryHost, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
-		t.Fatalf("credential discovery failed: %v", err)
-	}
-	if registryCreds == nil {
-		t.Fatal("expected credentials for mirror registry, got nil")
-	}
-
-	// Step 3: Pull secret management in gateway namespace
-	useImagePullSecret, err := openshift.EnsureWasmPluginPullSecret(ctx, fakeClient, gatewayNs, RegistryPullSecretName, registryCreds, logger)
-	if err != nil {
-		t.Fatalf("secret management failed: %v", err)
+		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
 	}
 	if !useImagePullSecret {
-		t.Fatal("expected useImagePullSecret=true after creating managed secret")
+		t.Fatal("expected useImagePullSecret=true")
 	}
 
 	// Verify the managed secret was created
@@ -104,7 +90,6 @@ func TestDisconnectedCluster_IstioFlow(t *testing.T) {
 		t.Fatal("managed secret missing kuadrant.io/managed label")
 	}
 
-	// Step 4: Wasm plugin construction
 	gw := &machinery.Gateway{
 		Gateway: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-gw", Namespace: gatewayNs},
@@ -133,43 +118,15 @@ func TestDisconnectedCluster_EnvoyGatewayFlow(t *testing.T) {
 		gatewayNs     = "eg-gateway-ns"
 	)
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s,
-		&configv1.ImageDigestMirrorSet{
-			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "wasm-mirror"},
-			Spec: configv1.ImageDigestMirrorSetSpec{
-				ImageDigestMirrors: []configv1.ImageDigestMirrors{
-					{
-						Source:  "registry.redhat.io",
-						Mirrors: []configv1.ImageMirror{configv1.ImageMirror(mirrorHost)},
-					},
-				},
-			},
-		},
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: "openshift-config"},
-			Type:       corev1.SecretTypeDockerConfigJson,
-			Data: map[string][]byte{
-				corev1.DockerConfigJsonKey: []byte(`{"auths":{"` + mirrorHost + `":{"auth":"bWlycm9yOnNlY3JldA=="}}}`),
-			},
-		},
-	)
-
-	ctx := context.Background()
+	fakeClient := newMirrorFakeClient(t, mirrorHost)
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
-	registryHost := openshift.ExtractRegistryHost(resolvedURL)
-	registryCreds, err := openshift.ResolveRegistryCredentials(ctx, fakeClient, registryHost, logger)
-	if err != nil {
-		t.Fatalf("credential discovery failed: %v", err)
-	}
 
-	useImagePullSecret, err := openshift.EnsureWasmPluginPullSecret(ctx, fakeClient, gatewayNs, RegistryPullSecretName, registryCreds, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
-		t.Fatalf("secret management failed: %v", err)
+		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
 	}
 
 	gw := &machinery.Gateway{
@@ -205,27 +162,17 @@ func TestDisconnectedCluster_NonOpenShift(t *testing.T) {
 		gatewayNs     = "non-ocp-ns"
 	)
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s)
-
-	ctx := context.Background()
+	fakeClient := dfake.NewSimpleDynamicClient(newTestScheme())
+	ctx := t.Context()
 	logger := logr.Discard()
 
-	// No CRDs installed → URL unchanged
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, false, false, false, logger)
 	if resolvedURL != originalImage {
 		t.Fatalf("expected unchanged URL on non-OpenShift, got %q", resolvedURL)
 	}
 
-	// No creds found
-	registryHost := openshift.ExtractRegistryHost(resolvedURL)
-	registryCreds, _ := openshift.ResolveRegistryCredentials(ctx, fakeClient, registryHost, logger)
-	if registryCreds != nil {
-		t.Fatal("expected nil creds on non-OpenShift cluster")
-	}
-
-	// No secret management needed (nil creds, no existing secret)
-	useImagePullSecret, err := openshift.EnsureWasmPluginPullSecret(ctx, fakeClient, gatewayNs, RegistryPullSecretName, registryCreds, logger)
+	// No CRDs installed — returns false immediately, no API calls
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, false, false, false, logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -260,31 +207,8 @@ func TestDisconnectedCluster_KillSwitch(t *testing.T) {
 
 	t.Setenv("DISABLE_IMAGE_MIRROR_RESOLUTION", "true")
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s,
-		&configv1.ImageDigestMirrorSet{
-			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "wasm-mirror"},
-			Spec: configv1.ImageDigestMirrorSetSpec{
-				ImageDigestMirrors: []configv1.ImageDigestMirrors{
-					{
-						Source:  "registry.redhat.io",
-						Mirrors: []configv1.ImageMirror{configv1.ImageMirror(mirrorHost)},
-					},
-				},
-			},
-		},
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: "openshift-config"},
-			Type:       corev1.SecretTypeDockerConfigJson,
-			Data: map[string][]byte{
-				corev1.DockerConfigJsonKey: []byte(`{"auths":{"` + mirrorHost + `":{"auth":"bWlycm9yOnNlY3JldA=="}}}`),
-			},
-		},
-	)
-
-	ctx := context.Background()
+	fakeClient := newMirrorFakeClient(t, mirrorHost)
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	// Mirror resolution disabled
@@ -293,19 +217,22 @@ func TestDisconnectedCluster_KillSwitch(t *testing.T) {
 		t.Fatalf("expected original URL with kill-switch, got %q", resolvedURL)
 	}
 
-	// Feature is disabled — skip cred discovery
-	if !openshift.IsImageMirrorResolutionDisabled() {
-		t.Fatal("expected kill-switch to be active")
+	// ReconcileWasmPluginPullSecret returns false (kill-switch active)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if useImagePullSecret {
+		t.Fatal("expected useImagePullSecret=false with kill-switch")
 	}
 
-	// Wasm plugin should use original URL, no pull secret
 	gw := &machinery.Gateway{
 		Gateway: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-gw", Namespace: gatewayNs},
 		},
 	}
 	wasmConfig := wasm.Config{ActionSets: []wasm.ActionSet{{Name: "test"}}}
-	plugin := buildIstioWasmPluginForGateway(gw, wasmConfig, resolvedURL, false)
+	plugin := buildIstioWasmPluginForGateway(gw, wasmConfig, resolvedURL, useImagePullSecret)
 	if plugin.Spec.Url != originalImage {
 		t.Errorf("expected original URL, got %q", plugin.Spec.Url)
 	}
@@ -322,23 +249,16 @@ func TestDisconnectedCluster_ProtectedRegistryFallback(t *testing.T) {
 		gatewayNs = "fallback-ns"
 	)
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s)
-
-	ctx := context.Background()
+	fakeClient := dfake.NewSimpleDynamicClient(newTestScheme())
+	ctx := t.Context()
 	logger := logr.Discard()
 
-	// No mirror CRDs → URL unchanged
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, imageURL, false, false, false, logger)
 
-	// No creds found
-	registryHost := openshift.ExtractRegistryHost(resolvedURL)
-	registryCreds, _ := openshift.ResolveRegistryCredentials(ctx, fakeClient, registryHost, logger)
+	// No CRDs → ReconcileWasmPluginPullSecret returns false
+	useImagePullSecret, _ := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, false, false, false, logger)
 
-	// EnsureWasmPluginPullSecret with nil creds → false
-	useImagePullSecret, _ := openshift.EnsureWasmPluginPullSecret(ctx, fakeClient, gatewayNs, RegistryPullSecretName, registryCreds, logger)
-
-	// PROTECTED_REGISTRY fallback
+	// PROTECTED_REGISTRY fallback (same logic as production reconcilers)
 	if !useImagePullSecret && ProtectedRegistry != "" && strings.Contains(resolvedURL, ProtectedRegistry) {
 		useImagePullSecret = true
 	}
@@ -368,48 +288,24 @@ func TestDisconnectedCluster_UserSecretNotOverwritten(t *testing.T) {
 		gatewayNs     = "user-secret-ns"
 	)
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s,
-		&configv1.ImageDigestMirrorSet{
-			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "wasm-mirror"},
-			Spec: configv1.ImageDigestMirrorSetSpec{
-				ImageDigestMirrors: []configv1.ImageDigestMirrors{
-					{
-						Source:  "registry.redhat.io",
-						Mirrors: []configv1.ImageMirror{configv1.ImageMirror(mirrorHost)},
-					},
-				},
-			},
+	// User-created secret (no managed label) in gateway namespace
+	userSecret := &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+		ObjectMeta: metav1.ObjectMeta{Name: RegistryPullSecretName, Namespace: gatewayNs},
+		Type:       corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: []byte(`{"auths":{"custom.registry.io":{"auth":"dXNlcg=="}}}`),
 		},
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: "openshift-config"},
-			Type:       corev1.SecretTypeDockerConfigJson,
-			Data: map[string][]byte{
-				corev1.DockerConfigJsonKey: []byte(`{"auths":{"` + mirrorHost + `":{"auth":"bWlycm9yOnNlY3JldA=="}}}`),
-			},
-		},
-		// User-created secret (no managed label) in gateway namespace
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: RegistryPullSecretName, Namespace: gatewayNs},
-			Type:       corev1.SecretTypeDockerConfigJson,
-			Data: map[string][]byte{
-				corev1.DockerConfigJsonKey: []byte(`{"auths":{"custom.registry.io":{"auth":"dXNlcg=="}}}`),
-			},
-		},
-	)
+	}
 
-	ctx := context.Background()
+	fakeClient := newMirrorFakeClient(t, mirrorHost, userSecret)
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
-	registryHost := openshift.ExtractRegistryHost(resolvedURL)
-	registryCreds, _ := openshift.ResolveRegistryCredentials(ctx, fakeClient, registryHost, logger)
 
-	// EnsureWasmPluginPullSecret should return true (user secret exists) without modifying it
-	useImagePullSecret, err := openshift.EnsureWasmPluginPullSecret(ctx, fakeClient, gatewayNs, RegistryPullSecretName, registryCreds, logger)
+	// ReconcileWasmPluginPullSecret should return true (user secret exists) without modifying it
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -424,7 +320,6 @@ func TestDisconnectedCluster_UserSecretNotOverwritten(t *testing.T) {
 		t.Fatal("user-created secret should not have managed label")
 	}
 
-	// Wasm plugin should still reference the pull secret
 	gw := &machinery.Gateway{
 		Gateway: &v1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-gw", Namespace: gatewayNs},
@@ -437,42 +332,18 @@ func TestDisconnectedCluster_UserSecretNotOverwritten(t *testing.T) {
 	}
 }
 
-// TestDisconnectedCluster_ReconcileWasmPluginPullSecret exercises the unified
-// entry point that production reconcilers use (credential discovery + secret
-// lifecycle in a single call).
-func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
+// TestDisconnectedCluster_Idempotent verifies that calling ReconcileWasmPluginPullSecret
+// twice produces the same result without errors (no spurious updates).
+func TestDisconnectedCluster_Idempotent(t *testing.T) {
 	const (
 		originalImage = "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:abc123"
 		mirrorHost    = "mirror.disconnected.local:8443"
 		mirrorImage   = mirrorHost + "/rhcl-1/wasm-shim-rhel9@sha256:abc123"
-		gatewayNs     = "unified-ns"
+		gatewayNs     = "idempotent-ns"
 	)
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s,
-		&configv1.ImageDigestMirrorSet{
-			TypeMeta:   metav1.TypeMeta{Kind: "ImageDigestMirrorSet", APIVersion: "config.openshift.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "wasm-mirror"},
-			Spec: configv1.ImageDigestMirrorSetSpec{
-				ImageDigestMirrors: []configv1.ImageDigestMirrors{
-					{
-						Source:  "registry.redhat.io",
-						Mirrors: []configv1.ImageMirror{configv1.ImageMirror(mirrorHost)},
-					},
-				},
-			},
-		},
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: "openshift-config"},
-			Type:       corev1.SecretTypeDockerConfigJson,
-			Data: map[string][]byte{
-				corev1.DockerConfigJsonKey: []byte(`{"auths":{"` + mirrorHost + `":{"auth":"bWlycm9yOnNlY3JldA=="}}}`),
-			},
-		},
-	)
-
-	ctx := context.Background()
+	fakeClient := newMirrorFakeClient(t, mirrorHost)
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
@@ -480,55 +351,60 @@ func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
 		t.Fatalf("mirror resolution: expected %q, got %q", mirrorImage, resolvedURL)
 	}
 
-	// Single call: discovers creds and creates/manages the secret
 	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
-		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
+		t.Fatalf("first call failed: %v", err)
 	}
 	if !useImagePullSecret {
-		t.Fatal("expected useImagePullSecret=true")
+		t.Fatal("expected useImagePullSecret=true on first call")
 	}
 
-	// Verify managed secret was created with correct label
-	created, err := fakeClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(gatewayNs).Get(ctx, RegistryPullSecretName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("managed secret not found: %v", err)
-	}
-	if created.GetLabels()["kuadrant.io/managed"] != "true" {
-		t.Fatal("managed secret missing kuadrant.io/managed label")
-	}
-
-	// Idempotent: calling again should succeed without error
 	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
-		t.Fatalf("second ReconcileWasmPluginPullSecret failed: %v", err)
+		t.Fatalf("second call failed: %v", err)
 	}
 	if !useImagePullSecret2 {
 		t.Fatal("expected useImagePullSecret=true on second call")
 	}
 }
 
-// TestDisconnectedCluster_ReconcileNoCreds verifies the unified entry point
-// returns false when no credentials are found (non-OpenShift cluster).
-func TestDisconnectedCluster_ReconcileNoCreds(t *testing.T) {
+// TestDisconnectedCluster_CleanupWhenInactive verifies that ReconcileWasmPluginPullSecret
+// cleans up managed secrets when active=false.
+func TestDisconnectedCluster_CleanupWhenInactive(t *testing.T) {
 	const (
-		imageURL  = "quay.io/kuadrant/wasm-shim:latest"
-		gatewayNs = "no-creds-ns"
+		originalImage = "registry.redhat.io/rhcl-1/wasm-shim-rhel9@sha256:abc123"
+		mirrorHost    = "mirror.disconnected.local:8443"
+		gatewayNs     = "cleanup-ns"
 	)
 
-	s := newTestScheme()
-	fakeClient := dfake.NewSimpleDynamicClient(s)
-
-	ctx := context.Background()
+	fakeClient := newMirrorFakeClient(t, mirrorHost)
+	ctx := t.Context()
 	logger := logr.Discard()
 
-	// No CRDs installed — function returns false immediately
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, imageURL, gatewayNs, RegistryPullSecretName, true, false, false, false, logger)
+	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
+
+	// First: create managed secret
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("create failed: %v", err)
+	}
+	if !useImagePullSecret {
+		t.Fatal("expected useImagePullSecret=true after create")
+	}
+
+	// Second: clean up (active=false)
+	useImagePullSecret, err = openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, false, true, false, false, logger)
+	if err != nil {
+		t.Fatalf("cleanup failed: %v", err)
 	}
 	if useImagePullSecret {
-		t.Fatal("expected useImagePullSecret=false when no CRDs installed")
+		t.Fatal("expected useImagePullSecret=false after cleanup")
+	}
+
+	// Verify secret was deleted
+	_, err = fakeClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(gatewayNs).Get(ctx, RegistryPullSecretName, metav1.GetOptions{})
+	if err == nil {
+		t.Fatal("expected managed secret to be deleted")
 	}
 }
 
@@ -575,29 +451,30 @@ func TestDisconnectedCluster_AdditionalPullSecretOverride(t *testing.T) {
 		},
 	)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := logr.Discard()
 
 	resolvedURL := openshift.ResolveImageURL(ctx, fakeClient, originalImage, true, false, false, logger)
-	registryHost := openshift.ExtractRegistryHost(resolvedURL)
-	registryCreds, err := openshift.ResolveRegistryCredentials(ctx, fakeClient, registryHost, logger)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if registryCreds == nil {
-		t.Fatal("expected credentials")
-	}
 
-	// Verify the additional-pull-secret credentials won (contains "bmV3OnBhc3M=")
-	if !strings.Contains(string(registryCreds), "bmV3OnBhc3M=") {
-		t.Errorf("expected additional-pull-secret creds to override, got %s", string(registryCreds))
-	}
-
-	useImagePullSecret, err := openshift.EnsureWasmPluginPullSecret(ctx, fakeClient, gatewayNs, RegistryPullSecretName, registryCreds, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !useImagePullSecret {
 		t.Fatal("expected useImagePullSecret=true")
+	}
+
+	// Verify the managed secret contains the additional-pull-secret creds (override won)
+	created, err := fakeClient.Resource(corev1.SchemeGroupVersion.WithResource("secrets")).Namespace(gatewayNs).Get(ctx, RegistryPullSecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("managed secret not found: %v", err)
+	}
+	var managedSecret corev1.Secret
+	if convErr := runtime.DefaultUnstructuredConverter.FromUnstructured(created.Object, &managedSecret); convErr != nil {
+		t.Fatalf("failed to convert managed secret: %v", convErr)
+	}
+	dockerCfg := string(managedSecret.Data[corev1.DockerConfigJsonKey])
+	if !strings.Contains(dockerCfg, "bmV3OnBhc3M=") {
+		t.Errorf("expected additional-pull-secret creds in managed secret, got %s", dockerCfg)
 	}
 }

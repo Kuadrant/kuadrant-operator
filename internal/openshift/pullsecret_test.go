@@ -45,7 +45,7 @@ func makeManagedSecret(namespace, name string, dockerConfigData []byte) *corev1.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels:    map[string]string{ManagedLabelKey: ManagedLabelValue},
+			Labels:    map[string]string{managedLabelKey: managedLabelValue},
 		},
 		Type: corev1.SecretTypeDockerConfigJson,
 		Data: map[string][]byte{corev1.DockerConfigJsonKey: dockerConfigData},
@@ -61,9 +61,9 @@ func makeUserSecret(namespace, name string) *corev1.Secret {
 	}
 }
 
-// --- ExtractRegistryHost tests ---
+// --- extractRegistryHost tests ---
 
-func TestExtractRegistryHost(t *testing.T) {
+func Test_extractRegistryHost(t *testing.T) {
 	tests := []struct {
 		name     string
 		imageURL string
@@ -103,7 +103,7 @@ func TestExtractRegistryHost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ExtractRegistryHost(tt.imageURL)
+			result := extractRegistryHost(tt.imageURL)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
@@ -228,18 +228,18 @@ func TestBuildFilteredDockerConfigJSON(t *testing.T) {
 	}
 }
 
-// --- ResolveRegistryCredentials tests ---
+// --- resolveRegistryCredentials tests ---
 
-func TestResolveRegistryCredentials(t *testing.T) {
+func Test_resolveRegistryCredentials(t *testing.T) {
 	t.Run("returns credentials from pull-secret", func(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s,
-			makeDockerConfigSecret(OpenshiftConfigNamespace, ClusterPullSecretName, map[string]string{
+			makeDockerConfigSecret(openshiftConfigNamespace, clusterPullSecretName, map[string]string{
 				"registry.redhat.io": "cmVkaGF0OnBhc3M=",
 			}),
 		)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -259,15 +259,15 @@ func TestResolveRegistryCredentials(t *testing.T) {
 	t.Run("additional-pull-secret overrides pull-secret", func(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s,
-			makeDockerConfigSecret(OpenshiftConfigNamespace, ClusterPullSecretName, map[string]string{
+			makeDockerConfigSecret(openshiftConfigNamespace, clusterPullSecretName, map[string]string{
 				"registry.redhat.io": "b3JpZ2luYWw=",
 			}),
-			makeDockerConfigSecret(OpenshiftConfigNamespace, AdditionalPullSecretName, map[string]string{
+			makeDockerConfigSecret(openshiftConfigNamespace, additionalPullSecretName, map[string]string{
 				"registry.redhat.io": "b3ZlcnJpZGRlbg==",
 			}),
 		)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -288,15 +288,15 @@ func TestResolveRegistryCredentials(t *testing.T) {
 	t.Run("additional-pull-secret adds new registries", func(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s,
-			makeDockerConfigSecret(OpenshiftConfigNamespace, ClusterPullSecretName, map[string]string{
+			makeDockerConfigSecret(openshiftConfigNamespace, clusterPullSecretName, map[string]string{
 				"registry.redhat.io": "cmVkaGF0",
 			}),
-			makeDockerConfigSecret(OpenshiftConfigNamespace, AdditionalPullSecretName, map[string]string{
+			makeDockerConfigSecret(openshiftConfigNamespace, additionalPullSecretName, map[string]string{
 				"mirror.local:8443": "bWlycm9y",
 			}),
 		)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "mirror.local:8443", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "mirror.local:8443", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -308,12 +308,12 @@ func TestResolveRegistryCredentials(t *testing.T) {
 	t.Run("returns nil when registry not found in any secret", func(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s,
-			makeDockerConfigSecret(OpenshiftConfigNamespace, ClusterPullSecretName, map[string]string{
+			makeDockerConfigSecret(openshiftConfigNamespace, clusterPullSecretName, map[string]string{
 				"registry.redhat.io": "cmVkaGF0",
 			}),
 		)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "unknown.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "unknown.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -326,7 +326,7 @@ func TestResolveRegistryCredentials(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -342,7 +342,7 @@ func TestResolveRegistryCredentials(t *testing.T) {
 			return true, nil, &errFake{msg: "API server error"}
 		})
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -352,9 +352,9 @@ func TestResolveRegistryCredentials(t *testing.T) {
 	})
 }
 
-// --- EnsureWasmPluginPullSecret tests ---
+// --- ensureWasmPluginPullSecret tests ---
 
-func TestEnsureWasmPluginPullSecret(t *testing.T) {
+func Test_ensureWasmPluginPullSecret(t *testing.T) {
 	const (
 		namespace  = "gateway-ns"
 		secretName = "wasm-plugin-pull-secret"
@@ -367,7 +367,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s)
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -380,7 +380,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 			t.Fatalf("secret was not created: %v", err)
 		}
 		labels := created.GetLabels()
-		if labels[ManagedLabelKey] != ManagedLabelValue {
+		if labels[managedLabelKey] != managedLabelValue {
 			t.Error("created secret missing managed label")
 		}
 	})
@@ -389,7 +389,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s)
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -403,7 +403,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		userSecret := makeUserSecret(namespace, secretName)
 		fakeClient := dfake.NewSimpleDynamicClient(s, userSecret)
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -413,7 +413,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 
 		existing, _ := fakeClient.Resource(secretsResource).Namespace(namespace).Get(context.Background(), secretName, metav1.GetOptions{})
 		labels := existing.GetLabels()
-		if labels != nil && labels[ManagedLabelKey] == ManagedLabelValue {
+		if labels != nil && labels[managedLabelKey] == managedLabelValue {
 			t.Error("user secret should NOT have managed label")
 		}
 	})
@@ -423,7 +423,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		userSecret := makeUserSecret(namespace, secretName)
 		fakeClient := dfake.NewSimpleDynamicClient(s, userSecret)
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -437,7 +437,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds)
 		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -456,7 +456,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		managedSecret := makeManagedSecret(namespace, secretName, sampleCreds)
 		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -476,7 +476,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 			return false, nil, nil
 		})
 
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -502,7 +502,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		})
 
 		// Desired data is compact JSON — same logical content
-		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		shouldSet, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -521,7 +521,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "server error"}
 		})
 
-		_, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -534,7 +534,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "create failed"}
 		})
 
-		_, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error on create failure, got nil")
 		}
@@ -548,7 +548,7 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "delete failed"}
 		})
 
-		_, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, nil, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error on delete failure, got nil")
 		}
@@ -562,27 +562,27 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 			return true, nil, &errFake{msg: "update failed"}
 		})
 
-		_, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, logr.Discard())
+		_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, updatedCreds, logr.Discard())
 		if err == nil {
 			t.Fatal("expected error on update failure, got nil")
 		}
 	})
 }
 
-// --- readAndMerge edge case tests (via ResolveRegistryCredentials) ---
+// --- readAndMerge edge case tests (via resolveRegistryCredentials) ---
 
-func TestResolveRegistryCredentials_EdgeCases(t *testing.T) {
+func Test_resolveRegistryCredentials_EdgeCases(t *testing.T) {
 	t.Run("secret without .dockerconfigjson key is skipped", func(t *testing.T) {
 		s := newPullSecretScheme()
 		secretWithoutKey := &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: ClusterPullSecretName, Namespace: OpenshiftConfigNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterPullSecretName, Namespace: openshiftConfigNamespace},
 			Type:       corev1.SecretTypeOpaque,
 			Data:       map[string][]byte{"some-other-key": []byte("irrelevant")},
 		}
 		fakeClient := dfake.NewSimpleDynamicClient(s, secretWithoutKey)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -595,13 +595,13 @@ func TestResolveRegistryCredentials_EdgeCases(t *testing.T) {
 		s := newPullSecretScheme()
 		secretWithBadData := &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: ClusterPullSecretName, Namespace: OpenshiftConfigNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterPullSecretName, Namespace: openshiftConfigNamespace},
 			Type:       corev1.SecretTypeDockerConfigJson,
 			Data:       map[string][]byte{corev1.DockerConfigJsonKey: []byte("not-valid-json")},
 		}
 		fakeClient := dfake.NewSimpleDynamicClient(s, secretWithBadData)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -612,18 +612,18 @@ func TestResolveRegistryCredentials_EdgeCases(t *testing.T) {
 
 	t.Run("one valid and one invalid secret still returns creds from valid one", func(t *testing.T) {
 		s := newPullSecretScheme()
-		validSecret := makeDockerConfigSecret(OpenshiftConfigNamespace, ClusterPullSecretName, map[string]string{
+		validSecret := makeDockerConfigSecret(openshiftConfigNamespace, clusterPullSecretName, map[string]string{
 			"registry.redhat.io": "dmFsaWQ=",
 		})
 		invalidSecret := &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: AdditionalPullSecretName, Namespace: OpenshiftConfigNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: additionalPullSecretName, Namespace: openshiftConfigNamespace},
 			Type:       corev1.SecretTypeDockerConfigJson,
 			Data:       map[string][]byte{corev1.DockerConfigJsonKey: []byte("{bad json}")},
 		}
 		fakeClient := dfake.NewSimpleDynamicClient(s, validSecret, invalidSecret)
 
-		creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+		creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -719,7 +719,7 @@ func TestBuildSecretUnstructured(t *testing.T) {
 		t.Errorf("expected namespace test-ns, got %s", obj.GetNamespace())
 	}
 	labels := obj.GetLabels()
-	if labels[ManagedLabelKey] != ManagedLabelValue {
+	if labels[managedLabelKey] != managedLabelValue {
 		t.Error("expected managed label")
 	}
 	if obj.GetKind() != "Secret" {
@@ -729,19 +729,19 @@ func TestBuildSecretUnstructured(t *testing.T) {
 
 // --- readAndMerge FromUnstructured error path ---
 
-func TestResolveRegistryCredentials_UnparseableSecret(t *testing.T) {
+func Test_resolveRegistryCredentials_UnparseableSecret(t *testing.T) {
 	s := newPullSecretScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s)
 
 	// Return an unstructured object that cannot be converted to corev1.Secret
 	fakeClient.PrependReactor("get", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		getAction := action.(k8stesting.GetAction)
-		if getAction.GetName() == ClusterPullSecretName {
+		if getAction.GetName() == clusterPullSecretName {
 			return true, &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": "v1",
 					"kind":       "Secret",
-					"metadata":   map[string]interface{}{"name": ClusterPullSecretName, "namespace": OpenshiftConfigNamespace},
+					"metadata":   map[string]interface{}{"name": clusterPullSecretName, "namespace": openshiftConfigNamespace},
 					"data":       "not-a-map",
 				},
 			}, nil
@@ -749,7 +749,7 @@ func TestResolveRegistryCredentials_UnparseableSecret(t *testing.T) {
 		return false, nil, nil
 	})
 
-	creds, err := ResolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
+	creds, err := resolveRegistryCredentials(context.Background(), fakeClient, "registry.redhat.io", logr.Discard())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -758,9 +758,9 @@ func TestResolveRegistryCredentials_UnparseableSecret(t *testing.T) {
 	}
 }
 
-// --- EnsureWasmPluginPullSecret FromUnstructured error on existing secret ---
+// --- ensureWasmPluginPullSecret FromUnstructured error on existing secret ---
 
-func TestEnsureWasmPluginPullSecret_UnparseableExistingSecret(t *testing.T) {
+func Test_ensureWasmPluginPullSecret_UnparseableExistingSecret(t *testing.T) {
 	s := newPullSecretScheme()
 	fakeClient := dfake.NewSimpleDynamicClient(s)
 
@@ -773,7 +773,7 @@ func TestEnsureWasmPluginPullSecret_UnparseableExistingSecret(t *testing.T) {
 				"metadata": map[string]interface{}{
 					"name":      "wasm-plugin-pull-secret",
 					"namespace": "test-ns",
-					"labels":    map[string]interface{}{ManagedLabelKey: ManagedLabelValue},
+					"labels":    map[string]interface{}{managedLabelKey: managedLabelValue},
 				},
 				"data": "not-a-map",
 			},
@@ -781,7 +781,7 @@ func TestEnsureWasmPluginPullSecret_UnparseableExistingSecret(t *testing.T) {
 	})
 
 	sampleCreds := []byte(`{"auths":{"mirror.local:8443":{"auth":"bWlycm9y"}}}`)
-	_, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, "test-ns", "wasm-plugin-pull-secret", sampleCreds, logr.Discard())
+	_, err := ensureWasmPluginPullSecret(context.Background(), fakeClient, "test-ns", "wasm-plugin-pull-secret", sampleCreds, logr.Discard())
 	if err == nil {
 		t.Fatal("expected error when existing secret cannot be parsed, got nil")
 	}

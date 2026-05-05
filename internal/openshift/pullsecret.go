@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	OpenshiftConfigNamespace = "openshift-config"
-	ClusterPullSecretName    = "pull-secret"
-	AdditionalPullSecretName = "additional-pull-secret"
+	openshiftConfigNamespace = "openshift-config"
+	clusterPullSecretName    = "pull-secret"
+	additionalPullSecretName = "additional-pull-secret"
 
-	ManagedLabelKey   = "kuadrant.io/managed"
-	ManagedLabelValue = "true"
+	managedLabelKey   = "kuadrant.io/managed"
+	managedLabelValue = "true"
 )
 
 var secretsResource = corev1.SchemeGroupVersion.WithResource("secrets")
@@ -43,18 +43,18 @@ func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface
 		return false, nil
 	}
 	if !active {
-		return EnsureWasmPluginPullSecret(ctx, client, namespace, secretName, nil, logger)
+		return ensureWasmPluginPullSecret(ctx, client, namespace, secretName, nil, logger)
 	}
-	registryHost := ExtractRegistryHost(imageURL)
-	registryCreds, err := ResolveRegistryCredentials(ctx, client, registryHost, logger)
+	registryHost := extractRegistryHost(imageURL)
+	registryCreds, err := resolveRegistryCredentials(ctx, client, registryHost, logger)
 	if err != nil {
 		logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", err)
 	}
-	return EnsureWasmPluginPullSecret(ctx, client, namespace, secretName, registryCreds, logger)
+	return ensureWasmPluginPullSecret(ctx, client, namespace, secretName, registryCreds, logger)
 }
 
-// ExtractRegistryHost extracts the registry hostname (with optional port) from a container image URL.
-func ExtractRegistryHost(imageURL string) string {
+// extractRegistryHost extracts the registry hostname (with optional port) from a container image URL.
+func extractRegistryHost(imageURL string) string {
 	if idx := strings.IndexByte(imageURL, '/'); idx >= 0 {
 		return imageURL[:idx]
 	}
@@ -65,26 +65,26 @@ func ExtractRegistryHost(imageURL string) string {
 	return imageURL
 }
 
-// ResolveRegistryCredentials reads the OpenShift cluster pull secrets (pull-secret and
+// resolveRegistryCredentials reads the OpenShift cluster pull secrets (pull-secret and
 // additional-pull-secret in openshift-config namespace), merges them, and returns a
 // dockerconfigjson containing only the credentials for the specified registry host.
 // Returns nil if no credentials are found or if the secrets cannot be read (e.g., on
 // non-OpenShift clusters).
-func ResolveRegistryCredentials(ctx context.Context, client dynamic.Interface, registryHost string, logger logr.Logger) ([]byte, error) {
+func resolveRegistryCredentials(ctx context.Context, client dynamic.Interface, registryHost string, logger logr.Logger) ([]byte, error) {
 	merged := make(map[string]json.RawMessage)
 
-	readAndMerge(ctx, client, ClusterPullSecretName, merged, logger)
+	readAndMerge(ctx, client, clusterPullSecretName, merged, logger)
 	// additional-pull-secret entries override pull-secret entries
-	readAndMerge(ctx, client, AdditionalPullSecretName, merged, logger)
+	readAndMerge(ctx, client, additionalPullSecretName, merged, logger)
 
 	return buildFilteredDockerConfigJSON(merged, registryHost)
 }
 
 func readAndMerge(ctx context.Context, client dynamic.Interface, secretName string, into map[string]json.RawMessage, logger logr.Logger) {
-	un, err := client.Resource(secretsResource).Namespace(OpenshiftConfigNamespace).Get(ctx, secretName, metav1.GetOptions{})
+	un, err := client.Resource(secretsResource).Namespace(openshiftConfigNamespace).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if !k8serrors.IsNotFound(err) && !k8serrors.IsForbidden(err) {
-			logger.V(1).Info("failed to read secret", "namespace", OpenshiftConfigNamespace, "name", secretName, "error", err)
+			logger.V(1).Info("failed to read secret", "namespace", openshiftConfigNamespace, "name", secretName, "error", err)
 		}
 		return
 	}
@@ -137,7 +137,7 @@ func buildFilteredDockerConfigJSON(auths map[string]json.RawMessage, registryHos
 	return data, nil
 }
 
-// EnsureWasmPluginPullSecret manages the lifecycle of the wasm-plugin-pull-secret in the
+// ensureWasmPluginPullSecret manages the lifecycle of the wasm-plugin-pull-secret in the
 // given namespace. It creates or updates the secret with the provided credentials, or
 // cleans it up if no credentials are needed.
 //
@@ -146,7 +146,7 @@ func buildFilteredDockerConfigJSON(auths map[string]json.RawMessage, registryHos
 // sets the imagePullSecret reference on the WasmPlugin / EnvoyExtensionPolicy.
 //
 // Returns true if the imagePullSecret reference should be set.
-func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, namespace, secretName string, dockerConfigData []byte, logger logr.Logger) (bool, error) {
+func ensureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, namespace, secretName string, dockerConfigData []byte, logger logr.Logger) (bool, error) {
 	resource := client.Resource(secretsResource).Namespace(namespace)
 
 	existing, err := resource.Get(ctx, secretName, metav1.GetOptions{})
@@ -158,7 +158,7 @@ func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 	isManaged := false
 	if secretExists {
 		lbls := existing.GetLabels()
-		isManaged = lbls != nil && lbls[ManagedLabelKey] == ManagedLabelValue
+		isManaged = lbls != nil && lbls[managedLabelKey] == managedLabelValue
 	}
 
 	// User-created secret: never touch it, always reference it
@@ -229,7 +229,7 @@ func buildSecretUnstructured(namespace, name string, dockerConfigData []byte) *u
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				ManagedLabelKey: ManagedLabelValue,
+				managedLabelKey: managedLabelValue,
 			},
 		},
 		Type: corev1.SecretTypeDockerConfigJson,

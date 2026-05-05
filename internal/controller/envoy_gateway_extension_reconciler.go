@@ -581,6 +581,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 		},
 	}
 	for _, wasm := range envoyPolicy.Spec.Wasm {
+		// reset to empty to allow for the image having moved to a public registry
 		if wasm.Code.Image.PullSecretRef != nil {
 			wasm.Code.Image.PullSecretRef = nil
 		}

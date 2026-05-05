@@ -592,6 +592,7 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 			Phase:        istioextensionsv1alpha1.PluginPhase_STATS, // insert the plugin before Istio stats filters and after Istio authorization filters.
 		},
 	}
+	// reset to empty to allow for the image having moved to a public registry
 	wasmPlugin.Spec.ImagePullSecret = ""
 	// Only check the resolved (post-mirror-resolution) image URL against PROTECTED_REGISTRY.
 	// In disconnected clusters, users must set PROTECTED_REGISTRY to the mirror hostname

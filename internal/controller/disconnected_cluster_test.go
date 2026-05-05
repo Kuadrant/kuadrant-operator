@@ -481,7 +481,7 @@ func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
 	}
 
 	// Single call: discovers creds and creates/manages the secret
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, logger)
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
 		t.Fatalf("ReconcileWasmPluginPullSecret failed: %v", err)
 	}
@@ -499,7 +499,7 @@ func TestDisconnectedCluster_ReconcileWasmPluginPullSecret(t *testing.T) {
 	}
 
 	// Idempotent: calling again should succeed without error
-	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, logger)
+	useImagePullSecret2, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, resolvedURL, gatewayNs, RegistryPullSecretName, true, true, false, false, logger)
 	if err != nil {
 		t.Fatalf("second ReconcileWasmPluginPullSecret failed: %v", err)
 	}
@@ -522,12 +522,13 @@ func TestDisconnectedCluster_ReconcileNoCreds(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
 
-	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, imageURL, gatewayNs, RegistryPullSecretName, true, logger)
+	// No CRDs installed — function returns false immediately
+	useImagePullSecret, err := openshift.ReconcileWasmPluginPullSecret(ctx, fakeClient, imageURL, gatewayNs, RegistryPullSecretName, true, false, false, false, logger)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if useImagePullSecret {
-		t.Fatal("expected useImagePullSecret=false when no creds exist")
+		t.Fatal("expected useImagePullSecret=false when no CRDs installed")
 	}
 }
 

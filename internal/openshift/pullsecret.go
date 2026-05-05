@@ -32,16 +32,16 @@ type dockerConfigJSON struct {
 	Auths map[string]json.RawMessage `json:"auths"`
 }
 
-// ReconcileWasmPluginPullSecret resolves registry credentials from OpenShift cluster
-// pull secrets and ensures the appropriate pull secret exists in the given namespace.
-// This is the single entry point for the reconciler — it encapsulates credential
-// discovery and secret lifecycle management.
-//
-// When active is true (gateway has wasm configs), it discovers credentials and
-// creates/updates the pull secret. When false, it cleans up any managed pull secret.
+// ReconcileWasmPluginPullSecret is the single entry point for pull secret automation.
+// It checks whether the feature is enabled (kill-switch off and at least one mirror CRD
+// installed), then either discovers credentials and manages the secret (when active) or
+// cleans up any managed secret (when not active).
 //
 // Returns true if the WasmPlugin/EnvoyExtensionPolicy should reference a pull secret.
-func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, imageURL, namespace, secretName string, active bool, logger logr.Logger) (bool, error) {
+func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, imageURL, namespace, secretName string, active, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) (bool, error) {
+	if IsImageMirrorResolutionDisabled() || (!isIDMSInstalled && !isITMSInstalled && !isICPInstalled) {
+		return false, nil
+	}
 	if !active {
 		return EnsureWasmPluginPullSecret(ctx, client, namespace, secretName, nil, logger)
 	}

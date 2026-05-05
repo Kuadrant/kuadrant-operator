@@ -73,8 +73,6 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
-	pullSecretEnabled := !openshift.IsImageMirrorResolutionDisabled() && (r.isIDMSInstalled || r.isITMSInstalled || r.isICPInstalled)
-
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
 	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
@@ -106,13 +104,9 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		var useImagePullSecret bool
-		if pullSecretEnabled {
-			var secretErr error
-			useImagePullSecret, secretErr = openshift.ReconcileWasmPluginPullSecret(ctx, r.client, resolvedImageURL, gateway.GetNamespace(), RegistryPullSecretName, len(wasmConfig.ActionSets) > 0, logger)
-			if secretErr != nil {
-				logger.Error(secretErr, "failed to reconcile pull secret", "gateway", gatewayKey.String())
-			}
+		useImagePullSecret, secretErr := openshift.ReconcileWasmPluginPullSecret(ctx, r.client, resolvedImageURL, gateway.GetNamespace(), RegistryPullSecretName, len(wasmConfig.ActionSets) > 0, r.isIDMSInstalled, r.isITMSInstalled, r.isICPInstalled, logger)
+		if secretErr != nil {
+			logger.Error(secretErr, "failed to reconcile pull secret", "gateway", gatewayKey.String())
 		}
 		// Fallback: PROTECTED_REGISTRY for backward compatibility (non-OpenShift or manual override)
 		if !useImagePullSecret && ProtectedRegistry != "" && strings.Contains(resolvedImageURL, ProtectedRegistry) {

@@ -77,8 +77,8 @@ type mirrorRule struct {
 //
 // This function collects mirror rules from all three sources, finds the most specific
 // source prefix match, and rewrites the image URL to point to the mirror. This is
-// necessary because Istio and Envoy Gateway pull wasm-shim images directly and do not
-// honor OpenShift's node-level mirror configuration (registries.conf / CRI-O).
+// necessary because some components (e.g., Istio, Envoy Gateway) pull images directly
+// and do not honor OpenShift's node-level mirror configuration (registries.conf / CRI-O).
 //
 // The resolution logic follows the prefix-matching semantics used by:
 //   - containers/image: pkg/sysregistriesv2 (refMatchingPrefix, refMatchingSubdomainPrefix)
@@ -127,7 +127,7 @@ func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL str
 
 	resolved := resolveFromMirrors(imageURL, rules)
 	if resolved != imageURL {
-		logger.V(1).Info("resolved wasm-shim image via mirror", "original", imageURL, "resolved", resolved)
+		logger.Info("resolved image via mirror", "original", imageURL, "resolved", resolved)
 	}
 	return resolved
 }

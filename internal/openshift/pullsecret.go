@@ -32,6 +32,21 @@ type dockerConfigJSON struct {
 	Auths map[string]json.RawMessage `json:"auths"`
 }
 
+// ReconcileWasmPluginPullSecret resolves registry credentials from OpenShift cluster
+// pull secrets and ensures the appropriate pull secret exists in the given namespace.
+// This is the single entry point for the reconciler — it encapsulates credential
+// discovery and secret lifecycle management.
+//
+// Returns true if the WasmPlugin/EnvoyExtensionPolicy should reference a pull secret.
+func ReconcileWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, imageURL, namespace, secretName string, logger logr.Logger) (bool, error) {
+	registryHost := ExtractRegistryHost(imageURL)
+	registryCreds, err := ResolveRegistryCredentials(ctx, client, registryHost, logger)
+	if err != nil {
+		logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", err)
+	}
+	return EnsureWasmPluginPullSecret(ctx, client, namespace, secretName, registryCreds, logger)
+}
+
 // ExtractRegistryHost extracts the registry hostname (with optional port) from a container image URL.
 func ExtractRegistryHost(imageURL string) string {
 	if idx := strings.IndexByte(imageURL, '/'); idx >= 0 {

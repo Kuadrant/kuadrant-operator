@@ -74,18 +74,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	logger.V(1).Info("building istio extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building istio extension")
 
-	// Auto-discover registry credentials from OpenShift cluster pull secrets.
-	// Only attempt when mirror CRDs are installed (indicating an OpenShift cluster)
-	// and the kill-switch is not set.
-	var registryCreds []byte
-	if !openshift.IsImageMirrorResolutionDisabled() && (r.isIDMSInstalled || r.isITMSInstalled || r.isICPInstalled) {
-		registryHost := openshift.ExtractRegistryHost(resolvedImageURL)
-		var credErr error
-		registryCreds, credErr = openshift.ResolveRegistryCredentials(ctx, r.client, registryHost, logger)
-		if credErr != nil {
-			logger.V(1).Info("failed to resolve registry credentials", "registry", registryHost, "error", credErr)
-		}
-	}
+	pullSecretEnabled := !openshift.IsImageMirrorResolutionDisabled() && (r.isIDMSInstalled || r.isITMSInstalled || r.isICPInstalled)
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
 	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
@@ -119,13 +108,18 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 
 		var useImagePullSecret bool
-		// Only manage pull secrets for gateways that have an active wasm plugin.
-		// Pass nil creds for gateways losing their wasm plugin to clean up managed secrets.
-		if !openshift.IsImageMirrorResolutionDisabled() && len(wasmConfig.ActionSets) > 0 {
-			var secretErr error
-			useImagePullSecret, secretErr = openshift.EnsureWasmPluginPullSecret(ctx, r.client, gateway.GetNamespace(), RegistryPullSecretName, registryCreds, logger)
-			if secretErr != nil {
-				logger.Error(secretErr, "failed to ensure pull secret", "gateway", gatewayKey.String())
+		if pullSecretEnabled {
+			if len(wasmConfig.ActionSets) > 0 {
+				var secretErr error
+				useImagePullSecret, secretErr = openshift.ReconcileWasmPluginPullSecret(ctx, r.client, resolvedImageURL, gateway.GetNamespace(), RegistryPullSecretName, logger)
+				if secretErr != nil {
+					logger.Error(secretErr, "failed to reconcile pull secret", "gateway", gatewayKey.String())
+				}
+			} else {
+				// No active policies — clean up any managed pull secret
+				if _, secretErr := openshift.EnsureWasmPluginPullSecret(ctx, r.client, gateway.GetNamespace(), RegistryPullSecretName, nil, logger); secretErr != nil {
+					logger.Error(secretErr, "failed to clean up pull secret", "gateway", gatewayKey.String())
+				}
 			}
 		}
 		// Fallback: PROTECTED_REGISTRY for backward compatibility (non-OpenShift or manual override)

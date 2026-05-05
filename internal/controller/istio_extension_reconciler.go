@@ -74,10 +74,11 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	logger.V(1).Info("building istio extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building istio extension")
 
-	// Auto-discover registry credentials from OpenShift cluster pull secrets
-	// (skipped when DISABLE_IMAGE_MIRROR_RESOLUTION=true)
+	// Auto-discover registry credentials from OpenShift cluster pull secrets.
+	// Only attempt when mirror CRDs are installed (indicating an OpenShift cluster)
+	// and the kill-switch is not set.
 	var registryCreds []byte
-	if !openshift.IsImageMirrorResolutionDisabled() {
+	if !openshift.IsImageMirrorResolutionDisabled() && (r.isIDMSInstalled || r.isITMSInstalled || r.isICPInstalled) {
 		registryHost := openshift.ExtractRegistryHost(resolvedImageURL)
 		var credErr error
 		registryCreds, credErr = openshift.ResolveRegistryCredentials(ctx, r.client, registryHost, logger)
@@ -118,10 +119,9 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 
 		var useImagePullSecret bool
-		if !openshift.IsImageMirrorResolutionDisabled() {
-			// Manage the pull secret in the gateway namespace.
-			// EnsureWasmPluginPullSecret creates/updates a managed secret when credentials are found,
-			// leaves user-created secrets untouched, and cleans up managed secrets when no longer needed.
+		// Only manage pull secrets for gateways that have an active wasm plugin.
+		// Pass nil creds for gateways losing their wasm plugin to clean up managed secrets.
+		if !openshift.IsImageMirrorResolutionDisabled() && len(wasmConfig.ActionSets) > 0 {
 			var secretErr error
 			useImagePullSecret, secretErr = openshift.EnsureWasmPluginPullSecret(ctx, r.client, gateway.GetNamespace(), RegistryPullSecretName, registryCreds, logger)
 			if secretErr != nil {

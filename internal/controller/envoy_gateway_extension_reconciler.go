@@ -73,10 +73,11 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL, "resolved image url", resolvedImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
 
-	// Auto-discover registry credentials from OpenShift cluster pull secrets
-	// (skipped when DISABLE_IMAGE_MIRROR_RESOLUTION=true)
+	// Auto-discover registry credentials from OpenShift cluster pull secrets.
+	// Only attempt when mirror CRDs are installed (indicating an OpenShift cluster)
+	// and the kill-switch is not set.
 	var registryCreds []byte
-	if !openshift.IsImageMirrorResolutionDisabled() {
+	if !openshift.IsImageMirrorResolutionDisabled() && (r.isIDMSInstalled || r.isITMSInstalled || r.isICPInstalled) {
 		registryHost := openshift.ExtractRegistryHost(resolvedImageURL)
 		var credErr error
 		registryCreds, credErr = openshift.ResolveRegistryCredentials(ctx, r.client, registryHost, logger)
@@ -117,7 +118,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 		}
 
 		var useImagePullSecret bool
-		if !openshift.IsImageMirrorResolutionDisabled() {
+		if !openshift.IsImageMirrorResolutionDisabled() && len(wasmConfig.ActionSets) > 0 {
 			var secretErr error
 			useImagePullSecret, secretErr = openshift.EnsureWasmPluginPullSecret(ctx, r.client, gateway.GetNamespace(), RegistryPullSecretName, registryCreds, logger)
 			if secretErr != nil {

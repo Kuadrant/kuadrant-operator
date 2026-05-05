@@ -1,6 +1,7 @@
 package openshift
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -155,9 +156,8 @@ func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 		return false, nil
 	}
 
-	desiredObj := buildSecretUnstructured(namespace, secretName, dockerConfigData)
-
 	if !secretExists {
+		desiredObj := buildSecretUnstructured(namespace, secretName, dockerConfigData)
 		if _, err := resource.Create(ctx, desiredObj, metav1.CreateOptions{}); err != nil {
 			return false, fmt.Errorf("failed to create secret %s/%s: %w", namespace, secretName, err)
 		}
@@ -165,13 +165,18 @@ func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 		return true, nil
 	}
 
-	// Secret exists and is managed — update if data changed
-	existingData, _, _ := unstructured.NestedString(existing.Object, "data", corev1.DockerConfigJsonKey)
-	desiredData, _, _ := unstructured.NestedString(desiredObj.Object, "data", corev1.DockerConfigJsonKey)
-	if existingData == desiredData {
+	// Secret exists and is managed — update only if the raw data actually changed.
+	// Convert via the typed API to get decoded []byte, avoiding any dependency on
+	// how the API server or unstructured converter serializes base64.
+	var existingSecret corev1.Secret
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(existing.Object, &existingSecret); err != nil {
+		return false, fmt.Errorf("failed to parse existing secret %s/%s: %w", namespace, secretName, err)
+	}
+	if bytes.Equal(existingSecret.Data[corev1.DockerConfigJsonKey], dockerConfigData) {
 		return true, nil
 	}
 
+	desiredObj := buildSecretUnstructured(namespace, secretName, dockerConfigData)
 	desiredObj.SetResourceVersion(existing.GetResourceVersion())
 	if _, err := resource.Update(ctx, desiredObj, metav1.UpdateOptions{}); err != nil {
 		return false, fmt.Errorf("failed to update secret %s/%s: %w", namespace, secretName, err)

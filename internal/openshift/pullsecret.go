@@ -1,6 +1,7 @@
 package openshift
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -185,12 +186,14 @@ func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 	return true, nil
 }
 
-// dockerConfigEqual compares two dockerconfigjson blobs by their deserialized
-// structure, making the comparison immune to JSON formatting differences.
+// dockerConfigEqual compares two dockerconfigjson blobs semantically.
+// When both are valid JSON, it deserializes and compares the structure
+// so that formatting differences don't cause spurious updates. Falls back
+// to byte comparison when either side is not valid JSON.
 func dockerConfigEqual(a, b []byte) bool {
 	var aVal, bVal interface{}
 	if json.Unmarshal(a, &aVal) != nil || json.Unmarshal(b, &bVal) != nil {
-		return false
+		return bytes.Equal(a, b)
 	}
 	return reflect.DeepEqual(aVal, bVal)
 }

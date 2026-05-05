@@ -683,9 +683,15 @@ func TestDockerConfigEqual(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "both invalid JSON",
+			name:     "both invalid JSON but identical bytes",
 			a:        []byte(`nope`),
 			b:        []byte(`nope`),
+			expected: true,
+		},
+		{
+			name:     "both invalid JSON and different bytes",
+			a:        []byte(`nope`),
+			b:        []byte(`nah`),
 			expected: false,
 		},
 	}

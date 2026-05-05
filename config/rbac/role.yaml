@@ -43,6 +43,15 @@ rules:
 - apiGroups:
   - ""
   resourceNames:
+  - additional-pull-secret
+  - pull-secret
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resourceNames:
   - wasm-plugin-pull-secret
   resources:
   - secrets

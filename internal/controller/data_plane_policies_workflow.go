@@ -88,6 +88,11 @@ var (
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagedigestmirrorsets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagetagmirrorsets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagecontentpolicies,verbs=get;list;watch
+// Pull secret automation: read cluster pull secrets to auto-discover registry credentials.
+// ClusterRole-scoped (not namespace-scoped) because OLM and Helm kustomize don't support
+// Roles in arbitrary namespaces. The resourceNames restriction limits read access to only
+// the two well-known OpenShift pull secrets.
+//+kubebuilder:rbac:groups="",resources=secrets,resourceNames=pull-secret;additional-pull-secret,verbs=get
 // wasm-plugin-pull-secret: create cannot use resourceNames (K8s RBAC limitation)
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=create
 //+kubebuilder:rbac:groups="",resources=secrets,resourceNames=wasm-plugin-pull-secret,verbs=get;update;patch;delete

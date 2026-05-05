@@ -2,6 +2,7 @@ package openshift
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -92,6 +93,11 @@ type mirrorRule struct {
 //
 // Returns the original URL unchanged if no mirrors match or on non-OpenShift clusters.
 func ResolveImageURL(ctx context.Context, client dynamic.Interface, imageURL string, isIDMSInstalled, isITMSInstalled, isICPInstalled bool, logger logr.Logger) string {
+	if os.Getenv("DISABLE_IMAGE_MIRROR_RESOLUTION") == "true" {
+		logger.V(1).Info("image mirror resolution disabled via DISABLE_IMAGE_MIRROR_RESOLUTION")
+		return imageURL
+	}
+
 	var rules []mirrorRule
 
 	if isIDMSInstalled {

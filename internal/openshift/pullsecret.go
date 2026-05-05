@@ -1,10 +1,10 @@
 package openshift
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -165,14 +165,14 @@ func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 		return true, nil
 	}
 
-	// Secret exists and is managed — update only if the raw data actually changed.
-	// Convert via the typed API to get decoded []byte, avoiding any dependency on
-	// how the API server or unstructured converter serializes base64.
+	// Secret exists and is managed — update only if the logical content changed.
+	// Deserialize both sides to compare semantically, so formatting differences
+	// (key order, whitespace) don't trigger unnecessary API writes.
 	var existingSecret corev1.Secret
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(existing.Object, &existingSecret); err != nil {
 		return false, fmt.Errorf("failed to parse existing secret %s/%s: %w", namespace, secretName, err)
 	}
-	if bytes.Equal(existingSecret.Data[corev1.DockerConfigJsonKey], dockerConfigData) {
+	if dockerConfigEqual(existingSecret.Data[corev1.DockerConfigJsonKey], dockerConfigData) {
 		return true, nil
 	}
 
@@ -183,6 +183,16 @@ func EnsureWasmPluginPullSecret(ctx context.Context, client dynamic.Interface, n
 	}
 	logger.Info("updated managed pull secret", "namespace", namespace, "secret", secretName)
 	return true, nil
+}
+
+// dockerConfigEqual compares two dockerconfigjson blobs by their deserialized
+// structure, making the comparison immune to JSON formatting differences.
+func dockerConfigEqual(a, b []byte) bool {
+	var aVal, bVal interface{}
+	if json.Unmarshal(a, &aVal) != nil || json.Unmarshal(b, &bVal) != nil {
+		return false
+	}
+	return reflect.DeepEqual(aVal, bVal)
 }
 
 func buildSecretUnstructured(namespace, name string, dockerConfigData []byte) *unstructured.Unstructured {

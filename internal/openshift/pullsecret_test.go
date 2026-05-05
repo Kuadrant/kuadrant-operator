@@ -487,6 +487,32 @@ func TestEnsureWasmPluginPullSecret(t *testing.T) {
 		}
 	})
 
+	t.Run("no-op when managed secret has same logical content but different JSON formatting", func(t *testing.T) {
+		s := newPullSecretScheme()
+		// Existing secret uses formatted JSON with different key order and whitespace
+		existingData := []byte(`{ "auths" : { "mirror.local:8443" : { "auth" : "bWlycm9y" } } }`)
+		managedSecret := makeManagedSecret(namespace, secretName, existingData)
+		fakeClient := dfake.NewSimpleDynamicClient(s, managedSecret)
+
+		var updateCalled bool
+		fakeClient.PrependReactor("update", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			updateCalled = true
+			return false, nil, nil
+		})
+
+		// Desired data is compact JSON — same logical content
+		shouldSet, err := EnsureWasmPluginPullSecret(context.Background(), fakeClient, namespace, secretName, sampleCreds, logr.Discard())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !shouldSet {
+			t.Error("expected shouldSet=true")
+		}
+		if updateCalled {
+			t.Error("expected no update when logical content is the same")
+		}
+	})
+
 	t.Run("returns error on get failure", func(t *testing.T) {
 		s := newPullSecretScheme()
 		fakeClient := dfake.NewSimpleDynamicClient(s)
@@ -604,6 +630,73 @@ func TestResolveRegistryCredentials_EdgeCases(t *testing.T) {
 			t.Fatal("expected credentials from valid pull-secret, got nil")
 		}
 	})
+}
+
+// --- dockerConfigEqual tests ---
+
+func TestDockerConfigEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a, b     []byte
+		expected bool
+	}{
+		{
+			name:     "identical bytes",
+			a:        []byte(`{"auths":{"r.io":{"auth":"x"}}}`),
+			b:        []byte(`{"auths":{"r.io":{"auth":"x"}}}`),
+			expected: true,
+		},
+		{
+			name:     "different whitespace",
+			a:        []byte(`{"auths":{"r.io":{"auth":"x"}}}`),
+			b:        []byte(`{ "auths" : { "r.io" : { "auth" : "x" } } }`),
+			expected: true,
+		},
+		{
+			name:     "different key order in auth entry",
+			a:        []byte(`{"auths":{"r.io":{"auth":"x","email":"a"}}}`),
+			b:        []byte(`{"auths":{"r.io":{"email":"a","auth":"x"}}}`),
+			expected: true,
+		},
+		{
+			name:     "different auth value",
+			a:        []byte(`{"auths":{"r.io":{"auth":"x"}}}`),
+			b:        []byte(`{"auths":{"r.io":{"auth":"y"}}}`),
+			expected: false,
+		},
+		{
+			name:     "different registry key",
+			a:        []byte(`{"auths":{"r.io":{"auth":"x"}}}`),
+			b:        []byte(`{"auths":{"s.io":{"auth":"x"}}}`),
+			expected: false,
+		},
+		{
+			name:     "invalid JSON in a",
+			a:        []byte(`not json`),
+			b:        []byte(`{"auths":{}}`),
+			expected: false,
+		},
+		{
+			name:     "invalid JSON in b",
+			a:        []byte(`{"auths":{}}`),
+			b:        []byte(`not json`),
+			expected: false,
+		},
+		{
+			name:     "both invalid JSON",
+			a:        []byte(`nope`),
+			b:        []byte(`nope`),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := dockerConfigEqual(tt.a, tt.b); got != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, got)
+			}
+		})
+	}
 }
 
 // --- buildSecretUnstructured tests ---

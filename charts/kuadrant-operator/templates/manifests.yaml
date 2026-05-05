@@ -13777,6 +13777,9 @@ rules:
   - config.openshift.io
   resources:
   - clusterversions
+  - imagecontentpolicies
+  - imagedigestmirrorsets
+  - imagetagmirrorsets
   verbs:
   - get
   - list

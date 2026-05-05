@@ -88,7 +88,9 @@ var (
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagedigestmirrorsets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagetagmirrorsets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=config.openshift.io,resources=imagecontentpolicies,verbs=get;list;watch
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// wasm-plugin-pull-secret: create cannot use resourceNames (K8s RBAC limitation)
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=create
+//+kubebuilder:rbac:groups="",resources=secrets,resourceNames=wasm-plugin-pull-secret,verbs=get;update;patch;delete
 
 func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled, isIDMSInstalled, isITMSInstalled, isICPInstalled bool) *controller.Workflow {
 	isGatewayProviderInstalled := isIstioInstalled || isEnvoyGatewayInstalled

@@ -1068,37 +1068,57 @@ func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
 	policy2 := testResourceID("DemoPolicy", "default", "demo-2")
 	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "my-api", Namespace: "default"}
 
+	fds1a := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{{Name: proto.String("svc1.proto")}},
+	}
+	fds1b := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{{Name: proto.String("svc2.proto")}},
+	}
+	fds2 := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{{Name: proto.String("svc3.proto")}},
+	}
+
 	store.SetUpstream(
-		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc1:8081", Service: "test.Service", Method: "Method1"},
-		RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRef, Service: "test.Service", Method: "Method1"},
-		testFileDescriptorSet(),
+		RegisteredUpstreamKey{Policy: policy1, Name: "method-a", URL: "grpc://svc1:8081", Service: "test.ServiceA", Method: "MethodA"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc1-8081", Host: "svc1", Port: 8081, TargetRef: targetRef, Service: "test.ServiceA", Method: "MethodA"},
+		fds1a,
 	)
 	store.SetUpstream(
-		RegisteredUpstreamKey{Policy: policy1, URL: "grpc://svc2:8082", Service: "test.Service", Method: "Method2"},
-		RegisteredUpstreamEntry{ClusterName: "ext-svc2-8082", Host: "svc2", Port: 8082, TargetRef: targetRef, Service: "test.Service", Method: "Method2"},
-		testFileDescriptorSet(),
+		RegisteredUpstreamKey{Policy: policy1, Name: "method-b", URL: "grpc://svc2:8082", Service: "test.ServiceB", Method: "MethodB"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc2-8082", Host: "svc2", Port: 8082, TargetRef: targetRef, Service: "test.ServiceB", Method: "MethodB"},
+		fds1b,
 	)
 	store.SetUpstream(
-		RegisteredUpstreamKey{Policy: policy2, URL: "grpc://svc3:8083", Service: "test.Service", Method: "Method3"},
-		RegisteredUpstreamEntry{ClusterName: "ext-svc3-8083", Host: "svc3", Port: 8083, TargetRef: targetRef, Service: "test.Service", Method: "Method3"},
-		testFileDescriptorSet(),
+		RegisteredUpstreamKey{Policy: policy2, Name: "method-c", URL: "grpc://svc3:8083", Service: "test.ServiceC", Method: "MethodC"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc3-8083", Host: "svc3", Port: 8083, TargetRef: targetRef, Service: "test.ServiceC", Method: "MethodC"},
+		fds2,
 	)
+
+	cacheKey1a := ProtoCacheKey{ClusterName: "ext-svc1-8081", Service: "test.ServiceA"}
+	cacheKey1b := ProtoCacheKey{ClusterName: "ext-svc2-8082", Service: "test.ServiceB"}
+	cacheKey2 := ProtoCacheKey{ClusterName: "ext-svc3-8083", Service: "test.ServiceC"}
 
 	_, _, clearedUpstreams := store.ClearPolicyData(policy1)
 	if clearedUpstreams != 2 {
 		t.Errorf("Expected 2 cleared upstreams, got %d", clearedUpstreams)
 	}
 
-	all := store.GetAllUpstreams()
-	if len(all) != 1 {
-		t.Errorf("Expected 1 remaining upstream, got %d", len(all))
+	if upstreams := store.GetUpstreamsForPolicy(policy1); len(upstreams) != 0 {
+		t.Errorf("Expected no upstreams for policy1 after clear, got %d", len(upstreams))
 	}
 
-	// Verify the remaining upstream belongs to policy2
-	key := RegisteredUpstreamKey{Policy: policy2, URL: "grpc://svc3:8083", Service: "test.Service", Method: "Method3"}
-	_, exists := store.GetUpstream(key)
-	if !exists {
-		t.Error("Expected policy2 upstream to still exist")
+	if _, exists := store.GetProtoDescriptor(cacheKey1a); exists {
+		t.Error("Expected proto descriptor for policy1 ServiceA to be removed")
+	}
+	if _, exists := store.GetProtoDescriptor(cacheKey1b); exists {
+		t.Error("Expected proto descriptor for policy1 ServiceB to be removed")
+	}
+
+	if upstreams := store.GetUpstreamsForPolicy(policy2); len(upstreams) != 1 {
+		t.Errorf("Expected 1 upstream for policy2, got %d", len(upstreams))
+	}
+	if _, exists := store.GetProtoDescriptor(cacheKey2); !exists {
+		t.Error("Expected proto descriptor for policy2 to still exist")
 	}
 }
 
@@ -1442,6 +1462,278 @@ func (m *mockWasmConfigMutator) Mutate(config *wasm.Config, targetRefs []machine
 	return m.mutateFn(config, targetRefs)
 }
 
+func TestPipelineActionStore_AppendAndGet(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	actions := []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "checkThreat", Intention: "resp.HeatLevel == 5"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "request.auth.identity.admin == true"},
+	}
+
+	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, actions)
+	if startIdx != 0 {
+		t.Errorf("Expected start index 0, got %d", startIdx)
+	}
+
+	retrieved := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if len(retrieved) != 2 {
+		t.Fatalf("Expected 2 actions, got %d", len(retrieved))
+	}
+	if retrieved[0].Index != 0 {
+		t.Errorf("First action index = %d, want 0", retrieved[0].Index)
+	}
+	if retrieved[1].Index != 1 {
+		t.Errorf("Second action index = %d, want 1", retrieved[1].Index)
+	}
+	if retrieved[0].Method != "checkThreat" {
+		t.Errorf("First action method = %q, want %q", retrieved[0].Method, "checkThreat")
+	}
+	if retrieved[1].ActionType != extpb.ActionType_ACTION_TYPE_ALLOW {
+		t.Errorf("Second action type = %v, want ALLOW", retrieved[1].ActionType)
+	}
+}
+
+func TestPipelineActionStore_SequentialAppends(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	// First append
+	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check1"},
+	})
+	if startIdx != 0 {
+		t.Errorf("First append start index = %d, want 0", startIdx)
+	}
+
+	// Second append continues index sequence
+	startIdx = store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "true"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check2"},
+	})
+	if startIdx != 1 {
+		t.Errorf("Second append start index = %d, want 1", startIdx)
+	}
+
+	all := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if len(all) != 3 {
+		t.Fatalf("Expected 3 total actions, got %d", len(all))
+	}
+	for i, a := range all {
+		if a.Index != i {
+			t.Errorf("Action %d has index %d, want %d", i, a.Index, i)
+		}
+	}
+}
+
+func TestPipelineActionStore_SeparatePhases(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+	})
+	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: "{'x-checked': 'true'}"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE, NewResponseCode: 403},
+	})
+
+	reqActions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if len(reqActions) != 1 {
+		t.Errorf("Expected 1 request action, got %d", len(reqActions))
+	}
+
+	respActions := store.GetPipelineActions(policy, PipelinePhaseResponse)
+	if len(respActions) != 2 {
+		t.Errorf("Expected 2 response actions, got %d", len(respActions))
+	}
+	// Response phase has its own index sequence
+	if respActions[0].Index != 0 {
+		t.Errorf("First response action index = %d, want 0", respActions[0].Index)
+	}
+}
+
+func TestPipelineActionStore_SeparatePolicies(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy1 := testResourceID("ThreatPolicy", "default", "policy-1")
+	policy2 := testResourceID("ThreatPolicy", "default", "policy-2")
+
+	store.AppendPipelineActions(policy1, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check1"},
+	})
+	store.AppendPipelineActions(policy2, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "true"},
+	})
+
+	p1Actions := store.GetPipelineActions(policy1, PipelinePhaseRequest)
+	p2Actions := store.GetPipelineActions(policy2, PipelinePhaseRequest)
+
+	if len(p1Actions) != 1 || len(p2Actions) != 1 {
+		t.Fatalf("Expected 1 action each, got %d and %d", len(p1Actions), len(p2Actions))
+	}
+	if p1Actions[0].Method != "check1" {
+		t.Errorf("Policy1 action method = %q, want %q", p1Actions[0].Method, "check1")
+	}
+	if p2Actions[0].ActionType != extpb.ActionType_ACTION_TYPE_ALLOW {
+		t.Errorf("Policy2 action type = %v, want ALLOW", p2Actions[0].ActionType)
+	}
+}
+
+func TestPipelineActionStore_ClearPipelineActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+	otherPolicy := testResourceID("ThreatPolicy", "default", "other-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+	})
+	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: "{'x': '1'}"},
+	})
+	store.AppendPipelineActions(otherPolicy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW},
+	})
+
+	cleared := store.ClearPipelineActions(policy)
+	if cleared != 2 {
+		t.Errorf("Expected 2 cleared actions, got %d", cleared)
+	}
+
+	if actions := store.GetPipelineActions(policy, PipelinePhaseRequest); actions != nil {
+		t.Errorf("Expected nil request actions after clear, got %v", actions)
+	}
+	if actions := store.GetPipelineActions(policy, PipelinePhaseResponse); actions != nil {
+		t.Errorf("Expected nil response actions after clear, got %v", actions)
+	}
+
+	// Other policy unaffected
+	otherActions := store.GetPipelineActions(otherPolicy, PipelinePhaseRequest)
+	if len(otherActions) != 1 {
+		t.Errorf("Expected other policy actions to remain, got %d", len(otherActions))
+	}
+}
+
+func TestPipelineActionStore_ClearPolicyDataIncludesPipeline(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+	})
+
+	store.ClearPolicyData(policy)
+
+	if actions := store.GetPipelineActions(policy, PipelinePhaseRequest); actions != nil {
+		t.Errorf("Expected pipeline actions to be cleared by ClearPolicyData, got %v", actions)
+	}
+}
+
+func TestPipelineActionStore_CounterResetsAfterClear(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD},
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW},
+	})
+
+	store.ClearPipelineActions(policy)
+
+	// After clear, index should restart at 0
+	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "new"},
+	})
+	if startIdx != 0 {
+		t.Errorf("Expected start index 0 after clear, got %d", startIdx)
+	}
+
+	actions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if len(actions) != 1 {
+		t.Fatalf("Expected 1 action after re-append, got %d", len(actions))
+	}
+	if actions[0].Index != 0 {
+		t.Errorf("Action index = %d, want 0", actions[0].Index)
+	}
+}
+
+func TestPipelineActionStore_GetFromEmptyStore(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	actions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if actions != nil {
+		t.Errorf("Expected nil from empty store, got %v", actions)
+	}
+}
+
+func TestPipelineActionStore_ConcurrentAppends(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+				{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: fmt.Sprintf("method-%d", index)},
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	actions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if len(actions) != 10 {
+		t.Errorf("Expected 10 actions after concurrent appends, got %d", len(actions))
+	}
+
+	// Verify all indices are unique
+	seen := make(map[int]bool)
+	for _, a := range actions {
+		if seen[a.Index] {
+			t.Errorf("Duplicate index %d found", a.Index)
+		}
+		seen[a.Index] = true
+	}
+}
+
+func TestPipelineActionStore_PredicatePreserved(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{
+			ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD,
+			Predicate:  "request.headers['check'] == '1' && request.method == 'GET'",
+			Method:     "checkThreat",
+			Intention:  "resp.ok",
+		},
+	})
+
+	actions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if actions[0].Predicate != "request.headers['check'] == '1' && request.method == 'GET'" {
+		t.Errorf("Predicate = %q, unexpected", actions[0].Predicate)
+	}
+}
+
+func TestPipelineActionStore_GetReturnsCopy(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "original"},
+	})
+
+	// Mutating the returned slice should not affect the store
+	retrieved := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	retrieved[0].Method = "mutated"
+
+	original := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if original[0].Method != "original" {
+		t.Errorf("Store was mutated through returned slice, method = %q", original[0].Method)
+	}
+}
+
 func TestMutateWasmConfig_DeduplicatesIdenticalUpstreams(t *testing.T) {
 	store := NewRegisteredDataStore()
 	mockTargetRef := createMockGatewayTargetRef()
@@ -1742,5 +2034,655 @@ func TestCollectRouteUpstreams(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+	policyID := testResourceID("ThreatPolicy", "default", "my-threat")
+
+	// Register an upstream (required for grpc_method actions)
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check", MessageTemplate: "threat.v1.Request{path: request.path}"},
+		testFileDescriptorSet(),
+	)
+
+	// Register pipeline actions
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: `request.url_path != "/blocked"`},
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse", Intention: "threatResponse.threat_level < 5", Predicate: `"x-assess-threat" in request.headers`},
+	})
+	store.AppendPipelineActions(policyID, PipelinePhaseResponse, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-checked": "true"}`},
+	})
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services: make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{
+			{Name: "test-action-set", Actions: []wasm.Action{}},
+		},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Legacy actions unchanged
+	if len(wasmConfig.ActionSets[0].Actions) != 0 {
+		t.Errorf("Expected 0 legacy actions, got %d", len(wasmConfig.ActionSets[0].Actions))
+	}
+
+	typed := wasmConfig.ActionSets[0].TypedActions
+	// AllowAction causes gRPC predicate to be removed; allow deny is prepended to onReply
+	if len(typed) != 1 {
+		t.Fatalf("Expected 1 TypedAction (grpc), got %d", len(typed))
+	}
+
+	expectedLocator := "ThreatPolicy/default/my-threat"
+
+	// gRPC action fires unconditionally (predicate moved to onReply)
+	grpc := typed[0]
+	if grpc.Type != "grpc" {
+		t.Errorf("Expected typed[0] type 'grpc', got %q", grpc.Type)
+	}
+	if grpc.Predicate != "true" {
+		t.Errorf("Expected typed[0] predicate 'true' (AllowAction removes gRPC predicate), got %q", grpc.Predicate)
+	}
+	if grpc.Var != "threatResponse" {
+		t.Errorf("Expected typed[0] var 'threatResponse', got %q", grpc.Var)
+	}
+	if grpc.Service == "" {
+		t.Error("Expected typed[0] service to be set")
+	}
+	if grpc.MessageBuilder != "threat.v1.Request{path: request.path}" {
+		t.Errorf("Expected typed[0] messageBuilder, got %q", grpc.MessageBuilder)
+	}
+	if grpc.Terminal {
+		t.Error("Expected typed[0] to NOT be terminal")
+	}
+	if len(grpc.SourcePolicyLocators) != 1 || grpc.SourcePolicyLocators[0] != expectedLocator {
+		t.Errorf("typed[0]: expected source locator %q, got %v", expectedLocator, grpc.SourcePolicyLocators)
+	}
+
+	// onReply: allow deny + intention deny (combined with gRPC predicate) + add_headers
+	if len(grpc.OnReply) != 3 {
+		t.Fatalf("Expected 3 onReply actions, got %d", len(grpc.OnReply))
+	}
+	// onReply[0]: AllowAction deny
+	if grpc.OnReply[0].Type != "deny" {
+		t.Errorf("Expected onReply[0] type 'deny', got %q", grpc.OnReply[0].Type)
+	}
+	if grpc.OnReply[0].Predicate != `!(request.url_path != "/blocked")` {
+		t.Errorf("Expected onReply[0] allow deny predicate, got %q", grpc.OnReply[0].Predicate)
+	}
+	if !grpc.OnReply[0].Terminal {
+		t.Error("Expected onReply[0] to be terminal")
+	}
+	// onReply[1]: intention deny (combined with original gRPC predicate)
+	if grpc.OnReply[1].Type != "deny" {
+		t.Errorf("Expected onReply[1] type 'deny', got %q", grpc.OnReply[1].Type)
+	}
+	expectedIntentionPredicate := `"x-assess-threat" in request.headers && !(threatResponse.threat_level < 5)`
+	if grpc.OnReply[1].Predicate != expectedIntentionPredicate {
+		t.Errorf("Expected onReply[1] combined predicate %q, got %q", expectedIntentionPredicate, grpc.OnReply[1].Predicate)
+	}
+	// onReply[2]: add_headers
+	if grpc.OnReply[2].Type != "headers" {
+		t.Errorf("Expected onReply[2] type 'headers', got %q", grpc.OnReply[2].Type)
+	}
+	if grpc.OnReply[2].Headers != `{"x-checked": "true"}` {
+		t.Errorf("Expected onReply[2] headers, got %q", grpc.OnReply[2].Headers)
+	}
+	if grpc.OnReply[2].Target != "response" {
+		t.Errorf("Expected onReply[2] target 'response', got %q", grpc.OnReply[2].Target)
+	}
+}
+
+func TestMutateWasmConfig_NoPipelineActionsNoChange(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+
+	// Register an upstream but NO pipeline actions
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: testResourceID("DemoPolicy", "default", "demo"), Name: "my-action", URL: "grpc://svc:8081", Service: "test.Service", Method: "Method1"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms", Service: "test.Service", Method: "Method1"},
+		testFileDescriptorSet(),
+	)
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	existingAction := wasm.Action{ServiceName: "auth-service", Scope: "default/route"}
+	wasmConfig := &wasm.Config{
+		Services:   make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{{Name: "set1", Actions: []wasm.Action{existingAction}}},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Service should be injected, but existing action set unchanged (no pipeline actions)
+	if len(wasmConfig.ActionSets[0].Actions) != 1 {
+		t.Errorf("Expected 1 action (unchanged), got %d", len(wasmConfig.ActionSets[0].Actions))
+	}
+	if wasmConfig.ActionSets[0].Actions[0].ServiceName != "auth-service" {
+		t.Errorf("Expected existing action preserved, got %q", wasmConfig.ActionSets[0].Actions[0].ServiceName)
+	}
+}
+
+func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+	policyID := testResourceID("ThreatPolicy", "default", "my-threat")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "check", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "request.method == 'GET'"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check", Intention: "response.ok"},
+	})
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services: make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{
+			{Name: "set1", Actions: []wasm.Action{}},
+			{Name: "set2", Actions: []wasm.Action{}},
+		},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// TypedActions should be appended to BOTH action sets (single grpc with allow deny in onReply)
+	for i, as := range wasmConfig.ActionSets {
+		if len(as.TypedActions) != 1 {
+			t.Errorf("ActionSet[%d]: expected 1 typed action (grpc), got %d", i, len(as.TypedActions))
+		}
+		if as.TypedActions[0].Type != "grpc" {
+			t.Errorf("ActionSet[%d]: expected grpc typed action, got %s", i, as.TypedActions[0].Type)
+		}
+		if as.TypedActions[0].Predicate != "true" {
+			t.Errorf("ActionSet[%d]: expected predicate 'true', got %s", i, as.TypedActions[0].Predicate)
+		}
+		// onReply should have allow deny + intention deny
+		if len(as.TypedActions[0].OnReply) < 2 {
+			t.Errorf("ActionSet[%d]: expected at least 2 onReply actions, got %d", i, len(as.TypedActions[0].OnReply))
+		}
+		if as.TypedActions[0].OnReply[0].Type != "deny" {
+			t.Errorf("ActionSet[%d]: expected onReply[0] deny (allow), got %s", i, as.TypedActions[0].OnReply[0].Type)
+		}
+	}
+}
+
+// testTopology builds a topology with gateway→listener→route links for testing.
+func testTopology(t *testing.T, gateways []*gwapiv1.Gateway, httpRoutes []*gwapiv1.HTTPRoute, grpcRoutes []*gwapiv1.GRPCRoute) *machinery.Topology {
+	t.Helper()
+	mGateways := lo.Map(gateways, func(g *gwapiv1.Gateway, _ int) *machinery.Gateway {
+		return &machinery.Gateway{Gateway: g}
+	})
+	listeners := lo.FlatMap(mGateways, machinery.ListenersFromGatewayFunc)
+	mHTTPRoutes := lo.Map(httpRoutes, func(r *gwapiv1.HTTPRoute, _ int) *machinery.HTTPRoute {
+		return &machinery.HTTPRoute{HTTPRoute: r}
+	})
+	mGRPCRoutes := lo.Map(grpcRoutes, func(r *gwapiv1.GRPCRoute, _ int) *machinery.GRPCRoute {
+		return &machinery.GRPCRoute{GRPCRoute: r}
+	})
+
+	topology, err := machinery.NewTopology(
+		machinery.WithTargetables(mGateways...),
+		machinery.WithTargetables(listeners...),
+		machinery.WithTargetables(mHTTPRoutes...),
+		machinery.WithTargetables(mGRPCRoutes...),
+		machinery.WithLinks(
+			machinery.LinkGatewayToListenerFunc(),
+			machinery.LinkListenerToHTTPRouteFunc(mGateways, listeners),
+			machinery.LinkListenerToGRPCRouteFunc(mGateways, listeners),
+		),
+	)
+	if err != nil {
+		t.Fatalf("Failed to build topology: %v", err)
+	}
+	return topology
+}
+
+func findGatewayInTopology(t *testing.T, topology *machinery.Topology, name string) *machinery.Gateway {
+	t.Helper()
+	for _, obj := range topology.Targetables().Items() {
+		if gw, ok := obj.(*machinery.Gateway); ok && gw.GetName() == name {
+			return gw
+		}
+	}
+	t.Fatalf("Gateway %s not found in topology", name)
+	return nil
+}
+
+func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
+	// Set up: extension policy has pipeline actions and upstreams, but no auth/ratelimit policies exist
+	store := NewRegisteredDataStore()
+	gatewayTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "test-gateway", Namespace: "test-namespace"}
+	policyID := testResourceID("ThreatPolicy", "default", "my-threat")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: gatewayTargetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: `request.url_path != "/blocked"`},
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse", Intention: "threatResponse.threat_level < 5"},
+	})
+
+	// Register the mutator globally (save and restore to avoid test pollution)
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	// Build a topology with one gateway, one listener, one HTTPRoute
+	gw := BuildGateway(func(g *gwapiv1.Gateway) {
+		g.Name = "test-gateway"
+		g.Namespace = "test-namespace"
+	})
+	route := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "test-route"
+		r.Namespace = "test-namespace"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "test-gateway"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"api.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{
+			Matches: []gwapiv1.HTTPRouteMatch{{
+				Path: &gwapiv1.HTTPPathMatch{
+					Type:  ptr.To(gwapiv1.PathMatchExact),
+					Value: ptr.To("/toy"),
+				},
+				Method: ptr.To(gwapiv1.HTTPMethodGet),
+			}},
+		}}
+	})
+
+	topology := testTopology(t, []*gwapiv1.Gateway{gw}, []*gwapiv1.HTTPRoute{route}, nil)
+	gateway := findGatewayInTopology(t, topology, "test-gateway")
+
+	wasmConfig := wasm.Config{}
+	err := ApplyWasmConfigMutators(&wasmConfig, gateway, topology)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// ActionSets should have been created from the topology
+	if len(wasmConfig.ActionSets) == 0 {
+		t.Fatal("Expected actionsets to be created from topology, got 0")
+	}
+
+	// Verify the actionset has the correct hostname
+	as := wasmConfig.ActionSets[0]
+	if len(as.RouteRuleConditions.Hostnames) != 1 || as.RouteRuleConditions.Hostnames[0] != "api.example.com" {
+		t.Errorf("Expected hostname 'api.example.com', got %v", as.RouteRuleConditions.Hostnames)
+	}
+
+	// AllowAction causes gRPC to fire unconditionally; allow deny is in onReply
+	if len(as.TypedActions) != 1 {
+		t.Fatalf("Expected 1 typed action (grpc), got %d", len(as.TypedActions))
+	}
+	if as.TypedActions[0].Type != "grpc" {
+		t.Errorf("Expected grpc typed action, got %s", as.TypedActions[0].Type)
+	}
+	if as.TypedActions[0].Predicate != "true" {
+		t.Errorf("Expected predicate 'true', got %q", as.TypedActions[0].Predicate)
+	}
+	// onReply[0]: allow deny, onReply[1]: intention deny
+	if len(as.TypedActions[0].OnReply) < 2 {
+		t.Fatalf("Expected at least 2 onReply actions, got %d", len(as.TypedActions[0].OnReply))
+	}
+	if as.TypedActions[0].OnReply[0].Type != "deny" {
+		t.Errorf("Expected onReply[0] deny (allow), got %s", as.TypedActions[0].OnReply[0].Type)
+	}
+	if as.TypedActions[0].OnReply[0].Predicate != `!(request.url_path != "/blocked")` {
+		t.Errorf("Expected allow deny predicate, got %q", as.TypedActions[0].OnReply[0].Predicate)
+	}
+}
+
+func TestApplyWasmConfigMutators_NoRoutesNoActionSets(t *testing.T) {
+	store := NewRegisteredDataStore()
+	gatewayTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "test-gateway", Namespace: "test-namespace"}
+	policyID := testResourceID("ThreatPolicy", "default", "my-threat")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: gatewayTargetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW},
+	})
+
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	// Gateway with no routes attached
+	gw := BuildGateway(func(g *gwapiv1.Gateway) {
+		g.Name = "test-gateway"
+		g.Namespace = "test-namespace"
+	})
+	topology := testTopology(t, []*gwapiv1.Gateway{gw}, nil, nil)
+	gateway := findGatewayInTopology(t, topology, "test-gateway")
+
+	wasmConfig := wasm.Config{}
+	err := ApplyWasmConfigMutators(&wasmConfig, gateway, topology)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// No routes → no actionsets created
+	if len(wasmConfig.ActionSets) != 0 {
+		t.Errorf("Expected 0 actionsets (no routes), got %d", len(wasmConfig.ActionSets))
+	}
+}
+
+func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
+	store := NewRegisteredDataStore()
+	gatewayTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: "test-gateway", Namespace: "test-namespace"}
+	policyID := testResourceID("ThreatPolicy", "default", "my-threat")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: gatewayTargetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "request.method == 'GET'"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Intention: "response.ok"},
+	})
+
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	gw := BuildGateway(func(g *gwapiv1.Gateway) {
+		g.Name = "test-gateway"
+		g.Namespace = "test-namespace"
+	})
+	route := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "test-route"
+		r.Namespace = "test-namespace"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "test-gateway"}}
+	})
+	topology := testTopology(t, []*gwapiv1.Gateway{gw}, []*gwapiv1.HTTPRoute{route}, nil)
+	gateway := findGatewayInTopology(t, topology, "test-gateway")
+
+	// Pre-existing actionsets from AuthPolicy
+	wasmConfig := wasm.Config{
+		ActionSets: []wasm.ActionSet{
+			{Name: "auth-actionset", Actions: []wasm.Action{{ServiceName: "auth-service"}}},
+		},
+	}
+
+	err := ApplyWasmConfigMutators(&wasmConfig, gateway, topology)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Should still have exactly 1 actionset (the existing one, not duplicated)
+	if len(wasmConfig.ActionSets) != 1 {
+		t.Fatalf("Expected 1 actionset (existing), got %d", len(wasmConfig.ActionSets))
+	}
+	if wasmConfig.ActionSets[0].Name != "auth-actionset" {
+		t.Errorf("Expected existing actionset preserved, got name %q", wasmConfig.ActionSets[0].Name)
+	}
+
+	// Legacy actions preserved, pipeline TypedActions appended
+	actions := wasmConfig.ActionSets[0].Actions
+	if len(actions) != 1 {
+		t.Fatalf("Expected 1 legacy action, got %d", len(actions))
+	}
+	if actions[0].ServiceName != "auth-service" {
+		t.Errorf("Expected legacy action to be auth-service, got %s", actions[0].ServiceName)
+	}
+
+	// AllowAction causes single gRPC action with allow deny in onReply
+	typed := wasmConfig.ActionSets[0].TypedActions
+	if len(typed) != 1 {
+		t.Fatalf("Expected 1 typed action (grpc), got %d", len(typed))
+	}
+	if typed[0].Type != "grpc" {
+		t.Errorf("Expected grpc typed action, got %s", typed[0].Type)
+	}
+	if typed[0].Predicate != "true" {
+		t.Errorf("Expected predicate 'true', got %q", typed[0].Predicate)
+	}
+	if len(typed[0].OnReply) < 2 {
+		t.Fatalf("Expected at least 2 onReply actions (allow deny + intention deny), got %d", len(typed[0].OnReply))
+	}
+	if typed[0].OnReply[0].Type != "deny" {
+		t.Errorf("Expected onReply[0] deny (allow), got %s", typed[0].OnReply[0].Type)
+	}
+}
+
+func TestReplacePipelineActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+	otherPolicy := testResourceID("ThreatPolicy", "default", "other-policy")
+
+	// Seed with initial actions for both policies
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "old-check"},
+	})
+	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-old": "true"}`},
+	})
+	store.AppendPipelineActions(otherPolicy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "true"},
+	})
+
+	// Replace both phases atomically
+	store.ReplacePipelineActions(policy,
+		[]PipelineActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: `request.url_path != "/blocked"`},
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "new-check", Intention: "resp.ok"},
+		},
+		[]PipelineActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-new": "true"}`},
+			{ActionType: extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE, NewResponseCode: 403},
+		},
+	)
+
+	// Verify request actions replaced
+	reqActions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if len(reqActions) != 2 {
+		t.Fatalf("Expected 2 request actions, got %d", len(reqActions))
+	}
+	if reqActions[0].ActionType != extpb.ActionType_ACTION_TYPE_ALLOW {
+		t.Errorf("First request action type = %v, want ALLOW", reqActions[0].ActionType)
+	}
+	if reqActions[1].Method != "new-check" {
+		t.Errorf("Second request action method = %q, want %q", reqActions[1].Method, "new-check")
+	}
+	if reqActions[0].Index != 0 || reqActions[1].Index != 1 {
+		t.Errorf("Indices not sequential: %d, %d", reqActions[0].Index, reqActions[1].Index)
+	}
+
+	// Verify response actions replaced
+	respActions := store.GetPipelineActions(policy, PipelinePhaseResponse)
+	if len(respActions) != 2 {
+		t.Fatalf("Expected 2 response actions, got %d", len(respActions))
+	}
+	if respActions[0].HeadersToAdd != `{"x-new": "true"}` {
+		t.Errorf("First response action headers = %q, unexpected", respActions[0].HeadersToAdd)
+	}
+	if respActions[1].NewResponseCode != 403 {
+		t.Errorf("Second response action code = %d, want 403", respActions[1].NewResponseCode)
+	}
+
+	// Other policy unaffected
+	otherActions := store.GetPipelineActions(otherPolicy, PipelinePhaseRequest)
+	if len(otherActions) != 1 {
+		t.Fatalf("Expected other policy to still have 1 action, got %d", len(otherActions))
+	}
+	if otherActions[0].ActionType != extpb.ActionType_ACTION_TYPE_ALLOW {
+		t.Errorf("Other policy action type = %v, want ALLOW", otherActions[0].ActionType)
+	}
+}
+
+func TestReplacePipelineActions_EmptyReplacement(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("ThreatPolicy", "default", "my-policy")
+
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+	})
+
+	// Replace with empty slices clears everything
+	store.ReplacePipelineActions(policy, nil, nil)
+
+	reqActions := store.GetPipelineActions(policy, PipelinePhaseRequest)
+	if reqActions != nil {
+		t.Errorf("Expected nil request actions after empty replace, got %v", reqActions)
+	}
+	respActions := store.GetPipelineActions(policy, PipelinePhaseResponse)
+	if respActions != nil {
+		t.Errorf("Expected nil response actions after empty replace, got %v", respActions)
+	}
+}
+
+func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
+	// Extension policy targets an HTTPRoute (not a Gateway).
+	// The upstreams and pipeline actions reference the route's targetRef.
+	store := NewRegisteredDataStore()
+	routeTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test-route", Namespace: "test-namespace"}
+	policyID := testResourceID("ThreatPolicy", "test-namespace", "route-threat")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: routeTargetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: `request.url_path != "/blocked"`},
+	})
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Intention: "threatResponse.threat_level < 5", Method: "assess-threat"},
+	})
+
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	gw := BuildGateway(func(g *gwapiv1.Gateway) {
+		g.Name = "test-gateway"
+		g.Namespace = "test-namespace"
+	})
+	route := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "test-route"
+		r.Namespace = "test-namespace"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "test-gateway"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"api.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{
+			Matches: []gwapiv1.HTTPRouteMatch{{
+				Path: &gwapiv1.HTTPPathMatch{
+					Type:  ptr.To(gwapiv1.PathMatchExact),
+					Value: ptr.To("/toy"),
+				},
+				Method: ptr.To(gwapiv1.HTTPMethodGet),
+			}},
+		}}
+	})
+
+	topology := testTopology(t, []*gwapiv1.Gateway{gw}, []*gwapiv1.HTTPRoute{route}, nil)
+	gateway := findGatewayInTopology(t, topology, "test-gateway")
+
+	wasmConfig := wasm.Config{}
+	err := ApplyWasmConfigMutators(&wasmConfig, gateway, topology)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// ActionSets should be created from topology for route-targeted policies
+	if len(wasmConfig.ActionSets) == 0 {
+		t.Fatal("Expected actionsets to be created from topology for route-targeted policy, got 0")
+	}
+
+	as := wasmConfig.ActionSets[0]
+	if len(as.RouteRuleConditions.Hostnames) != 1 || as.RouteRuleConditions.Hostnames[0] != "api.example.com" {
+		t.Errorf("Expected hostname 'api.example.com', got %v", as.RouteRuleConditions.Hostnames)
+	}
+
+	// AllowAction causes single gRPC action with allow deny in onReply
+	typed := as.TypedActions
+	if len(typed) != 1 {
+		t.Fatalf("Expected 1 typed action (grpc), got %d", len(typed))
+	}
+	if typed[0].Type != "grpc" {
+		t.Errorf("Expected grpc typed action, got %s", typed[0].Type)
+	}
+	if typed[0].Predicate != "true" {
+		t.Errorf("Expected predicate 'true', got %q", typed[0].Predicate)
+	}
+	if typed[0].Service == "" {
+		t.Error("Expected grpc typed action to have service set")
+	}
+	// onReply: allow deny + intention deny
+	if len(typed[0].OnReply) < 2 {
+		t.Fatalf("Expected at least 2 onReply actions, got %d", len(typed[0].OnReply))
+	}
+	if typed[0].OnReply[0].Type != "deny" {
+		t.Errorf("Expected onReply[0] deny (allow), got %s", typed[0].OnReply[0].Type)
+	}
+	if typed[0].OnReply[0].Predicate != `!(request.url_path != "/blocked")` {
+		t.Errorf("Expected allow deny predicate, got %q", typed[0].OnReply[0].Predicate)
+	}
+	if typed[0].OnReply[1].Type != "deny" {
+		t.Errorf("Expected onReply[1] deny (intention), got %s", typed[0].OnReply[1].Type)
+	}
+}
+
+// TestMutateWasmConfig_AllowOnlyPipelineProducesNoActions documents the known
+// limitation that a policy with only AllowAction (no grpc_method) produces no
+// typed actions, because the wasm-shim requires gRPC typed actions at the top
+// level and allow denies are currently injected into a gRPC action's onReply.
+func TestMutateWasmConfig_AllowOnlyPipelineProducesNoActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policyID := testResourceID("AllowPolicy", "default", "allow-only")
+
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: `request.url_path != "/admin"`},
+	})
+
+	wasmConfig := wasm.Config{
+		ActionSets: []wasm.ActionSet{{
+			Name: "allow-test",
+			RouteRuleConditions: wasm.RouteRuleConditions{
+				Hostnames: []string{"example.com"},
+			},
+		}},
+	}
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	err := mutator.Mutate(&wasmConfig, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Known limitation: allow-only policies without a grpc_method produce
+	// zero typed actions because allow denies can only be injected into a
+	// gRPC action's onReply in the current wasm-shim model.
+	if len(wasmConfig.ActionSets[0].TypedActions) != 0 {
+		t.Errorf("Expected 0 typed actions (known limitation), got %d", len(wasmConfig.ActionSets[0].TypedActions))
 	}
 }

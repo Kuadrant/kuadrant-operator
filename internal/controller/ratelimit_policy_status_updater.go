@@ -220,7 +220,7 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 		if !kuadrantgatewayapi.IsListenerReady(parsed.Listener.Listener, parsed.Gateway.Gateway) {
 			continue
 		}
-		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && !kuadrantgatewayapi.IsHTTPRouteReady(parsed.HTTPRoute.HTTPRoute, parsed.Gateway.Gateway, parsed.GatewayClass.Spec.ControllerName) {
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && !kuadrantgatewayapi.IsHTTPRouteReady(parsed.HTTPRoute.HTTPRoute, parsed.Gateway.Gateway, parsed.Listener.Listener, parsed.GatewayClass.Spec.ControllerName) {
 			continue
 		}
 		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeGRPC && !kuadrantgatewayapi.IsGRPCRouteReady(parsed.GRPCRoute.GRPCRoute, parsed.Gateway.Gateway, parsed.Listener.Listener, parsed.GatewayClass.Spec.ControllerName) {

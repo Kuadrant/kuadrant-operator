@@ -6,6 +6,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/types/known/structpb"
 	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioapiv1beta1 "istio.io/api/type/v1beta1"
@@ -60,6 +61,98 @@ func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatch
 			Patch: patch,
 		},
 	}, nil
+}
+
+// BuildEnvoyFilterWasmPatch returns an envoy config patch that adds a wasm HTTP filter to the gateway.
+func BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+	wasmFilterConfig := buildWasmFilterConfig(imageURL, imagePullSecret, pluginConfig)
+
+	patchValue := map[string]any{
+		"name": "envoy.filters.http.wasm",
+		"typed_config": map[string]any{
+			"@type":    "type.googleapis.com/udpa.type.v1.TypedStruct",
+			"type_url": "type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm",
+			"value":    wasmFilterConfig,
+		},
+	}
+
+	patchRaw, _ := json.Marshal(map[string]any{
+		"operation": "INSERT_BEFORE",
+		"value":     patchValue,
+	})
+	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
+	if err := patch.UnmarshalJSON(patchRaw); err != nil {
+		return nil, err
+	}
+
+	return []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+		{
+			ApplyTo: istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+			Match: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
+				Context: istioapinetworkingv1alpha3.EnvoyFilter_GATEWAY,
+				ObjectTypes: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
+					Listener: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch{
+						FilterChain: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
+							Filter: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
+								Name: "envoy.filters.network.http_connection_manager",
+								SubFilter: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_SubFilterMatch{
+									Name: "envoy.filters.http.router",
+								},
+							},
+						},
+					},
+				},
+			},
+			Patch: patch,
+		},
+	}, nil
+}
+
+// buildWasmFilterConfig builds the Envoy wasm filter configuration
+func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) map[string]any {
+	config := map[string]any{
+		"name":    "kuadrant-wasm-shim",
+		"root_id": "kuadrant_wasm_shim",
+		"vm_config": map[string]any{
+			"runtime": "envoy.wasm.runtime.v8",
+			"code": map[string]any{
+				"remote": map[string]any{
+					"http_uri": map[string]any{
+						"uri":     imageURL,
+						"timeout": "10s",
+					},
+				},
+			},
+			"allow_precompiled": true,
+		},
+	}
+
+	if pluginConfig != nil {
+		// Convert the protobuf Struct to a map for JSON serialization
+		configJSON, _ := pluginConfig.MarshalJSON()
+		var configMap map[string]any
+		if err := json.Unmarshal(configJSON, &configMap); err == nil {
+			config["configuration"] = map[string]any{
+				"@type": "type.googleapis.com/google.protobuf.Struct",
+				"value": configMap,
+			}
+		}
+	}
+
+	// Add image pull secret if provided
+	if imagePullSecret != "" {
+		if vmConfig, ok := config["vm_config"].(map[string]any); ok {
+			if code, ok := vmConfig["code"].(map[string]any); ok {
+				if remote, ok := code["remote"].(map[string]any); ok {
+					remote["image_pull_secret"] = imagePullSecret
+				}
+			}
+		}
+	}
+
+	return map[string]any{
+		"config": config,
+	}
 }
 
 func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {

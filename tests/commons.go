@@ -20,6 +20,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -413,6 +414,19 @@ func WasmPluginIsAvailable(ctx context.Context, cl client.Client, key client.Obj
 		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
 		//	return false
 		//}
+
+		return true
+	}
+}
+
+func EnvoyFilterIsAvailable(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {
+	return func() bool {
+		ef := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+		err := cl.Get(ctx, key, ef)
+		if err != nil {
+			logf.Log.V(1).Info("envoyfilter not read", "key", key, "error", err)
+			return false
+		}
 
 		return true
 	}

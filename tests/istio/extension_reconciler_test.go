@@ -4,6 +4,7 @@ package istio_test
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,7 +34,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Rate Limiting WasmPlugin controller", func() {
+var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -51,6 +53,69 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		return func() bool {
 			return tests.RLPIsAccepted(ctx, testClient(), key)() && !tests.RLPIsEnforced(ctx, testClient(), key)()
 		}
+	}
+
+	extractWasmConfigFromEnvoyFilter := func(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) (*wasm.Config, error) {
+		if len(ef.Spec.ConfigPatches) == 0 {
+			return nil, nil
+		}
+
+		// Get the patch value which contains the filter configuration
+		patchValue := ef.Spec.ConfigPatches[0].Patch.Value
+		if patchValue == nil {
+			return nil, nil
+		}
+
+		// Marshal to JSON to navigate the nested structure
+		valueJSON, err := patchValue.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+
+		// Unmarshal to a map to extract the wasm configuration
+		var filterConfig map[string]any
+		if err := json.Unmarshal(valueJSON, &filterConfig); err != nil {
+			return nil, err
+		}
+
+		// Navigate: typed_config -> value -> config -> configuration -> value
+		typedConfig, ok := filterConfig["typed_config"].(map[string]any)
+		if !ok {
+			return nil, nil
+		}
+
+		value, ok := typedConfig["value"].(map[string]any)
+		if !ok {
+			return nil, nil
+		}
+
+		config, ok := value["config"].(map[string]any)
+		if !ok {
+			return nil, nil
+		}
+
+		configuration, ok := config["configuration"].(map[string]any)
+		if !ok {
+			return nil, nil
+		}
+
+		wasmConfigValue, ok := configuration["value"].(map[string]any)
+		if !ok {
+			return nil, nil
+		}
+
+		// Convert the map back to wasm.Config
+		configJSON, err := json.Marshal(wasmConfigValue)
+		if err != nil {
+			return nil, err
+		}
+
+		var wasmConfig wasm.Config
+		if err := json.Unmarshal(configJSON, &wasmConfig); err != nil {
+			return nil, err
+		}
+
+		return &wasmConfig, nil
 	}
 
 	beforeEachCallback := func(ctx SpecContext) {
@@ -84,7 +149,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 		BeforeEach(beforeEachCallback)
 
-		It("Simple RLP targeting HTTPRoute creates wasmplugin", func(ctx SpecContext) {
+		It("Simple RLP targeting HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			err := testClient().Create(ctx, httpRoute)
@@ -135,20 +200,21 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
-			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			// Check envoy filter
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			// has the correct target ref
-			Expect(existingWasmPlugin.Spec.TargetRefs).To(Not(BeEmpty()))
-			Expect(existingWasmPlugin.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
-			Expect(existingWasmPlugin.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
-			Expect(existingWasmPlugin.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
-			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
-			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(existingEnvoyFilter.Spec.TargetRefs).To(Not(BeEmpty()))
+			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
+			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
+			// has config patches
+			Expect(existingEnvoyFilter.Spec.ConfigPatches).To(Not(BeEmpty()))
+			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Services: map[string]wasm.Service{

@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-04-21T14:46:21Z"
+    createdAt: "2026-05-08T09:42:37Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -237,6 +237,12 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: APIKeyApproval
+      name: apikeyapprovals.devportal.kuadrant.io
+      version: v1alpha1
+    - kind: APIKeyRequest
+      name: apikeyrequests.devportal.kuadrant.io
+      version: v1alpha1
     - kind: APIKey
       name: apikeys.devportal.kuadrant.io
       version: v1alpha1
@@ -303,13 +309,33 @@ spec:
           - delete
           - get
           - list
+          - watch
+        - apiGroups:
+          - devportal.kuadrant.io
+          resources:
+          - apikeyapprovals
+          verbs:
+          - create
+          - get
+          - list
           - patch
           - update
           - watch
         - apiGroups:
           - devportal.kuadrant.io
           resources:
-          - apikeys
+          - apikeyapprovals/status
+          - apikeyrequests/status
+          - apikeys/status
+          - apiproducts/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - devportal.kuadrant.io
+          resources:
+          - apikeyrequests
           - apiproducts
           verbs:
           - create
@@ -322,19 +348,11 @@ spec:
         - apiGroups:
           - devportal.kuadrant.io
           resources:
-          - apikeys/finalizers
-          - apiproducts/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - devportal.kuadrant.io
-          resources:
-          - apikeys/status
-          - apiproducts/status
+          - apikeys
           verbs:
           - get
-          - patch
-          - update
+          - list
+          - watch
         - apiGroups:
           - extensions.kuadrant.io
           resources:
@@ -367,6 +385,7 @@ spec:
           - kuadrant.io
           resources:
           - authpolicies
+          - kuadrants
           verbs:
           - get
           - list

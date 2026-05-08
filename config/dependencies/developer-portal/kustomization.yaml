@@ -10,6 +10,8 @@ resources:
 # CRDs
 - https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apikeys.yaml
 - https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apiproducts.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apikeyrequests.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apikeyapprovals.yaml
 # RBAC resources
 - https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/service_account.yaml
 - https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/role.yaml

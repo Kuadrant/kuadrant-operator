@@ -395,12 +395,10 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 		)),
 		controller.WithObjectKinds(
 			istio.EnvoyFilterGroupKind,
-			istio.WasmPluginGroupKind,
 			istio.PeerAuthenticationGroupKind,
 		),
 		controller.WithObjectLinks(
 			istio.LinkGatewayToEnvoyFilter,
-			istio.LinkGatewayToWasmPlugin,
 			istio.LinkKuadrantToPeerAuthentication,
 		),
 	)

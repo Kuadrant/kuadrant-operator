@@ -56,7 +56,6 @@ var (
 		{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
-		{Kind: &kuadrantistio.WasmPluginGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 	}

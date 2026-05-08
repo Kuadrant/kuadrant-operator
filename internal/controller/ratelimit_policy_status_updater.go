@@ -52,7 +52,6 @@ func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
-			{Kind: &kuadrantistio.WasmPluginGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 		},
@@ -279,17 +278,17 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 		controllerName := g.gatewayClass.Spec.ControllerName
 		switch defaultGatewayControllerName(controllerName) {
 		case defaultIstioGatewayControllerName:
-			// EnvoyFilter
+			// EnvoyFilter (rate limit clusters)
 			istioRateLimitClustersModifiedGateways, _ := state.Load(StateIstioRateLimitClustersModified)
 			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioRateLimitClustersModifiedGateways, topology, func(_ machinery.Object) bool {
 				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
-			// WasmPlugin
+			// EnvoyFilter (wasm plugin)
 			istioExtensionsModifiedGateways, _ := state.Load(StateIstioExtensionsModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.WasmPluginGroupKind, istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {
-				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
-				return true // Istio won't ever populate the status stanza of WasmPlugin resources, so we cannot expect to find a given a condition there
+			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {
+				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
+				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
 		case defaultEnvoyGatewayGatewayControllerName:
 			gatewayAncestor := gatewayapiv1.ParentReference{Name: gatewayapiv1.ObjectName(g.gateway.GetName()), Namespace: ptr.To(gatewayapiv1.Namespace(g.gateway.GetNamespace()))}

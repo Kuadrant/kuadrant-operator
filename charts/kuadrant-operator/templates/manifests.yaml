@@ -14106,18 +14106,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - extensions.istio.io
-  resources:
-  - wasmplugins
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - extensions.kuadrant.io
   resources:
   - oidcpolicies

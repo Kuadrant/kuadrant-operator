@@ -33,6 +33,7 @@ import (
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 type RateLimitPolicyStatusUpdater struct {
@@ -280,13 +281,13 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 		case defaultIstioGatewayControllerName:
 			// EnvoyFilter (rate limit clusters)
 			istioRateLimitClustersModifiedGateways, _ := state.Load(StateIstioRateLimitClustersModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioRateLimitClustersModifiedGateways, topology, func(_ machinery.Object) bool {
+			componentsToSync = append(componentsToSync, gatewayComponentsToSyncWithName(g.gateway, kuadrantistio.EnvoyFilterGroupKind, RateLimitClusterName(g.gateway.GetName()), istioRateLimitClustersModifiedGateways, topology, func(_ machinery.Object) bool {
 				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
 			// EnvoyFilter (wasm plugin)
 			istioExtensionsModifiedGateways, _ := state.Load(StateIstioExtensionsModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {
+			componentsToSync = append(componentsToSync, gatewayComponentsToSyncWithName(g.gateway, kuadrantistio.EnvoyFilterGroupKind, wasm.ExtensionName(g.gateway.GetName()), istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {
 				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)

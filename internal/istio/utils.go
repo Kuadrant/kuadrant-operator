@@ -120,7 +120,9 @@ func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *struc
 					"http_uri": map[string]any{
 						"uri":     imageURL,
 						"timeout": "10s",
+						"cluster": "wasm_remote_cluster",
 					},
+					"sha256": "",
 				},
 			},
 			"allow_precompiled": true,
@@ -179,14 +181,40 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				return false
 			}
 
-			// cluster match
-			aCluster := aConfigPatch.Match.GetCluster()
-			bCluster := bConfigPatch.Match.GetCluster()
-			if aCluster == nil || bCluster == nil {
-				return false
-			}
-			if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {
-				return false
+			// match comparison depends on patch type
+			if aConfigPatch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
+				// HTTP_FILTER uses listener match
+				aListener := aConfigPatch.Match.GetListener()
+				bListener := bConfigPatch.Match.GetListener()
+				if (aListener == nil) != (bListener == nil) {
+					return false
+				}
+				// For HTTP_FILTER patches, we compare the listener match structure if present
+				// Since the structure is complex, we'll compare the JSON representation
+				if aListener != nil && bListener != nil {
+					aMatchJSON, _ := json.Marshal(aConfigPatch.Match)
+					bMatchJSON, _ := json.Marshal(bConfigPatch.Match)
+					if string(aMatchJSON) != string(bMatchJSON) {
+						return false
+					}
+				}
+			} else if aConfigPatch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_CLUSTER {
+				// CLUSTER uses cluster match
+				aCluster := aConfigPatch.Match.GetCluster()
+				bCluster := bConfigPatch.Match.GetCluster()
+				if aCluster == nil || bCluster == nil {
+					return false
+				}
+				if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {
+					return false
+				}
+			} else {
+				// For other patch types, compare the match structure via JSON
+				aMatchJSON, _ := json.Marshal(aConfigPatch.Match)
+				bMatchJSON, _ := json.Marshal(bConfigPatch.Match)
+				if string(aMatchJSON) != string(bMatchJSON) {
+					return false
+				}
 			}
 
 			// patch

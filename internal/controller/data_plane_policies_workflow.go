@@ -158,6 +158,20 @@ func gatewayComponentsToSync(gateway *machinery.Gateway, componentGroupKind sche
 	return nil
 }
 
+// gatewayComponentsToSyncWithName is like gatewayComponentsToSync but also matches by object name
+func gatewayComponentsToSyncWithName(gateway *machinery.Gateway, componentGroupKind schema.GroupKind, componentName string, modifiedGatewayLocators any, topology *machinery.Topology, requiredCondition func(machinery.Object) bool) []string {
+	missingConditionInTopologyFunc := func() bool {
+		obj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
+			return child.GroupVersionKind().GroupKind() == componentGroupKind && child.GetName() == componentName
+		})
+		return !found || !requiredCondition(obj)
+	}
+	if (modifiedGatewayLocators != nil && lo.Contains(modifiedGatewayLocators.([]string), gateway.GetLocator())) || missingConditionInTopologyFunc() {
+		return []string{fmt.Sprintf("%s (%s/%s)", componentGroupKind.Kind, gateway.GetNamespace(), gateway.GetName())}
+	}
+	return nil
+}
+
 func getGatewayControllerNames(envName string, defaultGatewayControllerName string) []gatewayapiv1.GatewayController {
 	envValue := env.GetString(envName, defaultGatewayControllerName)
 	gatewayControllers := lo.Map(strings.Split(envValue, ","), func(c string, _ int) gatewayapiv1.GatewayController {

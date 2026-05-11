@@ -1307,7 +1307,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				}
 				// not found
 				return true
-			})
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("RLP targeting a route, GwA should not have wasmplugin and GwB should have wasmplugin", func(ctx SpecContext) {

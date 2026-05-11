@@ -5,6 +5,7 @@ package istio_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/types/known/structpb"
+	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,13 +59,20 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 
 	extractWasmConfigFromEnvoyFilter := func(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) (*wasm.Config, error) {
 		if len(ef.Spec.ConfigPatches) == 0 {
-			return nil, nil
+			return nil, fmt.Errorf("no config patches found in EnvoyFilter")
 		}
 
-		// Get the patch value which contains the filter configuration
-		patchValue := ef.Spec.ConfigPatches[0].Patch.Value
+		// Find the wasm HTTP filter patch
+		var patchValue *structpb.Struct
+		for _, patch := range ef.Spec.ConfigPatches {
+			if patch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
+				patchValue = patch.Patch.Value
+				break
+			}
+		}
+
 		if patchValue == nil {
-			return nil, nil
+			return nil, fmt.Errorf("no HTTP_FILTER patch found in EnvoyFilter config patches")
 		}
 
 		// Marshal to JSON to navigate the nested structure
@@ -80,27 +90,27 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 		// Navigate: typed_config -> value -> config -> configuration -> value
 		typedConfig, ok := filterConfig["typed_config"].(map[string]any)
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("missing typed_config in filter configuration")
 		}
 
 		value, ok := typedConfig["value"].(map[string]any)
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("missing value in typed_config")
 		}
 
 		config, ok := value["config"].(map[string]any)
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("missing config in typed_config.value")
 		}
 
 		configuration, ok := config["configuration"].(map[string]any)
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("missing configuration in config")
 		}
 
 		wasmConfigValue, ok := configuration["value"].(map[string]any)
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("missing value in configuration")
 		}
 
 		// Convert the map back to wasm.Config

@@ -2,6 +2,7 @@ package istio
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -65,7 +66,10 @@ func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatch
 
 // BuildEnvoyFilterWasmPatch returns an envoy config patch that adds a wasm HTTP filter to the gateway.
 func BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
-	wasmFilterConfig := buildWasmFilterConfig(imageURL, imagePullSecret, pluginConfig)
+	wasmFilterConfig, err := buildWasmFilterConfig(imageURL, imagePullSecret, pluginConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	patchValue := map[string]any{
 		"name": "envoy.filters.http.wasm",
@@ -109,7 +113,7 @@ func BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret string, pluginConfig *s
 }
 
 // buildWasmFilterConfig builds the Envoy wasm filter configuration
-func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) map[string]any {
+func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) (map[string]any, error) {
 	config := map[string]any{
 		"name":    "kuadrant-wasm-shim",
 		"root_id": "kuadrant_wasm_shim",
@@ -131,13 +135,17 @@ func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *struc
 
 	if pluginConfig != nil {
 		// Convert the protobuf Struct to a map for JSON serialization
-		configJSON, _ := pluginConfig.MarshalJSON()
+		configJSON, err := pluginConfig.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal plugin config: %w", err)
+		}
 		var configMap map[string]any
-		if err := json.Unmarshal(configJSON, &configMap); err == nil {
-			config["configuration"] = map[string]any{
-				"@type": "type.googleapis.com/google.protobuf.Struct",
-				"value": configMap,
-			}
+		if err := json.Unmarshal(configJSON, &configMap); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal plugin config JSON: %w", err)
+		}
+		config["configuration"] = map[string]any{
+			"@type": "type.googleapis.com/google.protobuf.Struct",
+			"value": configMap,
 		}
 	}
 
@@ -154,7 +162,7 @@ func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *struc
 
 	return map[string]any{
 		"config": config,
-	}
+	}, nil
 }
 
 func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {

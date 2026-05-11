@@ -129,18 +129,97 @@ type ActionSet struct {
 	// Conditions that activate the action set
 	RouteRuleConditions RouteRuleConditions `json:"routeRuleConditions,omitempty"`
 
-	// Actions that will be invoked when the conditions are met
+	// Actions that will be invoked when the conditions are met (legacy format)
 	// +optional
-	Actions []Action `json:"actions,omitempty"`
+	Actions []Action `json:"-"`
+
+	// TypedActions are extension pipeline actions in the new TypedAction format.
+	// +optional
+	TypedActions []TypedAction `json:"-"`
+
+	// SourceRoute records which route (Kind/Namespace/Name) this action set was
+	// created from. Not serialized — used only to match pipeline actions to the
+	// correct action sets at reconcile time.
+	SourceRoute string `json:"-"`
+}
+
+// actionSetJSON is the intermediate representation used for custom JSON marshaling.
+type actionSetJSON struct {
+	Name                string              `json:"name"`
+	RouteRuleConditions RouteRuleConditions `json:"routeRuleConditions,omitempty"`
+	Actions             []json.RawMessage   `json:"actions,omitempty"`
+}
+
+func (s ActionSet) MarshalJSON() ([]byte, error) {
+	alias := actionSetJSON{
+		Name:                s.Name,
+		RouteRuleConditions: s.RouteRuleConditions,
+	}
+
+	for _, action := range s.Actions {
+		raw, err := json.Marshal(action)
+		if err != nil {
+			return nil, err
+		}
+		alias.Actions = append(alias.Actions, raw)
+	}
+	for _, typed := range s.TypedActions {
+		raw, err := json.Marshal(typed)
+		if err != nil {
+			return nil, err
+		}
+		alias.Actions = append(alias.Actions, raw)
+	}
+
+	return json.Marshal(alias)
+}
+
+func (s *ActionSet) UnmarshalJSON(data []byte) error {
+	var alias actionSetJSON
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+
+	s.Name = alias.Name
+	s.RouteRuleConditions = alias.RouteRuleConditions
+	s.Actions = nil
+	s.TypedActions = nil
+
+	for _, raw := range alias.Actions {
+		var probe struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &probe); err == nil && probe.Type != "" {
+			var typed TypedAction
+			if err := json.Unmarshal(raw, &typed); err != nil {
+				return err
+			}
+			s.TypedActions = append(s.TypedActions, typed)
+		} else {
+			var action Action
+			if err := json.Unmarshal(raw, &action); err != nil {
+				return err
+			}
+			s.Actions = append(s.Actions, action)
+		}
+	}
+
+	return nil
 }
 
 func (s *ActionSet) EqualTo(other ActionSet) bool {
-	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) {
+	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) || len(s.TypedActions) != len(other.TypedActions) {
 		return false
 	}
 
 	for i := range s.Actions {
 		if !s.Actions[i].EqualTo(other.Actions[i]) {
+			return false
+		}
+	}
+
+	for i := range s.TypedActions {
+		if !s.TypedActions[i].EqualTo(other.TypedActions[i]) {
 			return false
 		}
 	}
@@ -336,6 +415,46 @@ type ExpressionItem struct {
 type Expression struct {
 	// Data to be sent to the service
 	ExpressionItem ExpressionItem `json:"expression"`
+}
+
+// TypedAction represents an extension pipeline action in the new wasm-shim format.
+// The "type" field discriminates the action kind (grpc, deny, headers).
+type TypedAction struct {
+	Type           string        `json:"type"`
+	Predicate      string        `json:"predicate"`
+	Terminal       bool          `json:"terminal"`
+	Var            string        `json:"var,omitempty"`
+	Service        string        `json:"service,omitempty"`
+	MessageBuilder string        `json:"messageBuilder,omitempty"`
+	OnReply        []TypedAction `json:"onReply,omitempty"`
+	DenyWith       string        `json:"denyWith,omitempty"`
+	Target         string        `json:"target,omitempty"`
+	Headers        string        `json:"headers,omitempty"`
+	// SourcePolicyLocators tracks all policies that contributed to this action.
+	// Format: "kind/namespace/name"
+	SourcePolicyLocators []string `json:"sources,omitempty"`
+}
+
+func (t TypedAction) EqualTo(other TypedAction) bool {
+	if t.Type != other.Type ||
+		t.Predicate != other.Predicate ||
+		t.Terminal != other.Terminal ||
+		t.Var != other.Var ||
+		t.Service != other.Service ||
+		t.MessageBuilder != other.MessageBuilder ||
+		t.DenyWith != other.DenyWith ||
+		t.Target != other.Target ||
+		t.Headers != other.Headers ||
+		!slices.Equal(t.SourcePolicyLocators, other.SourcePolicyLocators) ||
+		len(t.OnReply) != len(other.OnReply) {
+		return false
+	}
+	for i := range t.OnReply {
+		if !t.OnReply[i].EqualTo(other.OnReply[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 type Observability struct {

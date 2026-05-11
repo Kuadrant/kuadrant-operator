@@ -309,18 +309,20 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 	return err
 }
 
-// RegisterUpstreamMethod registers an external gRPC service with the operator
+// RegisterActionMethod registers an external gRPC service with the operator
 // so that it becomes available to the data plane. The operator performs a
 // reachability check and, if successful, creates the necessary Envoy cluster
 // and wasm service entries.
-func (ec *ExtensionController) RegisterUpstreamMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.UpstreamConfig) error {
+func (ec *ExtensionController) RegisterActionMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.ActionMethodConfig) error {
 	pbPolicy := convertPolicyToProtobuf(policy)
 
-	_, err := ec.extensionClient.client.RegisterUpstreamMethod(ctx, &extpb.RegisterUpstreamMethodRequest{
-		Policy:  pbPolicy,
-		Url:     svc.URL,
-		Service: svc.Service,
-		Method:  svc.Method,
+	_, err := ec.extensionClient.client.RegisterActionMethod(ctx, &extpb.RegisterActionMethodRequest{
+		Policy:          pbPolicy,
+		Name:            svc.Name,
+		Url:             svc.URL,
+		Service:         svc.Service,
+		Method:          svc.Method,
+		MessageTemplate: svc.MessageTemplate,
 	})
 	if err != nil {
 		if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
@@ -329,6 +331,91 @@ func (ec *ExtensionController) RegisterUpstreamMethod(ctx context.Context, polic
 		return err
 	}
 	return nil
+}
+
+// NewPipeline creates a Pipeline bound to the given policy. No I/O is performed;
+// the returned Pipeline captures the policy and gRPC client for later use.
+// Call OnRequest/OnResponse to accumulate actions, then Commit to send them.
+func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipeline {
+	return &PipelineImpl{
+		policy: policy,
+		client: ec.extensionClient.client,
+	}
+}
+
+// PipelineImpl implements Pipeline by accumulating actions locally and sending
+// them to the operator in a single PipelineCommit gRPC call.
+type PipelineImpl struct {
+	policy          exttypes.Policy
+	client          extpb.ExtensionServiceClient
+	requestActions  []*extpb.RequestActionEntry
+	responseActions []*extpb.ResponseActionEntry
+}
+
+func (p *PipelineImpl) OnRequest(actions ...exttypes.RequestAction) exttypes.Pipeline {
+	for _, action := range actions {
+		p.requestActions = append(p.requestActions, convertRequestAction(action))
+	}
+	return p
+}
+
+func (p *PipelineImpl) OnResponse(actions ...exttypes.ResponseAction) exttypes.Pipeline {
+	for _, action := range actions {
+		p.responseActions = append(p.responseActions, convertResponseAction(action))
+	}
+	return p
+}
+
+func (p *PipelineImpl) Commit(ctx context.Context) error {
+	_, err := p.client.PipelineCommit(ctx, &extpb.PipelineCommitRequest{
+		Policy:          convertPolicyToProtobuf(p.policy),
+		RequestActions:  p.requestActions,
+		ResponseActions: p.responseActions,
+	})
+	return err
+}
+
+func convertRequestAction(action exttypes.RequestAction) *extpb.RequestActionEntry {
+	switch a := action.(type) {
+	case exttypes.GRPCMethodAction:
+		return &extpb.RequestActionEntry{
+			ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD,
+			Predicate:  a.Predicate,
+			Intention:  a.Intention,
+			Method:     a.Method,
+			Var:        a.Var,
+		}
+	case exttypes.AllowAction:
+		return &extpb.RequestActionEntry{
+			ActionType: extpb.ActionType_ACTION_TYPE_ALLOW,
+			Predicate:  a.Predicate,
+			Intention:  a.Intention,
+		}
+	default:
+		panic(fmt.Sprintf("unknown request action type: %T", action))
+	}
+}
+
+func convertResponseAction(action exttypes.ResponseAction) *extpb.ResponseActionEntry {
+	switch a := action.(type) {
+	case exttypes.AddHeadersAction:
+		return &extpb.ResponseActionEntry{
+			ActionType:   extpb.ActionType_ACTION_TYPE_ADD_HEADERS,
+			Predicate:    a.Predicate,
+			HeadersToAdd: a.HeadersToAdd,
+		}
+	case exttypes.WithResponseCodeAction:
+		if a.NewResponseCode < 100 || a.NewResponseCode > 599 {
+			panic(fmt.Sprintf("NewResponseCode must be 100-599, got %d", a.NewResponseCode))
+		}
+		return &extpb.ResponseActionEntry{
+			ActionType:      extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE,
+			Predicate:       a.Predicate,
+			NewResponseCode: int32(a.NewResponseCode), // #nosec G115
+		}
+	default:
+		panic(fmt.Sprintf("unknown response action type: %T", action))
+	}
 }
 
 // Manager returns the underlying controller-runtime Manager.

@@ -96,7 +96,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 		// Get the wasm config for this gateway and apply mutators
 		wasmConfig := wasmConfigs[gateway.GetLocator()]
-		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway); err != nil {
+		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway, topology); err != nil {
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 

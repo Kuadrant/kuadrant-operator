@@ -69,7 +69,7 @@ if err := pipeline.OnRequest(ctx, GRPCMethodAction{...}, AllowAction{...}); err 
 Extension Controller                    Operator (gRPC server)
    │                                       │
    │── RegisterActionMethod ──────────────►│── Validate name uniqueness (per-policy)
-   │   (policy, ActionMethodConfig)        │── Validate CEL message template
+   │   (policy, ActionMethodConfig)        │── Store message template (opaque)
    │                                       │── Store in ActionMethodStore
    │                                       │── Trigger reconciliation
    │◄── nil / error ───────────────────────│
@@ -111,7 +111,7 @@ type ActionMethodConfig struct {
     URL             string // e.g. "grpc://threat-service:8080"
     Service         string // gRPC service name, e.g. "threat.ThreatService"
     Method          string // gRPC method name, e.g. "CheckThreatLevel"
-    MessageTemplate string // CEL/JSON template for building the request message
+    MessageTemplate string // Opaque template string for building the request message
 }
 ```
 
@@ -208,8 +208,7 @@ type WithResponseCodeAction struct {
 The gRPC proto (`pkg/extension/grpc/v1/kuadrant.proto`) requires the following changes:
 
 - **Rename** `RegisterUpstreamMethod` RPC to `RegisterActionMethod` — request message gains `name` and `message_template` fields
-- **New** `PipelineOnRequest` RPC — accepts a policy and a repeated list of request action entries (each with `action_type`, `predicates`, `intention`, `method`)
-- **New** `PipelineOnResponse` RPC — accepts a policy and a repeated list of response action entries (each with `action_type`, `predicates`, `headers_to_add`, `new_response_code`)
+- **New** `PipelineCommit` RPC — atomically replaces all pipeline actions for a policy; accepts a policy, a repeated list of request action entries (each with `action_type`, `predicate`, `intention`, `method`), and a repeated list of response action entries (each with `action_type`, `predicate`, `headers_to_add`, `new_response_code`)
 - **New** `ActionType` enum — `GRPC_METHOD`, `ALLOW`, `ADD_HEADERS`, `WITH_RESPONSE_CODE`
 
 ### Action Method Name Scoping
@@ -229,7 +228,7 @@ Two `ThreatPolicy` instances targeting the same Gateway both register `"checkThr
 
 #### New ActionType Field
 
-The wasm service definition gains a `messageTemplate` field — a JSON object where keys are proto field names and values are CEL expressions. The wasm-shim evaluates these expressions against the request context at request time to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
+The wasm service definition gains a `messageTemplate` field — an opaque string passed through from the operator to the wasm-shim. The operator does not parse or validate this field; interpretation is owned by the wasm-shim. The wasm-shim evaluates this template against the request context at request time to construct the gRPC request message (see [Message Template Processing](#message-template-processing) below).
 
 The wasm `Action` struct (`internal/wasm/types.go`) gains an explicit `ActionType` discriminator field. The wasm-shim dispatches based on the `ActionType` value, not by inspecting which fields are present (duck-typing). New fields are added for pipeline actions:
 
@@ -253,10 +252,7 @@ services:
     timeout: 100ms
     grpcService: "threat.ThreatService"
     grpcMethod: "CheckThreatLevel"
-    messageTemplate:
-      uri: "request.path"
-      is_authenticated: "has(auth.identity)"
-      source_ip: "source.address"
+    messageTemplate: "CheckThreatLevelRequest { uri: request.path, is_authenticated: has(auth.identity), source_ip: source.address }"
 
 actionSets:
   - name: "abc123-hash"
@@ -295,15 +291,13 @@ This catches typos and schema mismatches at reconcile time rather than at reques
 
 ### Message Template Processing
 
-The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim constructs the gRPC request message at request time. The template is a JSON object where keys are proto field names and values are CEL expressions evaluated against the request context.
+The `MessageTemplate` field on `ActionMethodConfig` defines how the wasm-shim constructs the gRPC request message at request time. The operator treats this as an opaque string — interpretation is owned by the wasm-shim.
 
-In the Extension Author Usage example, `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}` instructs the wasm-shim to populate the `uri`, `is_authenticated`, and `source_ip` fields of the `CheckThreatLevel` request message using the corresponding CEL expressions. Proto fields omitted from the template retain their protobuf default values.
-
-**Operator (registration time):** The operator parses the JSON and validates each value as a syntactically correct CEL expression. If Phase 2 ProtoCache has the method's input message descriptor available, the operator also validates that the template keys correspond to valid fields on the input message type. The validated template is stored in the `ActionMethodStore` alongside the method's service, cluster, and connection details.
+**Operator (registration time):** The operator stores the `MessageTemplate` as an opaque string alongside the method's service, cluster, and connection details. No parsing or validation of the template content is performed — interpretation is owned by the wasm-shim.
 
 **Operator (reconciliation):** The reconciler includes the message template in the wasm service configuration, so the wasm-shim has access to it without a back-channel to the operator.
 
-**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim looks up the referenced service's `messageTemplate`, evaluates each CEL value against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the evaluated values and the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
+**Wasm-shim (request time):** When processing a `grpc_method` action, the wasm-shim looks up the referenced service's `messageTemplate`, parses and evaluates it against the current request context (headers, path, method, auth metadata), and constructs the protobuf request message using the dynamic message schema obtained via Phase 2 gRPC reflection. The constructed message is sent to the upstream gRPC service, and the response is made available for `Intention` evaluation.
 
 ### Component Changes
 
@@ -322,35 +316,24 @@ Index allocation is atomic per `(Policy, Phase)` pair — the store maintains a 
 **RegisterActionMethod handler:**
 - Validates `Name` is non-empty and unique for this policy
 - Validates `URL`, `Service`, `Method` are set
-- Validates `MessageTemplate` is valid JSON with syntactically correct CEL expression values; if the ProtoCache has the input message descriptor, validates that template keys match field names on the input message type
+- Stores `MessageTemplate` as an opaque string (interpreted by the wasm-shim, not the operator)
 - Performs gRPC dial reachability check (from Phase 1)
 - Triggers gRPC reflection and caches descriptors (from Phase 2)
-- Stores `ActionMethodEntry` (including validated message template) in `ActionMethodStore`
+- Stores `ActionMethodEntry` (including message template) in `ActionMethodStore`
 - Triggers reconciliation
 
-**PipelineOnRequest handler:**
-- Iterates over the `actions` list in order
-- For each action, validates the action type is a valid request-phase type (`grpc_method`, `allow`)
-- For `grpc_method`: validates `Method` references a registered action method for this policy
-- For `grpc_method`: validates `Intention` CEL against the response proto schema (ProtoCache)
-- Validates predicate CEL expressions
-- If any action fails validation, the entire request is rejected (no partial writes)
-- Appends all actions to `PipelineActionStore` with sequential indices for this policy's request phase
-- Triggers reconciliation
-
-**PipelineOnResponse handler:**
-- Iterates over the `actions` list in order
-- For each action, validates the action type is a valid response-phase type (`add_headers`, `with_response_code`)
-- Validates predicate CEL expressions
-- If any action fails validation, the entire request is rejected (no partial writes)
-- Appends all actions to `PipelineActionStore` with sequential indices for this policy's response phase
+**PipelineCommit handler:**
+- Validates all request actions: action type is a valid request-phase type (`grpc_method`, `allow`), `Method` references a registered action method (for `grpc_method`), `Intention` CEL is syntactically valid, predicate CEL is syntactically valid
+- Validates all response actions: action type is a valid response-phase type (`add_headers`, `with_response_code`), predicate CEL and `headers_to_add` CEL are syntactically valid, response code is in 100-599 range
+- If any action in either phase fails validation, the entire commit is rejected (no partial writes)
+- Atomically replaces all pipeline actions for both phases
 - Triggers reconciliation
 
 #### 4. Client-Side Implementation (pkg/extension/controller/controller.go)
 
 - **`RegisterActionMethod`** on `ExtensionController` — converts `ActionMethodConfig` to the proto request, sends the RPC, and translates gRPC `Unavailable` status to `types.ErrUpstreamUnreachable`
 - **`NewPipeline`** on `ExtensionController` — creates a `PipelineImpl` bound to the policy and gRPC client. Performs no I/O.
-- **`PipelineImpl`** — `OnRequest` converts each `RequestAction` to a proto `RequestActionEntry`, sends them all in a single `PipelineOnRequestRequest` RPC. `OnResponse` does the same with `ResponseActionEntry` and `PipelineOnResponseRequest`. Unknown action types return an error before the RPC is sent.
+- **`PipelineImpl`** — `OnRequest`/`OnResponse` accumulate actions locally (no I/O). `Commit` converts all accumulated actions to proto entries and sends them in a single atomic `PipelineCommit` RPC. Unknown action types panic at conversion time.
 
 #### 5. Extension Reconcilers (internal/controller/)
 
@@ -371,7 +354,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
         URL:             threatServiceURL,
         Service:         "threat.ThreatService",
         Method:          "CheckThreatLevel",
-        MessageTemplate: `{"uri": "request.path", "is_authenticated": "has(auth.identity)", "source_ip": "source.address"}`,
+        MessageTemplate: `CheckThreatLevelRequest { uri: request.path, is_authenticated: has(auth.identity), source_ip: source.address }`,
     })
     if errors.Is(err, types.ErrUpstreamUnreachable) {
         return calculateErrorStatus(pol, err), err
@@ -425,10 +408,10 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 1. Rename `RegisterUpstreamMethod` to `RegisterActionMethod` in proto, SDK types, server handler, and client — add `Name` and `MessageTemplate` fields to the config
 2. Add action type definitions (`GRPCMethodAction`, `AllowAction`, `AddHeadersAction`, `WithResponseCodeAction`) and `Pipeline` interface to `pkg/extension/types/`
-3. Add `PipelineOnRequest` and `PipelineOnResponse` RPCs to the gRPC proto and regenerate
+3. Add `PipelineCommit` RPC to the gRPC proto and regenerate
 4. Implement `ActionMethodStore` (rename/extend from `RegisteredDataStore` upstream storage)
 5. Implement `PipelineActionStore` for ordered pipeline actions
-6. Implement server-side `PipelineOnRequest` and `PipelineOnResponse` handlers with CEL intention validation
+6. Implement server-side `PipelineCommit` handler with CEL validation
 7. Implement client-side `NewPipeline` and `PipelineImpl` on `ExtensionController`
 8. Add `ActionType` discriminator field to wasm `Action` struct
 9. Extend extension reconcilers to translate pipeline actions into wasm `Action` entries
@@ -448,32 +431,41 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 ### Todo
 
-- [ ] [Rename `RegisterUpstreamMethod` to `RegisterActionMethod`](https://github.com/Kuadrant/kuadrant-operator/issues/1899)
-  - [ ] Unit tests
-- [ ] [Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields](https://github.com/Kuadrant/kuadrant-operator/issues/1900)
-  - [ ] Unit tests
-- [ ] [Define action types and `Pipeline` interface](https://github.com/Kuadrant/kuadrant-operator/issues/1901)
-  - [ ] Unit tests
-- [ ] [Add `PipelineOnRequest` and `PipelineOnResponse` RPCs to gRPC proto](https://github.com/Kuadrant/kuadrant-operator/issues/1902)
-  - [ ] Unit tests
-- [ ] [Implement `PipelineActionStore`](https://github.com/Kuadrant/kuadrant-operator/issues/1903)
-  - [ ] Unit tests
-- [ ] [Implement server-side pipeline handlers with CEL intention validation](https://github.com/Kuadrant/kuadrant-operator/issues/1904)
-  - [ ] Unit tests
+- [x] [Rename `RegisterUpstreamMethod` to `RegisterActionMethod`](https://github.com/Kuadrant/kuadrant-operator/issues/1899)
+  - [x] Unit tests
+- [x] [Add `ActionMethodConfig` with `Name` and `MessageTemplate` fields](https://github.com/Kuadrant/kuadrant-operator/issues/1900)
+  - [x] Unit tests
+- [x] [Define action types and `Pipeline` interface](https://github.com/Kuadrant/kuadrant-operator/issues/1901)
+  - [x] Unit tests
+- [x] [Add `PipelineCommit` RPC to gRPC proto](https://github.com/Kuadrant/kuadrant-operator/issues/1902)
+  - [x] Unit tests
+- [x] [Implement `PipelineActionStore`](https://github.com/Kuadrant/kuadrant-operator/issues/1903)
+  - [x] Unit tests
+- [x] [Implement server-side `PipelineCommit` handler with CEL validation](https://github.com/Kuadrant/kuadrant-operator/issues/1904)
+  - [x] Unit tests
   - [ ] Integration tests
-- [ ] [Implement client-side `NewPipeline` and `PipelineImpl`](https://github.com/Kuadrant/kuadrant-operator/issues/1905)
-  - [ ] Unit tests
-- [ ] [Add `ActionType` discriminator to wasm `Action` struct](https://github.com/Kuadrant/kuadrant-operator/issues/1906)
-  - [ ] Unit tests
-- [ ] [Extend extension reconcilers for pipeline action → wasm Action translation](https://github.com/Kuadrant/kuadrant-operator/issues/1907)
-  - [ ] Unit tests
+- [x] [Implement client-side `NewPipeline` and `PipelineImpl`](https://github.com/Kuadrant/kuadrant-operator/issues/1905)
+  - [x] Unit tests
+- [x] [Add `ActionType` discriminator to wasm `Action` struct](https://github.com/Kuadrant/kuadrant-operator/issues/1906)
+  - [x] Unit tests
+- [x] [Extend extension reconcilers for pipeline action → wasm Action translation](https://github.com/Kuadrant/kuadrant-operator/issues/1907)
+  - [x] Unit tests
   - [ ] Integration tests
-- [ ] [Update wasm-shim to dispatch on `ActionType`](https://github.com/Kuadrant/kuadrant-operator/issues/1908)
-  - [ ] Unit tests
+- [x] [Update wasm-shim to dispatch on `ActionType`](https://github.com/Kuadrant/kuadrant-operator/issues/1908)
+  - [x] Unit tests
+- [x] [Extension pipeline actions should be independent of AuthPolicy/RateLimitPolicy lifecycle](https://github.com/Kuadrant/kuadrant-operator/issues/1942)
+  - [x] Unit tests
 
 ### Completed
 
 ## Change Log
+
+### 2026-04-22 — MessageTemplate as opaque string
+
+- `MessageTemplate` changed from structured JSON map (field→CEL pairs) to an opaque string
+- Operator stores and passes through `MessageTemplate` without parsing or validation; interpretation is owned by the wasm-shim
+- Updated wasm config example and extension author usage to use CEL struct syntax
+- Removed operator-side JSON parsing and CEL validation of template content from handler description
 
 ### 2026-04-16 — OnRequest/OnResponse accept multiple actions
 

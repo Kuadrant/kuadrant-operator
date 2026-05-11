@@ -84,7 +84,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	})
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
-	var modifiedGateways []string
+	modifiedGateways := make([]string, 0, len(gateways))
 
 	// reconcile istio cluster for gateway
 	for _, gateway := range gateways {

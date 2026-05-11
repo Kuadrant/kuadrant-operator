@@ -101,7 +101,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	})
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
-	var modifiedGateways []string
+	modifiedGateways := make([]string, 0, len(gateways))
 
 	if len(gateways) == 0 {
 		logger.V(1).Info("no gateways with rate limiting policies found")

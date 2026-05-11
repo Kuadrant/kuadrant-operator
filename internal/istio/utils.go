@@ -182,7 +182,8 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 			}
 
 			// match comparison depends on patch type
-			if aConfigPatch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
+			switch aConfigPatch.ApplyTo {
+			case istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER:
 				// HTTP_FILTER uses listener match
 				aListener := aConfigPatch.Match.GetListener()
 				bListener := bConfigPatch.Match.GetListener()
@@ -198,7 +199,7 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 						return false
 					}
 				}
-			} else if aConfigPatch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_CLUSTER {
+			case istioapinetworkingv1alpha3.EnvoyFilter_CLUSTER:
 				// CLUSTER uses cluster match
 				aCluster := aConfigPatch.Match.GetCluster()
 				bCluster := bConfigPatch.Match.GetCluster()
@@ -208,7 +209,7 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {
 					return false
 				}
-			} else {
+			default:
 				// For other patch types, compare the match structure via JSON
 				aMatchJSON, _ := json.Marshal(aConfigPatch.Match)
 				bMatchJSON, _ := json.Marshal(bConfigPatch.Match)

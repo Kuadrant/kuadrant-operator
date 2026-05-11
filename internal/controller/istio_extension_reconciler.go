@@ -87,7 +87,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 	}
 
-	var modifiedGateways []string
+	modifiedGateways := make([]string, 0, len(gateways))
 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}

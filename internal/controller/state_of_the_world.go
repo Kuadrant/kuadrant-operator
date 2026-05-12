@@ -25,7 +25,6 @@ import (
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -386,12 +385,6 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			istio.PeerAuthenticationResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*istiosecurity.PeerAuthentication](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-		)),
-		controller.WithRunnable("wasmplugin watcher", controller.Watch(
-			&istioclientgoextensionv1alpha1.WasmPlugin{},
-			istio.WasmPluginsResource,
-			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
 		controller.WithObjectKinds(
 			istio.EnvoyFilterGroupKind,

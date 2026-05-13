@@ -98,7 +98,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL, WASMFilterImageSHA)
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
@@ -549,7 +549,7 @@ func hasAuthAccess(actionSet []wasm.Action) bool {
 }
 
 // buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
-func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
 	imagePullSecret := ""
 	// only set to pull secret if we are in a protected registry
 	if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
@@ -561,7 +561,7 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 	if len(wasmConfig.ActionSets) > 0 {
 		pluginConfigStruct, err := wasmConfig.ToStruct()
 		if err == nil {
-			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret, pluginConfigStruct)
+			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret, imageSHA, pluginConfigStruct)
 			if err == nil {
 				configPatches = patches
 			}

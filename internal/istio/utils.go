@@ -65,8 +65,8 @@ func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatch
 }
 
 // BuildEnvoyFilterWasmPatch returns an envoy config patch that adds a wasm HTTP filter to the gateway.
-func BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
-	wasmFilterConfig, err := buildWasmFilterConfig(imageURL, imagePullSecret, pluginConfig)
+func BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret, imageSHA string, pluginConfig *structpb.Struct) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+	wasmFilterConfig, err := buildWasmFilterConfig(imageURL, imagePullSecret, imageSHA, pluginConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func BuildEnvoyFilterWasmPatch(imageURL, imagePullSecret string, pluginConfig *s
 }
 
 // buildWasmFilterConfig builds the Envoy wasm filter configuration
-func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *structpb.Struct) (map[string]any, error) {
+func buildWasmFilterConfig(imageURL, imagePullSecret, imageSHA string, pluginConfig *structpb.Struct) (map[string]any, error) {
 	config := map[string]any{
 		"name":    "kuadrant-wasm-shim",
 		"root_id": "kuadrant_wasm_shim",
@@ -126,7 +126,7 @@ func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *struc
 						"timeout": "10s",
 						"cluster": "kuadrant_wasm_remote_cluster",
 					},
-					"sha256": "b40e753d084fdae683521afab188f28dc0a77d06a7c428facc86a4617fe49143",
+					"sha256": imageSHA,
 				},
 			},
 			"allow_precompiled": true,

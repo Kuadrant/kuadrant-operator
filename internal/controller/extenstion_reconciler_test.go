@@ -225,7 +225,7 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 		t.Run(testCase.Name, func(t *testing.T) {
 			images := testCase.WASMImageURLS()
 			for _, image := range images {
-				envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image)
+				envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image, "")
 				testCase.Assert(t, envoyFilter)
 			}
 		})

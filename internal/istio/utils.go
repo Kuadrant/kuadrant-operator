@@ -126,6 +126,7 @@ func buildWasmFilterConfig(imageURL, imagePullSecret string, pluginConfig *struc
 						"timeout": "10s",
 						"cluster": "kuadrant_wasm_remote_cluster",
 					},
+					"sha256": "b40e753d084fdae683521afab188f28dc0a77d06a7c428facc86a4617fe49143",
 				},
 			},
 			"allow_precompiled": true,

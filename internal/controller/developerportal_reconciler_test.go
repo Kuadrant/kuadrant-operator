@@ -86,7 +86,7 @@ func TestDeveloperPortalReconciler(t *testing.T) {
 
 	t.Run("Topology with Kuadrant CR", func(subT *testing.T) {
 		topology := buildTopologyWithKuadrant(subT, true)
-		kuadrantCR := GetKuadrantFromTopology(topology)
+		kuadrantCR := GetKuadrantFromTopology(topology, nil)
 		assert.Assert(subT, kuadrantCR != nil, "GetKuadrantFromTopology should return Kuadrant CR")
 		assert.Equal(subT, kuadrantCR.Name, "kuadrant")
 		assert.Equal(subT, kuadrantCR.IsDeveloperPortalEnabled(), true)

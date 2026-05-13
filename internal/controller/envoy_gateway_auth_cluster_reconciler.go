@@ -53,7 +53,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) Reconcile(ctx context.Context, _ []c
 	logger.V(1).Info("building envoy gateway auth clusters")
 	defer logger.V(1).Info("finished building envoy gateway auth clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}

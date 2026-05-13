@@ -374,7 +374,7 @@ func (r *ObservabilityReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(baseCtx).WithName("ObservabilityReconciler")
 	ctx := logr.NewContext(baseCtx, logger)
 	logger.V(1).Info("reconciling observability", "status", "started")
@@ -390,7 +390,7 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 
 	// Check that a kuadrant resource exists, and observability enabled,
 	// otherwise delete all monitors
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 	if kObj == nil || !kObj.Spec.Observability.Enable {
 		logger.V(1).Info("deleting any existing monitors", "kuadrant", kObj != nil)
 		r.deleteAllMonitors(ctx, monitorObjs, logger)

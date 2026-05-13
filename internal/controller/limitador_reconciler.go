@@ -42,13 +42,13 @@ func (r *LimitadorReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	span := trace.SpanFromContext(ctx)
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorResourceReconciler").WithValues("context", ctx)
 	logger.Info("reconciling limitador resource", "status", "started")
 	defer logger.Info("reconciling limitador resource", "status", "completed")
 
-	kobj := GetKuadrantFromTopology(topology)
+	kobj := GetKuadrantFromTopology(topology, state)
 	if kobj == nil {
 		span.AddEvent("no kuadrant object found")
 		span.SetStatus(codes.Ok, "no kuadrant resource")

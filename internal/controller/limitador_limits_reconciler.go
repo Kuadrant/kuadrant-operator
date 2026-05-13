@@ -51,7 +51,7 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	logger.Info("Limitador limits reconciler", "status", "started")
 	defer logger.Info("Limitador limits reconciler", "status", "completed")
 
-	limitador := GetLimitadorFromTopology(topology)
+	limitador := GetLimitadorFromTopology(topology, state)
 	if limitador == nil {
 		logger.V(1).Info("not limitador resources found in topology")
 		return nil

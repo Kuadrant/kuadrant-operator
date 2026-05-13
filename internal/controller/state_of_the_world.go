@@ -833,7 +833,18 @@ func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	return workflow
 }
 
-func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuadrant {
+func GetKuadrantFromTopology(topology *machinery.Topology, state *sync.Map) *kuadrantv1beta1.Kuadrant {
+	const stateKuadrantKey = "kuadrant"
+
+	//PERF: The lo.FilterMap function is extremely slow.
+	//In large topologies it is faster to get the kuadrant CR from the state object
+	if state != nil {
+		stateKuadrant, ok := state.Load(stateKuadrantKey)
+		if ok {
+			kuadrant, _ := stateKuadrant.(*kuadrantv1beta1.Kuadrant)
+			return kuadrant
+		}
+	}
 	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
 		o, isSortable := root.(controller.Object)
 		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
@@ -843,6 +854,9 @@ func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuad
 	}
 	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
 	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	if state != nil {
+		state.Store(stateKuadrantKey, kuadrant)
+	}
 	return kuadrant
 }
 

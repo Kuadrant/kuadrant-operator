@@ -143,7 +143,7 @@ func (r *TokenRateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ 
 }
 
 func (r *TokenRateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1alpha1.TokenRateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 	if kObj == nil {
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("kuadrant"), false)
 	}
@@ -252,7 +252,7 @@ func (r *TokenRateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1
 	if limitadorLimitsModified, stateLimitadorLimitsModifiedPresent := state.Load(StateLimitadorLimitsModified); stateLimitadorLimitsModifiedPresent && limitadorLimitsModified.(bool) {
 		componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)
 	} else {
-		limitador := GetLimitadorFromTopology(topology)
+		limitador := GetLimitadorFromTopology(topology, state)
 		if limitador == nil {
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("limitador"), false)
 		}

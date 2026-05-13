@@ -66,7 +66,7 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 	logger.Info("reconciling kuadrant status", "status", "started")
 	defer logger.Info("reconciling kuadrant status", "status", "completed")
 
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 	if kObj == nil {
 		operatormetrics.SetKuadrantExists(false)
 		operatormetrics.ResetKuadrantMetrics()
@@ -83,7 +83,7 @@ func (r *KuadrantStatusUpdater) Reconcile(ctx context.Context, _ []controller.Re
 	operatormetrics.SetKuadrantReady(kObj.Namespace, kObj.Name, isReady)
 
 	// Emit component readiness metrics
-	r.emitComponentMetrics(topology, kObj.Namespace, logger)
+	r.emitComponentMetrics(topology, kObj.Namespace, logger, state)
 
 	equalStatus := kObj.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
@@ -133,7 +133,7 @@ func (r *KuadrantStatusUpdater) calculateStatus(topology *machinery.Topology, lo
 		MtlsLimitador:      mtlsLimitador(kObj, state),
 	}
 
-	availableCond := r.readyCondition(topology, logger)
+	availableCond := r.readyCondition(topology, logger, state)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
@@ -158,7 +158,7 @@ func mtlsLimitador(kObj *kuadrantv1beta1.Kuadrant, state *sync.Map) *bool {
 	return ptr.To(kObj.IsMTLSLimitadorEnabled() && len(effectiveRateLimitPoliciesMap) > 0)
 }
 
-func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, logger logr.Logger) *metav1.Condition {
+func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, logger logr.Logger, state *sync.Map) *metav1.Condition {
 	cond := &metav1.Condition{
 		Type:    ReadyConditionType,
 		Status:  metav1.ConditionTrue,
@@ -173,14 +173,14 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 		return cond
 	}
 
-	if reason := checkLimitadorReady(topology, logger); reason != nil {
+	if reason := checkLimitadorReady(topology, logger, state); reason != nil {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "LimitadorNotReady"
 		cond.Message = *reason
 		return cond
 	}
 
-	if reason := checkAuthorinoAvailable(topology, logger); reason != nil {
+	if reason := checkAuthorinoAvailable(topology, logger, state); reason != nil {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "AuthorinoNotReady"
 		cond.Message = *reason
@@ -218,8 +218,8 @@ func (r *KuadrantStatusUpdater) isMissingDependency() kuadrant.PolicyError {
 	return nil
 }
 
-func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *string {
-	limitadorObj := GetLimitadorFromTopology(topology)
+func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger, state *sync.Map) *string {
+	limitadorObj := GetLimitadorFromTopology(topology, state)
 	if limitadorObj == nil {
 		logger.V(1).Info("failed getting Limitador resource from topology", "status", "error")
 		return ptr.To("limitador resource not in topology")
@@ -236,8 +236,8 @@ func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *stri
 	return nil
 }
 
-func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *string {
-	authorinoObj := GetAuthorinoFromTopology(topology)
+func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger, state *sync.Map) *string {
+	authorinoObj := GetAuthorinoFromTopology(topology, state)
 	if authorinoObj == nil {
 		logger.V(1).Info("failed getting Authorino resource from topology", "status", "error")
 		return ptr.To("authorino resource not in topology")
@@ -258,12 +258,12 @@ func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *
 // emitComponentMetrics emits readiness metrics for Kuadrant-managed components (Authorino and Limitador).
 // This is called during reconciliation when a Kuadrant CR exists to provide real-time visibility into component health.
 // When no CR exists, component metrics are cleared via ResetKuadrantMetrics() instead.
-func (r *KuadrantStatusUpdater) emitComponentMetrics(topology *machinery.Topology, namespace string, logger logr.Logger) {
+func (r *KuadrantStatusUpdater) emitComponentMetrics(topology *machinery.Topology, namespace string, logger logr.Logger, state *sync.Map) {
 	// Check Authorino readiness
-	authorinoReady := checkAuthorinoAvailable(topology, logger) == nil
+	authorinoReady := checkAuthorinoAvailable(topology, logger, state) == nil
 	operatormetrics.SetComponentReady("authorino", namespace, authorinoReady)
 
 	// Check Limitador readiness
-	limitadorReady := checkLimitadorReady(topology, logger) == nil
+	limitadorReady := checkLimitadorReady(topology, logger, state) == nil
 	operatormetrics.SetComponentReady("limitador", namespace, limitadorReady)
 }

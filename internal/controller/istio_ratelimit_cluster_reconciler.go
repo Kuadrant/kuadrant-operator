@@ -55,12 +55,12 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building istio rate limit clusters")
 	defer logger.V(1).Info("finished building istio rate limit clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}
 
-	limitador := GetLimitadorFromTopology(topology)
+	limitador := GetLimitadorFromTopology(topology, state)
 	if limitador == nil {
 		logger.V(1).Info(ErrMissingLimitador.Error())
 		return nil

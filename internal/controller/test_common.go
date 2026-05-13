@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration || performance
 
 /*
 Copyright 2021.

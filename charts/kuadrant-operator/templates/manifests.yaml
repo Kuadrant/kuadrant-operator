@@ -14429,6 +14429,25 @@ spec:
     app: kuadrant
     control-plane: controller-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kuadrant
+    app.kubernetes.io/managed-by: helm
+    control-plane: controller-manager
+  name: kuadrant-operator-wasm
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  ports:
+  - name: wasm
+    port: 8082
+    protocol: TCP
+    targetPort: wasm
+  selector:
+    app: kuadrant
+    control-plane: controller-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14486,6 +14505,9 @@ spec:
           name: metrics
         - containerPort: 50051
           name: grpc
+          protocol: TCP
+        - containerPort: 8082
+          name: wasm
           protocol: TCP
         readinessProbe:
           httpGet:

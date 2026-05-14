@@ -104,7 +104,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, WASMFilterImageSHA)
+		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, WasmFileSHA256)
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 

@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -16,6 +18,21 @@ import (
 const defaultWasmServerPort = 8082
 
 var wasmFilePath = env.GetString("WASM_SERVER_FILE_PATH", "/wasm/plugin.wasm")
+
+var WasmFileSHA256 string
+
+func computeFileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
 
 type WasmServer struct {
 	server *http.Server
@@ -38,6 +55,13 @@ func (s *WasmServer) Run(stopCh <-chan struct{}) {
 		return
 	}
 
+	sha, err := computeFileSHA256(wasmFilePath)
+	if err != nil {
+		s.logger.Error(err, "failed to compute wasm file SHA256", "path", wasmFilePath)
+		return
+	}
+	WasmFileSHA256 = sha
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /plugin.wasm", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/wasm")
@@ -50,7 +74,7 @@ func (s *WasmServer) Run(stopCh <-chan struct{}) {
 	}
 
 	go func() {
-		s.logger.Info("starting wasm server", "port", port, "file", wasmFilePath)
+		s.logger.Info("starting wasm server", "port", port, "file", wasmFilePath, "sha256", WasmFileSHA256)
 		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error(err, "wasm server failed")
 		}

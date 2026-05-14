@@ -64,11 +64,12 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithValues("context", ctx)
 
 	operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+	wasmServerHost := fmt.Sprintf("kuadrant-operator-wasm.%s.svc.cluster.local", operatorNamespace)
 	wasmServerPort, portErr := env.GetInt("WASM_SERVER_PORT", defaultWasmServerPort)
 	if portErr != nil {
 		wasmServerPort = defaultWasmServerPort
 	}
-	wasmURL := fmt.Sprintf("http://kuadrant-operator-wasm.%s.svc.cluster.local:%d/plugin.wasm", operatorNamespace, wasmServerPort)
+	wasmURL := fmt.Sprintf("http://%s:%d/plugin.wasm", wasmServerHost, wasmServerPort)
 
 	logger.V(1).Info("building istio extension", "wasm url", wasmURL)
 	defer logger.V(1).Info("finished building istio extension")
@@ -104,7 +105,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, WasmFileSHA256)
+		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
@@ -327,22 +328,6 @@ func buildUpstreamEnvoyFilter(logger logr.Logger, gateway *machinery.Gateway, up
 		return nil, fmt.Errorf("failed to build cluster patch for descriptor service: %w", err)
 	}
 	allPatches = append(allPatches, descriptorPatches...)
-
-	// Add wasm server cluster for fetching the wasm binary
-	wasmServerHost := fmt.Sprintf("kuadrant-operator-wasm.%s.svc.cluster.local", operatorNamespace)
-	wasmServerPort, wasmPortErr := env.GetInt("WASM_SERVER_PORT", defaultWasmServerPort)
-	if wasmPortErr != nil {
-		logger.Error(wasmPortErr, "invalid WASM_SERVER_PORT, using default", "default", defaultWasmServerPort)
-		wasmServerPort = defaultWasmServerPort
-	}
-
-	wasmPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(wasmServerHost, wasmServerPort, false, func(h string, p int, _ bool) map[string]any {
-		return buildClusterPatch(WasmServerClusterName, h, p, false)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to build cluster patch for wasm server: %w", err)
-	}
-	allPatches = append(allPatches, wasmPatches...)
 
 	envoyFilter.Spec.ConfigPatches = allPatches
 
@@ -571,7 +556,7 @@ func hasAuthAccess(actionSet []wasm.Action) bool {
 }
 
 // buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
-func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
 	var configPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
 
 	if len(wasmConfig.ActionSets) > 0 {
@@ -581,6 +566,13 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 			if err == nil {
 				configPatches = patches
 			}
+		}
+
+		clusterPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(wasmServerHost, wasmServerPort, false, func(h string, p int, _ bool) map[string]any {
+			return buildClusterPatch(WasmServerClusterName, h, p, false)
+		})
+		if err == nil {
+			configPatches = append(configPatches, clusterPatches...)
 		}
 	}
 

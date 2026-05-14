@@ -165,7 +165,7 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 	wasmURL := "http://kuadrant-operator-wasm.kuadrant-system.svc.cluster.local:8082/plugin.wasm"
 
 	t.Run("ensure wasm URL is set in envoyfilter", func(t *testing.T) {
-		envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "")
+		envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
 		if envoyFilter == nil {
 			t.Fatalf("Expected an envoyfilter")
 		}

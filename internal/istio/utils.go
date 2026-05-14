@@ -134,19 +134,11 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 	}
 
 	if pluginConfig != nil {
-		// Convert the protobuf Struct to a map for JSON serialization
 		configJSON, err := pluginConfig.MarshalJSON()
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal plugin config: %w", err)
 		}
-		var configMap map[string]any
-		if err := json.Unmarshal(configJSON, &configMap); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal plugin config JSON: %w", err)
-		}
-		config["configuration"] = map[string]any{
-			"@type": "type.googleapis.com/google.protobuf.Struct",
-			"value": configMap,
-		}
+		config["configuration"] = string(configJSON)
 	}
 
 	// Add image pull secret if provided

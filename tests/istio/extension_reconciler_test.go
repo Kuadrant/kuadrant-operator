@@ -87,7 +87,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			return nil, err
 		}
 
-		// Navigate: typed_config -> value -> config -> configuration -> value
+		// Navigate: typed_config -> value -> config -> configuration (JSON string)
 		typedConfig, ok := filterConfig["typed_config"].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("missing typed_config in filter configuration")
@@ -103,24 +103,13 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			return nil, fmt.Errorf("missing config in typed_config.value")
 		}
 
-		configuration, ok := config["configuration"].(map[string]any)
+		configJSON, ok := config["configuration"].(string)
 		if !ok {
-			return nil, fmt.Errorf("missing configuration in config")
-		}
-
-		wasmConfigValue, ok := configuration["value"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing value in configuration")
-		}
-
-		// Convert the map back to wasm.Config
-		configJSON, err := json.Marshal(wasmConfigValue)
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("missing or non-string configuration in config")
 		}
 
 		var wasmConfig wasm.Config
-		if err := json.Unmarshal(configJSON, &wasmConfig); err != nil {
+		if err := json.Unmarshal([]byte(configJSON), &wasmConfig); err != nil {
 			return nil, err
 		}
 

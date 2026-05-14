@@ -418,6 +418,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
 		--build-arg WITH_EXTENSIONS=$(WITH_EXTENSIONS) \
+		--build-arg WASM_SHIM_IMAGE=$(RELATED_IMAGE_WASMSHIM) \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 

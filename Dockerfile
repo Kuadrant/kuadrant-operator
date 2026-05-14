@@ -1,3 +1,7 @@
+# Extract the wasm-shim binary (platform-independent) from the OCI image
+ARG WASM_SHIM_IMAGE=quay.io/kuadrant/wasm-shim:latest
+FROM ${WASM_SHIM_IMAGE} AS wasm-shim
+
 # Build the manager binary
 FROM --platform=$BUILDPLATFORM golang:1.25 AS builder
 
@@ -52,6 +56,7 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/extensions /extensions
+COPY --from=wasm-shim /plugin.wasm /wasm/plugin.wasm
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

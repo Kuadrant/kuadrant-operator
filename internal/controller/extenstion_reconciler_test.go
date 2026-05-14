@@ -162,75 +162,18 @@ func extractImageURLFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyFil
 }
 
 func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
-	testCases := []struct {
-		Name                    string
-		WASMImageURLS           func() []string
-		ProtectedRegistryPrefix string
-		Assert                  func(t *testing.T, envoyFilter *istioclientgonetworkingv1alpha3.EnvoyFilter)
-	}{
-		{
-			Name: "ensure image pull secret is set in envoyfilter for protected registry",
-			WASMImageURLS: func() []string {
-				// note currently this is a package global
-				return []string{protectedRegImage}
-			},
-			ProtectedRegistryPrefix: registry,
-			Assert: func(t *testing.T, envoyFilter *istioclientgonetworkingv1alpha3.EnvoyFilter) {
-				if envoyFilter == nil {
-					t.Fatalf("Expected an envoyfilter")
-				}
-				imagePullSecret := extractImagePullSecretFromEnvoyFilter(envoyFilter)
-				if imagePullSecret != RegistryPullSecretName {
-					t.Fatalf("Expected envoyfilter to have imagePullSecret %s but got %s", RegistryPullSecretName, imagePullSecret)
-				}
-			},
-		},
-		{
-			Name: "ensure image pull secret is NOT set in envoyfilter for unprotected registry",
-			WASMImageURLS: func() []string {
-				return []string{WASMFilterImageURL}
-			},
-			Assert: func(t *testing.T, envoyFilter *istioclientgonetworkingv1alpha3.EnvoyFilter) {
-				if envoyFilter == nil {
-					t.Fatalf("Expected an envoyfilter")
-				}
-				imagePullSecret := extractImagePullSecretFromEnvoyFilter(envoyFilter)
-				if imagePullSecret != "" {
-					t.Fatalf("Expected envoyfilter to NOT have imagePullSecret but got %v", imagePullSecret)
-				}
-			},
-		},
-		{
-			Name: "ensure image pull secret is set in envoyfilter for protected registry and unset for unprotected registry",
-			WASMImageURLS: func() []string {
-				return []string{ProtectedRegistry, WASMFilterImageURL}
-			},
-			Assert: func(t *testing.T, envoyFilter *istioclientgonetworkingv1alpha3.EnvoyFilter) {
-				if envoyFilter == nil {
-					t.Fatalf("Expected an envoyfilter")
-				}
-				imageURL := extractImageURLFromEnvoyFilter(envoyFilter)
-				imagePullSecret := extractImagePullSecretFromEnvoyFilter(envoyFilter)
-				if imageURL == protectedRegImage && imagePullSecret == "" {
-					t.Fatalf("Expected envoyfilter to have imagePullSecret set but got none")
-				}
-				if imageURL == WASMFilterImageURL && imagePullSecret != "" {
-					t.Fatalf("Expected envoyfilter to not have imagePullSecret set but got %v", imagePullSecret)
-				}
-			},
-		},
-	}
+	wasmURL := "http://kuadrant-operator-wasm.kuadrant-system.svc.cluster.local:8082/plugin.wasm"
 
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			images := testCase.WASMImageURLS()
-			for _, image := range images {
-				envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image, "")
-				testCase.Assert(t, envoyFilter)
-			}
-		})
-	}
-
+	t.Run("ensure wasm URL is set in envoyfilter", func(t *testing.T) {
+		envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "")
+		if envoyFilter == nil {
+			t.Fatalf("Expected an envoyfilter")
+		}
+		imageURL := extractImageURLFromEnvoyFilter(envoyFilter)
+		if imageURL != wasmURL {
+			t.Fatalf("Expected envoyfilter URI to be %s but got %s", wasmURL, imageURL)
+		}
+	})
 }
 
 func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {

@@ -6,65 +6,71 @@ import "context"
 type ActionType string
 
 const (
-	ActionTypeGRPCMethod       ActionType = "grpc_method"
-	ActionTypeAllow            ActionType = "allow"
-	ActionTypeAddHeaders       ActionType = "add_headers"
-	ActionTypeWithResponseCode ActionType = "with_response_code"
+	ActionTypeGRPCMethod ActionType = "grpc_method"
+	ActionTypeDeny       ActionType = "deny"
+	ActionTypeFailure    ActionType = "failure"
+	ActionTypeAddHeaders ActionType = "add_headers"
 )
 
-// RequestAction is the interface implemented by actions that can be used
-// in the request phase of a pipeline.
-type RequestAction interface {
-	requestActionType() ActionType
+// Action is the interface implemented by all pipeline action types.
+// Actions can be used in either the request or response phase.
+type Action interface {
+	actionType() ActionType
 }
 
-// ResponseAction is the interface implemented by actions that can be used
-// in the response phase of a pipeline.
-type ResponseAction interface {
-	responseActionType() ActionType
-}
-
-// GRPCMethodAction invokes a registered gRPC action method and evaluates
-// the response. Implements RequestAction.
+// GRPCMethodAction invokes a registered gRPC action method and optionally
+// stores the response in a named variable for use by subsequent actions.
 type GRPCMethodAction struct {
-	Predicate string // CEL predicate — if false, skip this action
-	Intention string // CEL expression evaluated against the gRPC response
+	Predicate string // CEL — if true, call the gRPC method
 	Method    string // Name of a registered ActionMethod
-	Var       string // Variable name for the gRPC response (used by onReply predicates)
+	Var       string // Variable name to store gRPC response (optional)
 }
 
-func (a GRPCMethodAction) requestActionType() ActionType { return ActionTypeGRPCMethod }
+func (a GRPCMethodAction) actionType() ActionType { return ActionTypeGRPCMethod }
 
-// AllowAction permits or denies the request based on request attributes only.
-// No gRPC call is made. Implements RequestAction.
-type AllowAction struct {
-	Predicate string // CEL predicate — if false, skip this action
-	Intention string // CEL expression — if false, deny the request
+// DenyAction denies the request or response when the predicate evaluates
+// to true.
+//
+// Phase semantics:
+//   - Request phase: deny sends the status code to the origin
+//     (request never reaches backend)
+//   - Response phase: deny sends the status code to the destination
+//     (backend response replaced before reaching client)
+type DenyAction struct {
+	Predicate string // CEL — if true, deny with DenyWith code
+	DenyWith  string // HTTP status code to send (e.g. "403")
 }
 
-func (a AllowAction) requestActionType() ActionType { return ActionTypeAllow }
+func (a DenyAction) actionType() ActionType { return ActionTypeDeny }
 
-// AddHeadersAction adds headers to the response. Implements ResponseAction.
+// FailureAction terminates the request with both a status code and a
+// human-readable message body when the predicate evaluates to true.
+type FailureAction struct {
+	Predicate      string // CEL — if true, send failure response
+	FailureMessage string // Response body sent to the client
+	FailureCode    string // HTTP status code (e.g. "500")
+}
+
+func (a FailureAction) actionType() ActionType { return ActionTypeFailure }
+
+// AddHeadersAction adds headers to the request or response depending on
+// the phase in which it is used, when the predicate evaluates to true.
+//
+// Phase semantics:
+//   - Request phase: headers added to the request before it reaches the backend
+//   - Response phase: headers added to the response before it reaches the client
 type AddHeadersAction struct {
-	Predicate    string // CEL predicate — if false, skip this action
-	HeadersToAdd string // CEL expression evaluating to a map of headers to add
+	Predicate    string // CEL — if true, add the headers
+	HeadersToAdd string // CEL expression evaluating to a map of headers
 }
 
-func (a AddHeadersAction) responseActionType() ActionType { return ActionTypeAddHeaders }
+func (a AddHeadersAction) actionType() ActionType { return ActionTypeAddHeaders }
 
-// WithResponseCodeAction modifies the HTTP response code. Implements ResponseAction.
-type WithResponseCodeAction struct {
-	Predicate       string // CEL predicate — if false, skip this action
-	NewResponseCode int    // HTTP status code to set on the response
-}
-
-func (a WithResponseCodeAction) responseActionType() ActionType { return ActionTypeWithResponseCode }
-
-// Pipeline provides a builder for composing ordered actions on request
-// and response phases. OnRequest/OnResponse accumulate actions locally;
-// Commit sends the full pipeline to the operator in a single atomic gRPC call.
+// Pipeline provides a builder for composing ordered actions on HTTP request
+// and response phases. Actions accumulate locally with immediate ordering
+// validation. Commit sends all actions atomically to the operator.
 type Pipeline interface {
-	OnRequest(actions ...RequestAction) Pipeline
-	OnResponse(actions ...ResponseAction) Pipeline
+	OnHTTPRequest(actions ...Action) error
+	OnHTTPResponse(actions ...Action) error
 	Commit(ctx context.Context) error
 }

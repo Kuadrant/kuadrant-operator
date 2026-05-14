@@ -333,7 +333,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 	serviceBuilder := wasm.NewServiceBuilder(&logger)
 	// Get Kuadrant CR to access observability settings
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 	var observability *wasm.Observability
 	if kObj != nil {
 		observability = wasm.BuildObservabilityConfig(serviceBuilder, &kObj.Spec.Observability)

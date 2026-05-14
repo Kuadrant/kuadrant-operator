@@ -38,7 +38,7 @@ func (r *EffectiveAuthPolicyReconciler) Reconcile(ctx context.Context, _ []contr
 	logger.V(1).Info("generate effective auth policy", "status", "started")
 	defer logger.V(1).Info("generate effective auth policy", "status", "completed")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}

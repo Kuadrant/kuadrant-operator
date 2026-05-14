@@ -44,8 +44,8 @@ var (
 	ErrMissingStateEffectiveTokenRateLimitPolicies = fmt.Errorf("missing token rate limit effective policies stored in the reconciliation state")
 )
 
-func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.Limitador {
-	kuadrant := GetKuadrantFromTopology(topology)
+func GetLimitadorFromTopology(topology *machinery.Topology, state *sync.Map) *limitadorv1alpha1.Limitador {
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}

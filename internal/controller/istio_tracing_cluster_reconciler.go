@@ -47,7 +47,7 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 	logger.V(1).Info("building istio tracing clusters")
 	defer logger.V(1).Info("finished building istio tracing clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		logger.V(1).Info("kuadrant CR not found")
 		return nil

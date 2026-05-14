@@ -61,7 +61,7 @@ func (l *LimitadorIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 	logger.V(1).Info("reconciling limitador integration in istio", "status", "started")
 	defer logger.V(1).Info("reconciling limitador integration in istio", "status", "completed")
 
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 
 	if kObj == nil {
 		// Nothing to be done. It is expected the limitador resource managed by kuadrant

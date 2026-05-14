@@ -102,7 +102,7 @@ func TestGetKuadrant(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := GetKuadrantFromTopology(tt.args.topology)
+			got := GetKuadrantFromTopology(tt.args.topology, nil)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetKuadrantFromTopology() got = %v, want %v", got, tt.want)
 			}

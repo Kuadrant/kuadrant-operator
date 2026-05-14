@@ -40,13 +40,13 @@ func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	span := trace.SpanFromContext(ctx)
 	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler").WithValues("context", ctx)
 	logger.V(1).Info("reconciling authorino resource", "status", "started")
 	defer logger.V(1).Info("reconciling authorino resource", "status", "completed")
 
-	kobj := GetKuadrantFromTopology(topology)
+	kobj := GetKuadrantFromTopology(topology, state)
 	if kobj == nil {
 		span.AddEvent("no kuadrant object found")
 		span.SetStatus(codes.Ok, "")
@@ -59,7 +59,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		attribute.String("kuadrant.namespace", kobj.Namespace),
 	)
 
-	clusterAuthorino := GetAuthorinoFromTopology(topology)
+	clusterAuthorino := GetAuthorinoFromTopology(topology, state)
 
 	if clusterAuthorino != nil {
 		span.AddEvent("Authorino resource already exists")

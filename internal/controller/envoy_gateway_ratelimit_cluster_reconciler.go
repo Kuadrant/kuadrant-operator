@@ -55,7 +55,7 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	logger.V(1).Info("building envoy gateway rate limit clusters")
 	defer logger.V(1).Info("finished building envoy gateway rate limit clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}

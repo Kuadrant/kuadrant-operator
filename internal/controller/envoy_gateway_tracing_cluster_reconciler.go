@@ -47,7 +47,7 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 	logger.V(1).Info("building envoy gateway tracing clusters")
 	defer logger.V(1).Info("finished building envoy gateway tracing clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		logger.V(1).Info("kuadrant CR not found")
 		return nil

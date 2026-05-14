@@ -103,9 +103,14 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			return nil, fmt.Errorf("missing config in typed_config.value")
 		}
 
-		configJSON, ok := config["configuration"].(string)
+		configuration, ok := config["configuration"].(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("missing or non-string configuration in config")
+			return nil, fmt.Errorf("missing configuration in config")
+		}
+
+		configJSON, ok := configuration["value"].(string)
+		if !ok {
+			return nil, fmt.Errorf("missing value in configuration")
 		}
 
 		var wasmConfig wasm.Config

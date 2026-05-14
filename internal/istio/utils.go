@@ -138,7 +138,10 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal plugin config: %w", err)
 		}
-		config["configuration"] = string(configJSON)
+		config["configuration"] = map[string]any{
+			"@type": "type.googleapis.com/google.protobuf.StringValue",
+			"value": string(configJSON),
+		}
 	}
 
 	// Add image pull secret if provided

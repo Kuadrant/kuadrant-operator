@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"k8s.io/utils/env"
 )
 
@@ -71,14 +73,15 @@ func (s *WasmServer) Run(stopCh <-chan struct{}) {
 		http.ServeFile(w, r, wasmFilePath)
 	})
 
+	h2s := &http2.Server{}
 	s.server = &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           mux,
+		Handler:           h2c.NewHandler(mux, h2s),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
-		s.logger.Info("starting wasm server", "port", port, "file", wasmFilePath, "sha256", WasmFileSHA256)
+		s.logger.Info("starting wasm server (h2c)", "port", port, "file", wasmFilePath, "sha256", WasmFileSHA256)
 		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error(err, "wasm server failed")
 		}

@@ -328,6 +328,22 @@ func buildUpstreamEnvoyFilter(logger logr.Logger, gateway *machinery.Gateway, up
 	}
 	allPatches = append(allPatches, descriptorPatches...)
 
+	// Add wasm server cluster for fetching the wasm binary
+	wasmServerHost := fmt.Sprintf("kuadrant-operator-wasm.%s.svc.cluster.local", operatorNamespace)
+	wasmServerPort, wasmPortErr := env.GetInt("WASM_SERVER_PORT", defaultWasmServerPort)
+	if wasmPortErr != nil {
+		logger.Error(wasmPortErr, "invalid WASM_SERVER_PORT, using default", "default", defaultWasmServerPort)
+		wasmServerPort = defaultWasmServerPort
+	}
+
+	wasmPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(wasmServerHost, wasmServerPort, false, func(h string, p int, _ bool) map[string]any {
+		return buildClusterPatch(WasmServerClusterName, h, p, false)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build cluster patch for wasm server: %w", err)
+	}
+	allPatches = append(allPatches, wasmPatches...)
+
 	envoyFilter.Spec.ConfigPatches = allPatches
 
 	return envoyFilter, nil
@@ -561,7 +577,7 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 	if len(wasmConfig.ActionSets) > 0 {
 		pluginConfigStruct, err := wasmConfig.ToStruct()
 		if err == nil {
-			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, pluginConfigStruct)
+			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
 			if err == nil {
 				configPatches = patches
 			}

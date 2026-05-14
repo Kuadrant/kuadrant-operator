@@ -15,7 +15,10 @@ import (
 	"k8s.io/utils/env"
 )
 
-const defaultWasmServerPort = 8082
+const (
+	defaultWasmServerPort = 8082
+	WasmServerClusterName = "kuadrant-operator-wasm"
+)
 
 var wasmFilePath = env.GetString("WASM_SERVER_FILE_PATH", "/wasm/plugin.wasm")
 

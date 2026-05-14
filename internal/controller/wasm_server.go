@@ -69,8 +69,9 @@ func (s *WasmServer) Run(stopCh <-chan struct{}) {
 	})
 
 	s.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {

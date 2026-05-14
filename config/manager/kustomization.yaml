@@ -2,6 +2,7 @@ resources:
 - manager.yaml
 - metrics_service.yaml
 - grpc_service.yaml
+- wasm_service.yaml
 
 generatorOptions:
   disableNameSuffixHash: true

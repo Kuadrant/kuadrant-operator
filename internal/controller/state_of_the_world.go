@@ -394,6 +394,7 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			istio.LinkGatewayToEnvoyFilter,
 			istio.LinkKuadrantToPeerAuthentication,
 		),
+		controller.WithRunnable("wasm server", wasmServerRunnable(b.logger)),
 	)
 
 	return opts, nil

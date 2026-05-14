@@ -584,7 +584,7 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
-			Labels:    KuadrantManagedObjectLabels(),
+			Labels:    labels.Set(map[string]string{kuadrantManagedLabelKey: "true", "kuadrant.io/wasm": "true"}),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),

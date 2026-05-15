@@ -97,9 +97,9 @@ sequenceDiagram
     Dev->>GHA: Trigger Automated Release Workflow
     GHA->>GHA: Update release.yaml with versions
     GHA->>GHA: Run make prepare-release<br/>• Execute make_chart.sh script<br/>• Build helm templates<br/>• Update Chart.yaml with versions
-    GHA->>GitHub: Create release-v{MAJOR.MINOR} base branch<br/>(if it doesn't exist)
+    GHA->>GitHub: Create release-{MAJOR.MINOR} base branch<br/>(if it doesn't exist)
     GHA->>CreatePR: Invoke create-pull-request
-    CreatePR->>GitHub: Auto-create release-v{FULL_VERSION} branch
+    CreatePR->>GitHub: Auto-create release-{FULL_VERSION} branch
     CreatePR->>GitHub: Commit chart changes to working branch
     CreatePR->>GitHub: Create PR (working → base branch)
 
@@ -161,9 +161,9 @@ sequenceDiagram
         - Updates Chart.yaml with version and dependency versions
 
 3. **Creates Pull Request**:
-    - Creates base branch `release-v{MAJOR.MINOR}` (e.g., `release-v1.0`) if it doesn't exist
+    - Creates base branch `release-{MAJOR.MINOR}` (e.g., `release-v1.0`) if it doesn't exist
     - Uses `peter-evans/create-pull-request` action which automatically:
-      - Creates working branch `release-v{FULL_VERSION}` (e.g., `release-v1.0.0`)
+      - Creates working branch `release-{FULL_VERSION}` (e.g., `release-v1.0.0`)
       - Commits all changes from `make prepare-release`
       - Opens PR from working branch to base branch
 
@@ -171,7 +171,7 @@ sequenceDiagram
 
 **Overview**: Once the release PR is merged the release creation will be triggered.
 
-**Trigger**: Release PR is merged (from `release-v{FULL_VERSION}` to `release-v{MAJOR.MINOR}` branch)
+**Trigger**: Release PR is merged (from `release-{FULL_VERSION}` to `release-{MAJOR.MINOR}` branch)
 
 **Workflow**: [release-operator.yaml](../../.github/workflows/release-operator.yaml)
 

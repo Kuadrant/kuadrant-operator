@@ -72,7 +72,7 @@ jobs:
         id: create-release-branch
         shell: bash
         run: |
-          base_branch=release-v$(echo "${{ github.event.inputs.kuadrantOperatorVersion }}" | sed 's/[+-].*//; s/\.[0-9]*$//')
+          base_branch=release-$(echo "${{ github.event.inputs.kuadrantOperatorVersion }}" | sed 's/[+-].*//; s/\.[0-9]*$//')
           echo BASE_BRANCH=$base_branch >> $GITHUB_ENV
           
           if git ls-remote --exit-code --heads origin $base_branch ; then
@@ -125,7 +125,7 @@ jobs:
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: true
           base: ${{ env.BASE_BRANCH }}
-          branch: release-v${{ github.event.inputs.kuadrantOperatorVersion }}
+          branch: release-${{ github.event.inputs.kuadrantOperatorVersion }}
           delete-branch: true
           title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
           body: |

@@ -600,3 +600,108 @@ func TestPipeline_VarInHeadersToAdd_ForwardReference(t *testing.T) {
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
 }
+
+func TestPipelineCommit_SendsAllActions(t *testing.T) {
+	var capturedReq *extpb.PipelineCommitRequest
+	mock := &mockExtensionServiceClient{
+		pipelineCommitFn: func(_ context.Context, in *extpb.PipelineCommitRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			capturedReq = in
+			return &emptypb.Empty{}, nil
+		},
+	}
+
+	ec := newTestExtensionController(mock)
+	pipeline := ec.NewPipeline(&mockPolicy{name: "my-policy", namespace: "default"})
+
+	err := pipeline.OnHTTPRequest(
+		exttypes.DenyAction{
+			Predicate: `request.url_path == "/blocked"`,
+			DenyWith:  "403",
+		},
+		exttypes.GRPCMethodAction{
+			Predicate: "true",
+			Method:    "assess-threat",
+			Var:       "threatResponse",
+		},
+		exttypes.FailureAction{
+			Predicate:      `request.headers["x-debug"] == "true"`,
+			FailureMessage: "Request blocked",
+			FailureCode:    "500",
+		},
+	)
+	assert.NilError(t, err)
+
+	err = pipeline.OnHTTPResponse(
+		exttypes.DenyAction{
+			Predicate: "threatResponse.threat_level >= 5",
+			DenyWith:  "403",
+		},
+		exttypes.AddHeadersAction{
+			HeadersToAdd: `{"x-threat-checked": "true"}`,
+		},
+	)
+	assert.NilError(t, err)
+
+	err = pipeline.Commit(context.Background())
+	assert.NilError(t, err)
+	assert.Assert(t, capturedReq != nil)
+	assert.Equal(t, capturedReq.Policy.Metadata.Name, "my-policy")
+	assert.Equal(t, capturedReq.Policy.Metadata.Namespace, "default")
+
+	assert.Assert(t, cmp.Len(capturedReq.Actions, 5))
+
+	assert.Equal(t, capturedReq.Actions[0].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
+	assert.Equal(t, capturedReq.Actions[0].Phase, "request")
+	assert.Equal(t, capturedReq.Actions[0].DenyWith, "403")
+
+	assert.Equal(t, capturedReq.Actions[1].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
+	assert.Equal(t, capturedReq.Actions[1].Phase, "request")
+	assert.Equal(t, capturedReq.Actions[1].Method, "assess-threat")
+	assert.Equal(t, capturedReq.Actions[1].Var, "threatResponse")
+
+	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAILURE)
+	assert.Equal(t, capturedReq.Actions[2].Phase, "request")
+	assert.Equal(t, capturedReq.Actions[2].FailureMessage, "Request blocked")
+	assert.Equal(t, capturedReq.Actions[2].FailureCode, "500")
+
+	assert.Equal(t, capturedReq.Actions[3].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
+	assert.Equal(t, capturedReq.Actions[3].Phase, "response")
+
+	assert.Equal(t, capturedReq.Actions[4].ActionType, extpb.ActionType_ACTION_TYPE_ADD_HEADERS)
+	assert.Equal(t, capturedReq.Actions[4].Phase, "response")
+	assert.Equal(t, capturedReq.Actions[4].HeadersToAdd, `{"x-threat-checked": "true"}`)
+}
+
+func TestPipelineCommit_EmptyPipeline(t *testing.T) {
+	var capturedReq *extpb.PipelineCommitRequest
+	mock := &mockExtensionServiceClient{
+		pipelineCommitFn: func(_ context.Context, in *extpb.PipelineCommitRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			capturedReq = in
+			return &emptypb.Empty{}, nil
+		},
+	}
+
+	ec := newTestExtensionController(mock)
+	pipeline := ec.NewPipeline(&mockPolicy{name: "p", namespace: "ns"})
+
+	err := pipeline.Commit(context.Background())
+	assert.NilError(t, err)
+	assert.Assert(t, capturedReq != nil)
+	assert.Assert(t, cmp.Len(capturedReq.Actions, 0))
+}
+
+func TestPipelineCommit_PropagatesError(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		pipelineCommitFn: func(_ context.Context, _ *extpb.PipelineCommitRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			return nil, status.Error(codes.InvalidArgument, "bad action")
+		},
+	}
+
+	ec := newTestExtensionController(mock)
+	pipeline := ec.NewPipeline(&mockPolicy{name: "p", namespace: "ns"})
+	_ = pipeline.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", DenyWith: "403"})
+
+	err := pipeline.Commit(context.Background())
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "bad action"))
+}

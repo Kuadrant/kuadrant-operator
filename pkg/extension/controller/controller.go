@@ -442,8 +442,42 @@ func celReferencesVar(expr, varName string) bool {
 }
 
 func (p *PipelineImpl) Commit(ctx context.Context) error {
-	// TODO: proto conversion will be updated in #1973
-	panic("pipeline proto conversion not yet implemented")
+	entries := make([]*extpb.ActionEntry, 0, len(p.actions))
+	for _, pe := range p.actions {
+		entries = append(entries, convertAction(pe))
+	}
+	_, err := p.client.PipelineCommit(ctx, &extpb.PipelineCommitRequest{
+		Policy:  convertPolicyToProtobuf(p.policy),
+		Actions: entries,
+	})
+	return err
+}
+
+func convertAction(pe pipelineEntry) *extpb.ActionEntry {
+	entry := &extpb.ActionEntry{Phase: pe.phase}
+	switch a := pe.action.(type) {
+	case exttypes.GRPCMethodAction:
+		entry.ActionType = extpb.ActionType_ACTION_TYPE_GRPC_METHOD
+		entry.Predicate = a.Predicate
+		entry.Method = a.Method
+		entry.Var = a.Var
+	case exttypes.DenyAction:
+		entry.ActionType = extpb.ActionType_ACTION_TYPE_DENY
+		entry.Predicate = a.Predicate
+		entry.DenyWith = a.DenyWith
+	case exttypes.FailureAction:
+		entry.ActionType = extpb.ActionType_ACTION_TYPE_FAILURE
+		entry.Predicate = a.Predicate
+		entry.FailureMessage = a.FailureMessage
+		entry.FailureCode = a.FailureCode
+	case exttypes.AddHeadersAction:
+		entry.ActionType = extpb.ActionType_ACTION_TYPE_ADD_HEADERS
+		entry.Predicate = a.Predicate
+		entry.HeadersToAdd = a.HeadersToAdd
+	default:
+		panic(fmt.Sprintf("unknown action type: %T", pe.action))
+	}
+	return entry
 }
 
 // Manager returns the underlying controller-runtime Manager.

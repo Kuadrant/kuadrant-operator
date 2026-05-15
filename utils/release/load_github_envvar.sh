@@ -6,7 +6,7 @@ source $script_dir/shared.sh
 
 log "Loading Environment Variables"
 
-releaseBranch="release-$(echo "$KUADRANT_OPERATOR_TAG" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
+releaseBranch="release-$(echo "$KUADRANT_OPERATOR_TAG" | sed -E 's/^v?([0-9]+\.[0-9]+).*/\1/')"
 
 prerelease=false
 if [[ "$KUADRANT_OPERATOR_TAG" =~ [-+] ]]; then

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -335,87 +336,114 @@ func (ec *ExtensionController) RegisterActionMethod(ctx context.Context, policy 
 
 // NewPipeline creates a Pipeline bound to the given policy. No I/O is performed;
 // the returned Pipeline captures the policy and gRPC client for later use.
-// Call OnRequest/OnResponse to accumulate actions, then Commit to send them.
 func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipeline {
 	return &PipelineImpl{
-		policy: policy,
-		client: ec.extensionClient.client,
+		policy:        policy,
+		client:        ec.extensionClient.client,
+		populatedVars: make(map[string]bool),
 	}
 }
 
-// PipelineImpl implements Pipeline by accumulating actions locally and sending
-// them to the operator in a single PipelineCommit gRPC call.
+type pipelineEntry struct {
+	action exttypes.Action
+	phase  string // "request" or "response"
+}
+
+// PipelineImpl implements Pipeline by accumulating actions locally with
+// ordering validation. Commit sends all actions to the operator atomically.
 type PipelineImpl struct {
-	policy          exttypes.Policy
-	client          extpb.ExtensionServiceClient
-	requestActions  []*extpb.RequestActionEntry
-	responseActions []*extpb.ResponseActionEntry
+	policy        exttypes.Policy
+	client        extpb.ExtensionServiceClient
+	actions       []pipelineEntry
+	populatedVars map[string]bool
 }
 
-func (p *PipelineImpl) OnRequest(actions ...exttypes.RequestAction) exttypes.Pipeline {
-	for _, action := range actions {
-		p.requestActions = append(p.requestActions, convertRequestAction(action))
+func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
+	for _, entry := range p.actions {
+		if entry.phase == "response" {
+			return fmt.Errorf("cannot add request actions after response actions have been added")
+		}
 	}
-	return p
+	return p.validateAndAppend("request", actions)
 }
 
-func (p *PipelineImpl) OnResponse(actions ...exttypes.ResponseAction) exttypes.Pipeline {
+func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
+	return p.validateAndAppend("response", actions)
+}
+
+func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action) error {
+	batchVars := make(map[string]bool)
 	for _, action := range actions {
-		p.responseActions = append(p.responseActions, convertResponseAction(action))
+		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+			batchVars[grpc.Var] = true
+		}
 	}
-	return p
+
+	localPopulated := make(map[string]bool, len(p.populatedVars))
+	for k := range p.populatedVars {
+		localPopulated[k] = true
+	}
+
+	for _, action := range actions {
+		exprs := celExpressionsFrom(action)
+		for _, expr := range exprs {
+			for varName := range batchVars {
+				if !localPopulated[varName] && celReferencesVar(expr, varName) {
+					return fmt.Errorf("action references variable %q before it is populated", varName)
+				}
+			}
+		}
+
+		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+			if localPopulated[grpc.Var] {
+				return fmt.Errorf("duplicate variable name %q", grpc.Var)
+			}
+			localPopulated[grpc.Var] = true
+		}
+	}
+
+	for k := range localPopulated {
+		p.populatedVars[k] = true
+	}
+	for _, action := range actions {
+		p.actions = append(p.actions, pipelineEntry{action: action, phase: phase})
+	}
+	return nil
+}
+
+func celExpressionsFrom(action exttypes.Action) []string {
+	var exprs []string
+	switch a := action.(type) {
+	case exttypes.GRPCMethodAction:
+		if a.Predicate != "" {
+			exprs = append(exprs, a.Predicate)
+		}
+	case exttypes.DenyAction:
+		if a.Predicate != "" {
+			exprs = append(exprs, a.Predicate)
+		}
+	case exttypes.FailureAction:
+		if a.Predicate != "" {
+			exprs = append(exprs, a.Predicate)
+		}
+	case exttypes.AddHeadersAction:
+		if a.Predicate != "" {
+			exprs = append(exprs, a.Predicate)
+		}
+		if a.HeadersToAdd != "" {
+			exprs = append(exprs, a.HeadersToAdd)
+		}
+	}
+	return exprs
+}
+
+func celReferencesVar(expr, varName string) bool {
+	return regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`).MatchString(expr)
 }
 
 func (p *PipelineImpl) Commit(ctx context.Context) error {
-	_, err := p.client.PipelineCommit(ctx, &extpb.PipelineCommitRequest{
-		Policy:          convertPolicyToProtobuf(p.policy),
-		RequestActions:  p.requestActions,
-		ResponseActions: p.responseActions,
-	})
-	return err
-}
-
-func convertRequestAction(action exttypes.RequestAction) *extpb.RequestActionEntry {
-	switch a := action.(type) {
-	case exttypes.GRPCMethodAction:
-		return &extpb.RequestActionEntry{
-			ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD,
-			Predicate:  a.Predicate,
-			Intention:  a.Intention,
-			Method:     a.Method,
-			Var:        a.Var,
-		}
-	case exttypes.AllowAction:
-		return &extpb.RequestActionEntry{
-			ActionType: extpb.ActionType_ACTION_TYPE_ALLOW,
-			Predicate:  a.Predicate,
-			Intention:  a.Intention,
-		}
-	default:
-		panic(fmt.Sprintf("unknown request action type: %T", action))
-	}
-}
-
-func convertResponseAction(action exttypes.ResponseAction) *extpb.ResponseActionEntry {
-	switch a := action.(type) {
-	case exttypes.AddHeadersAction:
-		return &extpb.ResponseActionEntry{
-			ActionType:   extpb.ActionType_ACTION_TYPE_ADD_HEADERS,
-			Predicate:    a.Predicate,
-			HeadersToAdd: a.HeadersToAdd,
-		}
-	case exttypes.WithResponseCodeAction:
-		if a.NewResponseCode < 100 || a.NewResponseCode > 599 {
-			panic(fmt.Sprintf("NewResponseCode must be 100-599, got %d", a.NewResponseCode))
-		}
-		return &extpb.ResponseActionEntry{
-			ActionType:      extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE,
-			Predicate:       a.Predicate,
-			NewResponseCode: int32(a.NewResponseCode), // #nosec G115
-		}
-	default:
-		panic(fmt.Sprintf("unknown response action type: %T", action))
-	}
+	// TODO: proto conversion will be updated in #1973
+	panic("pipeline proto conversion not yet implemented")
 }
 
 // Manager returns the underlying controller-runtime Manager.

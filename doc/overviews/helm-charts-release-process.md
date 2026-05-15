@@ -161,9 +161,9 @@ sequenceDiagram
         - Updates Chart.yaml with version and dependency versions
 
 3. **Creates Pull Request**:
-    - Creates base branch `release-{MAJOR.MINOR}` (e.g., `release-v1.0`) if it doesn't exist
+    - Creates base branch `release-{MAJOR.MINOR}` (e.g., `release-1.0`) if it doesn't exist
     - Uses `peter-evans/create-pull-request` action which automatically:
-      - Creates working branch `release-{FULL_VERSION}` (e.g., `release-v1.0.0`)
+      - Creates working branch `release-{FULL_VERSION}` (e.g., `release-1.0.0`)
       - Commits all changes from `make prepare-release`
       - Opens PR from working branch to base branch
 

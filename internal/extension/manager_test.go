@@ -936,13 +936,11 @@ func TestPipelineCommit_BothPhases(t *testing.T) {
 
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Predicate: "true", Intention: "response.score > 5", Var: "threatResponse"},
-			{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW},
-		},
-		ResponseActions: []*extpb.ResponseActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-checked": "true"}`, Predicate: "true"},
-			{ActionType: extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE, NewResponseCode: 403},
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Predicate: "true", Var: "threatResponse"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", DenyWith: "403"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: `{"x-checked": "true"}`, Predicate: "true"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_FAILURE, Phase: "response", FailureCode: "500", FailureMessage: "internal error"},
 		},
 	})
 	if err != nil {
@@ -963,11 +961,11 @@ func TestPipelineCommit_BothPhases(t *testing.T) {
 	if reqActions[0].Var != "threatResponse" {
 		t.Errorf("Expected var 'threatResponse', got %q", reqActions[0].Var)
 	}
-	if reqActions[0].Intention != "response.score > 5" {
-		t.Errorf("Expected intention, got %q", reqActions[0].Intention)
+	if reqActions[1].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
+		t.Errorf("Expected second request action DENY, got %s", reqActions[1].ActionType)
 	}
-	if reqActions[1].ActionType != extpb.ActionType_ACTION_TYPE_ALLOW {
-		t.Errorf("Expected second request action ALLOW, got %s", reqActions[1].ActionType)
+	if reqActions[1].DenyWith != "403" {
+		t.Errorf("Expected DenyWith '403', got %q", reqActions[1].DenyWith)
 	}
 
 	respActions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseResponse)
@@ -977,44 +975,22 @@ func TestPipelineCommit_BothPhases(t *testing.T) {
 	if respActions[0].HeadersToAdd != `{"x-checked": "true"}` {
 		t.Errorf("Expected headers_to_add, got %q", respActions[0].HeadersToAdd)
 	}
-	if respActions[1].NewResponseCode != 403 {
-		t.Errorf("Expected response code 403, got %d", respActions[1].NewResponseCode)
+	if respActions[1].FailureCode != "500" {
+		t.Errorf("Expected failure code '500', got %q", respActions[1].FailureCode)
+	}
+	if respActions[1].FailureMessage != "internal error" {
+		t.Errorf("Expected failure message 'internal error', got %q", respActions[1].FailureMessage)
 	}
 }
 
-func TestPipelineCommit_InvalidRequestAction_RejectsAll(t *testing.T) {
-	svc := newTestExtensionService()
-	registerTestActionMethod(t, svc, "demo", "assess-threat")
-
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "nonexistent"},
-		},
-		ResponseActions: []*extpb.ResponseActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE, NewResponseCode: 200},
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for invalid request action")
-	}
-
-	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
-	if actions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseResponse); len(actions) != 0 {
-		t.Errorf("Expected no response actions stored after request validation failure, got %d", len(actions))
-	}
-}
-
-func TestPipelineCommit_InvalidResponseAction_RejectsAll(t *testing.T) {
+func TestPipelineCommit_InvalidPhase_RejectsAll(t *testing.T) {
 	svc := newTestExtensionService()
 
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW},
-		},
-		ResponseActions: []*extpb.ResponseActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE, NewResponseCode: 0},
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", DenyWith: "403"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "invalid", DenyWith: "403"},
 		},
 	})
 	if err == nil {
@@ -1027,105 +1003,7 @@ func TestPipelineCommit_InvalidResponseAction_RejectsAll(t *testing.T) {
 	}
 }
 
-func TestPipelineCommit_InvalidPredicate(t *testing.T) {
-	svc := newTestExtensionService()
-	registerTestActionMethod(t, svc, "demo", "assess-threat")
-
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Predicate: "!!!invalid cel"},
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for invalid CEL predicate")
-	}
-	if !strings.Contains(err.Error(), "predicate") {
-		t.Errorf("Expected predicate in error, got: %v", err)
-	}
-}
-
-func TestPipelineCommit_InvalidIntention(t *testing.T) {
-	svc := newTestExtensionService()
-	registerTestActionMethod(t, svc, "demo", "assess-threat")
-
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Intention: "!!!bad cel"},
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for invalid CEL intention")
-	}
-	if !strings.Contains(err.Error(), "intention") {
-		t.Errorf("Expected intention error, got: %v", err)
-	}
-}
-
-func TestPipelineCommit_RequestPhaseActionInResponsePhase(t *testing.T) {
-	svc := newTestExtensionService()
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		ResponseActions: []*extpb.ResponseActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD},
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for request-phase action in response phase")
-	}
-	if !strings.Contains(err.Error(), "not valid in the response phase") {
-		t.Errorf("Expected phase error, got: %v", err)
-	}
-}
-
-func TestPipelineCommit_ResponsePhaseActionInRequestPhase(t *testing.T) {
-	svc := newTestExtensionService()
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS},
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for response-phase action in request phase")
-	}
-	if !strings.Contains(err.Error(), "not valid in the request phase") {
-		t.Errorf("Expected phase error, got: %v", err)
-	}
-}
-
-func TestPipelineCommit_NilRequestActionEntry(t *testing.T) {
-	svc := newTestExtensionService()
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			nil,
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for nil request action entry")
-	}
-	if !strings.Contains(err.Error(), "entry cannot be nil") {
-		t.Errorf("Expected nil entry error, got: %v", err)
-	}
-}
-
-func TestPipelineCommit_NilResponseActionEntry(t *testing.T) {
-	svc := newTestExtensionService()
-	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
-		Policy: testPipelinePolicy(),
-		ResponseActions: []*extpb.ResponseActionEntry{
-			nil,
-		},
-	})
-	if err == nil {
-		t.Fatal("Expected error for nil response action entry")
-	}
-	if !strings.Contains(err.Error(), "entry cannot be nil") {
-		t.Errorf("Expected nil entry error, got: %v", err)
-	}
-}
+// TODO(#1964): Add validation tests for CEL predicates, action type / phase constraints, nil entries
 
 func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	svc := newTestExtensionService()
@@ -1134,8 +1012,8 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	// First commit
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "first"},
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", DenyWith: "403"},
 		},
 	})
 	if err != nil {
@@ -1145,8 +1023,8 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	// Second commit replaces, not appends
 	_, err = svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW, Intention: "second"},
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", DenyWith: "401"},
 		},
 	})
 	if err != nil {
@@ -1158,8 +1036,8 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("Expected 1 action after replacement, got %d", len(actions))
 	}
-	if actions[0].Intention != "second" {
-		t.Errorf("Expected replaced action with intention 'second', got %q", actions[0].Intention)
+	if actions[0].DenyWith != "401" {
+		t.Errorf("Expected replaced action with DenyWith '401', got %q", actions[0].DenyWith)
 	}
 }
 
@@ -1174,8 +1052,8 @@ func TestPipelineCommit_ChangeNotifier(t *testing.T) {
 
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
-		RequestActions: []*extpb.RequestActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ALLOW},
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", DenyWith: "403"},
 		},
 	})
 	if err != nil {

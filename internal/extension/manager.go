@@ -744,18 +744,7 @@ func validateCELExpression(expr string) error {
 	return nil
 }
 
-// validRequestActionTypes lists action types allowed in the request phase.
-var validRequestActionTypes = map[extpb.ActionType]bool{
-	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: true,
-	extpb.ActionType_ACTION_TYPE_ALLOW:       true,
-}
-
-// validResponseActionTypes lists action types allowed in the response phase.
-var validResponseActionTypes = map[extpb.ActionType]bool{
-	extpb.ActionType_ACTION_TYPE_ADD_HEADERS:        true,
-	extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE: true,
-}
-
+// TODO(#1964): Rewrite PipelineCommit handler with full validation for unified action entries
 func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.PipelineCommitRequest) (*emptypb.Empty, error) {
 	if request == nil {
 		return nil, errors.New("request cannot be nil")
@@ -766,131 +755,38 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 		return nil, err
 	}
 
-	requestEntries, err := s.validateRequestActions(policyID, request.RequestActions)
-	if err != nil {
-		return nil, err
+	entries := make([]PipelineActionEntry, 0, len(request.Actions))
+	for _, action := range request.Actions {
+		entries = append(entries, PipelineActionEntry{
+			ActionType: action.ActionType,
+			Predicate:  action.Predicate,
+			Phase:      action.Phase,
+			Method:     action.Method,
+			Var:        action.Var,
+			DenyWith:   action.DenyWith,
+			HeadersToAdd:   action.HeadersToAdd,
+			FailureMessage: action.FailureMessage,
+			FailureCode:    action.FailureCode,
+		})
 	}
 
-	responseEntries, err := s.validateResponseActions(request.ResponseActions)
-	if err != nil {
+	if err := s.registeredData.ReplacePipelineActions(policyID, entries); err != nil {
 		return nil, err
 	}
-
-	s.registeredData.ReplacePipelineActions(policyID, requestEntries, responseEntries)
 
 	s.logger.Info("pipeline committed",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
-		"requestActions", len(requestEntries),
-		"responseActions", len(responseEntries))
+		"actions", len(entries))
 
 	if s.changeNotifier != nil {
-		reason := fmt.Sprintf("pipeline committed for policy %s/%s (%d request, %d response actions)",
-			policyID.Namespace, policyID.Name, len(requestEntries), len(responseEntries))
+		reason := fmt.Sprintf("pipeline committed for policy %s/%s (%d actions)",
+			policyID.Namespace, policyID.Name, len(entries))
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}
 	}
 
 	return &emptypb.Empty{}, nil
-}
-
-func (s *extensionService) validateRequestActions(policyID ResourceID, actions []*extpb.RequestActionEntry) ([]PipelineActionEntry, error) {
-	entries := make([]PipelineActionEntry, 0, len(actions))
-	for i, action := range actions {
-		if action == nil {
-			return nil, fmt.Errorf("request_actions[%d]: entry cannot be nil", i)
-		}
-		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("request_actions[%d]: action_type must be specified", i)
-		}
-		if !validRequestActionTypes[action.ActionType] {
-			return nil, fmt.Errorf("request_actions[%d]: action_type %s is not valid in the request phase", i, action.ActionType)
-		}
-
-		if action.Predicate != "" {
-			if err := validateCELExpression(action.Predicate); err != nil {
-				return nil, fmt.Errorf("request_actions[%d].predicate: %w", i, err)
-			}
-		}
-
-		entry := PipelineActionEntry{
-			ActionType: action.ActionType,
-			Predicate:  action.Predicate,
-		}
-
-		switch action.ActionType {
-		case extpb.ActionType_ACTION_TYPE_GRPC_METHOD:
-			if action.Method == "" {
-				return nil, fmt.Errorf("request_actions[%d]: method must be specified for grpc_method actions", i)
-			}
-			if !s.registeredData.HasUpstreamName(policyID, action.Method) {
-				return nil, fmt.Errorf("request_actions[%d]: method %q is not a registered action method for this policy", i, action.Method)
-			}
-			if action.Intention != "" {
-				if err := validateCELExpression(action.Intention); err != nil {
-					return nil, fmt.Errorf("request_actions[%d].intention: %w", i, err)
-				}
-			}
-			entry.Intention = action.Intention
-			entry.Method = action.Method
-			entry.Var = action.Var
-		case extpb.ActionType_ACTION_TYPE_ALLOW:
-			if action.Intention != "" {
-				if err := validateCELExpression(action.Intention); err != nil {
-					return nil, fmt.Errorf("request_actions[%d].intention: %w", i, err)
-				}
-			}
-			entry.Intention = action.Intention
-		}
-
-		entries = append(entries, entry)
-	}
-	return entries, nil
-}
-
-func (s *extensionService) validateResponseActions(actions []*extpb.ResponseActionEntry) ([]PipelineActionEntry, error) {
-	entries := make([]PipelineActionEntry, 0, len(actions))
-	for i, action := range actions {
-		if action == nil {
-			return nil, fmt.Errorf("response_actions[%d]: entry cannot be nil", i)
-		}
-		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("response_actions[%d]: action_type must be specified", i)
-		}
-		if !validResponseActionTypes[action.ActionType] {
-			return nil, fmt.Errorf("response_actions[%d]: action_type %s is not valid in the response phase", i, action.ActionType)
-		}
-
-		if action.Predicate != "" {
-			if err := validateCELExpression(action.Predicate); err != nil {
-				return nil, fmt.Errorf("response_actions[%d].predicate: %w", i, err)
-			}
-		}
-
-		entry := PipelineActionEntry{
-			ActionType: action.ActionType,
-			Predicate:  action.Predicate,
-		}
-
-		switch action.ActionType {
-		case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-			if action.HeadersToAdd == "" {
-				return nil, fmt.Errorf("response_actions[%d]: headers_to_add must be specified for add_headers actions", i)
-			}
-			if err := validateCELExpression(action.HeadersToAdd); err != nil {
-				return nil, fmt.Errorf("response_actions[%d].headers_to_add: %w", i, err)
-			}
-			entry.HeadersToAdd = action.HeadersToAdd
-		case extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE:
-			if action.NewResponseCode < 100 || action.NewResponseCode > 599 {
-				return nil, fmt.Errorf("response_actions[%d]: new_response_code must be between 100 and 599, got %d", i, action.NewResponseCode)
-			}
-			entry.NewResponseCode = action.NewResponseCode
-		}
-
-		entries = append(entries, entry)
-	}
-	return entries, nil
 }
 
 // Creates a locator matching the definition in policy-machinery

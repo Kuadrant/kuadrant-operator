@@ -113,7 +113,6 @@ spec:
             - planTier
             - requestedBy
             - secretRef
-            - useCase
             type: object
           status:
             description: APIKeyStatus defines the observed state of APIKey.

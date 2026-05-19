@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"maps"
+	"regexp"
 	"sort"
 
 	"sync"
@@ -998,7 +999,7 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	}
 
 	// Translate pipeline actions into TypedAction entries (deterministic order across policies)
-	policyIDs := lo.Keys(methodServiceKeys)
+	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActions()...))
 	sort.Slice(policyIDs, func(i, j int) bool {
 		if policyIDs[i].Kind != policyIDs[j].Kind {
 			return policyIDs[i].Kind < policyIDs[j].Kind
@@ -1031,13 +1032,21 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
 		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
 
-		// TODO(#1967): Rewrite pipeline action → TypedAction translation for unified action model
-		_ = requestEntries
-		_ = responseEntries
-		_ = methods
-		_ = sources
-		_ = upstreamByMethod
-		_ = policyRouteLocator
+		typedActions := translatePipelineToTypedActions(
+			requestEntries, responseEntries,
+			methods, upstreamByMethod[policyID], sources,
+		)
+		if len(typedActions) == 0 {
+			continue
+		}
+
+		routeLocator := policyRouteLocator[policyID]
+		for i := range wasmConfig.ActionSets {
+			if routeLocator != "" && wasmConfig.ActionSets[i].SourceRoute != routeLocator {
+				continue
+			}
+			wasmConfig.ActionSets[i].TypedActions = append(wasmConfig.ActionSets[i].TypedActions, typedActions...)
+		}
 	}
 
 	return nil
@@ -1048,6 +1057,129 @@ func predicateOrTrue(predicate string) string {
 		return "true"
 	}
 	return predicate
+}
+
+func translatePipelineToTypedActions(
+	requestEntries, responseEntries []PipelineActionEntry,
+	methods map[string]string,
+	upstreamByMethod map[string]RegisteredUpstreamEntry,
+	sources []string,
+) []wasm.TypedAction {
+	varToMethod := make(map[string]string)
+	for _, e := range requestEntries {
+		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+			varToMethod[e.Var] = e.Method
+		}
+	}
+	for _, e := range responseEntries {
+		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+			varToMethod[e.Var] = e.Method
+		}
+	}
+
+	grpcOnReply := make(map[string][]wasm.TypedAction)
+
+	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
+		for _, e := range entries {
+			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+				continue
+			}
+			ta := entryToTypedAction(e, sources, phase)
+			for varName, methodName := range varToMethod {
+				if actionReferencesVar(e, varName) {
+					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
+					break
+				}
+			}
+		}
+	}
+	classifyAndConvert(requestEntries, "request")
+	classifyAndConvert(responseEntries, "response")
+
+	var result []wasm.TypedAction
+	emittedGRPC := make(map[string]bool)
+
+	emit := func(entries []PipelineActionEntry, phase string) {
+		for _, e := range entries {
+			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+				if emittedGRPC[e.Method] {
+					continue
+				}
+				emittedGRPC[e.Method] = true
+				ta := grpcToTypedAction(e, methods, upstreamByMethod, sources)
+				ta.OnReply = grpcOnReply[e.Method]
+				result = append(result, ta)
+				continue
+			}
+			isVarDependent := false
+			for varName := range varToMethod {
+				if actionReferencesVar(e, varName) {
+					isVarDependent = true
+					break
+				}
+			}
+			if !isVarDependent {
+				result = append(result, entryToTypedAction(e, sources, phase))
+			}
+		}
+	}
+	emit(requestEntries, "request")
+	emit(responseEntries, "response")
+
+	return result
+}
+
+func actionReferencesVar(entry PipelineActionEntry, varName string) bool {
+	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	if entry.Predicate != "" && pattern.MatchString(entry.Predicate) {
+		return true
+	}
+	if entry.HeadersToAdd != "" && pattern.MatchString(entry.HeadersToAdd) {
+		return true
+	}
+	if entry.FailureMessage != "" && pattern.MatchString(entry.FailureMessage) {
+		return true
+	}
+	return false
+}
+
+func entryToTypedAction(entry PipelineActionEntry, sources []string, phase string) wasm.TypedAction {
+	ta := wasm.TypedAction{
+		Predicate:            predicateOrTrue(entry.Predicate),
+		SourcePolicyLocators: sources,
+	}
+	switch entry.ActionType {
+	case extpb.ActionType_ACTION_TYPE_DENY:
+		ta.Type = "deny"
+		ta.Terminal = true
+		ta.DenyWith = entry.DenyWith
+	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
+		ta.Type = "headers"
+		ta.Headers = entry.HeadersToAdd
+		if phase == "response" {
+			ta.Target = "response"
+		}
+	case extpb.ActionType_ACTION_TYPE_FAILURE:
+		ta.Type = "failure"
+		ta.Terminal = true
+		ta.FailureMessage = entry.FailureMessage
+		ta.FailureCode = entry.FailureCode
+	}
+	return ta
+}
+
+func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) wasm.TypedAction {
+	ta := wasm.TypedAction{
+		Type:                 "grpc",
+		Predicate:            predicateOrTrue(entry.Predicate),
+		Var:                  entry.Var,
+		Service:              methods[entry.Method],
+		SourcePolicyLocators: sources,
+	}
+	if upstream, ok := upstreamByMethod[entry.Method]; ok {
+		ta.MessageBuilder = upstream.MessageTemplate
+	}
+	return ta
 }
 
 // HashUpstreamServiceConfig produces a deterministic short hash from a wasm.Service

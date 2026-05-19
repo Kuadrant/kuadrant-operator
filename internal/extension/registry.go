@@ -656,6 +656,17 @@ func (r *RegisteredDataStore) HasUpstreamName(policy ResourceID, name string) bo
 	return false
 }
 
+func (r *RegisteredDataStore) GetUpstreamByName(policy ResourceID, name string) (RegisteredUpstreamKey, RegisteredUpstreamEntry, bool) {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	for k, v := range r.registeredUpstreams {
+		if k.Policy == policy && k.Name == name {
+			return k, v, true
+		}
+	}
+	return RegisteredUpstreamKey{}, RegisteredUpstreamEntry{}, false
+}
+
 func (r *RegisteredDataStore) GetUpstreamsForPolicy(policy ResourceID) []RegisteredUpstreamEntry {
 	r.upstreamsMutex.RLock()
 	defer r.upstreamsMutex.RUnlock()

@@ -473,6 +473,64 @@ func TestTypedAction_EqualTo(t *testing.T) {
 	}
 }
 
+func TestTypedAction_FailureType_JSON(t *testing.T) {
+	ta := TypedAction{
+		Type:           "failure",
+		Predicate:      `request.headers["x-debug"] == "true"`,
+		Terminal:       true,
+		FailureMessage: "Request blocked by threat policy",
+		FailureCode:    "500",
+	}
+
+	data, err := json.Marshal(ta)
+	if err != nil {
+		t.Fatalf("failed to marshal TypedAction: %v", err)
+	}
+
+	var roundTripped TypedAction
+	if err := json.Unmarshal(data, &roundTripped); err != nil {
+		t.Fatalf("failed to unmarshal TypedAction: %v", err)
+	}
+
+	if !ta.EqualTo(roundTripped) {
+		t.Fatalf("round-tripped TypedAction not equal:\n  got:  %+v\n  want: %+v", roundTripped, ta)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+	if raw["type"] != "failure" {
+		t.Errorf("Expected type 'failure', got %v", raw["type"])
+	}
+	if raw["failureMessage"] != "Request blocked by threat policy" {
+		t.Errorf("Expected failureMessage, got %v", raw["failureMessage"])
+	}
+	if raw["failureCode"] != "500" {
+		t.Errorf("Expected failureCode '500', got %v", raw["failureCode"])
+	}
+}
+
+func TestTypedAction_EqualTo_FailureFields(t *testing.T) {
+	a := TypedAction{Type: "failure", Predicate: "true", Terminal: true, FailureMessage: "error", FailureCode: "500"}
+	b := TypedAction{Type: "failure", Predicate: "true", Terminal: true, FailureMessage: "error", FailureCode: "500"}
+	if !a.EqualTo(b) {
+		t.Fatal("identical failure TypedActions should be equal")
+	}
+
+	diffMsg := b
+	diffMsg.FailureMessage = "other"
+	if a.EqualTo(diffMsg) {
+		t.Fatal("TypedActions with different FailureMessage should not be equal")
+	}
+
+	diffCode := b
+	diffCode.FailureCode = "403"
+	if a.EqualTo(diffCode) {
+		t.Fatal("TypedActions with different FailureCode should not be equal")
+	}
+}
+
 func TestActionSet_MixedActions_JSON(t *testing.T) {
 	as := ActionSet{
 		Name: "test-set",

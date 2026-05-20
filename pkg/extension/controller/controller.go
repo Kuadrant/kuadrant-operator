@@ -422,6 +422,9 @@ func celExpressionsFrom(action exttypes.Action) []string {
 		if a.Predicate != "" {
 			exprs = append(exprs, a.Predicate)
 		}
+		if a.WithHeaders != "" {
+			exprs = append(exprs, a.WithHeaders)
+		}
 	case exttypes.FailAction:
 		if a.Predicate != "" {
 			exprs = append(exprs, a.Predicate)

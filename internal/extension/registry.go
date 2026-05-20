@@ -1181,7 +1181,8 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 		parts = append(parts, fmt.Sprintf("headers: %s", headers))
 	}
 	if body != "" {
-		parts = append(parts, fmt.Sprintf("body: '%s'", body))
+		escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(body)
+		parts = append(parts, fmt.Sprintf("body: '%s'", escaped))
 	}
 	if len(parts) == 0 {
 		return "DenyResponse{}"

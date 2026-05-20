@@ -52,10 +52,12 @@ RUN if [ "$WITH_EXTENSIONS" = "true" ]; then \
     fi
 
 # Build additional extensions specified via EXTRA_EXTENSIONS (space-separated list of directory names under cmd/extensions/)
-RUN for ext in $EXTRA_EXTENSIONS; do \
-    echo "Building extra extension: $ext" && \
-    mkdir -p extensions/$ext && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -o extensions/$ext/$ext cmd/extensions/$ext/main.go; \
+RUN set -e; \
+    for ext in $EXTRA_EXTENSIONS; do \
+      echo "Building extra extension: $ext"; \
+      mkdir -p "extensions/$ext"; \
+      CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+        go build -a -o "extensions/$ext/$ext" "cmd/extensions/$ext/main.go"; \
     done
 
 # Use distroless as minimal base image to package the manager binary

@@ -747,7 +747,7 @@ func validateCELExpression(expr string) error {
 	return nil
 }
 
-var varNameRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)
+var varNameRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.PipelineCommitRequest) (*emptypb.Empty, error) {
 	if request == nil {
@@ -818,7 +818,7 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 				return nil, fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", i, action.Method)
 			}
 			if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
-				return nil, fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_-]*", i, action.Var)
+				return nil, fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", i, action.Var)
 			}
 			entry.Method = action.Method
 			entry.Var = action.Var
@@ -837,6 +837,9 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 			entry.WithBody = action.WithBody
 
 		case extpb.ActionType_ACTION_TYPE_FAIL:
+			if strings.TrimSpace(action.LogMessage) == "" {
+				return nil, fmt.Errorf("actions[%d]: log_message must be specified for fail actions", i)
+			}
 			entry.LogMessage = action.LogMessage
 
 		case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:

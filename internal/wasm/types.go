@@ -42,7 +42,24 @@ func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
 	return &apiextensionsv1.JSON{Raw: configJSON}, nil
 }
 
+// EqualTo performs semantic equality comparison between two Config instances.
+// This is not a strict equality check - it considers two configs equal if they are
+// functionally equivalent, even if some collection orderings differ.
+//
+// Order-sensitive fields:
+//   - ActionSets: Order matters - compared by index position
+//   - RequestData: Map comparison (order doesn't apply)
+//   - Services: Map comparison (order doesn't apply)
+//   - DescriptorService: String comparison
+//   - Observability: Strict equality via nested EqualTo
+//
+// Note: ActionSets order is significant because it affects the evaluation order
+// in the data plane.
 func (c *Config) EqualTo(other *Config) bool {
+	if other == nil {
+		return false
+	}
+
 	if len(c.RequestData) != len(other.RequestData) || len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
 		return false
 	}
@@ -207,6 +224,15 @@ func (s *ActionSet) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// EqualTo performs semantic equality comparison between two ActionSet instances.
+//
+// Order-sensitive fields:
+//   - Name: String comparison
+//   - RouteRuleConditions: Uses RouteRuleConditions.EqualTo (which has its own ordering rules)
+//   - Actions: Order matters - compared by index position
+//
+// Note: Actions order is significant because it affects the evaluation order
+// in the data plane.
 func (s *ActionSet) EqualTo(other ActionSet) bool {
 	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) || len(s.TypedActions) != len(other.TypedActions) {
 		return false
@@ -234,6 +260,14 @@ type RouteRuleConditions struct {
 	Predicates []string `json:"predicates,omitempty"`
 }
 
+// EqualTo performs semantic equality comparison between two RouteRuleConditions instances.
+//
+// Order-sensitive fields:
+//   - Hostnames: Order matters - compared by index position
+//   - Predicates: Order matters - compared by index position
+//
+// Note: Hostname order is preserved as it may reflect priority or specificity,
+// while predicates are order-insensitive as they are evaluated independently.
 func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 	if len(r.Hostnames) != len(other.Hostnames) || len(r.Predicates) != len(other.Predicates) {
 		return false
@@ -304,6 +338,15 @@ func (a *Action) HasAuthAccess() bool {
 	return false
 }
 
+// EqualTo performs semantic equality comparison between two ConditionalData instances.
+// Note: This has mixed ordering semantics for different fields.
+//
+// Order-sensitive fields:
+//   - Predicates: Order matters - strict slice equality
+//   - Data: Order matters - compared by index position
+//
+// Note: Both predicates and data order are significant as they may affect
+// evaluation order in the data plane.
 func (c *ConditionalData) EqualTo(other ConditionalData) bool {
 	if len(c.Predicates) != len(other.Predicates) || len(c.Data) != len(other.Data) {
 		return false
@@ -322,6 +365,17 @@ func (c *ConditionalData) EqualTo(other ConditionalData) bool {
 	return true
 }
 
+// EqualTo performs semantic equality comparison between two Action instances.
+// Note: This has mixed ordering semantics for different fields.
+//
+// Order-insensitive fields:
+//   - ConditionalData: Checks that the same conditional data exists, regardless of order
+//
+// Order-sensitive fields (strict equality):
+//   - Scope: String comparison
+//   - ServiceName: String comparison
+//   - Predicates: Strict slice equality - order matters
+//   - SourcePolicyLocators: Strict slice equality - order matters
 func (a *Action) EqualTo(other Action) bool {
 	if a.Scope != other.Scope ||
 		a.ServiceName != other.ServiceName ||
@@ -338,7 +392,7 @@ func (a *Action) EqualTo(other Action) bool {
 	}
 
 	for i := range a.ConditionalData {
-		if !a.ConditionalData[i].EqualTo(other.ConditionalData[i]) {
+		if !slices.ContainsFunc(other.ConditionalData, a.ConditionalData[i].EqualTo) {
 			return false
 		}
 	}
@@ -347,12 +401,12 @@ func (a *Action) EqualTo(other Action) bool {
 }
 
 type DataType struct {
-	Value interface{}
+	Value any
 }
 
 func (d *DataType) UnmarshalJSON(data []byte) error {
 	// Precisely one of "static", "selector" must be set.
-	types := []interface{}{
+	types := []any{
 		&Static{},
 		&Expression{},
 	}

@@ -464,7 +464,7 @@ func convertAction(pe pipelineEntry) *extpb.ActionEntry {
 	case exttypes.DenyAction:
 		entry.ActionType = extpb.ActionType_ACTION_TYPE_DENY
 		entry.Predicate = a.Predicate
-		entry.WithStatus = int32(a.WithStatus)
+		entry.WithStatus = int32(a.WithStatus) //nolint:gosec // HTTP status codes are validated and always fit in int32
 		entry.WithHeaders = a.WithHeaders
 		entry.WithBody = a.WithBody
 	case exttypes.FailAction:

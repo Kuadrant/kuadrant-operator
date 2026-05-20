@@ -6,7 +6,8 @@ source $script_dir/shared.sh
 
 log "Loading Environment Variables"
 
-releaseBranch="release-$(echo "$KUADRANT_OPERATOR_TAG" | sed -E 's/^(v[0-9]+\.[0-9]+).*/\1/')"
+# Extract major.minor from tag (e.g., v1.4.4 → 1.4) without v prefix per RFC 0018
+releaseBranch="release-$(echo "$KUADRANT_OPERATOR_TAG" | sed -E 's/^v([0-9]+\.[0-9]+).*/\1/')"
 
 prerelease=false
 if [[ "$KUADRANT_OPERATOR_TAG" =~ [-+] ]]; then

@@ -102,7 +102,7 @@ enum ActionType {
   ACTION_TYPE_GRPC_METHOD = 1;
   ACTION_TYPE_DENY = 2;
   ACTION_TYPE_ADD_HEADERS = 3;
-  ACTION_TYPE_FAILURE = 4;
+  ACTION_TYPE_FAIL = 4;
 }
 
 // ActionEntry represents a single action in either the request or response phase.
@@ -112,10 +112,11 @@ message ActionEntry {
   string phase = 3;            // "request" or "response"
   string method = 4;           // Name of a registered ActionMethod (for grpc_method type)
   string var = 5;              // Variable name to store gRPC response (for grpc_method type)
-  string deny_with = 6;        // HTTP status code to send (for deny type)
+  int32 with_status = 6;        // HTTP status code (for deny type); 0 means unset
+  string with_headers = 9;     // CEL expression — array of [name, value] pairs (for deny type)
+  string with_body = 10;       // Response body string (for deny type)
   string headers_to_add = 7;   // CEL expression evaluating to a map of headers (for add_headers type)
-  string failure_message = 8;  // Response body sent to client (for failure type)
-  string failure_code = 9;     // HTTP status code (for failure type)
+  string log_message = 8;      // Error message to log (for fail type)
 }
 
 // PipelineCommitRequest atomically replaces all pipeline actions for a policy.

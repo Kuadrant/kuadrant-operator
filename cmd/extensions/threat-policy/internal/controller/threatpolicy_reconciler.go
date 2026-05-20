@@ -85,30 +85,36 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 
 	r.Logger.Info("action method registered successfully", "url", threatServiceURL)
 
-	err := kuadrantCtx.NewPipeline(pol).
-		OnRequest(types.AllowAction{
-			Intention: `request.url_path != "/blocked"`,
-		}).
-		OnRequest(types.GRPCMethodAction{
-			Predicate: `"x-assess-threat" in request.headers`,
-			Method:    "assess-threat",
-			Var:       "threatResponse",
-			Intention: fmt.Sprintf("threatResponse.threat_level < %d", pol.Spec.Threshold),
-		}).
-		OnResponse(
-			types.AddHeadersAction{
-				Predicate:    `"x-assess-threat" in request.headers`,
-				HeadersToAdd: `[["x-threat-assessed", "true"]]`,
-			},
-			types.AddHeadersAction{
-				Predicate:    `!("x-assess-threat" in request.headers)`,
-				HeadersToAdd: `[["x-threat-assessed", "false"]]`,
-			},
-			types.AddHeadersAction{
-				HeadersToAdd: fmt.Sprintf(`[["x-threat-threshold", "%d"]]`, pol.Spec.Threshold),
-			},
-		).
-		Commit(ctx)
+	pipeline := kuadrantCtx.NewPipeline(pol)
+
+	if err := pipeline.OnHTTPRequest(
+		types.GRPCMethodAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+		types.FailAction{
+			Predicate:  `threatResponse.threat_level < 0`,
+			LogMessage: "threat assessment returned invalid threat_level",
+		},
+		types.DenyAction{
+			Predicate:   fmt.Sprintf("threatResponse.threat_level >= %d", pol.Spec.Threshold),
+			WithStatus:  403,
+			WithHeaders: `[["x-threat-blocked", "true"], ["x-threat-level", string(threatResponse.threat_level)]]`,
+			WithBody:    "Request blocked: threat level exceeds threshold",
+		},
+	); err != nil {
+		return calculateErrorStatus(pol, err), err
+	}
+
+	if err := pipeline.OnHTTPResponse(
+		types.AddHeadersAction{
+			HeadersToAdd: fmt.Sprintf(`[["x-threat-threshold", "%d"], ["x-threat-score", string(threatResponse.threat_level)]]`, pol.Spec.Threshold),
+		},
+	); err != nil {
+		return calculateErrorStatus(pol, err), err
+	}
+
+	err := pipeline.Commit(ctx)
 
 	if err != nil {
 		r.Logger.Error(err, "failed to commit pipeline")

@@ -8,7 +8,7 @@ type ActionType string
 const (
 	ActionTypeGRPCMethod ActionType = "grpc_method"
 	ActionTypeDeny       ActionType = "deny"
-	ActionTypeFailure    ActionType = "failure"
+	ActionTypeFail       ActionType = "fail"
 	ActionTypeAddHeaders ActionType = "add_headers"
 )
 
@@ -29,29 +29,30 @@ type GRPCMethodAction struct {
 func (a GRPCMethodAction) actionType() ActionType { return ActionTypeGRPCMethod }
 
 // DenyAction denies the request or response when the predicate evaluates
-// to true.
+// to true. All response fields are optional.
 //
 // Phase semantics:
-//   - Request phase: deny sends the status code to the origin
+//   - Request phase: deny sends the response to the origin
 //     (request never reaches backend)
-//   - Response phase: deny sends the status code to the destination
+//   - Response phase: deny sends the response to the destination
 //     (backend response replaced before reaching client)
 type DenyAction struct {
-	Predicate string // CEL — if true, deny with DenyWith code
-	DenyWith  string // HTTP status code to send (e.g. "403")
+	Predicate   string // CEL — if true, deny
+	WithStatus  int    // HTTP status code (e.g. 403); optional
+	WithHeaders string // CEL expression — array of [name, value] pairs; optional
+	WithBody    string // Response body string; optional
 }
 
 func (a DenyAction) actionType() ActionType { return ActionTypeDeny }
 
-// FailureAction terminates the request with both a status code and a
-// human-readable message body when the predicate evaluates to true.
-type FailureAction struct {
-	Predicate      string // CEL — if true, send failure response
-	FailureMessage string // Response body sent to the client
-	FailureCode    string // HTTP status code (e.g. "500")
+// FailAction logs an error message and terminates the action chain when
+// the predicate evaluates to true. Maps to the wasm-shim's "fail" type.
+type FailAction struct {
+	Predicate  string // CEL — if true, fail with log message
+	LogMessage string // Error message to log
 }
 
-func (a FailureAction) actionType() ActionType { return ActionTypeFailure }
+func (a FailAction) actionType() ActionType { return ActionTypeFail }
 
 // AddHeadersAction adds headers to the request or response depending on
 // the phase in which it is used, when the predicate evaluates to true.

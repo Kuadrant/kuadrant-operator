@@ -473,13 +473,12 @@ func TestTypedAction_EqualTo(t *testing.T) {
 	}
 }
 
-func TestTypedAction_FailureType_JSON(t *testing.T) {
+func TestTypedAction_FailType_JSON(t *testing.T) {
 	ta := TypedAction{
-		Type:           "failure",
-		Predicate:      `request.headers["x-debug"] == "true"`,
-		Terminal:       true,
-		FailureMessage: "Request blocked by threat policy",
-		FailureCode:    "500",
+		Type:       "fail",
+		Predicate:  `threatResponse.error_code != 0`,
+		Terminal:   true,
+		LogMessage: "Threat service returned unexpected error",
 	}
 
 	data, err := json.Marshal(ta)
@@ -500,34 +499,25 @@ func TestTypedAction_FailureType_JSON(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("failed to unmarshal to map: %v", err)
 	}
-	if raw["type"] != "failure" {
-		t.Errorf("Expected type 'failure', got %v", raw["type"])
+	if raw["type"] != "fail" {
+		t.Errorf("Expected type 'fail', got %v", raw["type"])
 	}
-	if raw["failureMessage"] != "Request blocked by threat policy" {
-		t.Errorf("Expected failureMessage, got %v", raw["failureMessage"])
-	}
-	if raw["failureCode"] != "500" {
-		t.Errorf("Expected failureCode '500', got %v", raw["failureCode"])
+	if raw["logMessage"] != "Threat service returned unexpected error" {
+		t.Errorf("Expected logMessage, got %v", raw["logMessage"])
 	}
 }
 
-func TestTypedAction_EqualTo_FailureFields(t *testing.T) {
-	a := TypedAction{Type: "failure", Predicate: "true", Terminal: true, FailureMessage: "error", FailureCode: "500"}
-	b := TypedAction{Type: "failure", Predicate: "true", Terminal: true, FailureMessage: "error", FailureCode: "500"}
+func TestTypedAction_EqualTo_FailFields(t *testing.T) {
+	a := TypedAction{Type: "fail", Predicate: "true", Terminal: true, LogMessage: "error"}
+	b := TypedAction{Type: "fail", Predicate: "true", Terminal: true, LogMessage: "error"}
 	if !a.EqualTo(b) {
-		t.Fatal("identical failure TypedActions should be equal")
+		t.Fatal("identical fail TypedActions should be equal")
 	}
 
 	diffMsg := b
-	diffMsg.FailureMessage = "other"
+	diffMsg.LogMessage = "other"
 	if a.EqualTo(diffMsg) {
-		t.Fatal("TypedActions with different FailureMessage should not be equal")
-	}
-
-	diffCode := b
-	diffCode.FailureCode = "403"
-	if a.EqualTo(diffCode) {
-		t.Fatal("TypedActions with different FailureCode should not be equal")
+		t.Fatal("TypedActions with different LogMessage should not be equal")
 	}
 }
 

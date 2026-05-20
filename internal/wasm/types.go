@@ -484,8 +484,7 @@ type TypedAction struct {
 	DenyWith       string        `json:"denyWith,omitempty"`
 	Target         string        `json:"target,omitempty"`
 	Headers        string        `json:"headers,omitempty"`
-	FailureMessage string        `json:"failureMessage,omitempty"`
-	FailureCode    string        `json:"failureCode,omitempty"`
+	LogMessage     string        `json:"logMessage,omitempty"`
 	// SourcePolicyLocators tracks all policies that contributed to this action.
 	// Format: "kind/namespace/name"
 	SourcePolicyLocators []string `json:"sources,omitempty"`
@@ -501,8 +500,7 @@ func (t TypedAction) EqualTo(other TypedAction) bool {
 		t.DenyWith != other.DenyWith ||
 		t.Target != other.Target ||
 		t.Headers != other.Headers ||
-		t.FailureMessage != other.FailureMessage ||
-		t.FailureCode != other.FailureCode ||
+		t.LogMessage != other.LogMessage ||
 		!slices.Equal(t.SourcePolicyLocators, other.SourcePolicyLocators) ||
 		len(t.OnReply) != len(other.OnReply) {
 		return false

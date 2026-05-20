@@ -425,16 +425,16 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 			Var:       "threatResponse",
 		},
 		exttypes.DenyAction{
-			Predicate: `request.url_path == "/blocked"`,
-			DenyWith:  "403",
+			Predicate:  `request.url_path == "/blocked"`,
+			WithStatus: 403,
 		},
 	)
 	assert.NilError(t, err)
 
 	err = p.OnHTTPResponse(
 		exttypes.DenyAction{
-			Predicate: "threatResponse.threat_level >= 5",
-			DenyWith:  "403",
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
 		},
 		exttypes.AddHeadersAction{
 			HeadersToAdd: `{"x-threat-checked": "true"}`,
@@ -458,8 +458,8 @@ func TestPipeline_PhaseOrdering_RequestAfterResponse(t *testing.T) {
 	assert.NilError(t, err)
 
 	err = p.OnHTTPRequest(exttypes.DenyAction{
-		Predicate: "true",
-		DenyWith:  "403",
+		Predicate:  "true",
+		WithStatus: 403,
 	})
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "cannot add request actions after response actions"))
@@ -470,8 +470,8 @@ func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
 
 	err := p.OnHTTPRequest(
 		exttypes.DenyAction{
-			Predicate: "threatResponse.threat_level >= 5",
-			DenyWith:  "403",
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
 		},
 		exttypes.GRPCMethodAction{
 			Method: "assess-threat",
@@ -491,8 +491,8 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 			Var:    "threatResponse",
 		},
 		exttypes.DenyAction{
-			Predicate: "threatResponse.threat_level >= 5",
-			DenyWith:  "403",
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
 		},
 	)
 	assert.NilError(t, err)
@@ -508,8 +508,8 @@ func TestPipeline_VarAvailability_CrossCallValid(t *testing.T) {
 	assert.NilError(t, err)
 
 	err = p.OnHTTPResponse(exttypes.DenyAction{
-		Predicate: "threatResponse.threat_level >= 5",
-		DenyWith:  "403",
+		Predicate:  "threatResponse.threat_level >= 5",
+		WithStatus: 403,
 	})
 	assert.NilError(t, err)
 }
@@ -541,13 +541,12 @@ func TestPipeline_NoVarReference_NoError(t *testing.T) {
 
 	err := p.OnHTTPRequest(
 		exttypes.DenyAction{
-			Predicate: `request.url_path == "/blocked"`,
-			DenyWith:  "403",
+			Predicate:  `request.url_path == "/blocked"`,
+			WithStatus: 403,
 		},
-		exttypes.FailureAction{
-			Predicate:      `request.headers["x-debug"] == "true"`,
-			FailureMessage: "debug failure",
-			FailureCode:    "500",
+		exttypes.FailAction{
+			Predicate:  `request.headers["x-debug"] == "true"`,
+			LogMessage: "debug failure",
 		},
 	)
 	assert.NilError(t, err)
@@ -561,10 +560,10 @@ func TestPipeline_NoVarReference_NoError(t *testing.T) {
 func TestPipeline_MultipleOnHTTPRequestCalls(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", DenyWith: "403"})
+	err := p.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", WithStatus: 403})
 	assert.NilError(t, err)
 
-	err = p.OnHTTPRequest(exttypes.DenyAction{Predicate: "false", DenyWith: "404"})
+	err = p.OnHTTPRequest(exttypes.DenyAction{Predicate: "false", WithStatus: 404})
 	assert.NilError(t, err)
 
 	assert.Equal(t, len(p.actions), 2)
@@ -615,26 +614,25 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 
 	err := pipeline.OnHTTPRequest(
 		exttypes.DenyAction{
-			Predicate: `request.url_path == "/blocked"`,
-			DenyWith:  "403",
+			Predicate:  `request.url_path == "/blocked"`,
+			WithStatus: 403,
 		},
 		exttypes.GRPCMethodAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
 		},
-		exttypes.FailureAction{
-			Predicate:      `request.headers["x-debug"] == "true"`,
-			FailureMessage: "Request blocked",
-			FailureCode:    "500",
+		exttypes.FailAction{
+			Predicate:  `request.headers["x-debug"] == "true"`,
+			LogMessage: "Request blocked",
 		},
 	)
 	assert.NilError(t, err)
 
 	err = pipeline.OnHTTPResponse(
 		exttypes.DenyAction{
-			Predicate: "threatResponse.threat_level >= 5",
-			DenyWith:  "403",
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
 		},
 		exttypes.AddHeadersAction{
 			HeadersToAdd: `{"x-threat-checked": "true"}`,
@@ -652,17 +650,16 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 
 	assert.Equal(t, capturedReq.Actions[0].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
 	assert.Equal(t, capturedReq.Actions[0].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[0].DenyWith, "403")
+	assert.Equal(t, capturedReq.Actions[0].WithStatus, int32(403))
 
 	assert.Equal(t, capturedReq.Actions[1].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
 	assert.Equal(t, capturedReq.Actions[1].Phase, "request")
 	assert.Equal(t, capturedReq.Actions[1].Method, "assess-threat")
 	assert.Equal(t, capturedReq.Actions[1].Var, "threatResponse")
 
-	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAILURE)
+	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAIL)
 	assert.Equal(t, capturedReq.Actions[2].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[2].FailureMessage, "Request blocked")
-	assert.Equal(t, capturedReq.Actions[2].FailureCode, "500")
+	assert.Equal(t, capturedReq.Actions[2].LogMessage, "Request blocked")
 
 	assert.Equal(t, capturedReq.Actions[3].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
 	assert.Equal(t, capturedReq.Actions[3].Phase, "response")
@@ -699,7 +696,7 @@ func TestPipelineCommit_PropagatesError(t *testing.T) {
 
 	ec := newTestExtensionController(mock)
 	pipeline := ec.NewPipeline(&mockPolicy{name: "p", namespace: "ns"})
-	_ = pipeline.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", DenyWith: "403"})
+	_ = pipeline.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", WithStatus: 403})
 
 	err := pipeline.Commit(context.Background())
 	assert.Assert(t, err != nil)

@@ -422,7 +422,7 @@ func celExpressionsFrom(action exttypes.Action) []string {
 		if a.Predicate != "" {
 			exprs = append(exprs, a.Predicate)
 		}
-	case exttypes.FailureAction:
+	case exttypes.FailAction:
 		if a.Predicate != "" {
 			exprs = append(exprs, a.Predicate)
 		}
@@ -464,12 +464,13 @@ func convertAction(pe pipelineEntry) *extpb.ActionEntry {
 	case exttypes.DenyAction:
 		entry.ActionType = extpb.ActionType_ACTION_TYPE_DENY
 		entry.Predicate = a.Predicate
-		entry.DenyWith = a.DenyWith
-	case exttypes.FailureAction:
-		entry.ActionType = extpb.ActionType_ACTION_TYPE_FAILURE
+		entry.WithStatus = int32(a.WithStatus)
+		entry.WithHeaders = a.WithHeaders
+		entry.WithBody = a.WithBody
+	case exttypes.FailAction:
+		entry.ActionType = extpb.ActionType_ACTION_TYPE_FAIL
 		entry.Predicate = a.Predicate
-		entry.FailureMessage = a.FailureMessage
-		entry.FailureCode = a.FailureCode
+		entry.LogMessage = a.LogMessage
 	case exttypes.AddHeadersAction:
 		entry.ActionType = extpb.ActionType_ACTION_TYPE_ADD_HEADERS
 		entry.Predicate = a.Predicate

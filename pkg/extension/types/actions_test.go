@@ -12,8 +12,8 @@ func TestDenyAction_ImplementsAction(t *testing.T) {
 	var _ Action = DenyAction{}
 }
 
-func TestFailureAction_ImplementsAction(t *testing.T) {
-	var _ Action = FailureAction{}
+func TestFailAction_ImplementsAction(t *testing.T) {
+	var _ Action = FailAction{}
 }
 
 func TestAddHeadersAction_ImplementsAction(t *testing.T) {
@@ -33,22 +33,22 @@ func TestGRPCMethodAction_ActionType(t *testing.T) {
 
 func TestDenyAction_ActionType(t *testing.T) {
 	a := DenyAction{
-		Predicate: "request.url_path == '/blocked'",
-		DenyWith:  "403",
+		Predicate:  "request.url_path == '/blocked'",
+		WithStatus: 403,
+		WithBody:   "Forbidden",
 	}
 	if a.actionType() != ActionTypeDeny {
 		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeDeny)
 	}
 }
 
-func TestFailureAction_ActionType(t *testing.T) {
-	a := FailureAction{
-		Predicate:      "request.headers['x-debug'] == 'true'",
-		FailureMessage: "Request blocked by threat policy",
-		FailureCode:    "500",
+func TestFailAction_ActionType(t *testing.T) {
+	a := FailAction{
+		Predicate:  "threatResponse.error_code != 0",
+		LogMessage: "Threat service returned unexpected error",
 	}
-	if a.actionType() != ActionTypeFailure {
-		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeFailure)
+	if a.actionType() != ActionTypeFail {
+		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeFail)
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"maps"
 	"regexp"
 	"sort"
+	"strings"
 
 	"sync"
 
@@ -326,16 +327,17 @@ const (
 
 // PipelineActionEntry represents a single stored pipeline action.
 type PipelineActionEntry struct {
-	Index          int
-	ActionType     extpb.ActionType
-	Predicate      string
-	Phase          string // "request" or "response"
-	Method         string // registered action method name (grpc_method)
-	Var            string // variable name for gRPC response (grpc_method)
-	DenyWith       string // HTTP status code to send (deny)
-	HeadersToAdd   string // CEL expression for headers (add_headers)
-	FailureMessage string // response body (failure)
-	FailureCode    string // HTTP status code (failure)
+	Index        int
+	ActionType   extpb.ActionType
+	Predicate    string
+	Phase        string // "request" or "response"
+	Method       string // registered action method name (grpc_method)
+	Var          string // variable name for gRPC response (grpc_method)
+	WithStatus   int    // HTTP status code (deny); 0 means unset
+	WithHeaders  string // CEL expression — array of [name, value] pairs (deny)
+	WithBody     string // response body string (deny)
+	HeadersToAdd string // CEL expression for headers (add_headers)
+	LogMessage   string // error message to log (fail)
 }
 
 // pipelineKey identifies a set of actions for a specific policy and phase.
@@ -1137,7 +1139,10 @@ func actionReferencesVar(entry PipelineActionEntry, varName string) bool {
 	if entry.HeadersToAdd != "" && pattern.MatchString(entry.HeadersToAdd) {
 		return true
 	}
-	if entry.FailureMessage != "" && pattern.MatchString(entry.FailureMessage) {
+	if entry.WithHeaders != "" && pattern.MatchString(entry.WithHeaders) {
+		return true
+	}
+	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
 		return true
 	}
 	return false
@@ -1152,20 +1157,36 @@ func entryToTypedAction(entry PipelineActionEntry, sources []string, phase strin
 	case extpb.ActionType_ACTION_TYPE_DENY:
 		ta.Type = "deny"
 		ta.Terminal = true
-		ta.DenyWith = entry.DenyWith
+		ta.DenyWith = buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)
 	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
 		ta.Type = "headers"
 		ta.Headers = entry.HeadersToAdd
 		if phase == "response" {
 			ta.Target = "response"
 		}
-	case extpb.ActionType_ACTION_TYPE_FAILURE:
-		ta.Type = "failure"
+	case extpb.ActionType_ACTION_TYPE_FAIL:
+		ta.Type = "fail"
 		ta.Terminal = true
-		ta.FailureMessage = entry.FailureMessage
-		ta.FailureCode = entry.FailureCode
+		ta.LogMessage = entry.LogMessage
 	}
 	return ta
+}
+
+func buildDenyResponseExpr(status int, headers, body string) string {
+	var parts []string
+	if status != 0 {
+		parts = append(parts, fmt.Sprintf("status: %du", status))
+	}
+	if headers != "" {
+		parts = append(parts, fmt.Sprintf("headers: %s", headers))
+	}
+	if body != "" {
+		parts = append(parts, fmt.Sprintf("body: '%s'", body))
+	}
+	if len(parts) == 0 {
+		return "DenyResponse{}"
+	}
+	return fmt.Sprintf("DenyResponse{%s}", strings.Join(parts, ", "))
 }
 
 func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) wasm.TypedAction {

@@ -82,7 +82,7 @@ const (
 	ActionType_ACTION_TYPE_GRPC_METHOD ActionType = 1
 	ActionType_ACTION_TYPE_DENY        ActionType = 2
 	ActionType_ACTION_TYPE_ADD_HEADERS ActionType = 3
-	ActionType_ACTION_TYPE_FAILURE     ActionType = 4
+	ActionType_ACTION_TYPE_FAIL        ActionType = 4
 )
 
 // Enum value maps for ActionType.
@@ -92,14 +92,14 @@ var (
 		1: "ACTION_TYPE_GRPC_METHOD",
 		2: "ACTION_TYPE_DENY",
 		3: "ACTION_TYPE_ADD_HEADERS",
-		4: "ACTION_TYPE_FAILURE",
+		4: "ACTION_TYPE_FAIL",
 	}
 	ActionType_value = map[string]int32{
 		"ACTION_TYPE_UNSPECIFIED": 0,
 		"ACTION_TYPE_GRPC_METHOD": 1,
 		"ACTION_TYPE_DENY":        2,
 		"ACTION_TYPE_ADD_HEADERS": 3,
-		"ACTION_TYPE_FAILURE":     4,
+		"ACTION_TYPE_FAIL":        4,
 	}
 )
 
@@ -716,18 +716,19 @@ func (x *RegisterActionMethodRequest) GetMessageTemplate() string {
 
 // ActionEntry represents a single action in either the request or response phase.
 type ActionEntry struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	ActionType     ActionType             `protobuf:"varint,1,opt,name=action_type,json=actionType,proto3,enum=kuadrant.v1.ActionType" json:"action_type,omitempty"`
-	Predicate      string                 `protobuf:"bytes,2,opt,name=predicate,proto3" json:"predicate,omitempty"`                                 // CEL predicate — if false, skip this action
-	Phase          string                 `protobuf:"bytes,3,opt,name=phase,proto3" json:"phase,omitempty"`                                         // "request" or "response"
-	Method         string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`                                       // Name of a registered ActionMethod (for grpc_method type)
-	Var            string                 `protobuf:"bytes,5,opt,name=var,proto3" json:"var,omitempty"`                                             // Variable name to store gRPC response (for grpc_method type)
-	DenyWith       string                 `protobuf:"bytes,6,opt,name=deny_with,json=denyWith,proto3" json:"deny_with,omitempty"`                   // HTTP status code to send (for deny type)
-	HeadersToAdd   string                 `protobuf:"bytes,7,opt,name=headers_to_add,json=headersToAdd,proto3" json:"headers_to_add,omitempty"`     // CEL expression evaluating to a map of headers (for add_headers type)
-	FailureMessage string                 `protobuf:"bytes,8,opt,name=failure_message,json=failureMessage,proto3" json:"failure_message,omitempty"` // Response body sent to client (for failure type)
-	FailureCode    string                 `protobuf:"bytes,9,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`          // HTTP status code (for failure type)
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActionType    ActionType             `protobuf:"varint,1,opt,name=action_type,json=actionType,proto3,enum=kuadrant.v1.ActionType" json:"action_type,omitempty"`
+	Predicate     string                 `protobuf:"bytes,2,opt,name=predicate,proto3" json:"predicate,omitempty"`                             // CEL predicate — if false, skip this action
+	Phase         string                 `protobuf:"bytes,3,opt,name=phase,proto3" json:"phase,omitempty"`                                     // "request" or "response"
+	Method        string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`                                   // Name of a registered ActionMethod (for grpc_method type)
+	Var           string                 `protobuf:"bytes,5,opt,name=var,proto3" json:"var,omitempty"`                                         // Variable name to store gRPC response (for grpc_method type)
+	WithStatus    int32                  `protobuf:"varint,6,opt,name=with_status,json=withStatus,proto3" json:"with_status,omitempty"`        // HTTP status code (for deny type); 0 means unset
+	WithHeaders   string                 `protobuf:"bytes,9,opt,name=with_headers,json=withHeaders,proto3" json:"with_headers,omitempty"`      // CEL expression — array of [name, value] pairs (for deny type)
+	WithBody      string                 `protobuf:"bytes,10,opt,name=with_body,json=withBody,proto3" json:"with_body,omitempty"`              // Response body string (for deny type)
+	HeadersToAdd  string                 `protobuf:"bytes,7,opt,name=headers_to_add,json=headersToAdd,proto3" json:"headers_to_add,omitempty"` // CEL expression evaluating to a map of headers (for add_headers type)
+	LogMessage    string                 `protobuf:"bytes,8,opt,name=log_message,json=logMessage,proto3" json:"log_message,omitempty"`         // Error message to log (for fail type)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActionEntry) Reset() {
@@ -795,9 +796,23 @@ func (x *ActionEntry) GetVar() string {
 	return ""
 }
 
-func (x *ActionEntry) GetDenyWith() string {
+func (x *ActionEntry) GetWithStatus() int32 {
 	if x != nil {
-		return x.DenyWith
+		return x.WithStatus
+	}
+	return 0
+}
+
+func (x *ActionEntry) GetWithHeaders() string {
+	if x != nil {
+		return x.WithHeaders
+	}
+	return ""
+}
+
+func (x *ActionEntry) GetWithBody() string {
+	if x != nil {
+		return x.WithBody
 	}
 	return ""
 }
@@ -809,16 +824,9 @@ func (x *ActionEntry) GetHeadersToAdd() string {
 	return ""
 }
 
-func (x *ActionEntry) GetFailureMessage() string {
+func (x *ActionEntry) GetLogMessage() string {
 	if x != nil {
-		return x.FailureMessage
-	}
-	return ""
-}
-
-func (x *ActionEntry) GetFailureCode() string {
-	if x != nil {
-		return x.FailureCode
+		return x.LogMessage
 	}
 	return ""
 }
@@ -920,32 +928,36 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\aservice\x18\x03 \x01(\tR\aservice\x12\x16\n" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x12\n" +
 	"\x04name\x18\x05 \x01(\tR\x04name\x12)\n" +
-	"\x10message_template\x18\x06 \x01(\tR\x0fmessageTemplate\"\xb4\x02\n" +
+	"\x10message_template\x18\x06 \x01(\tR\x0fmessageTemplate\"\xcd\x02\n" +
 	"\vActionEntry\x128\n" +
 	"\vaction_type\x18\x01 \x01(\x0e2\x17.kuadrant.v1.ActionTypeR\n" +
 	"actionType\x12\x1c\n" +
 	"\tpredicate\x18\x02 \x01(\tR\tpredicate\x12\x14\n" +
 	"\x05phase\x18\x03 \x01(\tR\x05phase\x12\x16\n" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x10\n" +
-	"\x03var\x18\x05 \x01(\tR\x03var\x12\x1b\n" +
-	"\tdeny_with\x18\x06 \x01(\tR\bdenyWith\x12$\n" +
-	"\x0eheaders_to_add\x18\a \x01(\tR\fheadersToAdd\x12'\n" +
-	"\x0ffailure_message\x18\b \x01(\tR\x0efailureMessage\x12!\n" +
-	"\ffailure_code\x18\t \x01(\tR\vfailureCode\"x\n" +
+	"\x03var\x18\x05 \x01(\tR\x03var\x12\x1f\n" +
+	"\vwith_status\x18\x06 \x01(\x05R\n" +
+	"withStatus\x12!\n" +
+	"\fwith_headers\x18\t \x01(\tR\vwithHeaders\x12\x1b\n" +
+	"\twith_body\x18\n" +
+	" \x01(\tR\bwithBody\x12$\n" +
+	"\x0eheaders_to_add\x18\a \x01(\tR\fheadersToAdd\x12\x1f\n" +
+	"\vlog_message\x18\b \x01(\tR\n" +
+	"logMessage\"x\n" +
 	"\x15PipelineCommitRequest\x12+\n" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x122\n" +
 	"\aactions\x18\x02 \x03(\v2\x18.kuadrant.v1.ActionEntryR\aactions*E\n" +
 	"\x06Domain\x12\x16\n" +
 	"\x12DOMAIN_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vDOMAIN_AUTH\x10\x01\x12\x12\n" +
-	"\x0eDOMAIN_REQUEST\x10\x02*\x92\x01\n" +
+	"\x0eDOMAIN_REQUEST\x10\x02*\x8f\x01\n" +
 	"\n" +
 	"ActionType\x12\x1b\n" +
 	"\x17ACTION_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ACTION_TYPE_GRPC_METHOD\x10\x01\x12\x14\n" +
 	"\x10ACTION_TYPE_DENY\x10\x02\x12\x1b\n" +
-	"\x17ACTION_TYPE_ADD_HEADERS\x10\x03\x12\x17\n" +
-	"\x13ACTION_TYPE_FAILURE\x10\x042\xbb\x04\n" +
+	"\x17ACTION_TYPE_ADD_HEADERS\x10\x03\x12\x14\n" +
+	"\x10ACTION_TYPE_FAIL\x10\x042\xbb\x04\n" +
 	"\x10ExtensionService\x12=\n" +
 	"\x04Ping\x12\x18.kuadrant.v1.PingRequest\x1a\x19.kuadrant.v1.PongResponse\"\x00\x12N\n" +
 	"\tSubscribe\x12\x1d.kuadrant.v1.SubscribeRequest\x1a\x1e.kuadrant.v1.SubscribeResponse\"\x000\x01\x12F\n" +

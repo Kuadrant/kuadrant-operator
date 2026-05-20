@@ -1468,7 +1468,7 @@ func TestPipelineActionStore_AppendAndGet(t *testing.T) {
 
 	actions := []PipelineActionEntry{
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "checkThreat", Var: "threatResponse"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
 	}
 
 	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, actions)
@@ -1508,7 +1508,7 @@ func TestPipelineActionStore_SequentialAppends(t *testing.T) {
 
 	// Second append continues index sequence
 	startIdx = store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check2"},
 	})
 	if startIdx != 1 {
@@ -1535,7 +1535,7 @@ func TestPipelineActionStore_SeparatePhases(t *testing.T) {
 	})
 	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
 		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: "{'x-checked': 'true'}"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_FAILURE, FailureMessage: "blocked", FailureCode: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, LogMessage: "blocked"},
 	})
 
 	reqActions := store.GetPipelineActions(policy, PipelinePhaseRequest)
@@ -1562,7 +1562,7 @@ func TestPipelineActionStore_SeparatePolicies(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check1"},
 	})
 	store.AppendPipelineActions(policy2, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
 	})
 
 	p1Actions := store.GetPipelineActions(policy1, PipelinePhaseRequest)
@@ -1591,7 +1591,7 @@ func TestPipelineActionStore_ClearPipelineActions(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: "{'x': '1'}"},
 	})
 	store.AppendPipelineActions(otherPolicy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
 	})
 
 	cleared := store.ClearPipelineActions(policy)
@@ -1634,7 +1634,7 @@ func TestPipelineActionStore_CounterResetsAfterClear(t *testing.T) {
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
 	})
 
 	store.ClearPipelineActions(policy)
@@ -2051,14 +2051,14 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 
 	// Request phase: deny (root), grpc with var, deny referencing var (onReply)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse", Predicate: `"x-assess-threat" in request.headers`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", DenyWith: "429"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
 	})
-	// Response phase: add_headers (root), failure referencing var (onReply)
+	// Response phase: add_headers (root), fail referencing var (onReply)
 	store.AppendPipelineActions(policyID, PipelinePhaseResponse, []PipelineActionEntry{
 		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-checked": "true"}`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_FAILURE, Predicate: "threatResponse.blocked", FailureMessage: "blocked by threat policy", FailureCode: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, Predicate: "threatResponse.blocked", LogMessage: "blocked by threat policy"},
 	})
 
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)
@@ -2093,8 +2093,8 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 	if typed[0].Predicate != `request.url_path == "/blocked"` {
 		t.Errorf("typed[0]: expected predicate, got %q", typed[0].Predicate)
 	}
-	if typed[0].DenyWith != "403" {
-		t.Errorf("typed[0]: expected denyWith '403', got %q", typed[0].DenyWith)
+	if typed[0].DenyWith != "DenyResponse{status: 403u}" {
+		t.Errorf("typed[0]: expected denyWith 'DenyResponse{status: 403u}', got %q", typed[0].DenyWith)
 	}
 	if !typed[0].Terminal {
 		t.Error("typed[0]: expected terminal")
@@ -2134,23 +2134,20 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 	if grpc.OnReply[0].Predicate != "threatResponse.threat_level > 5" {
 		t.Errorf("onReply[0]: expected predicate, got %q", grpc.OnReply[0].Predicate)
 	}
-	if grpc.OnReply[0].DenyWith != "429" {
-		t.Errorf("onReply[0]: expected denyWith '429', got %q", grpc.OnReply[0].DenyWith)
+	if grpc.OnReply[0].DenyWith != "DenyResponse{status: 429u}" {
+		t.Errorf("onReply[0]: expected denyWith 'DenyResponse{status: 429u}', got %q", grpc.OnReply[0].DenyWith)
 	}
 	if !grpc.OnReply[0].Terminal {
 		t.Error("onReply[0]: expected terminal")
 	}
-	if grpc.OnReply[1].Type != "failure" {
-		t.Errorf("onReply[1]: expected type 'failure', got %q", grpc.OnReply[1].Type)
+	if grpc.OnReply[1].Type != "fail" {
+		t.Errorf("onReply[1]: expected type 'fail', got %q", grpc.OnReply[1].Type)
 	}
 	if grpc.OnReply[1].Predicate != "threatResponse.blocked" {
 		t.Errorf("onReply[1]: expected predicate, got %q", grpc.OnReply[1].Predicate)
 	}
-	if grpc.OnReply[1].FailureMessage != "blocked by threat policy" {
-		t.Errorf("onReply[1]: expected failureMessage, got %q", grpc.OnReply[1].FailureMessage)
-	}
-	if grpc.OnReply[1].FailureCode != "403" {
-		t.Errorf("onReply[1]: expected failureCode '403', got %q", grpc.OnReply[1].FailureCode)
+	if grpc.OnReply[1].LogMessage != "blocked by threat policy" {
+		t.Errorf("onReply[1]: expected logMessage, got %q", grpc.OnReply[1].LogMessage)
 	}
 
 	// typed[2]: response headers (root-level, no var reference)
@@ -2211,7 +2208,7 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 	)
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "request.method == 'GET'", DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "request.method == 'GET'", WithStatus: 403},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
 	})
 
@@ -2296,9 +2293,9 @@ func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", DenyWith: "429"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
 	})
 
 	savedRegistry := *GlobalMutatorRegistry
@@ -2360,8 +2357,8 @@ func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
 	if as.TypedActions[1].OnReply[0].Type != "deny" {
 		t.Errorf("Expected onReply[0] deny, got %s", as.TypedActions[1].OnReply[0].Type)
 	}
-	if as.TypedActions[1].OnReply[0].DenyWith != "429" {
-		t.Errorf("Expected onReply[0] denyWith '429', got %q", as.TypedActions[1].OnReply[0].DenyWith)
+	if as.TypedActions[1].OnReply[0].DenyWith != "DenyResponse{status: 429u}" {
+		t.Errorf("Expected onReply[0] denyWith 'DenyResponse{status: 429u}', got %q", as.TypedActions[1].OnReply[0].DenyWith)
 	}
 }
 
@@ -2415,7 +2412,7 @@ func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "request.method == 'GET'", DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "request.method == 'GET'", WithStatus: 403},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat"},
 	})
 
@@ -2487,15 +2484,15 @@ func TestReplacePipelineActions(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-old": "true"}`},
 	})
 	store.AppendPipelineActions(otherPolicy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
 	})
 
 	// Replace both phases atomically
 	err := store.ReplacePipelineActions(policy, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", DenyWith: "403", Predicate: `request.url_path == "/blocked"`},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403, Predicate: `request.url_path == "/blocked"`},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "new-check", Var: "threatResponse"},
 		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: `{"x-new": "true"}`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_FAILURE, Phase: "response", FailureMessage: "blocked", FailureCode: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, Phase: "response", LogMessage: "blocked"},
 	})
 	if err != nil {
 		t.Fatalf("ReplacePipelineActions returned error: %v", err)
@@ -2524,8 +2521,8 @@ func TestReplacePipelineActions(t *testing.T) {
 	if respActions[0].HeadersToAdd != `{"x-new": "true"}` {
 		t.Errorf("First response action headers = %q, unexpected", respActions[0].HeadersToAdd)
 	}
-	if respActions[1].FailureCode != "403" {
-		t.Errorf("Second response action failure code = %q, want %q", respActions[1].FailureCode, "403")
+	if respActions[1].LogMessage != "blocked" {
+		t.Errorf("Second response action log message = %q, want %q", respActions[1].LogMessage, "blocked")
 	}
 
 	// Other policy unaffected
@@ -2543,7 +2540,7 @@ func TestReplacePipelineActions_InvalidPhase(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	err := store.ReplacePipelineActions(policy, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "invalid", DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "invalid", WithStatus: 403},
 	})
 	if err == nil {
 		t.Fatal("Expected error for invalid phase, got nil")
@@ -2584,7 +2581,7 @@ func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat"},
 	})
 
@@ -2665,7 +2662,7 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	policyID := testResourceID("DenyPolicy", "default", "deny-only")
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/admin"`, DenyWith: "403"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/admin"`, WithStatus: 403},
 	})
 
 	wasmConfig := wasm.Config{
@@ -2693,8 +2690,8 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	if ta.Predicate != `request.url_path == "/admin"` {
 		t.Errorf("Expected predicate, got %q", ta.Predicate)
 	}
-	if ta.DenyWith != "403" {
-		t.Errorf("Expected denyWith '403', got %q", ta.DenyWith)
+	if ta.DenyWith != "DenyResponse{status: 403u}" {
+		t.Errorf("Expected denyWith 'DenyResponse{status: 403u}', got %q", ta.DenyWith)
 	}
 	if !ta.Terminal {
 		t.Error("Expected deny action to be terminal")

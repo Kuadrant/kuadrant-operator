@@ -827,17 +827,17 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 			}
 
 		case extpb.ActionType_ACTION_TYPE_DENY:
-			if err := validateHTTPStatusCode(action.DenyWith, fmt.Sprintf("actions[%d].deny_with", i)); err != nil {
-				return nil, err
+			if action.WithStatus != 0 {
+				if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", i)); err != nil {
+					return nil, err
+				}
 			}
-			entry.DenyWith = action.DenyWith
+			entry.WithStatus = int(action.WithStatus)
+			entry.WithHeaders = action.WithHeaders
+			entry.WithBody = action.WithBody
 
-		case extpb.ActionType_ACTION_TYPE_FAILURE:
-			if err := validateHTTPStatusCode(action.FailureCode, fmt.Sprintf("actions[%d].failure_code", i)); err != nil {
-				return nil, err
-			}
-			entry.FailureCode = action.FailureCode
-			entry.FailureMessage = action.FailureMessage
+		case extpb.ActionType_ACTION_TYPE_FAIL:
+			entry.LogMessage = action.LogMessage
 
 		case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
 			if action.HeadersToAdd == "" {

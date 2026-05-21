@@ -2,13 +2,21 @@
 
 This example demonstrates a **generalized, configurable streaming request body inspector** using an Envoy Golang filter that:
 
-✅ **Processes body chunks as they arrive** (no full buffering)<br/>
+✅ **Processes body chunks as they arrive** (no full buffering in the plugin)<br/>
 ✅ **Blocks the filter chain** until data is extracted (prevents headers from reaching upstream prematurely)<br/>
 ✅ **Supports unlimited payload sizes** (uses a bounded rolling buffer)<br/>
 ✅ **Extracts data using regex patterns** (fully configurable via EnvoyFilter YAML)<br/>
 ✅ **Sets Envoy dynamic metadata or filter state** for downstream filters (e.g., Kuadrant AuthPolicy, RateLimitPolicy)<br/>
 ✅ **Configurable content-type filtering** (process JSON, JSONL, or custom formats)<br/>
 ✅ **Highly flexible** (extract model names, tenant IDs, user IDs, API versions, etc.)<br/>
+
+**What "No Full Buffering in the Plugin" Means**: The plugin itself only maintains a small rolling buffer (default 512 bytes) to search for patterns chunk-by-chunk. While the plugin blocks the filter chain with `StopAndBuffer`, **Envoy buffers incoming chunks until the pattern is found** (or end of stream). The key distinction:
+- **Plugin memory**: Bounded to `max_buffer_size` (512 bytes default)
+- **Envoy memory**: Buffers up to the point where the pattern is found (best case: first few KB; worst case: entire request)
+
+This differs from:
+- Plugins that must read the entire buffer before making decisions (e.g., full JSON parsing)
+- Plugins that don't block the chain, allowing headers to reach upstream while still processing the body
 
 ## Use Cases
 
@@ -90,7 +98,7 @@ Result:
    - If doesn't match or no body: Returns `Continue` → **Allows request to proceed normally**
    - If matches and has body: Returns `StopAndBuffer` → **Blocks the filter chain AND buffers the body**
    - Headers do NOT reach upstream yet
-   - ⚠️ **Memory implication**: Envoy buffers the entire request body in memory
+   - ⚠️ **Memory implication**: Envoy buffers chunks until the pattern is found or end of stream
 
 2. **DecodeData Phase** (called for each buffered body chunk):
    - Appends chunk to rolling buffer (max `max_buffer_size` bytes)
@@ -108,9 +116,10 @@ Result:
    - Kuadrant wasm filter reads the exported value via `requestData` bindings
    - Enforces AuthPolicy/RateLimitPolicy based on extracted value
 
-**Memory Trade-off (Envoy 1.38.0 Limitation)**: Due to limitations in Envoy 1.38.0's Golang filter API, this implementation must use `StopAndBuffer`, which causes Envoy to buffer the entire request body in memory. This means:
-- **Memory usage** = (max concurrent requests) × (average request body size)
-- **Example**: 100 concurrent requests with 10MB average body = 1GB memory
+**Memory Trade-off (Envoy 1.38.0 Limitation)**: Due to limitations in Envoy 1.38.0's Golang filter API, this implementation must use `StopAndBuffer`, which causes Envoy to buffer incoming body chunks while the filter searches for the pattern. This means:
+- **Best case**: Pattern found early → Envoy only buffers the first few chunks before releasing the chain
+- **Worst case**: Pattern never found or appears late → Envoy buffers the entire request body
+- **Memory usage** = (concurrent blocked requests) × (bytes buffered until pattern found)
 - **Recommendation**: Monitor proxy memory usage and set appropriate resource limits
 - **Future**: Newer Envoy versions may support `StopNoBuffer` or phase-specific status codes for streaming processing
 
@@ -695,7 +704,8 @@ Expected output (Golang filter should be first):
 ## Performance Considerations
 
 - **Latency**: ~0.1-0.5ms per chunk (negligible compared to LLM latency)
-- **Memory**: Bounded to 512 bytes rolling buffer per request
+- **Memory (plugin)**: Bounded to 512 bytes rolling buffer per request
+- **Memory (Envoy)**: Buffers chunks until pattern found (worst case: full request body; see Limitations)
 - **CPU**: Minimal (regex match on small buffer)
 - **Scalability**: Same as Envoy's baseline (thousands of RPS)
 

@@ -1182,7 +1182,7 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 		parts = append(parts, fmt.Sprintf("headers: %s", headers))
 	}
 	if body != "" {
-		escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(body)
+		escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", `\n`, "\r", `\r`).Replace(body)
 		parts = append(parts, fmt.Sprintf("body: '%s'", escaped))
 	}
 	if len(parts) == 0 {

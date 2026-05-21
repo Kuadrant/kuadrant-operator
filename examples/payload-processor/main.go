@@ -306,7 +306,7 @@ func (f *filter) DecodeHeaders(headers api.RequestHeaderMap, endOfStream bool) a
 		return api.Continue
 	}
 
-	f.callbacks.Log(api.Info, fmt.Sprintf("Request detected (content-type: %s), blocking filter chain until pattern extracted", contentType))
+	f.callbacks.Log(api.Info, "Processing request body for pattern extraction")
 
 	// Block the filter chain and buffer the request body
 	// Unfortunately, Envoy 1.38.0's Golang filter only supports StopAndBuffer (3) and Continue (2)
@@ -346,7 +346,7 @@ func (f *filter) DecodeData(buffer api.BufferInstance, endOfStream bool) api.Sta
 		f.extractedValue = matches[1]
 		f.patternFound = true
 
-		f.callbacks.Log(api.Info, fmt.Sprintf("Pattern found in payload: %s", f.extractedValue))
+		f.callbacks.Log(api.Debug, fmt.Sprintf("Pattern found in payload: %s", f.extractedValue))
 
 		// Evaluate the object_value CEL expression
 		objectValue, err := f.config.evaluateObjectValue(f.extractedValue)
@@ -370,7 +370,7 @@ func (f *filter) DecodeData(buffer api.BufferInstance, endOfStream bool) api.Sta
 				f.config.ObjectKey,
 				objectValue,
 			)
-			f.callbacks.Log(api.Info, fmt.Sprintf("Exported to dynamic_metadata[%s][%s] = %s",
+			f.callbacks.Log(api.Debug, fmt.Sprintf("Exported to dynamic_metadata[%s][%s] = %s",
 				f.config.MetadataNamespace, f.config.ObjectKey, objectValue))
 
 		case ExportTypeFilterState:
@@ -386,7 +386,7 @@ func (f *filter) DecodeData(buffer api.BufferInstance, endOfStream bool) api.Sta
 				api.LifeSpanRequest,  // Request scope (not Connection)
 				api.None,             // No sharing (simplest case)
 			)
-			f.callbacks.Log(api.Info, fmt.Sprintf("Exported to filter_state[%s] = %s (StateType=Mutable, LifeSpan=Request, Sharing=None)",
+			f.callbacks.Log(api.Debug, fmt.Sprintf("Exported to filter_state[%s] = %s (StateType=Mutable, LifeSpan=Request, Sharing=None)",
 				f.config.ObjectKey, objectValue))
 
 		default:

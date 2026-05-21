@@ -2657,6 +2657,103 @@ func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
 	}
 }
 
+func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *testing.T) {
+	// This test reproduces the bug where extension pipeline actions targeting an
+	// HTTPRoute are lost when built-in policies (AuthPolicy/RateLimitPolicy) have
+	// already created ActionSets for the same route. Built-in ActionSets don't set
+	// SourceRoute, so the extension's route-matching logic in mutateWasmConfig skips
+	// them all — resulting in extension TypedActions never being appended.
+	store := NewRegisteredDataStore()
+	routeTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test-route", Namespace: "test-namespace"}
+	policyID := testResourceID("ThreatPolicy", "test-namespace", "route-threat")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: routeTargetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse"},
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 403},
+	})
+
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	gw := BuildGateway(func(g *gwapiv1.Gateway) {
+		g.Name = "test-gateway"
+		g.Namespace = "test-namespace"
+	})
+	route := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "test-route"
+		r.Namespace = "test-namespace"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "test-gateway"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"api.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{
+			Matches: []gwapiv1.HTTPRouteMatch{{
+				Path: &gwapiv1.HTTPPathMatch{
+					Type:  ptr.To(gwapiv1.PathMatchExact),
+					Value: ptr.To("/toy"),
+				},
+				Method: ptr.To(gwapiv1.HTTPMethodGet),
+			}},
+		}}
+	})
+
+	topology := testTopology(t, []*gwapiv1.Gateway{gw}, []*gwapiv1.HTTPRoute{route}, nil)
+	gateway := findGatewayInTopology(t, topology, "test-gateway")
+
+	// Simulate built-in policies (AuthPolicy/RateLimitPolicy) having already
+	// created ActionSets. Crucially, these do NOT have SourceRoute set — exactly
+	// as BuildActionSetsForPath produces them.
+	wasmConfig := wasm.Config{
+		ActionSets: []wasm.ActionSet{
+			{
+				Name: "builtin-actionset",
+				RouteRuleConditions: wasm.RouteRuleConditions{
+					Hostnames: []string{"api.example.com"},
+				},
+				Actions: []wasm.Action{{ServiceName: "authorino-auth"}},
+			},
+		},
+	}
+
+	err := ApplyWasmConfigMutators(&wasmConfig, gateway, topology)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Built-in action set must survive
+	if len(wasmConfig.ActionSets) != 1 {
+		t.Fatalf("Expected 1 actionset, got %d", len(wasmConfig.ActionSets))
+	}
+
+	as := wasmConfig.ActionSets[0]
+
+	// Built-in actions preserved
+	if len(as.Actions) != 1 || as.Actions[0].ServiceName != "authorino-auth" {
+		t.Errorf("Expected built-in action preserved, got %v", as.Actions)
+	}
+
+	// Extension TypedActions must be merged alongside the built-in actions.
+	// The deny depends on the var "threatResponse" from the gRPC action, so it
+	// gets nested in the gRPC action's OnReply rather than being a separate root action.
+	if len(as.TypedActions) != 1 {
+		t.Fatalf("Expected 1 typed action (grpc with deny in onReply) merged into built-in actionset, got %d", len(as.TypedActions))
+	}
+	if as.TypedActions[0].Type != "grpc" {
+		t.Errorf("Expected typed[0] grpc, got %s", as.TypedActions[0].Type)
+	}
+	if len(as.TypedActions[0].OnReply) != 1 {
+		t.Fatalf("Expected 1 onReply action (deny), got %d", len(as.TypedActions[0].OnReply))
+	}
+	if as.TypedActions[0].OnReply[0].Type != "deny" {
+		t.Errorf("Expected onReply[0] deny, got %s", as.TypedActions[0].OnReply[0].Type)
+	}
+}
+
 func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	store := NewRegisteredDataStore()
 	policyID := testResourceID("DenyPolicy", "default", "deny-only")

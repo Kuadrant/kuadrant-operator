@@ -292,8 +292,9 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:    ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions: actions,
+					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:     actions,
+					SourceRoute: fmt.Sprintf("HTTPRoute/%s/%s", parsed.HTTPRoute.GetNamespace(), parsed.HTTPRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
 					Hostnames: []string{string(hostname)},
@@ -360,8 +361,9 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:    ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions: actions,
+					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:     actions,
+					SourceRoute: fmt.Sprintf("GRPCRoute/%s/%s", parsed.GRPCRoute.GetNamespace(), parsed.GRPCRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
 					Hostnames: []string{string(hostname)},

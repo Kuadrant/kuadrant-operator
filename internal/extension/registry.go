@@ -1044,7 +1044,8 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 
 		routeLocator := policyRouteLocator[policyID]
 		for i := range wasmConfig.ActionSets {
-			if routeLocator != "" && wasmConfig.ActionSets[i].SourceRoute != routeLocator {
+			asRoute := wasmConfig.ActionSets[i].SourceRoute
+			if routeLocator != "" && asRoute != "" && asRoute != routeLocator {
 				continue
 			}
 			wasmConfig.ActionSets[i].TypedActions = append(wasmConfig.ActionSets[i].TypedActions, typedActions...)

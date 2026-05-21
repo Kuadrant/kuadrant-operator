@@ -18,8 +18,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
+    - jsonPath: .status.conditions[?(@.type=="Approved")].status
+      name: Approved
       type: string
     - jsonPath: .spec.apiProductRef.name
       name: API
@@ -63,6 +63,8 @@ spec:
                 properties:
                   name:
                     type: string
+                  namespace:
+                    type: string
                 required:
                 - name
                 type: object
@@ -86,6 +88,24 @@ spec:
                 - email
                 - userId
                 type: object
+              secretRef:
+                description: |-
+                  SecretRef is a reference to the secret containing the API key
+                  Consumer creates this secret in their own namespace before creating APIKey
+                  The secret must contain an "api_key" entry with the value of the API key
+                  Controller reads API key from this secret on approval
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               useCase:
                 description: UseCase describes how the API key will be used
                 type: string
@@ -93,7 +113,7 @@ spec:
             - apiProductRef
             - planTier
             - requestedBy
-            - useCase
+            - secretRef
             type: object
           status:
             description: APIKeyStatus defines the observed state of APIKey.
@@ -194,11 +214,6 @@ spec:
                         type: object
                     type: object
                 type: object
-              canReadSecret:
-                default: true
-                description: CanReadSecret expresses the permission to read the APIKey's
-                  secret
-                type: boolean
               conditions:
                 description: Conditions represent the latest available observations
                   of the APIKey's state
@@ -294,37 +309,11 @@ spec:
                     description: Yearly limit of requests for this plan.
                     type: integer
                 type: object
-              phase:
-                description: |-
-                  Phase represents the current phase of the APIKey
-                  Valid values are "Pending", "Approved", or "Rejected"
-                enum:
-                - Pending
-                - Approved
-                - Rejected
-                type: string
-              reviewedAt:
-                description: ReviewedAt is the timestamp when the request was reviewed
-                format: date-time
-                type: string
-              reviewedBy:
-                description: ReviewedBy indicates who approved or rejected the request
-                type: string
-              secretRef:
-                description: SecretRef is a reference to the created Secret
-                properties:
-                  key:
-                    description: The key of the secret to select from.  Must be a
-                      valid secret key.
-                    type: string
-                  name:
-                    description: The name of the secret in the Authorino's namespace
-                      to select from.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
+                format: int64
+                type: integer
             type: object
         type: object
     served: true
@@ -13514,13 +13503,12 @@ rules:
   - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - devportal.kuadrant.io
   resources:
-  - apikeys
+  - apikeyapprovals
+  - apikeyrequests
   - apiproducts
   verbs:
   - create
@@ -13533,19 +13521,22 @@ rules:
 - apiGroups:
   - devportal.kuadrant.io
   resources:
-  - apikeys/finalizers
-  - apiproducts/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - devportal.kuadrant.io
-  resources:
+  - apikeyapprovals/status
+  - apikeyrequests/status
   - apikeys/status
   - apiproducts/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - devportal.kuadrant.io
+  resources:
+  - apikeys
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - extensions.kuadrant.io
   resources:
@@ -13578,6 +13569,7 @@ rules:
   - kuadrant.io
   resources:
   - authpolicies
+  - kuadrants
   verbs:
   - get
   - list
@@ -14050,16 +14042,16 @@ spec:
         - name: RELATED_IMAGE_WASMSHIM
           value: quay.io/kuadrant/wasm-shim:v0.12.3
         - name: RELATED_IMAGE_DEVELOPERPORTAL
-          value: quay.io/kuadrant/developer-portal-controller:v0.1.0
+          value: quay.io/kuadrant/developer-portal-controller:v0.1.1
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-          value: quay.io/kuadrant/console-plugin:v0.3.4
+          value: quay.io/kuadrant/console-plugin:v0.3.7
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
           value: quay.io/kuadrant/console-plugin:v0.1.5
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/kuadrant/kuadrant-operator:v1.4.3
+        image: quay.io/kuadrant/kuadrant-operator:v1.4.4
         livenessProbe:
           httpGet:
             path: /healthz

@@ -16,4 +16,7 @@ spec:
         headers:
           x-model:
             plain:
+              # The wasm-shim cannot currently detect the data type of the metadata set by the Go plugin, so it
+              # serialises it as a string with null separators and other markers from the convertion back and forth
+              # between proto and CEL.
               expression: metadata.filter_metadata["io.kuadrant"].payload_processor.split("model")[1].split("\u0000")[1]

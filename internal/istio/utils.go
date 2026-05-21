@@ -196,9 +196,9 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				// For HTTP_FILTER patches, we compare the listener match structure if present
 				// Since the structure is complex, we'll compare the JSON representation
 				if aListener != nil && bListener != nil {
-					aMatchJSON, _ := json.Marshal(aConfigPatch.Match)
+					aMatchJSON, aErr := json.Marshal(aConfigPatch.Match)
 					bMatchJSON, _ := json.Marshal(bConfigPatch.Match)
-					if string(aMatchJSON) != string(bMatchJSON) {
+					if string(aMatchJSON) != string(bMatchJSON) || aErr != nil {
 						return false
 					}
 				}
@@ -214,9 +214,9 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				}
 			default:
 				// For other patch types, compare the match structure via JSON
-				aMatchJSON, _ := json.Marshal(aConfigPatch.Match)
+				aMatchJSON, aErr := json.Marshal(aConfigPatch.Match)
 				bMatchJSON, _ := json.Marshal(bConfigPatch.Match)
-				if string(aMatchJSON) != string(bMatchJSON) {
+				if string(aMatchJSON) != string(bMatchJSON) || aErr != nil {
 					return false
 				}
 			}

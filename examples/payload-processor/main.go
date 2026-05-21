@@ -322,6 +322,11 @@ func (f *filter) DecodeData(buffer api.BufferInstance, endOfStream bool) api.Sta
 		return api.Continue
 	}
 
+	// Skip processing if pattern compilation failed
+	if f.config.compiledPattern == nil {
+		return api.Continue
+	}
+
 	// Get the current chunk
 	chunk := buffer.String()
 

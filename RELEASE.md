@@ -32,16 +32,16 @@ Reference [slack Chat](https://kubernetes.slack.com/archives/C05J0D0V525/p174419
 
 ### Local steps
 
-1. Create the `release-vX.Y` branch, if the branch does not already exist. 
-2. Push the `release-vX.Y` to the remote (kuadrant/kuadrant-operator)
-3. Create the `release-vX.Y.Z-rc(n)` branch with `release-vX.Y` as the base.
-4. Cherry-pick commits to the `kudrant-vX.Y.Z-rc(n)` from the relevant sources, i.e. `main`.
+1. Create the `release-X.Y` branch, if the branch does not already exist. 
+2. Push the `release-X.Y` to the remote (kuadrant/kuadrant-operator)
+3. Create the `release-X.Y.Z-rc(n)` branch with `release-X.Y` as the base.
+4. Cherry-pick commits to the `release-X.Y.Z-rc(n)` from the relevant sources, i.e. `main`.
 5. Update the applicable version in the [release.yaml](https://github.com/Kuadrant/kuadrant-operator/blob/main/RELEASE.md#release-file-format).
-6. Run `make prepare-release` on the `release-vX.Y.Z-rc(n)`. If you run into rate limit errors, set the env `GITHUB_TOKEN` with your PAT.
+6. Run `make prepare-release` on the `release-X.Y.Z-rc(n)`. If you run into rate limit errors, set the env `GITHUB_TOKEN` with your PAT.
 
 ### Remote steps
 
-1. Open a PR against the `release-vX.Y` branch with the changes from `release-vX.Y.Z-rc(n)` branch.
+1. Open a PR against the `release-X.Y` branch with the changes from `release-X.Y.Z-rc(n)` branch.
 2. PR verification checks will run.
 3. Get manual review of PR with focus on changes in these areas:
    * `./bundle.Dockerfile`
@@ -50,7 +50,7 @@ Reference [slack Chat](https://kubernetes.slack.com/archives/C05J0D0V525/p174419
    * `./charts/`
 > NOTE: **The PR must receive approval from at least one member of the QE team.**
 4. Merge PR
-5. Run the Release Workflow on the `release-vX.Y`. This does the following:
+5. Run the Release Workflow on the `release-X.Y`. This does the following:
    * Creates the GitHub release
    * Creates tags
 6. Verify that the build [release tag workflow](https://github.com/Kuadrant/kuadrant-operator/actions/workflows/build-images-for-tag-release.yaml) is triggered and completes for the new tag.
@@ -63,7 +63,7 @@ Resolution of this issue is tracked in [Auto generation of release notes failure
 ## Creating the RC2+
 
 1. Create a local branch based off the, targeted release branch. 
-Example: `git checkout -B release-v1.2.0-rc2 release-v1.2`
+Example: `git checkout -B release-1.2.0-rc2 release-1.2`
 2. Cherry pick the changes required to fix which ever issue justified the creation of a new RC.
 Example: `git cherry-pick <commit sha>`
 3. Update the `release.yaml` with the new version of the kuadrant-operator. 

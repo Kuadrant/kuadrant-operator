@@ -11,6 +11,18 @@ mod_version() {
   fi
 }
 
+# Pass version to Make as-is, but map 0.0.0 to "latest" to match the
+# Makefile's ifeq(latest,...) check. Without this, 0.0.0 would hit the
+# semantic version branch and produce GITREF=v0.0.0 (a non-existent tag).
+mod_version_for_make() {
+  version=$1
+  if [ "$version" == "0.0.0" ]; then
+    echo "latest"
+  else
+    echo "$version"
+  fi
+}
+
 echo "make bundle"
 root=$(pwd)
 cd $env
@@ -55,10 +67,10 @@ make bundle \
   LIMITADOR_OPERATOR_BUNDLE_IMG=$limitador_image \
   AUTHORINO_OPERATOR_BUNDLE_IMG=$authorino_image \
   DNS_OPERATOR_BUNDLE_IMG=$dns_image \
-  AUTHORINO_OPERATOR_VERSION=$AUTHORINO_OPERATOR_VERSION \
-  LIMITADOR_OPERATOR_VERSION=$LIMITADOR_OPERATOR_VERSION \
-  DNS_OPERATOR_VERSION=$DNS_OPERATOR_VERSION \
-  DEVELOPERPORTAL_VERSION=$DEVELOPERPORTAL_VERSION
+  AUTHORINO_OPERATOR_VERSION=$(mod_version_for_make $AUTHORINO_OPERATOR_VERSION) \
+  LIMITADOR_OPERATOR_VERSION=$(mod_version_for_make $LIMITADOR_OPERATOR_VERSION) \
+  DNS_OPERATOR_VERSION=$(mod_version_for_make $DNS_OPERATOR_VERSION) \
+  DEVELOPERPORTAL_VERSION=$(mod_version_for_make $DEVELOPERPORTAL_VERSION)
 
 operator-sdk bundle validate $env/bundle
 git diff --quiet -I'^    createdAt: ' ./bundle && git checkout ./bundle || true

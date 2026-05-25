@@ -30,9 +30,9 @@ func TestActionType_EnumValues(t *testing.T) {
 	}{
 		{"unspecified", ActionType_ACTION_TYPE_UNSPECIFIED, "ACTION_TYPE_UNSPECIFIED"},
 		{"grpc_method", ActionType_ACTION_TYPE_GRPC_METHOD, "ACTION_TYPE_GRPC_METHOD"},
-		{"allow", ActionType_ACTION_TYPE_ALLOW, "ACTION_TYPE_ALLOW"},
+		{"deny", ActionType_ACTION_TYPE_DENY, "ACTION_TYPE_DENY"},
 		{"add_headers", ActionType_ACTION_TYPE_ADD_HEADERS, "ACTION_TYPE_ADD_HEADERS"},
-		{"with_response_code", ActionType_ACTION_TYPE_WITH_RESPONSE_CODE, "ACTION_TYPE_WITH_RESPONSE_CODE"},
+		{"fail", ActionType_ACTION_TYPE_FAIL, "ACTION_TYPE_FAIL"},
 	}
 
 	for _, tt := range tests {
@@ -44,12 +44,13 @@ func TestActionType_EnumValues(t *testing.T) {
 	}
 }
 
-func TestRequestActionEntry_FieldAccessors(t *testing.T) {
-	entry := &RequestActionEntry{
+func TestActionEntry_FieldAccessors(t *testing.T) {
+	entry := &ActionEntry{
 		ActionType: ActionType_ACTION_TYPE_GRPC_METHOD,
 		Predicate:  "request.headers['check'] == '1'",
-		Intention:  "checkThreatResponse.HeatLevel == 5",
+		Phase:      "request",
 		Method:     "checkThreatLevel",
+		Var:        "threatResponse",
 	}
 
 	if entry.GetActionType() != ActionType_ACTION_TYPE_GRPC_METHOD {
@@ -58,16 +59,59 @@ func TestRequestActionEntry_FieldAccessors(t *testing.T) {
 	if entry.GetPredicate() != "request.headers['check'] == '1'" {
 		t.Errorf("GetPredicate() = %q, unexpected", entry.GetPredicate())
 	}
-	if entry.GetIntention() != "checkThreatResponse.HeatLevel == 5" {
-		t.Errorf("GetIntention() = %q, unexpected", entry.GetIntention())
+	if entry.GetPhase() != "request" {
+		t.Errorf("GetPhase() = %q, want %q", entry.GetPhase(), "request")
 	}
 	if entry.GetMethod() != "checkThreatLevel" {
 		t.Errorf("GetMethod() = %q, unexpected", entry.GetMethod())
 	}
+	if entry.GetVar() != "threatResponse" {
+		t.Errorf("GetVar() = %q, unexpected", entry.GetVar())
+	}
+
+	denyEntry := &ActionEntry{
+		ActionType:  ActionType_ACTION_TYPE_DENY,
+		Predicate:   "threatResponse.threat_level >= 5",
+		Phase:       "response",
+		WithStatus:  403,
+		WithHeaders: `[["x-threat-assessed", "true"]]`,
+		WithBody:    "Blocked by threat policy",
+	}
+	if denyEntry.GetWithStatus() != 403 {
+		t.Errorf("GetWithStatus() = %d, want %d", denyEntry.GetWithStatus(), 403)
+	}
+	if denyEntry.GetWithHeaders() != `[["x-threat-assessed", "true"]]` {
+		t.Errorf("GetWithHeaders() = %q, unexpected", denyEntry.GetWithHeaders())
+	}
+	if denyEntry.GetWithBody() != "Blocked by threat policy" {
+		t.Errorf("GetWithBody() = %q, unexpected", denyEntry.GetWithBody())
+	}
+	if denyEntry.GetPhase() != "response" {
+		t.Errorf("GetPhase() = %q, want %q", denyEntry.GetPhase(), "response")
+	}
+
+	headersEntry := &ActionEntry{
+		ActionType:   ActionType_ACTION_TYPE_ADD_HEADERS,
+		HeadersToAdd: `{"x-threat-checked": "true"}`,
+		Phase:        "response",
+	}
+	if headersEntry.GetHeadersToAdd() != `{"x-threat-checked": "true"}` {
+		t.Errorf("GetHeadersToAdd() = %q, unexpected", headersEntry.GetHeadersToAdd())
+	}
+
+	failEntry := &ActionEntry{
+		ActionType: ActionType_ACTION_TYPE_FAIL,
+		Predicate:  `threatResponse.error_code != 0`,
+		Phase:      "response",
+		LogMessage: "Threat service returned unexpected error",
+	}
+	if failEntry.GetLogMessage() != "Threat service returned unexpected error" {
+		t.Errorf("GetLogMessage() = %q, unexpected", failEntry.GetLogMessage())
+	}
 }
 
-func TestRequestActionEntry_NilSafeGetters(t *testing.T) {
-	var entry *RequestActionEntry
+func TestActionEntry_NilSafeGetters(t *testing.T) {
+	var entry *ActionEntry
 
 	if entry.GetActionType() != ActionType_ACTION_TYPE_UNSPECIFIED {
 		t.Errorf("GetActionType() on nil should return UNSPECIFIED")
@@ -75,59 +119,29 @@ func TestRequestActionEntry_NilSafeGetters(t *testing.T) {
 	if entry.GetPredicate() != "" {
 		t.Errorf("GetPredicate() on nil should return empty string")
 	}
-	if entry.GetIntention() != "" {
-		t.Errorf("GetIntention() on nil should return empty string")
+	if entry.GetPhase() != "" {
+		t.Errorf("GetPhase() on nil should return empty string")
 	}
 	if entry.GetMethod() != "" {
 		t.Errorf("GetMethod() on nil should return empty string")
 	}
-}
-
-func TestResponseActionEntry_FieldAccessors(t *testing.T) {
-	entry := &ResponseActionEntry{
-		ActionType:      ActionType_ACTION_TYPE_ADD_HEADERS,
-		Predicate:       "response.code == 200",
-		HeadersToAdd:    "{'x-threat-checked': 'true'}",
-		NewResponseCode: 0,
+	if entry.GetVar() != "" {
+		t.Errorf("GetVar() on nil should return empty string")
 	}
-
-	if entry.GetActionType() != ActionType_ACTION_TYPE_ADD_HEADERS {
-		t.Errorf("GetActionType() = %v, want %v", entry.GetActionType(), ActionType_ACTION_TYPE_ADD_HEADERS)
+	if entry.GetWithStatus() != 0 {
+		t.Errorf("GetWithStatus() on nil should return 0")
 	}
-	if entry.GetPredicate() != "response.code == 200" {
-		t.Errorf("GetPredicate() = %q, unexpected", entry.GetPredicate())
+	if entry.GetWithHeaders() != "" {
+		t.Errorf("GetWithHeaders() on nil should return empty string")
 	}
-	if entry.GetHeadersToAdd() != "{'x-threat-checked': 'true'}" {
-		t.Errorf("GetHeadersToAdd() = %q, unexpected", entry.GetHeadersToAdd())
-	}
-	if entry.GetNewResponseCode() != 0 {
-		t.Errorf("GetNewResponseCode() = %d, want 0", entry.GetNewResponseCode())
-	}
-
-	// Test with_response_code type
-	codeEntry := &ResponseActionEntry{
-		ActionType:      ActionType_ACTION_TYPE_WITH_RESPONSE_CODE,
-		NewResponseCode: 403,
-	}
-	if codeEntry.GetNewResponseCode() != 403 {
-		t.Errorf("GetNewResponseCode() = %d, want 403", codeEntry.GetNewResponseCode())
-	}
-}
-
-func TestResponseActionEntry_NilSafeGetters(t *testing.T) {
-	var entry *ResponseActionEntry
-
-	if entry.GetActionType() != ActionType_ACTION_TYPE_UNSPECIFIED {
-		t.Errorf("GetActionType() on nil should return UNSPECIFIED")
-	}
-	if entry.GetPredicate() != "" {
-		t.Errorf("GetPredicate() on nil should return empty string")
+	if entry.GetWithBody() != "" {
+		t.Errorf("GetWithBody() on nil should return empty string")
 	}
 	if entry.GetHeadersToAdd() != "" {
 		t.Errorf("GetHeadersToAdd() on nil should return empty string")
 	}
-	if entry.GetNewResponseCode() != 0 {
-		t.Errorf("GetNewResponseCode() on nil should return 0")
+	if entry.GetLogMessage() != "" {
+		t.Errorf("GetLogMessage() on nil should return empty string")
 	}
 }
 
@@ -139,54 +153,54 @@ func TestPipelineCommitRequest_FieldAccessors(t *testing.T) {
 			Name:      "my-policy",
 		},
 	}
-	requestActions := []*RequestActionEntry{
+	actions := []*ActionEntry{
+		{
+			ActionType: ActionType_ACTION_TYPE_DENY,
+			Predicate:  `request.url_path == "/blocked"`,
+			Phase:      "request",
+			WithStatus: 403,
+		},
 		{
 			ActionType: ActionType_ACTION_TYPE_GRPC_METHOD,
+			Phase:      "request",
 			Method:     "checkThreatLevel",
-			Intention:  "checkThreatLevelResponse.HeatLevel == 5",
+			Var:        "threatResponse",
 		},
 		{
-			ActionType: ActionType_ACTION_TYPE_ALLOW,
-			Intention:  "request.auth.identity.admin == true",
+			ActionType: ActionType_ACTION_TYPE_DENY,
+			Predicate:  "threatResponse.threat_level >= 5",
+			Phase:      "response",
+			WithStatus: 403,
 		},
-	}
-	responseActions := []*ResponseActionEntry{
 		{
 			ActionType:   ActionType_ACTION_TYPE_ADD_HEADERS,
-			HeadersToAdd: "{'x-threat-checked': 'true'}",
-		},
-		{
-			ActionType:      ActionType_ACTION_TYPE_WITH_RESPONSE_CODE,
-			NewResponseCode: 429,
+			Phase:        "response",
+			HeadersToAdd: `{"x-threat-checked": "true"}`,
 		},
 	}
 
 	req := &PipelineCommitRequest{
-		Policy:          policy,
-		RequestActions:  requestActions,
-		ResponseActions: responseActions,
+		Policy:  policy,
+		Actions: actions,
 	}
 
 	if req.GetPolicy() != policy {
 		t.Errorf("GetPolicy() returned unexpected value")
 	}
-	if len(req.GetRequestActions()) != 2 {
-		t.Fatalf("GetRequestActions() length = %d, want 2", len(req.GetRequestActions()))
+	if len(req.GetActions()) != 4 {
+		t.Fatalf("GetActions() length = %d, want 4", len(req.GetActions()))
 	}
-	if req.GetRequestActions()[0].GetMethod() != "checkThreatLevel" {
-		t.Errorf("first request action Method = %q, want %q", req.GetRequestActions()[0].GetMethod(), "checkThreatLevel")
+	if req.GetActions()[0].GetWithStatus() != 403 {
+		t.Errorf("first action WithStatus = %d, want %d", req.GetActions()[0].GetWithStatus(), 403)
 	}
-	if req.GetRequestActions()[1].GetActionType() != ActionType_ACTION_TYPE_ALLOW {
-		t.Errorf("second request action type = %v, want ALLOW", req.GetRequestActions()[1].GetActionType())
+	if req.GetActions()[1].GetMethod() != "checkThreatLevel" {
+		t.Errorf("second action Method = %q, want %q", req.GetActions()[1].GetMethod(), "checkThreatLevel")
 	}
-	if len(req.GetResponseActions()) != 2 {
-		t.Fatalf("GetResponseActions() length = %d, want 2", len(req.GetResponseActions()))
+	if req.GetActions()[2].GetPhase() != "response" {
+		t.Errorf("third action Phase = %q, want %q", req.GetActions()[2].GetPhase(), "response")
 	}
-	if req.GetResponseActions()[0].GetHeadersToAdd() != "{'x-threat-checked': 'true'}" {
-		t.Errorf("first response action HeadersToAdd = %q, unexpected", req.GetResponseActions()[0].GetHeadersToAdd())
-	}
-	if req.GetResponseActions()[1].GetNewResponseCode() != 429 {
-		t.Errorf("second response action NewResponseCode = %d, want 429", req.GetResponseActions()[1].GetNewResponseCode())
+	if req.GetActions()[3].GetHeadersToAdd() != `{"x-threat-checked": "true"}` {
+		t.Errorf("fourth action HeadersToAdd = %q, unexpected", req.GetActions()[3].GetHeadersToAdd())
 	}
 }
 
@@ -196,11 +210,8 @@ func TestPipelineCommitRequest_NilSafeGetters(t *testing.T) {
 	if req.GetPolicy() != nil {
 		t.Errorf("GetPolicy() on nil should return nil")
 	}
-	if req.GetRequestActions() != nil {
-		t.Errorf("GetRequestActions() on nil should return nil")
-	}
-	if req.GetResponseActions() != nil {
-		t.Errorf("GetResponseActions() on nil should return nil")
+	if req.GetActions() != nil {
+		t.Errorf("GetActions() on nil should return nil")
 	}
 }
 

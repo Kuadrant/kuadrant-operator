@@ -20,7 +20,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"maps"
+	"regexp"
 	"sort"
+	"strings"
 
 	"sync"
 
@@ -325,14 +327,17 @@ const (
 
 // PipelineActionEntry represents a single stored pipeline action.
 type PipelineActionEntry struct {
-	Index           int
-	ActionType      extpb.ActionType
-	Predicate       string
-	Intention       string // CEL expression (grpc_method, allow)
-	Method          string // registered action method name (grpc_method)
-	Var             string // variable name for gRPC response (grpc_method)
-	HeadersToAdd    string // CEL expression for headers (add_headers)
-	NewResponseCode int32  // HTTP status code (with_response_code)
+	Index        int
+	ActionType   extpb.ActionType
+	Predicate    string
+	Phase        string // "request" or "response"
+	Method       string // registered action method name (grpc_method)
+	Var          string // variable name for gRPC response (grpc_method)
+	WithStatus   int    // HTTP status code (deny); 0 means unset
+	WithHeaders  string // CEL expression — array of [name, value] pairs (deny)
+	WithBody     string // response body string (deny)
+	HeadersToAdd string // CEL expression for headers (add_headers)
+	LogMessage   string // error message to log (fail)
 }
 
 // pipelineKey identifies a set of actions for a specific policy and phase.
@@ -654,6 +659,17 @@ func (r *RegisteredDataStore) HasUpstreamName(policy ResourceID, name string) bo
 	return false
 }
 
+func (r *RegisteredDataStore) GetUpstreamByName(policy ResourceID, name string) (RegisteredUpstreamKey, RegisteredUpstreamEntry, bool) {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	for k, v := range r.registeredUpstreams {
+		if k.Policy == policy && k.Name == name {
+			return k, v, true
+		}
+	}
+	return RegisteredUpstreamKey{}, RegisteredUpstreamEntry{}, false
+}
+
 func (r *RegisteredDataStore) GetUpstreamsForPolicy(policy ResourceID) []RegisteredUpstreamEntry {
 	r.upstreamsMutex.RLock()
 	defer r.upstreamsMutex.RUnlock()
@@ -717,8 +733,15 @@ func (r *RegisteredDataStore) ClearPipelinePhase(policy ResourceID, phase Pipeli
 }
 
 // ReplacePipelineActions atomically clears all pipeline actions for a policy
-// and replaces them with the provided request and response entries.
-func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, requestEntries, responseEntries []PipelineActionEntry) {
+// and replaces them with the provided entries, grouped by their Phase field.
+// Returns an error if any entry has an invalid phase.
+func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries []PipelineActionEntry) error {
+	for i, entry := range entries {
+		if entry.Phase != string(PipelinePhaseRequest) && entry.Phase != string(PipelinePhaseResponse) {
+			return fmt.Errorf("entries[%d]: invalid phase %q, must be %q or %q", i, entry.Phase, PipelinePhaseRequest, PipelinePhaseResponse)
+		}
+	}
+
 	r.pipelineMutex.Lock()
 	defer r.pipelineMutex.Unlock()
 
@@ -728,23 +751,22 @@ func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, requestE
 		delete(r.pipelineCounters, key)
 	}
 
-	if len(requestEntries) > 0 {
-		key := pipelineKey{Policy: policy, Phase: PipelinePhaseRequest}
-		for i := range requestEntries {
-			requestEntries[i].Index = i
-		}
-		r.pipelineActions[key] = requestEntries
-		r.pipelineCounters[key] = len(requestEntries)
+	grouped := map[PipelinePhase][]PipelineActionEntry{}
+	for _, entry := range entries {
+		phase := PipelinePhase(entry.Phase)
+		grouped[phase] = append(grouped[phase], entry)
 	}
 
-	if len(responseEntries) > 0 {
-		key := pipelineKey{Policy: policy, Phase: PipelinePhaseResponse}
-		for i := range responseEntries {
-			responseEntries[i].Index = i
+	for phase, phaseEntries := range grouped {
+		key := pipelineKey{Policy: policy, Phase: phase}
+		for i := range phaseEntries {
+			phaseEntries[i].Index = i
 		}
-		r.pipelineActions[key] = responseEntries
-		r.pipelineCounters[key] = len(responseEntries)
+		r.pipelineActions[key] = phaseEntries
+		r.pipelineCounters[key] = len(phaseEntries)
 	}
+
+	return nil
 }
 
 // ClearPipelineActions removes all pipeline actions for a policy across both phases
@@ -949,6 +971,10 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	// Inject registered upstream services matching the current target refs
 	relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
 
+	if wasmConfig.Services == nil {
+		wasmConfig.Services = make(map[string]wasm.Service)
+	}
+
 	// Build method name → wasm service key lookup and inject services
 	methodServiceKeys := make(map[ResourceID]map[string]string) // policy → method name → service key
 	for key, entry := range relevantUpstreamKeys {
@@ -962,9 +988,6 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			GrpcMethod:  &entry.Method,
 		}
 		wasmServiceKey := "ext-" + HashUpstreamServiceConfig(svc)
-		if wasmConfig.Services == nil {
-			wasmConfig.Services = make(map[string]wasm.Service)
-		}
 		wasmConfig.Services[wasmServiceKey] = svc
 
 		if methodServiceKeys[key.Policy] == nil {
@@ -979,7 +1002,7 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	}
 
 	// Translate pipeline actions into TypedAction entries (deterministic order across policies)
-	policyIDs := lo.Keys(methodServiceKeys)
+	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActions()...))
 	sort.Slice(policyIDs, func(i, j int) bool {
 		if policyIDs[i].Kind != policyIDs[j].Kind {
 			return policyIDs[i].Kind < policyIDs[j].Kind
@@ -1012,121 +1035,18 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
 		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
 
-		// Build response-phase TypedActions (these nest inside gRPC action's onReply)
-		var onReplyActions []wasm.TypedAction
-		for _, entry := range responseEntries {
-			switch entry.ActionType {
-			case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-				onReplyActions = append(onReplyActions, wasm.TypedAction{
-					Type:                 "headers",
-					Predicate:            predicateOrTrue(entry.Predicate),
-					Terminal:             false,
-					Target:               "response",
-					Headers:              entry.HeadersToAdd,
-					SourcePolicyLocators: sources,
-				})
-			case extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE:
-				onReplyActions = append(onReplyActions, wasm.TypedAction{
-					Type:                 "deny",
-					Predicate:            predicateOrTrue(entry.Predicate),
-					Terminal:             true,
-					DenyWith:             fmt.Sprintf("DenyResponse{status: %du}", entry.NewResponseCode),
-					SourcePolicyLocators: sources,
-				})
-			}
+		typedActions := translatePipelineToTypedActions(
+			requestEntries, responseEntries,
+			methods, upstreamByMethod[policyID], sources,
+		)
+		if len(typedActions) == 0 {
+			continue
 		}
 
-		// Collect AllowAction deny entries first — the wasm-shim only supports
-		// gRPC typed actions at the top level, so AllowAction denies must be
-		// injected into a gRPC action's onReply.
-		var allowDenyActions []wasm.TypedAction
-		for _, entry := range requestEntries {
-			if entry.ActionType == extpb.ActionType_ACTION_TYPE_ALLOW && entry.Intention != "" {
-				denyPredicate := fmt.Sprintf("!(%s)", entry.Intention)
-				if entry.Predicate != "" {
-					denyPredicate = fmt.Sprintf("%s && !(%s)", entry.Predicate, entry.Intention)
-				}
-				allowDenyActions = append(allowDenyActions, wasm.TypedAction{
-					Type:                 "deny",
-					Predicate:            denyPredicate,
-					Terminal:             true,
-					DenyWith:             "DenyResponse{status: 403u}",
-					SourcePolicyLocators: sources,
-				})
-			}
-		}
-
-		// Build request-phase TypedActions
-		var typedActions []wasm.TypedAction
-		allowsPrepended := false
-		for _, entry := range requestEntries {
-			if entry.ActionType != extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
-				continue
-			}
-			grpcPredicate := predicateOrTrue(entry.Predicate)
-
-			ta := wasm.TypedAction{
-				Type:                 "grpc",
-				Terminal:             false,
-				Var:                  entry.Var,
-				Service:              methods[entry.Method],
-				SourcePolicyLocators: sources,
-			}
-			if upstream, ok := upstreamByMethod[policyID][entry.Method]; ok && upstream.MessageTemplate != "" {
-				ta.MessageBuilder = upstream.MessageTemplate
-			}
-
-			if len(allowDenyActions) > 0 && !allowsPrepended {
-				// AllowActions must fire regardless of the gRPC predicate, so
-				// we remove the predicate from this gRPC action (it fires
-				// unconditionally) and move the original predicate into the
-				// intention deny predicate.
-				ta.Predicate = "true"
-				ta.OnReply = append(ta.OnReply, allowDenyActions...)
-				allowsPrepended = true
-
-				if entry.Intention != "" {
-					intentionPredicate := fmt.Sprintf("!(%s)", entry.Intention)
-					if grpcPredicate != "true" {
-						intentionPredicate = fmt.Sprintf("%s && !(%s)", grpcPredicate, entry.Intention)
-					}
-					ta.OnReply = append(ta.OnReply, wasm.TypedAction{
-						Type:                 "deny",
-						Predicate:            intentionPredicate,
-						Terminal:             true,
-						DenyWith:             "DenyResponse{status: 403u}",
-						SourcePolicyLocators: sources,
-					})
-				}
-			} else {
-				ta.Predicate = grpcPredicate
-				if entry.Intention != "" {
-					ta.OnReply = append(ta.OnReply, wasm.TypedAction{
-						Type:                 "deny",
-						Predicate:            fmt.Sprintf("!(%s)", entry.Intention),
-						Terminal:             true,
-						DenyWith:             "DenyResponse{status: 403u}",
-						SourcePolicyLocators: sources,
-					})
-				}
-			}
-
-			ta.OnReply = append(ta.OnReply, onReplyActions...)
-			typedActions = append(typedActions, ta)
-		}
-
-		// If there are only response actions and no request actions, attach them directly
-		if len(requestEntries) == 0 && len(onReplyActions) > 0 {
-			typedActions = append(typedActions, onReplyActions...)
-		}
-
-		// Append typed actions to matching action sets. If the policy targets a
-		// specific route, only action sets created from that route receive the
-		// actions. If the policy targets a gateway (or no route locator is
-		// known), all action sets receive the actions.
 		routeLocator := policyRouteLocator[policyID]
 		for i := range wasmConfig.ActionSets {
-			if routeLocator != "" && wasmConfig.ActionSets[i].SourceRoute != "" && wasmConfig.ActionSets[i].SourceRoute != routeLocator {
+			asRoute := wasmConfig.ActionSets[i].SourceRoute
+			if routeLocator != "" && asRoute != "" && asRoute != routeLocator {
 				continue
 			}
 			wasmConfig.ActionSets[i].TypedActions = append(wasmConfig.ActionSets[i].TypedActions, typedActions...)
@@ -1141,6 +1061,153 @@ func predicateOrTrue(predicate string) string {
 		return "true"
 	}
 	return predicate
+}
+
+func translatePipelineToTypedActions(
+	requestEntries, responseEntries []PipelineActionEntry,
+	methods map[string]string,
+	upstreamByMethod map[string]RegisteredUpstreamEntry,
+	sources []string,
+) []wasm.TypedAction {
+	varToMethod := make(map[string]string)
+	for _, e := range requestEntries {
+		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+			varToMethod[e.Var] = e.Method
+		}
+	}
+	for _, e := range responseEntries {
+		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+			varToMethod[e.Var] = e.Method
+		}
+	}
+
+	varPatterns := make(map[string]*regexp.Regexp, len(varToMethod))
+	for varName := range varToMethod {
+		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	}
+
+	grpcOnReply := make(map[string][]wasm.TypedAction)
+
+	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
+		for _, e := range entries {
+			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+				continue
+			}
+			ta := entryToTypedAction(e, sources, phase)
+			for varName, methodName := range varToMethod {
+				if entryMatchesVar(e, varPatterns[varName]) {
+					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
+					break
+				}
+			}
+		}
+	}
+	classifyAndConvert(requestEntries, string(PipelinePhaseRequest))
+	classifyAndConvert(responseEntries, string(PipelinePhaseResponse))
+
+	var result []wasm.TypedAction
+	emittedGRPC := make(map[string]bool)
+
+	emit := func(entries []PipelineActionEntry, phase string) {
+		for _, e := range entries {
+			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+				if emittedGRPC[e.Method] {
+					continue
+				}
+				emittedGRPC[e.Method] = true
+				ta := grpcToTypedAction(e, methods, upstreamByMethod, sources)
+				ta.OnReply = grpcOnReply[e.Method]
+				result = append(result, ta)
+				continue
+			}
+			isVarDependent := false
+			for varName := range varToMethod {
+				if entryMatchesVar(e, varPatterns[varName]) {
+					isVarDependent = true
+					break
+				}
+			}
+			if !isVarDependent {
+				result = append(result, entryToTypedAction(e, sources, phase))
+			}
+		}
+	}
+	emit(requestEntries, string(PipelinePhaseRequest))
+	emit(responseEntries, string(PipelinePhaseResponse))
+
+	return result
+}
+
+func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
+	if entry.Predicate != "" && pattern.MatchString(entry.Predicate) {
+		return true
+	}
+	if entry.HeadersToAdd != "" && pattern.MatchString(entry.HeadersToAdd) {
+		return true
+	}
+	if entry.WithHeaders != "" && pattern.MatchString(entry.WithHeaders) {
+		return true
+	}
+	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
+		return true
+	}
+	return false
+}
+
+func entryToTypedAction(entry PipelineActionEntry, sources []string, phase string) wasm.TypedAction {
+	ta := wasm.TypedAction{
+		Predicate:            predicateOrTrue(entry.Predicate),
+		SourcePolicyLocators: sources,
+	}
+	switch entry.ActionType {
+	case extpb.ActionType_ACTION_TYPE_DENY:
+		ta.Type = "deny"
+		ta.Terminal = true
+		ta.DenyWith = buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)
+	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
+		ta.Type = "headers"
+		ta.Headers = entry.HeadersToAdd
+		if phase == string(PipelinePhaseResponse) {
+			ta.Target = "response"
+		}
+	case extpb.ActionType_ACTION_TYPE_FAIL:
+		ta.Type = "fail"
+		ta.Terminal = true
+		ta.LogMessage = entry.LogMessage
+	}
+	return ta
+}
+
+func buildDenyResponseExpr(status int, headers, body string) string {
+	var parts []string
+	if status != 0 {
+		parts = append(parts, fmt.Sprintf("status: %du", status))
+	}
+	if headers != "" {
+		parts = append(parts, fmt.Sprintf("headers: %s", headers))
+	}
+	if body != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", `\n`, "\r", `\r`).Replace(body)
+		parts = append(parts, fmt.Sprintf("body: '%s'", escaped))
+	}
+	if len(parts) == 0 {
+		return "DenyResponse{}"
+	}
+	return fmt.Sprintf("DenyResponse{%s}", strings.Join(parts, ", "))
+}
+
+func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) wasm.TypedAction {
+	ta := wasm.TypedAction{
+		Type:                 "grpc",
+		Predicate:            predicateOrTrue(entry.Predicate),
+		Var:                  entry.Var,
+		Service:              methods[entry.Method],
+		SourcePolicyLocators: sources,
+	}
+	if upstream, ok := upstreamByMethod[entry.Method]; ok {
+		ta.MessageBuilder = upstream.MessageTemplate
+	}
+	return ta
 }
 
 // HashUpstreamServiceConfig produces a deterministic short hash from a wasm.Service

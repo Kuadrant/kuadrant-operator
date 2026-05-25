@@ -415,7 +415,192 @@ func TestNewPipeline_ReturnsNonNil(t *testing.T) {
 	assert.Assert(t, pipeline != nil)
 }
 
-func TestPipelineCommit_SendsBothPhases(t *testing.T) {
+func TestPipeline_AccumulatesBothPhases(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCMethodAction{
+			Predicate: "true",
+			Method:    "assess-threat",
+			Var:       "threatResponse",
+		},
+		exttypes.DenyAction{
+			Predicate:  `request.url_path == "/blocked"`,
+			WithStatus: 403,
+		},
+	)
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(
+		exttypes.DenyAction{
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
+		},
+		exttypes.AddHeadersAction{
+			HeadersToAdd: `{"x-threat-checked": "true"}`,
+		},
+	)
+	assert.NilError(t, err)
+
+	assert.Equal(t, len(p.actions), 4)
+	assert.Equal(t, p.actions[0].phase, "request")
+	assert.Equal(t, p.actions[1].phase, "request")
+	assert.Equal(t, p.actions[2].phase, "response")
+	assert.Equal(t, p.actions[3].phase, "response")
+}
+
+func TestPipeline_PhaseOrdering_RequestAfterResponse(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPResponse(exttypes.AddHeadersAction{
+		HeadersToAdd: `{"x-checked": "true"}`,
+	})
+	assert.NilError(t, err)
+
+	err = p.OnHTTPRequest(exttypes.DenyAction{
+		Predicate:  "true",
+		WithStatus: 403,
+	})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "cannot add request actions after response actions"))
+}
+
+func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.DenyAction{
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
+		},
+		exttypes.GRPCMethodAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
+}
+
+func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCMethodAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+		exttypes.DenyAction{
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
+		},
+	)
+	assert.NilError(t, err)
+}
+
+func TestPipeline_VarAvailability_CrossCallValid(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+		Method: "assess-threat",
+		Var:    "threatResponse",
+	})
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(exttypes.DenyAction{
+		Predicate:  "threatResponse.threat_level >= 5",
+		WithStatus: 403,
+	})
+	assert.NilError(t, err)
+}
+
+func TestPipeline_DuplicateVarName(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"},
+		exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
+}
+
+func TestPipeline_DuplicateVarName_AcrossCalls(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"})
+	assert.NilError(t, err)
+
+	err = p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
+}
+
+func TestPipeline_NoVarReference_NoError(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.DenyAction{
+			Predicate:  `request.url_path == "/blocked"`,
+			WithStatus: 403,
+		},
+		exttypes.FailAction{
+			Predicate:  `request.headers["x-debug"] == "true"`,
+			LogMessage: "debug failure",
+		},
+	)
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(exttypes.AddHeadersAction{
+		HeadersToAdd: `{"x-checked": "true"}`,
+	})
+	assert.NilError(t, err)
+}
+
+func TestPipeline_MultipleOnHTTPRequestCalls(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", WithStatus: 403})
+	assert.NilError(t, err)
+
+	err = p.OnHTTPRequest(exttypes.DenyAction{Predicate: "false", WithStatus: 404})
+	assert.NilError(t, err)
+
+	assert.Equal(t, len(p.actions), 2)
+}
+
+func TestPipeline_VarInHeadersToAdd(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+		Method: "assess-threat",
+		Var:    "threatResponse",
+	})
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(exttypes.AddHeadersAction{
+		HeadersToAdd: `{"x-threat-level": string(threatResponse.threat_level)}`,
+	})
+	assert.NilError(t, err)
+}
+
+func TestPipeline_VarInHeadersToAdd_ForwardReference(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.AddHeadersAction{
+			HeadersToAdd: `{"x-threat-level": string(threatResponse.threat_level)}`,
+		},
+		exttypes.GRPCMethodAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
+}
+
+func TestPipelineCommit_SendsAllActions(t *testing.T) {
 	var capturedReq *extpb.PipelineCommitRequest
 	mock := &mockExtensionServiceClient{
 		pipelineCommitFn: func(_ context.Context, in *extpb.PipelineCommitRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
@@ -425,53 +610,63 @@ func TestPipelineCommit_SendsBothPhases(t *testing.T) {
 	}
 
 	ec := newTestExtensionController(mock)
-	policy := &mockPolicy{name: "my-policy", namespace: "default"}
-	pipeline := ec.NewPipeline(policy)
+	pipeline := ec.NewPipeline(&mockPolicy{name: "my-policy", namespace: "default"})
 
-	pipeline.OnRequest(
+	err := pipeline.OnHTTPRequest(
+		exttypes.DenyAction{
+			Predicate:  `request.url_path == "/blocked"`,
+			WithStatus: 403,
+		},
 		exttypes.GRPCMethodAction{
 			Predicate: "true",
-			Intention: "response.score > 5",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
 		},
-		exttypes.AllowAction{
-			Predicate: "request.path != '/health'",
-			Intention: "request.auth.claims.role == 'admin'",
+		exttypes.FailAction{
+			Predicate:  `request.headers["x-debug"] == "true"`,
+			LogMessage: "Request blocked",
 		},
 	)
-	pipeline.OnResponse(
+	assert.NilError(t, err)
+
+	err = pipeline.OnHTTPResponse(
+		exttypes.DenyAction{
+			Predicate:  "threatResponse.threat_level >= 5",
+			WithStatus: 403,
+		},
 		exttypes.AddHeadersAction{
-			Predicate:    "true",
 			HeadersToAdd: `{"x-threat-checked": "true"}`,
 		},
-		exttypes.WithResponseCodeAction{
-			Predicate:       "response.score > 5",
-			NewResponseCode: 403,
-		},
 	)
+	assert.NilError(t, err)
 
-	err := pipeline.Commit(context.Background())
+	err = pipeline.Commit(context.Background())
 	assert.NilError(t, err)
 	assert.Assert(t, capturedReq != nil)
 	assert.Equal(t, capturedReq.Policy.Metadata.Name, "my-policy")
 	assert.Equal(t, capturedReq.Policy.Metadata.Namespace, "default")
 
-	// Request actions
-	assert.Assert(t, cmp.Len(capturedReq.RequestActions, 2))
-	assert.Equal(t, capturedReq.RequestActions[0].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
-	assert.Equal(t, capturedReq.RequestActions[0].Method, "assess-threat")
-	assert.Equal(t, capturedReq.RequestActions[0].Var, "threatResponse")
-	assert.Equal(t, capturedReq.RequestActions[0].Intention, "response.score > 5")
-	assert.Equal(t, capturedReq.RequestActions[1].ActionType, extpb.ActionType_ACTION_TYPE_ALLOW)
-	assert.Equal(t, capturedReq.RequestActions[1].Intention, "request.auth.claims.role == 'admin'")
+	assert.Assert(t, cmp.Len(capturedReq.Actions, 5))
 
-	// Response actions
-	assert.Assert(t, cmp.Len(capturedReq.ResponseActions, 2))
-	assert.Equal(t, capturedReq.ResponseActions[0].ActionType, extpb.ActionType_ACTION_TYPE_ADD_HEADERS)
-	assert.Equal(t, capturedReq.ResponseActions[0].HeadersToAdd, `{"x-threat-checked": "true"}`)
-	assert.Equal(t, capturedReq.ResponseActions[1].ActionType, extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE)
-	assert.Equal(t, capturedReq.ResponseActions[1].NewResponseCode, int32(403))
+	assert.Equal(t, capturedReq.Actions[0].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
+	assert.Equal(t, capturedReq.Actions[0].Phase, "request")
+	assert.Equal(t, capturedReq.Actions[0].WithStatus, int32(403))
+
+	assert.Equal(t, capturedReq.Actions[1].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
+	assert.Equal(t, capturedReq.Actions[1].Phase, "request")
+	assert.Equal(t, capturedReq.Actions[1].Method, "assess-threat")
+	assert.Equal(t, capturedReq.Actions[1].Var, "threatResponse")
+
+	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAIL)
+	assert.Equal(t, capturedReq.Actions[2].Phase, "request")
+	assert.Equal(t, capturedReq.Actions[2].LogMessage, "Request blocked")
+
+	assert.Equal(t, capturedReq.Actions[3].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
+	assert.Equal(t, capturedReq.Actions[3].Phase, "response")
+
+	assert.Equal(t, capturedReq.Actions[4].ActionType, extpb.ActionType_ACTION_TYPE_ADD_HEADERS)
+	assert.Equal(t, capturedReq.Actions[4].Phase, "response")
+	assert.Equal(t, capturedReq.Actions[4].HeadersToAdd, `{"x-threat-checked": "true"}`)
 }
 
 func TestPipelineCommit_EmptyPipeline(t *testing.T) {
@@ -489,8 +684,7 @@ func TestPipelineCommit_EmptyPipeline(t *testing.T) {
 	err := pipeline.Commit(context.Background())
 	assert.NilError(t, err)
 	assert.Assert(t, capturedReq != nil)
-	assert.Assert(t, cmp.Len(capturedReq.RequestActions, 0))
-	assert.Assert(t, cmp.Len(capturedReq.ResponseActions, 0))
+	assert.Assert(t, cmp.Len(capturedReq.Actions, 0))
 }
 
 func TestPipelineCommit_PropagatesError(t *testing.T) {
@@ -502,31 +696,9 @@ func TestPipelineCommit_PropagatesError(t *testing.T) {
 
 	ec := newTestExtensionController(mock)
 	pipeline := ec.NewPipeline(&mockPolicy{name: "p", namespace: "ns"})
-	pipeline.OnRequest(exttypes.AllowAction{})
+	_ = pipeline.OnHTTPRequest(exttypes.DenyAction{Predicate: "true", WithStatus: 403})
 
 	err := pipeline.Commit(context.Background())
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "bad action"))
-}
-
-func TestPipelineCommit_MultipleOnRequestCalls(t *testing.T) {
-	var capturedReq *extpb.PipelineCommitRequest
-	mock := &mockExtensionServiceClient{
-		pipelineCommitFn: func(_ context.Context, in *extpb.PipelineCommitRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
-			capturedReq = in
-			return &emptypb.Empty{}, nil
-		},
-	}
-
-	ec := newTestExtensionController(mock)
-	pipeline := ec.NewPipeline(&mockPolicy{name: "p", namespace: "ns"})
-
-	pipeline.OnRequest(exttypes.AllowAction{Intention: "first"})
-	pipeline.OnRequest(exttypes.AllowAction{Intention: "second"})
-
-	err := pipeline.Commit(context.Background())
-	assert.NilError(t, err)
-	assert.Assert(t, cmp.Len(capturedReq.RequestActions, 2))
-	assert.Equal(t, capturedReq.RequestActions[0].Intention, "first")
-	assert.Equal(t, capturedReq.RequestActions[1].Intention, "second")
 }

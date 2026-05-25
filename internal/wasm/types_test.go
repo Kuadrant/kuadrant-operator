@@ -473,6 +473,54 @@ func TestTypedAction_EqualTo(t *testing.T) {
 	}
 }
 
+func TestTypedAction_FailType_JSON(t *testing.T) {
+	ta := TypedAction{
+		Type:       "fail",
+		Predicate:  `threatResponse.error_code != 0`,
+		Terminal:   true,
+		LogMessage: "Threat service returned unexpected error",
+	}
+
+	data, err := json.Marshal(ta)
+	if err != nil {
+		t.Fatalf("failed to marshal TypedAction: %v", err)
+	}
+
+	var roundTripped TypedAction
+	if err := json.Unmarshal(data, &roundTripped); err != nil {
+		t.Fatalf("failed to unmarshal TypedAction: %v", err)
+	}
+
+	if !ta.EqualTo(roundTripped) {
+		t.Fatalf("round-tripped TypedAction not equal:\n  got:  %+v\n  want: %+v", roundTripped, ta)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+	if raw["type"] != "fail" {
+		t.Errorf("Expected type 'fail', got %v", raw["type"])
+	}
+	if raw["logMessage"] != "Threat service returned unexpected error" {
+		t.Errorf("Expected logMessage, got %v", raw["logMessage"])
+	}
+}
+
+func TestTypedAction_EqualTo_FailFields(t *testing.T) {
+	a := TypedAction{Type: "fail", Predicate: "true", Terminal: true, LogMessage: "error"}
+	b := TypedAction{Type: "fail", Predicate: "true", Terminal: true, LogMessage: "error"}
+	if !a.EqualTo(b) {
+		t.Fatal("identical fail TypedActions should be equal")
+	}
+
+	diffMsg := b
+	diffMsg.LogMessage = "other"
+	if a.EqualTo(diffMsg) {
+		t.Fatal("TypedActions with different LogMessage should not be equal")
+	}
+}
+
 func TestActionSet_MixedActions_JSON(t *testing.T) {
 	as := ActionSet{
 		Name: "test-set",

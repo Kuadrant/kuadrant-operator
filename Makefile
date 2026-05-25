@@ -116,6 +116,7 @@ KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
 
 #Kuadrant Extensions
 WITH_EXTENSIONS ?= true
+EXTRA_EXTENSIONS ?=
 EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 
 # Kuadrant component versions
@@ -428,6 +429,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg VERSION=v$(VERSION) \
 		--build-arg WITH_EXTENSIONS=$(WITH_EXTENSIONS) \
 		--build-arg WASM_SHIM_IMAGE=$(RELATED_IMAGE_WASMSHIM) \
+		--build-arg EXTRA_EXTENSIONS="$(EXTRA_EXTENSIONS)" \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 

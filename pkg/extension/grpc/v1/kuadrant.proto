@@ -100,31 +100,27 @@ message RegisterActionMethodRequest {
 enum ActionType {
   ACTION_TYPE_UNSPECIFIED = 0;
   ACTION_TYPE_GRPC_METHOD = 1;
-  ACTION_TYPE_ALLOW = 2;
+  ACTION_TYPE_DENY = 2;
   ACTION_TYPE_ADD_HEADERS = 3;
-  ACTION_TYPE_WITH_RESPONSE_CODE = 4;
+  ACTION_TYPE_FAIL = 4;
 }
 
-// RequestActionEntry represents a single action in the request phase.
-message RequestActionEntry {
+// ActionEntry represents a single action in either the request or response phase.
+message ActionEntry {
   ActionType action_type = 1;
-  string predicate = 2;   // CEL predicate — if false, skip this action
-  string intention = 3;   // CEL expression evaluated against the gRPC response or request
-  string method = 4;      // Name of a registered ActionMethod (for grpc_method type)
-  string var = 5;         // Variable name for the gRPC response (used by onReply predicates)
-}
-
-// ResponseActionEntry represents a single action in the response phase.
-message ResponseActionEntry {
-  ActionType action_type = 1;
-  string predicate = 2;       // CEL predicate — if false, skip this action
-  string headers_to_add = 3;  // CEL expression evaluating to a map of headers (for add_headers type)
-  int32 new_response_code = 4;  // HTTP status code (for with_response_code type)
+  string predicate = 2;        // CEL predicate — if false, skip this action
+  string phase = 3;            // "request" or "response"
+  string method = 4;           // Name of a registered ActionMethod (for grpc_method type)
+  string var = 5;              // Variable name to store gRPC response (for grpc_method type)
+  int32 with_status = 6;        // HTTP status code (for deny type); 0 means unset
+  string with_headers = 9;     // CEL expression — array of [name, value] pairs (for deny type)
+  string with_body = 10;       // Response body string (for deny type)
+  string headers_to_add = 7;   // CEL expression evaluating to a map of headers (for add_headers type)
+  string log_message = 8;      // Error message to log (for fail type)
 }
 
 // PipelineCommitRequest atomically replaces all pipeline actions for a policy.
 message PipelineCommitRequest {
   kuadrant.v1.Policy policy = 1;
-  repeated RequestActionEntry request_actions = 2;
-  repeated ResponseActionEntry response_actions = 3;
+  repeated ActionEntry actions = 2;
 }

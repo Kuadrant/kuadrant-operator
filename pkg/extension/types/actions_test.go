@@ -4,57 +4,60 @@ package types
 
 import "testing"
 
-func TestGRPCMethodAction_ImplementsRequestAction(t *testing.T) {
-	var _ RequestAction = GRPCMethodAction{}
+func TestGRPCMethodAction_ImplementsAction(t *testing.T) {
+	var _ Action = GRPCMethodAction{}
 }
 
-func TestAllowAction_ImplementsRequestAction(t *testing.T) {
-	var _ RequestAction = AllowAction{}
+func TestDenyAction_ImplementsAction(t *testing.T) {
+	var _ Action = DenyAction{}
 }
 
-func TestAddHeadersAction_ImplementsResponseAction(t *testing.T) {
-	var _ ResponseAction = AddHeadersAction{}
+func TestFailAction_ImplementsAction(t *testing.T) {
+	var _ Action = FailAction{}
 }
 
-func TestWithResponseCodeAction_ImplementsResponseAction(t *testing.T) {
-	var _ ResponseAction = WithResponseCodeAction{}
+func TestAddHeadersAction_ImplementsAction(t *testing.T) {
+	var _ Action = AddHeadersAction{}
 }
 
-func TestGRPCMethodAction_RequestActionType(t *testing.T) {
+func TestGRPCMethodAction_ActionType(t *testing.T) {
 	a := GRPCMethodAction{
 		Predicate: "request.headers['check'] == '1'",
-		Intention: "response.HeatLevel == 5",
 		Method:    "checkThreatLevel",
+		Var:       "threatResponse",
 	}
-	if a.requestActionType() != ActionTypeGRPCMethod {
-		t.Errorf("requestActionType() = %q, want %q", a.requestActionType(), ActionTypeGRPCMethod)
-	}
-}
-
-func TestAllowAction_RequestActionType(t *testing.T) {
-	a := AllowAction{
-		Predicate: "request.headers['x-bypass'] == 'true'",
-		Intention: "request.auth.identity.admin == true",
-	}
-	if a.requestActionType() != ActionTypeAllow {
-		t.Errorf("requestActionType() = %q, want %q", a.requestActionType(), ActionTypeAllow)
+	if a.actionType() != ActionTypeGRPCMethod {
+		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeGRPCMethod)
 	}
 }
 
-func TestAddHeadersAction_ResponseActionType(t *testing.T) {
+func TestDenyAction_ActionType(t *testing.T) {
+	a := DenyAction{
+		Predicate:  "request.url_path == '/blocked'",
+		WithStatus: 403,
+		WithBody:   "Forbidden",
+	}
+	if a.actionType() != ActionTypeDeny {
+		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeDeny)
+	}
+}
+
+func TestFailAction_ActionType(t *testing.T) {
+	a := FailAction{
+		Predicate:  "threatResponse.error_code != 0",
+		LogMessage: "Threat service returned unexpected error",
+	}
+	if a.actionType() != ActionTypeFail {
+		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeFail)
+	}
+}
+
+func TestAddHeadersAction_ActionType(t *testing.T) {
 	a := AddHeadersAction{
-		HeadersToAdd: "{'x-threat-checked': 'true'}",
+		Predicate:    "true",
+		HeadersToAdd: `{"x-threat-checked": "true"}`,
 	}
-	if a.responseActionType() != ActionTypeAddHeaders {
-		t.Errorf("responseActionType() = %q, want %q", a.responseActionType(), ActionTypeAddHeaders)
-	}
-}
-
-func TestWithResponseCodeAction_ResponseActionType(t *testing.T) {
-	a := WithResponseCodeAction{
-		NewResponseCode: 403,
-	}
-	if a.responseActionType() != ActionTypeWithResponseCode {
-		t.Errorf("responseActionType() = %q, want %q", a.responseActionType(), ActionTypeWithResponseCode)
+	if a.actionType() != ActionTypeAddHeaders {
+		t.Errorf("actionType() = %q, want %q", a.actionType(), ActionTypeAddHeaders)
 	}
 }

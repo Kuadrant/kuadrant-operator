@@ -744,17 +744,7 @@ func validateCELExpression(expr string) error {
 	return nil
 }
 
-// validRequestActionTypes lists action types allowed in the request phase.
-var validRequestActionTypes = map[extpb.ActionType]bool{
-	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: true,
-	extpb.ActionType_ACTION_TYPE_ALLOW:       true,
-}
-
-// validResponseActionTypes lists action types allowed in the response phase.
-var validResponseActionTypes = map[extpb.ActionType]bool{
-	extpb.ActionType_ACTION_TYPE_ADD_HEADERS:        true,
-	extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE: true,
-}
+var varNameRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.PipelineCommitRequest) (*emptypb.Empty, error) {
 	if request == nil {
@@ -766,26 +756,22 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 		return nil, err
 	}
 
-	requestEntries, err := s.validateRequestActions(policyID, request.RequestActions)
+	entries, err := s.validateActions(policyID, request.Actions)
 	if err != nil {
 		return nil, err
 	}
 
-	responseEntries, err := s.validateResponseActions(request.ResponseActions)
-	if err != nil {
+	if err := s.registeredData.ReplacePipelineActions(policyID, entries); err != nil {
 		return nil, err
 	}
-
-	s.registeredData.ReplacePipelineActions(policyID, requestEntries, responseEntries)
 
 	s.logger.Info("pipeline committed",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
-		"requestActions", len(requestEntries),
-		"responseActions", len(responseEntries))
+		"actions", len(entries))
 
 	if s.changeNotifier != nil {
-		reason := fmt.Sprintf("pipeline committed for policy %s/%s (%d request, %d response actions)",
-			policyID.Namespace, policyID.Name, len(requestEntries), len(responseEntries))
+		reason := fmt.Sprintf("pipeline committed for policy %s/%s (%d actions)",
+			policyID.Namespace, policyID.Name, len(entries))
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}
@@ -794,103 +780,179 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 	return &emptypb.Empty{}, nil
 }
 
-func (s *extensionService) validateRequestActions(policyID ResourceID, actions []*extpb.RequestActionEntry) ([]PipelineActionEntry, error) {
+type actionValidationCtx struct {
+	store       *RegisteredDataStore
+	policyID    ResourceID
+	varToMethod map[string]string
+}
+
+type actionEntryValidator func(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error
+
+var actionEntryValidators = map[extpb.ActionType]actionEntryValidator{
+	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: validateGRPCMethodEntry,
+	extpb.ActionType_ACTION_TYPE_DENY:        validateDenyEntry,
+	extpb.ActionType_ACTION_TYPE_FAIL:        validateFailEntry,
+	extpb.ActionType_ACTION_TYPE_ADD_HEADERS: validateAddHeadersEntry,
+}
+
+func validateGRPCMethodEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error {
+	if action.Method == "" {
+		return fmt.Errorf("actions[%d]: method must be specified for grpc_method actions", index)
+	}
+	if !vctx.store.HasUpstreamName(vctx.policyID, action.Method) {
+		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, action.Method)
+	}
+	if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
+		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, action.Var)
+	}
+	entry.Method = action.Method
+	entry.Var = action.Var
+	if action.Var != "" {
+		vctx.varToMethod[action.Var] = action.Method
+	}
+	return nil
+}
+
+func validateDenyEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
+	if action.WithStatus != 0 {
+		if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", index)); err != nil {
+			return err
+		}
+	}
+	entry.WithStatus = int(action.WithStatus)
+	entry.WithHeaders = action.WithHeaders
+	entry.WithBody = action.WithBody
+	return nil
+}
+
+func validateFailEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
+	if strings.TrimSpace(action.LogMessage) == "" {
+		return fmt.Errorf("actions[%d]: log_message must be specified for fail actions", index)
+	}
+	entry.LogMessage = action.LogMessage
+	return nil
+}
+
+func validateAddHeadersEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
+	if action.HeadersToAdd == "" {
+		return fmt.Errorf("actions[%d]: headers_to_add must be specified for add_headers actions", index)
+	}
+	if err := validateCELExpression(action.HeadersToAdd); err != nil {
+		return fmt.Errorf("actions[%d].headers_to_add: %w", index, err)
+	}
+	entry.HeadersToAdd = action.HeadersToAdd
+	return nil
+}
+
+func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb.ActionEntry) ([]PipelineActionEntry, error) {
 	entries := make([]PipelineActionEntry, 0, len(actions))
+	vctx := actionValidationCtx{
+		store:       s.registeredData,
+		policyID:    policyID,
+		varToMethod: make(map[string]string),
+	}
+
 	for i, action := range actions {
 		if action == nil {
-			return nil, fmt.Errorf("request_actions[%d]: entry cannot be nil", i)
+			return nil, fmt.Errorf("actions[%d]: entry cannot be nil", i)
 		}
 		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("request_actions[%d]: action_type must be specified", i)
+			return nil, fmt.Errorf("actions[%d]: action_type must be specified", i)
 		}
-		if !validRequestActionTypes[action.ActionType] {
-			return nil, fmt.Errorf("request_actions[%d]: action_type %s is not valid in the request phase", i, action.ActionType)
+		if action.Phase != string(PipelinePhaseRequest) && action.Phase != string(PipelinePhaseResponse) {
+			return nil, fmt.Errorf("actions[%d]: phase must be %q or %q, got %q", i, PipelinePhaseRequest, PipelinePhaseResponse, action.Phase)
 		}
-
 		if action.Predicate != "" {
 			if err := validateCELExpression(action.Predicate); err != nil {
-				return nil, fmt.Errorf("request_actions[%d].predicate: %w", i, err)
+				return nil, fmt.Errorf("actions[%d].predicate: %w", i, err)
 			}
 		}
 
 		entry := PipelineActionEntry{
 			ActionType: action.ActionType,
 			Predicate:  action.Predicate,
+			Phase:      action.Phase,
 		}
 
-		switch action.ActionType {
-		case extpb.ActionType_ACTION_TYPE_GRPC_METHOD:
-			if action.Method == "" {
-				return nil, fmt.Errorf("request_actions[%d]: method must be specified for grpc_method actions", i)
-			}
-			if !s.registeredData.HasUpstreamName(policyID, action.Method) {
-				return nil, fmt.Errorf("request_actions[%d]: method %q is not a registered action method for this policy", i, action.Method)
-			}
-			if action.Intention != "" {
-				if err := validateCELExpression(action.Intention); err != nil {
-					return nil, fmt.Errorf("request_actions[%d].intention: %w", i, err)
-				}
-			}
-			entry.Intention = action.Intention
-			entry.Method = action.Method
-			entry.Var = action.Var
-		case extpb.ActionType_ACTION_TYPE_ALLOW:
-			if action.Intention != "" {
-				if err := validateCELExpression(action.Intention); err != nil {
-					return nil, fmt.Errorf("request_actions[%d].intention: %w", i, err)
-				}
-			}
-			entry.Intention = action.Intention
+		validator, ok := actionEntryValidators[action.ActionType]
+		if !ok {
+			return nil, fmt.Errorf("actions[%d]: unknown action_type %s", i, action.ActionType)
+		}
+		if err := validator(action, i, &entry, &vctx); err != nil {
+			return nil, err
 		}
 
 		entries = append(entries, entry)
 	}
+
+	if len(vctx.varToMethod) > 0 {
+		if err := s.validateCrossActionVars(policyID, actions, vctx.varToMethod); err != nil {
+			return nil, err
+		}
+	}
+
 	return entries, nil
 }
 
-func (s *extensionService) validateResponseActions(actions []*extpb.ResponseActionEntry) ([]PipelineActionEntry, error) {
-	entries := make([]PipelineActionEntry, 0, len(actions))
-	for i, action := range actions {
-		if action == nil {
-			return nil, fmt.Errorf("response_actions[%d]: entry cannot be nil", i)
-		}
-		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("response_actions[%d]: action_type must be specified", i)
-		}
-		if !validResponseActionTypes[action.ActionType] {
-			return nil, fmt.Errorf("response_actions[%d]: action_type %s is not valid in the response phase", i, action.ActionType)
-		}
-
-		if action.Predicate != "" {
-			if err := validateCELExpression(action.Predicate); err != nil {
-				return nil, fmt.Errorf("response_actions[%d].predicate: %w", i, err)
-			}
-		}
-
-		entry := PipelineActionEntry{
-			ActionType: action.ActionType,
-			Predicate:  action.Predicate,
-		}
-
-		switch action.ActionType {
-		case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-			if action.HeadersToAdd == "" {
-				return nil, fmt.Errorf("response_actions[%d]: headers_to_add must be specified for add_headers actions", i)
-			}
-			if err := validateCELExpression(action.HeadersToAdd); err != nil {
-				return nil, fmt.Errorf("response_actions[%d].headers_to_add: %w", i, err)
-			}
-			entry.HeadersToAdd = action.HeadersToAdd
-		case extpb.ActionType_ACTION_TYPE_WITH_RESPONSE_CODE:
-			if action.NewResponseCode < 100 || action.NewResponseCode > 599 {
-				return nil, fmt.Errorf("response_actions[%d]: new_response_code must be between 100 and 599, got %d", i, action.NewResponseCode)
-			}
-			entry.NewResponseCode = action.NewResponseCode
-		}
-
-		entries = append(entries, entry)
+func validateHTTPStatusCode(code, field string) error {
+	if code == "" {
+		return fmt.Errorf("%s: must be specified", field)
 	}
-	return entries, nil
+	n, err := strconv.Atoi(code)
+	if err != nil {
+		return fmt.Errorf("%s: %q is not a valid integer", field, code)
+	}
+	if n < 100 || n > 599 {
+		return fmt.Errorf("%s: must be between 100 and 599, got %d", field, n)
+	}
+	return nil
+}
+
+func (s *extensionService) validateCrossActionVars(policyID ResourceID, actions []*extpb.ActionEntry, varToMethod map[string]string) error {
+	for i, action := range actions {
+		exprs := collectCELExpressions(action)
+		for _, expr := range exprs {
+			fieldAccesses, err := extractVarFieldAccesses(expr, varToMethod)
+			if err != nil {
+				return fmt.Errorf("actions[%d]: %w", i, err)
+			}
+			for varName, chains := range fieldAccesses {
+				methodName := varToMethod[varName]
+				_, upstreamEntry, found := s.registeredData.GetUpstreamByName(policyID, methodName)
+				if !found {
+					continue
+				}
+				cacheKey := ProtoCacheKey{ClusterName: upstreamEntry.ClusterName, Service: upstreamEntry.Service}
+				fds, ok := s.registeredData.GetProtoDescriptor(cacheKey)
+				if !ok {
+					s.logger.V(1).Info("proto descriptor not cached, skipping field validation", "var", varName, "method", methodName)
+					continue
+				}
+				responseType := findResponseMessageType(fds, upstreamEntry.Service, upstreamEntry.Method)
+				if responseType == "" {
+					s.logger.V(1).Info("response message type not found, skipping field validation", "var", varName, "method", methodName, "service", upstreamEntry.Service)
+					continue
+				}
+				for _, chain := range chains {
+					if err := validateFieldAccess(fds, responseType, chain); err != nil {
+						return fmt.Errorf("actions[%d]: variable %q: %w", i, varName, err)
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func collectCELExpressions(action *extpb.ActionEntry) []string {
+	var exprs []string
+	if action.Predicate != "" {
+		exprs = append(exprs, action.Predicate)
+	}
+	if action.HeadersToAdd != "" {
+		exprs = append(exprs, action.HeadersToAdd)
+	}
+	return exprs
 }
 
 // Creates a locator matching the definition in policy-machinery

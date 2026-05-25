@@ -36,9 +36,21 @@ func findMessageDescriptor(fds *descriptorpb.FileDescriptorSet, messageType stri
 			if pkg != "" {
 				fqn = pkg + "." + msg.GetName()
 			}
-			if fqn == normalizedType {
-				return msg
+			if found := searchMessage(msg, fqn, normalizedType); found != nil {
+				return found
 			}
+		}
+	}
+	return nil
+}
+
+func searchMessage(msg *descriptorpb.DescriptorProto, fqn, target string) *descriptorpb.DescriptorProto {
+	if fqn == target {
+		return msg
+	}
+	for _, nested := range msg.NestedType {
+		if found := searchMessage(nested, fqn+"."+nested.GetName(), target); found != nil {
+			return found
 		}
 	}
 	return nil

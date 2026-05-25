@@ -1080,6 +1080,11 @@ func translatePipelineToTypedActions(
 		}
 	}
 
+	varPatterns := make(map[string]*regexp.Regexp, len(varToMethod))
+	for varName := range varToMethod {
+		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	}
+
 	grpcOnReply := make(map[string][]wasm.TypedAction)
 
 	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
@@ -1089,15 +1094,15 @@ func translatePipelineToTypedActions(
 			}
 			ta := entryToTypedAction(e, sources, phase)
 			for varName, methodName := range varToMethod {
-				if actionReferencesVar(e, varName) {
+				if entryMatchesVar(e, varPatterns[varName]) {
 					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
 					break
 				}
 			}
 		}
 	}
-	classifyAndConvert(requestEntries, "request")
-	classifyAndConvert(responseEntries, "response")
+	classifyAndConvert(requestEntries, string(PipelinePhaseRequest))
+	classifyAndConvert(responseEntries, string(PipelinePhaseResponse))
 
 	var result []wasm.TypedAction
 	emittedGRPC := make(map[string]bool)
@@ -1116,7 +1121,7 @@ func translatePipelineToTypedActions(
 			}
 			isVarDependent := false
 			for varName := range varToMethod {
-				if actionReferencesVar(e, varName) {
+				if entryMatchesVar(e, varPatterns[varName]) {
 					isVarDependent = true
 					break
 				}
@@ -1126,14 +1131,13 @@ func translatePipelineToTypedActions(
 			}
 		}
 	}
-	emit(requestEntries, "request")
-	emit(responseEntries, "response")
+	emit(requestEntries, string(PipelinePhaseRequest))
+	emit(responseEntries, string(PipelinePhaseResponse))
 
 	return result
 }
 
-func actionReferencesVar(entry PipelineActionEntry, varName string) bool {
-	pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	if entry.Predicate != "" && pattern.MatchString(entry.Predicate) {
 		return true
 	}
@@ -1162,7 +1166,7 @@ func entryToTypedAction(entry PipelineActionEntry, sources []string, phase strin
 	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
 		ta.Type = "headers"
 		ta.Headers = entry.HeadersToAdd
-		if phase == "response" {
+		if phase == string(PipelinePhaseResponse) {
 			ta.Target = "response"
 		}
 	case extpb.ActionType_ACTION_TYPE_FAIL:

@@ -344,9 +344,16 @@ func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipe
 	}
 }
 
+type pipelinePhase = string
+
+const (
+	phaseRequest  pipelinePhase = "request"
+	phaseResponse pipelinePhase = "response"
+)
+
 type pipelineEntry struct {
 	action exttypes.Action
-	phase  string // "request" or "response"
+	phase  pipelinePhase
 }
 
 // PipelineImpl implements Pipeline by accumulating actions locally with
@@ -360,15 +367,15 @@ type PipelineImpl struct {
 
 func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
 	for _, entry := range p.actions {
-		if entry.phase == "response" {
+		if entry.phase == phaseResponse {
 			return fmt.Errorf("cannot add request actions after response actions have been added")
 		}
 	}
-	return p.validateAndAppend("request", actions)
+	return p.validateAndAppend(phaseRequest, actions)
 }
 
 func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
-	return p.validateAndAppend("response", actions)
+	return p.validateAndAppend(phaseResponse, actions)
 }
 
 func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action) error {
@@ -379,16 +386,21 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 		}
 	}
 
+	varPatterns := make(map[string]*regexp.Regexp, len(batchVars))
+	for varName := range batchVars {
+		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	}
+
 	localPopulated := make(map[string]bool, len(p.populatedVars))
 	for k := range p.populatedVars {
 		localPopulated[k] = true
 	}
 
 	for _, action := range actions {
-		exprs := celExpressionsFrom(action)
+		exprs := action.CelExpressions()
 		for _, expr := range exprs {
-			for varName := range batchVars {
-				if !localPopulated[varName] && celReferencesVar(expr, varName) {
+			for varName, pattern := range varPatterns {
+				if !localPopulated[varName] && pattern.MatchString(expr) {
 					return fmt.Errorf("action references variable %q before it is populated", varName)
 				}
 			}
@@ -411,39 +423,6 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 	return nil
 }
 
-func celExpressionsFrom(action exttypes.Action) []string {
-	var exprs []string
-	switch a := action.(type) {
-	case exttypes.GRPCMethodAction:
-		if a.Predicate != "" {
-			exprs = append(exprs, a.Predicate)
-		}
-	case exttypes.DenyAction:
-		if a.Predicate != "" {
-			exprs = append(exprs, a.Predicate)
-		}
-		if a.WithHeaders != "" {
-			exprs = append(exprs, a.WithHeaders)
-		}
-	case exttypes.FailAction:
-		if a.Predicate != "" {
-			exprs = append(exprs, a.Predicate)
-		}
-	case exttypes.AddHeadersAction:
-		if a.Predicate != "" {
-			exprs = append(exprs, a.Predicate)
-		}
-		if a.HeadersToAdd != "" {
-			exprs = append(exprs, a.HeadersToAdd)
-		}
-	}
-	return exprs
-}
-
-func celReferencesVar(expr, varName string) bool {
-	return regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`).MatchString(expr)
-}
-
 func (p *PipelineImpl) Commit(ctx context.Context) error {
 	entries := make([]*extpb.ActionEntry, 0, len(p.actions))
 	for _, pe := range p.actions {
@@ -458,29 +437,7 @@ func (p *PipelineImpl) Commit(ctx context.Context) error {
 
 func convertAction(pe pipelineEntry) *extpb.ActionEntry {
 	entry := &extpb.ActionEntry{Phase: pe.phase}
-	switch a := pe.action.(type) {
-	case exttypes.GRPCMethodAction:
-		entry.ActionType = extpb.ActionType_ACTION_TYPE_GRPC_METHOD
-		entry.Predicate = a.Predicate
-		entry.Method = a.Method
-		entry.Var = a.Var
-	case exttypes.DenyAction:
-		entry.ActionType = extpb.ActionType_ACTION_TYPE_DENY
-		entry.Predicate = a.Predicate
-		entry.WithStatus = int32(a.WithStatus) //nolint:gosec // HTTP status codes are validated and always fit in int32
-		entry.WithHeaders = a.WithHeaders
-		entry.WithBody = a.WithBody
-	case exttypes.FailAction:
-		entry.ActionType = extpb.ActionType_ACTION_TYPE_FAIL
-		entry.Predicate = a.Predicate
-		entry.LogMessage = a.LogMessage
-	case exttypes.AddHeadersAction:
-		entry.ActionType = extpb.ActionType_ACTION_TYPE_ADD_HEADERS
-		entry.Predicate = a.Predicate
-		entry.HeadersToAdd = a.HeadersToAdd
-	default:
-		panic(fmt.Sprintf("unknown action type: %T", pe.action))
-	}
+	pe.action.PopulateProtobuf(entry)
 	return entry
 }
 

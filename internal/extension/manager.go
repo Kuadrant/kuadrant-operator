@@ -32,10 +32,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/common"
-	"github.com/google/cel-go/common/ast"
 	celtypes "github.com/google/cel-go/common/types"
-	"github.com/google/cel-go/parser"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -783,9 +780,77 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 	return &emptypb.Empty{}, nil
 }
 
+type actionValidationCtx struct {
+	store       *RegisteredDataStore
+	policyID    ResourceID
+	varToMethod map[string]string
+}
+
+type actionEntryValidator func(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error
+
+var actionEntryValidators = map[extpb.ActionType]actionEntryValidator{
+	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: validateGRPCMethodEntry,
+	extpb.ActionType_ACTION_TYPE_DENY:        validateDenyEntry,
+	extpb.ActionType_ACTION_TYPE_FAIL:        validateFailEntry,
+	extpb.ActionType_ACTION_TYPE_ADD_HEADERS: validateAddHeadersEntry,
+}
+
+func validateGRPCMethodEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error {
+	if action.Method == "" {
+		return fmt.Errorf("actions[%d]: method must be specified for grpc_method actions", index)
+	}
+	if !vctx.store.HasUpstreamName(vctx.policyID, action.Method) {
+		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, action.Method)
+	}
+	if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
+		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, action.Var)
+	}
+	entry.Method = action.Method
+	entry.Var = action.Var
+	if action.Var != "" {
+		vctx.varToMethod[action.Var] = action.Method
+	}
+	return nil
+}
+
+func validateDenyEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
+	if action.WithStatus != 0 {
+		if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", index)); err != nil {
+			return err
+		}
+	}
+	entry.WithStatus = int(action.WithStatus)
+	entry.WithHeaders = action.WithHeaders
+	entry.WithBody = action.WithBody
+	return nil
+}
+
+func validateFailEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
+	if strings.TrimSpace(action.LogMessage) == "" {
+		return fmt.Errorf("actions[%d]: log_message must be specified for fail actions", index)
+	}
+	entry.LogMessage = action.LogMessage
+	return nil
+}
+
+func validateAddHeadersEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
+	if action.HeadersToAdd == "" {
+		return fmt.Errorf("actions[%d]: headers_to_add must be specified for add_headers actions", index)
+	}
+	if err := validateCELExpression(action.HeadersToAdd); err != nil {
+		return fmt.Errorf("actions[%d].headers_to_add: %w", index, err)
+	}
+	entry.HeadersToAdd = action.HeadersToAdd
+	return nil
+}
+
 func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb.ActionEntry) ([]PipelineActionEntry, error) {
 	entries := make([]PipelineActionEntry, 0, len(actions))
-	varToMethod := make(map[string]string)
+	vctx := actionValidationCtx{
+		store:       s.registeredData,
+		policyID:    policyID,
+		varToMethod: make(map[string]string),
+	}
 
 	for i, action := range actions {
 		if action == nil {
@@ -809,57 +874,19 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 			Phase:      action.Phase,
 		}
 
-		switch action.ActionType {
-		case extpb.ActionType_ACTION_TYPE_GRPC_METHOD:
-			if action.Method == "" {
-				return nil, fmt.Errorf("actions[%d]: method must be specified for grpc_method actions", i)
-			}
-			if !s.registeredData.HasUpstreamName(policyID, action.Method) {
-				return nil, fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", i, action.Method)
-			}
-			if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
-				return nil, fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", i, action.Var)
-			}
-			entry.Method = action.Method
-			entry.Var = action.Var
-			if action.Var != "" {
-				varToMethod[action.Var] = action.Method
-			}
-
-		case extpb.ActionType_ACTION_TYPE_DENY:
-			if action.WithStatus != 0 {
-				if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", i)); err != nil {
-					return nil, err
-				}
-			}
-			entry.WithStatus = int(action.WithStatus)
-			entry.WithHeaders = action.WithHeaders
-			entry.WithBody = action.WithBody
-
-		case extpb.ActionType_ACTION_TYPE_FAIL:
-			if strings.TrimSpace(action.LogMessage) == "" {
-				return nil, fmt.Errorf("actions[%d]: log_message must be specified for fail actions", i)
-			}
-			entry.LogMessage = action.LogMessage
-
-		case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-			if action.HeadersToAdd == "" {
-				return nil, fmt.Errorf("actions[%d]: headers_to_add must be specified for add_headers actions", i)
-			}
-			if err := validateCELExpression(action.HeadersToAdd); err != nil {
-				return nil, fmt.Errorf("actions[%d].headers_to_add: %w", i, err)
-			}
-			entry.HeadersToAdd = action.HeadersToAdd
-
-		default:
+		validator, ok := actionEntryValidators[action.ActionType]
+		if !ok {
 			return nil, fmt.Errorf("actions[%d]: unknown action_type %s", i, action.ActionType)
+		}
+		if err := validator(action, i, &entry, &vctx); err != nil {
+			return nil, err
 		}
 
 		entries = append(entries, entry)
 	}
 
-	if len(varToMethod) > 0 {
-		if err := s.validateCrossActionVars(policyID, actions, varToMethod); err != nil {
+	if len(vctx.varToMethod) > 0 {
+		if err := s.validateCrossActionVars(policyID, actions, vctx.varToMethod); err != nil {
 			return nil, err
 		}
 	}
@@ -898,10 +925,12 @@ func (s *extensionService) validateCrossActionVars(policyID ResourceID, actions 
 				cacheKey := ProtoCacheKey{ClusterName: upstreamEntry.ClusterName, Service: upstreamEntry.Service}
 				fds, ok := s.registeredData.GetProtoDescriptor(cacheKey)
 				if !ok {
+					s.logger.V(1).Info("proto descriptor not cached, skipping field validation", "var", varName, "method", methodName)
 					continue
 				}
 				responseType := findResponseMessageType(fds, upstreamEntry.Service, upstreamEntry.Method)
 				if responseType == "" {
+					s.logger.V(1).Info("response message type not found, skipping field validation", "var", varName, "method", methodName, "service", upstreamEntry.Service)
 					continue
 				}
 				for _, chain := range chains {
@@ -924,147 +953,6 @@ func collectCELExpressions(action *extpb.ActionEntry) []string {
 		exprs = append(exprs, action.HeadersToAdd)
 	}
 	return exprs
-}
-
-func extractVarFieldAccesses(expr string, knownVars map[string]string) (map[string][][]string, error) {
-	prsr, err := parser.NewParser()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL parser: %w", err)
-	}
-	parsed, iss := prsr.Parse(common.NewTextSource(expr))
-	if len(iss.GetErrors()) > 0 {
-		return nil, fmt.Errorf("failed to parse CEL expression: %s", iss.ToDisplayString())
-	}
-
-	result := make(map[string][][]string)
-	collectFieldAccesses(parsed.Expr(), knownVars, result)
-	return result, nil
-}
-
-func collectFieldAccesses(expr ast.Expr, knownVars map[string]string, result map[string][][]string) {
-	if expr == nil {
-		return
-	}
-
-	if expr.Kind() == ast.SelectKind {
-		varName, fields := resolveSelectChain(expr)
-		if varName != "" {
-			if _, ok := knownVars[varName]; ok {
-				result[varName] = append(result[varName], fields)
-				return
-			}
-		}
-	}
-
-	switch expr.Kind() {
-	case ast.SelectKind:
-		collectFieldAccesses(expr.AsSelect().Operand(), knownVars, result)
-	case ast.CallKind:
-		call := expr.AsCall()
-		if t := call.Target(); t != nil {
-			collectFieldAccesses(t, knownVars, result)
-		}
-		for _, arg := range call.Args() {
-			collectFieldAccesses(arg, knownVars, result)
-		}
-	case ast.ListKind:
-		for _, elem := range expr.AsList().Elements() {
-			collectFieldAccesses(elem, knownVars, result)
-		}
-	case ast.MapKind:
-		for _, entry := range expr.AsMap().Entries() {
-			mapEntry := entry.AsMapEntry()
-			collectFieldAccesses(mapEntry.Key(), knownVars, result)
-			collectFieldAccesses(mapEntry.Value(), knownVars, result)
-		}
-	}
-}
-
-func resolveSelectChain(expr ast.Expr) (string, []string) {
-	var fields []string
-	current := expr
-	for current.Kind() == ast.SelectKind {
-		fields = append([]string{current.AsSelect().FieldName()}, fields...)
-		current = current.AsSelect().Operand()
-	}
-	if current.Kind() == ast.IdentKind {
-		return current.AsIdent(), fields
-	}
-	return "", nil
-}
-
-func findResponseMessageType(fds *descriptorpb.FileDescriptorSet, serviceName, methodName string) string {
-	for _, file := range fds.File {
-		for _, svc := range file.Service {
-			fullServiceName := svc.GetName()
-			if file.Package != nil && *file.Package != "" {
-				fullServiceName = *file.Package + "." + svc.GetName()
-			}
-			if fullServiceName != serviceName {
-				continue
-			}
-			for _, method := range svc.Method {
-				if method.GetName() == methodName {
-					return method.GetOutputType()
-				}
-			}
-		}
-	}
-	return ""
-}
-
-func findMessageDescriptor(fds *descriptorpb.FileDescriptorSet, messageType string) *descriptorpb.DescriptorProto {
-	normalizedType := strings.TrimPrefix(messageType, ".")
-	for _, file := range fds.File {
-		pkg := file.GetPackage()
-		for _, msg := range file.MessageType {
-			fqn := msg.GetName()
-			if pkg != "" {
-				fqn = pkg + "." + msg.GetName()
-			}
-			if fqn == normalizedType {
-				return msg
-			}
-		}
-	}
-	return nil
-}
-
-func validateFieldAccess(fds *descriptorpb.FileDescriptorSet, messageType string, fieldPath []string) error {
-	if len(fieldPath) == 0 {
-		return nil
-	}
-
-	msg := findMessageDescriptor(fds, messageType)
-	if msg == nil {
-		return fmt.Errorf("message type %q not found in proto descriptors", messageType)
-	}
-
-	currentMsg := msg
-	for i, fieldName := range fieldPath {
-		var found *descriptorpb.FieldDescriptorProto
-		for _, f := range currentMsg.Field {
-			if f.GetName() == fieldName {
-				found = f
-				break
-			}
-		}
-		if found == nil {
-			return fmt.Errorf("field %q not found on message %q", fieldName, currentMsg.GetName())
-		}
-
-		if i < len(fieldPath)-1 {
-			if found.GetType() != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
-				return fmt.Errorf("field %q on message %q is not a message type, cannot access sub-fields", fieldName, currentMsg.GetName())
-			}
-			nextMsg := findMessageDescriptor(fds, found.GetTypeName())
-			if nextMsg == nil {
-				return fmt.Errorf("message type %q for field %q not found", found.GetTypeName(), fieldName)
-			}
-			currentMsg = nextMsg
-		}
-	}
-	return nil
 }
 
 // Creates a locator matching the definition in policy-machinery

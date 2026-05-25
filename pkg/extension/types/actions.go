@@ -1,6 +1,10 @@
 package types
 
-import "context"
+import (
+	"context"
+
+	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+)
 
 // ActionType discriminates how the wasm-shim dispatches an action.
 type ActionType string
@@ -16,6 +20,8 @@ const (
 // Actions can be used in either the request or response phase.
 type Action interface {
 	actionType() ActionType
+	CelExpressions() []string
+	PopulateProtobuf(entry *extpb.ActionEntry)
 }
 
 // GRPCMethodAction invokes a registered gRPC action method and optionally
@@ -27,6 +33,20 @@ type GRPCMethodAction struct {
 }
 
 func (a GRPCMethodAction) actionType() ActionType { return ActionTypeGRPCMethod }
+
+func (a GRPCMethodAction) CelExpressions() []string {
+	if a.Predicate != "" {
+		return []string{a.Predicate}
+	}
+	return nil
+}
+
+func (a GRPCMethodAction) PopulateProtobuf(entry *extpb.ActionEntry) {
+	entry.ActionType = extpb.ActionType_ACTION_TYPE_GRPC_METHOD
+	entry.Predicate = a.Predicate
+	entry.Method = a.Method
+	entry.Var = a.Var
+}
 
 // DenyAction denies the request or response when the predicate evaluates
 // to true. All response fields are optional.
@@ -45,6 +65,25 @@ type DenyAction struct {
 
 func (a DenyAction) actionType() ActionType { return ActionTypeDeny }
 
+func (a DenyAction) CelExpressions() []string {
+	var exprs []string
+	if a.Predicate != "" {
+		exprs = append(exprs, a.Predicate)
+	}
+	if a.WithHeaders != "" {
+		exprs = append(exprs, a.WithHeaders)
+	}
+	return exprs
+}
+
+func (a DenyAction) PopulateProtobuf(entry *extpb.ActionEntry) {
+	entry.ActionType = extpb.ActionType_ACTION_TYPE_DENY
+	entry.Predicate = a.Predicate
+	entry.WithStatus = int32(a.WithStatus) //nolint:gosec
+	entry.WithHeaders = a.WithHeaders
+	entry.WithBody = a.WithBody
+}
+
 // FailAction logs an error message and terminates the action chain when
 // the predicate evaluates to true. Maps to the wasm-shim's "fail" type.
 type FailAction struct {
@@ -53,6 +92,19 @@ type FailAction struct {
 }
 
 func (a FailAction) actionType() ActionType { return ActionTypeFail }
+
+func (a FailAction) CelExpressions() []string {
+	if a.Predicate != "" {
+		return []string{a.Predicate}
+	}
+	return nil
+}
+
+func (a FailAction) PopulateProtobuf(entry *extpb.ActionEntry) {
+	entry.ActionType = extpb.ActionType_ACTION_TYPE_FAIL
+	entry.Predicate = a.Predicate
+	entry.LogMessage = a.LogMessage
+}
 
 // AddHeadersAction adds headers to the request or response depending on
 // the phase in which it is used, when the predicate evaluates to true.
@@ -66,6 +118,23 @@ type AddHeadersAction struct {
 }
 
 func (a AddHeadersAction) actionType() ActionType { return ActionTypeAddHeaders }
+
+func (a AddHeadersAction) CelExpressions() []string {
+	var exprs []string
+	if a.Predicate != "" {
+		exprs = append(exprs, a.Predicate)
+	}
+	if a.HeadersToAdd != "" {
+		exprs = append(exprs, a.HeadersToAdd)
+	}
+	return exprs
+}
+
+func (a AddHeadersAction) PopulateProtobuf(entry *extpb.ActionEntry) {
+	entry.ActionType = extpb.ActionType_ACTION_TYPE_ADD_HEADERS
+	entry.Predicate = a.Predicate
+	entry.HeadersToAdd = a.HeadersToAdd
+}
 
 // Pipeline provides a builder for composing ordered actions on HTTP request
 // and response phases. Actions accumulate locally with immediate ordering

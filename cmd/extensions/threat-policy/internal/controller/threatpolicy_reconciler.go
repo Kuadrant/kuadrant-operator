@@ -88,7 +88,10 @@ func (r *ThreatPolicyReconciler) validateTarget(ctx context.Context, pol *v1alph
 	}
 
 	if err := r.Client.Get(ctx, nn, obj); err != nil {
-		return kuadrant.NewErrTargetNotFound("ThreatPolicy", ref.LocalPolicyTargetReference, err)
+		if errors.IsNotFound(err) {
+			return kuadrant.NewErrTargetNotFound("ThreatPolicy", ref.LocalPolicyTargetReference, err)
+		}
+		return err
 	}
 	return nil
 }

@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-05-21T16:01:37Z"
+    createdAt: "2026-05-14T13:51:55Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -488,18 +488,6 @@ spec:
           resources:
           - configmaps
           - leases
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - extensions.istio.io
-          resources:
-          - wasmplugins
           verbs:
           - create
           - delete
@@ -782,6 +770,9 @@ spec:
                   name: metrics
                 - containerPort: 50051
                   name: grpc
+                  protocol: TCP
+                - containerPort: 8082
+                  name: wasm
                   protocol: TCP
                 readinessProbe:
                   httpGet:

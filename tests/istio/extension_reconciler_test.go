@@ -4,6 +4,8 @@ package istio_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -15,7 +17,9 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	"google.golang.org/protobuf/types/known/structpb"
+	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
+	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,7 +36,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Rate Limiting WasmPlugin controller", func() {
+var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -51,6 +55,70 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		return func() bool {
 			return tests.RLPIsAccepted(ctx, testClient(), key)() && !tests.RLPIsEnforced(ctx, testClient(), key)()
 		}
+	}
+
+	extractWasmConfigFromEnvoyFilter := func(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) (*wasm.Config, error) {
+		if len(ef.Spec.ConfigPatches) == 0 {
+			return nil, fmt.Errorf("no config patches found in EnvoyFilter")
+		}
+
+		// Find the wasm HTTP filter patch
+		var patchValue *structpb.Struct
+		for _, patch := range ef.Spec.ConfigPatches {
+			if patch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
+				patchValue = patch.Patch.Value
+				break
+			}
+		}
+
+		if patchValue == nil {
+			return nil, fmt.Errorf("no HTTP_FILTER patch found in EnvoyFilter config patches")
+		}
+
+		// Marshal to JSON to navigate the nested structure
+		valueJSON, err := patchValue.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+
+		// Unmarshal to a map to extract the wasm configuration
+		var filterConfig map[string]any
+		if err := json.Unmarshal(valueJSON, &filterConfig); err != nil {
+			return nil, err
+		}
+
+		// Navigate: typed_config -> value -> config -> configuration (JSON string)
+		typedConfig, ok := filterConfig["typed_config"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("missing typed_config in filter configuration")
+		}
+
+		value, ok := typedConfig["value"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("missing value in typed_config")
+		}
+
+		config, ok := value["config"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("missing config in typed_config.value")
+		}
+
+		configuration, ok := config["configuration"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("missing configuration in config")
+		}
+
+		configJSON, ok := configuration["value"].(string)
+		if !ok {
+			return nil, fmt.Errorf("missing value in configuration")
+		}
+
+		var wasmConfig wasm.Config
+		if err := json.Unmarshal([]byte(configJSON), &wasmConfig); err != nil {
+			return nil, err
+		}
+
+		return &wasmConfig, nil
 	}
 
 	beforeEachCallback := func(ctx SpecContext) {
@@ -84,7 +152,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 		BeforeEach(beforeEachCallback)
 
-		It("Simple RLP targeting HTTPRoute creates wasmplugin", func(ctx SpecContext) {
+		It("Simple RLP targeting HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			err := testClient().Create(ctx, httpRoute)
@@ -135,20 +203,21 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
-			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			// Check envoy filter
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			// has the correct target ref
-			Expect(existingWasmPlugin.Spec.TargetRefs).To(Not(BeEmpty()))
-			Expect(existingWasmPlugin.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
-			Expect(existingWasmPlugin.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
-			Expect(existingWasmPlugin.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
-			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
-			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(existingEnvoyFilter.Spec.TargetRefs).To(Not(BeEmpty()))
+			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
+			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
+			// has config patches
+			Expect(existingEnvoyFilter.Spec.ConfigPatches).To(Not(BeEmpty()))
+			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Services: map[string]wasm.Service{
@@ -213,7 +282,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}))
 		}, testTimeOut)
 
-		It("wasmplugin imagePullSecret should be reconciled", func(ctx SpecContext) {
+		It("envoyfilter config patches should be reconciled", func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			err := testClient().Create(ctx, httpRoute)
@@ -253,18 +322,19 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			// Check envoy filter
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			// ensure imagePullsecret is empty as expected
-			Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
-			// update the WASMPlugin imagePullSecret directly, it should get reconciled back to empty when RLP is reconciled next
-			existingWasmPlugin.Spec.ImagePullSecret = "shouldntbehere"
-			err = testClient().Update(ctx, existingWasmPlugin)
+			// ensure config patches exist
+			Expect(existingEnvoyFilter.Spec.ConfigPatches).ToNot(BeEmpty())
+			originalPatchCount := len(existingEnvoyFilter.Spec.ConfigPatches)
+			// clear the config patches, they should get reconciled back when RLP is reconciled next
+			existingEnvoyFilter.Spec.ConfigPatches = nil
+			err = testClient().Update(ctx, existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			// update the RLP to trigger reconcile
 			Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
@@ -276,12 +346,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			patch := client.MergeFrom(original)
 			Expect(testClient().Patch(ctx, rlp, patch)).To(Succeed())
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				g.Expect(existingWasmPlugin.Spec.ImagePullSecret).To(BeEmpty())
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				g.Expect(existingEnvoyFilter.Spec.ConfigPatches).ToNot(BeEmpty())
+				g.Expect(len(existingEnvoyFilter.Spec.ConfigPatches)).To(Equal(originalPatchCount))
 			}, "10s", "1s").Should(Succeed())
 		}, testTimeOut)
 
-		It("Full featured RLP targeting HTTPRoute creates wasmplugin", func(ctx SpecContext) {
+		It("Full featured RLP targeting HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.toystore.acme.com", "api.toystore.io"})
 			httpRoute.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
@@ -423,13 +494,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig.Services).To(HaveKeyWithValue(wasm.RateLimitServiceName, wasm.Service{
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
@@ -797,7 +868,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			))
 		}, testTimeOut)
 
-		It("Simple RLP targeting Gateway parented by one HTTPRoute creates wasmplugin", func(ctx SpecContext) {
+		It("Simple RLP targeting Gateway parented by one HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			err := testClient().Create(ctx, httpRoute)
@@ -849,13 +920,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Services: map[string]wasm.Service{
@@ -976,12 +1047,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey), 20*time.Second, 5*time.Second).Should(BeFalse())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			// must not exist
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 		}, testTimeOut)
 	})
@@ -1088,18 +1159,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A has configuration from the route
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -1167,7 +1238,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -1178,15 +1249,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err == nil {
-					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", envoyFilterKey)
 					return false
 				}
 				if !apierrors.IsNotFound(err) {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
 				// not found
@@ -1208,15 +1279,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err == nil {
-					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", envoyFilterKey)
 					return false
 				}
 				if !apierrors.IsNotFound(err) {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
 				// not found
@@ -1227,20 +1298,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// There is not RLP targeting Gateway B or any route parented by Gateway B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err == nil {
-					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", envoyFilterKey)
 					return false
 				}
 				if !apierrors.IsNotFound(err) {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
 				// not found
 				return true
-			})
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("RLP targeting a route, GwA should not have wasmplugin and GwB should have wasmplugin", func(ctx SpecContext) {
@@ -1317,18 +1388,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A has configuration from the route
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -1396,7 +1467,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -1407,15 +1478,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err == nil {
-					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", envoyFilterKey)
 					return false
 				}
 				if !apierrors.IsNotFound(err) {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
 				// not found
@@ -1437,15 +1508,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err == nil {
-					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", envoyFilterKey)
 					return false
 				}
 				if !apierrors.IsNotFound(err) {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
 				// not found
@@ -1464,18 +1535,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway B has configuration from the route
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -1543,7 +1614,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -1685,18 +1756,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin has configuration from the route A
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -1764,7 +1835,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -1795,18 +1866,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin has configuration from the route B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -1874,7 +1945,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -1991,18 +2062,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A has configuration from the route 1
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -2070,7 +2141,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -2119,18 +2190,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// RLP 1 should not add any config to the wasm plugin
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -2198,7 +2269,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -2351,18 +2422,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A has configuration from the route A only affected by RLP 2
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -2430,7 +2501,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -2467,18 +2538,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// - the route B with gateway level RLP 1
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{
+				envoyFilterKey := client.ObjectKey{
 					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
-				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+				existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+				err := testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin not read", "key", envoyFilterKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				if err != nil {
-					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", envoyFilterKey, "error", err)
 					return false
 				}
 
@@ -2586,7 +2657,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
 					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
-					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", envoyFilterKey, "diff", diff)
 					return false
 				}
 
@@ -2621,7 +2692,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 		BeforeEach(beforeEachCallback)
 
-		It("RLP with hostnames in route selector targeting hostname less HTTPRoute creates wasmplugin", func(ctx SpecContext) {
+		It("RLP with hostnames in route selector targeting hostname less HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
 			var emptyRouteHostnames []string
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, emptyRouteHostnames)
@@ -2674,13 +2745,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			})
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
-			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Services: map[string]wasm.Service{
@@ -2886,12 +2957,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			// must exist
-			Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(
 				Equal(
@@ -2937,8 +3008,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeFalse())
 			// Wasm plugin config should now use route RLP limit key
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err = extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig).To(
 					Equal(
@@ -2963,8 +3034,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
 			// Wasm plugin config should now use GW RLP limit key for route
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err = extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig).To(
 					Equal(
@@ -3031,11 +3102,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3089,8 +3160,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin config now has BOTH policies in sources (merged)
 			// Note: AuthPolicy creates a single auth action that includes all merged policies
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3158,11 +3229,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3215,8 +3286,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// With atomic strategy, route policy replaces gateway defaults - should have only route policy source
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3283,11 +3354,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3339,8 +3410,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// With atomic overrides strategy, gateway policy atomically overrides route policy - should have only gateway policy source
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3407,11 +3478,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), gwAuthPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3464,8 +3535,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// With merge overrides strategy, both gateway and route policies are merged - should have both policy sources
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3519,11 +3590,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3562,8 +3633,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// Check wasm plugin config now has BOTH policies in sources (merged)
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3619,11 +3690,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3662,8 +3733,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// With atomic strategy, route policy replaces gateway defaults - should have only route policy source
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3718,11 +3789,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3762,8 +3833,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// With atomic overrides strategy, gateway policy atomically overrides route policy - should have only gateway policy source
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 
@@ -3818,11 +3889,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin exists and has correct source for gateway policy
-			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
@@ -3862,8 +3933,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// With merge overrides strategy, both gateway and route policies are merged - should have both policy sources
 			Eventually(func(g Gomega) {
-				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 

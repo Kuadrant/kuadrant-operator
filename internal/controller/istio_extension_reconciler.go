@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -14,10 +13,8 @@ import (
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiov1beta1 "istio.io/api/type/v1beta1"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -38,14 +35,14 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
-//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
-// IstioExtensionReconciler reconciles Istio WasmPlugin custom resources
+// IstioExtensionReconciler reconciles Istio EnvoyFilter custom resources for wasm plugin injection
 type IstioExtensionReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-// IstioExtensionReconciler subscribes to events with potential impact on the Istio WasmPlugin custom resources
+// IstioExtensionReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources
 func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
@@ -58,7 +55,7 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1alpha1.TokenRateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
-			{Kind: &kuadrantistio.WasmPluginGroupKind},
+			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		},
 	}
 }
@@ -66,7 +63,15 @@ func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithValues("context", ctx)
 
-	logger.V(1).Info("building istio extension ", "image url", WASMFilterImageURL)
+	operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+	wasmServerHost := fmt.Sprintf("kuadrant-operator-wasm.%s.svc.cluster.local", operatorNamespace)
+	wasmServerPort, portErr := env.GetInt("WASM_SERVER_PORT", defaultWasmServerPort)
+	if portErr != nil {
+		wasmServerPort = defaultWasmServerPort
+	}
+	wasmURL := fmt.Sprintf("http://%s:%d/plugin.wasm", wasmServerHost, wasmServerPort)
+
+	logger.V(1).Info("building istio extension", "wasm url", wasmURL)
 	defer logger.V(1).Info("finished building istio extension")
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
@@ -89,7 +94,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 	}
 
-	var modifiedGateways []string
+	modifiedGateways := make([]string, 0, len(gateways))
 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
@@ -100,62 +105,60 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
 
-		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
+		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
-		existingWasmPluginObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantistio.WasmPluginGroupKind && child.GetName() == desiredWasmPlugin.GetName() && child.GetNamespace() == desiredWasmPlugin.GetNamespace() && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredWasmPlugin.GetLabels()))
+		existingEnvoyFilterObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
+			return child.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && child.GetName() == desiredEnvoyFilter.GetName() && child.GetNamespace() == desiredEnvoyFilter.GetNamespace() && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyFilter.GetLabels()))
 		})
 
 		// create
 		if !found {
-			if utils.IsObjectTaggedToDelete(desiredWasmPlugin) {
+			if utils.IsObjectTaggedToDelete(desiredEnvoyFilter) {
 				continue
 			}
-			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when a wasmplugin is created, because updates won't change the status
-			desiredWasmPluginUnstructured, err := controller.Destruct(desiredWasmPlugin)
+			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoyfilter is created, because updates won't change the status
+			desiredEnvoyFilterUnstructured, err := controller.Destruct(desiredEnvoyFilter)
 			if err != nil {
-				logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPlugin)
+				logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilter)
 				continue
 			}
-			if _, err = resource.Create(ctx, desiredWasmPluginUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPluginUnstructured.Object)
+			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
+				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
 				// TODO: handle error
 			}
 			continue
 		}
 
-		existingWasmPlugin := existingWasmPluginObj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
+		existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
 
 		// delete
-		if utils.IsObjectTaggedToDelete(desiredWasmPlugin) && !utils.IsObjectTaggedToDelete(existingWasmPlugin) {
-			if err := resource.Delete(ctx, existingWasmPlugin.GetName(), metav1.DeleteOptions{}); err != nil {
-				logger.Error(err, "failed to delete wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", fmt.Sprintf("%s/%s", existingWasmPlugin.GetNamespace(), existingWasmPlugin.GetName()))
+		if utils.IsObjectTaggedToDelete(desiredEnvoyFilter) && !utils.IsObjectTaggedToDelete(existingEnvoyFilter) {
+			if err := resource.Delete(ctx, existingEnvoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
+				logger.Error(err, "failed to delete envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", fmt.Sprintf("%s/%s", existingEnvoyFilter.GetNamespace(), existingEnvoyFilter.GetName()))
 				// TODO: handle error
 			}
 			continue
 		}
-		logger.V(1).Info("wasmplugin object ", "desired", desiredWasmPlugin)
-		if equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
-			logger.V(1).Info("wasmplugin object is up to date, nothing to do")
+		logger.V(1).Info("envoyfilter object ", "desired", desiredEnvoyFilter)
+		if kuadrantistio.EqualEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
+			logger.V(1).Info("envoyfilter object is up to date, nothing to do")
 			continue
 		}
 
 		// update
-		existingWasmPlugin.Spec.Url = desiredWasmPlugin.Spec.Url
-		existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
-		existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
-		existingWasmPlugin.Spec.PluginConfig = desiredWasmPlugin.Spec.PluginConfig
-		existingWasmPlugin.Spec.ImagePullSecret = desiredWasmPlugin.Spec.ImagePullSecret
+		existingEnvoyFilter.Spec.ConfigPatches = desiredEnvoyFilter.Spec.ConfigPatches
+		existingEnvoyFilter.Spec.Priority = desiredEnvoyFilter.Spec.Priority
+		existingEnvoyFilter.Spec.TargetRefs = desiredEnvoyFilter.Spec.TargetRefs
 
-		existingWasmPluginUnstructured, err := controller.Destruct(existingWasmPlugin)
+		existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)
 		if err != nil {
-			logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPlugin)
+			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter)
 			continue
 		}
-		if _, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
+		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
+			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
 			// TODO: handle error
 		}
 	}
@@ -552,17 +555,36 @@ func hasAuthAccess(actionSet []wasm.Action) bool {
 	return false
 }
 
-// buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config
-func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *istioclientgoextensionv1alpha1.WasmPlugin {
-	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
+// buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
+func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+	var configPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
+
+	if len(wasmConfig.ActionSets) > 0 {
+		pluginConfigStruct, err := wasmConfig.ToStruct()
+		if err == nil {
+			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
+			if err == nil {
+				configPatches = patches
+			}
+		}
+
+		clusterPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(wasmServerHost, wasmServerPort, false, func(h string, p int, _ bool) map[string]any {
+			return buildClusterPatch(WasmServerClusterName, h, p, false)
+		})
+		if err == nil {
+			configPatches = append(configPatches, clusterPatches...)
+		}
+	}
+
+	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       kuadrantistio.WasmPluginGroupKind.Kind,
-			APIVersion: istioclientgoextensionv1alpha1.SchemeGroupVersion.String(),
+			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
+			APIVersion: istioclientgonetworkingv1alpha3.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
-			Labels:    KuadrantManagedObjectLabels(),
+			Labels:    labels.Set(map[string]string{kuadrantManagedLabelKey: "true", "kuadrant.io/wasm": "true"}),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
@@ -574,7 +596,7 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 				},
 			},
 		},
-		Spec: istioextensionsv1alpha1.WasmPlugin{
+		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
 			TargetRefs: []*istiov1beta1.PolicyTargetReference{
 				{
 					Group: machinery.GatewayGroupKind.Group,
@@ -582,58 +604,13 @@ func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.
 					Name:  gateway.GetName(),
 				},
 			},
-			Url:          imageURL,
-			PluginConfig: nil,
-			Phase:        istioextensionsv1alpha1.PluginPhase_STATS, // insert the plugin before Istio stats filters and after Istio authorization filters.
+			ConfigPatches: configPatches,
 		},
-	}
-	// reset to empty to allow fo the image having moved to a public registry
-	wasmPlugin.Spec.ImagePullSecret = ""
-	// only set to pull secret if we are in a protected registry
-	if protectedRegistry != "" && strings.Contains(imageURL, protectedRegistry) {
-		wasmPlugin.Spec.ImagePullSecret = RegistryPullSecretName
 	}
 
 	if len(wasmConfig.ActionSets) == 0 {
-		utils.TagObjectToDelete(wasmPlugin)
-	} else {
-		pluginConfigStruct, err := wasmConfig.ToStruct()
-		if err != nil {
-			return nil
-		}
-		wasmPlugin.Spec.PluginConfig = pluginConfigStruct
+		utils.TagObjectToDelete(envoyFilter)
 	}
 
-	return wasmPlugin
-}
-
-func equalWasmPlugins(a, b *istioclientgoextensionv1alpha1.WasmPlugin) bool {
-	if a.Spec.ImagePullSecret != b.Spec.ImagePullSecret || a.Spec.Url != b.Spec.Url || a.Spec.Phase != b.Spec.Phase || !kuadrantistio.EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
-		return false
-	}
-
-	if a.Spec.PluginConfig == nil && b.Spec.PluginConfig == nil {
-		return true
-	}
-
-	var err error
-
-	var aConfig *wasm.Config
-	var bConfig *wasm.Config
-
-	if a.Spec.PluginConfig != nil {
-		aConfig, err = wasm.ConfigFromStruct(a.Spec.PluginConfig)
-		if err != nil {
-			return false
-		}
-	}
-
-	if b.Spec.PluginConfig != nil {
-		bConfig, err = wasm.ConfigFromStruct(b.Spec.PluginConfig)
-		if err != nil {
-			return false
-		}
-	}
-
-	return aConfig != nil && bConfig != nil && aConfig.EqualTo(bConfig)
+	return envoyFilter
 }

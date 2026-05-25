@@ -401,12 +401,21 @@ build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 build: generate fmt vet ## Build manager binary.
 	go build -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o bin/manager cmd/main.go
 
+WASM_BIN_DIR := $(PROJECT_PATH)/bin/wasm
+WASM_BIN := $(WASM_BIN_DIR)/plugin.wasm
+
+$(WASM_BIN): ## Fetch and extract the wasm-shim binary from the OCI image.
+	@mkdir -p $(WASM_BIN_DIR)
+	$(CONTAINER_ENGINE) pull $(RELATED_IMAGE_WASMSHIM)
+	$(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout $$($(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar tf - | grep -E '^[a-f0-9]+\.tar$$' | while IFS= read -r layer; do $(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout "$$layer" | tar tf - 2>/dev/null | grep -q plugin.wasm && echo "$$layer"; done | head -1) | tar xf - -C $(WASM_BIN_DIR)
+
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
 run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
+run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
-run: generate fmt vet ## Run a controller from your host.
+run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.
 	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -race ./cmd/main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
@@ -418,6 +427,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
 		--build-arg WITH_EXTENSIONS=$(WITH_EXTENSIONS) \
+		--build-arg WASM_SHIM_IMAGE=$(RELATED_IMAGE_WASMSHIM) \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 

@@ -34,6 +34,7 @@ const (
 
 var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "quay.io/kuadrant/wasm-shim:latest")
+	WASMFilterImageSHA = env.GetString("RELATED_IMAGE_WASMSHIM_SHA", "b937dee6dd5e496b5b6fc28aba9b23254dfd5ec304d7565125b3e14d69511d7a")
 	// protectedRegistry this defines a default protected registry. If this is in the wasm image URL we add a pull secret name to the WASMPLugin resource
 	ProtectedRegistry = env.GetString("PROTECTED_REGISTRY", "registry.redhat.io")
 
@@ -56,7 +57,6 @@ var (
 		{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
-		{Kind: &kuadrantistio.WasmPluginGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 	}
@@ -150,6 +150,20 @@ func gatewayComponentsToSync(gateway *machinery.Gateway, componentGroupKind sche
 	missingConditionInTopologyFunc := func() bool {
 		obj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
 			return child.GroupVersionKind().GroupKind() == componentGroupKind
+		})
+		return !found || !requiredCondition(obj)
+	}
+	if (modifiedGatewayLocators != nil && lo.Contains(modifiedGatewayLocators.([]string), gateway.GetLocator())) || missingConditionInTopologyFunc() {
+		return []string{fmt.Sprintf("%s (%s/%s)", componentGroupKind.Kind, gateway.GetNamespace(), gateway.GetName())}
+	}
+	return nil
+}
+
+// gatewayComponentsToSyncWithName is like gatewayComponentsToSync but also matches by object name
+func gatewayComponentsToSyncWithName(gateway *machinery.Gateway, componentGroupKind schema.GroupKind, componentName string, modifiedGatewayLocators any, topology *machinery.Topology, requiredCondition func(machinery.Object) bool) []string {
+	missingConditionInTopologyFunc := func() bool {
+		obj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
+			return child.GroupVersionKind().GroupKind() == componentGroupKind && child.GetName() == componentName
 		})
 		return !found || !requiredCondition(obj)
 	}

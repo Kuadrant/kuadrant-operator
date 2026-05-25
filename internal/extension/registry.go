@@ -971,6 +971,10 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	// Inject registered upstream services matching the current target refs
 	relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
 
+	if wasmConfig.Services == nil {
+		wasmConfig.Services = make(map[string]wasm.Service)
+	}
+
 	// Build method name → wasm service key lookup and inject services
 	methodServiceKeys := make(map[ResourceID]map[string]string) // policy → method name → service key
 	for key, entry := range relevantUpstreamKeys {
@@ -984,9 +988,6 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			GrpcMethod:  &entry.Method,
 		}
 		wasmServiceKey := "ext-" + HashUpstreamServiceConfig(svc)
-		if wasmConfig.Services == nil {
-			wasmConfig.Services = make(map[string]wasm.Service)
-		}
 		wasmConfig.Services[wasmServiceKey] = svc
 
 		if methodServiceKeys[key.Policy] == nil {

@@ -173,8 +173,6 @@ func NewServiceBuilder(logger *logr.Logger) *ServiceBuilder {
 				Endpoint:    kuadrant.KuadrantAuthClusterName,
 				FailureMode: AuthServiceFailureMode(logger),
 				Timeout:     ptr.To(AuthServiceTimeout()),
-				GrpcService: ptr.To("envoy.service.auth.v3.Authorization"),
-				GrpcMethod:  ptr.To("Check"),
 			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,

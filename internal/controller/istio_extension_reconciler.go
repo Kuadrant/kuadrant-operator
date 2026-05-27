@@ -198,6 +198,10 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 		// Also collect upstreams registered for routes attached to this gateway
 		gatewayUpstreams = append(gatewayUpstreams, extension.CollectRouteUpstreams(topology, gateway)...)
 
+		if len(gatewayUpstreams) == 0 {
+			continue
+		}
+
 		desiredEnvoyFilter, err := buildUpstreamEnvoyFilter(logger, gateway, gatewayUpstreams)
 		if err != nil {
 			logger.Error(err, "failed to build upstream envoy filter", "gateway", gatewayKey.String())

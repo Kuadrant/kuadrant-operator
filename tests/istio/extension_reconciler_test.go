@@ -226,6 +226,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						GrpcService: ptr.To("envoy.service.auth.v3.Authorization"),
+						GrpcMethod:  ptr.To("Check"),
 					},
 					wasm.RateLimitCheckServiceName: {
 						Type:        wasm.RateLimitCheckServiceType,
@@ -935,6 +937,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						GrpcService: ptr.To("envoy.service.auth.v3.Authorization"),
+						GrpcMethod:  ptr.To("Check"),
 					},
 					wasm.RateLimitCheckServiceName: {
 						Type:        wasm.RateLimitCheckServiceType,
@@ -2760,6 +2764,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						GrpcService: ptr.To("envoy.service.auth.v3.Authorization"),
+						GrpcMethod:  ptr.To("Check"),
 					},
 					wasm.RateLimitCheckServiceName: {
 						Type:        wasm.RateLimitCheckServiceType,
@@ -2857,6 +2863,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.AuthServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.AuthServiceTimeout()),
+						GrpcService: ptr.To("envoy.service.auth.v3.Authorization"),
+						GrpcMethod:  ptr.To("Check"),
 					},
 					wasm.RateLimitCheckServiceName: {
 						Type:        wasm.RateLimitCheckServiceType,

@@ -472,7 +472,7 @@ type Expression struct {
 }
 
 // TypedAction represents an extension pipeline action in the new wasm-shim format.
-// The "type" field discriminates the action kind (grpc, deny, headers).
+// The "type" field discriminates the action kind (grpc, deny, headers, store, fail).
 type TypedAction struct {
 	Type           string        `json:"type"`
 	Predicate      string        `json:"predicate"`
@@ -484,6 +484,8 @@ type TypedAction struct {
 	DenyWith       string        `json:"denyWith,omitempty"`
 	Target         string        `json:"target,omitempty"`
 	Headers        string        `json:"headers,omitempty"`
+	Path           string        `json:"path,omitempty"`
+	Value          string        `json:"value,omitempty"`
 	LogMessage     string        `json:"logMessage,omitempty"`
 	// SourcePolicyLocators tracks all policies that contributed to this action.
 	// Format: "kind/namespace/name"
@@ -500,6 +502,8 @@ func (t TypedAction) EqualTo(other TypedAction) bool {
 		t.DenyWith != other.DenyWith ||
 		t.Target != other.Target ||
 		t.Headers != other.Headers ||
+		t.Path != other.Path ||
+		t.Value != other.Value ||
 		t.LogMessage != other.LogMessage ||
 		!slices.Equal(t.SourcePolicyLocators, other.SourcePolicyLocators) ||
 		len(t.OnReply) != len(other.OnReply) {

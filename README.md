@@ -32,3 +32,4 @@ This software is licensed under the [Apache 2.0 license](https://www.apache.org/
 See the LICENSE and NOTICE files that should have been provided along with this software for details.
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FKuadrant%2Fkuadrant-operator.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FKuadrant%2Fkuadrant-operator?ref=badge_large)
+

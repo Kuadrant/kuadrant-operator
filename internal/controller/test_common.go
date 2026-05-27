@@ -23,8 +23,11 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 
+	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
+	"github.com/kuadrant/kuadrant-operator/internal/trace"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -64,7 +67,11 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())
 
-	stateOfTheWorld, err := NewPolicyMachineryController(mgr, dClient, log.Log)
+	otelConfig := kuadrantOtel.NewConfig("dev", "true", "dev")
+	dynTraceProvider, err := trace.NewDynamicProvider(context.Background(), otelConfig)
+	Expect(err).ToNot(HaveOccurred())
+
+	stateOfTheWorld, err := NewPolicyMachineryController(mgr, dClient, log.Log, dynTraceProvider)
 	Expect(err).NotTo(HaveOccurred())
 
 	go func() {

@@ -160,38 +160,38 @@ func main() {
 		}
 	}
 
-	// Setup OTel tracing if endpoint is configured
-	if otelConfig.TracesEndpoint() != "" {
-		traceProvider, err := trace.NewProvider(context.Background(), otelConfig)
-		if err != nil {
-			log.Log.Error(err, "Failed to setup OpenTelemetry tracing, continuing without traces")
-		} else {
-			log.Log.Info("OpenTelemetry tracing enabled",
-				"endpoint", otelConfig.TracesEndpoint(),
-				"sampler", "AlwaysSample",
-			)
-
-			// Set global propagator for distributed tracing
-			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-				propagation.TraceContext{},
-				propagation.Baggage{},
-			))
-
-			// Set as global tracer provider
-			otel.SetTracerProvider(traceProvider.TracerProvider())
-
-			// Ensure OTel tracing is shut down gracefully on exit
-			defer func() {
-				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer shutdownCancel()
-				if err := traceProvider.Shutdown(shutdownCtx); err != nil {
-					log.Log.Error(err, "Failed to shutdown OpenTelemetry tracing")
-				}
-			}()
-
-			opts = append(opts, controller.WithTracer(traceProvider.TracerProvider().Tracer(otelConfig.ServiceName)))
-		}
+	// Setup OTel tracing. DynamicProvider initializes from env vars and can be
+	// reconfigured at runtime via the kuadrant-tracing ConfigMap.
+	// NewDynamicProvider always returns a usable provider: initial endpoint failure
+	// is non-fatal so the ConfigMap reconciler can still reconfigure it later.
+	dynTraceProvider, err := trace.NewDynamicProvider(context.Background(), otelConfig)
+	if err != nil {
+		log.Log.Error(err, "Failed to connect to OTel traces endpoint from env vars, tracing disabled until ConfigMap is applied")
+	} else if otelConfig.TracesEndpoint() != "" {
+		log.Log.Info("OpenTelemetry tracing enabled",
+			"endpoint", otelConfig.TracesEndpoint(),
+			"sampler", "AlwaysSample",
+		)
 	}
+
+	// Set global propagator unconditionally so it is in place when tracing
+	// is enabled later via the kuadrant-tracing ConfigMap.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
+
+	// GlobalTracer always delegates to the current global provider, so spans
+	// are automatically routed to the updated exporter after a ConfigMap change.
+	opts = append(opts, controller.WithTracer(dynTraceProvider.GlobalTracer(otelConfig.ServiceName)))
+
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := dynTraceProvider.Shutdown(shutdownCtx); err != nil {
+			log.Log.Error(err, "Failed to shutdown OpenTelemetry tracing")
+		}
+	}()
 
 	printControllerMetaInfo()
 
@@ -201,7 +201,6 @@ func main() {
 		metricsAddr          string
 		enableLeaderElection bool
 		probeAddr            string
-		err                  error
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -270,7 +269,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, opts...)
+	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, dynTraceProvider, opts...)
 	if err != nil {
 		setupLog.Error(err, "unable to setup policy controller")
 		os.Exit(1)

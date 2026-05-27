@@ -191,10 +191,6 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 		// Also collect upstreams registered for routes attached to this gateway
 		gatewayUpstreams = append(gatewayUpstreams, extension.CollectRouteUpstreams(topology, gateway)...)
 
-		if len(gatewayUpstreams) == 0 {
-			continue
-		}
-
 		desiredPolicy, err := buildUpstreamEnvoyPatchPolicy(logger, gateway, gatewayUpstreams)
 		if err != nil {
 			logger.Error(err, "failed to build upstream envoy patch policy", "gateway", gatewayKey.String())

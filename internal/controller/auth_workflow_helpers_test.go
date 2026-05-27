@@ -79,7 +79,7 @@ func TestBuildWasmTypedActionsForAuth_WithPredicates(t *testing.T) {
 	actions := buildWasmTypedActionsForAuth(pathID, policy)
 	action := actions[0]
 
-	if action.Predicate != "request.method == 'GET' && request.path.startsWith('/api')" {
+	if action.Predicate != "(request.method == 'GET') && (request.path.startsWith('/api'))" {
 		t.Errorf("unexpected predicate: %q", action.Predicate)
 	}
 }
@@ -155,7 +155,7 @@ func TestJoinPredicates(t *testing.T) {
 	}{
 		{"empty", nil, ""},
 		{"single", []string{"a == b"}, "a == b"},
-		{"multiple", []string{"a == b", "c == d"}, "a == b && c == d"},
+		{"multiple", []string{"a == b", "c == d"}, "(a == b) && (c == d)"},
 	}
 
 	for _, tt := range tests {

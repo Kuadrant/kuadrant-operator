@@ -120,7 +120,11 @@ func joinPredicates(predicates []string) string {
 	if len(predicates) == 1 {
 		return predicates[0]
 	}
-	return strings.Join(predicates, " && ")
+	wrapped := make([]string, len(predicates))
+	for i, p := range predicates {
+		wrapped[i] = "(" + p + ")"
+	}
+	return strings.Join(wrapped, " && ")
 }
 
 func buildAuthMessageBuilder(scope string) string {

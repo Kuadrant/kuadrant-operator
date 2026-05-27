@@ -30,7 +30,6 @@ http {
 		listen              [::]:9443 ssl;
 		ssl_certificate     /var/serving-cert/tls.crt;
 		ssl_certificate_key /var/serving-cert/tls.key;
-		add_header oauth_token "$http_Authorization";
 		location / {
 			root                /usr/share/nginx/html;
 		}

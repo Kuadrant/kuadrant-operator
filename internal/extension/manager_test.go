@@ -1307,3 +1307,24 @@ func TestPipelineCommit_ChangeNotifier(t *testing.T) {
 		t.Fatal("Expected change notifier to have been called")
 	}
 }
+
+func TestPipelineCommit_ChangeNotifierError(t *testing.T) {
+	svc := newTestExtensionService()
+
+	svc.changeNotifier = func(reason string) error {
+		return fmt.Errorf("no Kuadrant resources found in cluster")
+	}
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error when change notifier fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to trigger reconciliation") {
+		t.Errorf("Expected error about failed reconciliation, got: %v", err)
+	}
+}

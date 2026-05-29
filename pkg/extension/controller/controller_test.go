@@ -600,6 +600,81 @@ func TestPipeline_VarInHeadersToAdd_ForwardReference(t *testing.T) {
 	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
 }
 
+func TestPipeline_TopLevelFailAction(t *testing.T) {
+	t.Run("standalone fail action rejected", func(t *testing.T) {
+		p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+		err := p.OnHTTPRequest(exttypes.FailAction{
+			Predicate:  `request.url_path == "/blocked"`,
+			LogMessage: "Request blocked",
+		})
+		assert.Assert(t, err != nil)
+		assert.Assert(t, cmp.Contains(err.Error(), "fail action must reference a gRPC response variable"))
+	})
+
+	t.Run("standalone fail action rejected in response phase", func(t *testing.T) {
+		p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+		err := p.OnHTTPResponse(exttypes.FailAction{
+			Predicate:  `request.url_path == "/blocked"`,
+			LogMessage: "Request blocked",
+		})
+		assert.Assert(t, err != nil)
+		assert.Assert(t, cmp.Contains(err.Error(), "fail action must reference a gRPC response variable"))
+	})
+
+	t.Run("fail action with grpc var but not referencing it", func(t *testing.T) {
+		p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+		err := p.OnHTTPRequest(
+			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.FailAction{
+				Predicate:  `request.url_path == "/blocked"`,
+				LogMessage: "blocked",
+			},
+		)
+		assert.Assert(t, err != nil)
+		assert.Assert(t, cmp.Contains(err.Error(), "fail action must reference a gRPC response variable"))
+	})
+
+	t.Run("fail action referencing grpc var accepted", func(t *testing.T) {
+		p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+		err := p.OnHTTPRequest(
+			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.FailAction{
+				Predicate:  `threatResponse.threat_level >= 5`,
+				LogMessage: "threat detected",
+			},
+		)
+		assert.NilError(t, err)
+	})
+
+	t.Run("fail action referencing grpc var from previous call", func(t *testing.T) {
+		p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+		err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"})
+		assert.NilError(t, err)
+
+		err = p.OnHTTPResponse(exttypes.FailAction{
+			Predicate:  `threatResponse.threat_level >= 5`,
+			LogMessage: "threat detected",
+		})
+		assert.Assert(t, cmp.Contains(err.Error(), "fail action must reference a gRPC response variable"))
+	})
+
+	t.Run("fail action with no predicate rejected", func(t *testing.T) {
+		p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+		err := p.OnHTTPRequest(
+			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.FailAction{LogMessage: "always fail"},
+		)
+		assert.Assert(t, err != nil)
+		assert.Assert(t, cmp.Contains(err.Error(), "fail action must reference a gRPC response variable"))
+	})
+}
+
 func TestPipelineCommit_SendsAllActions(t *testing.T) {
 	var capturedReq *extpb.PipelineCommitRequest
 	mock := &mockExtensionServiceClient{

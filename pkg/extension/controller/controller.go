@@ -397,6 +397,20 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 	}
 
 	for _, action := range actions {
+		if _, ok := action.(exttypes.FailAction); ok {
+			refsVar := false
+			for _, expr := range action.CelExpressions() {
+				for _, pattern := range varPatterns {
+					if pattern.MatchString(expr) {
+						refsVar = true
+					}
+				}
+			}
+			if !refsVar {
+				return fmt.Errorf("fail action must reference a gRPC response variable")
+			}
+		}
+
 		exprs := action.CelExpressions()
 		for _, expr := range exprs {
 			for varName, pattern := range varPatterns {

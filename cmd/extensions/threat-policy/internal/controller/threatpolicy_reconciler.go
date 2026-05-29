@@ -131,7 +131,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 			Predicate:   fmt.Sprintf("threatResponse.threat_level >= %d", pol.Spec.Threshold),
 			WithStatus:  403,
 			WithHeaders: `[["x-threat-blocked", "true"], ["x-threat-level", string(threatResponse.threat_level)]]`,
-			WithBody:    "Request blocked: threat level exceeds threshold",
+			WithBody:    "'Request blocked: threat level exceeds threshold'",
 		},
 	); err != nil {
 		return calculateErrorStatus(pol, err), err

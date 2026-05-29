@@ -36,11 +36,11 @@ spec:
             - name: EXTENSIONS_DESCRIPTOR_SERVICE_PORT
               value: "50051"
             - name: RELATED_IMAGE_WASMSHIM
-              value: "quay.io/kuadrant/wasm-shim:latest"
+              value: "quay.io/kuadrant/wasm-shim:v0.13.0"
             - name: RELATED_IMAGE_DEVELOPERPORTAL
-              value: "quay.io/kuadrant/developer-portal-controller:latest"
+              value: "quay.io/kuadrant/developer-portal-controller:v0.2.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-              value: "quay.io/kuadrant/console-plugin:latest"
+              value: "quay.io/kuadrant/console-plugin:v0.4.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
               value: "quay.io/kuadrant/console-plugin:v0.1.5-2"
             - name: OPERATOR_NAMESPACE

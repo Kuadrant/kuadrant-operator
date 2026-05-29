@@ -60,7 +60,7 @@ type DenyAction struct {
 	Predicate   string // CEL — if true, deny
 	WithStatus  int    // HTTP status code (e.g. 403); optional
 	WithHeaders string // CEL expression — array of [name, value] pairs; optional
-	WithBody    string // Response body string; optional
+	WithBody    string // CEL expression; optional
 }
 
 func (a DenyAction) actionType() ActionType { return ActionTypeDeny }
@@ -72,6 +72,9 @@ func (a DenyAction) CelExpressions() []string {
 	}
 	if a.WithHeaders != "" {
 		exprs = append(exprs, a.WithHeaders)
+	}
+	if a.WithBody != "" {
+		exprs = append(exprs, a.WithBody)
 	}
 	return exprs
 }

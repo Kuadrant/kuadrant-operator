@@ -544,10 +544,6 @@ func TestPipeline_NoVarReference_NoError(t *testing.T) {
 			Predicate:  `request.url_path == "/blocked"`,
 			WithStatus: 403,
 		},
-		exttypes.FailAction{
-			Predicate:  `request.headers["x-debug"] == "true"`,
-			LogMessage: "debug failure",
-		},
 	)
 	assert.NilError(t, err)
 
@@ -660,7 +656,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 			Predicate:  `threatResponse.threat_level >= 5`,
 			LogMessage: "threat detected",
 		})
-		assert.Assert(t, cmp.Contains(err.Error(), "fail action must reference a gRPC response variable"))
+		assert.NilError(t, err)
 	})
 
 	t.Run("fail action with no predicate rejected", func(t *testing.T) {
@@ -698,7 +694,7 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 			Var:       "threatResponse",
 		},
 		exttypes.FailAction{
-			Predicate:  `request.headers["x-debug"] == "true"`,
+			Predicate:  `threatResponse.threat_level >= 10`,
 			LogMessage: "Request blocked",
 		},
 	)

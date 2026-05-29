@@ -386,9 +386,14 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 		}
 	}
 
-	varPatterns := make(map[string]*regexp.Regexp, len(batchVars))
-	for varName := range batchVars {
+	varPatterns := make(map[string]*regexp.Regexp, len(batchVars)+len(p.populatedVars))
+	for varName := range p.populatedVars {
 		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	}
+	for varName := range batchVars {
+		if _, exists := varPatterns[varName]; !exists {
+			varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+		}
 	}
 
 	localPopulated := make(map[string]bool, len(p.populatedVars))

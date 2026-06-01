@@ -2757,10 +2757,12 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	store := NewRegisteredDataStore()
 	policyID := testResourceID("DenyPolicy", "default", "deny-only")
+	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test-route", Namespace: "test-namespace"}
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
 		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/admin"`, WithStatus: 403},
 	})
+	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
 	wasmConfig := wasm.Config{
 		ActionSets: []wasm.ActionSet{{
@@ -2771,8 +2773,9 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 		}},
 	}
 
+	mockTargetRef := createMockHTTPRouteTargetRef()
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)
-	err := mutator.Mutate(&wasmConfig, nil)
+	err := mutator.Mutate(&wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -2792,5 +2795,217 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	}
 	if !ta.Terminal {
 		t.Error("Expected deny action to be terminal")
+	}
+}
+
+func TestMutateWasmConfig_CrossGatewayIsolation(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policyID := testResourceID("ThreatPolicy", "test-ns", "my-threat")
+	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "test-ns"}
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "assess", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: routeRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check"},
+		testFileDescriptorSet(),
+	)
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess"},
+	})
+	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
+
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	gwA := BuildGateway(func(g *gwapiv1.Gateway) { g.Name = "gw-a"; g.Namespace = "test-ns" })
+	routeA := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "route-a"
+		r.Namespace = "test-ns"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "gw-a"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"a.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{Matches: []gwapiv1.HTTPRouteMatch{{
+			Path: &gwapiv1.HTTPPathMatch{Type: ptr.To(gwapiv1.PathMatchPathPrefix), Value: ptr.To("/")},
+		}}}}
+	})
+
+	gwB := BuildGateway(func(g *gwapiv1.Gateway) { g.Name = "gw-b"; g.Namespace = "test-ns" })
+	routeB := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "route-b"
+		r.Namespace = "test-ns"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "gw-b"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"b.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{Matches: []gwapiv1.HTTPRouteMatch{{
+			Path: &gwapiv1.HTTPPathMatch{Type: ptr.To(gwapiv1.PathMatchPathPrefix), Value: ptr.To("/")},
+		}}}}
+	})
+
+	topology := testTopology(t, []*gwapiv1.Gateway{gwA, gwB}, []*gwapiv1.HTTPRoute{routeA, routeB}, nil)
+	gatewayA := findGatewayInTopology(t, topology, "gw-a")
+	gatewayB := findGatewayInTopology(t, topology, "gw-b")
+
+	configA := wasm.Config{}
+	if err := ApplyWasmConfigMutators(&configA, gatewayA, topology); err != nil {
+		t.Fatalf("Unexpected error for gw-a: %v", err)
+	}
+	if len(configA.ActionSets) != 1 {
+		t.Fatalf("gw-a: expected 1 actionset, got %d", len(configA.ActionSets))
+	}
+	if len(configA.ActionSets[0].TypedActions) == 0 {
+		t.Fatal("gw-a: expected typed actions on route-a's action set")
+	}
+
+	configB := wasm.Config{}
+	if err := ApplyWasmConfigMutators(&configB, gatewayB, topology); err != nil {
+		t.Fatalf("Unexpected error for gw-b: %v", err)
+	}
+	if len(configB.ActionSets) != 0 {
+		t.Fatalf("gw-b: expected 0 actionsets (no policies target this gateway), got %d", len(configB.ActionSets))
+	}
+}
+
+func TestMutateWasmConfig_PipelineOnlyRouteIsolation(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policyID := testResourceID("DenyPolicy", "test-ns", "deny-route-a")
+	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "test-ns"}
+
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+	})
+	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	routeTargetRef := policyTargetRef("HTTPRoute", "route-a", "test-ns")
+	otherRouteRef := policyTargetRef("HTTPRoute", "route-b", "test-ns")
+	targetRefs := []machinery.PolicyTargetReference{routeTargetRef, otherRouteRef}
+
+	wasmConfig := &wasm.Config{
+		ActionSets: []wasm.ActionSet{
+			{Name: "set-a", SourceRoute: "HTTPRoute/test-ns/route-a"},
+			{Name: "set-b", SourceRoute: "HTTPRoute/test-ns/route-b"},
+		},
+	}
+
+	if err := mutator.Mutate(wasmConfig, targetRefs); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(wasmConfig.ActionSets[0].TypedActions) != 1 {
+		t.Fatalf("route-a: expected 1 typed action, got %d", len(wasmConfig.ActionSets[0].TypedActions))
+	}
+	if wasmConfig.ActionSets[0].TypedActions[0].Type != "deny" {
+		t.Errorf("route-a: expected deny action, got %s", wasmConfig.ActionSets[0].TypedActions[0].Type)
+	}
+
+	if len(wasmConfig.ActionSets[1].TypedActions) != 0 {
+		t.Fatalf("route-b: expected 0 typed actions (policy doesn't target this route), got %d", len(wasmConfig.ActionSets[1].TypedActions))
+	}
+}
+
+func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policyID := testResourceID("DenyPolicy", "test-ns", "deny-route-b")
+	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "test-ns"}
+
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+	})
+	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
+
+	savedRegistry := *GlobalMutatorRegistry
+	defer func() { *GlobalMutatorRegistry = savedRegistry }()
+	*GlobalMutatorRegistry = MutatorRegistry{}
+	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+
+	gw := BuildGateway(func(g *gwapiv1.Gateway) { g.Name = "test-gw"; g.Namespace = "test-ns" })
+	routeA := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "route-a"
+		r.Namespace = "test-ns"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "test-gw"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"a.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{Matches: []gwapiv1.HTTPRouteMatch{{
+			Path: &gwapiv1.HTTPPathMatch{Type: ptr.To(gwapiv1.PathMatchPathPrefix), Value: ptr.To("/")},
+		}}}}
+	})
+	routeB := BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		r.Name = "route-b"
+		r.Namespace = "test-ns"
+		r.Spec.ParentRefs = []gwapiv1.ParentReference{{Name: "test-gw"}}
+		r.Spec.Hostnames = []gwapiv1.Hostname{"b.example.com"}
+		r.Spec.Rules = []gwapiv1.HTTPRouteRule{{Matches: []gwapiv1.HTTPRouteMatch{{
+			Path: &gwapiv1.HTTPPathMatch{Type: ptr.To(gwapiv1.PathMatchPathPrefix), Value: ptr.To("/")},
+		}}}}
+	})
+
+	topology := testTopology(t, []*gwapiv1.Gateway{gw}, []*gwapiv1.HTTPRoute{routeA, routeB}, nil)
+	gateway := findGatewayInTopology(t, topology, "test-gw")
+
+	// Simulate route-a having a built-in policy action set, route-b has none
+	wasmConfig := wasm.Config{
+		ActionSets: []wasm.ActionSet{
+			{
+				Name:                "builtin-a",
+				SourceRoute:         "HTTPRoute/test-ns/route-a",
+				RouteRuleConditions: wasm.RouteRuleConditions{Hostnames: []string{"a.example.com"}},
+				Actions:             []wasm.Action{{ServiceName: "ratelimit-service"}},
+			},
+		},
+	}
+
+	if err := ApplyWasmConfigMutators(&wasmConfig, gateway, topology); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(wasmConfig.ActionSets) != 2 {
+		t.Fatalf("Expected 2 actionsets (builtin for route-a + skeleton for route-b), got %d", len(wasmConfig.ActionSets))
+	}
+
+	// route-a's action set should be untouched
+	if wasmConfig.ActionSets[0].SourceRoute != "HTTPRoute/test-ns/route-a" {
+		t.Errorf("Expected route-a action set first, got %s", wasmConfig.ActionSets[0].SourceRoute)
+	}
+	if len(wasmConfig.ActionSets[0].TypedActions) != 0 {
+		t.Errorf("route-a: expected 0 typed actions (deny targets route-b only), got %d", len(wasmConfig.ActionSets[0].TypedActions))
+	}
+
+	// route-b should have a skeleton with the deny action
+	if wasmConfig.ActionSets[1].SourceRoute != "HTTPRoute/test-ns/route-b" {
+		t.Errorf("Expected route-b action set second, got %s", wasmConfig.ActionSets[1].SourceRoute)
+	}
+	if len(wasmConfig.ActionSets[1].TypedActions) != 1 {
+		t.Fatalf("route-b: expected 1 typed action (deny), got %d", len(wasmConfig.ActionSets[1].TypedActions))
+	}
+	if wasmConfig.ActionSets[1].TypedActions[0].Type != "deny" {
+		t.Errorf("route-b: expected deny action, got %s", wasmConfig.ActionSets[1].TypedActions[0].Type)
+	}
+}
+
+func TestPipelineTargetRefCleanup(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policyID := testResourceID("ThreatPolicy", "default", "my-policy")
+	refs := []TargetRef{{Kind: "HTTPRoute", Name: "route-a", Namespace: "default"}}
+
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+	})
+	store.SetPipelineTargetRefs(policyID, refs)
+
+	if got := store.GetPipelineTargetRefs(policyID); len(got) != 1 {
+		t.Fatalf("Expected 1 target ref, got %d", len(got))
+	}
+
+	store.ClearPipelineActions(policyID)
+	if got := store.GetPipelineTargetRefs(policyID); got != nil {
+		t.Fatalf("Expected nil target refs after ClearPipelineActions, got %v", got)
+	}
+
+	// Verify ClearPolicyData also cleans up
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+	})
+	store.SetPipelineTargetRefs(policyID, refs)
+	store.ClearPolicyData(policyID)
+	if got := store.GetPipelineTargetRefs(policyID); got != nil {
+		t.Fatalf("Expected nil target refs after ClearPolicyData, got %v", got)
 	}
 }

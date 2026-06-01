@@ -765,6 +765,23 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 		return nil, err
 	}
 
+	if len(request.Policy.TargetRefs) == 0 {
+		return nil, fmt.Errorf("pipeline commit for policy %s/%s: policy must have target references", policyID.Namespace, policyID.Name)
+	}
+	targetRefs := make([]TargetRef, 0, len(request.Policy.TargetRefs))
+	for _, ref := range request.Policy.TargetRefs {
+		if ref == nil {
+			return nil, fmt.Errorf("pipeline commit for policy %s/%s: target reference cannot be nil", policyID.Namespace, policyID.Name)
+		}
+		targetRefs = append(targetRefs, TargetRef{
+			Group:     ref.Group,
+			Kind:      ref.Kind,
+			Name:      ref.Name,
+			Namespace: ref.Namespace,
+		})
+	}
+	s.registeredData.SetPipelineTargetRefs(policyID, targetRefs)
+
 	s.logger.Info("pipeline committed",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
 		"actions", len(entries))

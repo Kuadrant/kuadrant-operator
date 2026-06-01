@@ -773,7 +773,7 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 		reason := fmt.Sprintf("pipeline committed for policy %s/%s (%d actions)",
 			policyID.Namespace, policyID.Name, len(entries))
 		if err := s.changeNotifier(reason); err != nil {
-			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+			return nil, fmt.Errorf("pipeline committed but failed to trigger reconciliation: %w", err)
 		}
 	}
 

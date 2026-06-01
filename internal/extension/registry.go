@@ -1151,6 +1151,9 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
 		return true
 	}
+	if entry.WithBody != "" && pattern.MatchString(entry.WithBody) {
+		return true
+	}
 	return false
 }
 

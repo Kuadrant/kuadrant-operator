@@ -1271,6 +1271,9 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
 		return true
 	}
+	if entry.WithBody != "" && pattern.MatchString(entry.WithBody) {
+		return true
+	}
 	return false
 }
 
@@ -1307,8 +1310,7 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 		parts = append(parts, fmt.Sprintf("headers: %s", headers))
 	}
 	if body != "" {
-		escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", `\n`, "\r", `\r`).Replace(body)
-		parts = append(parts, fmt.Sprintf("body: '%s'", escaped))
+		parts = append(parts, fmt.Sprintf("body: %s", body))
 	}
 	if len(parts) == 0 {
 		return "DenyResponse{}"

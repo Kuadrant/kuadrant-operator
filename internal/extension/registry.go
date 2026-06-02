@@ -908,7 +908,7 @@ func pipelineTargetRefsMatch(storedRefs []TargetRef, targetRefs []machinery.Poli
 	return false
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
+func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int, clearedPipelineActions int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	r.upstreamsMutex.Lock()
@@ -972,12 +972,13 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 	// clear pipeline actions and target refs (lock already held)
 	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
 		key := pipelineKey{Policy: policy, Phase: phase}
+		clearedPipelineActions += len(r.pipelineActions[key])
 		delete(r.pipelineActions, key)
 		delete(r.pipelineCounters, key)
 	}
 	delete(r.pipelineTargetRefs, policy)
 
-	return clearedMutators, clearedSubscriptions, clearedUpstreams
+	return clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {
@@ -1134,18 +1135,16 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		}
 	}
 
-	// For pipeline-only policies (no upstreams), populate policyRouteLocators
-	// from stored pipeline target refs so they get the same route scoping.
+	// Merge stored pipeline target refs into policyRouteLocators so policies
+	// that target routes via both upstreams and pipeline actions see all routes.
 	for _, policyID := range policyIDs {
-		if _, hasUpstream := policyRouteLocators[policyID]; hasUpstream {
-			continue
-		}
 		for _, tr := range m.store.GetPipelineTargetRefs(policyID) {
 			if tr.Kind == "HTTPRoute" || tr.Kind == "GRPCRoute" {
 				locator := fmt.Sprintf("%s/%s/%s", tr.Kind, tr.Namespace, tr.Name)
 				policyRouteLocators[policyID] = append(policyRouteLocators[policyID], locator)
 			}
 		}
+		policyRouteLocators[policyID] = lo.Uniq(policyRouteLocators[policyID])
 	}
 
 	for _, policyID := range policyIDs {

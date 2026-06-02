@@ -121,48 +121,16 @@ kubectl label secret trusted-client-ca \
 Create a Gateway without frontend TLS validation (handled by EnvoyFilter instead):
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/x509-authentication/gateway-tier2.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/x509-authentication/gateway-tier2-istio.yaml
 ```
 
 This creates:
 - **cert-manager Issuer**: Self-signed certificate issuer for the gateway server certificate
 - **TLSPolicy**: Kuadrant policy to manage the gateway's server TLS certificate
-- **Gateway**: Standard Gateway without `spec.tls.frontend.default.validation` (client certificate validation handled by EnvoyFilter)
+- **ConfigMap**: Infrastructure configuration to mount the CA certificate bundle into gateway pods
+- **Gateway**: Standard Gateway with `infrastructure.parametersRef` pointing to the ConfigMap (client certificate validation handled by EnvoyFilter)
 
-### Step 4: Mount CA certificate into gateway pods
-
-Patch the gateway deployment to mount the CA certificate Secret:
-
-> [!WARNING] Warning
-> This approach directly patches the gateway deployment, which is managed by the gateway controller. In production environments, use proper configuration mechanisms (e.g., Istio Helm values or IstioOperator overlays) to ensure changes persist across controller reconciliations.
-
-```bash
-kubectl patch deployment -n gateway-system \
-  $(kubectl get deployment -n gateway-system -l gateway.networking.k8s.io/gateway-name=mtls-gateway -o jsonpath='{.items[0].metadata.name}') \
-  --type=json -p='[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/volumes/-",
-    "value": {
-      "name": "client-ca-bundle",
-      "configMap": {
-        "name": "client-ca-bundle"
-      }
-    }
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/volumeMounts/-",
-    "value": {
-      "name": "client-ca-bundle",
-      "mountPath": "/etc/certs",
-      "readOnly": true
-    }
-  }
-]'
-```
-
-### Step 5: Create EnvoyFilter for mTLS validation
+### Step 4: Create EnvoyFilter for mTLS validation
 
 Create an EnvoyFilter to configure Envoy's DownstreamTlsContext for client certificate validation:
 
@@ -199,7 +167,7 @@ spec:
 EOF
 ```
 
-### Step 6: Deploy application and create HTTPRoute
+### Step 5: Deploy application and create HTTPRoute
 
 ```bash
 # Deploy httpbin application
@@ -209,7 +177,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/re
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/x509-authentication/httproute.yaml
 ```
 
-### Step 7: Configure AuthPolicy
+### Step 6: Configure AuthPolicy
 
 The AuthPolicy configuration is **identical to Tier 1** - it extracts the certificate from the XFCC header and validates it:
 
@@ -237,42 +205,22 @@ Same as Istio (see [Istio Step 2](#step-2-create-ca-certificate-resources))
 
 ### Step 3: Configure Gateway
 
-Similar to Istio (see [Istio Step 3](#step-3-configure-gateway)), but adjust `gatewayClassName` for Envoy Gateway.
-
-### Step 4: Mount CA certificate into gateway pods
-
-Patch the gateway deployment to mount the CA certificate Secret:
-
-> [!WARNING] Warning
-> This approach directly patches the gateway deployment, which is managed by the Envoy Gateway controller. In production environments, use proper configuration mechanisms (e.g., EnvoyProxy resource with extraVolumes) to ensure changes persist across controller reconciliations.
+Create a Gateway without frontend TLS validation (handled by EnvoyPatchPolicy instead):
 
 ```bash
-kubectl patch deployment -n gateway-system \
-  $(kubectl get deployment -n gateway-system -l gateway.envoyproxy.io/owning-gateway-name=mtls-gateway -o jsonpath='{.items[0].metadata.name}') \
-  --type=json -p='[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/volumes/-",
-    "value": {
-      "name": "client-ca-bundle",
-      "configMap": {
-        "name": "client-ca-bundle"
-      }
-    }
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/volumeMounts/-",
-    "value": {
-      "name": "client-ca-bundle",
-      "mountPath": "/etc/certs",
-      "readOnly": true
-    }
-  }
-]'
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/x509-authentication/gateway-tier2-envoygateway.yaml
 ```
 
-### Step 5: Create EnvoyPatchPolicy for mTLS validation
+This creates:
+- **cert-manager Issuer**: Self-signed certificate issuer for the gateway server certificate
+- **TLSPolicy**: Kuadrant policy to manage the gateway's server TLS certificate
+- **EnvoyProxy**: Custom resource to mount the CA certificate bundle into gateway pods
+- **Gateway**: Standard Gateway with `infrastructure.parametersRef` pointing to the EnvoyProxy resource (client certificate validation handled by EnvoyPatchPolicy)
+
+> [!NOTE]
+> Unlike Istio which uses a plain ConfigMap, Envoy Gateway requires an `EnvoyProxy` custom resource for infrastructure configuration. The EnvoyProxy resource defines pod volumes and container volume mounts.
+
+### Step 4: Create EnvoyPatchPolicy for mTLS validation
 
 Create an EnvoyPatchPolicy to configure client certificate validation:
 
@@ -307,13 +255,13 @@ spec:
 EOF
 ```
 
-### Step 6: Deploy application and create HTTPRoute
+### Step 5: Deploy application and create HTTPRoute
 
-Same as Istio (see [Istio Step 6](#step-6-deploy-application-and-create-httproute))
+Same as Istio (see [Istio Step 5](#step-5-deploy-application-and-create-httproute))
 
-### Step 7: Configure AuthPolicy
+### Step 6: Configure AuthPolicy
 
-Same as Istio (see [Istio Step 7](#step-7-configure-authpolicy))
+Same as Istio (see [Istio Step 6](#step-6-configure-authpolicy))
 
 ---
 

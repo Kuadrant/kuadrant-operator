@@ -311,7 +311,7 @@ Create the Gateway and configure it to forward (not sanitize) XFCC headers:
 
 First, create the Gateway resources:
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/x509-authentication/gateway-tier2.yaml
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/examples/x509-authentication/gateway-tier3.yaml
 ```
 
 Then, annotate the Gateway to forward XFCC headers:

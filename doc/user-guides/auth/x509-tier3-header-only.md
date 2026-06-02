@@ -288,10 +288,9 @@ Create the CA certificate as a Secret for Authorino validation:
 
 ```bash
 # Secret for Authorino validation
-kubectl create secret tls trusted-client-ca \
+kubectl create secret generic trusted-client-ca \
   -n kuadrant-system \
-  --cert=/tmp/ca.crt \
-  --key=/tmp/ca.key
+  --from-file=ca.crt=/tmp/ca.crt
 
 # Label the secret so Authorino can discover it
 kubectl label secret trusted-client-ca \
@@ -410,17 +409,17 @@ x509:
 Create CA Secrets with appropriate labels:
 
 ```bash
-kubectl create secret tls production-ca \
+kubectl create secret generic production-ca \
   -n kuadrant-system \
-  --cert=prod-ca.crt --key=prod-ca.key
+  --from-file=ca.crt=prod-ca.crt
 kubectl label secret production-ca \
   -n kuadrant-system \
   authorino.kuadrant.io/managed-by=authorino \
   environment=production
 
-kubectl create secret tls staging-ca \
+kubectl create secret generic staging-ca \
   -n kuadrant-system \
-  --cert=staging-ca.crt --key=staging-ca.key
+  --from-file=ca.crt=staging-ca.crt
 kubectl label secret staging-ca \
   -n kuadrant-system \
   authorino.kuadrant.io/managed-by=authorino \

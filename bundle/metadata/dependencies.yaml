@@ -6,7 +6,7 @@ dependencies:
   - type: olm.package
     value:
       packageName: limitador-operator
-      version: "0.18.1"
+      version: "0.18.2"
   - type: olm.package
     value:
       packageName: dns-operator

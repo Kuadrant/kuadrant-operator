@@ -1,5 +1,5 @@
 kuadrant-operator:
-  version: "1.5.0-rc1"
+  version: "1.5.0-rc2"
 olm:
   channels:
     - "stable"
@@ -9,5 +9,5 @@ dependencies:
   console-plugin: "0.4.0"
   developer-portal-controller: "0.2.0"
   dns-operator: "0.17.0"
-  limitador-operator: "0.18.1"
+  limitador-operator: "0.18.2"
   wasm-shim: "0.13.0"

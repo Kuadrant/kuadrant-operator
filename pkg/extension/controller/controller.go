@@ -408,7 +408,11 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 				for _, pattern := range varPatterns {
 					if pattern.MatchString(expr) {
 						refsVar = true
+						break
 					}
+				}
+				if refsVar {
+					break
 				}
 			}
 			if !refsVar {

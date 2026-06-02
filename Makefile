@@ -43,6 +43,17 @@ DEFAULT_CHANNEL ?= alpha
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
+# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
+# You can enable this value if you would like to use SHA Based Digests
+# To enable set flag to true
+USE_IMAGE_DIGESTS ?= false
+
+# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) --extra-service-accounts=developer-portal-controller-manager
+ifeq ($(USE_IMAGE_DIGESTS), true)
+	BUNDLE_GEN_FLAGS += --use-image-digests
+endif
+
 DEFAULT_IMAGE_TAG = latest
 
 # Semantic versioning (i.e. Major.Minor.Patch)
@@ -492,7 +503,7 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	$(call update-csv-config,$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.version)
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) --extra-service-accounts=developer-portal-controller-manager
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
 	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
 		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
 		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
@@ -515,6 +526,10 @@ bundle-post-generate: yq opm
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_BUNDLE_IMG)
+ifeq ($(USE_IMAGE_DIGESTS),true)
+	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
+	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml
+endif
 
 .PHONY: bundle-ignore-createdAt
 bundle-ignore-createdAt:

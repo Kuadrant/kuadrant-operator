@@ -200,13 +200,16 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 3 entries for target ref, got %d", len(entries))
 	}
 
-	clearedMutators, clearedSubscriptions, _ := store.ClearPolicyData(testPolicy)
+	clearedMutators, clearedSubscriptions, _, clearedPipelineActions := store.ClearPolicyData(testPolicy)
 
 	if clearedMutators != 2 {
 		t.Errorf("Expected 2 cleared mutators, got %d", clearedMutators)
 	}
 	if clearedSubscriptions != 1 {
 		t.Errorf("Expected 1 cleared subscription, got %d", clearedSubscriptions)
+	}
+	if clearedPipelineActions != 0 {
+		t.Errorf("Expected 0 cleared pipeline actions, got %d", clearedPipelineActions)
 	}
 
 	entries = store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
@@ -263,7 +266,7 @@ func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 		t.Error("Expected policy data after adding entry")
 	}
 
-	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1")) //nolint:dogsled
+	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1")) //nolint:dogsled,exhaustruct
 
 	subscription := Subscription{
 		CAst: &cel.Ast{},
@@ -435,7 +438,7 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
 	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
 
-	_, cleared, _ := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	_, cleared, _, _ := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
 	if cleared != 2 {
 		t.Errorf("Expected 2 cleared subscriptions, got %d", cleared)
 	}
@@ -450,7 +453,7 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 		t.Errorf("Expected 1 subscription for other policy, got %d", len(subscriptions))
 	}
 
-	_, cleared, _ = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
+	_, cleared, _, _ = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
 	if cleared != 0 {
 		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", cleared)
 	}
@@ -781,7 +784,7 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("clear empty target", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		cleared, _, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
+		cleared, _, _, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
 		if cleared != 0 {
 			t.Errorf("Expected 0 cleared entries, got %d", cleared)
 		}
@@ -1098,7 +1101,7 @@ func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
 	cacheKey1b := ProtoCacheKey{ClusterName: "ext-svc2-8082", Service: "test.ServiceB"}
 	cacheKey2 := ProtoCacheKey{ClusterName: "ext-svc3-8083", Service: "test.ServiceC"}
 
-	_, _, clearedUpstreams := store.ClearPolicyData(policy1)
+	_, _, clearedUpstreams, _ := store.ClearPolicyData(policy1)
 	if clearedUpstreams != 2 {
 		t.Errorf("Expected 2 cleared upstreams, got %d", clearedUpstreams)
 	}
@@ -1621,8 +1624,11 @@ func TestPipelineActionStore_ClearPolicyDataIncludesPipeline(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
 	})
 
-	store.ClearPolicyData(policy)
+	_, _, _, clearedPipelineActions := store.ClearPolicyData(policy)
 
+	if clearedPipelineActions != 1 {
+		t.Errorf("Expected 1 cleared pipeline action, got %d", clearedPipelineActions)
+	}
 	if actions := store.GetPipelineActions(policy, PipelinePhaseRequest); actions != nil {
 		t.Errorf("Expected pipeline actions to be cleared by ClearPolicyData, got %v", actions)
 	}
@@ -3004,7 +3010,10 @@ func TestPipelineTargetRefCleanup(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, refs)
-	store.ClearPolicyData(policyID)
+	_, _, _, clearedPipeline := store.ClearPolicyData(policyID)
+	if clearedPipeline != 1 {
+		t.Fatalf("Expected 1 cleared pipeline action, got %d", clearedPipeline)
+	}
 	if got := store.GetPipelineTargetRefs(policyID); got != nil {
 		t.Fatalf("Expected nil target refs after ClearPolicyData, got %v", got)
 	}

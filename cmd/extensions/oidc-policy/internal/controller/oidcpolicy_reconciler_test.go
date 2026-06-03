@@ -335,3 +335,141 @@ func TestBuildTargetCookieExpression_Examples(t *testing.T) {
 		})
 	}
 }
+
+func TestIngressGatewayInfo_GetURL(t *testing.T) {
+	tests := []struct {
+		name            string
+		hostname        string
+		protocol        gatewayapiv1.ProtocolType
+		port            int32
+		expectedScheme  string
+		expectedHost    string
+		expectedFullURL string
+	}{
+		{
+			name:            "HTTP standard port 80",
+			hostname:        "example.com",
+			protocol:        gatewayapiv1.HTTPProtocolType,
+			port:            80,
+			expectedScheme:  "http",
+			expectedHost:    "example.com",
+			expectedFullURL: "http://example.com",
+		},
+		{
+			name:            "HTTPS standard port 443",
+			hostname:        "secure.example.com",
+			protocol:        gatewayapiv1.HTTPSProtocolType,
+			port:            443,
+			expectedScheme:  "https",
+			expectedHost:    "secure.example.com",
+			expectedFullURL: "https://secure.example.com",
+		},
+		{
+			name:            "HTTP non-standard port 8080",
+			hostname:        "example.com",
+			protocol:        gatewayapiv1.HTTPProtocolType,
+			port:            8080,
+			expectedScheme:  "http",
+			expectedHost:    "example.com:8080",
+			expectedFullURL: "http://example.com:8080",
+		},
+		{
+			name:            "HTTP non-standard port 8001",
+			hostname:        "example.com",
+			protocol:        gatewayapiv1.HTTPProtocolType,
+			port:            8001,
+			expectedScheme:  "http",
+			expectedHost:    "example.com:8001",
+			expectedFullURL: "http://example.com:8001",
+		},
+		{
+			name:            "HTTPS non-standard port 8443",
+			hostname:        "secure.example.com",
+			protocol:        gatewayapiv1.HTTPSProtocolType,
+			port:            8443,
+			expectedScheme:  "https",
+			expectedHost:    "secure.example.com:8443",
+			expectedFullURL: "https://secure.example.com:8443",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			igw := &ingressGatewayInfo{
+				Hostname:  tt.hostname,
+				Protocol:  tt.protocol,
+				Port:      tt.port,
+				Name:      "test-gateway",
+				Namespace: "default",
+			}
+
+			url := igw.GetURL()
+
+			if url.Scheme != tt.expectedScheme {
+				t.Errorf("GetURL() scheme = %v, want %v", url.Scheme, tt.expectedScheme)
+			}
+			if url.Host != tt.expectedHost {
+				t.Errorf("GetURL() host = %v, want %v", url.Host, tt.expectedHost)
+			}
+			if url.String() != tt.expectedFullURL {
+				t.Errorf("GetURL() = %v, want %v", url.String(), tt.expectedFullURL)
+			}
+		})
+	}
+}
+
+func TestIngressGatewayInfo_GetURL_CachesResult(t *testing.T) {
+	igw := &ingressGatewayInfo{
+		Hostname:  "example.com",
+		Protocol:  gatewayapiv1.HTTPProtocolType,
+		Port:      8080,
+		Name:      "test-gateway",
+		Namespace: "default",
+	}
+
+	// Call GetURL multiple times
+	url1 := igw.GetURL()
+	url2 := igw.GetURL()
+
+	// Should return the same cached instance
+	if url1 != url2 {
+		t.Error("GetURL() should cache and return the same URL instance")
+	}
+
+	// Verify the URL is correct
+	expectedURL := "http://example.com:8080"
+	if url1.String() != expectedURL {
+		t.Errorf("GetURL() = %v, want %v", url1.String(), expectedURL)
+	}
+}
+
+func TestIngressGatewayInfo_GetURL_PortInCookieDomain(t *testing.T) {
+	// Test that demonstrates Bug 1 is fixed: port is preserved in URL construction
+	igw := &ingressGatewayInfo{
+		Hostname:  "example.com",
+		Protocol:  gatewayapiv1.HTTPProtocolType,
+		Port:      8001,
+		Name:      "test-gateway",
+		Namespace: "default",
+	}
+
+	url := igw.GetURL()
+
+	// The URL should include the port
+	if url.Host != "example.com:8001" {
+		t.Errorf("Expected Host to include port: got %v, want example.com:8001", url.Host)
+	}
+
+	// When this URL is used for redirect URI construction, the port will be preserved
+	redirectURI := url.String() + "/auth/callback"
+	expectedRedirectURI := "http://example.com:8001/auth/callback"
+	if redirectURI != expectedRedirectURI {
+		t.Errorf("Redirect URI = %v, want %v", redirectURI, expectedRedirectURI)
+	}
+
+	// Cookie domain uses igw.Hostname (without port), which is correct
+	cookieExpr := buildTargetCookieExpression(igw.Hostname, igw.Protocol)
+	if !strings.Contains(cookieExpr, "domain=example.com") {
+		t.Error("Cookie domain should use hostname without port")
+	}
+}

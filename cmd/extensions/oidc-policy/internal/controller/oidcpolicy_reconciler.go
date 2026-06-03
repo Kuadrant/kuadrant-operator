@@ -297,6 +297,11 @@ func claimPredicate(k, v string) string {
 	return fmt.Sprintf(`has(auth.identity) && has(auth.identity.%s) && (auth.identity.%s == "%s" || (type(auth.identity.%s) == list && "%s" in auth.identity.%s))`, k, k, v, k, v, k)
 }
 
+func buildTargetCookieExpression(hostname string, protocol gatewayapiv1.ProtocolType) string {
+	return fmt.Sprintf(`
+"target=" + request.path + (request.query != "" ? "?" + request.query : "") + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, hostname, getSecureFlag(protocol))
+}
+
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	authorizeURL, err := pol.GetAuthorizeURL(igw.GetURL())
 	if err != nil {
@@ -307,8 +312,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		return nil, err
 	}
 
-	setCookie := fmt.Sprintf(`
-"target=" + request.path + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, igw.Hostname, getSecureFlag(igw.Protocol))
+	setCookie := buildTargetCookieExpression(igw.Hostname, igw.Protocol)
 
 	var authorization = map[string]kuadrantv1.MergeableAuthorizationSpec{}
 	var authPatterns []authorinov1beta3.PatternExpressionOrRef

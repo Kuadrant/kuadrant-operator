@@ -40,14 +40,21 @@ type ingressGatewayInfo struct {
 	Name      string                    `json:"name"`
 	Namespace string                    `json:"namespace"`
 	Protocol  gatewayapiv1.ProtocolType `json:"protocol"`
+	Port      int32                     `json:"port"`
 	url       *url.URL
 }
 
 func (g *ingressGatewayInfo) GetURL() *url.URL {
 	if g.url == nil {
+		host := g.Hostname
+		// Include port if it's not the standard port for the protocol
+		if (g.Protocol == gatewayapiv1.HTTPProtocolType && g.Port != 80) ||
+			(g.Protocol == gatewayapiv1.HTTPSProtocolType && g.Port != 443) {
+			host = fmt.Sprintf("%s:%d", g.Hostname, g.Port)
+		}
 		g.url = &url.URL{
 			Scheme: strings.ToLower(string(g.Protocol)),
-			Host:   g.Hostname,
+			Host:   host,
 		}
 	}
 	return g.url
@@ -109,6 +116,7 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		oidcPolicy,
 		`{"protocol": self.findGateways()[0].spec.listeners[0].protocol,
 		"hostname": self.findGateways()[0].spec.listeners[0].hostname,
+		"port": self.findGateways()[0].spec.listeners[0].port,
 		"name": self.findGateways()[0].metadata.name,
 		"namespace": self.findGateways()[0].metadata.namespace}`,
 		true)

@@ -442,6 +442,14 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 	}
 }
 
+func buildOpaAuthorizationRule(igwURL *url.URL, authorizeURL string) string {
+	return fmt.Sprintf(`cookies := { name: value | raw_cookies := input.request.headers.cookie; cookie_parts := split(raw_cookies, ";"); part := cookie_parts[_]; trimmed := trim(part, " "); eq_idx := indexof(trimmed, "="); eq_idx != -1; name := trim(substring(trimmed, 0, eq_idx), " "); value := trim(substring(trimmed, eq_idx + 1, -1), " ")}
+location := concat("", ["%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
+location := "%s" { input.auth.metadata.token.id_token; not cookies.target }
+location := "%s" { not input.auth.metadata.token.id_token }
+allow = true`, igwURL, igwURL, authorizeURL)
+}
+
 func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
 	tokenRequestURL, err := pol.GetTokenRequestURL()
@@ -470,11 +478,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 		Expression: authorinov1beta3.CelExpression(callBodyCelExpression),
 	}
 
-	opaAuthorizationRule := fmt.Sprintf(`cookies := { name: value | raw_cookies := input.request.headers.cookie; cookie_parts := split(raw_cookies, ";"); part := cookie_parts[_]; kv := split(trim(part, " "), "="); count(kv) == 2; name := trim(kv[0], " "); value := trim(kv[1], " ")}
-location := concat("", ["%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
-location := "%s" { input.auth.metadata.token.id_token; not cookies.target }
-location := "%s" { not input.auth.metadata.token.id_token }
-allow = true`, igwURL, igwURL, authorizeURL)
+	opaAuthorizationRule := buildOpaAuthorizationRule(igwURL, authorizeURL)
 
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{

@@ -223,12 +223,12 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				},
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
-			scope:           "my-ns/my-route",
+			scope:           string(ActionScope("my-ns/my-route")),
 			expectedActions: []wasm.Action{
 				// Request phase action
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
-					Scope:       "my-ns/my-route",
+					Scope:       string(ActionScope("my-ns/my-route")),
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
@@ -315,7 +315,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				// Request phase action
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
-					Scope:       "my-ns/my-route",
+					Scope:       string(ActionScope("my-ns/my-route")),
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
@@ -345,7 +345,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 				{
 					ServiceName:          wasm.RateLimitReportServiceName,
 					SourcePolicyLocators: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					Scope:                string(ActionScope("my-ns/my-route")),
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
@@ -376,7 +376,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedActions := wasmActionsFromTokenLimit(tc.tokenLimit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
+			computedActions := wasmActionsFromTokenLimit(tc.tokenLimit, tc.limitIdentifier, ActionScope(tc.scope), "test/policy/locator", tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedActions, computedActions); diff != "" {
 				t.Errorf("unexpected wasm actions (-want +got):\n%s", diff)
 			}

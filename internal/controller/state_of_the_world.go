@@ -761,25 +761,13 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			&certmanagerv1.Issuer{},
 			CertManagerIssuersResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
-					oldStatus := e.ObjectOld.GetStatus()
-					newStatus := e.ObjectOld.GetStatus()
-					return !reflect.DeepEqual(oldStatus, newStatus)
-				},
-			})),
+			controller.WithPredicates(issuerStatusChangedPredicate())),
 		),
 		controller.WithRunnable("clusterissuers watcher", controller.Watch(
 			&certmanagerv1.ClusterIssuer{},
 			CertMangerClusterIssuersResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
-					oldStatus := e.ObjectOld.GetStatus()
-					newStatus := e.ObjectOld.GetStatus()
-					return !reflect.DeepEqual(oldStatus, newStatus)
-				},
-			})),
+			controller.WithPredicates(clusterIssuerStatusChangedPredicate())),
 		),
 		controller.WithObjectKinds(
 			CertManagerCertificateKind,
@@ -791,6 +779,26 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			LinkTLSPolicyToIssuerFunc,
 			LinkTLSPolicyToClusterIssuerFunc,
 		),
+	}
+}
+
+func statusChanged[S any, T interface{ GetStatus() S }](oldObj, newObj T) bool {
+	return !reflect.DeepEqual(oldObj.GetStatus(), newObj.GetStatus())
+}
+
+func issuerStatusChangedPredicate() ctrlruntimepredicate.TypedPredicate[*certmanagerv1.Issuer] {
+	return ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
+			return statusChanged(e.ObjectOld, e.ObjectNew)
+		},
+	}
+}
+
+func clusterIssuerStatusChangedPredicate() ctrlruntimepredicate.TypedPredicate[*certmanagerv1.ClusterIssuer] {
+	return ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
+			return statusChanged(e.ObjectOld, e.ObjectNew)
+		},
 	}
 }
 

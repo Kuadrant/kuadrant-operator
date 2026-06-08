@@ -1,0 +1,78 @@
+name: Benchmark
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'internal/**'
+      - 'pkg/**'
+      - 'api/**'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      # Run benchmarks on PR branch
+      - name: Run benchmarks (PR)
+        run: make test-bench
+      - name: Save PR results
+        run: mv benchmark-results.txt pr-bench.txt
+
+      # Run benchmarks on base branch
+      - name: Check out base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          clean: false
+          path: base
+      - name: Run benchmarks (base)
+        run: cd base && make test-bench
+      - name: Save base results
+        run: mv base/benchmark-results.txt base-bench.txt
+
+      # Compare with benchstat
+      - name: Compare results
+        id: benchstat
+        run: |
+          {
+            echo '## Benchmark Results'
+            echo '```'
+            benchstat base-bench.txt pr-bench.txt 2>&1 || true
+            echo '```'
+          } > benchmark-report.md
+
+      - name: Post PR comment
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: benchmark-report.md
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            pr-bench.txt
+            base-bench.txt
+            benchmark-report.md

@@ -414,6 +414,10 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 	mkdir -p $(PROJECT_PATH)/coverage/unit
 	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -race -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
 
+.PHONY: test-bench
+test-bench: ## Run benchmarks.
+	go test $(UNIT_DIRS) -bench=. -benchmem -run='^$$' -count=6 -timeout 30m -tags unit | tee benchmark-results.txt
+
 ##@ Build
 
 build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")

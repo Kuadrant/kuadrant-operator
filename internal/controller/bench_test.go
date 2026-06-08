@@ -413,8 +413,8 @@ func BenchmarkBuildLimitadorLimits(b *testing.B) {
 // BenchmarkTopologyPaths measures the Paths() DFS traversal — the single most expensive operation.
 func BenchmarkTopologyPaths(b *testing.B) {
 	cases := []struct {
-		name   string
-		p      benchTopologyParams
+		name string
+		p    benchTopologyParams
 	}{
 		{"shallow-narrow", benchTopologyParams{1, 5, 2, false, false}},
 		{"shallow-wide", benchTopologyParams{1, 100, 2, false, false}},

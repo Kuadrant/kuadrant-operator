@@ -12,13 +12,17 @@ import (
 )
 
 func TestBuildOpaAuthorizationRule(t *testing.T) {
+	baseURL, err := url.Parse("https://gateway.example.com:8443")
+	if err != nil {
+		t.Fatal(err)
+	}
 	igwURL, err := url.Parse("https://gateway.example.com:8443")
 	if err != nil {
 		t.Fatal(err)
 	}
 	authorizeURL := "https://issuer.com/authorize?client_id=test"
 
-	rule := buildOpaAuthorizationRule(igwURL, authorizeURL)
+	rule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
 	fmt.Println(rule)
 
 	// Verify the rule contains the correct cookie parser that handles JWT tokens
@@ -47,10 +51,11 @@ func TestBuildOpaAuthorizationRule(t *testing.T) {
 }
 
 func TestBuildOpaAuthorizationRule_CookieParserPattern(t *testing.T) {
+	baseURL, _ := url.Parse("http://example.com")
 	igwURL, _ := url.Parse("http://example.com")
 	authorizeURL := "http://issuer.com/auth"
 
-	rule := buildOpaAuthorizationRule(igwURL, authorizeURL)
+	rule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
 
 	// The cookie parser should handle JWT tokens with = padding
 	// Example JWT: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.Signature==
@@ -110,9 +115,10 @@ func TestBuildOpaAuthorizationRule_JWTScenarios(t *testing.T) {
 		},
 	}
 
+	baseURL, _ := url.Parse("http://example.com")
 	igwURL, _ := url.Parse("http://example.com")
 	authorizeURL := "http://issuer.com/auth"
-	rule := buildOpaAuthorizationRule(igwURL, authorizeURL)
+	rule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
 
 	// Document that the cookie parser pattern can handle all these scenarios
 	for _, tt := range tests {
@@ -380,5 +386,152 @@ func TestIngressGatewayInfo_GetURL_PortInCookieDomain(t *testing.T) {
 	cookieExpr := buildTargetCookieExpression(igw.Hostname, igw.Protocol)
 	if !strings.Contains(cookieExpr, "domain=example.com") {
 		t.Error("Cookie domain should use hostname without port")
+	}
+}
+
+func TestBuildOpaAuthorizationRule_UsesCorrectBaseURL(t *testing.T) {
+	tests := []struct {
+		name              string
+		baseURL           string
+		igwURL            string
+		authorizeURL      string
+		expectedInRule    []string
+		notExpectedInRule []string
+		description       string
+	}{
+		{
+			name:         "No custom redirectURI - both URLs are the same",
+			baseURL:      "http://gateway.example.com:8001",
+			igwURL:       "http://gateway.example.com:8001",
+			authorizeURL: "https://issuer.com/authorize",
+			expectedInRule: []string{
+				"http://gateway.example.com:8001",
+				"https://issuer.com/authorize",
+			},
+			description: "When no custom redirectURI is set, baseURL and igwURL are identical",
+		},
+		{
+			name:         "Custom redirect URI - baseURL differs from igwURL",
+			baseURL:      "https://public.example.com:8443",
+			igwURL:       "http://gateway.internal:8080",
+			authorizeURL: "https://issuer.com/authorize",
+			expectedInRule: []string{
+				// Location 1: with cookies.target uses baseURL
+				`concat("", ["https://public.example.com:8443", cookies.target])`,
+				// Location 2: without cookies.target uses igwURL
+				`location := "http://gateway.internal:8080"`,
+				// Location 3: no auth uses authorizeURL
+				`location := "https://issuer.com/authorize"`,
+			},
+			description: "When custom redirectURI is set, location 1 uses baseURL, location 2 uses igwURL",
+		},
+		{
+			name:         "Custom redirect URI without port",
+			baseURL:      "https://public.example.com",
+			igwURL:       "http://gateway.example.com:8001",
+			authorizeURL: "https://issuer.com/authorize?client_id=test",
+			expectedInRule: []string{
+				`concat("", ["https://public.example.com", cookies.target])`,
+				`location := "http://gateway.example.com:8001"`,
+				`location := "https://issuer.com/authorize?client_id=test"`,
+			},
+			description: "Handles custom redirectURI with standard port, igwURL with non-standard port",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			baseURL, err := url.Parse(tt.baseURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			igwURL, err := url.Parse(tt.igwURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			rule := buildOpaAuthorizationRule(baseURL, igwURL, tt.authorizeURL)
+
+			// Verify expected strings are in the rule
+			for _, expected := range tt.expectedInRule {
+				if !strings.Contains(rule, expected) {
+					t.Errorf("OPA rule missing expected pattern: %s\nDescription: %s\nRule: %s",
+						expected, tt.description, rule)
+				}
+			}
+
+			// Verify unexpected strings are NOT in the rule
+			for _, notExpected := range tt.notExpectedInRule {
+				if strings.Contains(rule, notExpected) {
+					t.Errorf("OPA rule should not contain: %s\nDescription: %s\nRule: %s",
+						notExpected, tt.description, rule)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildOpaAuthorizationRule_LocationRedirects(t *testing.T) {
+	baseURL, _ := url.Parse("https://public.example.com:8443")
+	igwURL, _ := url.Parse("http://gateway.internal:8080")
+	authorizeURL := "https://issuer.com/authorize?client_id=test"
+
+	rule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
+
+	// The rule should have three location assignments:
+	// 1. Successful auth with target cookie: concat baseURL with cookies.target (uses custom redirectURI base)
+	// 2. Successful auth without target cookie: redirect to igwURL (uses gateway URL as default)
+	// 3. Failed auth: redirect to authorizeURL
+
+	expectedPatterns := []string{
+		// Pattern 1: successful auth with target - uses baseURL
+		`location := concat("", ["https://public.example.com:8443", cookies.target])`,
+		`input.auth.metadata.token.id_token`,
+		`cookies.target`,
+
+		// Pattern 2: successful auth without target - uses igwURL
+		`location := "http://gateway.internal:8080"`,
+		`not cookies.target`,
+
+		// Pattern 3: failed auth
+		`location := "https://issuer.com/authorize?client_id=test"`,
+		`not input.auth.metadata.token.id_token`,
+
+		// Allow statement
+		`allow = true`,
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(rule, pattern) {
+			t.Errorf("OPA rule missing expected pattern: %s", pattern)
+		}
+	}
+}
+
+func TestBuildOpaAuthorizationRule_CustomRedirectURI_Scenario(t *testing.T) {
+	// Real-world scenario: LoadBalancer exposes gateway on public URL,
+	// but internal gateway uses different host/port
+	baseURL, _ := url.Parse("https://app.example.com")     // Custom redirectURI base
+	igwURL, _ := url.Parse("http://gateway.internal:8080") // Internal gateway URL
+	authorizeURL := "https://auth.example.com/authorize"
+
+	rule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
+
+	// Scenario 1: User tried to access /dashboard?tab=settings
+	// After auth, they should be redirected to: https://app.example.com/dashboard?tab=settings
+	if !strings.Contains(rule, `concat("", ["https://app.example.com", cookies.target])`) {
+		t.Error("Location 1 should use custom baseURL for user's intended destination")
+	}
+
+	// Scenario 2: User accessed callback directly (no target cookie)
+	// They should be redirected to the internal gateway URL as default: http://gateway.internal:8080
+	if !strings.Contains(rule, `location := "http://gateway.internal:8080" { input.auth.metadata.token.id_token; not cookies.target }`) {
+		t.Error("Location 2 should use igwURL as default when no target cookie exists")
+	}
+
+	// Scenario 3: Auth failed (no token)
+	// Redirect to authorize URL for re-authentication
+	if !strings.Contains(rule, `location := "https://auth.example.com/authorize" { not input.auth.metadata.token.id_token }`) {
+		t.Error("Location 3 should redirect to authorize URL when auth fails")
 	}
 }

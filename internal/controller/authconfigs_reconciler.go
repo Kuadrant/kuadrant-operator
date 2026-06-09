@@ -98,9 +98,6 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	for _, authConfig := range staleAuthConfigs {
 		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil {
 			if apierrors.IsNotFound(err) {
-				// Already gone - idempotent success, matching the pattern
-				// used in effective_dnspolicies_reconciler.go:311 and
-				// effective_tls_policies_reconciler.go:131.
 				continue
 			}
 			logger.Error(err, "failed to delete authconfig object", "authconfig", fmt.Sprintf("%s/%s", authConfig.GetNamespace(), authConfig.GetName()))

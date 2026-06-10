@@ -29,6 +29,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
+	pkgcel "github.com/kuadrant/kuadrant-operator/pkg/cel"
 )
 
 var (
@@ -65,7 +66,7 @@ func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {
 	return utils.Associate(p.Spec.Plans, func(plan Plan) (string, kuadrantv1.Limit) {
 		return plan.Tier, kuadrantv1.Limit{
-			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan == "%s"`, plan.Tier)),
+			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan == %s`, pkgcel.StringLiteral(plan.Tier))),
 			Rates: plan.Limits.ToRates(),
 		}
 	})
@@ -77,8 +78,8 @@ func (p *PlanPolicy) BuildCelExpression() string {
 
 	for i, plan := range p.Spec.Plans {
 		predicate := strings.ReplaceAll(plan.Predicate, "\n", "")
-		tierList.WriteString(fmt.Sprintf(`"%s"`, plan.Tier))
-		tierPredicates.WriteString(fmt.Sprintf(`    "%s": %s,`, plan.Tier, predicate))
+		tierList.WriteString(pkgcel.StringLiteral(plan.Tier))
+		tierPredicates.WriteString(fmt.Sprintf(`    %s: %s,`, pkgcel.StringLiteral(plan.Tier), predicate))
 
 		if i < len(p.Spec.Plans)-1 {
 			tierList.WriteString(", ")

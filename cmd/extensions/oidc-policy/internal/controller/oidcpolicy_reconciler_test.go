@@ -236,7 +236,7 @@ func TestBuildTargetCookieExpression(t *testing.T) {
 			protocol: gatewayapiv1.HTTPProtocolType,
 			want: []string{
 				`"target=" + request.path`,
-				`request.query != ""`,
+				`has(request.query) && request.query != ""`,
 				`"?" + request.query`,
 				`domain=example.com`,
 				`HttpOnly`,
@@ -251,7 +251,7 @@ func TestBuildTargetCookieExpression(t *testing.T) {
 			protocol: gatewayapiv1.HTTPSProtocolType,
 			want: []string{
 				`"target=" + request.path`,
-				`request.query != ""`,
+				`has(request.query) && request.query != ""`,
 				`"?" + request.query`,
 				`domain=secure.example.com`,
 				`HttpOnly`,
@@ -283,10 +283,10 @@ func TestBuildTargetCookieExpression_QueryStringHandling(t *testing.T) {
 	// Verify the expression includes query string handling
 	requiredPatterns := []string{
 		// CEL ternary operator to conditionally add query string
-		`request.query != ""`,
+		`has(request.query) && request.query != ""`,
 		`"?" + request.query`,
-		// The pattern should be: path + (query != "" ? "?" + query : "")
-		`request.path + (request.query != "" ? "?" + request.query : "")`,
+		// The pattern should be: path + (has(request.query) ? "?" + query : "")
+		`request.path + (has(request.query) && request.query != "" ? "?" + request.query : "")`,
 	}
 
 	for _, pattern := range requiredPatterns {
@@ -333,9 +333,9 @@ func TestBuildTargetCookieExpression_Examples(t *testing.T) {
 
 	for _, ex := range examples {
 		t.Run(ex.scenario, func(t *testing.T) {
-			// The CEL expression uses a ternary: request.path + (request.query != "" ? "?" + request.query : "")
+			// The CEL expression uses a ternary: request.path + (has(request.query) ? "?" + request.query : "")
 			// This should construct the full path with query when query is present
-			if !strings.Contains(expression, `request.path + (request.query != "" ? "?" + request.query : "")`) {
+			if !strings.Contains(expression, `request.path + (has(request.query) ? "?" + request.query : "")`) {
 				t.Errorf("Expression should handle scenario: %s\nExpected to preserve: %s", ex.scenario, ex.expected)
 			}
 		})

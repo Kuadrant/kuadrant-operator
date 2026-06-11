@@ -292,7 +292,7 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 
 func buildTargetCookieExpression(hostname string, protocol gatewayapiv1.ProtocolType) string {
 	return fmt.Sprintf(`
-"target=" + request.path + (request.query != "" ? "?" + request.query : "") + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, hostname, getSecureFlag(protocol))
+"target=" + request.path + (has(request.query) && request.query != "" ? "?" + request.query : "") + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, hostname, getSecureFlag(protocol))
 }
 
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {

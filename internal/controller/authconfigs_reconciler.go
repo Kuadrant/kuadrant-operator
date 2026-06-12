@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -93,14 +94,19 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		_, desired := desiredAuthConfigs[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
 		return o.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels()) && !desired
 	})
+	var deleteErrors []error
 	for _, authConfig := range staleAuthConfigs {
 		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
 			logger.Error(err, "failed to delete authconfig object", "authconfig", fmt.Sprintf("%s/%s", authConfig.GetNamespace(), authConfig.GetName()))
-			// TODO: handle error
+			deleteErrors = append(deleteErrors, fmt.Errorf("failed to delete stale authconfig %s/%s: %w",
+				authConfig.GetNamespace(), authConfig.GetName(), err))
 		}
 	}
 
-	return nil
+	return errors.Join(deleteErrors...)
 }
 
 // reconcileAuthConfigForPath reconciles the AuthConfig for a single effective policy path.

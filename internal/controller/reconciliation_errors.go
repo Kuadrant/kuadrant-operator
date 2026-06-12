@@ -50,7 +50,20 @@ func (e *ReconciliationError) Key() string {
 
 // NextRetryDelay calculates exponential backoff delay
 func (e *ReconciliationError) NextRetryDelay() time.Duration {
-	delay := time.Duration(float64(initialRetryDelay) * float64(uint(1)<<uint(e.RetryCount)))
+	// Calculate 2^retryCount with safe conversion
+	// Cap the shift at 30 to avoid overflow (2^30 seconds = ~34 years, well over maxRetryDelay)
+	retryCount := e.RetryCount
+	if retryCount < 0 {
+		retryCount = 0
+	}
+	if retryCount > 30 {
+		retryCount = 30
+	}
+
+	// Safe conversion: retryCount is now guaranteed to be in [0, 30]
+	// #nosec G115 -- retryCount is bounded to [0, 30]
+	shift := uint(retryCount)
+	delay := time.Duration(float64(initialRetryDelay) * float64(uint(1)<<shift))
 	if delay > maxRetryDelay {
 		delay = maxRetryDelay
 	}

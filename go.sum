@@ -97,6 +97,8 @@ github.com/kuadrant/limitador-operator v0.15.0 h1:BWgYKV0iasFY3+zKQhLpTdfIlI2pD4
 github.com/kuadrant/limitador-operator v0.15.0/go.mod h1:58b5gdSemjXUijd2TBPKBwaQskU7rynHGHD7rTqk2OE=
 github.com/kuadrant/policy-machinery v0.8.0 h1:WktikruCgNcNdITDOI80yfRnr4uivCh6bxxfrsf0ibc=
 github.com/kuadrant/policy-machinery v0.8.0/go.mod h1:gAnVskiC8jXk13k56QHUhHvMUkYiDA6IqMpYv2UqOng=
+github.com/kuadrant/policy-machinery v0.8.1-0.20260611112329-244a3ec8172a h1:OUU62tFD1WxVvpTCIzStb/laBKAvHfY3rbQBm57LgqA=
+github.com/kuadrant/policy-machinery v0.8.1-0.20260611112329-244a3ec8172a/go.mod h1:cMPwXsMTamG2y3QmLKR3Vs4atZQ7wMIDNST6NXRlJ/4=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=

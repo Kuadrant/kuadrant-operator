@@ -37,3 +37,6 @@ vendor
 
 # Helm chart packages
 *operator*.tgz*
+
+# Benchmark results
+benchmark-results.txt

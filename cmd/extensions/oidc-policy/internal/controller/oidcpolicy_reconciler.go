@@ -26,6 +26,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/api/v1alpha1"
+	pkgcel "github.com/kuadrant/kuadrant-operator/pkg/cel"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
@@ -303,7 +304,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		for k, v := range claims {
 			authPatterns = append(authPatterns, authorinov1beta3.PatternExpressionOrRef{
 				CelPredicate: authorinov1beta3.CelPredicate{
-					Predicate: fmt.Sprintf(`"%s" in auth.identity.%s`, v, k),
+					Predicate: fmt.Sprintf(`auth.identity[%s] == %s`, pkgcel.StringLiteral(k), pkgcel.StringLiteral(v)),
 				},
 			})
 		}
@@ -326,7 +327,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 			},
 		}
 		if pol.Spec.Provider.IssuerURL != "" {
-			authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.IssuerURL)
+			authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == %s`, pkgcel.StringLiteral(pol.Spec.Provider.IssuerURL))
 		}
 	}
 
@@ -641,7 +642,7 @@ func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGa
 	headers["location"] = authorinov1beta3.ValueOrSelector{Expression: "auth.authorization.location.location"}
 	switch tokenSource.GetType() {
 	case authorinov1beta3.AuthorizationHeaderCredentials:
-		headers["Authorization"] = authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`"%s " + auth.metadata.token.id_token`, tokenSource.AuthorizationHeader.Prefix))}
+		headers["Authorization"] = authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`%s + " " + auth.metadata.token.id_token`, pkgcel.StringLiteral(tokenSource.AuthorizationHeader.Prefix)))}
 	case authorinov1beta3.CustomHeaderCredentials:
 		headers[tokenSource.CustomHeader.Name] = authorinov1beta3.ValueOrSelector{Expression: "auth.metadata.token.id_token"}
 	case authorinov1beta3.CookieCredentials:
@@ -653,11 +654,11 @@ func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGa
 }
 
 func cookieHeader(cookieName string, igw *ingressGatewayInfo) authorinov1beta3.ValueOrSelector {
-	return authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`
-"%s=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
-`, cookieName, igw.Hostname, getSecureFlag(igw.Protocol)))}
+	cookiePrefix := pkgcel.StringLiteral(cookieName + "=")
+	domainSuffix := pkgcel.StringLiteral("; domain=" + igw.Hostname + "; HttpOnly; " + getSecureFlag(igw.Protocol) + " SameSite=Lax; Path=/; Max-Age=3600")
+	expr := fmt.Sprintf("%s + auth.metadata.token.id_token + %s", cookiePrefix, domainSuffix)
+	return authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(expr)}
 }
-
 func getSecureFlag(protocol gatewayapiv1.ProtocolType) string {
 	flag := ""
 	if protocol == gatewayapiv1.HTTPSProtocolType {

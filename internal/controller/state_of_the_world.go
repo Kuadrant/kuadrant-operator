@@ -84,7 +84,10 @@ var (
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
-func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*controller.Controller, error) {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*KuadrantController, error) {
+	// Create error tracker for non-blocking error handling
+	errorTracker := NewPersistentErrorTracker(logger)
+
 	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
@@ -172,6 +175,18 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 	// Boot options and reconciler based on detected dependencies
 	bootOptions := NewBootOptionsBuilder(manager, client, logger)
+	bootOptions.errorTracker = errorTracker
+
+	// Create KuadrantController wrapper first so we can pass its ScheduleRetry method to the error handler
+	// We'll set the actual policy-machinery controller later
+	kuadrantController := &KuadrantController{
+		errorTracker: errorTracker,
+		logger:       logger.WithName("KuadrantController"),
+	}
+
+	// Now create the error handler with the retry scheduler callback
+	bootOptions.retryScheduler = kuadrantController.ScheduleRetry
+
 	options, err := bootOptions.getOptions()
 	if err != nil {
 		return nil, err
@@ -179,7 +194,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 	controllerOpts = append(controllerOpts, options...)
 	controllerOpts = append(controllerOpts, controller.WithReconcile(bootOptions.Reconciler()))
 
-	return controller.NewController(controllerOpts...), nil
+	policyMachineryController := controller.NewController(controllerOpts...)
+
+	// Set the controller in the wrapper
+	kuadrantController.Controller = policyMachineryController
+
+	return kuadrantController, nil
 }
 
 // NewBootOptionsBuilder is used to return a list of controller.ControllerOption and a controller.ReconcileFunc that depend
@@ -209,6 +229,10 @@ type BootOptionsBuilder struct {
 	isAuthorinoOperatorInstalled  bool
 	isPrometheusOperatorInstalled bool
 	isUsingExtensions             bool
+
+	// Error tracking for non-blocking errors
+	errorTracker   *PersistentErrorTracker
+	retryScheduler RetryScheduler
 }
 
 func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
@@ -821,6 +845,11 @@ func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 	if b.isUsingExtensions {
 		workflow.Tasks = append(workflow.Tasks, traceReconcileFunc("finalize.extensions", extension.Reconcile))
 	}
+
+	// Add error handler as the final postcondition to collect and process non-blocking errors
+	// The scheduleRetry callback is provided by the KuadrantController wrapper
+	errorHandler := NewReconciliationErrorHandler(b.errorTracker, b.retryScheduler)
+	workflow.Postcondition = traceReconcileFunc("finalize.error_handler", errorHandler.Reconcile)
 
 	return workflow
 }

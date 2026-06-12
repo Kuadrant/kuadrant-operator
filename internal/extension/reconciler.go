@@ -234,12 +234,14 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 	ls := make([]*extpb.Listener, len(listeners))
 	for i, l := range listeners {
 		listener := extpb.Listener{}
+		listener.Name = string(l.Name)
 		if l.Hostname != nil {
 			listener.Hostname = string(*l.Hostname)
 		}
 		if l.Protocol != "" {
 			listener.Protocol = string(l.Protocol)
 		}
+		listener.Port = int32(l.Port)
 		ls[i] = &listener
 	}
 	return ls

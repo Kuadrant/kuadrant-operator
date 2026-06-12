@@ -199,9 +199,8 @@ func TestReconciliationErrorHandler_Reconcile(t *testing.T) {
 
 	// Track if retry was scheduled
 	var scheduledDelay time.Duration
-	scheduleRetry := func(delay time.Duration, events []controller.ResourceEvent) {
+	scheduleRetry := func(delay time.Duration, _ []controller.ResourceEvent) {
 		scheduledDelay = delay
-		// events are captured but not asserted in this test
 	}
 
 	handler := NewReconciliationErrorHandler(tracker, scheduleRetry)

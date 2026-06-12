@@ -63,9 +63,9 @@ func (c *KuadrantController) ScheduleRetry(delay time.Duration, events []control
 
 		// Check if we should still retry (in case errors were resolved by external events)
 		if c.errorTracker.ShouldRequeue() > 0 {
-			// Trigger reconciliation by calling Propagate with empty events
-			// This forces the reconciliation workflow to run even though no objects changed
-			c.Controller.Propagate(events)
+			// Trigger reconciliation by calling Propagate with the original events
+			// This forces the reconciliation workflow to run with the same context
+			c.Propagate(events)
 		}
 	})
 }

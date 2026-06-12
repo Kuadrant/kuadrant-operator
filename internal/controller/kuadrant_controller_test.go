@@ -15,7 +15,7 @@ type mockController struct {
 	reconcileError  error
 }
 
-func (m *mockController) Reconcile(ctx context.Context, req ctrlruntimereconcile.Request) (ctrlruntimereconcile.Result, error) {
+func (m *mockController) Reconcile(_ context.Context, _ ctrlruntimereconcile.Request) (ctrlruntimereconcile.Result, error) {
 	return m.reconcileResult, m.reconcileError
 }
 
@@ -40,7 +40,7 @@ func TestKuadrantController_Reconcile_BlockingError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected blocking error to be returned")
 	}
-	if err != blockingErr {
+	if !errors.Is(err, blockingErr) {
 		t.Errorf("Expected error %v, got %v", blockingErr, err)
 	}
 

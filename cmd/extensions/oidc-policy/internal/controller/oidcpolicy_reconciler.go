@@ -282,6 +282,16 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 	return err
 }
 
+// claimPredicate builds the CEL predicate that matches a configured claim against
+// the JWT identity. A scalar claim (the common case, e.g. email, sub, email_verified)
+// is matched by equality; a list-valued claim (e.g. groups, roles) is matched by
+// membership. The combined expression covers both because CEL `==` between mismatched
+// types yields false rather than erroring, so the `in` branch only applies when the
+// claim is actually a list.
+func claimPredicate(k, v string) string {
+	return fmt.Sprintf(`auth.identity.%s == "%s" || (type(auth.identity.%s) == list && "%s" in auth.identity.%s)`, k, v, k, v, k)
+}
+
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	authorizeURL, err := pol.GetAuthorizeURL(igw.GetURL())
 	if err != nil {
@@ -303,7 +313,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		for k, v := range claims {
 			authPatterns = append(authPatterns, authorinov1beta3.PatternExpressionOrRef{
 				CelPredicate: authorinov1beta3.CelPredicate{
-					Predicate: fmt.Sprintf(`"%s" in auth.identity.%s`, v, k),
+					Predicate: claimPredicate(k, v),
 				},
 			})
 		}

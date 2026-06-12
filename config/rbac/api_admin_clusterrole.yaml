@@ -1,0 +1,76 @@
+# API Admin ClusterRole
+# Provides platform operators cluster-wide access for management and troubleshooting
+#
+# Usage:
+#   kubectl apply -f api-admin-clusterrole.yaml
+#
+#   Bind to admin users (ClusterRoleBinding grants cluster-wide access):
+#   kubectl create clusterrolebinding api-admin-alice \
+#     --clusterrole=api-admin \
+#     --user=alice
+#
+#   Bind to admin group:
+#   kubectl create clusterrolebinding api-admin-platform-team \
+#     --clusterrole=api-admin \
+#     --group=platform-team
+#
+# Binding strategy: ClusterRoleBinding for platform administrators (cluster-wide scope)
+#
+# Key characteristics:
+#   - Same core permissions as "api-owner" but bound cluster-wide
+#   - Additional APIKey write access for troubleshooting
+#   - Intentional limitation: No secret read permissions in consumer namespaces (consumer secrets remain isolated)
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: api-admin
+rules:
+  # Manage API products cluster-wide (same as api-owner, but cluster-wide via ClusterRoleBinding)
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apiproducts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Manage API key approvals cluster-wide (same as api-owner, but cluster-wide via ClusterRoleBinding)
+  # Allows admins to approve/reject on behalf of owners in any namespace
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apikeyapprovals"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # View API key requests cluster-wide (same as api-owner, but cluster-wide via ClusterRoleBinding)
+  # Allows admins to see all APIKeyRequest shadow resources across all namespaces
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apikeyrequests"]
+    verbs: ["get", "list", "watch"]
+
+  # Additional troubleshooting permission: Full access to API keys cluster-wide
+  # Unlike api-owner (no apikeys access), admins can create/update/delete APIKeys for troubleshooting
+  # Admins are trusted platform operators who may need to troubleshoot consumer API key issues
+  # NOTE: Admins still do NOT have secret read permissions in consumer namespaces (consumer secrets remain isolated)
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apikeys"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # NOTE: Secrets are managed by consumers in their own namespace and by controller in kuadrant namespace
+  # Admins do NOT have secret read permissions in consumer namespaces (consumer secrets remain isolated)
+  # Admins can view APIKey resources but cannot access consumer secrets containing API key values
+
+  # View rate limiting plans cluster-wide (same as api-owner)
+  - apiGroups: ["extensions.kuadrant.io"]
+    resources: ["planpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # View policies cluster-wide (same as api-owner)
+  - apiGroups: ["kuadrant.io"]
+    resources: ["authpolicies", "ratelimitpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # View HTTPRoutes cluster-wide (same as api-owner)
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "list", "watch"]
+
+  # View Gateways cluster-wide (same as api-owner)
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways"]
+    verbs: ["get", "list", "watch"]

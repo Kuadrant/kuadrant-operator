@@ -1,0 +1,69 @@
+# API Owner ClusterRole
+# Allows teams to publish APIs and manage consumer access requests
+#
+# Usage:
+#   kubectl apply -f api-owner-clusterrole.yaml
+#
+#   Bind to team users or groups in their namespace using RoleBinding:
+#   kubectl create rolebinding api-owner-binding \
+#     --clusterrole=api-owner \
+#     --group=team-payment-services \
+#     -n payment-services
+#
+# Binding strategy: RoleBinding per owner namespace (namespace-scoped API management)
+#
+# Key architectural features:
+#   - Owners discover requests via "APIKeyRequest" shadow resources (not direct APIKey access)
+#   - No secret read permissions in consumer namespaces (API key values protected)
+#   - Approval enforcement via "APIKeyApproval" CRD in owner's namespace
+#   - Namespace-scoped catalog browsing (only see resources in assigned namespace)
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: api-owner
+rules:
+  # Manage API products (namespace-scoped via RoleBinding)
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apiproducts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Approve/reject API key requests via APIKeyApproval resource (namespace-scoped via RoleBinding)
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apikeyapprovals"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Discover API key requests via APIKeyRequest shadow resources (namespace-scoped via RoleBinding)
+  # Controller automatically creates APIKeyRequest in owner's namespace when consumer creates APIKey
+  # APIKeyRequest does NOT contain apiKeyValue (security isolation)
+  # Namespace boundaries ensure owners only see requests for their API products
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apikeyrequests"]
+    verbs: ["get", "list", "watch"]
+
+  # NOTE: Owners do NOT have access to apikeys resources (consumers own these)
+  # Owners discover requests via apikeyrequests in their own namespace only
+
+  # View rate limiting plans cluster-wide (reference when creating products)
+  - apiGroups: ["extensions.kuadrant.io"]
+    resources: ["planpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # View policies cluster-wide (read-only, to understand API requirements)
+  - apiGroups: ["kuadrant.io"]
+    resources: ["authpolicies", "ratelimitpolicies"]
+    verbs: ["get", "list", "watch"]
+
+  # View HTTPRoutes cluster-wide (for discovery and referencing in APIProducts)
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "list", "watch"]
+
+  # View Gateways cluster-wide (for context)
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways"]
+    verbs: ["get", "list", "watch"]
+
+  # NOTE: Secrets are managed by consumers in their own namespace and by controller in kuadrant namespace
+  # Owners do NOT have secret read permissions in consumer namespaces (consumer secrets remain isolated)
+  # Owners do not have access to consumer APIKey resources or consumer secrets

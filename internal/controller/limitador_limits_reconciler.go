@@ -94,7 +94,16 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	if _, err := r.client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(limitador.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
 		logger.Error(err, "failed to update limitador object")
-		// TODO: handle error
+
+		// Record error for deferred retry
+		errorRegistry := GetOrCreateErrorRegistry(state)
+		errorRegistry.Record(
+			"LimitadorLimitsReconciler",
+			"update",
+			k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()},
+			kuadrantv1beta1.LimitadorGroupKind,
+			err,
+		)
 	}
 
 	logger.V(1).Info("finished updating limitador object", "limitador", (k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()}).String())

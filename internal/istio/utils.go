@@ -131,6 +131,7 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 			},
 			"allow_precompiled": true,
 		},
+		"failure_policy":                  "FAIL_RELOAD",
 		"allow_on_headers_stop_iteration": true,
 	}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
@@ -194,12 +195,9 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				if (aListener == nil) != (bListener == nil) {
 					return false
 				}
-				// For HTTP_FILTER patches, we compare the listener match structure if present
-				// Since the structure is complex, we'll compare the JSON representation
+				// For HTTP_FILTER patches, compare the match structure using protobuf equality
 				if aListener != nil && bListener != nil {
-					aMatchJSON, aErr := json.Marshal(aConfigPatch.Match)
-					bMatchJSON, _ := json.Marshal(bConfigPatch.Match)
-					if string(aMatchJSON) != string(bMatchJSON) || aErr != nil {
+					if !proto.Equal(aConfigPatch.Match, bConfigPatch.Match) {
 						return false
 					}
 				}
@@ -214,10 +212,8 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 					return false
 				}
 			default:
-				// For other patch types, compare the match structure via JSON
-				aMatchJSON, aErr := json.Marshal(aConfigPatch.Match)
-				bMatchJSON, _ := json.Marshal(bConfigPatch.Match)
-				if string(aMatchJSON) != string(bMatchJSON) || aErr != nil {
+				// For other patch types, compare the match structure using protobuf equality
+				if !proto.Equal(aConfigPatch.Match, bConfigPatch.Match) {
 					return false
 				}
 			}
@@ -229,9 +225,9 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 			if aPatch.Operation != bPatch.Operation || aPatch.FilterClass != bPatch.FilterClass {
 				return false
 			}
-			aPatchJSON, _ := aPatch.Value.MarshalJSON()
-			bPatchJSON, _ := bPatch.Value.MarshalJSON()
-			return string(aPatchJSON) == string(bPatchJSON)
+
+			// Use protobuf equality for patch values to handle non-deterministic map ordering.
+			return proto.Equal(aPatch.Value, bPatch.Value)
 		})
 	})
 }

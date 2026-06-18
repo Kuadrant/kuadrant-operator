@@ -636,4 +636,86 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 		_, err := mergeAndVerify(context.TODO(), actions)
 		assert.ErrorContains(t, err, "duplicate key '' with different values")
 	})
+
+	t.Run("deterministic conditional data ordering after merge", func(t *testing.T) {
+		// Create two sets of actions in different orders
+		actionsOrder1 := []wasm.Action{
+			{
+				ServiceName: wasm.RateLimitCheckServiceName,
+				Scope:       "route-0",
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Predicates: []string{"auth.identity.bob"},
+						Data: []wasm.DataType{
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "limit.bob", Value: "1"}}},
+						},
+					},
+				},
+			},
+			{
+				ServiceName: wasm.RateLimitCheckServiceName,
+				Scope:       "route-0",
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Predicates: []string{"auth.identity.alice"},
+						Data: []wasm.DataType{
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "limit.alice", Value: "1"}}},
+						},
+					},
+				},
+			},
+		}
+
+		actionsOrder2 := []wasm.Action{
+			{
+				ServiceName: wasm.RateLimitCheckServiceName,
+				Scope:       "route-0",
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Predicates: []string{"auth.identity.alice"},
+						Data: []wasm.DataType{
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "limit.alice", Value: "1"}}},
+						},
+					},
+				},
+			},
+			{
+				ServiceName: wasm.RateLimitCheckServiceName,
+				Scope:       "route-0",
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Predicates: []string{"auth.identity.bob"},
+						Data: []wasm.DataType{
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "limit.bob", Value: "1"}}},
+						},
+					},
+				},
+			},
+		}
+
+		result1, err := mergeAndVerify(context.TODO(), actionsOrder1)
+		assert.NilError(t, err)
+		assert.Equal(t, 1, len(result1))
+
+		result2, err := mergeAndVerify(context.TODO(), actionsOrder2)
+		assert.NilError(t, err)
+		assert.Equal(t, 1, len(result2))
+
+		// Both results should have exactly the same ConditionalData in the same order
+		assert.Equal(t, len(result1[0].ConditionalData), len(result2[0].ConditionalData))
+		for i := range result1[0].ConditionalData {
+			cd1 := result1[0].ConditionalData[i]
+			cd2 := result2[0].ConditionalData[i]
+
+			// Predicates should be in the same order
+			assert.DeepEqual(t, cd1.Predicates, cd2.Predicates)
+
+			// Data should be in the same order
+			assert.Equal(t, len(cd1.Data), len(cd2.Data))
+		}
+
+		// The ConditionalData should be sorted by predicates (alice before bob)
+		assert.Equal(t, "auth.identity.alice", result1[0].ConditionalData[0].Predicates[0])
+		assert.Equal(t, "auth.identity.bob", result1[0].ConditionalData[1].Predicates[0])
+	})
 }

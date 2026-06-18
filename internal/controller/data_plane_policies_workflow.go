@@ -219,6 +219,14 @@ func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, 
 			// Merge source policy locators - deduplicate them
 			lastAction.SourcePolicyLocators = lo.Uniq(append(lastAction.SourcePolicyLocators, currentAction.SourcePolicyLocators...))
 			slices.Sort(lastAction.SourcePolicyLocators)
+
+			// Sort by the first predicate (if any), then by the concatenation of all predicates
+			slices.SortFunc(lastAction.ConditionalData, func(a, b wasm.ConditionalData) int {
+				// Compare by predicates (join them into a single string for comparison)
+				aKey := strings.Join(a.Predicates, "|")
+				bKey := strings.Join(b.Predicates, "|")
+				return strings.Compare(aKey, bKey)
+			})
 		} else {
 			result = append(result, currentAction)
 		}

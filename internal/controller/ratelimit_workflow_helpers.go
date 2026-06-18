@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"unicode"
 
@@ -331,7 +333,12 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
-	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+	rulesEntries := lo.Entries(rules)
+	slices.SortFunc(rulesEntries, func(a, b lo.Entry[string, kuadrantv1.MergeableRule]) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+
+	topLevelRules, limitRules := lo.FilterReject(rulesEntries,
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
 			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates
 		},
@@ -386,7 +393,12 @@ func buildWasmActionsForAnyRateLimit(
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
-	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+	rulesEntries := lo.Entries(rules)
+	slices.SortFunc(rulesEntries, func(a, b lo.Entry[string, kuadrantv1.MergeableRule]) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+
+	topLevelRules, limitRules := lo.FilterReject(rulesEntries,
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
 			return r.Key == topLevelPredicatesKey
 		},

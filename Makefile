@@ -106,6 +106,14 @@ IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 # Directories containing unit & integration test packages
 UNIT_DIRS := ./pkg/... ./api/... ./internal/...
 
+# Directories to process with Go commands (fmt, vet)
+# Excludes examples/ which has its own independent Go module
+GO_DIRS := ./pkg/... ./api/... ./internal/... ./cmd/...
+
+# Directories for controller-gen (uses semicolon separator)
+# Excludes examples/ which has its own independent Go module
+CONTROLLER_GEN_DIRS := ./pkg/...;./api/...;./internal/...;./cmd/...
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -384,13 +392,13 @@ dependencies-manifests: ## Update kuadrant dependencies manifests.
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="$(CONTROLLER_GEN_DIRS)"
 
 fmt: ## Run go fmt against code.
-	go fmt ./...
+	go fmt $(GO_DIRS)
 
 vet: ## Run go vet against code.
-	go vet ./...
+	go vet $(GO_DIRS)
 
 .PHONY: clean-cov
 clean-cov: ## Remove coverage reports

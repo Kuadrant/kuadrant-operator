@@ -57,7 +57,7 @@ func TestConfigEqual(t *testing.T) {
 				},
 				Services: map[string]Service{
 					"ratelimit-service": {
-						Type:        "ratelimit",
+						Type:        "ratelimit-check",
 						Endpoint:    "kuadrant-ratelimit-service",
 						FailureMode: "allow",
 						Timeout:     ptr.To("100ms"),
@@ -139,7 +139,7 @@ func TestConfigEqual(t *testing.T) {
 				},
 				Services: map[string]Service{
 					"ratelimit-service": {
-						Type:        "ratelimit",
+						Type:        "ratelimit-check",
 						Endpoint:    "kuadrant-ratelimit-service",
 						FailureMode: "allow",
 						Timeout:     ptr.To("100ms"),

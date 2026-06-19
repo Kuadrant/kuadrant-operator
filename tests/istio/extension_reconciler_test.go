@@ -234,7 +234,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
-						Type:        wasm.RateLimitServiceType,
+						Type:        wasm.RateLimitCheckServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -505,7 +505,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(existingWASMConfig.Services).To(HaveKeyWithValue(wasm.RateLimitServiceName, wasm.Service{
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: wasm.RatelimitServiceFailureMode(&logger),
-				Type:        wasm.RateLimitServiceType,
+				Type:        wasm.RateLimitCheckServiceType,
 				Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
 			}))
 			Expect(existingWASMConfig.ActionSets).To(HaveLen(6))
@@ -943,7 +943,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
-						Type:        wasm.RateLimitServiceType,
+						Type:        wasm.RateLimitCheckServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -1189,7 +1189,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -1418,7 +1418,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -1565,7 +1565,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -1786,7 +1786,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -1896,7 +1896,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -2092,7 +2092,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -2220,7 +2220,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -2452,7 +2452,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -2577,7 +2577,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 						},
 						wasm.RateLimitServiceName: {
-							Type:        wasm.RateLimitServiceType,
+							Type:        wasm.RateLimitCheckServiceType,
 							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 							FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 							Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -2768,7 +2768,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
-						Type:        wasm.RateLimitServiceType,
+						Type:        wasm.RateLimitCheckServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),
@@ -2865,7 +2865,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitCheckServiceTimeout()),
 					},
 					wasm.RateLimitServiceName: {
-						Type:        wasm.RateLimitServiceType,
+						Type:        wasm.RateLimitCheckServiceType,
 						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.RatelimitServiceFailureMode(&logger),
 						Timeout:     ptr.To(wasm.RatelimitServiceTimeout()),

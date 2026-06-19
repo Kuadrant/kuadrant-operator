@@ -175,7 +175,7 @@ func NewServiceBuilder(logger *logr.Logger) *ServiceBuilder {
 				Timeout:     ptr.To(AuthServiceTimeout()),
 			},
 			RateLimitServiceName: {
-				Type:        RateLimitServiceType,
+				Type:        RateLimitCheckServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: RatelimitServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitServiceTimeout()),

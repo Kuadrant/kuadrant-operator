@@ -55,6 +55,9 @@ func (c *KuadrantController) ScheduleRetry(delay time.Duration, events []control
 		"errorCount", c.errorTracker.GetErrorCount(),
 	)
 
+	// Defensive copy of events slice to avoid reference issues if caller reuses the backing array
+	eventsCopy := append([]controller.ResourceEvent(nil), events...)
+
 	// Create a new timer that will trigger propagation
 	c.retryTimer = time.AfterFunc(delay, func() {
 		c.logger.Info("triggering reconciliation retry for non-blocking errors",
@@ -65,7 +68,7 @@ func (c *KuadrantController) ScheduleRetry(delay time.Duration, events []control
 		if c.errorTracker.ShouldRequeue() > 0 {
 			// Trigger reconciliation by calling Propagate with the original events
 			// This forces the reconciliation workflow to run with the same context
-			c.Propagate(events)
+			c.Propagate(eventsCopy)
 		}
 	})
 }

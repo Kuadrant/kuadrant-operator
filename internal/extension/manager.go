@@ -51,6 +51,8 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
+const defaultPort = 50051
+
 var ErrNoExtensionsFound = errors.New("no extensions found")
 
 type ChangeNotifier func(reason string) error
@@ -63,6 +65,7 @@ type Manager struct {
 	sync             io.Writer
 	client           dynamic.Interface
 	descriptorServer *grpc.Server
+	extensionServer  *grpc.Server
 }
 
 type Extension interface {
@@ -113,14 +116,9 @@ func (m *Manager) Start() error {
 		err = fmt.Errorf("descriptor server: %w", e)
 	}
 
-	for _, extension := range m.extensions {
-		if e := extension.Start(); e != nil {
-			if err == nil {
-				err = fmt.Errorf("%s: %w", extension.Name(), e)
-			} else {
-				err = fmt.Errorf("%w; %s: %w", err, extension.Name(), e)
-			}
-		}
+	if e := m.startExtensionServer(); e != nil {
+		m.logger.Error(e, "failed to start extension server")
+		err = fmt.Errorf("extension server: %w", e)
 	}
 
 	return err
@@ -145,7 +143,6 @@ func (m *Manager) Stop() error {
 }
 
 func (m *Manager) startDescriptorServer() error {
-	const defaultPort = 50051
 	descriptorPort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", defaultPort)
 	if portErr != nil {
 		m.logger.Error(portErr, "invalid EXTENSIONS_DESCRIPTOR_SERVICE_PORT, using default", "default", defaultPort)
@@ -201,6 +198,39 @@ func (m *Manager) stopDescriptorServer() {
 	}
 
 	m.descriptorServer = nil
+}
+
+func (m *Manager) startExtensionServer() error {
+	descriptorPort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", defaultPort)
+	if portErr != nil {
+		m.logger.Error(portErr, "invalid EXTENSIONS_DESCRIPTOR_SERVICE_PORT, using default", "default", defaultPort)
+		descriptorPort = defaultPort
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", descriptorPort))
+	if err != nil {
+		return fmt.Errorf("failed to listen on port %d: %w", descriptorPort, err)
+	}
+
+	server := grpc.NewServer()
+
+	if svc, ok := m.service.(extpb.ExtensionServiceServer); ok {
+		extpb.RegisterExtensionServiceServer(server, svc)
+	} else {
+		lis.Close()
+		return fmt.Errorf("service does not implement DescriptorServiceServer")
+	}
+
+	m.extensionServer = server
+
+	go func() {
+		m.logger.Info("starting extensions service", "port", descriptorPort)
+		if err := server.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			m.logger.Error(err, "descriptor server failed")
+		}
+	}()
+
+	return nil
 }
 
 func (m *Manager) SetChangeNotifier(notifier ChangeNotifier) {

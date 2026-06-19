@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -102,7 +103,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			Namespace: authConfig.GetNamespace(),
 		}
 
-		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete authconfig object", "authconfig", fmt.Sprintf("%s/%s", authConfig.GetNamespace(), authConfig.GetName()))
 
 			// Record the error for deferred retry instead of returning it
@@ -199,7 +200,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 
 	// delete
 	if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
-		if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			msg := "failed to delete authconfig object"
 			logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
 			span.RecordError(err)

@@ -180,11 +180,18 @@ func TestPersistentErrorTracker_ShouldRequeue(t *testing.T) {
 		t.Errorf("Expected 4s requeue delay, got %v", delay)
 	}
 
-	// Exceed max retries - should not requeue
-	for i := 0; i < 5; i++ {
+	// Exceed max retries - error should be removed from tracker
+	// We've already done 2 updates above (RetryCount is now 1)
+	// Need 4 more to reach RetryCount = 5, which triggers deletion
+	for i := 0; i < 4; i++ {
 		reg := NewErrorRegistry()
 		reg.Record("TestReconciler", "delete", resource, kind, errors.New("error"))
 		tracker.UpdateFromRegistry(reg)
+	}
+
+	// After exceeding max retries, the error should be removed
+	if tracker.GetErrorCount() != 0 {
+		t.Errorf("Expected error to be removed after max retries, got %d errors", tracker.GetErrorCount())
 	}
 
 	delay = tracker.ShouldRequeue()
@@ -256,6 +263,38 @@ func TestGetOrCreateErrorRegistry(t *testing.T) {
 	registry3 := GetOrCreateErrorRegistry(nil)
 	if registry3 == nil {
 		t.Error("Expected registry to be created even with nil state")
+	}
+}
+
+func TestPersistentErrorTracker_MaxRetriesCleanup(t *testing.T) {
+	logger := logr.Discard()
+	tracker := NewPersistentErrorTracker(logger)
+
+	resource := k8stypes.NamespacedName{Namespace: "ns", Name: "resource"}
+	kind := schema.GroupKind{Group: "test.io", Kind: "TestKind"}
+
+	// Record error and fail it maxRetryAttempts times
+	for i := 0; i <= maxRetryAttempts; i++ {
+		registry := NewErrorRegistry()
+		registry.Record("TestReconciler", "delete", resource, kind, errors.New("persistent error"))
+		tracker.UpdateFromRegistry(registry)
+
+		if i < maxRetryAttempts {
+			// Should still be tracked
+			if tracker.GetErrorCount() != 1 {
+				t.Errorf("Iteration %d: Expected 1 error in tracker, got %d", i, tracker.GetErrorCount())
+			}
+		} else {
+			// After max retries, should be removed
+			if tracker.GetErrorCount() != 0 {
+				t.Errorf("After max retries: Expected error to be removed, got %d errors", tracker.GetErrorCount())
+			}
+		}
+	}
+
+	// Verify no requeue is scheduled
+	if delay := tracker.ShouldRequeue(); delay != 0 {
+		t.Errorf("Expected no requeue after cleanup, got %v", delay)
 	}
 }
 

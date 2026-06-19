@@ -174,6 +174,21 @@ func (t *PersistentErrorTracker) UpdateFromRegistry(registry *ErrorRegistry) {
 			existing.LastSeen = time.Now()
 			existing.Err = newErr.Err // Update error message in case it changed
 
+			// Check if we've exceeded max retries - if so, give up and remove from tracker
+			if !existing.ShouldRetry() {
+				t.logger.Error(existing.Err, "max retry attempts reached, giving up",
+					"source", existing.Source,
+					"operation", existing.Operation,
+					"resource", existing.Resource.String(),
+					"kind", existing.ResourceKind.String(),
+					"attempts", existing.RetryCount,
+					"duration", time.Since(existing.FirstSeen),
+				)
+				delete(t.errors, key)
+				delete(currentKeys, key) // Don't count as "still active"
+				continue
+			}
+
 			t.logger.V(1).Info("error persists",
 				"key", key,
 				"retryCount", existing.RetryCount,
@@ -220,33 +235,14 @@ func (t *PersistentErrorTracker) ShouldRequeue() time.Duration {
 		return 0
 	}
 
-	// Find the minimum retry delay among all retryable errors
+	// Find the minimum retry delay among all errors
+	// (errors that exceed max retries are already removed from the tracker)
 	var minDelay time.Duration
-	hasRetryableError := false
-
 	for _, err := range t.errors {
-		if !err.ShouldRetry() {
-			// Max attempts reached - log and skip
-			t.logger.Error(err.Err, "max retry attempts reached, giving up",
-				"source", err.Source,
-				"operation", err.Operation,
-				"resource", err.Resource.String(),
-				"kind", err.ResourceKind.String(),
-				"attempts", err.RetryCount,
-				"duration", time.Since(err.FirstSeen),
-			)
-			continue
-		}
-
 		delay := err.NextRetryDelay()
-		if !hasRetryableError || delay < minDelay {
+		if minDelay == 0 || delay < minDelay {
 			minDelay = delay
-			hasRetryableError = true
 		}
-	}
-
-	if !hasRetryableError {
-		return 0
 	}
 
 	return minDelay

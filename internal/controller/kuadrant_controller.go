@@ -84,3 +84,28 @@ func (c *KuadrantController) cancelPendingRetry() {
 		c.logger.V(1).Info("cancelled pending retry (new reconciliation started)")
 	}
 }
+
+// Start wraps the embedded controller's Start method and ensures cleanup on context cancellation
+func (c *KuadrantController) Start(ctx context.Context) error {
+	// Start a goroutine to call Stop() when context is cancelled
+	go func() {
+		<-ctx.Done()
+		c.Stop()
+	}()
+
+	// Delegate to the embedded controller's Start method
+	return c.Controller.Start(ctx)
+}
+
+// Stop cancels any pending retry timer and cleans up resources
+// Called automatically when the context passed to Start() is cancelled
+func (c *KuadrantController) Stop() {
+	c.retryTimerMu.Lock()
+	defer c.retryTimerMu.Unlock()
+
+	if c.retryTimer != nil {
+		c.retryTimer.Stop()
+		c.retryTimer = nil
+		c.logger.V(1).Info("stopped retry timer on controller shutdown")
+	}
+}

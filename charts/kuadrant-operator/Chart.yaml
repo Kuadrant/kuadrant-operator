@@ -24,7 +24,7 @@ version: "1.4.4"
 appVersion: "1.4.4"
 dependencies:
   - name: authorino-operator
-    version: 0.23.2
+    version: 0.23.3
     repository: https://kuadrant.io/helm-charts/
   - name: limitador-operator
     version: 0.17.2

@@ -104,7 +104,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	}
 
 	deployment := consoleplugin.Deployment(r.namespace, consolePluginImageURL, TopologyConfigMapName)
-	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
+	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0, 1)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
 	if !topologyExists || !clusterVersionExists {
 		utils.TagObjectToDelete(deployment)

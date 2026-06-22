@@ -147,7 +147,8 @@ func extractDiscoverableRoutes(topology *machinery.Topology) []discoverableRoute
 }
 
 func getRoutePath(topology *machinery.Topology, route machinery.Targetable) []machinery.Targetable {
-	path := []machinery.Targetable{route}
+	path := make([]machinery.Targetable, 0, 3)
+	path = append(path, route)
 	for _, listener := range topology.Targetables().Parents(route) {
 		path = append(path, listener)
 		path = append(path, topology.Targetables().Parents(listener)...)

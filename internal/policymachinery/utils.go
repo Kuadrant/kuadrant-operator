@@ -36,7 +36,7 @@ func isNil(obj any) bool {
 	v := reflect.ValueOf(obj)
 	// Only certain kinds can be nil - check them
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
+	case reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
 		return v.IsNil()
 	default:
 		return false

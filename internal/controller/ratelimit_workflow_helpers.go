@@ -126,7 +126,7 @@ func wasmActionFromLimit(limit *kuadrantv1.Limit, limitIdentifier, scope, source
 }
 
 func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1.Limit) []wasm.DataType {
-	data := make([]wasm.DataType, 0)
+	data := make([]wasm.DataType, 0, 1+len(limit.Counters))
 
 	// static key representing the limit
 	data = append(data,
@@ -227,16 +227,15 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	}
 
 	// common both actions
-	commonData := []wasm.DataType{
-		{
-			Value: &wasm.Expression{
-				ExpressionItem: wasm.ExpressionItem{
-					Key:   limitIdentifier,
-					Value: "1",
-				},
+	commonData := make([]wasm.DataType, 0, 1+len(tokenLimit.Counters))
+	commonData = append(commonData, wasm.DataType{
+		Value: &wasm.Expression{
+			ExpressionItem: wasm.ExpressionItem{
+				Key:   limitIdentifier,
+				Value: "1",
 			},
 		},
-	}
+	})
 
 	// add counters if specified
 	for _, counter := range tokenLimit.Counters {

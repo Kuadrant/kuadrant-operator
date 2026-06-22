@@ -77,9 +77,8 @@ func TestKuadrantExt(t *testing.T) {
 
 func testKuadrantEnv(t *testing.T, opts ...cel.EnvOption) *cel.Env {
 	t.Helper()
-	baseOpts := []cel.EnvOption{
-		CelExt(&TestDAG{}),
-	}
+	baseOpts := make([]cel.EnvOption, 0, 1+len(opts))
+	baseOpts = append(baseOpts, CelExt(&TestDAG{}))
 	opts = append(baseOpts, opts...)
 	env, err := cel.NewEnv(opts...)
 	if err != nil {

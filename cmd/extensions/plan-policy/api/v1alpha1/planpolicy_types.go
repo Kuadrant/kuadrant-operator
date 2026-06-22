@@ -77,8 +77,8 @@ func (p *PlanPolicy) BuildCelExpression() string {
 
 	for i, plan := range p.Spec.Plans {
 		predicate := strings.ReplaceAll(plan.Predicate, "\n", "")
-		tierList.WriteString(fmt.Sprintf(`"%s"`, plan.Tier))
-		tierPredicates.WriteString(fmt.Sprintf(`    "%s": %s,`, plan.Tier, predicate))
+		fmt.Fprintf(&tierList, `"%s"`, plan.Tier)
+		fmt.Fprintf(&tierPredicates, `    "%s": %s,`, plan.Tier, predicate)
 
 		if i < len(p.Spec.Plans)-1 {
 			tierList.WriteString(", ")

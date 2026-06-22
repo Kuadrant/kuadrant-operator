@@ -503,6 +503,12 @@ spec:
           - update
           - watch
         - apiGroups:
+          - extensions.istio.io
+          resources:
+          - wasmplugins
+          verbs:
+          - delete
+        - apiGroups:
           - extensions.kuadrant.io
           resources:
           - oidcpolicies

@@ -211,7 +211,7 @@ func (r *OIDCPolicyReconciler) reconcileMainAuthPolicy(ctx context.Context, pol 
 		r.Logger.Error(err, "Error setting OwnerReference on AuthPolicy")
 		return nil, err
 	}
-	authPolicyMutators := make([]authPolicyMutateFn, 0)
+	authPolicyMutators := make([]authPolicyMutateFn, 0, 1)
 	authPolicyMutators = append(authPolicyMutators, authPolicySpecMutator)
 	policyMutator := authPolicyMutator(authPolicyMutators...)
 
@@ -236,7 +236,7 @@ func (r *OIDCPolicyReconciler) reconcileCallbackAuthPolicy(ctx context.Context, 
 		return nil, err
 	}
 
-	authPolicyMutators := make([]authPolicyMutateFn, 0)
+	authPolicyMutators := make([]authPolicyMutateFn, 0, 1)
 	authPolicyMutators = append(authPolicyMutators, authPolicySpecMutator)
 	policyMutator := authPolicyMutator(authPolicyMutators...)
 
@@ -259,7 +259,7 @@ func (r *OIDCPolicyReconciler) reconcileCallbackHTTPRoute(ctx context.Context, p
 		return err
 	}
 
-	httpRouteMutators := make([]httpRouteMutateFn, 0)
+	httpRouteMutators := make([]httpRouteMutateFn, 0, 2)
 	httpRouteMutators = append(httpRouteMutators, httpObjectMetaRouteMutator, httpSpecRouteMutator)
 	routeMutator := httpRouteMutator(httpRouteMutators...)
 

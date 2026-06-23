@@ -54,7 +54,7 @@ A release follows two sequential PR phases:
 
 ### Manual Workflow
 
-#### Local steps
+### Local steps
 
 1. Create the `release-X.Y` branch if it does not already exist, then push it to the remote (`kuadrant/kuadrant-operator`).
 2. Create the `release-X.Y.Z-rc(n)` branch with `release-X.Y` as the base.
@@ -64,7 +64,7 @@ A release follows two sequential PR phases:
    If you hit rate-limit errors, set `GITHUB_TOKEN` to your PAT.
 6. Commit and push the branch.
 
-#### Remote steps
+### Remote steps
 
 1. Open a PR from `release-X.Y.Z-rc(n)` targeting `release-X.Y`.
    ([Example PR](https://github.com/Kuadrant/kuadrant-operator/pull/2058))
@@ -80,7 +80,7 @@ A release follows two sequential PR phases:
 
 Once the RC PR is merged, open the GA PR immediately. QE's approval of that PR serves as their sign-off.
 
-#### Local steps
+### Local steps
 
 1. Create a `prepare-release-X.Y.Z` branch based on `release-X.Y`.
    Example: `git checkout -B prepare-release-1.4.5 release-1.4`
@@ -89,7 +89,7 @@ Once the RC PR is merged, open the GA PR immediately. QE's approval of that PR s
 3. Run `make prepare-release` and commit the changes.
 4. Push the branch.
 
-#### Remote steps
+### Remote steps
 
 1. Open a PR from `prepare-release-X.Y.Z` targeting `release-X.Y`.
    ([Example PR](https://github.com/Kuadrant/kuadrant-operator/pull/2059))
@@ -165,7 +165,7 @@ The `dependencies` section relates to the released versions of the subcomponents
 
 ### Verify OLM Deployment
 
-1. Deploy the OLM catalog image following [Deploy kuadrant operator using OLM](/doc/development.md#deploy-kuadrant-operator-using-olm),
+1. Deploy the OLM catalog image following [Deploy kuadrant operator using OLM](/doc/overviews/development.md#deploy-kuadrant-operator-using-olm),
    providing the generated catalog image. For example:
 ```sh
 make deploy-catalog CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:v1.0.0-rc4

@@ -65,8 +65,9 @@ func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetRefer
 func (p *PlanPolicy) ToRateLimits() map[string]kuadrantv1.Limit {
 	return utils.Associate(p.Spec.Plans, func(plan Plan) (string, kuadrantv1.Limit) {
 		return plan.Tier, kuadrantv1.Limit{
-			When:  kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan == "%s"`, plan.Tier)),
-			Rates: plan.Limits.ToRates(),
+			When:     kuadrantv1.NewWhenPredicates(fmt.Sprintf(`auth.kuadrant.plan == "%s"`, plan.Tier)),
+			Rates:    plan.Limits.ToRates(),
+			Counters: plan.Counters,
 		}
 	})
 }
@@ -112,6 +113,10 @@ type Plan struct {
 	// Limits contains the list of limits that the plan enforces.
 	// +optional
 	Limits Limits `json:"limits,omitempty"`
+
+	// Counters defines the counters to group the rate limits by.
+	// +optional
+	Counters []kuadrantv1.Counter `json:"counters,omitempty"`
 
 	// Predicate is a CEL expression used to determine if the plan is applied.
 	// +kubebuilder:validation:MinLength=1

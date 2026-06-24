@@ -125,7 +125,10 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 
 		// Not found
 		if !utils.IsObjectTaggedToDelete(desired) {
-			return nil, b.CreateResource(ctx, desired)
+			if err := b.CreateResource(ctx, desired); err != nil {
+				return nil, err
+			}
+			return desired, nil
 		}
 
 		// Marked for deletion and not found. Nothing to do.

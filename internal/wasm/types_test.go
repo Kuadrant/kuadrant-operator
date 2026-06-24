@@ -2009,3 +2009,60 @@ func TestAction_EqualTo(t *testing.T) {
 		})
 	}
 }
+
+func TestTypedAction_StoreType_JSON(t *testing.T) {
+	ta := TypedAction{
+		Type:      "store",
+		Predicate: "has(auth_response.ok_response) && has(auth_response.dynamic_metadata)",
+		Path:      "auth",
+		Value:     "auth_response.dynamic_metadata",
+	}
+
+	data, err := json.Marshal(ta)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var roundTripped TypedAction
+	if err := json.Unmarshal(data, &roundTripped); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if !ta.EqualTo(roundTripped) {
+		t.Fatalf("round-tripped store TypedAction not equal:\n  got:  %+v\n  want: %+v", roundTripped, ta)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+	if raw["type"] != "store" {
+		t.Errorf("expected type 'store', got %v", raw["type"])
+	}
+	if raw["path"] != "auth" {
+		t.Errorf("expected path 'auth', got %v", raw["path"])
+	}
+	if raw["value"] != "auth_response.dynamic_metadata" {
+		t.Errorf("expected value 'auth_response.dynamic_metadata', got %v", raw["value"])
+	}
+}
+
+func TestTypedAction_EqualTo_StoreFields(t *testing.T) {
+	a := TypedAction{Type: "store", Predicate: "true", Path: "auth", Value: "resp.metadata"}
+	b := TypedAction{Type: "store", Predicate: "true", Path: "auth", Value: "resp.metadata"}
+	if !a.EqualTo(b) {
+		t.Fatal("identical store TypedActions should be equal")
+	}
+
+	diffPath := b
+	diffPath.Path = "other"
+	if a.EqualTo(diffPath) {
+		t.Fatal("TypedActions with different Path should not be equal")
+	}
+
+	diffValue := b
+	diffValue.Value = "resp.other"
+	if a.EqualTo(diffValue) {
+		t.Fatal("TypedActions with different Value should not be equal")
+	}
+}

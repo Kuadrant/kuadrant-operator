@@ -239,7 +239,7 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 // gRPC methods map to HTTP/2 paths (/{service}/{method}). This conversion enables sorting
 // with HTTP routes and reflects the wire-level protocol. The actual predicates sent to
 // the WASM plugin are generated from the original GRPCRouteMatch.
-func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []Action, typedActions []TypedAction) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	tracer := controller.TracerFromContext(ctx)
 	_, span := tracer.Start(ctx, "wasm.BuildActionSetsForPath")
 	defer span.End()
@@ -292,9 +292,10 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions:     actions,
-					SourceRoute: fmt.Sprintf("HTTPRoute/%s/%s", parsed.HTTPRoute.GetNamespace(), parsed.HTTPRoute.GetName()),
+					Name:         ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:      actions,
+					TypedActions: typedActions,
+					SourceRoute:  fmt.Sprintf("HTTPRoute/%s/%s", parsed.HTTPRoute.GetNamespace(), parsed.HTTPRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
 					Hostnames: []string{string(hostname)},
@@ -361,9 +362,10 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions:     actions,
-					SourceRoute: fmt.Sprintf("GRPCRoute/%s/%s", parsed.GRPCRoute.GetNamespace(), parsed.GRPCRoute.GetName()),
+					Name:         ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:      actions,
+					TypedActions: typedActions,
+					SourceRoute:  fmt.Sprintf("GRPCRoute/%s/%s", parsed.GRPCRoute.GetNamespace(), parsed.GRPCRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
 					Hostnames: []string{string(hostname)},

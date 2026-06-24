@@ -427,10 +427,11 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		var actions []wasm.Action
+		var typedActions []wasm.TypedAction
 
 		// auth
 		if effectivePolicy, ok := effectiveAuthPoliciesMap[pathID]; ok {
-			actions = append(actions, buildWasmActionsForAuth(pathID, effectivePolicy)...)
+			typedActions = append(typedActions, buildWasmTypedActionsForAuth(pathID, effectivePolicy)...)
 			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
 
@@ -440,7 +441,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			if hasAuthAccess(rlAction) {
 				actions = append(actions, rlAction...)
 			} else {
-				// pre auth rate limiting
 				actions = append(rlAction, actions...)
 			}
 			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
@@ -451,7 +451,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			if hasAuthAccess(trlAction) {
 				actions = append(actions, trlAction...)
 			} else {
-				// pre auth rate limiting
 				actions = append(trlAction, actions...)
 			}
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
@@ -463,6 +462,10 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		sourcePolicies := lo.Uniq(lo.FlatMap(actions, func(a wasm.Action, _ int) []string {
 			return a.SourcePolicyLocators
 		}))
+		typedSourcePolicies := lo.Uniq(lo.FlatMap(typedActions, func(a wasm.TypedAction, _ int) []string {
+			return a.SourcePolicyLocators
+		}))
+		sourcePolicies = lo.Uniq(append(sourcePolicies, typedSourcePolicies...))
 		if len(sourcePolicies) > 0 {
 			pathSpan.SetAttributes(attribute.StringSlice("source_policies", sourcePolicies))
 		}
@@ -475,7 +478,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
 
-		if len(actions) == 0 {
+		if len(actions) == 0 && len(typedActions) == 0 {
 			pathSpan.SetStatus(codes.Ok, "no actions after merge")
 			pathSpan.End()
 			continue
@@ -499,19 +502,29 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			}
 		}
 
+		var validatedTypedActions []wasm.TypedAction
+		for _, action := range typedActions {
+			if err := celvalidator.ValidateTypedAction(action, validator); err != nil {
+				logger.V(1).Info("typed WASM action is invalid", "action", action, "path", pathID, "error", err)
+				celValidationIssues.Add(celvalidator.NewTypedActionIssue(action, pathID, err))
+			} else {
+				validatedTypedActions = append(validatedTypedActions, action)
+			}
+		}
+
 		pathSpan.SetAttributes(
 			attribute.Int("actions.after_merge", len(actions)),
 			attribute.Int("actions.validated", len(validatedActions)),
 			attribute.Int("actions.invalid", len(actions)-len(validatedActions)),
 		)
 
-		if len(validatedActions) == 0 {
+		if len(validatedActions) == 0 && len(validatedTypedActions) == 0 {
 			pathSpan.SetStatus(codes.Ok, "no validated actions")
 			pathSpan.End()
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathCtx, pathID, path, validatedActions)
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathCtx, pathID, path, validatedActions, validatedTypedActions)
 		if err != nil {
 			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
 				logger.V(1).Info("ingoring invalid paths", "error", err.Error(), "status", "skipping", "pathID", pathID)

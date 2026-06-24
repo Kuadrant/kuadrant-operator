@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -89,17 +90,118 @@ func AuthConfigNameForPath(pathID string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.Action {
-	spec := effectivePolicy.Spec.Spec.Proper()
+const authResponseVar = "auth_response"
 
-	action := wasm.Action{
-		ServiceName:          wasm.AuthServiceName,
-		Scope:                AuthConfigNameForPath(pathID),
-		Predicates:           spec.Predicates.Into(),
+func buildWasmTypedActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.TypedAction {
+	spec := effectivePolicy.Spec.Spec.Proper()
+	scope := AuthConfigNameForPath(pathID)
+	predicate := joinPredicates(spec.Predicates.Into())
+	if predicate == "" {
+		predicate = "true"
+	}
+
+	action := wasm.TypedAction{
+		Type:                 "grpc",
+		Predicate:            predicate,
+		Var:                  authResponseVar,
+		Service:              wasm.AuthServiceName,
+		MessageBuilder:       buildAuthMessageBuilder(scope),
+		OnReply:              buildAuthOnReply(authResponseVar),
 		SourcePolicyLocators: effectivePolicy.SourcePolicies,
 	}
 
-	return []wasm.Action{action}
+	return []wasm.TypedAction{action}
+}
+
+func joinPredicates(predicates []string) string {
+	if len(predicates) == 0 {
+		return ""
+	}
+	if len(predicates) == 1 {
+		return predicates[0]
+	}
+	wrapped := make([]string, len(predicates))
+	for i, p := range predicates {
+		wrapped[i] = "(" + p + ")"
+	}
+	return strings.Join(wrapped, " && ")
+}
+
+func buildAuthMessageBuilder(scope string) string {
+	return fmt.Sprintf(`envoy.service.auth.v3.CheckRequest {
+  attributes: envoy.service.auth.v3.AttributeContext {
+    request: envoy.service.auth.v3.AttributeContext.Request {
+      time: request.time,
+      http: envoy.service.auth.v3.AttributeContext.HttpRequest {
+        host: request.host,
+        method: request.method,
+        scheme: request.scheme,
+        path: request.path,
+        protocol: request.protocol,
+        headers: request.headers
+      }
+    },
+    destination: envoy.service.auth.v3.AttributeContext.Peer {
+      address: envoy.config.core.v3.Address {
+        socket_address: envoy.config.core.v3.SocketAddress {
+          address: destination.address,
+          port_value: uint(destination.port)
+        }
+      }
+    },
+    source: envoy.service.auth.v3.AttributeContext.Peer {
+      address: envoy.config.core.v3.Address {
+        socket_address: envoy.config.core.v3.SocketAddress {
+          address: source.address,
+          port_value: uint(source.port)
+        }
+      }
+    },
+    context_extensions: {"host": "%s"},
+    metadata_context: envoy.config.core.v3.Metadata{}
+  }
+}`, scope)
+}
+
+func buildAuthOnReply(varName string) []wasm.TypedAction {
+	return []wasm.TypedAction{
+		{
+			Type:      "deny",
+			Predicate: fmt.Sprintf("has(%s.denied_response)", varName),
+			Terminal:  true,
+			DenyWith: fmt.Sprintf(
+				`DenyResponse{status: (%s.denied_response.status.code != 0) ? uint(%s.denied_response.status.code) : 403u, headers: %s.denied_response.headers, body: %s.denied_response.body}`,
+				varName, varName, varName, varName,
+			),
+		},
+		{
+			Type: "fail",
+			Predicate: fmt.Sprintf(
+				"has(%s.ok_response) && (%s.ok_response.response_headers_to_add.size() > 0 || %s.ok_response.headers_to_remove.size() > 0 || %s.ok_response.query_parameters_to_set.size() > 0 || %s.ok_response.query_parameters_to_remove.size() > 0)",
+				varName, varName, varName, varName, varName,
+			),
+			Terminal:   true,
+			LogMessage: "Unsupported field in OkHttpResponse",
+		},
+		{
+			Type:      "store",
+			Predicate: fmt.Sprintf("has(%s.ok_response) && has(%s.dynamic_metadata)", varName, varName),
+			Path:      "auth",
+			Value:     fmt.Sprintf("%s.dynamic_metadata", varName),
+		},
+		{
+			Type:      "headers",
+			Predicate: fmt.Sprintf("has(%s.ok_response)", varName),
+			Target:    "request",
+			Headers:   fmt.Sprintf("%s.ok_response.headers", varName),
+		},
+		{
+			Type:       "fail",
+			Predicate:  fmt.Sprintf("!has(%s.denied_response) && !has(%s.ok_response)", varName, varName),
+			Terminal:   true,
+			LogMessage: fmt.Sprintf("Auth response contained no http_response from %s", varName),
+		},
+	}
 }
 
 func isAuthPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.Policy) bool {

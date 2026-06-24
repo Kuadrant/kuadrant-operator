@@ -32,7 +32,7 @@ jobs:
       LOCAL_CLUSTER: ${{ inputs.clusterServer == '' && inputs.clusterToken == '' }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - name: Install helm
         run: |
           make helm
@@ -49,7 +49,7 @@ jobs:
         run: echo "Installing version ${{ inputs.kuadrantStartVersion }}, upgrading to version ${{ steps.upgrade-version.outputs.version }}"
       - name: Deploy local Kind cluster
         if: ${{ env.LOCAL_CLUSTER }}
-        uses: helm/kind-action@v1.12.0
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3  # v1.12.0
         with:
           version: v0.23.0
           config: utils/kind-cluster.yaml
@@ -57,7 +57,7 @@ jobs:
           wait: 120s
       - name: Install kubectl for remote cluster
         if: ${{ !env.LOCAL_CLUSTER }}
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede  # v4
         with:
           version: v1.31.0
       - name: Mask cluster token
@@ -142,14 +142,14 @@ jobs:
       LOCAL_CLUSTER: ${{ inputs.clusterServer == '' && inputs.clusterToken == '' }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
           make yq
       - name: Deploy local Kind cluster
         if: ${{ env.LOCAL_CLUSTER }}
-        uses: helm/kind-action@v1.12.0
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3  # v1.12.0
         with:
           version: v0.23.0
           config: utils/kind-cluster.yaml
@@ -157,7 +157,7 @@ jobs:
           wait: 120s
       - name: Install kubectl for remote cluster
         if: ${{ !env.LOCAL_CLUSTER }}
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede  # v4
         with:
           version: v1.31.0
       - name: Mask cluster token

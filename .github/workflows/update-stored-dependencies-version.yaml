@@ -29,7 +29,7 @@ jobs:
     steps:
       - name: Fetch dependencies images list
         id: fetch
-        uses: fjogeleit/http-request-action@v1
+        uses: fjogeleit/http-request-action@c0b95d02a088b47c1f2f4db04fd8af8bd19eee54  # v1
         with:
           method: 'GET'
           url: ${{env.IMG_REPO_URL}}${{ matrix.repository }}?includeTags=true

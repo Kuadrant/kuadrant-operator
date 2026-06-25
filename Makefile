@@ -416,7 +416,7 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 
 .PHONY: test-bench
 test-bench: ## Run benchmarks.
-	go test $(UNIT_DIRS) -bench=. -benchmem -run='^$$' -count=6 -timeout 30m -tags unit | tee benchmark-results.txt
+	go test $(UNIT_DIRS) -bench=. -benchmem -run='^$$' -count=10 -timeout 30m -tags bench | tee benchmark-results.txt
 
 ##@ Build
 

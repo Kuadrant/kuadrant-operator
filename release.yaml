@@ -5,7 +5,7 @@ olm:
     - "stable"
   default-channel: "stable"
 dependencies:
-  authorino-operator: "0.25.0"
+  authorino-operator: "0.25.1"
   console-plugin: "0.4.0"
   developer-portal-controller: "0.2.0"
   dns-operator: "0.17.0"

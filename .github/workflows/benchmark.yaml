@@ -47,13 +47,8 @@ jobs:
           clean: false
           path: base
       - name: Run benchmarks (base)
-        run: |
-          cd base
-          if make test-bench 2>/dev/null; then
-            mv benchmark-results.txt ../base-bench.txt
-          else
-            go test ./pkg/... ./api/... ./internal/... -bench=. -benchmem -run='^$' -count=6 -timeout 30m -tags bench | tee ../base-bench.txt
-          fi
+        run: cd base && make test-bench && mv benchmark-results.txt ../base-bench.txt
+        continue-on-error: true
 
       # Compare with benchstat
       - name: Compare results

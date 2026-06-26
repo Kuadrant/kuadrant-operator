@@ -288,8 +288,13 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 // membership. The combined expression covers both because CEL `==` between mismatched
 // types yields false rather than erroring, so the `in` branch only applies when the
 // claim is actually a list.
+//
+// Accessing a missing field with dot notation raises a no_such_field error in CEL
+// rather than yielding false, so the predicate is guarded with has() on the identity
+// and the claim key; a token that lacks the claim then evaluates to false instead of
+// failing the whole authorization expression.
 func claimPredicate(k, v string) string {
-	return fmt.Sprintf(`auth.identity.%s == "%s" || (type(auth.identity.%s) == list && "%s" in auth.identity.%s)`, k, v, k, v, k)
+	return fmt.Sprintf(`has(auth.identity) && has(auth.identity.%s) && (auth.identity.%s == "%s" || (type(auth.identity.%s) == list && "%s" in auth.identity.%s))`, k, k, v, k, v, k)
 }
 
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {

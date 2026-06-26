@@ -80,6 +80,13 @@ func TestClaimPredicate(t *testing.T) {
 			identity: map[string]interface{}{"groups": []interface{}{"dev", "ops"}},
 			want:     false,
 		},
+		{
+			name:     "claim absent from identity",
+			claim:    "email",
+			value:    "user@example.com",
+			identity: map[string]interface{}{"sub": "1234567890"},
+			want:     false,
+		},
 	}
 
 	for _, tc := range cases {

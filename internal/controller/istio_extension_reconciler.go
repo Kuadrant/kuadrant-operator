@@ -16,6 +16,7 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -35,6 +36,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=delete
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
 // IstioExtensionReconciler reconciles Istio EnvoyFilter custom resources for wasm plugin injection
@@ -129,6 +131,12 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 				// TODO: handle error
 			}
 			continue
+		}
+
+		// Clean up old WasmPlugin for this specific gateway - temporary to be removed
+		wasmPluginName := wasm.ExtensionName(gateway.GetName())
+		if err := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(gateway.GetNamespace()).Delete(ctx, wasmPluginName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			logger.Error(err, "failed to delete old wasmplugin", "gateway", gatewayKey.String(), "wasmplugin", wasmPluginName)
 		}
 
 		existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)

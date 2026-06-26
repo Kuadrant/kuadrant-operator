@@ -16,6 +16,7 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -35,6 +36,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=delete
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
 // IstioExtensionReconciler reconciles Istio EnvoyFilter custom resources for wasm plugin injection
@@ -95,6 +97,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	}
 
 	modifiedGateways := make([]string, 0, len(gateways))
+	var reconcileErr error
 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
@@ -122,13 +125,21 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			desiredEnvoyFilterUnstructured, err := controller.Destruct(desiredEnvoyFilter)
 			if err != nil {
 				logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilter)
+				reconcileErr = errors.Join(reconcileErr, fmt.Errorf("failed to destruct envoyfilter %s/%s: %w", gateway.GetNamespace(), desiredEnvoyFilter.GetName(), err))
 				continue
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
-				// TODO: handle error
+				reconcileErr = errors.Join(reconcileErr, fmt.Errorf("failed to create envoyfilter %s/%s: %w", gateway.GetNamespace(), desiredEnvoyFilter.GetName(), err))
 			}
 			continue
+		}
+
+		// Clean up old WasmPlugin for this specific gateway - temporary to be removed
+		wasmPluginName := wasm.ExtensionName(gateway.GetName())
+		if err := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(gateway.GetNamespace()).Delete(ctx, wasmPluginName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			logger.Error(err, "failed to delete wasmplugin", "gateway", gatewayKey.String(), "wasmplugin", wasmPluginName)
+			reconcileErr = errors.Join(reconcileErr, fmt.Errorf("failed to delete wasmplugin %s/%s: %w", gateway.GetNamespace(), wasmPluginName, err))
 		}
 
 		existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
@@ -137,7 +148,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		if utils.IsObjectTaggedToDelete(desiredEnvoyFilter) && !utils.IsObjectTaggedToDelete(existingEnvoyFilter) {
 			if err := resource.Delete(ctx, existingEnvoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
 				logger.Error(err, "failed to delete envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", fmt.Sprintf("%s/%s", existingEnvoyFilter.GetNamespace(), existingEnvoyFilter.GetName()))
-				// TODO: handle error
+				reconcileErr = errors.Join(reconcileErr, fmt.Errorf("failed to delete envoyfilter %s/%s: %w", existingEnvoyFilter.GetNamespace(), existingEnvoyFilter.GetName(), err))
 			}
 			continue
 		}
@@ -159,13 +170,13 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
-			// TODO: handle error
+			reconcileErr = errors.Join(reconcileErr, fmt.Errorf("failed to update envoyfilter %s/%s: %w", existingEnvoyFilter.GetNamespace(), existingEnvoyFilter.GetName(), err))
 		}
 	}
 
 	state.Store(StateIstioExtensionsModified, modifiedGateways)
 
-	return nil
+	return reconcileErr
 }
 
 func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway) {

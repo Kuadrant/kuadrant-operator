@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -12,6 +13,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantmetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 )
 
 type EffectiveTokenRateLimitPolicy struct {
@@ -35,6 +37,9 @@ func (r *EffectiveTokenRateLimitPolicyReconciler) Subscription() controller.Subs
 }
 
 func (r *EffectiveTokenRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	startTime := time.Now()
+	defer kuadrantmetrics.ObserveEffectivePolicyDuration("tokenratelimit", startTime)
+
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTokenRateLimitPolicyReconciler").WithValues("context", ctx)
 	logger.V(1).Info("generating effective token rate limit policy", "status", "started")
 	defer logger.V(1).Info("generating effective token rate limit policy", "status", "completed")

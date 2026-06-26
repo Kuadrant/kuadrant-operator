@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -24,6 +25,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	extensionmanager "github.com/kuadrant/kuadrant-operator/internal/extension"
+	kuadrantmetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
@@ -51,6 +53,9 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 }
 
 func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	startTime := time.Now()
+	defer kuadrantmetrics.ObserveAuthconfigGenerationDuration(startTime)
+
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler").WithValues("context", ctx)
 
 	authorino := GetAuthorinoFromTopology(topology, state)
@@ -83,6 +88,8 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
 		}
 	}
+
+	kuadrantmetrics.SetAuthconfigsGeneratedTotal(len(desiredAuthConfigs))
 
 	if len(modifiedAuthConfigs) > 0 {
 		state.Store(StateModifiedAuthConfigs, modifiedAuthConfigs)

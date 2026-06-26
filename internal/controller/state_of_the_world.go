@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"time"
 
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
@@ -698,6 +699,14 @@ func traceReconcileFunc(name string, reconcileFunc controller.ReconcileFunc, add
 	}
 }
 
+func metricsReconcileFunc(workflow string, reconcileFunc controller.ReconcileFunc) controller.ReconcileFunc {
+	return func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
+		startTime := time.Now()
+		defer operatormetrics.ObserveReconciliationDuration(workflow, startTime)
+		return reconcileFunc(ctx, resourceEvents, topology, err, state)
+	}
+}
+
 func additionalMainTraceAttributes(resourceEvents []controller.ResourceEvent, _ *machinery.Topology, _ error, _ *sync.Map) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attribute.Int("event_count", len(resourceEvents)),
@@ -717,15 +726,15 @@ func additionalMainTraceAttributes(resourceEvents []controller.ResourceEvent, _ 
 
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: traceReconcileFunc("workflow.init", initWorkflow(b.client).Run),
+		Precondition: metricsReconcileFunc("init", traceReconcileFunc("workflow.init", initWorkflow(b.client).Run)),
 		Tasks: []controller.ReconcileFunc{
-			traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run),
-			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
-			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
-			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
+			metricsReconcileFunc("dns", traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run)),
+			metricsReconcileFunc("tls", traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run)),
+			metricsReconcileFunc("data_plane", traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run)),
+			metricsReconcileFunc("observability", traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile)),
 			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
 		},
-		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
+		Postcondition: metricsReconcileFunc("finalize", traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run)),
 	}
 
 	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {

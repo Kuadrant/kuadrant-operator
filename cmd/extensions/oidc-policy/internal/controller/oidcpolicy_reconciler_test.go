@@ -235,7 +235,7 @@ func TestBuildTargetCookieExpression(t *testing.T) {
 			hostname: "example.com",
 			protocol: gatewayapiv1.HTTPProtocolType,
 			want: []string{
-				`"target=" + request.path`,
+				`"target=" + request.url_path`,
 				`has(request.query) && request.query != ""`,
 				`"?" + request.query`,
 				`domain=example.com`,
@@ -250,7 +250,7 @@ func TestBuildTargetCookieExpression(t *testing.T) {
 			hostname: "secure.example.com",
 			protocol: gatewayapiv1.HTTPSProtocolType,
 			want: []string{
-				`"target=" + request.path`,
+				`"target=" + request.url_path`,
 				`has(request.query) && request.query != ""`,
 				`"?" + request.query`,
 				`domain=secure.example.com`,
@@ -286,7 +286,7 @@ func TestBuildTargetCookieExpression_QueryStringHandling(t *testing.T) {
 		`has(request.query) && request.query != ""`,
 		`"?" + request.query`,
 		// The pattern should be: path + (has(request.query) ? "?" + query : "")
-		`request.path + (has(request.query) && request.query != "" ? "?" + request.query : "")`,
+		`request.url_path + (has(request.query) && request.query != "" ? "?" + request.query : "")`,
 	}
 
 	for _, pattern := range requiredPatterns {
@@ -296,7 +296,7 @@ func TestBuildTargetCookieExpression_QueryStringHandling(t *testing.T) {
 	}
 
 	// Verify it does NOT use the broken pattern that only stores the path
-	if strings.Contains(expression, `"target=" + request.path + "; domain=`) {
+	if strings.Contains(expression, `"target=" + request.url_path + "; domain=`) {
 		t.Error("Expression should not directly concatenate path with cookie attributes (missing query string logic)")
 	}
 }
@@ -333,9 +333,9 @@ func TestBuildTargetCookieExpression_Examples(t *testing.T) {
 
 	for _, ex := range examples {
 		t.Run(ex.scenario, func(t *testing.T) {
-			// The CEL expression uses a ternary: request.path + (has(request.query) ? "?" + request.query : "")
+			// The CEL expression uses a ternary: request.url_path + (has(request.query) ? "?" + request.query : "")
 			// This should construct the full path with query when query is present
-			if !strings.Contains(expression, `request.path + (has(request.query) ? "?" + request.query : "")`) {
+			if !strings.Contains(expression, `request.url_path + (has(request.query) ? "?" + request.query : "")`) {
 				t.Errorf("Expression should handle scenario: %s\nExpected to preserve: %s", ex.scenario, ex.expected)
 			}
 		})

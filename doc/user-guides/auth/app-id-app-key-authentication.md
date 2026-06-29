@@ -129,7 +129,7 @@ metadata:
   namespace: kuadrant-system
   labels:
     authorino.kuadrant.io/managed-by: authorino
-    app-credentials: "true"
+    app: demo-api
   annotations:
     app-id: app123
 type: Opaque
@@ -143,7 +143,7 @@ metadata:
   namespace: kuadrant-system
   labels:
     authorino.kuadrant.io/managed-by: authorino
-    app-credentials: "true"
+    app: demo-api
   annotations:
     app-id: app456
 type: Opaque
@@ -154,7 +154,7 @@ EOF
 
 **Key Points:**
 - Label `authorino.kuadrant.io/managed-by: authorino` - Marks the secret for Authorino discovery
-- Label `app-credentials: "true"` - Used by AuthPolicy selector to identify API key secrets
+- Label `app: demo-api` - Used by AuthPolicy selector to identify API key secrets
 - Annotation `app-id` - Stores the App ID for validation against the request header
 - `stringData.api_key` - The API key credential (automatically base64 encoded)
 
@@ -163,7 +163,7 @@ EOF
 Verify that the Secrets were created successfully:
 
 ```sh
-kubectl get secrets -n kuadrant-system -l app-credentials=true
+kubectl get secrets -n kuadrant-system -l app=demo-api
 
 kubectl describe secret api-key-app-123 -n kuadrant-system
 ```
@@ -321,7 +321,7 @@ spec:
         apiKey:
           selector:
             matchLabels:
-              app-credentials: "true"
+              app: "demo-api"
           allNamespaces: true
         credentials:
           customHeader:
@@ -348,7 +348,7 @@ EOF
 The AuthPolicy implements a two-stage validation:
 
 1. **Authentication Stage** (`api-key-authentication`):
-   - Selects Secrets with label `app-credentials: "true"` (synced from Vault)
+   - Selects Secrets with label `app: demo-api` (synced from Vault)
    - Looks for the API key in the `app_key` custom header
    - Validates the provided key against stored secrets
    - Authorino loads the secret's annotations into `auth.identity.metadata.annotations`

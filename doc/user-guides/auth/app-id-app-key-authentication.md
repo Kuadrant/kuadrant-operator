@@ -264,6 +264,10 @@ spec:
 EOF
 ```
 
+Note: This step is only necessary because we are skipping DNS configuration and using `nip.io` hostname combined with the
+Ingress IP, that is assigned by the Load Balancer. Otherwise, it would be configured in Step 1 when setting the Gateway
+alongside a [DNSPolicy](https://docs.kuadrant.io/latest/kuadrant-operator/doc/reference/dnspolicy/).
+
 ### 4.2 Create HTTPRoute
 
 Create an HTTPRoute that exposes your API:

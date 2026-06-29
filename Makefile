@@ -265,6 +265,7 @@ ACT ?= $(LOCALBIN)/act
 GINKGO ?= $(LOCALBIN)/ginkgo
 HELM ?= $(LOCALBIN)/helm
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+RATCHET ?= $(LOCALBIN)/ratchet
 
 ## Tool Versions
 OPERATOR_SDK_VERSION ?= v1.33.0
@@ -276,6 +277,7 @@ KIND_VERSION ?= v0.31.0
 ACT_VERSION ?= latest
 HELM_VERSION ?= v3.15.0
 GOLANGCI_LINT_VERSION ?= v2.12.2
+RATCHET_VERSION ?= v0.11.4
 
 ## Versioned Binaries
 OPERATOR_SDK_V_BINARY := $(LOCALBIN)/operator-sdk-$(OPERATOR_SDK_VERSION)
@@ -287,6 +289,7 @@ KIND_V_BINARY := $(LOCALBIN)/kind-$(KIND_VERSION)
 ACT_V_BINARY := $(LOCALBIN)/act-$(ACT_VERSION)
 HELM_V_BINARY := $(LOCALBIN)/helm-$(HELM_VERSION)
 GOLANGCI_LINT_V_BINARY := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+RATCHET_V_BINARY := $(LOCALBIN)/ratchet-$(RATCHET_VERSION)
 
 .PHONY: operator-sdk
 operator-sdk: $(OPERATOR_SDK_V_BINARY) ## Download operator-sdk locally if necessary.
@@ -337,6 +340,11 @@ $(GINKGO): $(LOCALBIN) go.mod
 helm: $(HELM_V_BINARY) ## Download helm locally if necessary.
 $(HELM_V_BINARY): $(LOCALBIN)
 	$(call go-install-tool,$(HELM),helm.sh/helm/v3/cmd/helm,$(HELM_VERSION))
+
+.PHONY: ratchet
+ratchet: $(RATCHET_V_BINARY) ## Download ratchet locally if necessary.
+$(RATCHET_V_BINARY): $(LOCALBIN)
+	$(call go-install-tool,$(RATCHET),github.com/sethvargo/ratchet,$(RATCHET_VERSION))
 
 ##@ Development
 define patch-config
@@ -579,6 +587,10 @@ update-catalogsource:
 	@$(YQ) e -i '.spec.image = "${CATALOG_IMG}"' config/deploy/olm/catalogsource.yaml
 
 ##@ Code Style
+
+.PHONY: ratchet-pin
+ratchet-pin: ratchet ## Pin GitHub Actions to commit SHAs.
+	$(RATCHET) pin $$(find .github/workflows -name '*.yaml' -o -name '*.yml')
 
 .PHONY: run-lint
 run-lint: golangci-lint ## Run lint tests

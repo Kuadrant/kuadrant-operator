@@ -24,6 +24,11 @@ const (
 	initialRetryDelay = 2 * time.Second
 	maxRetryDelay     = 1 * time.Minute
 	maxRetryAttempts  = 5
+
+	// Operation types for error recording
+	OperationCreate = "create"
+	OperationUpdate = "update"
+	OperationDelete = "delete"
 )
 
 // ReconciliationError represents a single non-blocking error

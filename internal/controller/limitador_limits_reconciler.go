@@ -25,6 +25,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
+const LimitadorLimitsReconcilerName = "LimitadorLimitsReconciler"
+
 type LimitadorLimitsReconciler struct {
 	client *dynamic.DynamicClient
 }
@@ -98,8 +100,8 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		// Record error for deferred retry
 		errorRegistry := GetOrCreateErrorRegistry(state)
 		errorRegistry.Record(
-			"LimitadorLimitsReconciler",
-			"update",
+			LimitadorLimitsReconcilerName,
+			OperationUpdate,
 			k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()},
 			kuadrantv1beta1.LimitadorGroupKind,
 			err,

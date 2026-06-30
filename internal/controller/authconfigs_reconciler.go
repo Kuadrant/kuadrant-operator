@@ -31,6 +31,8 @@ import (
 
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
+const AuthConfigsReconcilerName = "AuthConfigsReconciler"
+
 type AuthConfigsReconciler struct {
 	client *dynamic.DynamicClient
 }
@@ -108,8 +110,8 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 			// Record the error for deferred retry instead of returning it
 			errorRegistry.Record(
-				"AuthConfigsReconciler",
-				"delete",
+				AuthConfigsReconcilerName,
+				OperationDelete,
 				resourceName,
 				kuadrantauthorino.AuthConfigGroupKind,
 				err,
@@ -181,8 +183,8 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 
 			// Record error for deferred retry
 			errorRegistry.Record(
-				"AuthConfigsReconciler",
-				"create",
+				AuthConfigsReconcilerName,
+				OperationCreate,
 				k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace},
 				kuadrantauthorino.AuthConfigGroupKind,
 				err,
@@ -208,8 +210,8 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 
 			// Record error for deferred retry
 			errorRegistry.Record(
-				"AuthConfigsReconciler",
-				"delete",
+				AuthConfigsReconcilerName,
+				OperationDelete,
 				k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace},
 				kuadrantauthorino.AuthConfigGroupKind,
 				err,
@@ -236,8 +238,8 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 
 		// Record error for deferred retry
 		errorRegistry.Record(
-			"AuthConfigsReconciler",
-			"update",
+			AuthConfigsReconcilerName,
+			OperationUpdate,
 			k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace},
 			kuadrantauthorino.AuthConfigGroupKind,
 			err,

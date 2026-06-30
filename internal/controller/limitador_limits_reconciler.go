@@ -178,7 +178,7 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
 					Name:       limitKey,
-					Namespace:  limitsNamespace,
+					Namespace:  string(limitsNamespace),
 					MaxValue:   maxValue,
 					Seconds:    seconds,
 					Conditions: []string{fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", limitIdentifier)},
@@ -193,7 +193,7 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
 					Name:       limitKey,
-					Namespace:  limitsNamespace,
+					Namespace:  string(limitsNamespace),
 					MaxValue:   maxValue,
 					Seconds:    seconds,
 					Conditions: []string{fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", limitIdentifier)},

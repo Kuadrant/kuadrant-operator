@@ -2304,9 +2304,9 @@ func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
 	})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	gw := BuildGateway(func(g *gwapiv1.Gateway) {
@@ -2382,9 +2382,9 @@ func TestApplyWasmConfigMutators_NoRoutesNoActionSets(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_DENY},
 	})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	// Gateway with no routes attached
@@ -2422,9 +2422,9 @@ func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat"},
 	})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	gw := BuildGateway(func(g *gwapiv1.Gateway) {
@@ -2591,9 +2591,9 @@ func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat"},
 	})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	gw := BuildGateway(func(g *gwapiv1.Gateway) {
@@ -2683,9 +2683,9 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 403},
 	})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	gw := BuildGateway(func(g *gwapiv1.Gateway) {
@@ -2819,9 +2819,9 @@ func TestMutateWasmConfig_CrossGatewayIsolation(t *testing.T) {
 	})
 	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	gwA := BuildGateway(func(g *gwapiv1.Gateway) { g.Name = "gw-a"; g.Namespace = "test-ns" })
@@ -2918,9 +2918,9 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 	})
 	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
-	savedRegistry := *GlobalMutatorRegistry
-	defer func() { *GlobalMutatorRegistry = savedRegistry }()
-	*GlobalMutatorRegistry = MutatorRegistry{}
+	savedRegistry := GlobalMutatorRegistry
+	defer func() { GlobalMutatorRegistry = savedRegistry }()
+	GlobalMutatorRegistry = &MutatorRegistry{}
 	GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
 
 	gw := BuildGateway(func(g *gwapiv1.Gateway) { g.Name = "test-gw"; g.Namespace = "test-ns" })

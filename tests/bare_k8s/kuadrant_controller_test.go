@@ -93,6 +93,27 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
+		It("Kuadrant-owned resources use non-blocking owner references", func(ctx SpecContext) {
+			assertNonBlockingKuadrantOwnerRef := func(g Gomega, owner []metav1.OwnerReference) {
+				g.Expect(owner).To(ContainElement(SatisfyAll(
+					HaveField("Kind", "Kuadrant"),
+					HaveField("Name", kuadrantCR.Name),
+					HaveField("Controller", ptr.To(true)),
+					HaveField("BlockOwnerDeletion", ptr.To(false)),
+				)))
+			}
+
+			Eventually(func(g Gomega) {
+				limitador := &limitadorv1alpha1.Limitador{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: testNamespace}, limitador)).To(Succeed())
+				assertNonBlockingKuadrantOwnerRef(g, limitador.GetOwnerReferences())
+
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				assertNonBlockingKuadrantOwnerRef(g, authorino.GetOwnerReferences())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
 		It("Limitador CR should retain user fields and restore default", func(ctx SpecContext) {
 			By("Patching Limitador CR with user fields")
 			limitador := &limitadorv1alpha1.Limitador{

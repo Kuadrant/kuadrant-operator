@@ -149,11 +149,13 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			Namespace: kobj.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion:         kobj.GroupVersionKind().GroupVersion().String(),
-					Kind:               kobj.GroupVersionKind().Kind,
-					Name:               kobj.Name,
-					UID:                kobj.UID,
-					BlockOwnerDeletion: ptr.To(true),
+					APIVersion: kobj.GroupVersionKind().GroupVersion().String(),
+					Kind:       kobj.GroupVersionKind().Kind,
+					Name:       kobj.Name,
+					UID:        kobj.UID,
+					// Intentionally false: a blocking owner ref to the Kuadrant CR
+					// races OLM startup and fails the Create.
+					BlockOwnerDeletion: ptr.To(false),
 					Controller:         ptr.To(true),
 				},
 			},

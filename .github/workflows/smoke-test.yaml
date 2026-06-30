@@ -14,9 +14,9 @@ jobs:
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
       - id: skip_check
-        uses: fkirc/skip-duplicate-actions@v3.4.1
+        uses: fkirc/skip-duplicate-actions@f75dd6564bb646f95277dc8c3b80612e46a4a1ea # ratchet:fkirc/skip-duplicate-actions@v3.4.1
         with:
           cancel_others: false
           paths_ignore: '["**.adoc", "**.md", "examples/**", "LICENSE"]'
@@ -31,10 +31,10 @@ jobs:
         shell: bash
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -108,13 +108,13 @@ jobs:
       - name: Deploy testsuite tools
         run: |
           kubectl create namespace tools
-          
+
           helm install --repo https://kuadrant.io/helm-charts-olm \
           --set=tools.keycloak.keycloakProvider=deployment --set=tools.coredns.enable=false --set=tools.redis.enable=false --set=tools.dragonfly.enable=false --set=tools.valkey.enable=false --set=tools.customMetricsApiserver.enable=false --set=tools.jaeger.enable=false --set=tools.mockserver.enable=false \
           --debug --wait --timeout=10m0s tools tools-instances
 
       - name: Check out testsuite
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
         with:
           repository: Kuadrant/testsuite
           ref: main

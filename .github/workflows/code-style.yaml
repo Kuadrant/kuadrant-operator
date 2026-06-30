@@ -29,7 +29,7 @@ jobs:
     name: Auto-format and Check
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false  # Keep running if one leg fails.
+      fail-fast: false # Keep running if one leg fails.
       matrix:
         tool:
           - goimports
@@ -43,10 +43,10 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
           go-version-file: go.mod
         id: go
@@ -93,10 +93,10 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
           go-version-file: go.mod
         id: go
@@ -123,7 +123,7 @@ jobs:
           echo "${TEMP_PATH}" >> $GITHUB_PATH
 
       - id: golangci_configuration
-        uses: andstor/file-existence-action@v1
+        uses: andstor/file-existence-action@f02338908d150e00a4b8bebc2dad18bd9e5229b0 # ratchet:andstor/file-existence-action@v1
         with:
           files: .golangci.yaml
       - name: Go Lint
@@ -157,34 +157,34 @@ jobs:
 
           echo '::endgroup::'
 
-#      - name: trailing whitespace
-#        shell: bash
-#        if: ${{ always() }}
-#        env:
-#          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
-#        run: |
-#          set -e
-#          cd "${GITHUB_WORKSPACE}" || exit 1
-#
-#          echo '::group:: Flagging trailing whitespace with reviewdog 🐶 ...'
-#          # Don't fail because of grep
-#          set +o pipefail
-#
-#          # Exclude generated and vendored files, plus some legacy
-#          # paths until we update all .gitattributes
-#          git ls-files |
-#          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
-#          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
-#          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
-#          xargs grep -nE " +$" |
-#          reviewdog -efm="%f:%l:%m" \
-#                -name="trailing whitespace" \
-#                -reporter="github-pr-check" \
-#                -filter-mode="added" \
-#                -fail-on-error="true" \
-#                -level="error"
-#
-#          echo '::endgroup::'
+        #      - name: trailing whitespace
+        #        shell: bash
+        #        if: ${{ always() }}
+        #        env:
+        #          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+        #        run: |
+        #          set -e
+        #          cd "${GITHUB_WORKSPACE}" || exit 1
+        #
+        #          echo '::group:: Flagging trailing whitespace with reviewdog 🐶 ...'
+        #          # Don't fail because of grep
+        #          set +o pipefail
+        #
+        #          # Exclude generated and vendored files, plus some legacy
+        #          # paths until we update all .gitattributes
+        #          git ls-files |
+        #          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
+        #          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
+        #          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
+        #          xargs grep -nE " +$" |
+        #          reviewdog -efm="%f:%l:%m" \
+        #                -name="trailing whitespace" \
+        #                -reporter="github-pr-check" \
+        #                -filter-mode="added" \
+        #                -fail-on-error="true" \
+        #                -level="error"
+        #
+        #          echo '::endgroup::'
 
       - name: EOF newline
         shell: bash
@@ -266,9 +266,9 @@ jobs:
     # This check adds a list of checks to one job to simplify adding settings to the repo.
     # If a new check is added in this file, and it should be retested on entry to the merge queue,
     # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
-    needs: [ auto-format, lint ]
+    needs: [auto-format, lint]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
       - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'

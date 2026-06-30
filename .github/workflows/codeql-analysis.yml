@@ -23,6 +23,9 @@ on:
     - cron: '35 17 * * 6'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze

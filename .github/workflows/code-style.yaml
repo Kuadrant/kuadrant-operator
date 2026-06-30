@@ -24,6 +24,9 @@ on:
     types: [checks_requested]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   auto-format:
     name: Auto-format and Check
@@ -88,6 +91,10 @@ jobs:
           echo "${{ github.repository }} is formatted correctly."
 
   lint:
+    permissions:
+      checks: write  # for reviewdog to create check
+      contents: read  # for actions/checkout to fetch code
+      pull-requests: write  # for reviewdog to add comment to the PR
     name: Lint
     runs-on: ubuntu-latest
 

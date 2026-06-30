@@ -10,6 +10,9 @@ env:
   IMG_REGISTRY_ORG: kuadrant
   OPERATOR_NAME: kuadrant-operator
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build and Push image

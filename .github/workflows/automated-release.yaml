@@ -42,8 +42,13 @@ on:
         type: string
         default: "stable"
 
+permissions:
+  contents: read
+
 jobs:
   auto-release:
+    permissions:
+      contents: write  # for Git to git push
     name: Release operator
     runs-on: ubuntu-latest
     steps:

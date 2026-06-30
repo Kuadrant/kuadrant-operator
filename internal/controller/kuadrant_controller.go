@@ -20,15 +20,6 @@ type KuadrantController struct {
 	retryTimerMu sync.Mutex
 }
 
-// NewKuadrantController wraps a policy-machinery controller with error tracking
-func NewKuadrantController(policyMachineryController *controller.Controller, errorTracker *PersistentErrorTracker, logger logr.Logger) *KuadrantController {
-	return &KuadrantController{
-		Controller:   policyMachineryController,
-		errorTracker: errorTracker,
-		logger:       logger.WithName("KuadrantController"),
-	}
-}
-
 // Reconcile implements the controller-runtime Reconciler interface
 // It delegates to the wrapped policy-machinery controller and handles error tracking
 func (c *KuadrantController) Reconcile(ctx context.Context, req ctrlruntimereconcile.Request) (ctrlruntimereconcile.Result, error) {

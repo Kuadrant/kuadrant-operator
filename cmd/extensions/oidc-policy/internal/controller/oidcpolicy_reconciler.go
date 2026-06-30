@@ -40,14 +40,21 @@ type ingressGatewayInfo struct {
 	Name      string                    `json:"name"`
 	Namespace string                    `json:"namespace"`
 	Protocol  gatewayapiv1.ProtocolType `json:"protocol"`
+	Port      int32                     `json:"port"`
 	url       *url.URL
 }
 
 func (g *ingressGatewayInfo) GetURL() *url.URL {
 	if g.url == nil {
+		host := g.Hostname
+		// Include port if it's not the standard port for the protocol
+		if (g.Protocol == gatewayapiv1.HTTPProtocolType && g.Port != 80) ||
+			(g.Protocol == gatewayapiv1.HTTPSProtocolType && g.Port != 443) {
+			host = fmt.Sprintf("%s:%d", g.Hostname, g.Port)
+		}
 		g.url = &url.URL{
 			Scheme: strings.ToLower(string(g.Protocol)),
-			Host:   g.Hostname,
+			Host:   host,
 		}
 	}
 	return g.url
@@ -109,6 +116,7 @@ func (r *OIDCPolicyReconciler) Reconcile(ctx context.Context, request reconcile.
 		oidcPolicy,
 		`{"protocol": self.findGateways()[0].spec.listeners[0].protocol,
 		"hostname": self.findGateways()[0].spec.listeners[0].hostname,
+		"port": self.findGateways()[0].spec.listeners[0].port,
 		"name": self.findGateways()[0].metadata.name,
 		"namespace": self.findGateways()[0].metadata.namespace}`,
 		true)
@@ -297,6 +305,11 @@ func claimPredicate(k, v string) string {
 	return fmt.Sprintf(`has(auth.identity) && has(auth.identity.%s) && (auth.identity.%s == "%s" || (type(auth.identity.%s) == list && "%s" in auth.identity.%s))`, k, k, v, k, v, k)
 }
 
+func buildTargetCookieExpression(hostname string, protocol gatewayapiv1.ProtocolType) string {
+	return fmt.Sprintf(`
+"target=" + request.url_path + (has(request.query) && request.query != "" ? "?" + request.query : "") + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, hostname, getSecureFlag(protocol))
+}
+
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	authorizeURL, err := pol.GetAuthorizeURL(igw.GetURL())
 	if err != nil {
@@ -307,8 +320,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		return nil, err
 	}
 
-	setCookie := fmt.Sprintf(`
-"target=" + request.path + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, igw.Hostname, getSecureFlag(igw.Protocol))
+	setCookie := buildTargetCookieExpression(igw.Hostname, igw.Protocol)
 
 	var authorization = map[string]kuadrantv1.MergeableAuthorizationSpec{}
 	var authPatterns []authorinov1beta3.PatternExpressionOrRef
@@ -442,6 +454,14 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 	}
 }
 
+func buildOpaAuthorizationRule(baseURL *url.URL, igwURL *url.URL, authorizeURL string) string {
+	return fmt.Sprintf(`cookies := { name: value | raw_cookies := input.request.headers.cookie; cookie_parts := split(raw_cookies, ";"); part := cookie_parts[_]; trimmed := trim(part, " "); eq_idx := indexof(trimmed, "="); eq_idx != -1; name := trim(substring(trimmed, 0, eq_idx), " "); value := trim(substring(trimmed, eq_idx + 1, -1), " ")}
+location := concat("", ["%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
+location := "%s" { input.auth.metadata.token.id_token; not cookies.target }
+location := "%s" { not input.auth.metadata.token.id_token }
+allow = true`, baseURL, igwURL, authorizeURL)
+}
+
 func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
 	igwURL := igw.GetURL()
 	tokenRequestURL, err := pol.GetTokenRequestURL()
@@ -458,6 +478,12 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 		return nil, err
 	}
 
+	// Get the base URL for post-auth redirects (respects custom redirectURI if set)
+	baseURL, err := pol.GetBaseURL(igwURL)
+	if err != nil {
+		return nil, err
+	}
+
 	callbackRoute := gatewayapiv1alpha2.LocalPolicyTargetReference{
 		Group: gatewayapiv1alpha2.GroupName,
 		Kind:  gatewayapiv1alpha2.Kind("HTTPRoute"),
@@ -470,11 +496,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 		Expression: authorinov1beta3.CelExpression(callBodyCelExpression),
 	}
 
-	opaAuthorizationRule := fmt.Sprintf(`cookies := { name: value | raw_cookies := input.request.headers.cookie; cookie_parts := split(raw_cookies, ";"); part := cookie_parts[_]; kv := split(trim(part, " "), "="); count(kv) == 2; name := trim(kv[0], " "); value := trim(kv[1], " ")}
-location := concat("", ["%s", cookies.target]) { input.auth.metadata.token.id_token; cookies.target }
-location := "%s" { input.auth.metadata.token.id_token; not cookies.target }
-location := "%s" { not input.auth.metadata.token.id_token }
-allow = true`, igwURL, igwURL, authorizeURL)
+	opaAuthorizationRule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
 
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{

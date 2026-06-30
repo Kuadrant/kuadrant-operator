@@ -271,6 +271,23 @@ func (p *OIDCPolicy) redirectURL(igwURL *url.URL) (*url.URL, error) {
 	return redirectURL, nil
 }
 
+// GetBaseURL returns the base URL (scheme + host + port) for post-authentication redirects.
+// It derives this from spec.provider.redirectURI if set, otherwise from igwURL.
+func (p *OIDCPolicy) GetBaseURL(igwURL *url.URL) (*url.URL, error) {
+	redirectURL, err := p.redirectURL(igwURL)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract base URL (scheme + host, no path or query)
+	baseURL := &url.URL{
+		Scheme: redirectURL.Scheme,
+		Host:   redirectURL.Host,
+	}
+
+	return baseURL, nil
+}
+
 // +kubebuilder:object:root=true
 
 // OIDCPolicyList contains a list of OIDCPolicy

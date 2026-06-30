@@ -117,6 +117,9 @@ env:
   OPERATOR_NAME: kuadrant-operator
   QUAY_IMAGE_EXPIRY: ${{ inputs.quayImageExpiry }}
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build

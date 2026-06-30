@@ -9,6 +9,9 @@ on:
       - examples/dashboards/business_user.json
       - examples/dashboards/platform_engineer.json
 
+permissions:
+  contents: read
+
 jobs:
   upload-dashboards:
     name: Upload Dashboards

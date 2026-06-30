@@ -13,8 +13,14 @@ on:
     types: [ checks_requested ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   pre-job:
+    permissions:
+      actions: write  # for fkirc/skip-duplicate-actions to skip or stop workflow runs
+      contents: read  # for fkirc/skip-duplicate-actions to read and compare commits
     runs-on: ubuntu-latest
     name: Pre job checks
     outputs:

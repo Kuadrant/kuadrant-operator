@@ -147,7 +147,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           push: true
-          provenance: false
+          provenance: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
@@ -158,6 +158,11 @@ jobs:
         run: |
           echo "Image(s) pushed:"
           echo "${{ steps.meta.outputs.tags }}"
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # ratchet:sigstore/cosign-installer@v3
+      - name: Sign image with cosign
+        run: |
+          cosign sign --yes ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}@${{ steps.build-image.outputs.digest }}
 
   build-bundle:
     needs: build
@@ -209,13 +214,18 @@ jobs:
           file: ./bundle.Dockerfile
           platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           push: true
-          provenance: false
+          provenance: true
           tags: ${{ steps.bundle-meta.outputs.tags }}
           build-args: QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
       - name: Print Image URL
         run: |
           echo "Image(s) pushed:"
           echo "${{ steps.bundle-meta.outputs.tags }}"
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # ratchet:sigstore/cosign-installer@v3
+      - name: Sign image with cosign
+        run: |
+          cosign sign --yes ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle@${{ steps.build-bundle-image.outputs.digest }}
 
   build-catalog:
     name: Build Catalog
@@ -260,10 +270,15 @@ jobs:
           file: ./catalog/kuadrant-operator-catalog.Dockerfile
           platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           push: true
-          provenance: false
+          provenance: true
           tags: ${{ steps.catalog-meta.outputs.tags }}
           # The Quay image expiry label for the generated catalog Dockerfile is set via opm, using the value set in the QUAY_IMAGE_EXPIRY environment variable
       - name: Print Image URL
         run: |
           echo "Image(s) pushed:"
           echo "${{ steps.catalog-meta.outputs.tags }}"
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # ratchet:sigstore/cosign-installer@v3
+      - name: Sign image with cosign
+        run: |
+          cosign sign --yes ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog@${{ steps.build-catalog-image.outputs.digest }}

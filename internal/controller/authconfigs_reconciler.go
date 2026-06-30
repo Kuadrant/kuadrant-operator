@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -29,6 +30,8 @@ import (
 )
 
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
+
+const AuthConfigsReconcilerName = "AuthConfigsReconciler"
 
 type AuthConfigsReconciler struct {
 	client *dynamic.DynamicClient
@@ -70,11 +73,13 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	logger.V(1).Info("reconciling authconfig objects", "effectivePolicies", len(effectivePoliciesMap))
 	defer logger.V(1).Info("finished reconciling authconfig objects")
 
+	errorRegistry := GetOrCreateErrorRegistry(state)
+
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
 	modifiedAuthConfigs := []string{}
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
-		authConfigName, modified := r.reconcileAuthConfigForPath(ctx, pathID, effectivePolicy, authConfigsNamespace, topology)
+		authConfigName, modified := r.reconcileAuthConfigForPath(ctx, pathID, effectivePolicy, authConfigsNamespace, topology, errorRegistry)
 		if authConfigName == "" {
 			continue
 		}
@@ -93,10 +98,24 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		_, desired := desiredAuthConfigs[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
 		return o.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels()) && !desired
 	})
+
 	for _, authConfig := range staleAuthConfigs {
-		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+		resourceName := k8stypes.NamespacedName{
+			Name:      authConfig.GetName(),
+			Namespace: authConfig.GetNamespace(),
+		}
+
+		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete authconfig object", "authconfig", fmt.Sprintf("%s/%s", authConfig.GetNamespace(), authConfig.GetName()))
-			// TODO: handle error
+
+			// Record the error for deferred retry instead of returning it
+			errorRegistry.Record(
+				AuthConfigsReconcilerName,
+				OperationDelete,
+				resourceName,
+				kuadrantauthorino.AuthConfigGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -105,7 +124,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 // reconcileAuthConfigForPath reconciles the AuthConfig for a single effective policy path.
 // It returns the authConfigName (empty if the path is invalid) and whether the object was modified.
-func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, pathID string, effectivePolicy EffectiveAuthPolicy, authConfigsNamespace string, topology *machinery.Topology) (string, bool) {
+func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, pathID string, effectivePolicy EffectiveAuthPolicy, authConfigsNamespace string, topology *machinery.Topology, errorRegistry *ErrorRegistry) (string, bool) {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler")
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
@@ -161,7 +180,15 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 			logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", desiredAuthConfigUnstructured.Object)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, msg)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				AuthConfigsReconcilerName,
+				OperationCreate,
+				k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace},
+				kuadrantauthorino.AuthConfigGroupKind,
+				err,
+			)
 		}
 		return authConfigName, true
 	}
@@ -175,12 +202,20 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 
 	// delete
 	if utils.IsObjectTaggedToDelete(desiredAuthConfig) && !utils.IsObjectTaggedToDelete(existingAuthConfig) {
-		if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := resource.Delete(ctx, existingAuthConfig.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			msg := "failed to delete authconfig object"
 			logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", fmt.Sprintf("%s/%s", existingAuthConfig.GetNamespace(), existingAuthConfig.GetName()))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, msg)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				AuthConfigsReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace},
+				kuadrantauthorino.AuthConfigGroupKind,
+				err,
+			)
 		}
 		return authConfigName, true
 	}
@@ -200,7 +235,15 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 		logger.Error(err, msg, "route", routeKey.String(), "routeRule", routeRuleKey, "authconfig", existingAuthConfigUnstructured.Object)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, msg)
-		// TODO: handle error
+
+		// Record error for deferred retry
+		errorRegistry.Record(
+			AuthConfigsReconcilerName,
+			OperationUpdate,
+			k8stypes.NamespacedName{Name: authConfigName, Namespace: authConfigsNamespace},
+			kuadrantauthorino.AuthConfigGroupKind,
+			err,
+		)
 	}
 	return authConfigName, true
 }

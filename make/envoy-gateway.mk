@@ -26,6 +26,10 @@ ifeq ($(ARCH),s390x)
 	# Envoy Gateway may not publish egctl for s390x; download will fail if not available
 	EG_ARCH = s390x
 endif
+ifeq ($(ARCH),ppc64le)
+	# Envoy Gateway may not publish egctl for ppc64le; download will fail if not available
+	EG_ARCH = ppc64le
+endif
 ifneq ($(filter armv5%,$(ARCH)),)
 	EG_ARCH = armv5
 endif

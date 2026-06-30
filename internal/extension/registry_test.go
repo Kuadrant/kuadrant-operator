@@ -2092,24 +2092,23 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 
 	expectedLocator := "ThreatPolicy/default/my-threat"
 
-	// typed[0]: root deny
-	if typed[0].Type != "deny" {
-		t.Errorf("typed[0]: expected type 'deny', got %q", typed[0].Type)
+	deny0 := typed[0].(*wasm.DenyAction)
+	if deny0.ActionType() != wasm.ActionKindDeny {
+		t.Errorf("typed[0]: expected type 'deny', got %q", deny0.ActionType())
 	}
-	if typed[0].Predicate != `request.url_path == "/blocked"` {
-		t.Errorf("typed[0]: expected predicate, got %q", typed[0].Predicate)
+	if deny0.Predicate != `request.url_path == "/blocked"` {
+		t.Errorf("typed[0]: expected predicate, got %q", deny0.Predicate)
 	}
-	if typed[0].DenyWith != "DenyResponse{status: 403u}" {
-		t.Errorf("typed[0]: expected denyWith 'DenyResponse{status: 403u}', got %q", typed[0].DenyWith)
+	if deny0.DenyWith != "DenyResponse{status: 403u}" {
+		t.Errorf("typed[0]: expected denyWith 'DenyResponse{status: 403u}', got %q", deny0.DenyWith)
 	}
-	if !typed[0].Terminal {
+	if !deny0.Terminal {
 		t.Error("typed[0]: expected terminal")
 	}
 
-	// typed[1]: grpc with onReply
-	grpc := typed[1]
-	if grpc.Type != "grpc" {
-		t.Errorf("typed[1]: expected type 'grpc', got %q", grpc.Type)
+	grpc := typed[1].(*wasm.GrpcAction)
+	if grpc.ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("typed[1]: expected type 'grpc', got %q", grpc.ActionType())
 	}
 	if grpc.Predicate != `"x-assess-threat" in request.headers` {
 		t.Errorf("typed[1]: expected predicate, got %q", grpc.Predicate)
@@ -2130,41 +2129,42 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 		t.Errorf("typed[1]: expected source %q, got %v", expectedLocator, grpc.SourcePolicyLocators)
 	}
 
-	// onReply: deny (var-dependent) + failure (var-dependent)
 	if len(grpc.OnReply) != 2 {
 		t.Fatalf("Expected 2 onReply actions, got %d", len(grpc.OnReply))
 	}
-	if grpc.OnReply[0].Type != "deny" {
-		t.Errorf("onReply[0]: expected type 'deny', got %q", grpc.OnReply[0].Type)
+	onReplyDeny := grpc.OnReply[0].(*wasm.DenyAction)
+	if onReplyDeny.ActionType() != wasm.ActionKindDeny {
+		t.Errorf("onReply[0]: expected type 'deny', got %q", onReplyDeny.ActionType())
 	}
-	if grpc.OnReply[0].Predicate != "threatResponse.threat_level > 5" {
-		t.Errorf("onReply[0]: expected predicate, got %q", grpc.OnReply[0].Predicate)
+	if onReplyDeny.Predicate != "threatResponse.threat_level > 5" {
+		t.Errorf("onReply[0]: expected predicate, got %q", onReplyDeny.Predicate)
 	}
-	if grpc.OnReply[0].DenyWith != "DenyResponse{status: 429u}" {
-		t.Errorf("onReply[0]: expected denyWith 'DenyResponse{status: 429u}', got %q", grpc.OnReply[0].DenyWith)
+	if onReplyDeny.DenyWith != "DenyResponse{status: 429u}" {
+		t.Errorf("onReply[0]: expected denyWith 'DenyResponse{status: 429u}', got %q", onReplyDeny.DenyWith)
 	}
-	if !grpc.OnReply[0].Terminal {
+	if !onReplyDeny.Terminal {
 		t.Error("onReply[0]: expected terminal")
 	}
-	if grpc.OnReply[1].Type != "fail" {
-		t.Errorf("onReply[1]: expected type 'fail', got %q", grpc.OnReply[1].Type)
+	onReplyFail := grpc.OnReply[1].(*wasm.FailAction)
+	if onReplyFail.ActionType() != wasm.ActionKindFail {
+		t.Errorf("onReply[1]: expected type 'fail', got %q", onReplyFail.ActionType())
 	}
-	if grpc.OnReply[1].Predicate != "threatResponse.blocked" {
-		t.Errorf("onReply[1]: expected predicate, got %q", grpc.OnReply[1].Predicate)
+	if onReplyFail.Predicate != "threatResponse.blocked" {
+		t.Errorf("onReply[1]: expected predicate, got %q", onReplyFail.Predicate)
 	}
-	if grpc.OnReply[1].LogMessage != "blocked by threat policy" {
-		t.Errorf("onReply[1]: expected logMessage, got %q", grpc.OnReply[1].LogMessage)
+	if onReplyFail.LogMessage != "blocked by threat policy" {
+		t.Errorf("onReply[1]: expected logMessage, got %q", onReplyFail.LogMessage)
 	}
 
-	// typed[2]: response headers (root-level, no var reference)
-	if typed[2].Type != "headers" {
-		t.Errorf("typed[2]: expected type 'headers', got %q", typed[2].Type)
+	headers2 := typed[2].(*wasm.HeadersAction)
+	if headers2.ActionType() != wasm.ActionKindHeaders {
+		t.Errorf("typed[2]: expected type 'headers', got %q", headers2.ActionType())
 	}
-	if typed[2].Headers != `{"x-checked": "true"}` {
-		t.Errorf("typed[2]: expected headers, got %q", typed[2].Headers)
+	if headers2.Headers != `{"x-checked": "true"}` {
+		t.Errorf("typed[2]: expected headers, got %q", headers2.Headers)
 	}
-	if typed[2].Target != "response" {
-		t.Errorf("typed[2]: expected target 'response', got %q", typed[2].Target)
+	if headers2.Target != "response" {
+		t.Errorf("typed[2]: expected target 'response', got %q", headers2.Target)
 	}
 }
 
@@ -2237,11 +2237,11 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 			t.Errorf("ActionSet[%d]: expected 2 typed actions, got %d", i, len(as.TypedActions))
 			continue
 		}
-		if as.TypedActions[0].Type != "deny" {
-			t.Errorf("ActionSet[%d]: expected typed[0] deny, got %s", i, as.TypedActions[0].Type)
+		if as.TypedActions[0].ActionType() != wasm.ActionKindDeny {
+			t.Errorf("ActionSet[%d]: expected typed[0] deny, got %s", i, as.TypedActions[0].ActionType())
 		}
-		if as.TypedActions[1].Type != "grpc" {
-			t.Errorf("ActionSet[%d]: expected typed[1] grpc, got %s", i, as.TypedActions[1].Type)
+		if as.TypedActions[1].ActionType() != wasm.ActionKindGrpc {
+			t.Errorf("ActionSet[%d]: expected typed[1] grpc, got %s", i, as.TypedActions[1].ActionType())
 		}
 	}
 }
@@ -2351,20 +2351,22 @@ func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
 	if len(as.TypedActions) != 2 {
 		t.Fatalf("Expected 2 root-level typed actions, got %d", len(as.TypedActions))
 	}
-	if as.TypedActions[0].Type != "deny" {
-		t.Errorf("Expected typed[0] deny, got %s", as.TypedActions[0].Type)
+	if as.TypedActions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected typed[0] deny, got %s", as.TypedActions[0].ActionType())
 	}
-	if as.TypedActions[1].Type != "grpc" {
-		t.Errorf("Expected typed[1] grpc, got %s", as.TypedActions[1].Type)
+	if as.TypedActions[1].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected typed[1] grpc, got %s", as.TypedActions[1].ActionType())
 	}
-	if len(as.TypedActions[1].OnReply) != 1 {
-		t.Fatalf("Expected 1 onReply action, got %d", len(as.TypedActions[1].OnReply))
+	grpcAction := as.TypedActions[1].(*wasm.GrpcAction)
+	if len(grpcAction.OnReply) != 1 {
+		t.Fatalf("Expected 1 onReply action, got %d", len(grpcAction.OnReply))
 	}
-	if as.TypedActions[1].OnReply[0].Type != "deny" {
-		t.Errorf("Expected onReply[0] deny, got %s", as.TypedActions[1].OnReply[0].Type)
+	if grpcAction.OnReply[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected onReply[0] deny, got %s", grpcAction.OnReply[0].ActionType())
 	}
-	if as.TypedActions[1].OnReply[0].DenyWith != "DenyResponse{status: 429u}" {
-		t.Errorf("Expected onReply[0] denyWith 'DenyResponse{status: 429u}', got %q", as.TypedActions[1].OnReply[0].DenyWith)
+	onReplyDeny := grpcAction.OnReply[0].(*wasm.DenyAction)
+	if onReplyDeny.DenyWith != "DenyResponse{status: 429u}" {
+		t.Errorf("Expected onReply[0] denyWith 'DenyResponse{status: 429u}', got %q", onReplyDeny.DenyWith)
 	}
 }
 
@@ -2469,11 +2471,11 @@ func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
 	if len(typed) != 2 {
 		t.Fatalf("Expected 2 typed actions (deny + grpc), got %d", len(typed))
 	}
-	if typed[0].Type != "deny" {
-		t.Errorf("Expected typed[0] deny, got %s", typed[0].Type)
+	if typed[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected typed[0] deny, got %s", typed[0].ActionType())
 	}
-	if typed[1].Type != "grpc" {
-		t.Errorf("Expected typed[1] grpc, got %s", typed[1].Type)
+	if typed[1].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected typed[1] grpc, got %s", typed[1].ActionType())
 	}
 }
 
@@ -2652,13 +2654,13 @@ func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
 	if len(as.TypedActions) != 2 {
 		t.Fatalf("Expected 2 typed actions on matching route, got %d", len(as.TypedActions))
 	}
-	if as.TypedActions[0].Type != "deny" {
-		t.Errorf("Expected typed[0] deny, got %s", as.TypedActions[0].Type)
+	if as.TypedActions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected typed[0] deny, got %s", as.TypedActions[0].ActionType())
 	}
-	if as.TypedActions[1].Type != "grpc" {
-		t.Errorf("Expected typed[1] grpc, got %s", as.TypedActions[1].Type)
+	if as.TypedActions[1].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected typed[1] grpc, got %s", as.TypedActions[1].ActionType())
 	}
-	if as.TypedActions[1].Service == "" {
+	if as.TypedActions[1].(*wasm.GrpcAction).Service == "" {
 		t.Error("Expected grpc typed action to have service set")
 	}
 }
@@ -2749,14 +2751,15 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 	if len(as.TypedActions) != 1 {
 		t.Fatalf("Expected 1 typed action (grpc with deny in onReply) merged into built-in actionset, got %d", len(as.TypedActions))
 	}
-	if as.TypedActions[0].Type != "grpc" {
-		t.Errorf("Expected typed[0] grpc, got %s", as.TypedActions[0].Type)
+	if as.TypedActions[0].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected typed[0] grpc, got %s", as.TypedActions[0].ActionType())
 	}
-	if len(as.TypedActions[0].OnReply) != 1 {
-		t.Fatalf("Expected 1 onReply action (deny), got %d", len(as.TypedActions[0].OnReply))
+	grpcAction := as.TypedActions[0].(*wasm.GrpcAction)
+	if len(grpcAction.OnReply) != 1 {
+		t.Fatalf("Expected 1 onReply action (deny), got %d", len(grpcAction.OnReply))
 	}
-	if as.TypedActions[0].OnReply[0].Type != "deny" {
-		t.Errorf("Expected onReply[0] deny, got %s", as.TypedActions[0].OnReply[0].Type)
+	if grpcAction.OnReply[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected onReply[0] deny, got %s", grpcAction.OnReply[0].ActionType())
 	}
 }
 
@@ -2789,9 +2792,9 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	if len(wasmConfig.ActionSets[0].TypedActions) != 1 {
 		t.Fatalf("Expected 1 typed action, got %d", len(wasmConfig.ActionSets[0].TypedActions))
 	}
-	ta := wasmConfig.ActionSets[0].TypedActions[0]
-	if ta.Type != "deny" {
-		t.Errorf("Expected type 'deny', got %q", ta.Type)
+	ta := wasmConfig.ActionSets[0].TypedActions[0].(*wasm.DenyAction)
+	if ta.ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected type 'deny', got %q", ta.ActionType())
 	}
 	if ta.Predicate != `request.url_path == "/admin"` {
 		t.Errorf("Expected predicate, got %q", ta.Predicate)
@@ -2899,8 +2902,8 @@ func TestMutateWasmConfig_PipelineOnlyRouteIsolation(t *testing.T) {
 	if len(wasmConfig.ActionSets[0].TypedActions) != 1 {
 		t.Fatalf("route-a: expected 1 typed action, got %d", len(wasmConfig.ActionSets[0].TypedActions))
 	}
-	if wasmConfig.ActionSets[0].TypedActions[0].Type != "deny" {
-		t.Errorf("route-a: expected deny action, got %s", wasmConfig.ActionSets[0].TypedActions[0].Type)
+	if wasmConfig.ActionSets[0].TypedActions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("route-a: expected deny action, got %s", wasmConfig.ActionSets[0].TypedActions[0].ActionType())
 	}
 
 	if len(wasmConfig.ActionSets[1].TypedActions) != 0 {
@@ -2981,8 +2984,8 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 	if len(wasmConfig.ActionSets[1].TypedActions) != 1 {
 		t.Fatalf("route-b: expected 1 typed action (deny), got %d", len(wasmConfig.ActionSets[1].TypedActions))
 	}
-	if wasmConfig.ActionSets[1].TypedActions[0].Type != "deny" {
-		t.Errorf("route-b: expected deny action, got %s", wasmConfig.ActionSets[1].TypedActions[0].Type)
+	if wasmConfig.ActionSets[1].TypedActions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("route-b: expected deny action, got %s", wasmConfig.ActionSets[1].TypedActions[0].ActionType())
 	}
 }
 

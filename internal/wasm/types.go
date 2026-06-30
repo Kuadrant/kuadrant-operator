@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -207,8 +208,8 @@ func (s *ActionSet) UnmarshalJSON(data []byte) error {
 			Type string `json:"type"`
 		}
 		if err := json.Unmarshal(raw, &probe); err == nil && probe.Type != "" {
-			var typed TypedAction
-			if err := json.Unmarshal(raw, &typed); err != nil {
+			typed, err := UnmarshalTypedAction(raw)
+			if err != nil {
 				return err
 			}
 			s.TypedActions = append(s.TypedActions, typed)
@@ -471,46 +472,251 @@ type Expression struct {
 	ExpressionItem ExpressionItem `json:"expression"`
 }
 
-// TypedAction represents an extension pipeline action in the new wasm-shim format.
-// The "type" field discriminates the action kind (grpc, deny, headers).
-type TypedAction struct {
-	Type           string        `json:"type"`
-	Predicate      string        `json:"predicate"`
-	Terminal       bool          `json:"terminal"`
-	Var            string        `json:"var,omitempty"`
-	Service        string        `json:"service,omitempty"`
-	MessageBuilder string        `json:"messageBuilder,omitempty"`
-	OnReply        []TypedAction `json:"onReply,omitempty"`
-	DenyWith       string        `json:"denyWith,omitempty"`
-	Target         string        `json:"target,omitempty"`
-	Headers        string        `json:"headers,omitempty"`
-	LogMessage     string        `json:"logMessage,omitempty"`
-	// SourcePolicyLocators tracks all policies that contributed to this action.
-	// Format: "kind/namespace/name"
+type ActionKind string
+
+const (
+	ActionKindGrpc    ActionKind = "grpc"
+	ActionKindDeny    ActionKind = "deny"
+	ActionKindHeaders ActionKind = "headers"
+	ActionKindStore   ActionKind = "store"
+	ActionKindFail    ActionKind = "fail"
+)
+
+// TypedAction is the interface for typed pipeline actions in the wasm-shim format.
+// Concrete implementations: GrpcAction, DenyAction, HeadersAction, StoreAction, FailAction.
+type TypedAction interface {
+	ActionType() ActionKind
+	Base() *ActionBase
+	EqualTo(other TypedAction) bool
+	sealedTypedAction()
+}
+
+type ActionBase struct {
+	Predicate            string   `json:"predicate"`
+	Terminal             bool     `json:"terminal"`
+	IsGuard              bool     `json:"isGuard"`
 	SourcePolicyLocators []string `json:"sources,omitempty"`
 }
 
-func (t TypedAction) EqualTo(other TypedAction) bool {
-	if t.Type != other.Type ||
-		t.Predicate != other.Predicate ||
-		t.Terminal != other.Terminal ||
-		t.Var != other.Var ||
-		t.Service != other.Service ||
-		t.MessageBuilder != other.MessageBuilder ||
-		t.DenyWith != other.DenyWith ||
-		t.Target != other.Target ||
-		t.Headers != other.Headers ||
-		t.LogMessage != other.LogMessage ||
-		!slices.Equal(t.SourcePolicyLocators, other.SourcePolicyLocators) ||
-		len(t.OnReply) != len(other.OnReply) {
+func (b *ActionBase) equalBase(other *ActionBase) bool {
+	return b.Predicate == other.Predicate &&
+		b.Terminal == other.Terminal &&
+		b.IsGuard == other.IsGuard &&
+		slices.Equal(b.SourcePolicyLocators, other.SourcePolicyLocators)
+}
+
+// GrpcAction sends a gRPC request to a service and processes the reply.
+type GrpcAction struct {
+	ActionBase
+	Var            string
+	Service        string
+	Label          string
+	MessageBuilder string
+	OnReply        []TypedAction
+}
+
+func (a *GrpcAction) ActionType() ActionKind { return ActionKindGrpc }
+func (a *GrpcAction) Base() *ActionBase     { return &a.ActionBase }
+func (a *GrpcAction) sealedTypedAction()    {}
+func (a *GrpcAction) EqualTo(other TypedAction) bool {
+	o, ok := other.(*GrpcAction)
+	if !ok {
 		return false
 	}
-	for i := range t.OnReply {
-		if !t.OnReply[i].EqualTo(other.OnReply[i]) {
+	if !a.equalBase(&o.ActionBase) ||
+		a.Var != o.Var ||
+		a.Service != o.Service ||
+		a.Label != o.Label ||
+		a.MessageBuilder != o.MessageBuilder ||
+		len(a.OnReply) != len(o.OnReply) {
+		return false
+	}
+	for i := range a.OnReply {
+		if !a.OnReply[i].EqualTo(o.OnReply[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+type DenyAction struct {
+	ActionBase
+	DenyWith string
+}
+
+func (a *DenyAction) ActionType() ActionKind { return ActionKindDeny }
+func (a *DenyAction) Base() *ActionBase     { return &a.ActionBase }
+func (a *DenyAction) sealedTypedAction()    {}
+func (a *DenyAction) EqualTo(other TypedAction) bool {
+	o, ok := other.(*DenyAction)
+	if !ok {
+		return false
+	}
+	return a.equalBase(&o.ActionBase) && a.DenyWith == o.DenyWith
+}
+
+type HeadersAction struct {
+	ActionBase
+	Target  string
+	Headers string
+}
+
+func (a *HeadersAction) ActionType() ActionKind { return ActionKindHeaders }
+func (a *HeadersAction) Base() *ActionBase     { return &a.ActionBase }
+func (a *HeadersAction) sealedTypedAction()    {}
+func (a *HeadersAction) EqualTo(other TypedAction) bool {
+	o, ok := other.(*HeadersAction)
+	if !ok {
+		return false
+	}
+	return a.equalBase(&o.ActionBase) && a.Target == o.Target && a.Headers == o.Headers
+}
+
+type StoreAction struct {
+	ActionBase
+	Path         string
+	Value        string
+	ExportToHost bool
+}
+
+func (a *StoreAction) ActionType() ActionKind { return ActionKindStore }
+func (a *StoreAction) Base() *ActionBase     { return &a.ActionBase }
+func (a *StoreAction) sealedTypedAction()    {}
+func (a *StoreAction) EqualTo(other TypedAction) bool {
+	o, ok := other.(*StoreAction)
+	if !ok {
+		return false
+	}
+	return a.equalBase(&o.ActionBase) &&
+		a.Path == o.Path && a.Value == o.Value && a.ExportToHost == o.ExportToHost
+}
+
+type FailAction struct {
+	ActionBase
+	LogMessage string
+}
+
+func (a *FailAction) ActionType() ActionKind { return ActionKindFail }
+func (a *FailAction) Base() *ActionBase     { return &a.ActionBase }
+func (a *FailAction) sealedTypedAction()    {}
+func (a *FailAction) EqualTo(other TypedAction) bool {
+	o, ok := other.(*FailAction)
+	if !ok {
+		return false
+	}
+	return a.equalBase(&o.ActionBase) && a.LogMessage == o.LogMessage
+}
+
+// actionWire is the flat JSON representation used for wire serialization.
+type actionWire struct {
+	Type           ActionKind        `json:"type"`
+	Predicate      string            `json:"predicate"`
+	Terminal       bool              `json:"terminal"`
+	IsGuard        bool              `json:"isGuard"`
+	Var            string            `json:"var,omitempty"`
+	Service        string            `json:"service,omitempty"`
+	Label          string            `json:"label,omitempty"`
+	MessageBuilder string            `json:"messageBuilder,omitempty"`
+	OnReply        []json.RawMessage `json:"onReply,omitempty"`
+	DenyWith       string            `json:"denyWith,omitempty"`
+	Target         string            `json:"target,omitempty"`
+	Headers        string            `json:"headers,omitempty"`
+	Path           string            `json:"path,omitempty"`
+	Value          string            `json:"value,omitempty"`
+	ExportToHost   bool              `json:"exportToHost,omitempty"`
+	LogMessage     string            `json:"logMessage,omitempty"`
+	Sources        []string          `json:"sources,omitempty"`
+}
+
+func marshalOnReply(actions []TypedAction) ([]json.RawMessage, error) {
+	if len(actions) == 0 {
+		return nil, nil
+	}
+	raw := make([]json.RawMessage, len(actions))
+	for i, a := range actions {
+		data, err := json.Marshal(a)
+		if err != nil {
+			return nil, err
+		}
+		raw[i] = data
+	}
+	return raw, nil
+}
+
+func (a *GrpcAction) MarshalJSON() ([]byte, error) {
+	onReply, err := marshalOnReply(a.OnReply)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(actionWire{
+		Type: ActionKindGrpc, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
+		Var: a.Var, Service: a.Service, Label: a.Label, MessageBuilder: a.MessageBuilder,
+		OnReply: onReply, Sources: a.SourcePolicyLocators,
+	})
+}
+
+func (a *DenyAction) MarshalJSON() ([]byte, error) {
+	return json.Marshal(actionWire{
+		Type: ActionKindDeny, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
+		DenyWith: a.DenyWith, Sources: a.SourcePolicyLocators,
+	})
+}
+
+func (a *HeadersAction) MarshalJSON() ([]byte, error) {
+	return json.Marshal(actionWire{
+		Type: ActionKindHeaders, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
+		Target: a.Target, Headers: a.Headers, Sources: a.SourcePolicyLocators,
+	})
+}
+
+func (a *StoreAction) MarshalJSON() ([]byte, error) {
+	return json.Marshal(actionWire{
+		Type: ActionKindStore, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
+		Path: a.Path, Value: a.Value, ExportToHost: a.ExportToHost, Sources: a.SourcePolicyLocators,
+	})
+}
+
+func (a *FailAction) MarshalJSON() ([]byte, error) {
+	return json.Marshal(actionWire{
+		Type: ActionKindFail, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
+		LogMessage: a.LogMessage, Sources: a.SourcePolicyLocators,
+	})
+}
+
+func UnmarshalTypedAction(data []byte) (TypedAction, error) {
+	var w actionWire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return nil, err
+	}
+	base := ActionBase{
+		Predicate: w.Predicate, Terminal: w.Terminal, IsGuard: w.IsGuard,
+		SourcePolicyLocators: w.Sources,
+	}
+	switch w.Type {
+	case ActionKindGrpc:
+		var onReply []TypedAction
+		for _, raw := range w.OnReply {
+			r, err := UnmarshalTypedAction(raw)
+			if err != nil {
+				return nil, err
+			}
+			onReply = append(onReply, r)
+		}
+		return &GrpcAction{
+			ActionBase: base, Var: w.Var, Service: w.Service,
+			Label: w.Label, MessageBuilder: w.MessageBuilder, OnReply: onReply,
+		}, nil
+	case ActionKindDeny:
+		return &DenyAction{ActionBase: base, DenyWith: w.DenyWith}, nil
+	case ActionKindHeaders:
+		return &HeadersAction{ActionBase: base, Target: w.Target, Headers: w.Headers}, nil
+	case ActionKindStore:
+		return &StoreAction{ActionBase: base, Path: w.Path, Value: w.Value, ExportToHost: w.ExportToHost}, nil
+	case ActionKindFail:
+		return &FailAction{ActionBase: base, LogMessage: w.LogMessage}, nil
+	default:
+		return nil, fmt.Errorf("unknown typed action type: %q", w.Type)
+	}
 }
 
 type Observability struct {

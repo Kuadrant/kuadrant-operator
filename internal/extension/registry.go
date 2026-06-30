@@ -1236,7 +1236,7 @@ func translatePipelineToTypedActions(
 				}
 				emittedGRPC[e.Method] = true
 				ta := grpcToTypedAction(e, methods, upstreamByMethod, sources)
-				ta.OnReply = grpcOnReply[e.Method]
+				ta.WithOnReply(grpcOnReply[e.Method]...)
 				result = append(result, ta)
 				continue
 			}
@@ -1278,27 +1278,25 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 }
 
 func entryToTypedAction(entry PipelineActionEntry, sources []string, phase string) wasm.TypedAction {
-	ta := wasm.TypedAction{
-		Predicate:            predicateOrTrue(entry.Predicate),
-		SourcePolicyLocators: sources,
-	}
+	predicate := predicateOrTrue(entry.Predicate)
 	switch entry.ActionType {
 	case extpb.ActionType_ACTION_TYPE_DENY:
-		ta.Type = "deny"
-		ta.Terminal = true
-		ta.DenyWith = buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)
+		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)).
+			WithSources(sources)
 	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-		ta.Type = "headers"
-		ta.Headers = entry.HeadersToAdd
+		target := ""
 		if phase == string(PipelinePhaseResponse) {
-			ta.Target = "response"
+			target = "response"
 		}
+		return wasm.NewHeadersAction(predicate, target, entry.HeadersToAdd).
+			WithSources(sources)
 	case extpb.ActionType_ACTION_TYPE_FAIL:
-		ta.Type = "fail"
-		ta.Terminal = true
-		ta.LogMessage = entry.LogMessage
+		return wasm.NewFailAction(predicate, entry.LogMessage).
+			WithSources(sources)
+	default:
+		return wasm.NewFailAction(predicate, "unknown action type").
+			WithSources(sources)
 	}
-	return ta
 }
 
 func buildDenyResponseExpr(status int, headers, body string) string {
@@ -1318,18 +1316,13 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 	return fmt.Sprintf("DenyResponse{%s}", strings.Join(parts, ", "))
 }
 
-func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) wasm.TypedAction {
-	ta := wasm.TypedAction{
-		Type:                 "grpc",
-		Predicate:            predicateOrTrue(entry.Predicate),
-		Var:                  entry.Var,
-		Service:              methods[entry.Method],
-		SourcePolicyLocators: sources,
-	}
+func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) *wasm.GrpcAction {
+	mb := ""
 	if upstream, ok := upstreamByMethod[entry.Method]; ok {
-		ta.MessageBuilder = upstream.MessageTemplate
+		mb = upstream.MessageTemplate
 	}
-	return ta
+	return wasm.NewGrpcAction(predicateOrTrue(entry.Predicate), entry.Var, methods[entry.Method], mb, "").
+		WithSources(sources)
 }
 
 // HashUpstreamServiceConfig produces a deterministic short hash from a wasm.Service

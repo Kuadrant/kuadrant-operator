@@ -375,38 +375,23 @@ func TestAuthAccesses(t *testing.T) {
 }
 
 func TestTypedAction_JSON(t *testing.T) {
-	ta := TypedAction{
-		Type:                 "grpc",
-		Predicate:            `"x-assess-threat" in request.headers`,
-		Terminal:             false,
-		Var:                  "threatResponse",
-		Service:              "ext-abc123",
-		MessageBuilder:       "threat.v1.Request{path: request.path}",
-		SourcePolicyLocators: []string{"ThreatPolicy/default/my-threat"},
-		OnReply: []TypedAction{
-			{
-				Type:      "deny",
-				Predicate: "!(threatResponse.threat_level < 5)",
-				Terminal:  true,
-				DenyWith:  "DenyResponse{status: 403u}",
-			},
-			{
-				Type:      "headers",
-				Predicate: "true",
-				Terminal:  false,
-				Target:    "response",
-				Headers:   `{"x-threat-assessed": "true"}`,
-			},
-		},
-	}
+	ta := NewGrpcAction(
+		`"x-assess-threat" in request.headers`,
+		"threatResponse", "ext-abc123",
+		"threat.v1.Request{path: request.path}", "",
+	).WithSources([]string{"ThreatPolicy/default/my-threat"}).
+		WithOnReply(
+			NewDenyAction("!(threatResponse.threat_level < 5)", "DenyResponse{status: 403u}"),
+			NewHeadersAction("true", "response", `{"x-threat-assessed": "true"}`),
+		)
 
 	data, err := json.Marshal(ta)
 	if err != nil {
 		t.Fatalf("failed to marshal TypedAction: %v", err)
 	}
 
-	var roundTripped TypedAction
-	if err := json.Unmarshal(data, &roundTripped); err != nil {
+	roundTripped, err := UnmarshalTypedAction(data)
+	if err != nil {
 		t.Fatalf("failed to unmarshal TypedAction: %v", err)
 	}
 
@@ -414,7 +399,6 @@ func TestTypedAction_JSON(t *testing.T) {
 		t.Fatalf("round-tripped TypedAction not equal:\n  got:  %+v\n  want: %+v", roundTripped, ta)
 	}
 
-	// Verify JSON has expected top-level fields
 	var raw map[string]interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("failed to unmarshal to map: %v", err)
@@ -432,62 +416,42 @@ func TestTypedAction_JSON(t *testing.T) {
 }
 
 func TestTypedAction_EqualTo(t *testing.T) {
-	base := TypedAction{
-		Type:                 "grpc",
-		Predicate:            "true",
-		Terminal:             false,
-		Var:                  "resp",
-		Service:              "ext-svc",
-		SourcePolicyLocators: []string{"Policy/ns/name"},
-		OnReply: []TypedAction{
-			{Type: "deny", Predicate: "!(resp.ok)", Terminal: true, DenyWith: "DenyResponse{status: 403u}"},
-		},
-	}
+	base := NewGrpcAction("true", "resp", "ext-svc", "", "").
+		WithSources([]string{"Policy/ns/name"}).
+		WithOnReply(NewDenyAction("!(resp.ok)", "DenyResponse{status: 403u}"))
 
-	same := TypedAction{
-		Type:                 "grpc",
-		Predicate:            "true",
-		Terminal:             false,
-		Var:                  "resp",
-		Service:              "ext-svc",
-		SourcePolicyLocators: []string{"Policy/ns/name"},
-		OnReply: []TypedAction{
-			{Type: "deny", Predicate: "!(resp.ok)", Terminal: true, DenyWith: "DenyResponse{status: 403u}"},
-		},
-	}
+	same := NewGrpcAction("true", "resp", "ext-svc", "", "").
+		WithSources([]string{"Policy/ns/name"}).
+		WithOnReply(NewDenyAction("!(resp.ok)", "DenyResponse{status: 403u}"))
 
 	if !base.EqualTo(same) {
 		t.Fatal("identical TypedActions should be equal")
 	}
 
-	diffVar := same
-	diffVar.Var = "other"
+	diffVar := NewGrpcAction("true", "other", "ext-svc", "", "").
+		WithSources([]string{"Policy/ns/name"}).
+		WithOnReply(NewDenyAction("!(resp.ok)", "DenyResponse{status: 403u}"))
 	if base.EqualTo(diffVar) {
 		t.Fatal("TypedActions with different Var should not be equal")
 	}
 
-	diffOnReply := same
-	diffOnReply.OnReply = nil
+	diffOnReply := NewGrpcAction("true", "resp", "ext-svc", "", "").
+		WithSources([]string{"Policy/ns/name"})
 	if base.EqualTo(diffOnReply) {
 		t.Fatal("TypedActions with different OnReply length should not be equal")
 	}
 }
 
 func TestTypedAction_FailType_JSON(t *testing.T) {
-	ta := TypedAction{
-		Type:       "fail",
-		Predicate:  `threatResponse.error_code != 0`,
-		Terminal:   true,
-		LogMessage: "Threat service returned unexpected error",
-	}
+	ta := NewFailAction(`threatResponse.error_code != 0`, "Threat service returned unexpected error")
 
 	data, err := json.Marshal(ta)
 	if err != nil {
 		t.Fatalf("failed to marshal TypedAction: %v", err)
 	}
 
-	var roundTripped TypedAction
-	if err := json.Unmarshal(data, &roundTripped); err != nil {
+	roundTripped, err := UnmarshalTypedAction(data)
+	if err != nil {
 		t.Fatalf("failed to unmarshal TypedAction: %v", err)
 	}
 
@@ -508,14 +472,13 @@ func TestTypedAction_FailType_JSON(t *testing.T) {
 }
 
 func TestTypedAction_EqualTo_FailFields(t *testing.T) {
-	a := TypedAction{Type: "fail", Predicate: "true", Terminal: true, LogMessage: "error"}
-	b := TypedAction{Type: "fail", Predicate: "true", Terminal: true, LogMessage: "error"}
+	a := NewFailAction("true", "error")
+	b := NewFailAction("true", "error")
 	if !a.EqualTo(b) {
 		t.Fatal("identical fail TypedActions should be equal")
 	}
 
-	diffMsg := b
-	diffMsg.LogMessage = "other"
+	diffMsg := NewFailAction("true", "other")
 	if a.EqualTo(diffMsg) {
 		t.Fatal("TypedActions with different LogMessage should not be equal")
 	}
@@ -531,7 +494,7 @@ func TestActionSet_MixedActions_JSON(t *testing.T) {
 			{ServiceName: "auth-service", Scope: "default/route"},
 		},
 		TypedActions: []TypedAction{
-			{Type: "deny", Predicate: "!(request.ok)", Terminal: true, DenyWith: "DenyResponse{status: 403u}"},
+			NewDenyAction("!(request.ok)", "DenyResponse{status: 403u}"),
 		},
 	}
 

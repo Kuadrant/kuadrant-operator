@@ -21,6 +21,9 @@ on:
         required: false
         default: kuadrant-system
         type: string
+permissions:
+  contents: read
+
 jobs:
   helm-charts-upgrade-test:
     runs-on: ubuntu-latest

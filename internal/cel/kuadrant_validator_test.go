@@ -31,7 +31,7 @@ func TestNewRootValidatorBuilder(t *testing.T) {
 }
 
 func TestValidateWasmActionInvalidNoAuth(t *testing.T) {
-	wasmAction := wasm.Action{
+	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       "scope",
 		Predicates:  []string{"request.id == 1"},
@@ -48,11 +48,11 @@ func TestValidateWasmActionInvalidNoAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.ErrorContains(t, ValidateWasmAction(wasmAction, validator), "undeclared reference to 'auth'")
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "undeclared reference to 'auth'")
 }
 
 func TestValidateWasmActionInvalidWrongDependency(t *testing.T) {
-	wasmAction := wasm.Action{
+	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       "scope",
 		Predicates:  []string{"auth == 'something'"},
@@ -65,11 +65,11 @@ func TestValidateWasmActionInvalidWrongDependency(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.ErrorContains(t, ValidateWasmAction(wasmAction, validator), "undeclared reference to 'auth'")
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "undeclared reference to 'auth'")
 }
 
 func TestValidateWasmActionValid(t *testing.T) {
-	wasmAction := wasm.Action{
+	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       "scope",
 		Predicates:  []string{"request.id == 1"},
@@ -87,11 +87,11 @@ func TestValidateWasmActionValid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.NilError(t, ValidateWasmAction(wasmAction, validator))
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
 }
 
 func TestNewIssue(t *testing.T) {
-	action := wasm.Action{
+	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       "scope",
 		Predicates:  []string{"auth.identity == 'anonymous'"},
@@ -107,7 +107,7 @@ func TestIssueCollectionIsEmpty(t *testing.T) {
 	collection := NewIssueCollection()
 	assert.Equal(t, collection.IsEmpty(), true)
 
-	action := wasm.Action{
+	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       "scope",
 		Predicates:  []string{"auth.identity == 'anonymous'"},
@@ -120,7 +120,7 @@ func TestIssueCollectionIsEmpty(t *testing.T) {
 
 func TestIssueCollectionGetByPolicyKind(t *testing.T) {
 	collection := NewIssueCollection()
-	action := wasm.Action{
+	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       "scope",
 		Predicates:  []string{"auth.identity == 'anonymous'"},

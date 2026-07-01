@@ -111,11 +111,11 @@ func rateLimitClusterPatch(host string, port int, mTLS bool) map[string]any {
 //
 // The only action of the rule is the ratelimit service, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
-func wasmActionFromLimit(limit *kuadrantv1.Limit, limitIdentifier, scope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates) wasm.Action {
-	return wasm.Action{
-		ServiceName:          wasm.RateLimitServiceName,
-		Scope:                scope,
-		SourcePolicyLocators: []string{sourcePolicyLocator}, // Single policy for individual rules
+func wasmActionSpecFromLimit(limit *kuadrantv1.Limit, limitIdentifier, scope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates) wasm.ActionSpec {
+	return wasm.ActionSpec{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       scope,
+		Sources:     []string{sourcePolicyLocator}, // Single policy for individual rules
 		ConditionalData: []wasm.ConditionalData{
 			{
 				Predicates: topLevelPredicates.Extend(limit.When).Into(),
@@ -217,7 +217,7 @@ func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
-func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier, scope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.Action {
+func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier, scope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.ActionSpec {
 	predicates := make([]string, 0, len(topLevelPredicates)+1)
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
@@ -265,10 +265,10 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 		},
 	})
 
-	requestAction := wasm.Action{
-		ServiceName:          wasm.RateLimitCheckServiceName,
-		Scope:                scope,
-		SourcePolicyLocators: []string{sourcePolicyLocator}, // Single policy for individual token limits
+	requestSpec := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitCheckServiceName,
+		Scope:       scope,
+		Sources:     []string{sourcePolicyLocator},
 		ConditionalData: []wasm.ConditionalData{
 			{
 				Predicates: predicates,
@@ -289,10 +289,10 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 		},
 	})
 
-	responseAction := wasm.Action{
-		ServiceName:          wasm.RateLimitReportServiceName,
-		Scope:                scope,
-		SourcePolicyLocators: []string{sourcePolicyLocator}, // Single policy for individual token limits
+	responseSpec := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReportServiceName,
+		Scope:       scope,
+		Sources:     []string{sourcePolicyLocator},
 		ConditionalData: []wasm.ConditionalData{
 			{
 				Predicates: predicates,
@@ -301,11 +301,11 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 		},
 	}
 
-	return []wasm.Action{requestAction, responseAction}
+	return []wasm.ActionSpec{requestSpec, responseSpec}
 }
 
-func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
-	return buildWasmActionsForAnyRateLimit(
+func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.ActionSpec {
+	return buildWasmActionSpecsForAnyRateLimit(
 		effectivePolicy.Path,
 		effectivePolicy.Spec.Rules(),
 		kuadrantv1.RulesKeyTopLevelPredicates,
@@ -313,14 +313,14 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, poli
 		func(key k8stypes.NamespacedName, limitName string) string {
 			return LimitNameToLimitadorIdentifier(key, limitName)
 		},
-		func(spec interface{}, limitIdentifier, scope, sourcePolicyLocator string, predicates kuadrantv1.WhenPredicates) wasm.Action {
+		func(spec interface{}, limitIdentifier, scope, sourcePolicyLocator string, predicates kuadrantv1.WhenPredicates) wasm.ActionSpec {
 			limit := spec.(*kuadrantv1.Limit)
-			return wasmActionFromLimit(limit, limitIdentifier, scope, sourcePolicyLocator, predicates)
+			return wasmActionSpecFromLimit(limit, limitIdentifier, scope, sourcePolicyLocator, predicates)
 		},
 	)
 }
 
-func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
+func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.ActionSpec {
 	path := effectivePolicy.Path
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
@@ -328,7 +328,7 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
 		// If the path is invalid, return empty actions
-		return []wasm.Action{}
+		return []wasm.ActionSpec{}
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
@@ -351,7 +351,7 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
 	}
 
-	var allActions []wasm.Action
+	var allSpecs []wasm.ActionSpec
 	for _, r := range limitRules {
 		uniquePolicyRuleKey := r.Key
 		policyRule := r.Value
@@ -367,28 +367,28 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 		sourcePolicyLocator := source.GetLocator()
 
 		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
-		tokenActions := wasmActionsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates)
-		allActions = append(allActions, tokenActions...)
+		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates)
+		allSpecs = append(allSpecs, tokenSpecs...)
 	}
 
-	return allActions
+	return allSpecs
 }
 
 // buildWasmActionsForAnyRateLimit is the generic implementation used by both rate limit policy types
-func buildWasmActionsForAnyRateLimit(
+func buildWasmActionSpecsForAnyRateLimit(
 	path []machinery.Targetable,
 	rules map[string]kuadrantv1.MergeableRule,
 	topLevelPredicatesKey string,
 	policyPredicate func(machinery.Policy) bool,
 	identifierFunc func(k8stypes.NamespacedName, string) string,
-	actionFunc func(interface{}, string, string, string, kuadrantv1.WhenPredicates) wasm.Action,
-) []wasm.Action {
+	specFunc func(interface{}, string, string, string, kuadrantv1.WhenPredicates) wasm.ActionSpec,
+) []wasm.ActionSpec {
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
 		// If the path is invalid, return empty actions
-		return []wasm.Action{}
+		return []wasm.ActionSpec{}
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
@@ -411,20 +411,20 @@ func buildWasmActionsForAnyRateLimit(
 		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
 	}
 
-	return lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.Action, bool) {
+	return lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.ActionSpec, bool) {
 		uniquePolicyRuleKey := r.Key
 		policyRule := r.Value
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
 			return p.GetLocator() == policyRule.GetSource()
 		})
 		if !found { // should never happen
-			return wasm.Action{}, false
+			return wasm.ActionSpec{}, false
 		}
 		limitIdentifier := identifierFunc(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
 		limitSpec := policyRule.GetSpec()
 		scope := limitsNamespace
 		sourcePolicyLocator := source.GetLocator()
 
-		return actionFunc(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates), true
+		return specFunc(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates), true
 	})
 }

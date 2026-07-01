@@ -194,41 +194,41 @@ func defaultGatewayControllerName(controllerName gatewayapiv1.GatewayController)
 	return "Unknown"
 }
 
-func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, error) {
+func mergeAndVerifySpecs(ctx context.Context, specs []wasm.ActionSpec) ([]wasm.ActionSpec, error) {
 	tracer := controller.TracerFromContext(ctx)
-	_, span := tracer.Start(ctx, "wasm.MergeAndVerifyActions")
+	_, span := tracer.Start(ctx, "wasm.MergeAndVerifySpecs")
 	defer span.End()
 
 	span.SetAttributes(
-		attribute.Int("actions.input", len(actions)),
+		attribute.Int("specs.input", len(specs)),
 	)
 
-	if len(actions) == 0 {
-		span.SetAttributes(attribute.Int("actions.output", 0))
+	if len(specs) == 0 {
+		span.SetAttributes(attribute.Int("specs.output", 0))
 		span.SetStatus(codes.Ok, "")
 		return nil, nil
 	}
 
-	result := []wasm.Action{actions[0]}
-	for _, currentAction := range actions[1:] {
-		lastAction := &result[len(result)-1]
+	result := []wasm.ActionSpec{specs[0]}
+	for _, current := range specs[1:] {
+		last := &result[len(result)-1]
 
-		if lastAction.Scope == currentAction.Scope &&
-			lastAction.ServiceName == currentAction.ServiceName && lastAction.ServiceName != wasm.AuthServiceName {
-			lastAction.ConditionalData = append(lastAction.ConditionalData, currentAction.ConditionalData...)
+		if last.Scope == current.Scope &&
+			last.ServiceName == current.ServiceName && last.ServiceName != wasm.AuthServiceName {
+			last.ConditionalData = append(last.ConditionalData, current.ConditionalData...)
 			// Merge source policy locators - deduplicate them
-			lastAction.SourcePolicyLocators = lo.Uniq(append(lastAction.SourcePolicyLocators, currentAction.SourcePolicyLocators...))
-			slices.Sort(lastAction.SourcePolicyLocators)
+			last.Sources = lo.Uniq(append(last.Sources, current.Sources...))
+			slices.Sort(last.Sources)
 
 			// Sort by the first predicate (if any), then by the concatenation of all predicates
-			slices.SortFunc(lastAction.ConditionalData, func(a, b wasm.ConditionalData) int {
+			slices.SortFunc(last.ConditionalData, func(a, b wasm.ConditionalData) int {
 				// Compare by predicates (join them into a single string for comparison)
 				aKey := strings.Join(a.Predicates, "|")
 				bKey := strings.Join(b.Predicates, "|")
 				return strings.Compare(aKey, bKey)
 			})
 		} else {
-			result = append(result, currentAction)
+			result = append(result, current)
 		}
 	}
 
@@ -251,7 +251,7 @@ func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, 
 					if existingValue != value {
 						span.RecordError(fmt.Errorf("duplicate key '%s' with different values", key))
 						span.SetStatus(codes.Error, "duplicate key conflict")
-						return nil, fmt.Errorf("duplicate key '%s' with different values found in action", key)
+						return nil, fmt.Errorf("duplicate key '%s' with different values found in action spec", key)
 					}
 				} else {
 					keyValueMap[key] = value
@@ -261,8 +261,8 @@ func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, 
 	}
 
 	span.SetAttributes(
-		attribute.Int("actions.output", len(result)),
-		attribute.Int("actions.merged", len(actions)-len(result)),
+		attribute.Int("specs.output", len(result)),
+		attribute.Int("specs.merged", len(specs)-len(result)),
 	)
 	span.SetStatus(codes.Ok, "")
 

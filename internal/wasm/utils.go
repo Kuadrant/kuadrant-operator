@@ -239,7 +239,7 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 // gRPC methods map to HTTP/2 paths (/{service}/{method}). This conversion enables sorting
 // with HTTP routes and reflects the wire-level protocol. The actual predicates sent to
 // the WASM plugin are generated from the original GRPCRouteMatch.
-func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []TypedAction) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	tracer := controller.TracerFromContext(ctx)
 	_, span := tracer.Start(ctx, "wasm.BuildActionSetsForPath")
 	defer span.End()
@@ -252,11 +252,8 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 	}
 
 	// Add action type attributes for observability
-	actionTypes := lo.Map(actions, func(action Action, _ int) string {
-		if action.ServiceName != "" {
-			return action.ServiceName
-		}
-		return "unknown"
+	actionTypes := lo.Map(actions, func(action TypedAction, _ int) string {
+		return string(action.ActionType())
 	})
 	if len(actionTypes) > 0 {
 		span.SetAttributes(attribute.StringSlice("action_types", actionTypes))
@@ -292,8 +289,8 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions:     actions,
+					Name:         ActionSetNameForPath(pathID, j, string(hostname)),
+					TypedActions: actions,
 					SourceRoute: fmt.Sprintf("HTTPRoute/%s/%s", parsed.HTTPRoute.GetNamespace(), parsed.HTTPRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
@@ -306,16 +303,13 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				actionSet.RouteRuleConditions = routeRuleConditions
 
 				// Count actions by service type to understand policy composition for this specific match
-				actionsByService := lo.GroupBy(actions, func(a Action) string {
-					return a.ServiceName
-				})
-
+				serviceCounts := countActionsByService(actions)
 				actionSetSpan.SetAttributes(
 					attribute.String("actionset.name", actionSet.Name),
-					attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
-					attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
-					attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
-					attribute.Int("actionset.ratelimit_report_actions", len(actionsByService[RateLimitReportServiceName])),
+					attribute.Int("actionset.auth_actions", serviceCounts[AuthServiceName]),
+					attribute.Int("actionset.ratelimit_actions", serviceCounts[RateLimitServiceName]),
+					attribute.Int("actionset.ratelimit_check_actions", serviceCounts[RateLimitCheckServiceName]),
+					attribute.Int("actionset.ratelimit_report_actions", serviceCounts[RateLimitReportServiceName]),
 				)
 				actionSetSpan.SetStatus(codes.Ok, "")
 				actionSetSpan.End()
@@ -361,8 +355,8 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions:     actions,
+					Name:         ActionSetNameForPath(pathID, j, string(hostname)),
+					TypedActions: actions,
 					SourceRoute: fmt.Sprintf("GRPCRoute/%s/%s", parsed.GRPCRoute.GetNamespace(), parsed.GRPCRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
@@ -375,16 +369,13 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				actionSet.RouteRuleConditions = routeRuleConditions
 
 				// Count actions by service type to understand policy composition for this specific match
-				actionsByService := lo.GroupBy(actions, func(a Action) string {
-					return a.ServiceName
-				})
-
+				serviceCounts := countActionsByService(actions)
 				actionSetSpan.SetAttributes(
 					attribute.String("actionset.name", actionSet.Name),
-					attribute.Int("actionset.auth_actions", len(actionsByService[AuthServiceName])),
-					attribute.Int("actionset.ratelimit_actions", len(actionsByService[RateLimitServiceName])),
-					attribute.Int("actionset.ratelimit_check_actions", len(actionsByService[RateLimitCheckServiceName])),
-					attribute.Int("actionset.ratelimit_report_actions", len(actionsByService[RateLimitReportServiceName])),
+					attribute.Int("actionset.auth_actions", serviceCounts[AuthServiceName]),
+					attribute.Int("actionset.ratelimit_actions", serviceCounts[RateLimitServiceName]),
+					attribute.Int("actionset.ratelimit_check_actions", serviceCounts[RateLimitCheckServiceName]),
+					attribute.Int("actionset.ratelimit_report_actions", serviceCounts[RateLimitReportServiceName]),
 				)
 				actionSetSpan.SetStatus(codes.Ok, "")
 				actionSetSpan.End()
@@ -532,6 +523,18 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func countActionsByService(actions []TypedAction) map[string]int {
+	counts := make(map[string]int)
+	for _, a := range actions {
+		if grpc, ok := a.(*GrpcAction); ok {
+			counts[grpc.Service]++
+		} else {
+			counts[string(a.ActionType())]++
+		}
+	}
+	return counts
 }
 
 // PredicatesFromHTTPRouteMatch builds a list of conditions from a rule match

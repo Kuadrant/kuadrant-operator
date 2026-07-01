@@ -25,9 +25,9 @@ type Issue struct {
 	err        error
 }
 
-func NewIssue(action wasm.Action, pathID string, err error) *Issue {
+func NewIssue(spec wasm.ActionSpec, pathID string, err error) *Issue {
 	return &Issue{
-		policyKind: policyKindFromWasmServiceName(action.ServiceName),
+		policyKind: policyKindFromWasmServiceName(spec.ServiceName),
 		pathID:     pathID,
 		err:        err,
 	}
@@ -103,14 +103,14 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	return builder
 }
 
-func ValidateWasmAction(action wasm.Action, validator *Validator) error {
-	pol := policyKindFromWasmServiceName(action.ServiceName)
-	for _, predicate := range action.Predicates {
+func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
+	pol := policyKindFromWasmServiceName(spec.ServiceName)
+	for _, predicate := range spec.Predicates {
 		if _, err := validator.Validate(pol, predicate); err != nil {
 			return err
 		}
 	}
-	for _, conditionalData := range action.ConditionalData {
+	for _, conditionalData := range spec.ConditionalData {
 		for _, predicate := range conditionalData.Predicates {
 			if _, err := validator.Validate(pol, predicate); err != nil {
 				return err

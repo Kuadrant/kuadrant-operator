@@ -55,15 +55,24 @@ jobs:
         id: benchstat
         run: |
           BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1 || true)
-          {
-            echo '## Benchmark Results'
-            echo '```'
-            echo "$BENCHSTAT_OUTPUT"
-            echo '```'
-          } > benchmark-report.md
 
-          if echo "$BENCHSTAT_OUTPUT" | grep -qE '\+[0-9]+\.[0-9]+% \(p=' ; then
+          REGRESSIONS=$(echo "$BENCHSTAT_OUTPUT" | grep -E '\+[0-9]+\.[0-9]+% \(p=' || true)
+          if [ -n "$REGRESSIONS" ]; then
+            {
+              echo '## Benchmark: regression detected'
+              echo '```'
+              echo "$REGRESSIONS"
+              echo '```'
+              echo '<details><summary>Full benchstat output</summary>'
+              echo ''
+              echo '```'
+              echo "$BENCHSTAT_OUTPUT"
+              echo '```'
+              echo '</details>'
+            } > benchmark-report.md
             echo 'regression=true' >> "$GITHUB_OUTPUT"
+          else
+            echo '## Benchmark: no regression' > benchmark-report.md
           fi
 
       - name: Post PR comment
@@ -79,7 +88,6 @@ jobs:
           path: |
             pr-bench.txt
             base-bench.txt
-            benchmark-report.md
 
       - name: Check for regressions
         if: steps.benchstat.outputs.regression == 'true'

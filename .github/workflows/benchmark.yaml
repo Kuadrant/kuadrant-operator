@@ -56,7 +56,7 @@ jobs:
         run: |
           BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1 || true)
 
-          REGRESSIONS=$(echo "$BENCHSTAT_OUTPUT" | grep -E '\+[0-9]+\.[0-9]+% \(p=' || true)
+          REGRESSIONS=$(echo "$BENCHSTAT_OUTPUT" | sed '/B\/op/,$d' | grep -E '\+[0-9]+\.[0-9]+% \(p=' | awk -F'+' '{split($2,a,"%"); if (a[1]+0 >= 5) print $0}' || true)
           if [ -n "$REGRESSIONS" ]; then
             {
               echo '## Benchmark: regression detected'

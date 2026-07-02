@@ -24,7 +24,7 @@ jobs:
       wasmshim_digest: ${{ steps.wasmshim-get-digest.outputs.digest }}
     steps:
       - name: Install crane
-        uses: imjasonh/setup-crane@v0.1
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
       - id: wasmshim-get-digest
         name: Get digest of latest wasmshim image
         run: |
@@ -39,7 +39,7 @@ jobs:
       devportal_controller_digest: ${{ steps.devportal-get-digest.outputs.digest }}
     steps:
       - name: Install crane
-        uses: imjasonh/setup-crane@v0.1
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
       - id: devportal-get-digest
         name: Get digest of latest devportal controller image
         run: |
@@ -54,7 +54,7 @@ jobs:
       console_plugin_digest: ${{ steps.console-plugin-get-digest.outputs.digest }}
     steps:
       - name: Install crane
-        uses: imjasonh/setup-crane@v0.1
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
       - id: console-plugin-get-digest
         name: Get digest of latest console plugin image
         run: |
@@ -69,7 +69,7 @@ jobs:
       console_plugin_pf5_digest: ${{ steps.console-plugin-pf5-get-digest.outputs.digest }}
     steps:
       - name: Install crane
-        uses: imjasonh/setup-crane@v0.1
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
       - id: console-plugin-pf5-get-digest
         name: Get digest of latest console plugin pf5 image
         run: |

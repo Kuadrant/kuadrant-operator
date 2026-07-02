@@ -17,7 +17,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
       - name: Set changed files variable
         id: changes
         run: |
@@ -25,7 +25,7 @@ jobs:
       - name: Upload Dashboard
         run: |
           # Push new dashboard changes
-          
+
           # Init variable with base64 auth
           auth=$(echo -n ${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }} | base64)
 

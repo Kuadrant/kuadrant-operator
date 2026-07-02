@@ -54,12 +54,17 @@ jobs:
       - name: Compare results
         id: benchstat
         run: |
+          BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1 || true)
           {
             echo '## Benchmark Results'
             echo '```'
-            benchstat base-bench.txt pr-bench.txt 2>&1 || true
+            echo "$BENCHSTAT_OUTPUT"
             echo '```'
           } > benchmark-report.md
+
+          if echo "$BENCHSTAT_OUTPUT" | grep -qE '\+[0-9]+\.[0-9]+% \(p=' ; then
+            echo 'regression=true' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Post PR comment
         if: github.event.pull_request.head.repo.full_name == github.repository
@@ -75,3 +80,9 @@ jobs:
             pr-bench.txt
             base-bench.txt
             benchmark-report.md
+
+      - name: Check for regressions
+        if: steps.benchstat.outputs.regression == 'true'
+        run: |
+          echo "::warning::Benchmark regression detected. Check the PR comment for details."
+          exit 1

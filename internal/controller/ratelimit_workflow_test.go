@@ -82,9 +82,9 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.ActionSpec{
-				Sources: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Data: []wasm.DataType{
@@ -109,9 +109,9 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.ActionSpec{
-				Sources: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Data: []wasm.DataType{
@@ -145,9 +145,9 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.ActionSpec{
-				Sources: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{"auth.identity.group != admin"},
@@ -180,9 +180,9 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.ActionSpec{
-				Sources: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{"auth.identity.group != admin"},
@@ -209,9 +209,9 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.ActionSpec{
-				Sources: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{

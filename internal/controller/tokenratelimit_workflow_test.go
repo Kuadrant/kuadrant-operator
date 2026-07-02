@@ -97,9 +97,9 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					Scope:                "my-ns/my-route",
-					Sources: []string{"test/policy/locator"},
+					ServiceName: wasm.RateLimitReportServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{},
@@ -175,9 +175,9 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					Sources: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					ServiceName: wasm.RateLimitReportServiceName,
+					Sources:     []string{"test/policy/locator"},
+					Scope:       "my-ns/my-route",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{},
@@ -264,9 +264,9 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					Sources: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					ServiceName: wasm.RateLimitReportServiceName,
+					Sources:     []string{"test/policy/locator"},
+					Scope:       "my-ns/my-route",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
@@ -343,9 +343,9 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					Sources: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					ServiceName: wasm.RateLimitReportServiceName,
+					Sources:     []string{"test/policy/locator"},
+					Scope:       "my-ns/my-route",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},

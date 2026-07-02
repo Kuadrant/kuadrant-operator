@@ -7,7 +7,7 @@ import (
 )
 
 // ActionSpec is a service-agnostic intermediate that collects policy-derived data
-// before materialization into a concrete TypedAction via Build().
+// before materialization into a concrete Action via Build().
 type ActionSpec struct {
 	ServiceName     string
 	Scope           string
@@ -28,12 +28,12 @@ type ActionSetSpec struct {
 	Name                string
 	RouteRuleConditions RouteRuleConditions
 	Specs               []ActionSpec
-	ExtensionActions    []TypedAction
+	ExtensionActions    []Action
 	SourceRoute         string
 }
 
 // HasAuthAccess checks whether any predicate or expression value references "auth."
-func (s *ActionSpec) HasAuthAccess() bool {
+func (s ActionSpec) HasAuthAccess() bool {
 	for _, cd := range s.ConditionalData {
 		for _, predicate := range cd.Predicates {
 			if strings.Contains(predicate, "auth.") {
@@ -60,8 +60,8 @@ const (
 	reportResponseVar    = "report_response"
 )
 
-// Build materializes this ActionSpec into a concrete TypedAction by dispatching on ServiceName.
-func (s *ActionSpec) Build() TypedAction {
+// Build materializes this ActionSpec into a concrete Action by dispatching on ServiceName.
+func (s ActionSpec) Build() Action {
 	switch s.ServiceName {
 	case AuthServiceName:
 		return s.buildAuth()
@@ -75,7 +75,7 @@ func (s *ActionSpec) Build() TypedAction {
 	}
 }
 
-func (s *ActionSpec) buildAuth() *GrpcAction {
+func (s ActionSpec) buildAuth() *GrpcAction {
 	bindings := filterBindings(s.Bindings, false)
 	request := CheckRequestCEL{
 		Scope:           s.Scope,
@@ -88,13 +88,13 @@ func (s *ActionSpec) buildAuth() *GrpcAction {
 		WithOnReply(buildAuthOnReply(authResponseVar)...)
 }
 
-func (s *ActionSpec) buildRateLimit(responseVar string, isGuard bool, label string) *GrpcAction {
+func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label string) *GrpcAction {
 	includeAll := !isGuard
 	bindings := filterBindings(s.Bindings, includeAll)
 	request := buildRateLimitRequest(s.Scope, s.ConditionalData, bindings)
 	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
 
-	var onReply []TypedAction
+	var onReply []Action
 	if isGuard {
 		onReply = buildRateLimitOnReply(responseVar)
 	} else {
@@ -222,8 +222,8 @@ func buildMetadataContext(bindings []DataBinding) MetadataCEL {
 	return MetadataCEL{FilterMetadata: entries}
 }
 
-func buildAuthOnReply(name string) []TypedAction {
-	return []TypedAction{
+func buildAuthOnReply(name string) []Action {
+	return []Action{
 		NewDenyAction(
 			fmt.Sprintf("has(%s.denied_response)", name),
 			fmt.Sprintf(
@@ -408,8 +408,8 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 
 // --- RateLimit on_reply ---
 
-func buildRateLimitOnReply(name string) []TypedAction {
-	return []TypedAction{
+func buildRateLimitOnReply(name string) []Action {
+	return []Action{
 		NewDenyAction(
 			fmt.Sprintf("%s.overall_code == 2", name),
 			fmt.Sprintf(
@@ -429,8 +429,8 @@ func buildRateLimitOnReply(name string) []TypedAction {
 	}
 }
 
-func buildReportOnReply(name string) []TypedAction {
-	return []TypedAction{
+func buildReportOnReply(name string) []Action {
+	return []Action{
 		NewFailAction(
 			fmt.Sprintf("!has(%s.overall_code)", name),
 			"Rate limit report failed: invalid gRPC response",

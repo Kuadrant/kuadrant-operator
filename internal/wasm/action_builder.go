@@ -57,7 +57,7 @@ func (a *GrpcAction) WithSources(sources []string) *GrpcAction {
 	return a
 }
 
-func (a *GrpcAction) WithOnReply(onReply ...TypedAction) *GrpcAction {
+func (a *GrpcAction) WithOnReply(onReply ...Action) *GrpcAction {
 	a.OnReply = onReply
 	return a
 }

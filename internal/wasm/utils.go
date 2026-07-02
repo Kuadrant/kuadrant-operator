@@ -239,7 +239,7 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 // gRPC methods map to HTTP/2 paths (/{service}/{method}). This conversion enables sorting
 // with HTTP routes and reflects the wire-level protocol. The actual predicates sent to
 // the WASM plugin are generated from the original GRPCRouteMatch.
-func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []TypedAction) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	tracer := controller.TracerFromContext(ctx)
 	_, span := tracer.Start(ctx, "wasm.BuildActionSetsForPath")
 	defer span.End()
@@ -252,7 +252,7 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 	}
 
 	// Add action type attributes for observability
-	actionTypes := lo.Map(actions, func(action TypedAction, _ int) string {
+	actionTypes := lo.Map(actions, func(action Action, _ int) string {
 		return string(action.ActionType())
 	})
 	if len(actionTypes) > 0 {
@@ -289,8 +289,8 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:         ActionSetNameForPath(pathID, j, string(hostname)),
-					TypedActions: actions,
+					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:     actions,
 					SourceRoute: fmt.Sprintf("HTTPRoute/%s/%s", parsed.HTTPRoute.GetNamespace(), parsed.HTTPRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
@@ -355,8 +355,8 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:         ActionSetNameForPath(pathID, j, string(hostname)),
-					TypedActions: actions,
+					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:     actions,
 					SourceRoute: fmt.Sprintf("GRPCRoute/%s/%s", parsed.GRPCRoute.GetNamespace(), parsed.GRPCRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
@@ -525,7 +525,7 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 	return config, nil
 }
 
-func countActionsByService(actions []TypedAction) map[string]int {
+func countActionsByService(actions []Action) map[string]int {
 	counts := make(map[string]int)
 	for _, a := range actions {
 		if grpc, ok := a.(*GrpcAction); ok {

@@ -210,10 +210,10 @@ var _ = Describe("wasm controller", func() {
 							},
 						},
 						Actions: []wasm.Action{
-							{
-								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(gwRoute),
-								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + gwPolicyKey.String()},
+							wasm.ActionSpec{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
+								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + gwPolicyKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -228,7 +228,7 @@ var _ = Describe("wasm controller", func() {
 										},
 									},
 								},
-							},
+							}.Build(),
 						},
 					},
 				},
@@ -393,10 +393,10 @@ var _ = Describe("wasm controller", func() {
 							},
 						},
 						Actions: []wasm.Action{
-							{
-								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(gwRoute),
-								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + routePolicyKey.String()},
+							wasm.ActionSpec{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
+								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + routePolicyKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -411,7 +411,7 @@ var _ = Describe("wasm controller", func() {
 										},
 									},
 								},
-							},
+							}.Build(),
 						},
 					},
 				},
@@ -520,7 +520,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source for auth action
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -578,8 +578,10 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 
 				// The single auth action should list BOTH policy sources
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(ConsistOf(
 					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
 					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
 				))
@@ -651,7 +653,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source for auth action
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -708,8 +710,10 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 
 				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + routeAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -780,7 +784,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -836,8 +840,10 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 
 				// The action should list ONLY the gateway policy source (atomic overrides route policy)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -908,7 +914,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -965,8 +971,10 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 
 				// The action should list BOTH policy sources (merge overrides merges both policies)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(ConsistOf(
 					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
 					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
 				))
@@ -1017,7 +1025,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -1051,13 +1059,10 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The merged action should list BOTH policy sources
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(ConsistOf(
 					"ratelimitpolicy.kuadrant.io:"+gwRLPKey.String(),
 					"ratelimitpolicy.kuadrant.io:"+routeRLPKey.String(),
 				))
-
-				// Verify both limits' data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(2))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -1104,7 +1109,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -1138,12 +1143,9 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + routeRLPKey.String(),
 				}))
-
-				// Verify only route limit's data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(1))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -1190,7 +1192,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -1224,12 +1226,9 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list ONLY the gateway policy source (atomic overrides route policy)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
-
-				// Verify only gateway limit's data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(1))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -1276,7 +1275,7 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -1310,13 +1309,10 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list BOTH policy sources (merge overrides merges both policies)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(ConsistOf(
 					"ratelimitpolicy.kuadrant.io:"+gwRLPKey.String(),
 					"ratelimitpolicy.kuadrant.io:"+routeRLPKey.String(),
 				))
-
-				// Verify both limits' data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(2))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})

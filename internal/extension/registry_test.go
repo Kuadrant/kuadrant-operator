@@ -2071,7 +2071,7 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 	wasmConfig := &wasm.Config{
 		Services: make(map[string]wasm.Service),
 		ActionSets: []wasm.ActionSet{
-			{Name: "test-action-set", Actions: []wasm.Action{}},
+			{Name: "test-action-set"},
 		},
 	}
 
@@ -2080,14 +2080,10 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if len(wasmConfig.ActionSets[0].Actions) != 0 {
-		t.Errorf("Expected 0 legacy actions, got %d", len(wasmConfig.ActionSets[0].Actions))
-	}
-
-	typed := wasmConfig.ActionSets[0].TypedActions
+	typed := wasmConfig.ActionSets[0].Actions
 	// Root-level: deny, grpc (with onReply), headers
 	if len(typed) != 3 {
-		t.Fatalf("Expected 3 root-level TypedActions, got %d", len(typed))
+		t.Fatalf("Expected 3 root-level Actions, got %d", len(typed))
 	}
 
 	expectedLocator := "ThreatPolicy/default/my-threat"
@@ -2181,7 +2177,10 @@ func TestMutateWasmConfig_NoPipelineActionsNoChange(t *testing.T) {
 	)
 
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)
-	existingAction := wasm.Action{ServiceName: "auth-service", Scope: "default/route"}
+	existingAction := &wasm.DenyAction{
+		ActionBase: wasm.ActionBase{Predicate: "true", Terminal: true},
+		DenyWith:   "DenyResponse{status: 403u}",
+	}
 	wasmConfig := &wasm.Config{
 		Services:   make(map[string]wasm.Service),
 		ActionSets: []wasm.ActionSet{{Name: "set1", Actions: []wasm.Action{existingAction}}},
@@ -2196,8 +2195,8 @@ func TestMutateWasmConfig_NoPipelineActionsNoChange(t *testing.T) {
 	if len(wasmConfig.ActionSets[0].Actions) != 1 {
 		t.Errorf("Expected 1 action (unchanged), got %d", len(wasmConfig.ActionSets[0].Actions))
 	}
-	if wasmConfig.ActionSets[0].Actions[0].ServiceName != "auth-service" {
-		t.Errorf("Expected existing action preserved, got %q", wasmConfig.ActionSets[0].Actions[0].ServiceName)
+	if wasmConfig.ActionSets[0].Actions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected existing action preserved, got %q", wasmConfig.ActionSets[0].Actions[0].ActionType())
 	}
 }
 
@@ -2222,8 +2221,8 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 	wasmConfig := &wasm.Config{
 		Services: make(map[string]wasm.Service),
 		ActionSets: []wasm.ActionSet{
-			{Name: "set1", Actions: []wasm.Action{}},
-			{Name: "set2", Actions: []wasm.Action{}},
+			{Name: "set1"},
+			{Name: "set2"},
 		},
 	}
 
@@ -2233,15 +2232,15 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 	}
 
 	for i, as := range wasmConfig.ActionSets {
-		if len(as.TypedActions) != 2 {
-			t.Errorf("ActionSet[%d]: expected 2 typed actions, got %d", i, len(as.TypedActions))
+		if len(as.Actions) != 2 {
+			t.Errorf("ActionSet[%d]: expected 2 actions, got %d", i, len(as.Actions))
 			continue
 		}
-		if as.TypedActions[0].ActionType() != wasm.ActionKindDeny {
-			t.Errorf("ActionSet[%d]: expected typed[0] deny, got %s", i, as.TypedActions[0].ActionType())
+		if as.Actions[0].ActionType() != wasm.ActionKindDeny {
+			t.Errorf("ActionSet[%d]: expected actions[0] deny, got %s", i, as.Actions[0].ActionType())
 		}
-		if as.TypedActions[1].ActionType() != wasm.ActionKindGrpc {
-			t.Errorf("ActionSet[%d]: expected typed[1] grpc, got %s", i, as.TypedActions[1].ActionType())
+		if as.Actions[1].ActionType() != wasm.ActionKindGrpc {
+			t.Errorf("ActionSet[%d]: expected actions[1] grpc, got %s", i, as.Actions[1].ActionType())
 		}
 	}
 }
@@ -2348,16 +2347,16 @@ func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
 	}
 
 	// Root-level: deny + grpc (with var-dependent deny in onReply)
-	if len(as.TypedActions) != 2 {
-		t.Fatalf("Expected 2 root-level typed actions, got %d", len(as.TypedActions))
+	if len(as.Actions) != 2 {
+		t.Fatalf("Expected 2 root-level actions, got %d", len(as.Actions))
 	}
-	if as.TypedActions[0].ActionType() != wasm.ActionKindDeny {
-		t.Errorf("Expected typed[0] deny, got %s", as.TypedActions[0].ActionType())
+	if as.Actions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected actions[0] deny, got %s", as.Actions[0].ActionType())
 	}
-	if as.TypedActions[1].ActionType() != wasm.ActionKindGrpc {
-		t.Errorf("Expected typed[1] grpc, got %s", as.TypedActions[1].ActionType())
+	if as.Actions[1].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected actions[1] grpc, got %s", as.Actions[1].ActionType())
 	}
-	grpcAction := as.TypedActions[1].(*wasm.GrpcAction)
+	grpcAction := as.Actions[1].(*wasm.GrpcAction)
 	if len(grpcAction.OnReply) != 1 {
 		t.Fatalf("Expected 1 onReply action, got %d", len(grpcAction.OnReply))
 	}
@@ -2443,7 +2442,7 @@ func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
 
 	wasmConfig := wasm.Config{
 		ActionSets: []wasm.ActionSet{
-			{Name: "auth-actionset", Actions: []wasm.Action{{ServiceName: "auth-service"}}},
+			{Name: "auth-actionset"},
 		},
 	}
 
@@ -2460,22 +2459,14 @@ func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
 	}
 
 	actions := wasmConfig.ActionSets[0].Actions
-	if len(actions) != 1 {
-		t.Fatalf("Expected 1 legacy action, got %d", len(actions))
+	if len(actions) != 2 {
+		t.Fatalf("Expected 2 actions (deny + grpc), got %d", len(actions))
 	}
-	if actions[0].ServiceName != "auth-service" {
-		t.Errorf("Expected legacy action to be auth-service, got %s", actions[0].ServiceName)
+	if actions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected actions[0] deny, got %s", actions[0].ActionType())
 	}
-
-	typed := wasmConfig.ActionSets[0].TypedActions
-	if len(typed) != 2 {
-		t.Fatalf("Expected 2 typed actions (deny + grpc), got %d", len(typed))
-	}
-	if typed[0].ActionType() != wasm.ActionKindDeny {
-		t.Errorf("Expected typed[0] deny, got %s", typed[0].ActionType())
-	}
-	if typed[1].ActionType() != wasm.ActionKindGrpc {
-		t.Errorf("Expected typed[1] grpc, got %s", typed[1].ActionType())
+	if actions[1].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected actions[1] grpc, got %s", actions[1].ActionType())
 	}
 }
 
@@ -2651,17 +2642,17 @@ func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
 	if len(as.RouteRuleConditions.Hostnames) != 1 || as.RouteRuleConditions.Hostnames[0] != "api.example.com" {
 		t.Errorf("Expected hostname 'api.example.com', got %v", as.RouteRuleConditions.Hostnames)
 	}
-	if len(as.TypedActions) != 2 {
-		t.Fatalf("Expected 2 typed actions on matching route, got %d", len(as.TypedActions))
+	if len(as.Actions) != 2 {
+		t.Fatalf("Expected 2 actions on matching route, got %d", len(as.Actions))
 	}
-	if as.TypedActions[0].ActionType() != wasm.ActionKindDeny {
-		t.Errorf("Expected typed[0] deny, got %s", as.TypedActions[0].ActionType())
+	if as.Actions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("Expected actions[0] deny, got %s", as.Actions[0].ActionType())
 	}
-	if as.TypedActions[1].ActionType() != wasm.ActionKindGrpc {
-		t.Errorf("Expected typed[1] grpc, got %s", as.TypedActions[1].ActionType())
+	if as.Actions[1].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected actions[1] grpc, got %s", as.Actions[1].ActionType())
 	}
-	if as.TypedActions[1].(*wasm.GrpcAction).Service == "" {
-		t.Error("Expected grpc typed action to have service set")
+	if as.Actions[1].(*wasm.GrpcAction).Service == "" {
+		t.Error("Expected grpc action to have service set")
 	}
 }
 
@@ -2670,7 +2661,7 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 	// HTTPRoute are lost when built-in policies (AuthPolicy/RateLimitPolicy) have
 	// already created ActionSets for the same route. Built-in ActionSets don't set
 	// SourceRoute, so the extension's route-matching logic in mutateWasmConfig skips
-	// them all — resulting in extension TypedActions never being appended.
+	// them all — resulting in extension Actions never being appended.
 	store := NewRegisteredDataStore()
 	routeTargetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test-route", Namespace: "test-namespace"}
 	policyID := testResourceID("ThreatPolicy", "test-namespace", "route-threat")
@@ -2723,7 +2714,6 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 				RouteRuleConditions: wasm.RouteRuleConditions{
 					Hostnames: []string{"api.example.com"},
 				},
-				Actions: []wasm.Action{{ServiceName: "authorino-auth"}},
 			},
 		},
 	}
@@ -2740,21 +2730,16 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 
 	as := wasmConfig.ActionSets[0]
 
-	// Built-in actions preserved
-	if len(as.Actions) != 1 || as.Actions[0].ServiceName != "authorino-auth" {
-		t.Errorf("Expected built-in action preserved, got %v", as.Actions)
-	}
-
-	// Extension TypedActions must be merged alongside the built-in actions.
+	// Extension Actions must be merged into the action set.
 	// The deny depends on the var "threatResponse" from the gRPC action, so it
 	// gets nested in the gRPC action's OnReply rather than being a separate root action.
-	if len(as.TypedActions) != 1 {
-		t.Fatalf("Expected 1 typed action (grpc with deny in onReply) merged into built-in actionset, got %d", len(as.TypedActions))
+	if len(as.Actions) != 1 {
+		t.Fatalf("Expected 1 action (grpc with deny in onReply) merged into built-in actionset, got %d", len(as.Actions))
 	}
-	if as.TypedActions[0].ActionType() != wasm.ActionKindGrpc {
-		t.Errorf("Expected typed[0] grpc, got %s", as.TypedActions[0].ActionType())
+	if as.Actions[0].ActionType() != wasm.ActionKindGrpc {
+		t.Errorf("Expected actions[0] grpc, got %s", as.Actions[0].ActionType())
 	}
-	grpcAction := as.TypedActions[0].(*wasm.GrpcAction)
+	grpcAction := as.Actions[0].(*wasm.GrpcAction)
 	if len(grpcAction.OnReply) != 1 {
 		t.Fatalf("Expected 1 onReply action (deny), got %d", len(grpcAction.OnReply))
 	}
@@ -2789,10 +2774,10 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if len(wasmConfig.ActionSets[0].TypedActions) != 1 {
-		t.Fatalf("Expected 1 typed action, got %d", len(wasmConfig.ActionSets[0].TypedActions))
+	if len(wasmConfig.ActionSets[0].Actions) != 1 {
+		t.Fatalf("Expected 1 action, got %d", len(wasmConfig.ActionSets[0].Actions))
 	}
-	ta := wasmConfig.ActionSets[0].TypedActions[0].(*wasm.DenyAction)
+	ta := wasmConfig.ActionSets[0].Actions[0].(*wasm.DenyAction)
 	if ta.ActionType() != wasm.ActionKindDeny {
 		t.Errorf("Expected type 'deny', got %q", ta.ActionType())
 	}
@@ -2860,8 +2845,8 @@ func TestMutateWasmConfig_CrossGatewayIsolation(t *testing.T) {
 	if len(configA.ActionSets) != 1 {
 		t.Fatalf("gw-a: expected 1 actionset, got %d", len(configA.ActionSets))
 	}
-	if len(configA.ActionSets[0].TypedActions) == 0 {
-		t.Fatal("gw-a: expected typed actions on route-a's action set")
+	if len(configA.ActionSets[0].Actions) == 0 {
+		t.Fatal("gw-a: expected actions on route-a's action set")
 	}
 
 	configB := wasm.Config{}
@@ -2899,15 +2884,15 @@ func TestMutateWasmConfig_PipelineOnlyRouteIsolation(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	if len(wasmConfig.ActionSets[0].TypedActions) != 1 {
-		t.Fatalf("route-a: expected 1 typed action, got %d", len(wasmConfig.ActionSets[0].TypedActions))
+	if len(wasmConfig.ActionSets[0].Actions) != 1 {
+		t.Fatalf("route-a: expected 1 action, got %d", len(wasmConfig.ActionSets[0].Actions))
 	}
-	if wasmConfig.ActionSets[0].TypedActions[0].ActionType() != wasm.ActionKindDeny {
-		t.Errorf("route-a: expected deny action, got %s", wasmConfig.ActionSets[0].TypedActions[0].ActionType())
+	if wasmConfig.ActionSets[0].Actions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("route-a: expected deny action, got %s", wasmConfig.ActionSets[0].Actions[0].ActionType())
 	}
 
-	if len(wasmConfig.ActionSets[1].TypedActions) != 0 {
-		t.Fatalf("route-b: expected 0 typed actions (policy doesn't target this route), got %d", len(wasmConfig.ActionSets[1].TypedActions))
+	if len(wasmConfig.ActionSets[1].Actions) != 0 {
+		t.Fatalf("route-b: expected 0 actions (policy doesn't target this route), got %d", len(wasmConfig.ActionSets[1].Actions))
 	}
 }
 
@@ -2956,7 +2941,12 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 				Name:                "builtin-a",
 				SourceRoute:         "HTTPRoute/test-ns/route-a",
 				RouteRuleConditions: wasm.RouteRuleConditions{Hostnames: []string{"a.example.com"}},
-				Actions:             []wasm.Action{{ServiceName: "ratelimit-service"}},
+				Actions: []wasm.Action{
+					&wasm.DenyAction{
+						ActionBase: wasm.ActionBase{Predicate: "true", Terminal: true},
+						DenyWith:   "DenyResponse{status: 503u}",
+					},
+				},
 			},
 		},
 	}
@@ -2969,23 +2959,23 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 		t.Fatalf("Expected 2 actionsets (builtin for route-a + skeleton for route-b), got %d", len(wasmConfig.ActionSets))
 	}
 
-	// route-a's action set should be untouched
+	// route-a's action set should retain the existing built-in action only
 	if wasmConfig.ActionSets[0].SourceRoute != "HTTPRoute/test-ns/route-a" {
 		t.Errorf("Expected route-a action set first, got %s", wasmConfig.ActionSets[0].SourceRoute)
 	}
-	if len(wasmConfig.ActionSets[0].TypedActions) != 0 {
-		t.Errorf("route-a: expected 0 typed actions (deny targets route-b only), got %d", len(wasmConfig.ActionSets[0].TypedActions))
+	if len(wasmConfig.ActionSets[0].Actions) != 1 {
+		t.Errorf("route-a: expected 1 action (built-in deny, extension targets route-b only), got %d", len(wasmConfig.ActionSets[0].Actions))
 	}
 
 	// route-b should have a skeleton with the deny action
 	if wasmConfig.ActionSets[1].SourceRoute != "HTTPRoute/test-ns/route-b" {
 		t.Errorf("Expected route-b action set second, got %s", wasmConfig.ActionSets[1].SourceRoute)
 	}
-	if len(wasmConfig.ActionSets[1].TypedActions) != 1 {
-		t.Fatalf("route-b: expected 1 typed action (deny), got %d", len(wasmConfig.ActionSets[1].TypedActions))
+	if len(wasmConfig.ActionSets[1].Actions) != 1 {
+		t.Fatalf("route-b: expected 1 action (deny), got %d", len(wasmConfig.ActionSets[1].Actions))
 	}
-	if wasmConfig.ActionSets[1].TypedActions[0].ActionType() != wasm.ActionKindDeny {
-		t.Errorf("route-b: expected deny action, got %s", wasmConfig.ActionSets[1].TypedActions[0].ActionType())
+	if wasmConfig.ActionSets[1].Actions[0].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("route-b: expected deny action, got %s", wasmConfig.ActionSets[1].Actions[0].ActionType())
 	}
 }
 

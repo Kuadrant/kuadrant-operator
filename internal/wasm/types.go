@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
-	"strings"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -147,13 +145,9 @@ type ActionSet struct {
 	// Conditions that activate the action set
 	RouteRuleConditions RouteRuleConditions `json:"routeRuleConditions,omitempty"`
 
-	// Actions that will be invoked when the conditions are met (legacy format)
+	// Actions holds the typed pipeline actions for this action set.
 	// +optional
 	Actions []Action `json:"-"`
-
-	// TypedActions are extension pipeline actions in the new TypedAction format.
-	// +optional
-	TypedActions []TypedAction `json:"-"`
 
 	// SourceRoute records which route (Kind/Namespace/Name) this action set was
 	// created from. Not serialized — used only to match pipeline actions to the
@@ -181,13 +175,6 @@ func (s ActionSet) MarshalJSON() ([]byte, error) {
 		}
 		alias.Actions = append(alias.Actions, raw)
 	}
-	for _, typed := range s.TypedActions {
-		raw, err := json.Marshal(typed)
-		if err != nil {
-			return nil, err
-		}
-		alias.Actions = append(alias.Actions, raw)
-	}
 
 	return json.Marshal(alias)
 }
@@ -201,25 +188,13 @@ func (s *ActionSet) UnmarshalJSON(data []byte) error {
 	s.Name = alias.Name
 	s.RouteRuleConditions = alias.RouteRuleConditions
 	s.Actions = nil
-	s.TypedActions = nil
 
 	for _, raw := range alias.Actions {
-		var probe struct {
-			Type string `json:"type"`
+		action, err := UnmarshalAction(raw)
+		if err != nil {
+			return err
 		}
-		if err := json.Unmarshal(raw, &probe); err == nil && probe.Type != "" {
-			typed, err := UnmarshalTypedAction(raw)
-			if err != nil {
-				return err
-			}
-			s.TypedActions = append(s.TypedActions, typed)
-		} else {
-			var action Action
-			if err := json.Unmarshal(raw, &action); err != nil {
-				return err
-			}
-			s.Actions = append(s.Actions, action)
-		}
+		s.Actions = append(s.Actions, action)
 	}
 
 	return nil
@@ -235,18 +210,12 @@ func (s *ActionSet) UnmarshalJSON(data []byte) error {
 // Note: Actions order is significant because it affects the evaluation order
 // in the data plane.
 func (s *ActionSet) EqualTo(other ActionSet) bool {
-	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) || len(s.TypedActions) != len(other.TypedActions) {
+	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) {
 		return false
 	}
 
 	for i := range s.Actions {
 		if !s.Actions[i].EqualTo(other.Actions[i]) {
-			return false
-		}
-	}
-
-	for i := range s.TypedActions {
-		if !s.TypedActions[i].EqualTo(other.TypedActions[i]) {
 			return false
 		}
 	}
@@ -289,24 +258,6 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 	return true
 }
 
-type Action struct {
-	ServiceName string `json:"service"`
-	Scope       string `json:"scope"`
-
-	Predicates []string `json:"predicates,omitempty"`
-
-	// ConditionalData data contains the predicates and data that will be sent to the service
-	// +optional
-	ConditionalData []ConditionalData `json:"conditionalData,omitempty"`
-
-	// SourcePolicyLocators tracks all policies that contributed to this action.
-	// This is important for policies that can be merged (e.g., Gateway-level + HTTPRoute-level).
-	// For atomic merge strategies or individual rules, this may contain a single entry.
-	// Serialized to wasm config as "sources" for observability and debugging.
-	// Format: "kind/namespace/name"
-	SourcePolicyLocators []string `json:"sources,omitempty"`
-}
-
 type ConditionalData struct {
 	// Predicates holds a list of CEL predicates
 	// +optional
@@ -315,90 +266,6 @@ type ConditionalData struct {
 	// Data to be sent to the service
 	// +optional
 	Data []DataType `json:"data,omitempty"`
-}
-
-func (a *Action) HasAuthAccess() bool {
-	for _, conditional := range a.ConditionalData {
-		for _, predicate := range conditional.Predicates {
-			if strings.Contains(predicate, "auth.") {
-				return true
-			}
-		}
-		for _, data := range conditional.Data {
-			switch val := data.Value.(type) {
-			case *Static:
-
-				continue
-			case *Expression:
-				if strings.Contains(val.ExpressionItem.Value, "auth.") {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// EqualTo performs semantic equality comparison between two ConditionalData instances.
-// Note: This has mixed ordering semantics for different fields.
-//
-// Order-sensitive fields:
-//   - Predicates: Order matters - strict slice equality
-//   - Data: Order matters - compared by index position
-//
-// Note: Both predicates and data order are significant as they may affect
-// evaluation order in the data plane.
-func (c *ConditionalData) EqualTo(other ConditionalData) bool {
-	if len(c.Predicates) != len(other.Predicates) || len(c.Data) != len(other.Data) {
-		return false
-	}
-
-	if !reflect.DeepEqual(c.Predicates, other.Predicates) {
-		return false
-	}
-
-	for i := range c.Data {
-		if !c.Data[i].EqualTo(other.Data[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// EqualTo performs semantic equality comparison between two Action instances.
-// Note: This has mixed ordering semantics for different fields.
-//
-// Order-insensitive fields:
-//   - ConditionalData: Checks that the same conditional data exists, regardless of order
-//
-// Order-sensitive fields (strict equality):
-//   - Scope: String comparison
-//   - ServiceName: String comparison
-//   - Predicates: Strict slice equality - order matters
-//   - SourcePolicyLocators: Strict slice equality - order matters
-func (a *Action) EqualTo(other Action) bool {
-	if a.Scope != other.Scope ||
-		a.ServiceName != other.ServiceName ||
-		len(a.ConditionalData) != len(other.ConditionalData) {
-		return false
-	}
-
-	if !reflect.DeepEqual(a.Predicates, other.Predicates) {
-		return false
-	}
-
-	if !slices.Equal(a.SourcePolicyLocators, other.SourcePolicyLocators) {
-		return false
-	}
-
-	for i := range a.ConditionalData {
-		if !slices.ContainsFunc(other.ConditionalData, a.ConditionalData[i].EqualTo) {
-			return false
-		}
-	}
-
-	return true
 }
 
 type DataType struct {
@@ -438,18 +305,6 @@ func (d *DataType) MarshalJSON() ([]byte, error) {
 	}
 }
 
-func (d *DataType) EqualTo(other DataType) bool {
-	dt, err := d.MarshalJSON()
-	if err != nil {
-		return false
-	}
-	odt, err := other.MarshalJSON()
-	if err != nil {
-		return false
-	}
-	return bytes.Equal(dt, odt)
-}
-
 type Static struct {
 	Static StaticSpec `json:"static"`
 }
@@ -482,13 +337,13 @@ const (
 	ActionKindFail    ActionKind = "fail"
 )
 
-// TypedAction is the interface for typed pipeline actions in the wasm-shim format.
+// Action is the interface for typed pipeline actions in the wasm-shim format.
 // Concrete implementations: GrpcAction, DenyAction, HeadersAction, StoreAction, FailAction.
-type TypedAction interface {
+type Action interface {
 	ActionType() ActionKind
 	Base() *ActionBase
-	EqualTo(other TypedAction) bool
-	sealedTypedAction()
+	EqualTo(other Action) bool
+	sealedAction()
 }
 
 type ActionBase struct {
@@ -512,13 +367,13 @@ type GrpcAction struct {
 	Service        string
 	Label          string
 	MessageBuilder string
-	OnReply        []TypedAction
+	OnReply        []Action
 }
 
 func (a *GrpcAction) ActionType() ActionKind { return ActionKindGrpc }
-func (a *GrpcAction) Base() *ActionBase     { return &a.ActionBase }
-func (a *GrpcAction) sealedTypedAction()    {}
-func (a *GrpcAction) EqualTo(other TypedAction) bool {
+func (a *GrpcAction) Base() *ActionBase      { return &a.ActionBase }
+func (a *GrpcAction) sealedAction()          {}
+func (a *GrpcAction) EqualTo(other Action) bool {
 	o, ok := other.(*GrpcAction)
 	if !ok {
 		return false
@@ -545,9 +400,9 @@ type DenyAction struct {
 }
 
 func (a *DenyAction) ActionType() ActionKind { return ActionKindDeny }
-func (a *DenyAction) Base() *ActionBase     { return &a.ActionBase }
-func (a *DenyAction) sealedTypedAction()    {}
-func (a *DenyAction) EqualTo(other TypedAction) bool {
+func (a *DenyAction) Base() *ActionBase      { return &a.ActionBase }
+func (a *DenyAction) sealedAction()          {}
+func (a *DenyAction) EqualTo(other Action) bool {
 	o, ok := other.(*DenyAction)
 	if !ok {
 		return false
@@ -562,9 +417,9 @@ type HeadersAction struct {
 }
 
 func (a *HeadersAction) ActionType() ActionKind { return ActionKindHeaders }
-func (a *HeadersAction) Base() *ActionBase     { return &a.ActionBase }
-func (a *HeadersAction) sealedTypedAction()    {}
-func (a *HeadersAction) EqualTo(other TypedAction) bool {
+func (a *HeadersAction) Base() *ActionBase      { return &a.ActionBase }
+func (a *HeadersAction) sealedAction()          {}
+func (a *HeadersAction) EqualTo(other Action) bool {
 	o, ok := other.(*HeadersAction)
 	if !ok {
 		return false
@@ -580,9 +435,9 @@ type StoreAction struct {
 }
 
 func (a *StoreAction) ActionType() ActionKind { return ActionKindStore }
-func (a *StoreAction) Base() *ActionBase     { return &a.ActionBase }
-func (a *StoreAction) sealedTypedAction()    {}
-func (a *StoreAction) EqualTo(other TypedAction) bool {
+func (a *StoreAction) Base() *ActionBase      { return &a.ActionBase }
+func (a *StoreAction) sealedAction()          {}
+func (a *StoreAction) EqualTo(other Action) bool {
 	o, ok := other.(*StoreAction)
 	if !ok {
 		return false
@@ -597,9 +452,9 @@ type FailAction struct {
 }
 
 func (a *FailAction) ActionType() ActionKind { return ActionKindFail }
-func (a *FailAction) Base() *ActionBase     { return &a.ActionBase }
-func (a *FailAction) sealedTypedAction()    {}
-func (a *FailAction) EqualTo(other TypedAction) bool {
+func (a *FailAction) Base() *ActionBase      { return &a.ActionBase }
+func (a *FailAction) sealedAction()          {}
+func (a *FailAction) EqualTo(other Action) bool {
 	o, ok := other.(*FailAction)
 	if !ok {
 		return false
@@ -628,7 +483,7 @@ type actionWire struct {
 	Sources        []string          `json:"sources,omitempty"`
 }
 
-func marshalOnReply(actions []TypedAction) ([]json.RawMessage, error) {
+func marshalOnReply(actions []Action) ([]json.RawMessage, error) {
 	if len(actions) == 0 {
 		return nil, nil
 	}
@@ -683,7 +538,7 @@ func (a *FailAction) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func UnmarshalTypedAction(data []byte) (TypedAction, error) {
+func UnmarshalAction(data []byte) (Action, error) {
 	var w actionWire
 	if err := json.Unmarshal(data, &w); err != nil {
 		return nil, err
@@ -694,9 +549,9 @@ func UnmarshalTypedAction(data []byte) (TypedAction, error) {
 	}
 	switch w.Type {
 	case ActionKindGrpc:
-		var onReply []TypedAction
+		var onReply []Action
 		for _, raw := range w.OnReply {
-			r, err := UnmarshalTypedAction(raw)
+			r, err := UnmarshalAction(raw)
 			if err != nil {
 				return nil, err
 			}
@@ -715,7 +570,7 @@ func UnmarshalTypedAction(data []byte) (TypedAction, error) {
 	case ActionKindFail:
 		return &FailAction{ActionBase: base, LogMessage: w.LogMessage}, nil
 	default:
-		return nil, fmt.Errorf("unknown typed action type: %q", w.Type)
+		return nil, fmt.Errorf("unknown action type: %q", w.Type)
 	}
 }
 

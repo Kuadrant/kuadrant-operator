@@ -257,10 +257,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							},
 						},
 						Actions: []wasm.Action{
-							{
-								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
-								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+							wasm.ActionSpec{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -275,7 +275,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 										},
 									},
 								},
-							},
+							}.Build(),
 						},
 					},
 				},
@@ -521,19 +521,11 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"}
 			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[1], Name: "rule-2"}
 
-			// *.toystore.acme.com/assets
-			actionSet := existingWASMConfig.ActionSets[0]
-			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
-			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
-			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.url_path == '/assets'",
-			))
-			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
-				[]wasm.ConditionalData{
+			expectedRLAction := wasm.ActionSpec{
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+				Sources:     []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{
 							"source.remote_address != '192.168.1.1'",
@@ -576,7 +568,18 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						},
 					},
 				},
+			}.Build()
+
+			// *.toystore.acme.com/assets
+			actionSet := existingWASMConfig.ActionSets[0]
+			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				"request.url_path == '/assets'",
 			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions[1].EqualTo(expectedRLAction)).To(BeTrue())
 
 			// GET *.toystore.acme.com/toys*
 			actionSet = existingWASMConfig.ActionSets[1]
@@ -588,53 +591,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
-				[]wasm.ConditionalData{
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-							"auth.identity.group != 'admin'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   "auth.identity.username",
-										Value: "auth.identity.username",
-									},
-								},
-							},
-						},
-					},
-				},
-			))
+			Expect(actionSet.Actions[1].EqualTo(expectedRLAction)).To(BeTrue())
 
 			// POST *.toystore.acme.com/toys*
 			actionSet = existingWASMConfig.ActionSets[2]
@@ -646,53 +603,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
-				[]wasm.ConditionalData{
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-							"auth.identity.group != 'admin'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   "auth.identity.username",
-										Value: "auth.identity.username",
-									},
-								},
-							},
-						},
-					},
-				},
-			))
+			Expect(actionSet.Actions[1].EqualTo(expectedRLAction)).To(BeTrue())
 
 			// api.toystore.io/assets
 			actionSet = existingWASMConfig.ActionSets[3]
@@ -703,53 +614,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
-				[]wasm.ConditionalData{
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-							"auth.identity.group != 'admin'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   "auth.identity.username",
-										Value: "auth.identity.username",
-									},
-								},
-							},
-						},
-					},
-				},
-			))
+			Expect(actionSet.Actions[1].EqualTo(expectedRLAction)).To(BeTrue())
 
 			// GET api.toystore.io/toys*
 			actionSet = existingWASMConfig.ActionSets[4]
@@ -761,53 +626,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
-				[]wasm.ConditionalData{
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-							"auth.identity.group != 'admin'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   "auth.identity.username",
-										Value: "auth.identity.username",
-									},
-								},
-							},
-						},
-					},
-				},
-			))
+			Expect(actionSet.Actions[1].EqualTo(expectedRLAction)).To(BeTrue())
 
 			// POST api.toystore.io/toys*
 			actionSet = existingWASMConfig.ActionSets[5]
@@ -819,53 +638,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				"request.url_path.startsWith('/toys')",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
-			Expect(actionSet.Actions[1].ServiceName).To(Equal(wasm.RateLimitServiceName))
-			Expect(actionSet.Actions[1].ConditionalData).To(ContainElements(
-				[]wasm.ConditionalData{
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-					{
-						Predicates: []string{
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-							"auth.identity.group != 'admin'",
-						},
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &wasm.Expression{
-									ExpressionItem: wasm.ExpressionItem{
-										Key:   "auth.identity.username",
-										Value: "auth.identity.username",
-									},
-								},
-							},
-						},
-					},
-				},
-			))
+			Expect(actionSet.Actions[1].EqualTo(expectedRLAction)).To(BeTrue())
 		}, testTimeOut)
 
 		It("Simple RLP targeting Gateway parented by one HTTPRoute creates envoyfilter", func(ctx SpecContext) {
@@ -966,10 +739,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							},
 						},
 						Actions: []wasm.Action{
-							{
-								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
-								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+							wasm.ActionSpec{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -984,7 +757,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 										},
 									},
 								},
-							},
+							}.Build(),
 						},
 					},
 				},
@@ -1212,7 +985,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 									ConditionalData: []wasm.ConditionalData{
@@ -1229,8 +1002,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -1441,7 +1214,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 									ConditionalData: []wasm.ConditionalData{
@@ -1458,8 +1231,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -1588,7 +1361,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 									ConditionalData: []wasm.ConditionalData{
@@ -1605,8 +1378,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -1809,7 +1582,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									ConditionalData: []wasm.ConditionalData{
@@ -1826,8 +1599,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -1919,7 +1692,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
 									ConditionalData: []wasm.ConditionalData{
@@ -1936,8 +1709,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -2115,7 +1888,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									ConditionalData: []wasm.ConditionalData{
@@ -2132,8 +1905,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp1Key.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlp1Key.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -2243,7 +2016,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									ConditionalData: []wasm.ConditionalData{
@@ -2260,8 +2033,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -2475,7 +2248,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									ConditionalData: []wasm.ConditionalData{
@@ -2492,8 +2265,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -2600,7 +2373,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									ConditionalData: []wasm.ConditionalData{
@@ -2617,8 +2390,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlp2Key.String()},
+								}.Build(),
 							},
 						},
 						{
@@ -2631,7 +2404,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								},
 							},
 							Actions: []wasm.Action{
-								{
+								wasm.ActionSpec{
 									ServiceName: wasm.RateLimitServiceName,
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
 									ConditionalData: []wasm.ConditionalData{
@@ -2648,8 +2421,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 											},
 										},
 									},
-									SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlp1Key.String()},
-								},
+									Sources: []string{"ratelimitpolicy.kuadrant.io:" + rlp1Key.String()},
+								}.Build(),
 							},
 						},
 					},
@@ -2791,10 +2564,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							},
 						},
 						Actions: []wasm.Action{
-							{
-								ServiceName:          wasm.RateLimitServiceName,
-								Scope:                controllers.LimitsNamespaceFromRoute(httpRoute),
-								SourcePolicyLocators: []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
+							wasm.ActionSpec{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + rlpKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
 										Data: []wasm.DataType{
@@ -2809,7 +2582,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 										},
 									},
 								},
-							},
+							}.Build(),
 						},
 					},
 				},
@@ -2888,7 +2661,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							},
 						},
 						Actions: []wasm.Action{
-							{
+							wasm.ActionSpec{
 								ServiceName: wasm.RateLimitServiceName,
 								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 								ConditionalData: []wasm.ConditionalData{
@@ -2905,8 +2678,8 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 										},
 									},
 								},
-								SourcePolicyLocators: sourcePolicies,
-							},
+								Sources: sourcePolicies,
+							}.Build(),
 						},
 					},
 				},
@@ -3111,7 +2884,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source for auth action
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3169,8 +2942,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The single auth action should list BOTH policy sources
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(ConsistOf(
 					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
 					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
 				))
@@ -3238,7 +3013,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source for auth action
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3295,8 +3070,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + routeAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3363,7 +3140,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3419,8 +3196,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list ONLY the gateway policy source (atomic overrides route policy)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3487,7 +3266,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3544,8 +3323,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list BOTH policy sources (merge overrides merges both policies)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				grpcAction, ok := existingWASMConfig.ActionSets[0].Actions[0].(*wasm.GrpcAction)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(grpcAction.Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(grpcAction.Base().SourcePolicyLocators).To(ConsistOf(
 					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
 					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
 				))
@@ -3599,7 +3380,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3642,13 +3423,11 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The merged action should list BOTH policy sources
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(ConsistOf(
 					"ratelimitpolicy.kuadrant.io:"+gwRLPKey.String(),
 					"ratelimitpolicy.kuadrant.io:"+routeRLPKey.String(),
 				))
 
-				// Verify both limits' data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(2))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -3699,7 +3478,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3742,12 +3521,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + routeRLPKey.String(),
 				}))
 
-				// Verify only route limit's data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(1))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -3798,7 +3575,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3842,12 +3619,10 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list ONLY the gateway policy source (atomic overrides route policy)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 
-				// Verify only gateway limit's data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(1))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -3898,7 +3673,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(Equal([]string{
 					"ratelimitpolicy.kuadrant.io:" + gwRLPKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -3942,13 +3717,11 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(existingWASMConfig.ActionSets[0].Actions).To(HaveLen(1))
 
 				// The action should list BOTH policy sources (merge overrides merges both policies)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].Base().SourcePolicyLocators).To(ConsistOf(
 					"ratelimitpolicy.kuadrant.io:"+gwRLPKey.String(),
 					"ratelimitpolicy.kuadrant.io:"+routeRLPKey.String(),
 				))
 
-				// Verify both limits' data is present
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ConditionalData).To(HaveLen(2))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)

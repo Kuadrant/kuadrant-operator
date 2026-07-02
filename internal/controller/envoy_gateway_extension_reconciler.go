@@ -471,8 +471,8 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
 
-		// Validate specs, then Build() validated ones into TypedActions
-		var builtActions []wasm.TypedAction
+		// Validate specs, then Build() validated ones into Actions
+		var builtActions []wasm.Action
 		invalidCount := 0
 
 		for _, spec := range specs {

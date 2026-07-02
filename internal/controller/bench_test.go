@@ -298,10 +298,6 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 	return topology, kuadrant, state
 }
 
-// ---------------------------------------------------------------------------
-// Original benchmarks: individual reconciler hot paths
-// ---------------------------------------------------------------------------
-
 // BenchmarkCalculateEffectiveAuthPolicies measures the O(GatewayClasses × RouteRules) loop
 // that calls Paths() for each pair — the most expensive reconciliation path.
 func BenchmarkCalculateEffectiveAuthPolicies(b *testing.B) {
@@ -309,8 +305,6 @@ func BenchmarkCalculateEffectiveAuthPolicies(b *testing.B) {
 		name string
 		p    benchTopologyParams
 	}{
-		{"1gc-10routes", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 10, numRulesPerRoute: 2, attachAuthPolicies: true}},
-		{"1gc-100routes", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 2, attachAuthPolicies: true}},
 		{"1gc-300routes", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 2, attachAuthPolicies: true}},
 		{"3gc-100routes", benchTopologyParams{numGatewayClasses: 3, numRoutesPerGW: 100, numRulesPerRoute: 2, attachAuthPolicies: true}},
 	}
@@ -328,299 +322,164 @@ func BenchmarkCalculateEffectiveAuthPolicies(b *testing.B) {
 
 // BenchmarkTopologyToDot measures the DAG-to-DOT serialization called every reconciliation cycle.
 func BenchmarkTopologyToDot(b *testing.B) {
-	cases := []struct {
-		name   string
-		routes int
-		rules  int
-	}{
-		{"10obj", 2, 1},
-		{"100obj", 20, 2},
-		{"300obj", 60, 2},
-		{"1000obj", 200, 2},
-	}
-	for _, tc := range cases {
-		b.Run(tc.name, func(b *testing.B) {
-			topology, _, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: tc.routes, numRulesPerRoute: tc.rules})
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				topology.ToDot()
-			}
-		})
+	topology, _, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 200, numRulesPerRoute: 2})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		topology.ToDot()
 	}
 }
 
 // BenchmarkBuildDesiredAuthConfig measures AuthConfig generation for N route rules.
 func BenchmarkBuildDesiredAuthConfig(b *testing.B) {
-	cases := []struct {
-		name  string
-		rules int
-	}{
-		{"1-rule", 1},
-		{"10-rules", 10},
-		{"100-rules", 100},
-		{"300-rules", 300},
+	topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 1, numRulesPerRoute: 300, attachAuthPolicies: true})
+	ctx := context.Background()
+
+	effectivePolicies := CalculateEffectiveAuthPolicies(ctx, topology, kuadrant, state)
+
+	type authConfigInput struct {
+		effectivePolicy  EffectiveAuthPolicy
+		name             string
+		annotationKey    string
+		routeRuleLocator string
 	}
-	for _, tc := range cases {
-		b.Run(tc.name, func(b *testing.B) {
-			topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 1, numRulesPerRoute: tc.rules, attachAuthPolicies: true})
-			ctx := context.Background()
-
-			effectivePolicies := CalculateEffectiveAuthPolicies(ctx, topology, kuadrant, state)
-
-			type authConfigInput struct {
-				effectivePolicy  EffectiveAuthPolicy
-				name             string
-				annotationKey    string
-				routeRuleLocator string
-			}
-			var inputs []authConfigInput
-			for pathID, ep := range effectivePolicies {
-				inputs = append(inputs, authConfigInput{
-					effectivePolicy:  ep,
-					name:             AuthConfigNameForPath(pathID),
-					annotationKey:    kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation,
-					routeRuleLocator: ep.Path[len(ep.Path)-1].GetLocator(),
-				})
-			}
-
-			r := &AuthConfigsReconciler{client: nil}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				for _, in := range inputs {
-					r.buildDesiredAuthConfig(ctx, in.effectivePolicy, in.name, "kuadrant-system", in.annotationKey, in.routeRuleLocator)
-				}
-			}
+	var inputs []authConfigInput
+	for pathID, ep := range effectivePolicies {
+		inputs = append(inputs, authConfigInput{
+			effectivePolicy:  ep,
+			name:             AuthConfigNameForPath(pathID),
+			annotationKey:    kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation,
+			routeRuleLocator: ep.Path[len(ep.Path)-1].GetLocator(),
 		})
+	}
+
+	r := &AuthConfigsReconciler{client: nil}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, in := range inputs {
+			r.buildDesiredAuthConfig(ctx, in.effectivePolicy, in.name, "kuadrant-system", in.annotationKey, in.routeRuleLocator)
+		}
 	}
 }
 
 // BenchmarkBuildLimitadorLimits measures merging effective rate limit policies into Limitador limits.
 func BenchmarkBuildLimitadorLimits(b *testing.B) {
-	cases := []struct {
-		name   string
-		routes int
-	}{
-		{"10-policies", 5},
-		{"100-policies", 50},
-		{"300-policies", 150},
+	topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 150, numRulesPerRoute: 2, attachRLPolicies: true})
+	ctx := context.Background()
+
+	targetables := topology.Targetables()
+	gatewayClasses := targetables.Children(kuadrant)
+	httpRouteRules := targetables.Items(func(o machinery.Object) bool {
+		_, ok := o.(*machinery.HTTPRouteRule)
+		return ok
+	})
+
+	allPolicies := topology.Policies().Items()
+	var rlPolicies []machinery.Policy
+	for _, p := range allPolicies {
+		if _, ok := p.(*kuadrantv1.RateLimitPolicy); ok {
+			rlPolicies = append(rlPolicies, p)
+		}
 	}
-	for _, tc := range cases {
-		b.Run(tc.name, func(b *testing.B) {
-			topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: tc.routes, numRulesPerRoute: 2, attachRLPolicies: true})
-			ctx := context.Background()
+	if len(rlPolicies) == 0 {
+		b.Fatal("no rate limit policies in topology")
+	}
 
-			targetables := topology.Targetables()
-			gatewayClasses := targetables.Children(kuadrant)
-			httpRouteRules := targetables.Items(func(o machinery.Object) bool {
-				_, ok := o.(*machinery.HTTPRouteRule)
-				return ok
-			})
-
-			allPolicies := topology.Policies().Items()
-			var rlPolicies []machinery.Policy
-			for _, p := range allPolicies {
-				if _, ok := p.(*kuadrantv1.RateLimitPolicy); ok {
-					rlPolicies = append(rlPolicies, p)
+	effectivePolicies := EffectiveRateLimitPolicies{}
+	for _, gc := range gatewayClasses {
+		for _, rule := range httpRouteRules {
+			paths := targetables.Paths(gc, rule)
+			for _, path := range paths {
+				pathID := kuadrantv1.PathID(path)
+				rlp := rlPolicies[0].(*kuadrantv1.RateLimitPolicy)
+				effectivePolicies[pathID] = EffectiveRateLimitPolicy{
+					Path:           path,
+					Spec:           *rlp,
+					SourcePolicies: []string{rlp.GetLocator()},
 				}
 			}
-			if len(rlPolicies) == 0 {
-				b.Fatal("no rate limit policies in topology")
-			}
+		}
+	}
+	state.Store(StateEffectiveRateLimitPolicies, effectivePolicies)
 
-			effectivePolicies := EffectiveRateLimitPolicies{}
-			for _, gc := range gatewayClasses {
-				for _, rule := range httpRouteRules {
-					paths := targetables.Paths(gc, rule)
-					for _, path := range paths {
-						pathID := kuadrantv1.PathID(path)
-						rlp := rlPolicies[0].(*kuadrantv1.RateLimitPolicy)
-						effectivePolicies[pathID] = EffectiveRateLimitPolicy{
-							Path:           path,
-							Spec:           *rlp,
-							SourcePolicies: []string{rlp.GetLocator()},
-						}
-					}
-				}
-			}
-			state.Store(StateEffectiveRateLimitPolicies, effectivePolicies)
-
-			r := &LimitadorLimitsReconciler{client: nil}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				r.buildLimitadorLimits(ctx, state)
-			}
-		})
+	r := &LimitadorLimitsReconciler{client: nil}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r.buildLimitadorLimits(ctx, state)
 	}
 }
 
-// BenchmarkTopologyPaths measures the Paths() DFS traversal — the single most expensive operation.
+// BenchmarkTopologyPaths measures the Paths() DFS traversal in isolation.
 func BenchmarkTopologyPaths(b *testing.B) {
+	topology, kuadrant, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 2})
+
+	targetables := topology.Targetables()
+	gatewayClasses := targetables.Children(kuadrant)
+	httpRouteRules := targetables.Items(func(o machinery.Object) bool {
+		_, ok := o.(*machinery.HTTPRouteRule)
+		return ok
+	})
+	if len(gatewayClasses) == 0 || len(httpRouteRules) == 0 {
+		b.Fatal("topology has no gateway classes or route rules")
+	}
+	from := gatewayClasses[0]
+	to := httpRouteRules[len(httpRouteRules)-1]
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		targetables.Paths(from, to)
+	}
+}
+
+// BenchmarkListenerFanout measures the impact of listener count on Paths() DFS traversal.
+// Reproduces the scaling pattern from #1085 where 63 listeners caused 30-minute reconciliation.
+func BenchmarkListenerFanout(b *testing.B) {
+	topology, kuadrant, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 32, attachAuthPolicies: true, policyTarget: "route"})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		state := &sync.Map{}
+		CalculateEffectiveAuthPolicies(context.Background(), topology, kuadrant, state)
+	}
+}
+
+// BenchmarkTopologyBuild measures the cost of constructing the GatewayAPI topology.
+func BenchmarkTopologyBuild(b *testing.B) {
 	cases := []struct {
 		name string
 		p    benchTopologyParams
 	}{
-		{"shallow-narrow", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 5, numRulesPerRoute: 2}},
-		{"shallow-wide", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 2}},
-		{"deep-wide", benchTopologyParams{numGatewayClasses: 3, numRoutesPerGW: 100, numRulesPerRoute: 5}},
-		{"stress", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 2}},
+		{"300routes", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1}},
+		{"300routes-32listeners", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, listenersPerGW: 32}},
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
-			topology, kuadrant, _ := buildBenchTopology(b, tc.p)
-
-			targetables := topology.Targetables()
-			gatewayClasses := targetables.Children(kuadrant)
-			httpRouteRules := targetables.Items(func(o machinery.Object) bool {
-				_, ok := o.(*machinery.HTTPRouteRule)
-				return ok
-			})
-			if len(gatewayClasses) == 0 || len(httpRouteRules) == 0 {
-				b.Fatal("topology has no gateway classes or route rules")
-			}
-			from := gatewayClasses[0]
-			to := httpRouteRules[len(httpRouteRules)-1]
-
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				targetables.Paths(from, to)
-			}
-		})
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Benchmarks from Mike Nairn's PR #2031: scaling dimensions and composite cycles
-// ---------------------------------------------------------------------------
-
-// BenchmarkEffectiveRateLimitPolicies measures the RateLimitPolicy effective
-// policy calculation via Reconcile() (calculateEffectivePolicies is unexported).
-func BenchmarkEffectiveRateLimitPolicies(b *testing.B) {
-	cases := []benchTopologyParams{
-		{numGatewayClasses: 1, numRoutesPerGW: 10, numRulesPerRoute: 1, attachRLPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, attachRLPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, attachRLPolicies: true, policyTarget: "route"},
-	}
-	reconciler := &EffectiveRateLimitPolicyReconciler{}
-	for _, tc := range cases {
-		b.Run(tc.label(), func(b *testing.B) {
-			topology, _, _ := buildBenchTopology(b, tc)
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				state := &sync.Map{}
-				reconciler.Reconcile(context.Background(), nil, topology, nil, state)
-			}
-		})
-	}
-}
-
-// BenchmarkEffectiveAuthPoliciesListenerFanout measures the impact of increasing
-// listeners per gateway. More listeners = more paths in the DFS traversal.
-// Reproduces the scaling pattern from #1085 where 63 listeners caused 30-minute reconciliation.
-func BenchmarkEffectiveAuthPoliciesListenerFanout(b *testing.B) {
-	cases := []benchTopologyParams{
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 1, attachAuthPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 4, attachAuthPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 16, attachAuthPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 32, attachAuthPolicies: true, policyTarget: "route"},
-	}
-	for _, tc := range cases {
-		topology, kuadrant, _ := buildBenchTopology(b, tc)
-		b.Run(tc.label(), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				state := &sync.Map{}
-				CalculateEffectiveAuthPolicies(context.Background(), topology, kuadrant, state)
-			}
-		})
-	}
-}
-
-// BenchmarkEffectiveAuthPoliciesMultiGateway measures the impact of
-// multiple gateways with routes distributed evenly across them.
-func BenchmarkEffectiveAuthPoliciesMultiGateway(b *testing.B) {
-	cases := []benchTopologyParams{
-		{numGatewayClasses: 3, numRoutesPerGW: 100, numRulesPerRoute: 1, attachAuthPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 10, numRoutesPerGW: 30, numRulesPerRoute: 1, attachAuthPolicies: true, policyTarget: "route"},
-	}
-	for _, tc := range cases {
-		topology, kuadrant, _ := buildBenchTopology(b, tc)
-		b.Run(tc.label(), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				state := &sync.Map{}
-				CalculateEffectiveAuthPolicies(context.Background(), topology, kuadrant, state)
-			}
-		})
-	}
-}
-
-// BenchmarkGetKuadrantFromTopology measures the cost of the Kuadrant CR lookup.
-// Called ~28 times per reconciliation cycle across all reconcilers.
-func BenchmarkGetKuadrantFromTopology(b *testing.B) {
-	cases := []benchTopologyParams{
-		{numGatewayClasses: 1, numRoutesPerGW: 10, numRulesPerRoute: 1},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1},
-		{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1},
-	}
-	for _, tc := range cases {
-		topology, _, _ := buildBenchTopology(b, tc)
-		b.Run(tc.label(), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				GetKuadrantFromTopology(topology, &sync.Map{})
-			}
-		})
-	}
-}
-
-// BenchmarkTopologyBuild measures the cost of constructing the GatewayAPI
-// topology itself, which happens on every reconciliation cycle.
-func BenchmarkTopologyBuild(b *testing.B) {
-	cases := []benchTopologyParams{
-		{numGatewayClasses: 1, numRoutesPerGW: 10, numRulesPerRoute: 1},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1},
-		{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1},
-		{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, listenersPerGW: 32},
-		{numGatewayClasses: 3, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 16},
-	}
-	for _, tc := range cases {
-		b.Run(tc.label(), func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				buildBenchTopology(b, tc)
+				buildBenchTopology(b, tc.p)
 			}
 		})
 	}
 }
 
 // BenchmarkFullReconciliationCycle simulates a full reconciliation cycle:
-// build topology, look up Kuadrant CR (as each reconciler does), then
-// calculate effective policies for all three policy types.
+// build topology, look up Kuadrant CR, then calculate effective policies
+// for all three policy types.
 func BenchmarkFullReconciliationCycle(b *testing.B) {
-	cases := []benchTopologyParams{
-		{numGatewayClasses: 1, numRoutesPerGW: 10, numRulesPerRoute: 1, attachAuthPolicies: true, attachRLPolicies: true, attachTRLPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, attachAuthPolicies: true, attachRLPolicies: true, attachTRLPolicies: true, policyTarget: "route"},
-		{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, attachAuthPolicies: true, attachRLPolicies: true, attachTRLPolicies: true, policyTarget: "route"},
-	}
+	p := benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, attachAuthPolicies: true, attachRLPolicies: true, attachTRLPolicies: true, policyTarget: "route"}
 
 	authReconciler := &EffectiveAuthPolicyReconciler{}
 	rlpReconciler := &EffectiveRateLimitPolicyReconciler{}
 	trlpReconciler := &EffectiveTokenRateLimitPolicyReconciler{}
 
-	for _, tc := range cases {
-		b.Run(tc.label(), func(b *testing.B) {
-			ctx := context.Background()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				topology, _, _ := buildBenchTopology(b, tc)
-				state := &sync.Map{}
-				for j := 0; j < 28; j++ {
-					GetKuadrantFromTopology(topology, state)
-				}
-				authReconciler.Reconcile(ctx, nil, topology, nil, state)
-				rlpReconciler.Reconcile(ctx, nil, topology, nil, state)
-				trlpReconciler.Reconcile(ctx, nil, topology, nil, state)
-			}
-		})
+	ctx := context.Background()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		topology, _, _ := buildBenchTopology(b, p)
+		state := &sync.Map{}
+		for j := 0; j < 28; j++ {
+			GetKuadrantFromTopology(topology, state)
+		}
+		authReconciler.Reconcile(ctx, nil, topology, nil, state)
+		rlpReconciler.Reconcile(ctx, nil, topology, nil, state)
+		trlpReconciler.Reconcile(ctx, nil, topology, nil, state)
 	}
 }

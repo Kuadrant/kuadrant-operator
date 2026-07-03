@@ -71,12 +71,10 @@ jobs:
               echo '</details>'
             } > benchmark-report.md
             echo 'regression=true' >> "$GITHUB_OUTPUT"
-          else
-            echo '## Benchmark: no regression' > benchmark-report.md
           fi
 
       - name: Post PR comment
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        if: steps.benchstat.outputs.regression == 'true' && github.event.pull_request.head.repo.full_name == github.repository
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           path: benchmark-report.md

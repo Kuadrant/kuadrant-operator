@@ -411,8 +411,9 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		var specs []wasm.ActionSpec
 
 		// auth
-		if effectivePolicy, ok := effectiveAuthPoliciesMap[pathID]; ok {
-			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectivePolicy)...)
+		effectiveAuthPolicy, hasAuth := effectiveAuthPoliciesMap[pathID]
+		if hasAuth {
+			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy)...)
 			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
 
@@ -423,6 +424,13 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 				specs = append(specs, rlSpecs...)
 			} else {
 				// pre auth rate limiting
+				if hasAuth {
+					for i := range specs {
+						if specs[i].ServiceName == wasm.AuthServiceName {
+							specs[i].Predicates = append(specs[i].Predicates, wasm.RateLimitCompleteSignal)
+						}
+					}
+				}
 				specs = append(rlSpecs, specs...)
 			}
 			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
@@ -434,6 +442,13 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 				specs = append(specs, trlSpecs...)
 			} else {
 				// pre auth rate limiting
+				if hasAuth {
+					for i := range specs {
+						if specs[i].ServiceName == wasm.AuthServiceName {
+							specs[i].Predicates = append(specs[i].Predicates, wasm.RateLimitCompleteSignal)
+						}
+					}
+				}
 				specs = append(trlSpecs, specs...)
 			}
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)

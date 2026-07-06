@@ -397,11 +397,18 @@ func TestActionSpecBuild_RateLimit(t *testing.T) {
 	if !grpc.IsGuard {
 		t.Error("expected isGuard=true")
 	}
-	if len(grpc.OnReply) != 3 {
-		t.Fatalf("onReply length = %d, want 3", len(grpc.OnReply))
+	if len(grpc.OnReply) != 4 {
+		t.Fatalf("onReply length = %d, want 4", len(grpc.OnReply))
 	}
 	if grpc.OnReply[0].ActionType() != ActionKindDeny {
 		t.Errorf("onReply[0] type = %s, want deny", grpc.OnReply[0].ActionType())
+	}
+	completionStore, ok := grpc.OnReply[3].(*StoreAction)
+	if !ok {
+		t.Fatalf("onReply[3] type = %s, want store", grpc.OnReply[3].ActionType())
+	}
+	if completionStore.Path != RateLimitCompleteSignal {
+		t.Errorf("completion store path = %q, want %q", completionStore.Path, RateLimitCompleteSignal)
 	}
 }
 

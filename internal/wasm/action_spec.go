@@ -58,6 +58,8 @@ const (
 	authResponseVar      = "auth_response"
 	rateLimitResponseVar = "ratelimit_response"
 	reportResponseVar    = "report_response"
+
+	RateLimitCompleteSignal = "kuadrant.internal.ratelimit.complete"
 )
 
 // Build materializes this ActionSpec into a concrete Action by dispatching on ServiceName.
@@ -426,6 +428,7 @@ func buildRateLimitOnReply(name string) []Action {
 			fmt.Sprintf("%s.overall_code != 1 && %s.overall_code != 2", name, name),
 			fmt.Sprintf("Unknown rate limit response code from %s", name),
 		),
+		NewStoreAction("true", RateLimitCompleteSignal, "true"),
 	}
 }
 

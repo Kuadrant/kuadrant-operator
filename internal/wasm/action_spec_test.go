@@ -57,9 +57,9 @@ func TestDomainAndFieldName(t *testing.T) {
 		{"a.b.c.d", "a.b.c", "d"},
 	}
 	for _, tc := range tests {
-		domain, field := domainAndFieldName(tc.input)
+		domain, field := DomainAndFieldName(tc.input)
 		if domain != tc.expectedDomain || field != tc.expectedField {
-			t.Errorf("domainAndFieldName(%q) = (%q, %q), want (%q, %q)",
+			t.Errorf("DomainAndFieldName(%q) = (%q, %q), want (%q, %q)",
 				tc.input, domain, field, tc.expectedDomain, tc.expectedField)
 		}
 	}

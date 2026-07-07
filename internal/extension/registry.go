@@ -1396,3 +1396,36 @@ func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstream
 	}
 	return result
 }
+
+// GetRequestBindings returns DOMAIN_REQUEST bindings from all registered wasm
+// config mutators for the given target ref locators, converted to DataBinding.
+func GetRequestBindings(targetRefLocators []string) []wasm.DataBinding {
+	GlobalMutatorRegistry.mutex.RLock()
+	defer GlobalMutatorRegistry.mutex.RUnlock()
+
+	seen := make(map[string]struct{})
+	var bindings []wasm.DataBinding
+
+	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
+		m, ok := mutator.(*RegisteredDataMutator[*wasm.Config])
+		if !ok {
+			continue
+		}
+		for _, locator := range targetRefLocators {
+			for _, entry := range m.store.GetAllForTargetRef(locator, extpb.Domain_DOMAIN_REQUEST) {
+				if _, exists := seen[entry.Binding]; exists {
+					continue
+				}
+				seen[entry.Binding] = struct{}{}
+				domain, field := wasm.DomainAndFieldName(entry.Binding)
+				bindings = append(bindings, wasm.DataBinding{
+					Domain:     domain,
+					Field:      field,
+					Expression: entry.Expression,
+				})
+			}
+		}
+	}
+
+	return bindings
+}

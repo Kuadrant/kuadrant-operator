@@ -1,4 +1,3 @@
-
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -27,6 +26,14 @@ testbin/*
 *~
 /cmd/cmd
 tmp
+
+## AI agents local folders
+.claude
+.cursor
+.aider*
+.copilot
+.windsurf
+.gemini
 
 /catalog/kuadrant-operator-catalog
 /catalog/kuadrant-operator-catalog.Dockerfile

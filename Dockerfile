@@ -3,7 +3,7 @@ ARG WASM_SHIM_IMAGE=quay.io/kuadrant/wasm-shim:latest
 FROM ${WASM_SHIM_IMAGE} AS wasm-shim
 
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.25 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26 AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests

@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-06-22T15:16:38Z"
+    createdAt: "2026-07-07T20:22:47Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -249,6 +249,18 @@ spec:
     - kind: APIProduct
       name: apiproducts.devportal.kuadrant.io
       version: v1alpha1
+    - description: AuthConfig defines authentication and authorization configurations
+        for protecting APIs
+      displayName: AuthConfig
+      kind: AuthConfig
+      name: authconfigs.authorino.kuadrant.io
+      version: v1beta3
+    - description: Authorino configures an instance of the Authorino authorization
+        service
+      displayName: Authorino
+      kind: Authorino
+      name: authorinos.operator.authorino.kuadrant.io
+      version: v1beta1
     - description: AuthPolicy enables authentication and authorization for service
         workloads in a Gateway API network
       displayName: AuthPolicy
@@ -267,6 +279,12 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
+    - description: Limitador configures an instance of the Limitador rate limiting
+        service
+      displayName: Limitador
+      kind: Limitador
+      name: limitadors.limitador.kuadrant.io
+      version: v1alpha1
     - kind: OIDCPolicy
       name: oidcpolicies.extensions.kuadrant.io
       version: v1alpha1
@@ -420,6 +438,7 @@ spec:
           - ""
           resources:
           - namespaces
+          - secrets
           verbs:
           - get
           - list
@@ -437,6 +456,12 @@ spec:
           - update
           - watch
         - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
           - authorino.kuadrant.io
           resources:
           - authconfigs
@@ -448,6 +473,20 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - authorino.kuadrant.io
+          resources:
+          - authconfigs/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
         - apiGroups:
           - cert-manager.io
           resources:
@@ -708,6 +747,18 @@ spec:
           - operator.authorino.kuadrant.io
           resources:
           - authorinos
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
           verbs:
           - create
           - delete

@@ -385,8 +385,6 @@ dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR
 dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
 dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
-	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
-	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
 	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 

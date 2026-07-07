@@ -1,0 +1,12 @@
+{{- if not .Values.limits.configMapName }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "limitador.fullname" . }}-config
+  labels:
+    {{- include "limitador.labels" . | nindent 4 }}
+data:
+  limitador-config.yaml: |
+    # Empty limits file - will be populated by operator
+    ---
+{{- end }}

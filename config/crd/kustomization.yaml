@@ -11,6 +11,10 @@ resources:
   - bases/extensions.kuadrant.io_oidcpolicies.yaml
   - bases/extensions.kuadrant.io_planpolicies.yaml
   - bases/extensions.kuadrant.io_telemetrypolicies.yaml
+  # Vendored CRDs for OLMv1 consolidation
+  - bases/operator.authorino.kuadrant.io_authorinos.yaml
+  - bases/authorino.kuadrant.io_authconfigs.yaml
+  - bases/limitador.kuadrant.io_limitadors.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

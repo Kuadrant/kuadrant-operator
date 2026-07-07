@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "limitador.fullname" . }}
+  labels:
+    {{- include "limitador.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "limitador.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "limitador.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "limitador.serviceAccountName" . }}
+      containers:
+      - name: limitador
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - limitador-server
+        args:
+        - --http-port
+        - "8080"
+        - --rls-port
+        - "8081"
+        - /home/limitador/etc/limitador-config.yaml
+        {{- if eq .Values.storage.type "memory" }}
+        - memory
+        {{- else if eq .Values.storage.type "redis" }}
+        - redis
+        - $(REDIS_URL)
+        {{- else if eq .Values.storage.type "redis-cached" }}
+        - redis_cached
+        - $(REDIS_URL)
+        {{- else if eq .Values.storage.type "disk" }}
+        - disk
+        - /var/limitador/data
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 8081
+          protocol: TCP
+        volumeMounts:
+        - name: config
+          mountPath: /home/limitador/etc
+          readOnly: true
+        {{- if eq .Values.storage.type "disk" }}
+        - name: data
+          mountPath: /var/limitador/data
+        {{- end }}
+        {{- with .Values.env }}
+        env:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ .Values.limits.configMapName | default (printf "%s-config" (include "limitador.fullname" .)) }}
+      {{- if eq .Values.storage.type "disk" }}
+      - name: data
+        emptyDir: {}
+      {{- end }}

@@ -18,6 +18,21 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+      - description: Authorino configures an instance of the Authorino authorization service
+        displayName: Authorino
+        kind: Authorino
+        name: authorinos.operator.authorino.kuadrant.io
+        version: v1beta1
+      - description: AuthConfig defines authentication and authorization configurations for protecting APIs
+        displayName: AuthConfig
+        kind: AuthConfig
+        name: authconfigs.authorino.kuadrant.io
+        version: v1beta3
+      - description: Limitador configures an instance of the Limitador rate limiting service
+        displayName: Limitador
+        kind: Limitador
+        name: limitadors.limitador.kuadrant.io
+        version: v1alpha1
       - description: Kuadrant configures installations of Kuadrant Service Protection components
         displayName: Kuadrant
         kind: Kuadrant

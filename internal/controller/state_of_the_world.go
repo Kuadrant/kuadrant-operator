@@ -154,6 +154,18 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
 			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=limitador"),
 		)),
+		controller.WithRunnable("authorino watcher", controller.Watch(
+			&authorinooperatorv1beta1.Authorino{},
+			kuadrantv1beta1.AuthorinosResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*authorinooperatorv1beta1.Authorino]{}),
+		)),
+		controller.WithRunnable("limitador watcher", controller.Watch(
+			&limitadorv1alpha1.Limitador{},
+			kuadrantv1beta1.LimitadorsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*limitadorv1alpha1.Limitador]{}),
+		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
@@ -165,6 +177,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
 			kuadrantv1beta1.DeploymentGroupKind,
+			kuadrantv1beta1.AuthorinoGroupKind,
+			kuadrantv1beta1.LimitadorGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
@@ -768,6 +782,13 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
 			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
 	}
+
+	// Helm-based reconcilers for Authorino/Limitador workloads
+	// These render charts based on Authorino/Limitador CRs in topology
+	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+		traceReconcileFunc("workflow.helm_authorino", NewHelmAuthorinoReconciler(b.client, "charts/authorino").Subscription().Reconcile),
+		traceReconcileFunc("workflow.helm_limitador", NewHelmLimitadorReconciler(b.client, "charts/limitador").Subscription().Reconcile),
+	)
 
 	// Wrap the entire main workflow with tracing
 	return traceReconcileFunc("reconcile", mainWorkflow.Run, additionalMainTraceAttributes)

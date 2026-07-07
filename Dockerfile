@@ -18,6 +18,7 @@ COPY cmd/ cmd/
 COPY api/ api/
 COPY internal/ internal/
 COPY pkg/ pkg/
+# Note: charts/ NOT copied here - copied in final stage to avoid invalidating build cache
 
 # Set environment variables for cross-compilation
 ARG TARGETARCH
@@ -67,6 +68,8 @@ WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/extensions /extensions
 COPY --from=wasm-shim /plugin.wasm /wasm/plugin.wasm
+# Copy charts directly from build context (not from builder) to avoid invalidating Go build cache
+COPY charts/ /charts/
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

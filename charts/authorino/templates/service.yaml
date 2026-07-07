@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "authorino.fullname" . }}-auth
+  labels:
+    {{- include "authorino.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.auth.type }}
+  ports:
+  - name: grpc
+    port: {{ .Values.service.auth.port }}
+    targetPort: grpc
+    protocol: TCP
+  selector:
+    {{- include "authorino.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "authorino.fullname" . }}-oidc
+  labels:
+    {{- include "authorino.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.oidc.type }}
+  ports:
+  - name: oidc
+    port: {{ .Values.service.oidc.port }}
+    targetPort: oidc
+    protocol: TCP
+  selector:
+    {{- include "authorino.selectorLabels" . | nindent 4 }}

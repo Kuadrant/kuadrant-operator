@@ -1,0 +1,33 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "authorino.fullname" . }}
+  labels:
+    {{- include "authorino.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kuadrant-operator-authorino-manager-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "authorino.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+---
+{{- if .Values.clusterWide }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "authorino.fullname" . }}-k8s-auth
+  labels:
+    {{- include "authorino.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kuadrant-operator-authorino-manager-k8s-auth-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "authorino.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

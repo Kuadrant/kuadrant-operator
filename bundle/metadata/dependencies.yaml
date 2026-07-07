@@ -1,12 +1,8 @@
+# OLMv1 Consolidated Operator Dependencies
+# Removed: authorino-operator (CRDs vendored, Helm charts embedded)
+# Removed: limitador-operator (CRDs vendored, Helm charts embedded)
+# Kept: dns-operator (still external dependency)
 dependencies:
-  - type: olm.package
-    value:
-      packageName: authorino-operator
-      version: "0.0.0"
-  - type: olm.package
-    value:
-      packageName: limitador-operator
-      version: "0.0.0"
   - type: olm.package
     value:
       packageName: dns-operator

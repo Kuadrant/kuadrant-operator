@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "authorino.fullname" . }}
+  labels:
+    {{- include "authorino.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "authorino.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "authorino.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "authorino.serviceAccountName" . }}
+      containers:
+      - name: authorino
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+        {{- range .Values.args }}
+        - {{ . }}
+        {{- end }}
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        - name: oidc
+          containerPort: 8083
+          protocol: TCP
+        {{- if .Values.tls.enabled }}
+        volumeMounts:
+        - name: tls-cert
+          mountPath: /etc/ssl/certs
+          readOnly: true
+        - name: tls-key
+          mountPath: /etc/ssl/private
+          readOnly: true
+        {{- end }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      {{- if .Values.tls.enabled }}
+      volumes:
+      - name: tls-cert
+        secret:
+          secretName: {{ .Values.tls.certSecretName }}
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.crt
+            path: oidc.crt
+      - name: tls-key
+        secret:
+          secretName: {{ .Values.tls.certSecretName }}
+          items:
+          - key: tls.key
+            path: tls.key
+          - key: tls.key
+            path: oidc.key
+      {{- end }}

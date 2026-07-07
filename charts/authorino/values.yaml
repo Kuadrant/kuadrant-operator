@@ -1,0 +1,58 @@
+# Default values for Authorino workload
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: quay.io/kuadrant/authorino
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+# Whether Authorino should watch all namespaces (true) or just its own (false)
+clusterWide: true
+
+serviceAccount:
+  create: true
+  name: ""
+
+# RBAC settings
+rbac:
+  create: true
+
+service:
+  auth:
+    port: 50051
+    type: ClusterIP
+  oidc:
+    port: 8083
+    type: ClusterIP
+
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+labels:
+  app.kubernetes.io/component: authorization
+
+# Additional arguments for authorino
+args:
+  - --auth-config-label-selector=authorino.kuadrant.io/managed-by=authorino
+  - --deep-metrics-enabled=true
+  - --log-level=info
+  - --log-mode=production
+  - --oidc-http-port=8083
+  - --oidc-tls-cert=/etc/ssl/certs/oidc.crt
+  - --oidc-tls-cert-key=/etc/ssl/private/oidc.key
+  - --timeout=0
+  - --tls-cert=/etc/ssl/certs/tls.crt
+  - --tls-cert-key=/etc/ssl/private/tls.key
+
+# TLS configuration
+tls:
+  enabled: true
+  certSecretName: authorino-oidc-server-cert

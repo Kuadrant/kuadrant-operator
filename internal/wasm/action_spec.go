@@ -158,10 +158,10 @@ func buildRateLimitPredicate(actionPredicates []string, conditionalData []Condit
 
 // --- Binding helpers ---
 
-// domainAndFieldName splits a binding key on the last "." into (domain, field).
+// DomainAndFieldName splits a binding key on the last "." into (domain, field).
 // "auth.identity.user" → ("auth.identity", "user")
 // "simple" → ("", "simple")
-func domainAndFieldName(name string) (string, string) {
+func DomainAndFieldName(name string) (string, string) {
 	idx := strings.LastIndex(name, ".")
 	if idx < 0 {
 		return "", name

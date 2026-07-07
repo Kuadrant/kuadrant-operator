@@ -480,6 +480,20 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
+		// Attach extension request bindings to specs before Build()
+		var routeLocator string
+		switch parsed.RouteType {
+		case kuadrantpolicymachinery.RouteTypeHTTP:
+			routeLocator = parsed.HTTPRoute.GetLocator()
+		case kuadrantpolicymachinery.RouteTypeGRPC:
+			routeLocator = parsed.GRPCRoute.GetLocator()
+		}
+		if bindings := extension.GetRequestBindings([]string{parsed.Gateway.GetLocator(), routeLocator}); len(bindings) > 0 {
+			for i := range specs {
+				specs[i].Bindings = append(specs[i].Bindings, bindings...)
+			}
+		}
+
 		pathSpan.SetAttributes(attribute.Int("specs.before_merge", len(specs)))
 
 		// Extract and track source policies before merging

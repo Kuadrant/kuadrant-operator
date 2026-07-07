@@ -1059,21 +1059,6 @@ func (m *RegisteredDataMutator[TResource]) mutateAuthConfig(authConfig *authorin
 
 // mutateWasmConfig handles WasmConfig-specific mutations
 func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Config, targetRefs []machinery.PolicyTargetReference) error {
-	requestData := make(map[string]string)
-
-	for _, targetRef := range targetRefs {
-		providerEntries := m.store.GetAllForTargetRef(targetRef.GetLocator(), extpb.Domain_DOMAIN_REQUEST)
-
-		for _, entry := range providerEntries {
-			// Add if it doesn't exist
-			if _, exists := requestData[entry.Binding]; !exists {
-				requestData[entry.Binding] = entry.Expression
-			}
-		}
-	}
-
-	wasmConfig.RequestData = requestData
-
 	// Inject registered upstream services matching the current target refs
 	relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
 

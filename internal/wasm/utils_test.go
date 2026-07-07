@@ -60,10 +60,6 @@ func init() {
 
 	testBasicConfig = &Config{
 		DescriptorService: "kuadrant-operator-grpc",
-		RequestData: map[string]string{
-			"metrics.labels.user":  "auth.identity.user",
-			"metrics.labels.group": "auth.identity.group",
-		},
 		Services: map[string]Service{
 			"auth-service": {
 				Type:        "auth",
@@ -1185,34 +1181,6 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 					},
 				}
 			}(),
-			expected: false,
-		},
-		{
-			name: "configs with different RequestData",
-			config1: &Config{
-				RequestData: map[string]string{"key1": "value1"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			config2: &Config{
-				RequestData: map[string]string{"key1": "value2"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			expected: false,
-		},
-		{
-			name: "configs with RequestData - one missing key",
-			config1: &Config{
-				RequestData: map[string]string{"key1": "value1", "key2": "value2"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			config2: &Config{
-				RequestData: map[string]string{"key1": "value1"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
 			expected: false,
 		},
 	}

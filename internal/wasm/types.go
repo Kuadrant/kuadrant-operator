@@ -12,7 +12,6 @@ import (
 )
 
 type Config struct {
-	RequestData       map[string]string  `json:"requestData,omitempty"`
 	Services          map[string]Service `json:"services"`
 	ActionSets        []ActionSet        `json:"actionSets"`
 	Observability     *Observability     `json:"observability,omitempty"`
@@ -47,7 +46,6 @@ func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
 //
 // Order-sensitive fields:
 //   - ActionSets: Order matters - compared by index position
-//   - RequestData: Map comparison (order doesn't apply)
 //   - Services: Map comparison (order doesn't apply)
 //   - DescriptorService: String comparison
 //   - Observability: Strict equality via nested EqualTo
@@ -59,18 +57,12 @@ func (c *Config) EqualTo(other *Config) bool {
 		return false
 	}
 
-	if len(c.RequestData) != len(other.RequestData) || len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
+	if len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
 		return false
 	}
 
 	if c.DescriptorService != other.DescriptorService {
 		return false
-	}
-
-	for key, data := range c.RequestData {
-		if otherData, ok := other.RequestData[key]; !ok || data != otherData {
-			return false
-		}
 	}
 
 	for key, service := range c.Services {

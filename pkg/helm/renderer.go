@@ -40,8 +40,8 @@ func (r *Renderer) Render(releaseName, namespace string, values map[string]inter
 
 	// Configure action
 	client := action.NewInstall(&action.Configuration{})
-	client.ClientOnly = true  // Don't talk to Kubernetes
-	client.DryRun = true       // Don't actually install
+	client.ClientOnly = true // Don't talk to Kubernetes
+	client.DryRun = true     // Don't actually install
 	client.ReleaseName = releaseName
 	client.Namespace = namespace
 	client.DisableHooks = true // Don't run hooks

@@ -3,4 +3,6 @@ namespace: kuadrant-system
 # OLMv1 Consolidated Operator
 # Removed: authorino-operator and limitador-operator (now managed by Helm charts)
 resources:
-  - developer-portal
+  # Temporarily disabled - GitHub rate limiting during POC testing
+  # Re-enable when deploying to production
+  # - developer-portal

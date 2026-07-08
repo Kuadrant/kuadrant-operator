@@ -10,6 +10,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -97,18 +98,31 @@ func (r *HelmLimitadorReconciler) Reconcile(ctx context.Context, _ []controller.
 			obj,
 			metav1.ApplyOptions{
 				FieldManager: FieldManagerName,
-				Force:        true,
+				Force:        false, // Only own fields we explicitly set
 			},
 		)
 
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, fmt.Sprintf("failed to apply %s/%s", obj.GetKind(), obj.GetName()))
-			logger.Error(err, "failed to apply resource",
-				"kind", obj.GetKind(),
-				"name", obj.GetName(),
-			)
-			return err
+
+			// Handle conflicts specially - these indicate user customization
+			if apierrors.IsConflict(err) {
+				logger.Info("field ownership conflict detected - preserving user customization",
+					"kind", obj.GetKind(),
+					"name", obj.GetName(),
+					"message", "This resource has fields owned by another manager (likely user customization). "+
+						"User's values will be preserved. Kuadrant only manages: image, args, serviceAccountName. "+
+						"See docs/helm-minimal-ownership.md for details.",
+				)
+			} else {
+				logger.Error(err, "failed to apply resource",
+					"kind", obj.GetKind(),
+					"name", obj.GetName(),
+				)
+			}
+			// Continue with other resources instead of failing entire reconciliation
+			continue
 		}
 
 		logger.V(1).Info("applied resource",
@@ -135,8 +149,12 @@ func (r *HelmLimitadorReconciler) buildHelmValues(limitadorObj *limitadorv1alpha
 		},
 	}
 
-	// Use replicas from Limitador CR
-	values["replicas"] = limitadorObj.GetReplicas()
+	// Only set replicas if explicitly specified in CR
+	// GetReplicas() returns 1 if nil, but we want to distinguish between
+	// "user set to 1" vs "user didn't set (allow free scaling)"
+	if limitadorObj.Spec.Replicas != nil {
+		values["replicas"] = *limitadorObj.Spec.Replicas
+	}
 
 	// Use custom image if specified
 	if limitadorObj.Spec.Image != nil {

@@ -35,7 +35,12 @@ uninstall-olm:
 
 deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(MAKE) namespace
-	$(KUSTOMIZE) build config/dependencies | kubectl apply --server-side -f -
+	@MANIFESTS=$$($(KUSTOMIZE) build config/dependencies); \
+	if [ -n "$$MANIFESTS" ]; then \
+		echo "$$MANIFESTS" | kubectl apply --server-side -f -; \
+	else \
+		echo "No dependency manifests to apply"; \
+	fi
 	@if kubectl -n "$(KUADRANT_NAMESPACE)" get deployments 2>/dev/null | grep -q .; then \
 		kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all; \
 	else \

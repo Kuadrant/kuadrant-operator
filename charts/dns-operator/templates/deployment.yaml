@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "dns-operator.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.replicas }}
   replicas: {{ .Values.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "dns-operator.selectorLabels" . | nindent 6 }}
@@ -53,8 +55,10 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
+        {{- with .Values.resources }}
         resources:
-          {{- toYaml .Values.resources | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

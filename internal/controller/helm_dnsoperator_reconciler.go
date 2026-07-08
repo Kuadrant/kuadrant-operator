@@ -9,6 +9,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -104,17 +105,29 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 			obj,
 			metav1.ApplyOptions{
 				FieldManager: FieldManagerName,
-				Force:        true,
+				Force:        false, // Only own fields we explicitly set
 			},
 		)
 
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, fmt.Sprintf("failed to apply %s/%s", obj.GetKind(), obj.GetName()))
-			logger.Error(err, "failed to apply resource",
-				"kind", obj.GetKind(),
-				"name", obj.GetName(),
-			)
+
+			// Handle conflicts specially - these indicate user customization
+			if apierrors.IsConflict(err) {
+				logger.Info("field ownership conflict detected - preserving user customization",
+					"kind", obj.GetKind(),
+					"name", obj.GetName(),
+					"message", "This resource has fields owned by another manager (likely user customization). "+
+						"User's values will be preserved. Kuadrant only manages: image, args, serviceAccountName. "+
+						"See docs/helm-minimal-ownership.md for details.",
+				)
+			} else {
+				logger.Error(err, "failed to apply resource",
+					"kind", obj.GetKind(),
+					"name", obj.GetName(),
+				)
+			}
 			// Continue with other resources instead of failing entire reconciliation
 			continue
 		}
@@ -147,6 +160,6 @@ func (r *HelmDNSOperatorReconciler) buildHelmValues() map[string]interface{} {
 			"create": true,
 			"name":   "",
 		},
-		"replicas": 1,
+		// Don't set replicas - allow user to scale freely or use HPA
 	}
 }

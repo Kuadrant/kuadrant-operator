@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "limitador.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.replicas }}
   replicas: {{ .Values.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "limitador.selectorLabels" . | nindent 6 }}

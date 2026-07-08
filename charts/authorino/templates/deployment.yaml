@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "authorino.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.replicas }}
   replicas: {{ .Values.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "authorino.selectorLabels" . | nindent 6 }}

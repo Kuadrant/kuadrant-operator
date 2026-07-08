@@ -8,7 +8,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kuadrant-operator-authorino-manager-role
+  name: {{ .Values.rbac.clusterRoleNamePrefix }}authorino-manager-role
 subjects:
 - kind: ServiceAccount
   name: {{ include "authorino.serviceAccountName" . }}
@@ -24,7 +24,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kuadrant-operator-authorino-manager-k8s-auth-role
+  name: {{ .Values.rbac.clusterRoleNamePrefix }}authorino-manager-k8s-auth-role
 subjects:
 - kind: ServiceAccount
   name: {{ include "authorino.serviceAccountName" . }}

@@ -45,6 +45,7 @@ func (r *Renderer) Render(releaseName, namespace string, values map[string]inter
 	client.ReleaseName = releaseName
 	client.Namespace = namespace
 	client.DisableHooks = true // Don't run hooks
+	client.SkipCRDs = true     // Don't include CRDs (OLM installs them)
 
 	// Render the chart
 	rel, err := client.Run(chart, values)

@@ -18,7 +18,9 @@ serviceAccount:
 
 # RBAC settings
 rbac:
-  create: true
+  install: true   # Install ClusterRoles from static/rbac/ (set false for OLM)
+  create: true    # Create ClusterRoleBindings
+  clusterRoleNamePrefix: ""  # Prefix for ClusterRole names (e.g., "kuadrant-operator-" when deployed via operator)
 
 service:
   auth:

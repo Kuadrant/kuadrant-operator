@@ -145,7 +145,9 @@ func (r *HelmAuthorinoReconciler) buildHelmValues(authorinoObj *authorinoopapi.A
 			"pullPolicy": "IfNotPresent",
 		},
 		"rbac": map[string]interface{}{
-			"create": true,
+			"install":                false,                    // OLM installs ClusterRoles from bundle
+			"create":                 true,                     // Chart creates ClusterRoleBindings
+			"clusterRoleNamePrefix":  "kuadrant-operator-",     // Match Kustomize namePrefix
 		},
 		"serviceAccount": map[string]interface{}{
 			"create": true,

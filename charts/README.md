@@ -1,127 +1,164 @@
-# Helm Charts POC for OLMv1 Consolidation
+# Kuadrant Helm Charts
 
-This directory contains proof-of-concept Helm charts for deploying Authorino and Limitador workloads directly from kuadrant-operator, without requiring separate operator CRs.
-
-## Context
-
-Part of [Spike #183](https://github.com/Kuadrant/architecture/issues/183) - investigating consolidated operator architecture for OLMv1.
-
-## Architecture
-
-### Current (Separate Operators)
-```
-Kuadrant CR → kuadrant-operator → creates Authorino CR
-                                 ↓
-                    authorino-operator → creates Deployment/Services
-```
-
-### POC (Consolidated with Helm)
-```
-Kuadrant CR → kuadrant-operator → renders Helm chart
-                                 ↓
-                          creates Deployment/Services directly
-```
+This directory contains Helm charts for deploying Kuadrant components.
 
 ## Charts
 
-### `authorino/`
-Minimal Helm chart for Authorino workload deployment.
+### authorino/
+Authorino authorization service deployment.
 
-**Resources created:**
-- Deployment (authorino binary)
-- Service (auth - gRPC/HTTP)
-- Service (oidc - HTTP)
-- ServiceAccount
+**Features:**
+- CRD installation (Authorino, AuthConfig)
+- RBAC management (ClusterRoles, ClusterRoleBindings)
+- ServiceAccount creation
+- Dual services (gRPC auth, HTTP OIDC)
+- TLS support
+- Cluster-wide or namespace-scoped mode
 
-**Configurable values:**
-- `image.repository`, `image.tag` - Authorino image
-- `replicas` - Number of replicas
-- `resources` - Resource limits/requests
-- `args` - Command-line arguments (hardcoded defaults for POC)
-- `tls.enabled`, `tls.certSecretName` - TLS configuration
+See [authorino/README.md](authorino/README.md) for details.
 
-**Known limitations:**
-- Simplified args (operator builds ~20 conditional args from CR spec)
-- Missing 3rd service (`controller-metrics`)
-- No volume support (Spec.Volumes.Items)
-- No backwards compatibility (env vars for old Authorino versions)
+### limitador/
+Limitador rate limiting service deployment.
 
-### `limitador/`
-Minimal Helm chart for Limitador workload deployment.
+**Features:**
+- CRD installation (Limitador)
+- Multiple storage backends (memory, Redis, disk)
+- ServiceAccount creation
+- Limits configuration via ConfigMap
+- Dual protocols (HTTP, gRPC)
 
-**Resources created:**
-- Deployment (limitador-server binary)
-- Service (HTTP + gRPC)
-- ServiceAccount
-- ConfigMap (limits configuration)
+See [limitador/README.md](limitador/README.md) for details.
 
-**Configurable values:**
-- `image.repository`, `image.tag` - Limitador image
-- `replicas` - Number of replicas
-- `resources` - Resource limits/requests
-- `storage.type` - Storage backend (memory, redis, disk)
+## Usage
 
-**Known limitations:**
-- Missing health probes (LivenessProbe, ReadinessProbe)
-- Missing PodDisruptionBudget
-- Service should be headless (ClusterIP: None)
-- No affinity support
-- Simplified storage config (no volume mounts for disk, no Redis env vars)
+### Standalone Installation
 
-## Implementation
-
-### Helm Renderer (`pkg/helm/`)
-
-Wrapper around `helm.sh/helm/v3` library:
-- `renderer.go` - Renders charts to Unstructured Kubernetes objects
-- Uses Helm **as templating only** (`ClientOnly: true`, `DryRun: true`)
-- NO `helm install/upgrade` - just template rendering
-
-### Reconcilers (`internal/controller/`)
-
-**HelmAuthorinoReconciler:**
-- Renders `charts/authorino/` on Kuadrant CR create/update
-- Applies rendered resources via Server-Side Apply
-- Sets ownerReferences to Kuadrant CR
-
-**HelmLimitadorReconciler:**
-- Renders `charts/limitador/` on Kuadrant CR create/update
-- Applies rendered resources via Server-Side Apply
-- Sets ownerReferences to Kuadrant CR
-
-## What This POC Proves
-
-✅ Helm charts can render successfully  
-✅ Operator can use Helm library for templating  
-✅ Rendered manifests can be applied via Server-Side Apply  
-✅ Resources get proper ownerReferences for cleanup  
-✅ Chart versioning is independent (Chart.yaml version != app version)  
-
-## What This POC Defers
-
-❌ Full feature parity with current operators  
-❌ Orphaned resource cleanup (when chart removes resources)  
-❌ Cluster-scoped resources (ClusterRole/CRDs - handled by OLM bundle)  
-❌ Chart sourcing strategy (embedded vs runtime vs build-time)  
-❌ Integration testing with real cluster  
-
-## Testing
+These charts can be installed directly with Helm:
 
 ```bash
-# Render charts manually
-helm template test-authorino charts/authorino/ --namespace kuadrant-system
-helm template test-limitador charts/limitador/ --namespace kuadrant-system
+# Authorino
+helm install authorino ./charts/authorino \
+  --namespace authorino-system \
+  --create-namespace
 
-# Unit tests
-go test ./pkg/helm/... -v                    # Chart rendering
-go test ./internal/controller -run TestHelm  # Reconciler logic
+# Limitador
+helm install limitador ./charts/limitador \
+  --namespace limitador-system \
+  --create-namespace
 ```
 
-## Next Steps
+### Operator Integration (POC)
 
-See [olmv1-resource-cleanup-concern.md](/workspace/architecture/docs/design/olmv1-resource-cleanup-concern.md) for discussion of namespaced resource cleanup strategies.
+These charts are embedded in the kuadrant-operator binary and rendered at runtime via the Helm library (helm.sh/helm/v3). The operator:
 
-For production implementation, choices needed:
-1. **Full Helm charts vs Go code** - Replicate all operator logic in Helm templates OR vendor Go resource builders
-2. **Chart sourcing** - Embedded in image, initContainers (cluster-olm-operator pattern), or build-time fetch
-3. **Cleanup strategy** - Inventory tracking, label-based pruning, or Helm upgrade (3-way merge)
+1. Watches Authorino/Limitador CRs (created by Kuadrant CR reconciler)
+2. Renders charts based on CR specs
+3. Applies resources using server-side apply
+4. Manages lifecycle without Tiller or Helm release state
+
+When used by the operator, CRDs and RBAC ClusterRoles are managed separately (vendored in the operator bundle and installed by OLM).
+
+**POC Architecture:**
+```
+Kuadrant CR → kuadrant-operator → creates Authorino/Limitador CRs
+                                 ↓
+                          Helm reconcilers → renders charts
+                                 ↓
+                          Server-Side Apply → Deployments/Services
+```
+
+This replaces the separate authorino-operator and limitador-operator dependencies.
+
+## Structure
+
+Each chart follows standard Helm conventions:
+
+```
+chart/
+├── Chart.yaml              # Chart metadata
+├── values.yaml            # Default values
+├── README.md              # Documentation
+├── crds/                  # CRD manifests (static, copied from config/crd/bases/)
+│   └── *.yaml             # Installed automatically by Helm
+└── templates/             # Kubernetes resource templates
+    ├── _helpers.tpl       # Template helpers
+    ├── deployment.yaml
+    ├── service.yaml
+    ├── serviceaccount.yaml
+    └── clusterrolebinding.yaml  # (Authorino only - references static ClusterRoles)
+```
+
+**Static vs Templated:**
+
+| Resource | Location | Reason |
+|----------|----------|--------|
+| **CRDs** | `config/crd/bases/` (copied to `crds/`) | OLM bundle requirement (static) |
+| **ClusterRoles** | `config/rbac/` (NOT in chart) | OLM bundle requirement (static) |
+| **ClusterRoleBindings** | Chart templates | Need namespace for ServiceAccount subjects |
+| **Deployment/Service/SA** | Chart templates | Namespace-scoped resources |
+
+## CRD Management
+
+By default, CRDs in `crds/` are installed automatically when using `helm install`. To skip CRD installation:
+
+```yaml
+crds:
+  install: false
+```
+
+**Important**: Helm CRD limitations:
+- CRDs are installed on `helm install`
+- CRDs are **NOT** upgraded on `helm upgrade`
+- CRDs are **NOT** deleted on `helm uninstall`
+
+For production or operator usage, manage CRDs separately via `kubectl apply` or OLM bundles.
+
+## RBAC Management (Authorino Only)
+
+**ClusterRoles** are **static manifests** in `config/rbac/`:
+- `authorino-manager-role` - Main permissions (secrets, authconfigs, leases)
+- `authorino-manager-k8s-auth-role` - TokenReviews/SubjectAccessReviews (clusterWide mode)
+
+**ClusterRoleBindings** are **templated** in the chart (need namespace for ServiceAccount subjects):
+
+```yaml
+rbac:
+  create: true  # Create ClusterRoleBindings
+```
+
+This split allows:
+- ClusterRoles → OLM bundle (static, fixed names)
+- ClusterRoleBindings → Helm chart (templated, namespace-aware)
+
+When using standalone Helm, install ClusterRoles manually first:
+```bash
+kubectl apply -f config/rbac/authorino_manager_role.yaml
+```
+
+## Development
+
+When modifying charts:
+
+1. Update templates and values
+2. Test rendering: `helm template test-name ./charts/authorino/`
+3. Rebuild operator image (charts are embedded at build time)
+4. Test with `make local-setup`
+
+Chart changes require operator rebuild because charts are copied into the binary at build time (see Dockerfile).
+
+## POC Status
+
+This is a **proof-of-concept** for Spike #183 (OLMv1 consolidation). 
+
+**What's proven:**
+✅ Helm charts can be used as templating engine
+✅ Server-side apply works with rendered manifests
+✅ Charts can be embedded in operator binary
+✅ CRDs and RBAC can be included in charts
+
+**Known limitations:**
+- Simplified compared to full operator implementations
+- Missing some advanced features (see individual chart READMEs)
+- No upgrade/cleanup strategy implemented yet
+
+See [olmv1-resource-cleanup-concern.md](/workspace/architecture/docs/design/olmv1-resource-cleanup-concern.md) for cleanup strategy discussion.

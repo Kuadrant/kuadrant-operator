@@ -27,6 +27,8 @@ import (
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
+const IstioRateLimitClusterReconcilerName = "IstioRateLimitClusterReconciler"
+
 // IstioRateLimitClusterReconciler reconciles Istio EnvoyFilter custom resources for rate limiting
 type IstioRateLimitClusterReconciler struct {
 	client *dynamic.DynamicClient
@@ -54,6 +56,8 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 
 	logger.V(1).Info("building istio rate limit clusters")
 	defer logger.V(1).Info("finished building istio rate limit clusters")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
@@ -136,7 +140,15 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					IstioRateLimitClusterReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()},
+					kuadrantistio.EnvoyFilterGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -162,7 +174,15 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		}
 		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioRateLimitClusterReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existingEnvoyFilter.GetName(), Namespace: existingEnvoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -178,7 +198,15 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	for _, envoyFilter := range staleEnvoyFilters {
 		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
 			logger.Error(err, "failed to delete envoyfilter object", "envoyfilter", fmt.Sprintf("%s/%s", envoyFilter.GetNamespace(), envoyFilter.GetName()))
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioRateLimitClusterReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: envoyFilter.GetName(), Namespace: envoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 

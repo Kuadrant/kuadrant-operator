@@ -39,6 +39,8 @@ import (
 
 //+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete
 
+const EnvoyGatewayExtensionReconcilerName = "EnvoyGatewayExtensionReconciler"
+
 // EnvoyGatewayExtensionReconciler reconciles Envoy Gateway EnvoyExtensionPolicy custom resources
 type EnvoyGatewayExtensionReconciler struct {
 	client *dynamic.DynamicClient
@@ -67,6 +69,8 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 	logger.V(1).Info("building envoy gateway extension", "image url", WASMFilterImageURL)
 	defer logger.V(1).Info("finished building envoy gateway extension")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
 	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
@@ -120,7 +124,15 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyExtensionPolicyUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", desiredEnvoyExtensionPolicyUnstructured.Object)
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					EnvoyGatewayExtensionReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyExtensionPolicy.GetName(), Namespace: desiredEnvoyExtensionPolicy.GetNamespace()},
+					kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -131,7 +143,15 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 		if utils.IsObjectTaggedToDelete(desiredEnvoyExtensionPolicy) && !utils.IsObjectTaggedToDelete(existingEnvoyExtensionPolicy) {
 			if err := resource.Delete(ctx, existingEnvoyExtensionPolicy.GetName(), metav1.DeleteOptions{}); err != nil {
 				logger.Error(err, "failed to delete envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", fmt.Sprintf("%s/%s", existingEnvoyExtensionPolicy.GetNamespace(), existingEnvoyExtensionPolicy.GetName()))
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					EnvoyGatewayExtensionReconcilerName,
+					OperationDelete,
+					k8stypes.NamespacedName{Name: existingEnvoyExtensionPolicy.GetName(), Namespace: existingEnvoyExtensionPolicy.GetNamespace()},
+					kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -152,7 +172,15 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 		}
 		if _, err = resource.Update(ctx, existingEnvoyExtensionPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", existingEnvoyExtensionPolicyUnstructured.Object)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				EnvoyGatewayExtensionReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existingEnvoyExtensionPolicy.GetName(), Namespace: existingEnvoyExtensionPolicy.GetNamespace()},
+				kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind,
+				err,
+			)
 		}
 	}
 

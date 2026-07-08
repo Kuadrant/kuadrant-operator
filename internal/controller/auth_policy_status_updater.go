@@ -38,6 +38,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
+const AuthPolicyStatusUpdaterName = "AuthPolicyStatusUpdater"
+
 type AuthPolicyStatusUpdater struct {
 	client *dynamic.DynamicClient
 }
@@ -74,6 +76,8 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 
 	logger.V(1).Info("updating authpolicy statuses", "policies", len(policies))
 	defer logger.V(1).Info("finished updating authpolicy statuses")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	for _, policy := range policies {
 		policyCtx, span := tracer.Start(ctx, "policy.AuthPolicy")
@@ -142,7 +146,15 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "unable to update status")
 			span.End()
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				AuthPolicyStatusUpdaterName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()},
+				kuadrantv1.AuthPolicyGroupKind,
+				err,
+			)
 			continue
 		}
 

@@ -39,6 +39,8 @@ import (
 //+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=delete
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
+const IstioExtensionReconcilerName = "IstioExtensionReconciler"
+
 // IstioExtensionReconciler reconciles Istio EnvoyFilter custom resources for wasm plugin injection
 type IstioExtensionReconciler struct {
 	client *dynamic.DynamicClient
@@ -75,6 +77,8 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 	logger.V(1).Info("building istio extension", "wasm url", wasmURL)
 	defer logger.V(1).Info("finished building istio extension")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
 	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
@@ -128,7 +132,15 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					IstioExtensionReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()},
+					kuadrantistio.EnvoyFilterGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -145,7 +157,15 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		if utils.IsObjectTaggedToDelete(desiredEnvoyFilter) && !utils.IsObjectTaggedToDelete(existingEnvoyFilter) {
 			if err := resource.Delete(ctx, existingEnvoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
 				logger.Error(err, "failed to delete envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", fmt.Sprintf("%s/%s", existingEnvoyFilter.GetNamespace(), existingEnvoyFilter.GetName()))
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					IstioExtensionReconcilerName,
+					OperationDelete,
+					k8stypes.NamespacedName{Name: existingEnvoyFilter.GetName(), Namespace: existingEnvoyFilter.GetNamespace()},
+					kuadrantistio.EnvoyFilterGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -167,7 +187,15 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioExtensionReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existingEnvoyFilter.GetName(), Namespace: existingEnvoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 

@@ -23,6 +23,8 @@ import (
 
 //+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
 
+const EnvoyGatewayTracingClusterReconcilerName = "EnvoyGatewayTracingClusterReconciler"
+
 // EnvoyGatewayTracingClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources for tracing
 type EnvoyGatewayTracingClusterReconciler struct {
 	client *dynamic.DynamicClient
@@ -46,6 +48,8 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 
 	logger.V(1).Info("building envoy gateway tracing clusters")
 	defer logger.V(1).Info("finished building envoy gateway tracing clusters")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
@@ -115,7 +119,15 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyPatchPolicyUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicyUnstructured.Object)
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					EnvoyGatewayTracingClusterReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyPatchPolicy.GetName(), Namespace: desiredEnvoyPatchPolicy.GetNamespace()},
+					kuadrantenvoygateway.EnvoyPatchPolicyGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -142,7 +154,15 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 		}
 		if _, err = resource.Update(ctx, existingEnvoyPatchPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", existingEnvoyPatchPolicyUnstructured.Object)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				EnvoyGatewayTracingClusterReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existingEnvoyPatchPolicy.GetName(), Namespace: existingEnvoyPatchPolicy.GetNamespace()},
+				kuadrantenvoygateway.EnvoyPatchPolicyGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -159,7 +179,15 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 	for _, envoyPatchPolicy := range staleEnvoyPatchPolicies {
 		if err := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(envoyPatchPolicy.GetNamespace()).Delete(ctx, envoyPatchPolicy.GetName(), metav1.DeleteOptions{}); err != nil {
 			logger.Error(err, "failed to delete envoypatchpolicy object", "envoypatchpolicy", fmt.Sprintf("%s/%s", envoyPatchPolicy.GetNamespace(), envoyPatchPolicy.GetName()))
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				EnvoyGatewayTracingClusterReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: envoyPatchPolicy.GetName(), Namespace: envoyPatchPolicy.GetNamespace()},
+				kuadrantenvoygateway.EnvoyPatchPolicyGroupKind,
+				err,
+			)
 		}
 	}
 

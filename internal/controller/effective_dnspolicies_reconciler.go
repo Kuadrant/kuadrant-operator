@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -35,6 +36,8 @@ func NewEffectiveDNSPoliciesReconciler(client *dynamic.DynamicClient, scheme *ru
 		scheme: scheme,
 	}
 }
+
+const EffectiveDNSPoliciesReconcilerName = "EffectiveDNSPoliciesReconciler"
 
 type EffectiveDNSPoliciesReconciler struct {
 	client *dynamic.DynamicClient
@@ -64,6 +67,8 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 	policyErrors := map[string]error{}
 
 	logger.V(1).Info("updating dns policies", "policies", len(policies))
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	clusterID, err := utils.GetClusterUID(ctx, r.client)
 	if err != nil {
@@ -176,13 +181,13 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 					} else {
 						rLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting record for listener")
 					}
-					r.deleteRecord(ctx, existingRecordObj)
+					r.deleteRecord(ctx, existingRecordObj, errorRegistry)
 					continue
 				}
 
 				if !canUpdateDNSRecord(ctx, existingRecord, desiredRecord) {
 					rLogger.V(1).Info("unable to update record, deleting record for listener and re-creating")
-					r.deleteRecord(ctx, existingRecordObj)
+					r.deleteRecord(ctx, existingRecordObj, errorRegistry)
 					break
 				}
 
@@ -201,6 +206,15 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				rLogger.V(1).Info("updating record for listener")
 				if _, uErr := resource.Update(ctx, un, metav1.UpdateOptions{}); uErr != nil {
 					rLogger.Error(uErr, "unable to update dns record")
+
+					// Record error for deferred retry
+					errorRegistry.Record(
+						EffectiveDNSPoliciesReconcilerName,
+						OperationUpdate,
+						k8stypes.NamespacedName{Name: existingRecord.GetName(), Namespace: existingRecord.GetNamespace()},
+						DNSRecordGroupKind,
+						uErr,
+					)
 				}
 				continue
 			}
@@ -223,8 +237,17 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 			//Create
 			lLogger.V(1).Info("creating DNS record for listener")
-			if _, cErr := resource.Create(ctx, un, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+			if _, cErr := resource.Create(ctx, un, metav1.CreateOptions{}); cErr != nil {
 				lLogger.Error(cErr, "unable to create dns record")
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					EffectiveDNSPoliciesReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredRecord.GetName(), Namespace: desiredRecord.GetNamespace()},
+					DNSRecordGroupKind,
+					cErr,
+				)
 			}
 		}
 
@@ -244,12 +267,14 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 	state.Store(StateDNSPolicyErrorsKey, policyErrors)
 
-	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology)
+	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology, state)
 }
 
 // deleteOrphanDNSRecords deletes any DNSRecord resources that exist in the topology but have no parent targettable, policy or path back to the policy.
-func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology) error {
+func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("deleteOrphanDNSRecords").WithValues("context", ctx)
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	orphanRecords := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
 		if item.GroupVersionKind().GroupKind() == DNSRecordGroupKind {
@@ -292,13 +317,13 @@ func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Cont
 	})
 
 	for _, obj := range orphanRecords {
-		r.deleteRecord(ctx, obj)
+		r.deleteRecord(ctx, obj, errorRegistry)
 	}
 
 	return nil
 }
 
-func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj machinery.Object) {
+func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj machinery.Object, errorRegistry *ErrorRegistry) {
 	logger := controller.LoggerFromContext(ctx)
 
 	record := obj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
@@ -310,6 +335,17 @@ func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj m
 	resource := r.client.Resource(DNSRecordResource).Namespace(record.GetNamespace())
 	if err := resource.Delete(ctx, record.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		logger.Error(err, "failed to delete DNSRecord", "record", obj.GetLocator())
+
+		// Record error for deferred retry
+		if errorRegistry != nil {
+			errorRegistry.Record(
+				EffectiveDNSPoliciesReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: record.GetName(), Namespace: record.GetNamespace()},
+				DNSRecordGroupKind,
+				err,
+			)
+		}
 	}
 }
 

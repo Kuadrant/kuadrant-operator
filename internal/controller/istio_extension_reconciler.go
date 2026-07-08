@@ -155,7 +155,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 		// delete
 		if utils.IsObjectTaggedToDelete(desiredEnvoyFilter) && !utils.IsObjectTaggedToDelete(existingEnvoyFilter) {
-			if err := resource.Delete(ctx, existingEnvoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
+			if err := resource.Delete(ctx, existingEnvoyFilter.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to delete envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", fmt.Sprintf("%s/%s", existingEnvoyFilter.GetNamespace(), existingEnvoyFilter.GetName()))
 
 				// Record error for deferred retry
@@ -293,7 +293,7 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 			!desired
 	})
 	for _, ef := range stale {
-		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(ef.GetNamespace()).Delete(ctx, ef.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(ef.GetNamespace()).Delete(ctx, ef.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete stale upstream envoyfilter", "envoyfilter", fmt.Sprintf("%s/%s", ef.GetNamespace(), ef.GetName()))
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -141,7 +142,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 		// delete
 		if utils.IsObjectTaggedToDelete(desiredEnvoyExtensionPolicy) && !utils.IsObjectTaggedToDelete(existingEnvoyExtensionPolicy) {
-			if err := resource.Delete(ctx, existingEnvoyExtensionPolicy.GetName(), metav1.DeleteOptions{}); err != nil {
+			if err := resource.Delete(ctx, existingEnvoyExtensionPolicy.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to delete envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", fmt.Sprintf("%s/%s", existingEnvoyExtensionPolicy.GetNamespace(), existingEnvoyExtensionPolicy.GetName()))
 
 				// Record error for deferred retry
@@ -279,7 +280,7 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 			!desired
 	})
 	for _, pp := range stale {
-		if err := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(pp.GetNamespace()).Delete(ctx, pp.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(pp.GetNamespace()).Delete(ctx, pp.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete stale upstream envoypatchpolicy", "envoypatchpolicy", fmt.Sprintf("%s/%s", pp.GetNamespace(), pp.GetName()))
 		}
 	}

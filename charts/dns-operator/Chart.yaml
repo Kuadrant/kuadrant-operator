@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dns-operator
+description: DNS operator for Kuadrant DNSRecord and DNSHealthCheckProbe reconciliation
+type: application
+version: 0.1.0
+appVersion: "latest"

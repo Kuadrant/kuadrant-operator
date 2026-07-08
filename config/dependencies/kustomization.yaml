@@ -3,8 +3,4 @@ namespace: kuadrant-system
 # OLMv1 Consolidated Operator
 # Removed: authorino-operator and limitador-operator (now managed by Helm charts)
 resources:
-  - dns
   - developer-portal
-
-patchesStrategicMerge:
-  - dns/delete-ns.yaml

@@ -380,12 +380,8 @@ extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRo
 
 
 .PHONY: dependencies-manifests
-dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
-dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
 dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
-	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
 .PHONY: generate
@@ -525,13 +521,7 @@ bundle-post-generate: yq opm
 	# Set Openshift version in bundle annotations
 	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
 	$(YQ) -i '(.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
-	# Update operator dependencies
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_BUNDLE_IMG)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_BUNDLE_IMG)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_BUNDLE_IMG)
+	# No OLM operator dependencies - all operators deployed via Helm
 ifeq ($(USE_IMAGE_DIGESTS),true)
 	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
 	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml

@@ -15,6 +15,8 @@ resources:
   - bases/operator.authorino.kuadrant.io_authorinos.yaml
   - bases/authorino.kuadrant.io_authconfigs.yaml
   - bases/limitador.kuadrant.io_limitadors.yaml
+  - bases/kuadrant.io_dnsrecords.yaml
+  - bases/kuadrant.io_dnshealthcheckprobes.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

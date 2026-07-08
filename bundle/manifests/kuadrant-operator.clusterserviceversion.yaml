@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-07-07T20:22:47Z"
+    createdAt: "2026-07-08T12:07:34Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -267,12 +267,18 @@ spec:
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1
+    - kind: DNSHealthCheckProbe
+      name: dnshealthcheckprobes.kuadrant.io
+      version: v1alpha1
     - description: DNSPolicy configures how North-South based traffic should be balanced
         and reach the gateways
       displayName: DNSPolicy
       kind: DNSPolicy
       name: dnspolicies.kuadrant.io
       version: v1
+    - kind: DNSRecord
+      name: dnsrecords.kuadrant.io
+      version: v1alpha1
     - description: Kuadrant configures installations of Kuadrant Service Protection
         components
       displayName: Kuadrant

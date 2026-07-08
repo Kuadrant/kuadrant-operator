@@ -783,11 +783,12 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
 	}
 
-	// Helm-based reconcilers for Authorino/Limitador workloads
-	// These render charts based on Authorino/Limitador CRs in topology
+	// Helm-based reconcilers for Authorino/Limitador/DNS-Operator workloads
+	// These render charts based on Kuadrant/Authorino/Limitador CRs in topology
 	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
 		traceReconcileFunc("workflow.helm_authorino", NewHelmAuthorinoReconciler(b.client, "charts/authorino").Subscription().Reconcile),
 		traceReconcileFunc("workflow.helm_limitador", NewHelmLimitadorReconciler(b.client, "charts/limitador").Subscription().Reconcile),
+		traceReconcileFunc("workflow.helm_dnsoperator", NewHelmDNSOperatorReconciler(b.client, "charts/dns-operator").Subscription().Reconcile),
 	)
 
 	// Wrap the entire main workflow with tracing

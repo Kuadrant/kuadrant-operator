@@ -795,7 +795,7 @@ func certManagerControllerOpts() []controller.ControllerOption {
 		),
 		controller.WithRunnable("clusterissuers watcher", controller.Watch(
 			&certmanagerv1.ClusterIssuer{},
-			CertMangerClusterIssuersResource,
+			CertManagerClusterIssuersResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
 				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {

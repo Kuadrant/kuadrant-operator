@@ -26,7 +26,7 @@ const (
 var (
 	CertManagerCertificatesResource  = certmanagerv1.SchemeGroupVersion.WithResource("certificates")
 	CertManagerIssuersResource       = certmanagerv1.SchemeGroupVersion.WithResource("issuers")
-	CertMangerClusterIssuersResource = certmanagerv1.SchemeGroupVersion.WithResource("clusterissuers")
+	CertManagerClusterIssuersResource = certmanagerv1.SchemeGroupVersion.WithResource("clusterissuers")
 
 	CertManagerCertificateKind   = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.CertificateKind}
 	CertManagerIssuerKind        = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.IssuerKind}

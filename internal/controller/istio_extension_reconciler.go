@@ -397,7 +397,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 	authPathIDs := lo.Keys(effectiveAuthPoliciesMap)
 	logger.V(1).Info("effective auth policy pathIDs", "count", len(authPathIDs), "pathIDs", authPathIDs)
 
-	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
+	wasmActionSets := kuadrantgatewayapi.GroupedHTTPRouteMatchConfigs{}
 	celValidationIssues := celvalidator.NewIssueCollection()
 
 	tracer := controller.TracerFromContext(ctx)

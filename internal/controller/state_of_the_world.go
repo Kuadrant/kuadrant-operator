@@ -772,16 +772,20 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		)
 	}
 
-	if b.isLimitadorOperatorInstalled {
-		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.limitador", NewLimitadorReconciler(b.client).Subscription().Reconcile),
-		)
-	}
-
-	if b.isAuthorinoOperatorInstalled {
-		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
-	}
+	// REMOVED: Wrapper CR reconcilers no longer needed
+	// Helm reconcilers now watch Kuadrant CR directly and deploy workloads
+	// without needing Authorino/Limitador wrapper CRs
+	//
+	// if b.isLimitadorOperatorInstalled {
+	// 	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+	// 		traceReconcileFunc("workflow.limitador", NewLimitadorReconciler(b.client).Subscription().Reconcile),
+	// 	)
+	// }
+	//
+	// if b.isAuthorinoOperatorInstalled {
+	// 	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+	// 		traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
+	// }
 
 	// Helm-based reconcilers for Authorino/Limitador/DNS-Operator workloads
 	// These render charts based on Kuadrant/Authorino/Limitador CRs in topology

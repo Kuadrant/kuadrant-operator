@@ -303,12 +303,8 @@ rules:
   resources:
   - limitadors
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - monitoring.coreos.com
@@ -340,12 +336,8 @@ rules:
   resources:
   - authorinos
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io

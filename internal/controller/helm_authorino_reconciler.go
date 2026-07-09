@@ -34,6 +34,7 @@ type HelmAuthorinoReconciler struct {
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;create;update
 //+kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
 //+kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
+//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch
 
 func NewHelmAuthorinoReconciler(client *dynamic.DynamicClient, chartPath string) *HelmAuthorinoReconciler {
 	return &HelmAuthorinoReconciler{
@@ -46,8 +47,13 @@ func (r *HelmAuthorinoReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
+			// Watch Kuadrant CR (primary trigger)
+			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
+			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+			// Also watch Authorino CR for migration detection
 			{Kind: ptr.To(v1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.CreateEvent)},
 			{Kind: ptr.To(v1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: ptr.To(v1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.DeleteEvent)},
 		},
 	}
 }
@@ -58,22 +64,39 @@ func (r *HelmAuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.
 	logger.V(1).Info("reconciling authorino via helm", "status", "started")
 	defer logger.V(1).Info("reconciling authorino via helm", "status", "completed")
 
-	// Get Authorino CR from topology
-	authorinoObj := GetAuthorinoFromTopology(topology, state)
-	if authorinoObj == nil {
-		span.AddEvent("no authorino object found")
+	// Get Kuadrant CR (primary resource we reconcile from)
+	kuadrantObj := GetKuadrantFromTopology(topology, state)
+	if kuadrantObj == nil {
+		span.AddEvent("no kuadrant object found")
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	logger = logger.WithValues("authorino", authorinoObj.Namespace+"/"+authorinoObj.Name)
+	logger = logger.WithValues("kuadrant", kuadrantObj.Namespace+"/"+kuadrantObj.Name)
 
-	// Build Helm values from Authorino spec
-	values := r.buildHelmValues(authorinoObj)
+	// Check for Authorino wrapper CR
+	// Keep wrapper CR in topology for migration detection in future task
+	authorinoWrapperObj := GetAuthorinoFromTopology(topology, state)
+	if authorinoWrapperObj == nil {
+		// No wrapper CR and no spec.authorino in Kuadrant CR yet
+		// This means fresh install - use defaults
+		logger.V(1).Info("no authorino wrapper CR found, using defaults")
+	}
+
+	// Build Helm values from wrapper CR if it exists, otherwise use defaults
+	// This allows us to work with existing installations while still watching Kuadrant CR
+	var values map[string]interface{}
+	if authorinoWrapperObj != nil {
+		logger.V(1).Info("building values from Authorino wrapper CR", "wrapper", authorinoWrapperObj.Namespace+"/"+authorinoWrapperObj.Name)
+		values = r.buildHelmValues(authorinoWrapperObj)
+	} else {
+		logger.V(1).Info("building default values (no wrapper CR)")
+		values = r.buildDefaultHelmValues()
+	}
 
 	// Render chart
 	renderer := helm.NewRenderer(r.ChartPath)
-	objects, err := renderer.Render("authorino", authorinoObj.Namespace, values)
+	objects, err := renderer.Render("authorino", kuadrantObj.Namespace, values)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to render authorino chart")
@@ -85,13 +108,13 @@ func (r *HelmAuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.
 
 	// Apply each rendered resource using Server-Side Apply
 	for _, obj := range objects {
-		// Set owner reference to Authorino CR
+		// Set owner reference to Kuadrant CR (not wrapper CR)
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{
-				APIVersion: authorinoObj.APIVersion,
-				Kind:       authorinoObj.Kind,
-				Name:       authorinoObj.Name,
-				UID:        authorinoObj.UID,
+				APIVersion: kuadrantObj.APIVersion,
+				Kind:       kuadrantObj.Kind,
+				Name:       kuadrantObj.Name,
+				UID:        kuadrantObj.UID,
 				Controller: ptr.To(true),
 			},
 		})
@@ -103,7 +126,7 @@ func (r *HelmAuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.
 		if obj.GetKind() == "ClusterRoleBinding" {
 			resourceClient = r.Client.Resource(gvr)
 		} else {
-			resourceClient = r.Client.Resource(gvr).Namespace(authorinoObj.Namespace)
+			resourceClient = r.Client.Resource(gvr).Namespace(kuadrantObj.Namespace)
 		}
 
 		_, err := resourceClient.Apply(
@@ -222,6 +245,22 @@ func (r *HelmAuthorinoReconciler) buildHelmValues(authorinoObj *authorinoopapi.A
 	values["args"] = args
 
 	return values
+}
+
+func (r *HelmAuthorinoReconciler) buildDefaultHelmValues() map[string]interface{} {
+	// Minimal values when no wrapper CR exists
+	// Let Helm chart's values.yaml provide most defaults
+	return map[string]interface{}{
+		"rbac": map[string]interface{}{
+			"install":               false,                // OLM installs ClusterRoles from bundle
+			"create":                true,                 // Chart creates ClusterRoleBindings
+			"clusterRoleNamePrefix": "kuadrant-operator-", // Match Kustomize namePrefix
+		},
+		"tls": map[string]interface{}{
+			"enabled": false, // Disable TLS by default (matches old AuthorinoReconciler behavior)
+		},
+		// Everything else (image, args, etc.) comes from chart's values.yaml
+	}
 }
 
 // splitImageString splits "repo:tag" into map[string]interface{}{"repository": "repo", "tag": "tag"}

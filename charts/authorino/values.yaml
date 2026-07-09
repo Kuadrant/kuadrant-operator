@@ -41,20 +41,16 @@ resources: {}
 labels:
   app.kubernetes.io/component: authorization
 
-# Additional arguments for authorino
+# Additional arguments for authorino (base args, TLS args added by template if tls.enabled)
 args:
   - --auth-config-label-selector=authorino.kuadrant.io/managed-by=authorino
   - --deep-metrics-enabled=true
   - --log-level=info
   - --log-mode=production
   - --oidc-http-port=8083
-  - --oidc-tls-cert=/etc/ssl/certs/oidc.crt
-  - --oidc-tls-cert-key=/etc/ssl/private/oidc.key
   - --timeout=0
-  - --tls-cert=/etc/ssl/certs/tls.crt
-  - --tls-cert-key=/etc/ssl/private/tls.key
 
 # TLS configuration
 tls:
-  enabled: true
+  enabled: false  # Disabled by default - operator sets to true if needed
   certSecretName: authorino-oidc-server-cert

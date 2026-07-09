@@ -25,6 +25,12 @@ spec:
         {{- range .Values.args }}
         - {{ . }}
         {{- end }}
+        {{- if .Values.tls.enabled }}
+        - --tls-cert=/etc/ssl/certs/tls.crt
+        - --tls-cert-key=/etc/ssl/private/tls.key
+        - --oidc-tls-cert=/etc/ssl/certs/oidc.crt
+        - --oidc-tls-cert-key=/etc/ssl/private/oidc.key
+        {{- end }}
         ports:
         - name: grpc
           containerPort: 50051

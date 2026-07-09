@@ -28,6 +28,7 @@ type HelmLimitadorReconciler struct {
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services;serviceaccounts;configmaps,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch
 
 func NewHelmLimitadorReconciler(client *dynamic.DynamicClient, chartPath string) *HelmLimitadorReconciler {
 	return &HelmLimitadorReconciler{
@@ -40,8 +41,13 @@ func (r *HelmLimitadorReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
+			// Watch Kuadrant CR (primary trigger)
+			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
+			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+			// Also watch Limitador CR for migration detection
 			{Kind: ptr.To(v1beta1.LimitadorGroupKind), EventType: ptr.To(controller.CreateEvent)},
 			{Kind: ptr.To(v1beta1.LimitadorGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: ptr.To(v1beta1.LimitadorGroupKind), EventType: ptr.To(controller.DeleteEvent)},
 		},
 	}
 }
@@ -52,22 +58,36 @@ func (r *HelmLimitadorReconciler) Reconcile(ctx context.Context, _ []controller.
 	logger.V(1).Info("reconciling limitador via helm", "status", "started")
 	defer logger.V(1).Info("reconciling limitador via helm", "status", "completed")
 
-	// Get Limitador CR from topology
-	limitadorObj := GetLimitadorFromTopology(topology, state)
-	if limitadorObj == nil {
-		span.AddEvent("no limitador object found")
+	// Get Kuadrant CR (primary resource we reconcile from)
+	kuadrantObj := GetKuadrantFromTopology(topology, state)
+	if kuadrantObj == nil {
+		span.AddEvent("no kuadrant object found")
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	logger = logger.WithValues("limitador", limitadorObj.Namespace+"/"+limitadorObj.Name)
+	logger = logger.WithValues("kuadrant", kuadrantObj.Namespace+"/"+kuadrantObj.Name)
 
-	// Build Helm values from Limitador spec
-	values := r.buildHelmValues(limitadorObj)
+	// Check for Limitador wrapper CR
+	// Keep wrapper CR in topology for migration detection in future task
+	limitadorWrapperObj := GetLimitadorFromTopology(topology, state)
+	if limitadorWrapperObj == nil {
+		logger.V(1).Info("no limitador wrapper CR found, using defaults")
+	}
+
+	// Build Helm values from wrapper CR if it exists, otherwise use defaults
+	var values map[string]interface{}
+	if limitadorWrapperObj != nil {
+		logger.V(1).Info("building values from Limitador wrapper CR", "wrapper", limitadorWrapperObj.Namespace+"/"+limitadorWrapperObj.Name)
+		values = r.buildHelmValues(limitadorWrapperObj)
+	} else {
+		logger.V(1).Info("building default values (no wrapper CR)")
+		values = r.buildDefaultHelmValues()
+	}
 
 	// Render chart
 	renderer := helm.NewRenderer(r.ChartPath)
-	objects, err := renderer.Render("limitador", limitadorObj.Namespace, values)
+	objects, err := renderer.Render("limitador", kuadrantObj.Namespace, values)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to render limitador chart")
@@ -79,20 +99,20 @@ func (r *HelmLimitadorReconciler) Reconcile(ctx context.Context, _ []controller.
 
 	// Apply each rendered resource using Server-Side Apply
 	for _, obj := range objects {
-		// Set owner reference to Limitador CR
+		// Set owner reference to Kuadrant CR (not wrapper CR)
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{
-				APIVersion: limitadorObj.APIVersion,
-				Kind:       limitadorObj.Kind,
-				Name:       limitadorObj.Name,
-				UID:        limitadorObj.UID,
+				APIVersion: kuadrantObj.APIVersion,
+				Kind:       kuadrantObj.Kind,
+				Name:       kuadrantObj.Name,
+				UID:        kuadrantObj.UID,
 				Controller: ptr.To(true),
 			},
 		})
 
 		gvr := obj.GroupVersionKind().GroupVersion().WithResource(kindToResource(obj.GetKind()))
 
-		_, err := r.Client.Resource(gvr).Namespace(limitadorObj.Namespace).Apply(
+		_, err := r.Client.Resource(gvr).Namespace(kuadrantObj.Namespace).Apply(
 			ctx,
 			obj.GetName(),
 			obj,
@@ -182,4 +202,13 @@ func (r *HelmLimitadorReconciler) buildHelmValues(limitadorObj *limitadorv1alpha
 	}
 
 	return values
+}
+
+func (r *HelmLimitadorReconciler) buildDefaultHelmValues() map[string]interface{} {
+	// Minimal values when no wrapper CR exists
+	// Let Helm chart's values.yaml provide the defaults for everything else
+	return map[string]interface{}{
+		// Everything (image, storage, etc.) comes from chart's values.yaml
+		// Empty map means "use chart defaults"
+	}
 }

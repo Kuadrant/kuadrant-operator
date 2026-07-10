@@ -44,3 +44,5 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
+# NOTE: ../dependencies/child-operators/ must be applied separately
+# to avoid namePrefix being applied to child operator resources

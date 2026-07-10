@@ -18,35 +18,38 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/helm"
 )
 
-// HelmDNSOperatorReconciler reconciles DNS Operator deployment using Helm charts
-type HelmDNSOperatorReconciler struct {
+// HelmAuthorinoOperatorReconciler reconciles Authorino Operator deployment using Helm charts
+type HelmAuthorinoOperatorReconciler struct {
 	Client    *dynamic.DynamicClient
 	ChartPath string
 }
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services;serviceaccounts;configmaps;secrets;pods,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=configmaps/status,verbs=delete;get;patch;update
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/finalizers,verbs=update
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=patch;update
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnshealthcheckprobes,verbs=create;delete;get;list;patch;update;watch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnshealthcheckprobes/finalizers,verbs=update
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnshealthcheckprobes/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=dns-operator-manager-role
+//+kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
+//+kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
+//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos/finalizers,verbs=update
+//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create;get;list;update;watch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=authorino-operator-manager;authorino-manager-role;authorino-manager-k8s-auth-role
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
-func NewHelmDNSOperatorReconciler(client *dynamic.DynamicClient, chartPath string) *HelmDNSOperatorReconciler {
-	return &HelmDNSOperatorReconciler{
+func NewHelmAuthorinoOperatorReconciler(client *dynamic.DynamicClient, chartPath string) *HelmAuthorinoOperatorReconciler {
+	return &HelmAuthorinoOperatorReconciler{
 		Client:    client,
 		ChartPath: chartPath,
 	}
 }
 
-func (r *HelmDNSOperatorReconciler) Subscription() *controller.Subscription {
+func (r *HelmAuthorinoOperatorReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
@@ -56,11 +59,11 @@ func (r *HelmDNSOperatorReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+func (r *HelmAuthorinoOperatorReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	span := trace.SpanFromContext(ctx)
-	logger := controller.LoggerFromContext(ctx).WithName("HelmDNSOperatorReconciler")
-	logger.V(1).Info("reconciling dns-operator via helm", "status", "started")
-	defer logger.V(1).Info("reconciling dns-operator via helm", "status", "completed")
+	logger := controller.LoggerFromContext(ctx).WithName("HelmAuthorinoOperatorReconciler")
+	logger.V(1).Info("reconciling authorino-operator via helm", "status", "started")
+	defer logger.V(1).Info("reconciling authorino-operator via helm", "status", "completed")
 
 	// Get Kuadrant CR from topology
 	kuadrantObj := GetKuadrantFromTopology(topology, state)
@@ -77,15 +80,20 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	// Render chart
 	renderer := helm.NewRenderer(r.ChartPath)
-	objects, err := renderer.Render("dns-operator", kuadrantObj.Namespace, values)
+	objects, err := renderer.Render("authorino-operator", kuadrantObj.Namespace, values)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to render dns-operator chart")
-		logger.Error(err, "failed to render dns-operator chart")
+		span.SetStatus(codes.Error, "failed to render authorino-operator chart")
+		logger.Error(err, "failed to render authorino-operator chart")
 		return err
 	}
 
-	logger.Info("rendered dns-operator chart", "resourceCount", len(objects))
+	logger.Info("rendered authorino-operator chart", "resourceCount", len(objects))
+
+	// Log all rendered resource types for debugging
+	for _, obj := range objects {
+		logger.V(1).Info("rendered resource", "kind", obj.GetKind(), "name", obj.GetName())
+	}
 
 	// Apply each rendered resource using Server-Side Apply
 	for _, obj := range objects {
@@ -118,13 +126,17 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 			"fieldManager", FieldManagerName,
 		)
 
+		// Use Force: true for cluster-scoped resources to avoid "not found" errors
+		// when the resource doesn't exist yet
+		force := obj.GetKind() == "ClusterRoleBinding"
+
 		_, err := resourceClient.Apply(
 			ctx,
 			obj.GetName(),
 			obj,
 			metav1.ApplyOptions{
 				FieldManager: FieldManagerName,
-				Force:        false, // Only own fields we explicitly set
+				Force:        force,
 			},
 		)
 
@@ -132,14 +144,10 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 			span.RecordError(err)
 			span.SetStatus(codes.Error, fmt.Sprintf("failed to apply %s/%s", obj.GetKind(), obj.GetName()))
 
-			// Handle conflicts specially - these indicate user customization
 			if apierrors.IsConflict(err) {
 				logger.Info("field ownership conflict detected - preserving user customization",
 					"kind", obj.GetKind(),
 					"name", obj.GetName(),
-					"message", "This resource has fields owned by another manager (likely user customization). "+
-						"User's values will be preserved. Kuadrant only manages: image, args, serviceAccountName. "+
-						"See docs/helm-minimal-ownership.md for details.",
 				)
 			} else {
 				logger.Error(err, "failed to apply resource",
@@ -147,7 +155,6 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 					"name", obj.GetName(),
 				)
 			}
-			// Continue with other resources instead of failing entire reconciliation
 			continue
 		}
 
@@ -158,16 +165,16 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 	}
 
 	span.SetStatus(codes.Ok, "")
-	logger.Info("dns-operator helm deployment reconciled successfully")
+	logger.Info("authorino-operator helm deployment reconciled successfully")
 
 	return nil
 }
 
-func (r *HelmDNSOperatorReconciler) buildHelmValues() map[string]interface{} {
+func (r *HelmAuthorinoOperatorReconciler) buildHelmValues() map[string]interface{} {
 	return map[string]interface{}{
 		"rbac": map[string]interface{}{
-			"install": false, // OLM installs ClusterRole from bundle
-			"create":  true,  // Chart creates ClusterRoleBinding
+			"install": false, // OLM bundle installs ClusterRoles
+			"create":  true,  // Chart creates ClusterRoleBindings
 		},
 		// All other values use chart defaults (image, serviceAccount, replicas, etc.)
 	}

@@ -14,11 +14,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-	"sigs.k8s.io/yaml"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -56,76 +53,64 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	logger.Info("Limitador limits reconciler", "status", "started")
 	defer logger.Info("Limitador limits reconciler", "status", "completed")
 
-	// Check for Kuadrant CR to get namespace
-	kuadrantObj := GetKuadrantFromTopology(topology, state)
-	if kuadrantObj == nil {
-		logger.V(1).Info("no kuadrant resource found in topology")
+	limitador := GetLimitadorFromTopology(topology, state)
+	if limitador == nil {
+		logger.V(1).Info("not limitador resources found in topology")
 		return nil
 	}
 
 	desiredLimits, sources := r.buildLimitadorLimits(ctx, state)
 
-	// Check if wrapper CR exists (migration path)
-	limitador := GetLimitadorFromTopology(topology, state)
-	if limitador != nil {
-		logger.V(1).Info("limitador wrapper CR found, using legacy update path")
-
-		// Wrapper CR exists - use legacy path (update wrapper CR)
-		if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
-			logger.Info("limitador object is up to date, nothing to do", "status", "skipping")
-			return nil
-		}
-
-		state.Store(StateLimitadorLimitsModified, true)
-
-		if limitador.Annotations == nil {
-			limitador.Annotations = make(map[string]string)
-		}
-
-		span := trace.SpanFromContext(ctx)
-		span.SetAttributes(
-			attribute.String("namespace", limitador.Namespace),
-			attribute.String("name", limitador.Name),
-			attribute.StringSlice("sources", lo.Uniq(sources)),
-		)
-
-		// Clear stale trace annotations then inject fresh ones (no-op if tracing is disabled)
-		delete(limitador.Annotations, "traceparent")
-		delete(limitador.Annotations, "tracestate")
-		otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(limitador.Annotations))
-
-		limitador.Spec.Limits = desiredLimits
-
-		obj, err := controller.Destruct(limitador)
-		if err != nil {
-			return err // should never happen
-		}
-
-		logger.V(1).Info("updating limitador object", "limitador", obj.Object)
-		logger.Info("updating limitador object", "status", "processing")
-
-		if _, err := r.client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(limitador.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update limitador object")
-
-			// Record error for deferred retry
-			errorRegistry := GetOrCreateErrorRegistry(state)
-			errorRegistry.Record(
-				LimitadorLimitsReconcilerName,
-				OperationUpdate,
-				k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()},
-				kuadrantv1beta1.LimitadorGroupKind,
-				err,
-			)
-		}
-
-		logger.V(1).Info("finished updating limitador object", "limitador", (k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()}).String())
-
+	if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
+		logger.Info("limitador object is up to date, nothing to do", "status", "skipping")
 		return nil
 	}
 
-	// No wrapper CR - write limits directly to ConfigMap (OLMv1 path)
-	logger.V(1).Info("no limitador wrapper CR found, writing limits directly to ConfigMap")
-	return r.reconcileLimitsConfigMap(ctx, kuadrantObj.Namespace, desiredLimits, sources, state)
+	state.Store(StateLimitadorLimitsModified, true)
+
+	if limitador.Annotations == nil {
+		limitador.Annotations = make(map[string]string)
+	}
+
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attribute.String("namespace", limitador.Namespace),
+		attribute.String("name", limitador.Name),
+		attribute.StringSlice("sources", lo.Uniq(sources)),
+	)
+
+	// Clear stale trace annotations then inject fresh ones (no-op if tracing is disabled)
+	delete(limitador.Annotations, "traceparent")
+	delete(limitador.Annotations, "tracestate")
+	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(limitador.Annotations))
+
+	limitador.Spec.Limits = desiredLimits
+
+	obj, err := controller.Destruct(limitador)
+	if err != nil {
+		return err // should never happen
+	}
+
+	logger.V(1).Info("updating limitador object", "limitador", obj.Object)
+	logger.Info("updating limitador object", "status", "processing")
+
+	if _, err := r.client.Resource(kuadrantv1beta1.LimitadorsResource).Namespace(limitador.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
+		logger.Error(err, "failed to update limitador object")
+
+		// Record error for deferred retry
+		errorRegistry := GetOrCreateErrorRegistry(state)
+		errorRegistry.Record(
+			LimitadorLimitsReconcilerName,
+			OperationUpdate,
+			k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()},
+			kuadrantv1beta1.LimitadorGroupKind,
+			err,
+		)
+	}
+
+	logger.V(1).Info("finished updating limitador object", "limitador", (k8stypes.NamespacedName{Name: limitador.GetName(), Namespace: limitador.GetNamespace()}).String())
+
+	return nil
 }
 
 func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, []string) {
@@ -245,101 +230,4 @@ func isRateLimitingPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machine
 		// Check if it's a RateLimitPolicy or TokenRateLimitPolicy
 		return rlpPredicate(policy) || trlpPredicate(policy)
 	}
-}
-
-// reconcileLimitsConfigMap writes rate limits directly to the limitador-config ConfigMap
-// This is used when no Limitador wrapper CR exists (OLMv1 path)
-func (r *LimitadorLimitsReconciler) reconcileLimitsConfigMap(ctx context.Context, namespace string, limits []limitadorv1alpha1.RateLimit, sources []string, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("reconcileLimitsConfigMap")
-	span := trace.SpanFromContext(ctx)
-
-	configMapName := "limitador-config"
-
-	// Marshal limits to YAML (same format as limitador-operator)
-	limitsBytes, err := yaml.Marshal(limits)
-	if err != nil {
-		logger.Error(err, "failed to marshal limits to YAML")
-		span.RecordError(err)
-		return err
-	}
-	limitsYAML := string(limitsBytes)
-
-	logger.V(1).Info("marshaled limits to YAML", "bytes", len(limitsBytes), "limits", len(limits))
-
-	// Build ConfigMap object
-	configMap := map[string]interface{}{
-		"apiVersion": "v1",
-		"kind":       "ConfigMap",
-		"metadata": map[string]interface{}{
-			"name":      configMapName,
-			"namespace": namespace,
-			"labels": map[string]interface{}{
-				"app.kubernetes.io/name":      "limitador",
-				"app.kubernetes.io/component": "rate-limiter",
-			},
-			"annotations": map[string]interface{}{},
-		},
-		"data": map[string]interface{}{
-			"limitador-config.yaml": limitsYAML,
-		},
-	}
-
-	// Add tracing annotations
-	metadata := configMap["metadata"].(map[string]interface{})
-	annotationsInterface := metadata["annotations"].(map[string]interface{})
-	// Convert to map[string]string for propagation.MapCarrier
-	annotations := make(map[string]string)
-	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(annotations))
-	// Copy back to interface map
-	for k, v := range annotations {
-		annotationsInterface[k] = v
-	}
-
-	span.SetAttributes(
-		attribute.String("namespace", namespace),
-		attribute.String("configMap", configMapName),
-		attribute.StringSlice("sources", lo.Uniq(sources)),
-		attribute.Int("limitsCount", len(limits)),
-	)
-
-	// Apply with Server-Side Apply
-	obj := &unstructured.Unstructured{Object: configMap}
-	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
-
-	logger.V(1).Info("applying limitador ConfigMap", "configMap", configMapName)
-	logger.Info("applying limitador ConfigMap", "status", "processing")
-
-	_, err = r.client.Resource(gvr).Namespace(namespace).Apply(
-		ctx,
-		configMapName,
-		obj,
-		metav1.ApplyOptions{
-			FieldManager: FieldManagerName,
-			Force:        false,
-		},
-	)
-
-	if err != nil {
-		logger.Error(err, "failed to apply limitador ConfigMap")
-		span.RecordError(err)
-
-		// Record error for deferred retry
-		errorRegistry := GetOrCreateErrorRegistry(state)
-		errorRegistry.Record(
-			LimitadorLimitsReconcilerName,
-			OperationUpdate,
-			k8stypes.NamespacedName{Name: configMapName, Namespace: namespace},
-			schema.GroupKind{Group: "", Kind: "ConfigMap"},
-			err,
-		)
-
-		return err
-	}
-
-	state.Store(StateLimitadorLimitsModified, true)
-
-	logger.V(1).Info("successfully applied limitador ConfigMap", "configMap", namespace+"/"+configMapName)
-	logger.Info("successfully applied limitador ConfigMap", "status", "completed")
-
-	return nil
 }

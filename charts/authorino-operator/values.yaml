@@ -1,0 +1,36 @@
+# Default values for Authorino Operator
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: quay.io/kuadrant/authorino-operator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# replicas: 1  # Commented out - only set when needed, allows user scaling/HPA
+
+serviceAccount:
+  create: true
+  name: ""
+
+# RBAC settings
+rbac:
+  install: true    # Install ClusterRoles from static/rbac/ (kuadrant-operator sets to false)
+  create: true     # Create ClusterRoleBindings
+  clusterRoleNamePrefix: ""  # Prefix for ClusterRole names (e.g., "kuadrant-operator-" when deployed via operator)
+
+resources: {}
+  # limits:
+  #   cpu: 200m
+  #   memory: 300Mi
+  # requests:
+  #   cpu: 200m
+  #   memory: 200Mi
+
+# Additional labels to add to all resources
+labels:
+  app.kubernetes.io/component: authorino-operator
+
+# Image that the operator will deploy for Authorino workloads
+# Only set this to override the operator's default
+# authorinoImage: quay.io/kuadrant/authorino:latest

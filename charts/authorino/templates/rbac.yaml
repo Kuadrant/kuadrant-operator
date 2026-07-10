@@ -1,8 +1,0 @@
-{{- if .Values.rbac.install }}
----
-{{ .Files.Get "static/rbac/clusterrole.yaml" }}
-{{- if .Values.clusterWide }}
----
-{{ .Files.Get "static/rbac/clusterrole-k8s-auth.yaml" }}
-{{- end }}
-{{- end }}

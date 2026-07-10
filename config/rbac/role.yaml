@@ -9,6 +9,9 @@ rules:
   resources:
   - configmaps
   - leases
+  - persistentvolumeclaims
+  - pods
+  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -22,6 +25,15 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps/status
+  verbs:
+  - delete
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - create
@@ -30,7 +42,6 @@ rules:
   - ""
   resources:
   - namespaces
-  - secrets
   verbs:
   - get
   - list
@@ -246,7 +257,9 @@ rules:
   - kuadrant.io
   resources:
   - authpolicies/finalizers
+  - dnshealthcheckprobes/finalizers
   - dnspolicies/finalizers
+  - dnsrecords/finalizers
   - kuadrants/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
@@ -257,7 +270,9 @@ rules:
   - kuadrant.io
   resources:
   - authpolicies/status
+  - dnshealthcheckprobes/status
   - dnspolicies/status
+  - dnsrecords/status
   - kuadrants/status
   - ratelimitpolicies/status
   - tlspolicies/status
@@ -266,6 +281,20 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnshealthcheckprobes
+  - dnsrecords
+  - ratelimitpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - kuadrant.io
   resources:
@@ -280,10 +309,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.io
+  - limitador.kuadrant.io
   resources:
-  - dnsrecords
-  - ratelimitpolicies
+  - limitadors
   verbs:
   - create
   - delete
@@ -293,19 +321,19 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.io
+  - limitador.kuadrant.io
   resources:
-  - dnsrecords/status
+  - limitadors/finalizers
   verbs:
-  - get
+  - update
 - apiGroups:
   - limitador.kuadrant.io
   resources:
-  - limitadors
+  - limitadors/status
   verbs:
   - get
-  - list
-  - watch
+  - patch
+  - update
 - apiGroups:
   - monitoring.coreos.com
   resources:
@@ -336,13 +364,31 @@ rules:
   resources:
   - authorinos
   verbs:
+  - create
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
-  - rbac.authorization.k8s.io
+  - operator.authorino.kuadrant.io
   resources:
-  - clusterrolebindings
+  - authorinos/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - operator.authorino.kuadrant.io
+  resources:
+  - authorinos/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
   verbs:
   - create
   - delete
@@ -351,6 +397,59 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  verbs:
+  - create
+  - get
+  - list
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - authorino-manager-k8s-auth-role
+  - authorino-manager-role
+  - authorino-operator-manager
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - dns-operator-manager-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - limitador-operator-manager
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
 - apiGroups:
   - security.istio.io
   resources:

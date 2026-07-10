@@ -154,18 +154,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
 			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=limitador"),
 		)),
-		controller.WithRunnable("authorino watcher", controller.Watch(
-			&authorinooperatorv1beta1.Authorino{},
-			kuadrantv1beta1.AuthorinosResource,
-			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*authorinooperatorv1beta1.Authorino]{}),
-		)),
-		controller.WithRunnable("limitador watcher", controller.Watch(
-			&limitadorv1alpha1.Limitador{},
-			kuadrantv1beta1.LimitadorsResource,
-			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*limitadorv1alpha1.Limitador]{}),
-		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
@@ -177,8 +165,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
 			kuadrantv1beta1.DeploymentGroupKind,
-			kuadrantv1beta1.AuthorinoGroupKind,
-			kuadrantv1beta1.LimitadorGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
@@ -531,6 +517,8 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.ControllerOption, error) {
 	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
+	// Phase 1 Note: We deploy Limitador Operator via Helm, but still check if CRDs exist
+	// This allows graceful handling if Helm deployment fails and maintains compatibility
 	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
 	if err != nil {
 		return nil, err
@@ -567,6 +555,8 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.ControllerOption, error) {
 	opts := make([]controller.ControllerOption, 0, 5)
 	var err error
+	// Phase 1 Note: We deploy Authorino Operator via Helm, but still check if CRDs exist
+	// This allows graceful handling if Helm deployment fails and maintains compatibility
 	b.isAuthorinoOperatorInstalled, err = authorino.IsAuthorinoOperatorInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil {
 		return nil, err
@@ -772,28 +762,25 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		)
 	}
 
-	// REMOVED: Wrapper CR reconcilers no longer needed
-	// Helm reconcilers now watch Kuadrant CR directly and deploy workloads
-	// without needing Authorino/Limitador wrapper CRs
-	//
-	// if b.isLimitadorOperatorInstalled {
-	// 	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-	// 		traceReconcileFunc("workflow.limitador", NewLimitadorReconciler(b.client).Subscription().Reconcile),
-	// 	)
-	// }
-	//
-	// if b.isAuthorinoOperatorInstalled {
-	// 	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-	// 		traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
-	// }
-
-	// Helm-based reconcilers for Authorino/Limitador/DNS-Operator workloads
-	// These render charts based on Kuadrant/Authorino/Limitador CRs in topology
+	// Phase 1 POC: Deploy child operators via Helm, then old reconcilers will create wrapper CRs
+	// Helm reconcilers deploy authorino-operator, limitador-operator, dns-operator
 	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-		traceReconcileFunc("workflow.helm_authorino", NewHelmAuthorinoReconciler(b.client, "charts/authorino").Subscription().Reconcile),
-		traceReconcileFunc("workflow.helm_limitador", NewHelmLimitadorReconciler(b.client, "charts/limitador").Subscription().Reconcile),
-		traceReconcileFunc("workflow.helm_dnsoperator", NewHelmDNSOperatorReconciler(b.client, "charts/dns-operator").Subscription().Reconcile),
+		traceReconcileFunc("workflow.helm_authorino_operator", NewHelmAuthorinoOperatorReconciler(b.client, "/charts/authorino-operator").Subscription().Reconcile),
+		traceReconcileFunc("workflow.helm_limitador_operator", NewHelmLimitadorOperatorReconciler(b.client, "/charts/limitador-operator").Subscription().Reconcile),
+		traceReconcileFunc("workflow.helm_dnsoperator", NewHelmDNSOperatorReconciler(b.client, "/charts/dns-operator").Subscription().Reconcile),
 	)
+
+	// Wrapper CR reconcilers - create Authorino/Limitador CRs (child operators reconcile these to workloads)
+	if b.isLimitadorOperatorInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			traceReconcileFunc("workflow.limitador", NewLimitadorReconciler(b.client).Subscription().Reconcile),
+		)
+	}
+
+	if b.isAuthorinoOperatorInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
+	}
 
 	// Wrap the entire main workflow with tracing
 	return traceReconcileFunc("reconcile", mainWorkflow.Run, additionalMainTraceAttributes)

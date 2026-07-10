@@ -1,0 +1,15 @@
+# Build artifacts
+*.so
+*.h
+extract_model.so
+extract_model.h
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+test_*.json

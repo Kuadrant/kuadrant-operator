@@ -44,3 +44,6 @@ vendor
 
 # Helm chart packages
 *operator*.tgz*
+
+# Go workspace (go.work is committed, but go.work.sum is auto-generated)
+go.work.sum

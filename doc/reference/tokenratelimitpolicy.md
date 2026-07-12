@@ -113,6 +113,10 @@ The policy automatically parses token usage from response bodies in the followin
 
 This is compatible with OpenAI-style API responses and similar AI/LLM services.
 
+**What's actually checked**: Token extraction looks for a single JSON pointer, `/usage/total_tokens`, in the response body. Any backend that returns that exact field works out of the box, including OpenAI Chat Completions (`/v1/chat/completions`), OpenAI legacy Completions (`/v1/completions`), OpenAI Embeddings, and OpenAI-compatible backends like vLLM, Ollama, Azure OpenAI, and Gemini's OpenAI-compatibility endpoint.
+
+**Not currently supported**: Providers that return token usage under a different field name — Anthropic's `/v1/messages` (`usage.input_tokens` / `usage.output_tokens`, no `total_tokens`) or Google Gemini's native endpoint (`usageMetadata.totalTokenCount`) — are not parsed. Multi-provider support is tracked in [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
+
 **Streaming Support**: Both streaming and non-streaming responses are supported:
 - **Non-streaming**: Works with `stream: false` or when `stream` is omitted
 - **Streaming**: Requires `"stream": true` and `"stream_options": { "include_usage": true }` to extract usage from the final stream event

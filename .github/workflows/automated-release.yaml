@@ -48,13 +48,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code at git ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.inputs.gitRef }}
           token: ${{ secrets.KUADRANT_WORKFLOWS_PAT }}
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
         id: go
@@ -124,7 +124,7 @@ jobs:
       - name: Create Pull Request
         id: cpr
         if: ${{ !env.ACT }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           token: ${{ secrets.KUADRANT_DEV_PAT }}
           commit-message: Prepare release ${{ github.event.inputs.kuadrantOperatorVersion }}

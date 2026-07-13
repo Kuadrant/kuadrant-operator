@@ -13,6 +13,7 @@ import (
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1unstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	dfake "k8s.io/client-go/dynamic/fake"
 
@@ -58,7 +59,7 @@ func TestTopologyReconciler_Create(t *testing.T) {
 	assert.Equal(t, created.GetName(), TopologyConfigMapName)
 	assert.Equal(t, created.GetLabels()[kuadrant.TopologyLabel], "true")
 
-	data, found, err := unstructuredNestedString(created.Object, "data", "topology")
+	data, found, err := metav1unstructured.NestedString(created.Object, "data", "topology")
 	assert.NilError(t, err)
 	assert.Assert(t, found, "topology data key should exist")
 	assert.Assert(t, strings.Contains(data, "digraph"), "topology data should be DOT format")
@@ -102,7 +103,7 @@ func TestTopologyReconciler_Update(t *testing.T) {
 	updated, err := fakeClient.Resource(controller.ConfigMapsResource).Namespace(namespace).Get(context.Background(), TopologyConfigMapName, metav1.GetOptions{})
 	assert.NilError(t, err)
 
-	data, found, err := unstructuredNestedString(updated.Object, "data", "topology")
+	data, found, err := metav1unstructured.NestedString(updated.Object, "data", "topology")
 	assert.NilError(t, err)
 	assert.Assert(t, found, "topology data key should exist")
 	assert.Assert(t, data != "old-data", "topology data should have been updated")
@@ -154,27 +155,4 @@ func TestNewTopologyReconciler_PanicsOnEmptyNamespace(t *testing.T) {
 		assert.Assert(t, r != nil, "expected panic for empty namespace")
 	}()
 	NewTopologyReconciler(nil, "")
-}
-
-func unstructuredNestedString(obj map[string]any, fields ...string) (string, bool, error) {
-	current := obj
-	for i, field := range fields {
-		if i == len(fields)-1 {
-			val, ok := current[field]
-			if !ok {
-				return "", false, nil
-			}
-			s, ok := val.(string)
-			return s, ok, nil
-		}
-		next, ok := current[field]
-		if !ok {
-			return "", false, nil
-		}
-		current, ok = next.(map[string]any)
-		if !ok {
-			return "", false, nil
-		}
-	}
-	return "", false, nil
 }

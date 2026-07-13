@@ -1,18 +1,14 @@
-name: Benchmark
+name: Benchmark (Nightly)
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'internal/**'
-      - 'pkg/**'
-      - 'api/**'
-      - 'go.mod'
-      - 'go.sum'
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
+  issues: write
+  actions: read
 
 jobs:
   benchmark:
@@ -22,7 +18,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Check out PR branch
+      - name: Check out code
         uses: actions/checkout@v4
 
       - name: Set up Go
@@ -33,62 +29,89 @@ jobs:
       - name: Install benchstat
         run: go install golang.org/x/perf/cmd/benchstat@latest
 
-      # Run benchmarks on PR branch
-      - name: Run benchmarks (PR)
+      - name: Run benchmarks
         run: make test-bench
-      - name: Save PR results
-        run: mv benchmark-results.txt pr-bench.txt
 
-      # Run benchmarks on base branch
-      - name: Check out base branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.base_ref }}
-          clean: false
-          path: base
-      - name: Run benchmarks (base)
-        run: cd base && make test-bench && mv benchmark-results.txt ../base-bench.txt
-        continue-on-error: true
-
-      # Compare with benchstat
-      - name: Compare results
-        id: benchstat
+      # Download previous baseline from the last successful nightly run
+      - name: Download previous baseline
+        id: baseline
         run: |
-          BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1 || true)
+          # Find the most recent successful run of this workflow (excluding current)
+          RUN_ID=$(gh run list \
+            --workflow=benchmark.yaml \
+            --status=success \
+            --limit=1 \
+            --json databaseId \
+            --jq '.[0].databaseId' 2>/dev/null || true)
+
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            gh run download "$RUN_ID" -n benchmark-baseline -D previous/ 2>/dev/null && \
+              echo 'found=true' >> "$GITHUB_OUTPUT" || \
+              echo 'found=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'found=false' >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Compare with previous baseline if available
+      - name: Compare with previous baseline
+        id: benchstat
+        if: steps.baseline.outputs.found == 'true'
+        run: |
+          BENCHSTAT_OUTPUT=$(benchstat previous/benchmark-results.txt benchmark-results.txt 2>&1 || true)
 
           REGRESSIONS=$(echo "$BENCHSTAT_OUTPUT" | sed '/B\/op/,$d' | grep -E '\+[0-9]+\.[0-9]+% \(p=' | awk -F'+' '{split($2,a,"%"); if (a[1]+0 >= 5) print $0}' || true)
           if [ -n "$REGRESSIONS" ]; then
+            echo 'regression=true' >> "$GITHUB_OUTPUT"
             {
-              echo '## Benchmark: regression detected'
+              echo "## Nightly Benchmark: regression detected"
+              echo ""
+              echo "Compared to previous nightly run."
               echo '```'
               echo "$REGRESSIONS"
               echo '```'
+              echo ""
+              echo "**Note:** This regression was introduced by one or more PRs merged since the last nightly run. Manual bisection is required to identify the cause."
+              echo ""
               echo '<details><summary>Full benchstat output</summary>'
-              echo ''
+              echo ""
               echo '```'
               echo "$BENCHSTAT_OUTPUT"
               echo '```'
               echo '</details>'
             } > benchmark-report.md
-            echo 'regression=true' >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Post PR comment
-        if: steps.benchstat.outputs.regression == 'true' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          path: benchmark-report.md
-
-      - name: Upload artifacts
+      # Save current results as baseline for next run
+      - name: Upload baseline for next run
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
-          path: |
-            pr-bench.txt
-            base-bench.txt
+          name: benchmark-baseline
+          path: benchmark-results.txt
+          overwrite: true
+
+      - name: Upload comparison report
+        if: steps.benchstat.outputs.regression == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: benchmark-report.md
+
+      # Create an issue if regression detected
+      - name: Create regression issue
+        if: steps.benchstat.outputs.regression == 'true'
+        run: |
+          BODY=$(cat benchmark-report.md)
+          gh issue create \
+            --title "Nightly benchmark regression detected ($(date +%Y-%m-%d))" \
+            --body "$BODY" \
+            --label "performance"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Check for regressions
         if: steps.benchstat.outputs.regression == 'true'
         run: |
-          echo "::warning::Benchmark regression detected. Check the PR comment for details."
+          echo "::warning::Benchmark regression detected compared to previous nightly. See workflow artifacts."
           exit 1

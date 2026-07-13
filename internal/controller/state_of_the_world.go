@@ -785,25 +785,13 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			&certmanagerv1.Issuer{},
 			CertManagerIssuersResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
-					oldStatus := e.ObjectOld.GetStatus()
-					newStatus := e.ObjectOld.GetStatus()
-					return !reflect.DeepEqual(oldStatus, newStatus)
-				},
-			})),
+			controller.WithPredicates(issuerStatusChangedPredicate())),
 		),
 		controller.WithRunnable("clusterissuers watcher", controller.Watch(
 			&certmanagerv1.ClusterIssuer{},
 			CertMangerClusterIssuersResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
-					oldStatus := e.ObjectOld.GetStatus()
-					newStatus := e.ObjectOld.GetStatus()
-					return !reflect.DeepEqual(oldStatus, newStatus)
-				},
-			})),
+			controller.WithPredicates(clusterIssuerStatusChangedPredicate())),
 		),
 		controller.WithObjectKinds(
 			CertManagerCertificateKind,
@@ -815,6 +803,22 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			LinkTLSPolicyToIssuerFunc,
 			LinkTLSPolicyToClusterIssuerFunc,
 		),
+	}
+}
+
+func issuerStatusChangedPredicate() ctrlruntimepredicate.TypedPredicate[*certmanagerv1.Issuer] {
+	return ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetStatus(), e.ObjectNew.GetStatus())
+		},
+	}
+}
+
+func clusterIssuerStatusChangedPredicate() ctrlruntimepredicate.TypedPredicate[*certmanagerv1.ClusterIssuer] {
+	return ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetStatus(), e.ObjectNew.GetStatus())
+		},
 	}
 }
 

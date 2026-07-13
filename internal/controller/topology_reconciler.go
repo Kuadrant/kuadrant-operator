@@ -10,6 +10,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,9 +42,7 @@ func NewTopologyReconciler(client dynamic.Interface, namespace string) *Topology
 
 func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file").WithValues("context", ctx)
-	tracer := controller.TracerFromContext(ctx)
-	ctx, span := tracer.Start(ctx, "TopologyReconciler.Reconcile")
-	defer span.End()
+	span := trace.SpanFromContext(ctx)
 
 	span.SetAttributes(
 		attribute.String("configmap.name", TopologyConfigMapName),

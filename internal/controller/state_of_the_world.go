@@ -789,7 +789,7 @@ func certManagerControllerOpts() []controller.ControllerOption {
 		),
 		controller.WithRunnable("clusterissuers watcher", controller.Watch(
 			&certmanagerv1.ClusterIssuer{},
-			CertMangerClusterIssuersResource,
+			CertManagerClusterIssuersResource,
 			metav1.NamespaceAll,
 			controller.WithPredicates(clusterIssuerStatusChangedPredicate())),
 		),

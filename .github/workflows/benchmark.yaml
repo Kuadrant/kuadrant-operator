@@ -23,10 +23,12 @@ jobs:
         shell: bash
     steps:
       - name: Check out PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
           go-version-file: go.mod
 
@@ -41,11 +43,12 @@ jobs:
 
       # Run benchmarks on base branch
       - name: Check out base branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
         with:
           ref: ${{ github.base_ref }}
           clean: false
           path: base
+          persist-credentials: false
       - name: Run benchmarks (base)
         run: cd base && make test-bench && mv benchmark-results.txt ../base-bench.txt
         continue-on-error: true
@@ -75,12 +78,12 @@ jobs:
 
       - name: Post PR comment
         if: steps.benchstat.outputs.regression == 'true' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@f3bbb8300013c686241004a1c1b5d4045b10bc30 # ratchet:marocchino/sticky-pull-request-comment@v2
         with:
           path: benchmark-report.md
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: |

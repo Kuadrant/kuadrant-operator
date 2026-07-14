@@ -39,12 +39,13 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 
 	logger := controller.LoggerFromContext(ctx).WithName("topology file").WithValues("context", ctx)
 
+	kuadrantmetrics.ResetTopologyObjects()
 	objectsByKind := make(map[string]int)
 	for _, obj := range topology.All().Items() {
 		objectsByKind[obj.GroupVersionKind().Kind]++
 	}
 	for kind, count := range objectsByKind {
-		kuadrantmetrics.SetTopologyObjectsTotal(kind, count)
+		kuadrantmetrics.SetTopologyObjects(kind, count)
 	}
 
 	cm := &corev1.ConfigMap{

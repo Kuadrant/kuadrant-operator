@@ -45,16 +45,16 @@ var (
 			Buckets: prometheus.DefBuckets,
 		})
 
-	topologyObjectsTotal = prometheus.NewGaugeVec(
+	topologyObjects = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "kuadrant_topology_objects_total",
+			Name: "kuadrant_topology_objects",
 			Help: "Number of objects in the topology DAG by kind",
 		},
 		[]string{"kind"})
 
-	authconfigsGeneratedTotal = prometheus.NewGauge(
+	authconfigsGenerated = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "kuadrant_authconfigs_generated_total",
+			Name: "kuadrant_authconfigs_generated",
 			Help: "Number of AuthConfigs generated in the last reconciliation cycle",
 		})
 )
@@ -66,8 +66,8 @@ func init() {
 		topologyRebuildDuration,
 		authconfigGenerationDuration,
 		limitadorLimitsGenerationDuration,
-		topologyObjectsTotal,
-		authconfigsGeneratedTotal,
+		topologyObjects,
+		authconfigsGenerated,
 	)
 }
 
@@ -91,10 +91,14 @@ func ObserveLimitadorLimitsGenerationDuration(start time.Time) {
 	limitadorLimitsGenerationDuration.Observe(time.Since(start).Seconds())
 }
 
-func SetTopologyObjectsTotal(kind string, count int) {
-	topologyObjectsTotal.WithLabelValues(kind).Set(float64(count))
+func ResetTopologyObjects() {
+	topologyObjects.Reset()
 }
 
-func SetAuthconfigsGeneratedTotal(count int) {
-	authconfigsGeneratedTotal.Set(float64(count))
+func SetTopologyObjects(kind string, count int) {
+	topologyObjects.WithLabelValues(kind).Set(float64(count))
+}
+
+func SetAuthconfigsGenerated(count int) {
+	authconfigsGenerated.Set(float64(count))
 }

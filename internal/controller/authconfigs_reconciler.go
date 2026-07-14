@@ -89,7 +89,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		}
 	}
 
-	kuadrantmetrics.SetAuthconfigsGeneratedTotal(len(desiredAuthConfigs))
+	kuadrantmetrics.SetAuthconfigsGenerated(len(desiredAuthConfigs))
 
 	if len(modifiedAuthConfigs) > 0 {
 		state.Store(StateModifiedAuthConfigs, modifiedAuthConfigs)

@@ -21,15 +21,8 @@ endif
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.0
 
-# CHANNEL define the catalog channel used in the catalog.
-# - use the CHANNEL as arg of the catalog target (e.g make catalog CHANNEL=stable)
-# - use environment variables to overwrite this value (e.g export CHANNEL="stable")
-CHANNEL ?= alpha
-
-# CHANNELS define the bundle channels used in the bundle.
-# Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
-# To re-generate a bundle for other specific channels without changing the standard setup, you can:
-# - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
+# CHANNELS define the bundle and catalog channels.
+# - use CHANNELS as arg of the bundle or catalog target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
 CHANNELS ?= alpha
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
@@ -132,62 +125,38 @@ EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 
 # Kuadrant component versions
 ## authorino
-#ToDo Pin this version once we have an initial release of authorino
 AUTHORINO_OPERATOR_VERSION ?= latest
 authorino_bundle_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
 
 ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
-AUTHORINO_OPERATOR_BUNDLE_VERSION = 0.0.0
-AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = latest
 AUTHORINO_OPERATOR_GITREF = main
 else ifeq (true,$(authorino_bundle_is_semantic))
-AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
-AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
-AUTHORINO_OPERATOR_GITREF = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+AUTHORINO_OPERATOR_GITREF = v$(AUTHORINO_OPERATOR_VERSION)
 else
-AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
-AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
-AUTHORINO_OPERATOR_GITREF = $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+AUTHORINO_OPERATOR_GITREF = $(AUTHORINO_OPERATOR_VERSION)
 endif
 
-AUTHORINO_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/authorino-operator-bundle:$(AUTHORINO_OPERATOR_BUNDLE_IMG_TAG)
 ## limitador
-#ToDo Pin this version once we have an initial release of limitador
 LIMITADOR_OPERATOR_VERSION ?= latest
 limitador_bundle_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
 ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
-LIMITADOR_OPERATOR_BUNDLE_VERSION = 0.0.0
-LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = latest
 LIMITADOR_OPERATOR_GITREF = main
 else ifeq (true,$(limitador_bundle_is_semantic))
-LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
-LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
-LIMITADOR_OPERATOR_GITREF = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+LIMITADOR_OPERATOR_GITREF = v$(LIMITADOR_OPERATOR_VERSION)
 else
-LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
-LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
-LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_VERSION)
 endif
-LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
 ## dns
 DNS_OPERATOR_VERSION ?= latest
-
 kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 ifeq (latest,$(DNS_OPERATOR_VERSION))
-DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
-DNS_OPERATOR_BUNDLE_IMG_TAG = latest
 DNS_OPERATOR_GITREF = main
 else ifeq (true,$(kuadrantdns_bundle_is_semantic))
-DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
-DNS_OPERATOR_BUNDLE_IMG_TAG = v$(DNS_OPERATOR_BUNDLE_VERSION)
-DNS_OPERATOR_GITREF = v$(DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_GITREF = v$(DNS_OPERATOR_VERSION)
 else
-DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
-DNS_OPERATOR_BUNDLE_IMG_TAG = $(DNS_OPERATOR_BUNDLE_VERSION)
-DNS_OPERATOR_GITREF = $(DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_GITREF = $(DNS_OPERATOR_VERSION)
 endif
-DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
@@ -482,7 +451,7 @@ ln -sf $(shell basename $(1))-$(3) $(1)
 endef
 
 .PHONY: bundle
-bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+bundle: yq manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	@echo "Cleaning bundle manifests..."
 	rm -rf bundle/manifests
 	$(OPERATOR_SDK) generate kustomize manifests -q
@@ -506,9 +475,7 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
-	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
-		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
+	$(MAKE) bundle-post-generate
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile

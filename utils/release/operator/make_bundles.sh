@@ -47,16 +47,6 @@ if [[ "$OLM_DEFAULT_CHANNEL" == "null" ]]; then
   default_channel_opt=""
 fi
 
-# Set up bundle dependency images
-limitador_version=$(mod_version $LIMITADOR_OPERATOR_VERSION)
-limitador_image=quay.io/kuadrant/limitador-operator-bundle:$limitador_version
-
-authorino_version=$(mod_version $AUTHORINO_OPERATOR_VERSION)
-authorino_image=quay.io/kuadrant/authorino-operator-bundle:$authorino_version
-
-dns_version=$(mod_version $DNS_OPERATOR_VERSION)
-dns_image=quay.io/kuadrant/dns-operator-bundle:$dns_version
-
 make bundle \
   BUNDLE_VERSION=$KUADRANT_OPERATOR_VERSION \
   BUNDLE_METADATA_OPTS="--channels $OLM_CHANNELS $default_channel_opt" \
@@ -64,12 +54,6 @@ make bundle \
   RELATED_IMAGE_WASMSHIM=$wasm_shim_image \
   RELATED_IMAGE_DEVELOPERPORTAL=$developerportal_image \
   RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=$consoleplugin_image \
-  LIMITADOR_OPERATOR_BUNDLE_IMG=$limitador_image \
-  AUTHORINO_OPERATOR_BUNDLE_IMG=$authorino_image \
-  DNS_OPERATOR_BUNDLE_IMG=$dns_image \
-  AUTHORINO_OPERATOR_VERSION=$(mod_version_for_make $AUTHORINO_OPERATOR_VERSION) \
-  LIMITADOR_OPERATOR_VERSION=$(mod_version_for_make $LIMITADOR_OPERATOR_VERSION) \
-  DNS_OPERATOR_VERSION=$(mod_version_for_make $DNS_OPERATOR_VERSION) \
   DEVELOPERPORTAL_VERSION=$(mod_version_for_make $DEVELOPERPORTAL_VERSION)
 
 operator-sdk bundle validate $env/bundle

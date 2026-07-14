@@ -20,9 +20,6 @@ helm-build: yq kustomize manifests ## Build the helm chart from kustomize manife
 	# Set the helm chart version and dependencies versions
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.version = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.appVersion = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
-	V="$(AUTHORINO_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
-	V="$(LIMITADOR_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
-	V="$(DNS_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 
 .PHONY: helm-install
 helm-install: helm ## Install the helm chart

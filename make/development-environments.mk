@@ -102,6 +102,7 @@ local-deploy: ## Deploy Kuadrant Operator from the current code
 	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
 	$(MAKE) kind-load-image IMG=$(IMAGE_TAG_BASE):dev
 
+	$(MAKE) install
 	$(MAKE) deploy-child-operator-dependencies
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
@@ -125,6 +126,19 @@ local-setup: kind ## Run local Kubernetes cluster and deploy kuadrant operator (
 	$(MAKE) local-env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
 	$(MAKE) local-deploy
 
+.PHONY: local-deploy-helm
+local-deploy-helm: helm ## Deploy Kuadrant Operator from the current code via Helm
+	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
+	$(MAKE) kind-load-image IMG=$(IMAGE_TAG_BASE):dev
+	$(MAKE) helm-build IMG=$(IMAGE_TAG_BASE):dev
+	$(HELM) install $(CHART_NAME) $(CHART_DIRECTORY) -n $(KUADRANT_NAMESPACE) --create-namespace
+	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
+
+.PHONY: local-setup-helm
+local-setup-helm: kind ## Run local Kubernetes cluster and deploy kuadrant operator via Helm
+	$(MAKE) local-env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
+	$(MAKE) local-deploy-helm
+
 .PHONY: local-cleanup
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster
@@ -132,13 +146,12 @@ local-cleanup: ## Delete local cluster
 ##@ Development Environment: bare kubernetes
 
 .PHONY: k8s-env-setup
-k8s-env-setup: ## Install Kuadrant CRDs and dependencies.
+k8s-env-setup: ## Install cluster dependencies (metrics, cert-manager, metallb, observability).
 	$(MAKE) deploy-metrics-server
 	$(MAKE) install-observability-crds
 	$(MAKE) install-metallb
 	$(MAKE) install-cert-manager
 	$(MAKE) deploy-dependencies
-	$(MAKE) install
 
 .PHONY: local-k8s-env-setup
 local-k8s-env-setup: ## k8s-env-setup based on Kind cluster

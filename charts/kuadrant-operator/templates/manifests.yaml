@@ -14243,7 +14243,6 @@ rules:
   resources:
   - configmaps
   - leases
-  - persistentvolumeclaims
   - pods
   - secrets
   - serviceaccounts
@@ -14256,15 +14255,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - configmaps/status
-  verbs:
-  - delete
-  - get
-  - patch
-  - update
 - apiGroups:
   - ""
   resources:
@@ -14293,12 +14283,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - authentication.k8s.io
-  resources:
-  - tokenreviews
-  verbs:
-  - create
-- apiGroups:
   - authorino.kuadrant.io
   resources:
   - authconfigs
@@ -14310,20 +14294,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - authorino.kuadrant.io
-  resources:
-  - authconfigs/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - subjectaccessreviews
-  verbs:
-  - create
 - apiGroups:
   - cert-manager.io
   resources:
@@ -14491,9 +14461,7 @@ rules:
   - kuadrant.io
   resources:
   - authpolicies/finalizers
-  - dnshealthcheckprobes/finalizers
   - dnspolicies/finalizers
-  - dnsrecords/finalizers
   - kuadrants/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
@@ -14504,9 +14472,7 @@ rules:
   - kuadrant.io
   resources:
   - authpolicies/status
-  - dnshealthcheckprobes/status
   - dnspolicies/status
-  - dnsrecords/status
   - kuadrants/status
   - ratelimitpolicies/status
   - tlspolicies/status
@@ -14515,20 +14481,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - kuadrant.io
-  resources:
-  - dnshealthcheckprobes
-  - dnsrecords
-  - ratelimitpolicies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - kuadrant.io
   resources:
@@ -14543,6 +14495,25 @@ rules:
   - update
   - watch
 - apiGroups:
+  - kuadrant.io
+  resources:
+  - dnsrecords
+  - ratelimitpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnsrecords/status
+  verbs:
+  - get
+- apiGroups:
   - limitador.kuadrant.io
   resources:
   - limitadors
@@ -14554,20 +14525,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - limitador.kuadrant.io
-  resources:
-  - limitadors/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - limitador.kuadrant.io
-  resources:
-  - limitadors/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - monitoring.coreos.com
   resources:
@@ -14606,20 +14563,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - operator.authorino.kuadrant.io
-  resources:
-  - authorinos/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - operator.authorino.kuadrant.io
-  resources:
-  - authorinos/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
   - policy
   resources:
   - poddisruptionbudgets
@@ -14647,16 +14590,6 @@ rules:
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - create
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
   resourceNames:
   - authorino-manager-k8s-auth-role
   - authorino-manager-role
@@ -14670,6 +14603,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - dns-operator-manager-role
+  - dns-operator-remote-cluster-role
   resources:
   - clusterroles
   verbs:
@@ -14678,7 +14612,7 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
-  - limitador-operator-manager
+  - limitador-operator-manager-role
   resources:
   - clusterroles
   verbs:
@@ -14863,7 +14797,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/kuadrant/kuadrant-operator:latest
+        image: quay.io/kuadrant/kuadrant-operator:dev
         livenessProbe:
           httpGet:
             path: /healthz

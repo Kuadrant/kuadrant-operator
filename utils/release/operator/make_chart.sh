@@ -41,6 +41,3 @@ kustomize build $env/config/helm > $env/charts/kuadrant-operator/templates/manif
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))
 V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.version = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.appVersion = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.authorino-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.limitador-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.dns-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml

@@ -17,7 +17,14 @@ helm-build: yq kustomize manifests ## Build the helm chart from kustomize manife
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Build the helm chart templates from kustomize manifests
 	$(KUSTOMIZE) build config/helm > $(CHART_DIRECTORY)/templates/manifests.yaml
-	# Set the helm chart version and dependencies versions
+	# Include child operator CRDs and ClusterRoles in the chart
+	@for f in charts/authorino-operator/crds/manifests.yaml charts/limitador-operator/crds/manifests.yaml charts/dns-operator/crds/manifests.yaml; do \
+		cat "$$f"; echo "---"; \
+	done > $(CHART_DIRECTORY)/templates/child-operator-crds.yaml
+	@for f in charts/authorino-operator/static/clusterroles.yaml charts/limitador-operator/static/clusterroles.yaml charts/dns-operator/static/clusterroles.yaml; do \
+		cat "$$f"; echo "---"; \
+	done > $(CHART_DIRECTORY)/templates/child-operator-clusterroles.yaml
+	# Set the helm chart version
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.version = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.appVersion = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 

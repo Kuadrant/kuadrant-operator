@@ -75,7 +75,7 @@ kubectl exec -n gateway-system $EGRESS_POD -- \
 
 Example output:
 
-```
+```text
 istio_requests_total{...,destination_service="httpbin.org",...,response_code="200",response_flags="-",...} 8
 istio_requests_total{...,destination_service="httpbin.org",...,response_code="503",response_flags="-",...} 24
 istio_requests_total{...,destination_service="unknown",...,response_code="404",response_flags="NR",...} 4
@@ -131,11 +131,11 @@ sum(rate(istio_requests_total{
 }[5m])) by (destination_service)
 ```
 
-### Identifying the Egress Gateway in Metrics
+### Identifying the Egress Gateway
 
-The egress gateway pod gets the label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`, and the Istio proxy reports its workload as `kuadrant-egressgateway-istio`. Use either to filter for egress-specific metrics.
+For Kubernetes queries (kubectl, log filtering), use the pod label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`. This label is not a Prometheus metric label.
 
-In PromQL, filter by `source_workload="kuadrant-egressgateway-istio"` to isolate egress traffic from ingress traffic on the same Prometheus instance.
+For PromQL queries, filter by `source_workload="kuadrant-egressgateway-istio"` to isolate egress traffic from ingress traffic on the same Prometheus instance. This is the Istio proxy workload name, which appears as a label on all `istio_*` metrics.
 
 ## Access Logging
 
@@ -165,7 +165,7 @@ kubectl logs -n gateway-system -l gateway.networking.k8s.io/gateway-name=kuadran
 
 The Envoy default log format includes fields that are particularly useful for egress troubleshooting:
 
-```
+```text
 [2026-07-07T14:33:57.697Z] "GET /get HTTP/1.1" 200 - via_upstream - "-" 0 1172 1879 1879
   "10.244.0.18" "curl/8.21.0" "4fe1434d-fd3b-4c68-92ac-c15700dfccc7" "httpbin.org"
   "100.59.144.143:443" outbound|443||httpbin.org 10.244.0.17:40974 10.244.0.17:80
@@ -174,21 +174,20 @@ The Envoy default log format includes fields that are particularly useful for eg
 
 Each access log entry captures both connection legs of the egress path: the incoming connection from the workload pod to the gateway (downstream), and the outgoing connection from the gateway to the external service (upstream). Key fields for egress:
 
-| Position | Field | Example Value | Egress Use |
-|----------|-------|---------------|------------|
-| 1 | Timestamp | `2026-07-07T14:33:57.697Z` | When the request was processed |
-| 2 | Method, path, protocol | `GET /get HTTP/1.1` | What was requested |
-| 3 | Response code | `200` | External service's response |
-| 4 | Response flags | `-` | Envoy-level error indicators |
-| 5 | Response code details | `via_upstream` | Where the response came from |
-| 10 | Duration (ms) | `1879` | Total request time including external service |
-| 11 | Upstream service time (ms) | `1879` | External service response time |
-| 12 | Downstream remote address | `10.244.0.18` | Source workload pod IP |
-| 14 | Request ID | `4fe1434d-...` | For correlation across components |
-| 15 | Authority (Host) | `httpbin.org` | Destination hostname after rewrite |
-| 16 | Upstream host | `100.59.144.143:443` | Resolved external IP address |
-| 17 | Upstream cluster | `outbound\|443\|\|httpbin.org` | Routing destination |
-| 22 | Route name | `gateway-system.httpbin-external.0` | Which HTTPRoute matched |
+| Field | Format Variable | Example Value | Egress Use |
+|-------|----------------|---------------|------------|
+| Response code | `%RESPONSE_CODE%` | `200` | External service response status |
+| Response flags | `%RESPONSE_FLAGS%` | `-` | Envoy-level error indicators |
+| Response code details | `%RESPONSE_CODE_DETAILS%` | `via_upstream` | Where the response came from |
+| Duration (ms) | `%DURATION%` | `1879` | Total request time including external service |
+| Upstream service time (ms) | `%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%` | `1879` | External service response time |
+| X-Forwarded-For | `%REQ(X-FORWARDED-FOR)%` | `10.244.0.18` | Client IP (same as downstream for egress) |
+| Request ID | `%REQ(X-REQUEST-ID)%` | `4fe1434d-...` | Correlation across components |
+| Authority (Host) | `%REQ(:AUTHORITY)%` | `httpbin.org` | Destination hostname after rewrite |
+| Upstream host | `%UPSTREAM_HOST%` | `100.59.144.143:443` | Resolved external IP address |
+| Upstream cluster | `%UPSTREAM_CLUSTER%` | `outbound\|443\|\|httpbin.org` | Routing destination |
+| Downstream remote address | `%DOWNSTREAM_REMOTE_ADDRESS%` | `10.244.0.18:43722` | Source workload pod IP and port |
+| Route name | `%ROUTE_NAME%` | `gateway-system.httpbin-external.0` | Which HTTPRoute matched |
 
 ### Troubleshooting with Access Logs
 
@@ -196,7 +195,7 @@ Each access log entry captures both connection legs of the egress path: the inco
 
 When the external service returns an error (for example, 503), the access log shows:
 
-```
+```text
 [...] "GET /get HTTP/1.1" 503 - via_upstream - "-" 0 162 326 326
   "10.244.0.18" "curl/8.21.0" "e0d56588-..." "httpbin.org"
   "32.193.74.35:443" outbound|443||httpbin.org ...
@@ -219,7 +218,7 @@ kubectl exec -n gateway-system $EGRESS_POD -- \
 
 Example output:
 
-```
+```text
 outbound|443||httpbin.org::54.156.228.155:443::cx_total::1
 outbound|443||httpbin.org::54.156.228.155:443::cx_connect_fail::0
 outbound|443||httpbin.org::54.156.228.155:443::rq_total::1
@@ -240,7 +239,7 @@ This shows each resolved IP for the external service with its connection count (
 
 When a workload sends traffic to a hostname with no matching HTTPRoute:
 
-```
+```text
 [...] "GET /get HTTP/1.1" 404 NR route_not_found - "-" 0 0 0 -
   "10.244.0.18" "curl/8.21.0" "a326cb9d-..." "unknown-api.example.com"
   "-" - - 10.244.0.17:80 10.244.0.18:41290 - -
@@ -251,7 +250,7 @@ When a workload sends traffic to a hostname with no matching HTTPRoute:
 - `upstream_host=-`: no upstream was selected.
 - `authority=unknown-api.example.com`: shows which hostname the workload tried to reach.
 
-This indicates a missing HTTPRoute and ServiceEntry for the requested destination.
+This indicates that no HTTPRoute matched the requested hostname. Check that an HTTPRoute exists for this destination, and if the external hostname also needs a ServiceEntry to be routable.
 
 **Isolating gateway latency from external service latency**
 
@@ -260,13 +259,13 @@ The access log contains two timing fields that together show where time is being
 - **Duration** (position 10): total time from when the gateway received the request to when the response was sent back to the workload.
 - **Upstream service time** (position 11): time the external service took to respond.
 
-The difference between these two values is the gateway overhead (TLS handshake, policy evaluation, Envoy processing). For example:
+The difference between these two values approximates non-upstream latency, which includes proxy processing, TLS handshake, policy evaluation, network transit, and queueing. For example:
 
-```
+```text
 [...] "GET /get HTTP/1.1" 200 - via_upstream - "-" 0 1172 1879 1650 ...
 ```
 
-Here the total duration is 1,879 ms and the upstream service time is 1,650 ms, so the gateway added approximately 229 ms of overhead (TLS origination, routing). If the duration is much larger than the upstream service time, investigate gateway-side issues (policy evaluation latency, connection pool exhaustion). If they are close, the external service is the bottleneck.
+Here the total duration is 1,879 ms and the upstream service time is 1,650 ms, so approximately 229 ms was spent outside the external service (TLS origination, proxy processing, network). A large and persistent gap may indicate gateway-side issues such as policy evaluation latency, connection pool exhaustion, or network problems. When both values are close, most of the time is spent waiting for the external service to respond.
 
 **Client timeout (downstream disconnect)**
 
@@ -294,7 +293,7 @@ The distinction between `response_flags=-` and other flags is critical: a 503 wi
 
 ### Filtering Access Logs
 
-To reduce log volume, filter access logs to only capture errors:
+To reduce log volume, filter access logs to only capture errors. Use `!has(response.code)` to also capture connection failures where no HTTP response code is generated (for example, `UF`, `UH`, `UT` flags):
 
 ```yaml
 apiVersion: telemetry.istio.io/v1
@@ -307,7 +306,7 @@ spec:
     - providers:
       - name: envoy
       filter:
-        expression: "response.code >= 400"
+        expression: "!has(response.code) || response.code >= 400"
 ```
 
 Other useful filters:

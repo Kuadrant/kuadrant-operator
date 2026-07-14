@@ -8,6 +8,7 @@ Kuadrant provides comprehensive observability features including:
 - **[Tracing](./tracing.md)**: Distributed tracing with OpenTelemetry support for request flows
 - **[Access Logs](./envoy-access-logs.md)**: Envoy access logs with request correlation and structured logging
 - **[Dashboards](./examples.md)**: Pre-built Grafana dashboards for visualization
+- **[Egress Observability](../user-guides/egress/observability.md)**: Metrics and access logging specific to egress gateway traffic
 
 ## Deploying the observabilty
 

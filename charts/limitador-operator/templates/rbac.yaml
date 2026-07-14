@@ -1,5 +1,0 @@
-{{- if .Values.rbac.install }}
----
-# Limitador Operator ClusterRole
-{{ .Files.Get "static/rbac/limitador_operator_role.yaml" }}
-{{- end }}

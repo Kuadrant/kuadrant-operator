@@ -353,6 +353,21 @@ dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITRE
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
+CHILD_OPERATORS_DIR = $(PROJECT_PATH)/config/dependencies/child-operators
+
+.PHONY: sync-child-operator-charts
+sync-child-operator-charts: export YQ := $(YQ)
+sync-child-operator-charts: yq ## Sync child operator Helm charts from upstream repos and update bundle dependencies.
+	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/authorino-operator $(AUTHORINO_OPERATOR_GITREF) authorino-operator $(PROJECT_PATH)/charts/authorino-operator
+	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/limitador-operator $(LIMITADOR_OPERATOR_GITREF) limitador-operator $(PROJECT_PATH)/charts/limitador-operator
+	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/dns-operator $(DNS_OPERATOR_GITREF) dns-operator $(PROJECT_PATH)/charts/dns-operator
+	@# Sync CRDs and ClusterRoles to config/dependencies/child-operators/ for kustomize/bundle
+	@for operator in authorino-operator limitador-operator dns-operator; do \
+		cp $(PROJECT_PATH)/charts/$$operator/crds/manifests.yaml $(CHILD_OPERATORS_DIR)/$${operator}-crds.yaml; \
+		cp $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml $(CHILD_OPERATORS_DIR)/$${operator}-clusterroles.yaml; \
+	done
+	@echo "Synced CRDs and ClusterRoles to $(CHILD_OPERATORS_DIR)"
+
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."

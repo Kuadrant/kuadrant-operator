@@ -1,0 +1,166 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app: limitador-operator
+    app.kubernetes.io/managed-by: helm
+  name: limitador-operator-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: limitador-operator-leader-election-role
+  namespace: '{{ .Release.Namespace }}'
+rules:
+  - apiGroups:
+      - ""
+      - coordination.k8s.io
+    resources:
+      - configmaps
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: limitador-operator-leader-election-rolebinding
+  namespace: '{{ .Release.Namespace }}'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: limitador-operator-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: limitador-operator-controller-manager
+    namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: limitador-operator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: limitador-operator-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: limitador-operator-controller-manager
+    namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: v1
+data:
+  controller_manager_config.yaml: |
+    apiVersion: controller-runtime.sigs.k8s.io/v1alpha1
+    kind: ControllerManagerConfig
+    health:
+      healthProbeBindAddress: :8081
+    metrics:
+      bindAddress: :8080
+    webhook:
+      port: 9443
+    leaderElection:
+      leaderElect: true
+      resourceName: 3745a16e.kuadrant.io
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+  name: limitador-operator-manager-config
+  namespace: '{{ .Release.Namespace }}'
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+    control-plane: controller-manager
+  name: limitador-operator-metrics
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: metrics
+  selector:
+    app: limitador-operator
+    control-plane: controller-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: helm
+    control-plane: controller-manager
+  name: limitador-operator-controller-manager
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      labels:
+        app: limitador-operator
+        app.kubernetes.io/managed-by: helm
+        control-plane: controller-manager
+    spec:
+      containers:
+        - args:
+            - --leader-elect
+          command:
+            - /manager
+          env:
+            - name: RELATED_IMAGE_LIMITADOR
+              value: quay.io/kuadrant/limitador:latest
+          image: quay.io/kuadrant/limitador-operator:latest
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          name: manager
+          ports:
+            - containerPort: 8080
+              name: metrics
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 200m
+              memory: 300Mi
+            requests:
+              cpu: 200m
+              memory: 200Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: limitador-operator-controller-manager
+      terminationGracePeriodSeconds: 10

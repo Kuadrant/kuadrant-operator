@@ -29,13 +29,7 @@ type HelmDNSOperatorReconciler struct {
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/finalizers,verbs=update
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=patch;update
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnshealthcheckprobes,verbs=create;delete;get;list;patch;update;watch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnshealthcheckprobes/finalizers,verbs=update
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnshealthcheckprobes/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=dns-operator-manager-role
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
@@ -72,12 +66,9 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	logger = logger.WithValues("kuadrant", kuadrantObj.Namespace+"/"+kuadrantObj.Name)
 
-	// Build Helm values
-	values := r.buildHelmValues()
-
 	// Render chart
 	renderer := helm.NewRenderer(r.ChartPath)
-	objects, err := renderer.Render("dns-operator", kuadrantObj.Namespace, values)
+	objects, err := renderer.Render("dns-operator", kuadrantObj.Namespace, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to render dns-operator chart")
@@ -163,12 +154,3 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 	return nil
 }
 
-func (r *HelmDNSOperatorReconciler) buildHelmValues() map[string]interface{} {
-	return map[string]interface{}{
-		"rbac": map[string]interface{}{
-			"install": false, // OLM installs ClusterRole from bundle
-			"create":  true,  // Chart creates ClusterRoleBinding
-		},
-		// All other values use chart defaults (image, serviceAccount, replicas, etc.)
-	}
-}

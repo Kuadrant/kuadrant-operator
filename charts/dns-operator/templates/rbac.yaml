@@ -1,4 +1,0 @@
-{{- if .Values.rbac.install }}
----
-{{ .Files.Get "static/rbac/clusterrole.yaml" }}
-{{- end }}

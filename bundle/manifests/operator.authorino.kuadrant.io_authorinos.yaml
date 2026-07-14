@@ -104,8 +104,31 @@ spec:
                             type: string
                         type: object
                         x-kubernetes-map-type: atomic
+                      cipherSuites:
+                        description: TLS cipher suites (IANA names).
+                        items:
+                          type: string
+                        type: array
                       enabled:
                         type: boolean
+                      maxVersion:
+                        description: Maximum TLS version (1.0, 1.1, 1.2, 1.3).
+                        enum:
+                        - "1.0"
+                        - "1.1"
+                        - "1.2"
+                        - "1.3"
+                        - ""
+                        type: string
+                      minVersion:
+                        description: Minimum TLS version (1.0, 1.1, 1.2, 1.3).
+                        enum:
+                        - "1.0"
+                        - "1.1"
+                        - "1.2"
+                        - "1.3"
+                        - ""
+                        type: string
                     type: object
                 required:
                 - tls
@@ -145,8 +168,31 @@ spec:
                             type: string
                         type: object
                         x-kubernetes-map-type: atomic
+                      cipherSuites:
+                        description: TLS cipher suites (IANA names).
+                        items:
+                          type: string
+                        type: array
                       enabled:
                         type: boolean
+                      maxVersion:
+                        description: Maximum TLS version (1.0, 1.1, 1.2, 1.3).
+                        enum:
+                        - "1.0"
+                        - "1.1"
+                        - "1.2"
+                        - "1.3"
+                        - ""
+                        type: string
+                      minVersion:
+                        description: Minimum TLS version (1.0, 1.1, 1.2, 1.3).
+                        enum:
+                        - "1.0"
+                        - "1.1"
+                        - "1.2"
+                        - "1.3"
+                        - ""
+                        type: string
                     type: object
                 required:
                 - tls

@@ -26,14 +26,10 @@ type HelmLimitadorOperatorReconciler struct {
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services;serviceaccounts;configmaps;secrets;pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=create;delete;get;list;patch;update;watch
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors/finalizers,verbs=update
-//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=limitador-operator-manager
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=limitador-operator-manager-role
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
@@ -70,12 +66,9 @@ func (r *HelmLimitadorOperatorReconciler) Reconcile(ctx context.Context, _ []con
 
 	logger = logger.WithValues("kuadrant", kuadrantObj.Namespace+"/"+kuadrantObj.Name)
 
-	// Build Helm values
-	values := r.buildHelmValues()
-
 	// Render chart
 	renderer := helm.NewRenderer(r.ChartPath)
-	objects, err := renderer.Render("limitador-operator", kuadrantObj.Namespace, values)
+	objects, err := renderer.Render("limitador-operator", kuadrantObj.Namespace, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to render limitador-operator chart")
@@ -160,12 +153,3 @@ func (r *HelmLimitadorOperatorReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *HelmLimitadorOperatorReconciler) buildHelmValues() map[string]interface{} {
-	return map[string]interface{}{
-		"rbac": map[string]interface{}{
-			"install": false, // OLM bundle installs ClusterRoles
-			"create":  true,  // Chart creates ClusterRoleBindings
-		},
-		// All other values use chart defaults (image, serviceAccount, replicas, etc.)
-	}
-}

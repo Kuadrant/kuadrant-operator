@@ -26,18 +26,9 @@ type HelmAuthorinoOperatorReconciler struct {
 
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services;serviceaccounts;configmaps;secrets;pods,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="",resources=configmaps/status,verbs=delete;get;patch;update
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
-//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos/finalizers,verbs=update
-//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create;get;list;update;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=bind;escalate,resourceNames=authorino-operator-manager;authorino-manager-role;authorino-manager-k8s-auth-role
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
@@ -75,12 +66,9 @@ func (r *HelmAuthorinoOperatorReconciler) Reconcile(ctx context.Context, _ []con
 
 	logger = logger.WithValues("kuadrant", kuadrantObj.Namespace+"/"+kuadrantObj.Name)
 
-	// Build Helm values
-	values := r.buildHelmValues()
-
 	// Render chart
 	renderer := helm.NewRenderer(r.ChartPath)
-	objects, err := renderer.Render("authorino-operator", kuadrantObj.Namespace, values)
+	objects, err := renderer.Render("authorino-operator", kuadrantObj.Namespace, nil)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to render authorino-operator chart")
@@ -170,12 +158,3 @@ func (r *HelmAuthorinoOperatorReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *HelmAuthorinoOperatorReconciler) buildHelmValues() map[string]interface{} {
-	return map[string]interface{}{
-		"rbac": map[string]interface{}{
-			"install": false, // OLM bundle installs ClusterRoles
-			"create":  true,  // Chart creates ClusterRoleBindings
-		},
-		// All other values use chart defaults (image, serviceAccount, replicas, etc.)
-	}
-}

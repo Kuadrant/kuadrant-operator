@@ -89,6 +89,56 @@ A reference cleanup has been done on the dns-operator `olmv1-umbrella-poc-phase1
 - Component controller SAs and ClusterRoleBindings created via bind/escalate
 - Authorino and Limitador workloads deployed by their respective controllers
 
+## Release Process Changes
+
+The current release process (`make prepare-release` / `automated-release.yaml`) runs a four-phase pipeline: pre-validation → dependencies → operator → post-validation. Phase 1 simplifies several of these stages.
+
+### What stays the same
+
+- **Version inputs**: `release.yaml` still declares versions for all component dependencies (authorino-operator, limitador-operator, dns-operator, wasm-shim, console-plugin, developer-portal). These are still needed to pin chart versions and RELATED_IMAGE references
+- **Pre-validation**: `verify_dependencies.sh` still checks that component versions exist as GitHub tags before allowing a release
+- **Image references**: `RELATED_IMAGE_*` environment variables in `manager.yaml` are still updated at release time for wasm-shim, developer-portal, and console-plugin
+- **Helm chart build**: `make helm-build` still generates the kuadrant-operator chart from kustomize
+
+### What changes
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| **Bundle generation** | `make bundle` pulled child operator bundle images, injected `olm.package.required` dependencies, assembled 4 bundles | `make bundle` generates a single self-contained bundle. Component CRDs and ClusterRoles are already in `config/dependencies/child-operators/` from chart sync |
+| **Catalog generation** | `generate-catalog.sh` rendered 4 bundle images (kuadrant + 3 children) into the catalog | Renders only the kuadrant-operator bundle. Single package in catalog |
+| **Dependencies phase** | `dependencies-manifests.sh` generated kustomize overlays pulling from upstream repos at release time | Simplified — component charts are pre-synced and committed via `make sync-child-operator-charts`. Only developer-portal template remains |
+| **Chart dependencies** | `Chart.yaml` declared authorino-operator, limitador-operator, dns-operator as Helm dependencies pulled from `kuadrant.io/helm-charts` | No Helm dependencies. Component charts are embedded in the kuadrant-operator repo and rendered at runtime |
+| **Release scripts** | `make_bundles.sh` passed child operator bundle image refs to `make bundle` | Simplified — no child operator bundle refs needed |
+| **Artefacts produced** | Operator image + bundle image + catalog image (+ relied on 3 child operator bundle images existing) | Operator image + bundle image + catalog image (self-contained, no external bundle dependencies) |
+
+### Technical debt: release script duplication
+
+The current release pipeline uses shell scripts (`utils/release/operator/make_chart.sh`, `make_bundles.sh`) that duplicate logic already in make targets (`make helm-build`, `make bundle`). Both paths do the same work — resolve versions, set image references, build charts — but with separate implementations. This creates a maintenance risk where changes to make targets don't apply during releases and vice versa.
+
+Ideally, `make prepare-release` should call the standard make targets with version overrides derived from `release.yaml`, rather than reimplementing the build steps in shell scripts. This is pre-existing technical debt, not introduced by Phase 1, but the simplification of the bundle/catalog pipeline makes it a good time to address.
+
+### Component version pinning
+
+Component chart versions are pinned at **sync time** (`make sync-child-operator-charts`), not at release time. The synced charts are committed to the repo and included in the operator container image. At release time, the version in `release.yaml` determines which GITREF was used to sync, and the pre-validation step confirms the tag exists — but the actual chart content is already committed.
+
+This means the release process no longer needs network access to upstream repos during `make bundle` or `make prepare-release` (other than the pre-validation GitHub API check).
+
+## Automated Dependency Sync
+
+With the umbrella operator owning all component charts, we need automation to keep the kuadrant-operator repo in sync when component repos change. A pattern for this already exists between authorino and authorino-operator:
+
+1. **authorino** pushes to `main` with CRD/manifest changes
+2. A GitHub workflow dispatches a `repository_dispatch` event to **authorino-operator**
+3. authorino-operator runs `make manifests bundle helm-build`, detects meaningful changes, and creates a PR automatically
+
+The same pattern should be adopted for the umbrella operator:
+
+1. Component repo (e.g. dns-operator) pushes to `main` with changes to `charts/`, `config/crd/`, or `config/rbac/`
+2. Dispatches to kuadrant-operator
+3. kuadrant-operator runs `make sync-child-operator-charts`, detects changes, creates a PR
+
+This ensures CRDs, ClusterRoles, and chart templates in the kuadrant-operator stay current without manual intervention. Each component repo needs a dispatch workflow watching the relevant paths (`charts/`, `config/crd/`, `config/rbac/`).
+
 ## Migration Considerations
 
 Moving from the current multi-operator OLM model to the umbrella operator requires handling several areas:

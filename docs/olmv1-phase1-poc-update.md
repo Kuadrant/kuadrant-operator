@@ -1,4 +1,4 @@
-# OLMv1 Phase 1 — OLM Dependencies Deprecation
+# OLMv1 Phase 1: OLM Dependencies Deprecation
 
 ## Goal
 
@@ -8,41 +8,41 @@ Remove OLM operator dependencies (`dependencies.yaml`) from kuadrant-operator. O
 
 The kuadrant-operator becomes an umbrella operator that deploys component controllers (authorino-operator, limitador-operator, dns-operator, mcp-gateway) itself at runtime, rather than relying on OLM to install them as separate operators.
 
-**Before Phase 1**: 4 OLM operators (kuadrant, authorino, limitador, dns) — each with its own CSV, bundle image, and catalog entry. OLM manages all lifecycles independently. dns-operator was additionally deployed via kustomize remote refs separately from the Kuadrant CR lifecycle.
+**Before Phase 1**: 4 OLM operators (kuadrant, authorino, limitador, dns), each with its own CSV, bundle image, and catalog entry. OLM manages all lifecycles independently. dns-operator ran independently of the Kuadrant CR and could serve DNSRecords without one.
 
-**After Phase 1**: 1 OLM operator (kuadrant-operator) — single CSV, single bundle, single catalog entry. Component controllers are no longer OLM packages. They become internal controller deployments whose lifecycle is managed by the kuadrant-operator. No component controller bundles, catalogs, or CSVs need to be maintained.
+**After Phase 1**: 1 OLM operator (kuadrant-operator) with a single CSV, bundle, and catalog entry. Component controllers are no longer OLM packages. They become internal controller deployments whose lifecycle is managed by the kuadrant-operator. No component controller bundles, catalogs, or CSVs need to be maintained.
 
 ## Key Architectural Decisions
 
 ### 1. All component controllers deployed via Helm chart rendering, triggered by Kuadrant CR
 
 - When a user creates a Kuadrant CR, the umbrella operator renders each component controller's Helm chart and applies the resources (Deployment, ServiceAccount, ClusterRoleBinding, etc.) via Server-Side Apply
-- **All** component controllers now hang off the Kuadrant CR — including dns-operator, which on main was deployed via kustomize remote refs independently of the Kuadrant CR lifecycle
+- **All** component controllers now hang off the Kuadrant CR, including dns-operator, which previously ran independently and did not require a Kuadrant CR to function
 - Charts are pulled from the upstream component repos and committed to the kuadrant-operator repo
 - A generic `make sync-child-operator-charts` target handles both simple charts (dns/authorino/limitador) and mature charts with full Helm templating (mcp-gateway)
 
-### 2. RBAC: bind/escalate only — no permission duplication
+### 2. RBAC: bind/escalate only, no permission duplication
 
 - The umbrella operator does NOT need to duplicate component controller permissions
 - Kubernetes `bind` verb allows creating ClusterRoleBindings to named ClusterRoles without holding all their permissions
-- Only ClusterRole **names** need tracking, not their contents — when a component controller changes its RBAC, no umbrella operator change is needed unless a role is added or renamed
+- Only ClusterRole **names** need tracking, not their contents. When a component controller changes its RBAC, no umbrella operator change is needed unless a role is added or renamed
 - Tested and confirmed working on a live cluster
 
 ### 3. Two supported installation methods
 
-- **Helm**: Single `helm install` deploys everything — CRDs, ClusterRoles, and the operator. `make local-setup-helm` for local dev
+- **Helm**: Single `helm install` deploys everything (CRDs, ClusterRoles, and the operator). `make local-setup-helm` for local dev
 - **OLM**: Single operator in the catalog, bundle includes all component controller CRDs and ClusterRoles. No component controller bundles in the catalog
 - Both paths share the same environment setup (`local-env-setup`), differing only in how the operator is deployed
 
 ### 4. Clear separation of cluster-scoped and namespaced resources
 
-- **Cluster-scoped resources** (CRDs, ClusterRoles) are managed by the installation method (Helm or OLM) — they exist before the operator starts and before any Kuadrant CR is created
+- **Cluster-scoped resources** (CRDs, ClusterRoles) are managed by the installation method (Helm or OLM). These exist before the operator starts and before any Kuadrant CR is created
 - **Namespaced resources** (Deployments, ServiceAccounts, Roles, RoleBindings, ConfigMaps, Services) and **ClusterRoleBindings** are managed by the kuadrant-operator at runtime when a Kuadrant CR is created
 - CRDs and ClusterRoles are extracted from component charts during `make sync-child-operator-charts` and included in both the Helm chart and OLM bundle
 
 ### 5. Simplified OLM bundle/catalog pipeline
 
-Previously the kuadrant-operator bundle/catalog pipeline had to manage four operator bundles — it pulled, validated, and assembled bundles for authorino-operator, limitador-operator, and dns-operator alongside its own. This required version variables, bundle image references, and dependency injection for each component.
+Previously the kuadrant-operator bundle/catalog pipeline had to manage four operator bundles. It pulled, validated, and assembled bundles for authorino-operator, limitador-operator, and dns-operator alongside its own. This required version variables, bundle image references, and dependency injection for each component.
 
 Now the pipeline only deals with a single bundle (kuadrant-operator itself):
 
@@ -56,9 +56,9 @@ Now the pipeline only deals with a single bundle (kuadrant-operator itself):
 - Authorino CR and Limitador CR are still created by kuadrant-operator
 - Component controllers reconcile these wrapper CRs to create workloads — no change to this flow
 - Users see no difference in behaviour
-- During migration, control plane resources (component controller Deployments, SAs, ClusterRoleBindings) can be safely deleted and recreated by the umbrella operator — these don't affect the data plane
+- During migration, control plane resources (component controller Deployments, SAs, ClusterRoleBindings) can be safely deleted and recreated by the umbrella operator. These don't affect the data plane
 - The data plane workloads (Authorino Deployment, Limitador Deployment) are owned by the wrapper CRs via ownerReference. As long as the wrapper CRs are not deleted, workloads continue running uninterrupted
-- The only risk window is the brief period where component controllers aren't running and therefore not reconciling — but existing workloads remain healthy and serving traffic
+- The only risk window is the brief period where component controllers aren't running and therefore not reconciling. Existing workloads remain healthy and serving traffic during this window
 
 ## What Changes in Component Repos
 
@@ -71,7 +71,7 @@ However, since component repos no longer need to produce their own OLM bundles o
 - All OLM-related make targets, variables, and CI jobs
 - `operator-sdk` and `opm` tool dependencies
 
-Each component repo retains its Helm chart, kustomize layers, and application code. The kustomize layers (`config/crd/`, `config/rbac/`, `config/manager/`, `config/default/`) are shared between the Helm chart and local dev paths — removing the OLM overlay doesn't affect them.
+Each component repo retains its Helm chart, kustomize layers, and application code. The kustomize layers (`config/crd/`, `config/rbac/`, `config/manager/`, `config/default/`) are shared between the Helm chart and local dev paths. Removing the OLM overlay doesn't affect them.
 
 A reference cleanup has been done on the dns-operator `olmv1-umbrella-poc-phase1` branch, removing ~1,800 lines. Similar reductions are expected for authorino-operator and limitador-operator. See [Child Operator Cleanup](olmv1-child-operator-cleanup.md) for the full audit.
 
@@ -113,13 +113,13 @@ The current release process (`make prepare-release` / `automated-release.yaml`) 
 
 ### Technical debt: release script duplication
 
-The current release pipeline uses shell scripts (`utils/release/operator/make_chart.sh`, `make_bundles.sh`) that duplicate logic already in make targets (`make helm-build`, `make bundle`). Both paths do the same work — resolve versions, set image references, build charts — but with separate implementations. This creates a maintenance risk where changes to make targets don't apply during releases and vice versa.
+The current release pipeline uses shell scripts (`utils/release/operator/make_chart.sh`, `make_bundles.sh`) that duplicate logic already in make targets (`make helm-build`, `make bundle`). Both paths do the same work (resolve versions, set image references, build charts) but with separate implementations. This creates a maintenance risk where changes to make targets don't apply during releases and vice versa.
 
 Ideally, `make prepare-release` should call the standard make targets with version overrides derived from `release.yaml`, rather than reimplementing the build steps in shell scripts. This is pre-existing technical debt, not introduced by Phase 1, but the simplification of the bundle/catalog pipeline makes it a good time to address.
 
 ### Component version pinning
 
-Component chart versions are pinned at **sync time** (`make sync-child-operator-charts`), not at release time. The synced charts are committed to the repo and included in the operator container image. At release time, the version in `release.yaml` determines which GITREF was used to sync, and the pre-validation step confirms the tag exists — but the actual chart content is already committed.
+Component chart versions are pinned at **sync time** (`make sync-child-operator-charts`), not at release time. The synced charts are committed to the repo and included in the operator container image. At release time, the version in `release.yaml` determines which GITREF was used to sync, and the pre-validation step confirms the tag exists. The actual chart content is already committed.
 
 This means the release process no longer needs network access to upstream repos during `make bundle` or `make prepare-release` (other than the pre-validation GitHub API check).
 
@@ -166,11 +166,11 @@ To minimise migration friction, resource names produced by the Helm chart render
 ### Helm vs OLM upgrade path
 
 - **OLM users**: Upgrade the kuadrant-operator subscription to the new bundle version, then clean up orphaned child operator subscriptions
-- **Helm users**: `helm upgrade` replaces the old chart (which had child operator chart dependencies) with the new chart (which includes everything). Cleaner path — Helm manages the full lifecycle
+- **Helm users**: `helm upgrade` replaces the old chart (which had child operator chart dependencies) with the new chart (which includes everything). Cleaner path since Helm manages the full lifecycle
 
 ### Consistent labelling of managed resources
 
-Since the umbrella operator now controls the deployment of all component controllers, we can apply consistent labels to every resource it creates. This addresses existing gaps — for example, the Authorino Deployment currently lacks distinguishing labels, which prevents it from being filtered in the kuadrant-operator topology (only Limitador Deployment is tracked today). With consistent labels (e.g. `kuadrant.io/managed-by: kuadrant-operator`, `kuadrant.io/component: authorino`) applied at render time, all managed resources become discoverable, filterable, and trackable in the topology DAG.
+Since the umbrella operator now controls the deployment of all component controllers, we can apply consistent labels to every resource it creates. This addresses existing gaps. For example, the Authorino Deployment currently lacks distinguishing labels, which prevents it from being filtered in the kuadrant-operator topology (only Limitador Deployment is tracked today). With consistent labels (e.g. `kuadrant.io/managed-by: kuadrant-operator`, `kuadrant.io/component: authorino`) applied at render time, all managed resources become discoverable, filterable, and trackable in the topology DAG.
 
 ## Future Phases
 
@@ -182,7 +182,7 @@ Currently, the path from Kuadrant CR to workload goes through two layers: kuadra
 
 ### Wrapper CR removal
 
-The Authorino CR and Limitador CR are intermediate resources that the child operators reconcile into workloads. If the intermediate operator layer is removed, wrapper CRs become unnecessary — the kuadrant-operator would manage workload Deployments, ConfigMaps, and Services directly. This simplifies the resource ownership chain but requires migrating any user customisations currently applied via wrapper CR fields.
+The Authorino CR and Limitador CR are intermediate resources that the child operators reconcile into workloads. If the intermediate operator layer is removed, wrapper CRs become unnecessary. The kuadrant-operator would manage workload Deployments, ConfigMaps, and Services directly. This simplifies the resource ownership chain but requires migrating any user customisations currently applied via wrapper CR fields.
 
 ### Selective component installation
 
@@ -194,7 +194,7 @@ Move component Helm charts from individual repos (dns-operator, authorino-operat
 
 ### Improved Helm chart templating for simple components
 
-The dns-operator, limitador-operator, and authorino-operator charts currently use minimal templating — a single `manifests.yaml` generated by kustomize with only `{{ .Release.Namespace }}` substitution. These could be improved with proper Helm templating (configurable values, helpers, conditionals) similar to the mcp-gateway chart, enabling more flexible configuration when deployed by the umbrella operator.
+The dns-operator, limitador-operator, and authorino-operator charts currently use minimal templating: a single `manifests.yaml` generated by kustomize with only `{{ .Release.Namespace }}` substitution. These could be improved with proper Helm templating (configurable values, helpers, conditionals) similar to the mcp-gateway chart, enabling more flexible configuration when deployed by the umbrella operator.
 
 ## Architecture Diagrams
 

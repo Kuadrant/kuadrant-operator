@@ -54,11 +54,29 @@ Now the pipeline only deals with a single bundle (kuadrant-operator itself):
 ### 6. Wrapper CRs preserved (minimal migration risk)
 
 - Authorino CR and Limitador CR are still created by kuadrant-operator
-- Component controllers reconcile these wrapper CRs to create workloads — no change to this flow
+- Component controllers reconcile these wrapper CRs to create workloads. No change to this flow
 - Users see no difference in behaviour
 - During migration, control plane resources (component controller Deployments, SAs, ClusterRoleBindings) can be safely deleted and recreated by the umbrella operator. These don't affect the data plane
 - The data plane workloads (Authorino Deployment, Limitador Deployment) are owned by the wrapper CRs via ownerReference. As long as the wrapper CRs are not deleted, workloads continue running uninterrupted
 - The only risk window is the brief period where component controllers aren't running and therefore not reconciling. Existing workloads remain healthy and serving traffic during this window
+
+### 7. Kuadrant CR deletion must manage child operator lifecycle (CRITICAL)
+
+In the umbrella operator model, component controller Deployments are owned by the Kuadrant CR via ownerReference. If the Kuadrant CR is deleted, Kubernetes will cascade-delete both the component controller Deployments and the wrapper CRs simultaneously.
+
+This is a problem because several CRDs use finalizers that require their controller to be running:
+- **Authorino CR** has finalizer `authorino.kuadrant.io/finalizer`
+- **DNSRecord CRs** have finalizers for cleaning up external DNS provider records
+
+If the controller Deployment is deleted before these finalizers complete, the CRs will be stuck in `Terminating` state. DNSRecords are particularly critical since their finalizers clean up external state (DNS provider records that would otherwise become orphaned).
+
+**Required implementation**: The Kuadrant CR must have a finalizer that enforces the correct deletion order:
+
+1. Delete wrapper CRs (Authorino CR, Limitador CR) and wait for their finalizers to complete
+2. Wait for any DNSRecord finalizers to complete
+3. Then remove the finalizer, allowing the Kuadrant CR deletion to proceed and cascade-delete the component controller Deployments
+
+The current Kuadrant CR has no finalizer for this purpose (only `kuadrant.io/developerportal`). This must be implemented before the umbrella operator can be used in production.
 
 ## What Changes in Component Repos
 
@@ -168,9 +186,16 @@ To minimise migration friction, resource names produced by the Helm chart render
 - **OLM users**: Upgrade the kuadrant-operator subscription to the new bundle version, then clean up orphaned child operator subscriptions
 - **Helm users**: `helm upgrade` replaces the old chart (which had child operator chart dependencies) with the new chart (which includes everything). Cleaner path since Helm manages the full lifecycle
 
-### Consistent labelling of managed resources
+### Resource identity and compatibility
 
-Since the umbrella operator now controls the deployment of all component controllers, we can apply consistent labels to every resource it creates. This addresses existing gaps. For example, the Authorino Deployment currently lacks distinguishing labels, which prevents it from being filtered in the kuadrant-operator topology (only Limitador Deployment is tracked today). With consistent labels (e.g. `kuadrant.io/managed-by: kuadrant-operator`, `kuadrant.io/component: authorino`) applied at render time, all managed resources become discoverable, filterable, and trackable in the topology DAG.
+Since the umbrella operator now controls the deployment of all component controllers, we have the opportunity to ensure consistent naming, labels, selectors, and ownerReferences across all managed resources. This addresses existing gaps such as the Authorino Deployment lacking distinguishing labels (preventing topology tracking), and the limitador-operator using a generic selector that collides with kuadrant-operator.
+
+A full baseline of resource names, labels, selectors, ownerReferences, and service account mappings has been captured from both the current main branch and the Phase 1 branch. These should be used as the compatibility reference when implementing the production version.
+
+See:
+- [Resource Baseline (main)](olmv1-resource-baseline-main.md)
+- [Resource Baseline (Phase 1)](olmv1-resource-baseline-phase1.md)
+- [Resource Comparison](olmv1-resource-comparison.md)
 
 ## Future Phases
 

@@ -363,7 +363,7 @@ sync-child-operator-charts: yq ## Sync child operator Helm charts from upstream 
 	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/dns-operator $(DNS_OPERATOR_GITREF) dns-operator $(PROJECT_PATH)/charts/dns-operator
 	@# Sync CRDs and ClusterRoles to config/dependencies/child-operators/ for kustomize/bundle
 	@for operator in authorino-operator limitador-operator dns-operator; do \
-		cp $(PROJECT_PATH)/charts/$$operator/crds/manifests.yaml $(CHILD_OPERATORS_DIR)/$${operator}-crds.yaml; \
+		cat $(PROJECT_PATH)/charts/$$operator/crds/*.yaml > $(CHILD_OPERATORS_DIR)/$${operator}-crds.yaml; \
 		cp $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml $(CHILD_OPERATORS_DIR)/$${operator}-clusterroles.yaml; \
 	done
 	@echo "Synced CRDs and ClusterRoles to $(CHILD_OPERATORS_DIR)"

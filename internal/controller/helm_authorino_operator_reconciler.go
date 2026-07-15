@@ -157,4 +157,3 @@ func (r *HelmAuthorinoOperatorReconciler) Reconcile(ctx context.Context, _ []con
 
 	return nil
 }
-

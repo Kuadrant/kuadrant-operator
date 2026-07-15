@@ -1,0 +1,19 @@
+{{- if and .Values.mcpGatewayExtension.create .Values.mcpGatewayExtension.gatewayRef.namespace }}
+{{- if ne .Values.mcpGatewayExtension.gatewayRef.namespace .Release.Namespace }}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-{{ .Values.mcpGatewayExtension.gatewayRef.name }}
+  namespace: {{ .Values.mcpGatewayExtension.gatewayRef.namespace }}
+  labels:
+    {{- include "mcp-gateway.labels" . | nindent 4 }}
+spec:
+  from:
+    - group: mcp.kuadrant.io
+      kind: MCPGatewayExtension
+      namespace: {{ .Release.Namespace }}
+  to:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+{{- end }}
+{{- end }}

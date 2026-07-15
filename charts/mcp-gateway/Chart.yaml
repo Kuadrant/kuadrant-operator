@@ -1,0 +1,20 @@
+apiVersion: v2
+name: mcp-gateway
+description: A Kubernetes gateway for aggregating and routing Model Context Protocol (MCP) servers
+type: application
+version: 0.1.0
+appVersion: "latest"
+home: https://github.com/Kuadrant/mcp-gateway
+sources:
+  - https://github.com/Kuadrant/mcp-gateway
+maintainers:
+  - name: Kuadrant Team
+    url: https://github.com/Kuadrant
+keywords:
+  - mcp
+  - model-context-protocol
+  - gateway
+  - broker
+  - controller
+annotations:
+  category: Infrastructure

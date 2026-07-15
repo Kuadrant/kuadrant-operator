@@ -14619,6 +14619,15 @@ rules:
   - bind
   - escalate
 - apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - mcp-gateway-controller
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+- apiGroups:
   - security.istio.io
   resources:
   - peerauthentications

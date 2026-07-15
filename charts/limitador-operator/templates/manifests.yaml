@@ -118,13 +118,13 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: controller-manager
+      control-plane: limitador-operator-controller-manager
   template:
     metadata:
       labels:
         app: limitador-operator
         app.kubernetes.io/managed-by: helm
-        control-plane: controller-manager
+        control-plane: limitador-operator-controller-manager
     spec:
       containers:
         - args:

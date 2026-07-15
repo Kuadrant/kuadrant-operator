@@ -158,6 +158,17 @@ else
 DNS_OPERATOR_GITREF = $(DNS_OPERATOR_VERSION)
 endif
 
+## mcp-gateway
+MCP_GATEWAY_VERSION ?= latest
+mcpgateway_is_semantic := $(call is_semantic_version,$(MCP_GATEWAY_VERSION))
+ifeq (latest,$(MCP_GATEWAY_VERSION))
+MCP_GATEWAY_GITREF = main
+else ifeq (true,$(mcpgateway_is_semantic))
+MCP_GATEWAY_GITREF = v$(MCP_GATEWAY_VERSION)
+else
+MCP_GATEWAY_GITREF = $(MCP_GATEWAY_VERSION)
+endif
+
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
@@ -361,10 +372,13 @@ sync-child-operator-charts: yq ## Sync child operator Helm charts from upstream 
 	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/authorino-operator $(AUTHORINO_OPERATOR_GITREF) authorino-operator $(PROJECT_PATH)/charts/authorino-operator
 	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/limitador-operator $(LIMITADOR_OPERATOR_GITREF) limitador-operator $(PROJECT_PATH)/charts/limitador-operator
 	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/dns-operator $(DNS_OPERATOR_GITREF) dns-operator $(PROJECT_PATH)/charts/dns-operator
+	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/mcp-gateway $(MCP_GATEWAY_GITREF) mcp-gateway $(PROJECT_PATH)/charts/mcp-gateway
 	@# Sync CRDs and ClusterRoles to config/dependencies/child-operators/ for kustomize/bundle
-	@for operator in authorino-operator limitador-operator dns-operator; do \
+	@for operator in authorino-operator limitador-operator dns-operator mcp-gateway; do \
 		cat $(PROJECT_PATH)/charts/$$operator/crds/*.yaml > $(CHILD_OPERATORS_DIR)/$${operator}-crds.yaml; \
-		cp $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml $(CHILD_OPERATORS_DIR)/$${operator}-clusterroles.yaml; \
+		if [ -f $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml ]; then \
+			cp $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml $(CHILD_OPERATORS_DIR)/$${operator}-clusterroles.yaml; \
+		fi; \
 	done
 	@echo "Synced CRDs and ClusterRoles to $(CHILD_OPERATORS_DIR)"
 

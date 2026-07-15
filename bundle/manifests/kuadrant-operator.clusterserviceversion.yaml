@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-07-14T15:59:26Z"
+    createdAt: "2026-07-15T16:25:12Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -290,6 +290,24 @@ spec:
       displayName: Limitador
       kind: Limitador
       name: limitadors.limitador.kuadrant.io
+      version: v1alpha1
+    - kind: MCPGatewayExtension
+      name: mcpgatewayextensions.mcp.kuadrant.io
+      version: v1
+    - kind: MCPGatewayExtension
+      name: mcpgatewayextensions.mcp.kuadrant.io
+      version: v1alpha1
+    - kind: MCPServerRegistration
+      name: mcpserverregistrations.mcp.kuadrant.io
+      version: v1
+    - kind: MCPServerRegistration
+      name: mcpserverregistrations.mcp.kuadrant.io
+      version: v1alpha1
+    - kind: MCPVirtualServer
+      name: mcpvirtualservers.mcp.kuadrant.io
+      version: v1
+    - kind: MCPVirtualServer
+      name: mcpvirtualservers.mcp.kuadrant.io
       version: v1alpha1
     - kind: OIDCPolicy
       name: oidcpolicies.extensions.kuadrant.io
@@ -793,6 +811,15 @@ spec:
           - rbac.authorization.k8s.io
           resourceNames:
           - limitador-operator-manager-role
+          resources:
+          - clusterroles
+          verbs:
+          - bind
+          - escalate
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resourceNames:
+          - mcp-gateway-controller
           resources:
           - clusterroles
           verbs:

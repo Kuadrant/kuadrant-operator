@@ -1,0 +1,42 @@
+{{- if .Values.mcpGatewayExtension.create }}
+apiVersion: mcp.kuadrant.io/v1alpha1
+kind: MCPGatewayExtension
+metadata:
+  name: {{ include "mcp-gateway.fullname" . }}-extension
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "mcp-gateway.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: {{ .Values.mcpGatewayExtension.gatewayRef.name }}
+    {{- if .Values.mcpGatewayExtension.gatewayRef.namespace }}
+    namespace: {{ .Values.mcpGatewayExtension.gatewayRef.namespace }}
+    {{- end }}
+    sectionName: {{ .Values.mcpGatewayExtension.gatewayRef.sectionName }}
+  {{- if .Values.gateway.publicHost }}
+  publicHost: {{ .Values.gateway.publicHost | quote }}
+  {{- end }}
+  privateHost: {{ printf "%s-%s.%s.svc.cluster.local:%v" .Values.gateway.name .Values.gateway.gatewayClassName .Values.gateway.namespace .Values.gateway.port | quote }}
+  {{- if .Values.broker.pollInterval }}
+  backendPingIntervalSeconds: {{ .Values.broker.pollInterval }}
+  {{- end }}
+  {{- /* pass-through fields */ -}}
+  {{- with .Values.mcpGatewayExtension.httpRouteManagement }}
+  httpRouteManagement: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.mcpGatewayExtension.sessionStore.secretName }}
+  sessionStore:
+    secretName: {{ .Values.mcpGatewayExtension.sessionStore.secretName | quote }}
+  {{- end }}
+  {{- if or .Values.mcpGatewayExtension.trustedHeadersKey.generate .Values.mcpGatewayExtension.trustedHeadersKey.secretName }}
+  trustedHeadersKey:
+    {{- with .Values.mcpGatewayExtension.trustedHeadersKey.generate }}
+    generate: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.mcpGatewayExtension.trustedHeadersKey.secretName }}
+    secretName: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+{{- end }}

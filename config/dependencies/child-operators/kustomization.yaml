@@ -12,3 +12,6 @@ resources:
 # DNS operator
 - dns-operator-crds.yaml
 - dns-operator-clusterroles.yaml
+# MCP Gateway
+- mcp-gateway-crds.yaml
+- mcp-gateway-clusterroles.yaml

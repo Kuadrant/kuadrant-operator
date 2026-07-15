@@ -3,16 +3,19 @@
 # Pull a child operator Helm chart from its upstream repo.
 # Works with any chart structure (single manifests.yaml or multiple template files).
 #
-# If the chart has a native crds/ directory, it is used as-is.
-# If not (CRDs inline in templates/manifests.yaml), they are extracted via yq.
+# CRDs: extracted from templates/manifests.yaml if no native crds/ directory exists.
+# ClusterRoles: for simple charts (single manifests.yaml), ClusterRoles are extracted
+# into static/clusterroles.yaml and removed from templates.
 #
-# ClusterRoles are extracted from templates/manifests.yaml (simple charts) or
-# downloaded from the repo's config/rbac/ with namePrefix applied (complex charts).
+# NOTE: Several post-processing hacks exist below for the mcp-gateway chart
+# specifically, due to differences between its Helm chart conventions and the
+# simple kustomize-generated charts used by the other child operators. These are
+# marked as HACK and are for POC purposes only. In the real implementation, we
+# should find a better approach to chart syncing — possibly reusing the same Helm
+# rendering engine used internally by the operator to extract resources, rather
+# than sed/yq post-processing of template files.
 #
 # Usage: pull-child-chart.sh ORG/REPO GITREF CHART_NAME OUTPUT_DIR
-#
-# Example: pull-child-chart.sh Kuadrant/dns-operator main dns-operator ./charts/dns-operator
-# Example: pull-child-chart.sh Kuadrant/mcp-gateway main mcp-gateway ./charts/mcp-gateway
 
 set -euo pipefail
 
@@ -48,19 +51,47 @@ if [ ! -d "${OUTPUT_DIR}/crds" ] && [ -f "${OUTPUT_DIR}/templates/manifests.yaml
     echo "${FILTERED}" > "${OUTPUT_DIR}/templates/manifests.yaml"
 fi
 
-# Extract ClusterRoles for bundle/dependencies
+# Extract ClusterRoles into static/ for bundle/dependencies
 mkdir -p "${OUTPUT_DIR}/static"
 if [ -f "${OUTPUT_DIR}/templates/manifests.yaml" ]; then
-    # Simple charts: ClusterRoles inline in manifests.yaml (already namePrefix'd by kustomize)
+    # Simple charts: ClusterRoles inline in manifests.yaml (already namePrefix'd)
     ${YQ} 'select(.kind == "ClusterRole")' "${OUTPUT_DIR}/templates/manifests.yaml" \
         > "${OUTPUT_DIR}/static/clusterroles.yaml"
     FILTERED=$(${YQ} 'select(.kind != "ClusterRole")' "${OUTPUT_DIR}/templates/manifests.yaml")
     echo "${FILTERED}" > "${OUTPUT_DIR}/templates/manifests.yaml"
-else
-    # Complex charts: download raw ClusterRole from config/rbac/
-    curl -sSfL "https://raw.githubusercontent.com/${REPO}/${GITREF}/config/rbac/role.yaml" \
-        -o "${OUTPUT_DIR}/static/clusterroles.yaml"
+fi
+
+# HACK (POC only, mcp-gateway): The mcp-gateway chart uses Helm-templated RBAC
+# in templates/rbac.yaml with ClusterRole names that differ from the kustomize
+# source (config/rbac/role.yaml). We strip the ClusterRole (managed by the
+# installer) and preserve only the ClusterRoleBinding. The static ClusterRole in
+# config/dependencies/child-operators/ is manually maintained with the correct name.
+# TODO: upstream should align ClusterRole naming between kustomize and Helm, or
+# the sync process should use the Helm renderer to extract resources cleanly.
+if [ -f "${OUTPUT_DIR}/templates/rbac.yaml" ]; then
+    sed -n '/kind: ClusterRoleBinding/,$ p' "${OUTPUT_DIR}/templates/rbac.yaml" | \
+        sed '1 i\apiVersion: rbac.authorization.k8s.io/v1' > "${TMP}/crb.yaml"
+    if [ -s "${TMP}/crb.yaml" ]; then
+        echo '{{- if .Values.controller.enabled }}' > "${OUTPUT_DIR}/templates/rbac.yaml"
+        echo '---' >> "${OUTPUT_DIR}/templates/rbac.yaml"
+        cat "${TMP}/crb.yaml" >> "${OUTPUT_DIR}/templates/rbac.yaml"
+        echo "  HACK: Stripped ClusterRole from templates/rbac.yaml (mcp-gateway) — managed by installer"
+    else
+        rm "${OUTPUT_DIR}/templates/rbac.yaml"
+        echo "  HACK: Removed templates/rbac.yaml (mcp-gateway) — managed externally"
+    fi
+fi
+
+# HACK (POC only, limitador-operator): Uses the generic 'control-plane: controller-manager'
+# selector which collides with kuadrant-operator in the same namespace. Patch it to use
+# a unique selector. This MUST be fixed upstream in the limitador-operator chart and this
+# hack removed — it will break upgrades if the Deployment already exists with the old selector.
+if [ "${CHART_NAME}" = "limitador-operator" ] && [ -f "${OUTPUT_DIR}/templates/manifests.yaml" ]; then
+    ${YQ} -i '
+        (select(.kind == "Deployment").spec.selector.matchLabels."control-plane") = "limitador-operator-controller-manager" |
+        (select(.kind == "Deployment").spec.template.metadata.labels."control-plane") = "limitador-operator-controller-manager"
+    ' "${OUTPUT_DIR}/templates/manifests.yaml"
+    echo "  HACK: Patched limitador-operator Deployment selector to avoid collision"
 fi
 
 echo "  Chart pulled to ${OUTPUT_DIR}"
-echo "  ClusterRoles → static/clusterroles.yaml"

@@ -36,9 +36,9 @@ The kuadrant-operator becomes an umbrella operator that deploys component contro
 
 ### 4. Clear separation of cluster-scoped and namespaced resources
 
-- **Cluster-scoped resources** (CRDs, ClusterRoles) are managed by the installation method (Helm or OLM). These exist before the operator starts and before any Kuadrant CR is created
-- **Namespaced resources** (Deployments, ServiceAccounts, Roles, RoleBindings, ConfigMaps, Services) and **ClusterRoleBindings** are managed by the kuadrant-operator at runtime when a Kuadrant CR is created
-- CRDs and ClusterRoles are extracted from component charts during `make sync-child-operator-charts` and included in both the Helm chart and OLM bundle
+- **Cluster-scoped resources** (CRDs, ClusterRoles) for all components are owned and managed by the kuadrant-operator itself, distributed via its OLM bundle or Helm chart. These are installed before the operator starts and before any Kuadrant CR is created. The operator will not attempt to create or modify these resources at runtime.
+- **Namespaced resources** (Deployments, ServiceAccounts, Roles, RoleBindings, ConfigMaps, Services) and **ClusterRoleBindings** are created by the kuadrant-operator at runtime when a Kuadrant CR is created. The operator uses Helm chart templating internally to render these resources from the child operator charts.
+- CRDs and ClusterRoles are extracted from component charts at build time during `make sync-child-operator-charts` and included in the kuadrant-operator's own Helm chart and OLM bundle. The child operator charts are the source of these resources, but the kuadrant-operator is the owner.
 
 ### 5. Simplified OLM bundle/catalog pipeline
 

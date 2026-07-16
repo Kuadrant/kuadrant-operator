@@ -55,6 +55,10 @@ func GetAuthorinoFromTopology(topology *machinery.Topology, state *sync.Map) *au
 func AuthObjectLabels() labels.Set {
 	m := KuadrantManagedObjectLabels()
 	m[authObjectLabelKey] = "true"
+	// Helm-deployed Authorino (charts/authorino) uses --auth-config-label-selector=
+	// authorino.kuadrant.io/managed-by=authorino. Add this label so AuthConfigs are
+	// picked up by the Helm-deployed Authorino, not just by the operator-based one.
+	m["authorino.kuadrant.io/managed-by"] = "authorino"
 	return m
 }
 
@@ -73,7 +77,10 @@ type authorinoServiceInfo struct {
 
 func authorinoServiceInfoFromAuthorino(authorino *authorinooperatorv1beta1.Authorino) authorinoServiceInfo {
 	info := authorinoServiceInfo{
-		Host: fmt.Sprintf("%s-authorino-authorization.%s.svc.cluster.local", authorino.GetName(), authorino.GetNamespace()),
+		// When Authorino is deployed via the Helm chart (charts/authorino), the gRPC service
+		// is named "<release>-auth" (e.g. authorino-auth), not "<name>-authorino-authorization"
+		// which was the naming convention used by the authorino-operator CR-based deployment.
+		Host: fmt.Sprintf("%s-auth.%s.svc.cluster.local", authorino.GetName(), authorino.GetNamespace()),
 		Port: int32(50051), // default authorino grpc authorization service port
 	}
 	if p := authorino.Spec.Listener.Ports.GRPC; p != nil {

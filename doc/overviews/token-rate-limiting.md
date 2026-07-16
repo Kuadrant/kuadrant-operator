@@ -22,7 +22,7 @@ Kuadrant's Token Rate Limit implementation extends the Envoy [Rate Limit Service
 
 This approach ensures accurate usage-based rate limiting where limits are enforced based on actual AI/LLM token consumption rather than simple request counts.
 
-**Important**: Currently, TokenRateLimitPolicy only supports non-streaming OpenAI-style API responses (where `stream: false` or is omitted in the request). Support for streaming responses is planned for future releases.
+**Important**: TokenRateLimitPolicy supports both non-streaming and streaming OpenAI-style API responses. For streaming, the request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event. Only OpenAI-style completions responses are supported today — this includes `/v1/chat/completions` and `/v1/completions`, and any backend implementing the OpenAI-compatible API such as vLLM and kServe. Other provider formats (e.g. Anthropic, Google Gemini) are not yet parsed; see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
 
 ### The TokenRateLimitPolicy custom resource
 
@@ -59,6 +59,7 @@ TokenRateLimitPolicy automatically extracts token usage from AI/LLM responses wi
 
 - **Zero configuration**: Works out-of-the-box with OpenAI-compatible APIs
 - **Response parsing**: Automatically extracts `usage.total_tokens` from response bodies
+- **Provider scope**: Supports any backend returning that field, e.g. OpenAI `/v1/chat/completions` and `/v1/completions`, and OpenAI-compatible backends like vLLM, kServe, Ollama, Azure OpenAI, and Gemini's OpenAI-compat endpoint. Anthropic and Gemini's native response formats aren't supported yet — see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864)
 - **Accurate accounting**: Tracks actual token consumption, not estimates
 - **Graceful fallback**: If token parsing fails, falls back to request counting
 

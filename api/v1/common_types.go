@@ -15,7 +15,7 @@ type Predicate struct {
 }
 
 func NewWhenPredicates(predicates ...string) WhenPredicates {
-	whenPredicates := make(WhenPredicates, 0)
+	whenPredicates := make(WhenPredicates, 0, len(predicates))
 	for _, predicate := range predicates {
 		whenPredicates = append(whenPredicates, NewPredicate(predicate))
 	}

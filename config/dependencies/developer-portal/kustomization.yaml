@@ -8,10 +8,10 @@ namePrefix: developer-portal-
 
 resources:
 # CRDs - directory ref adapts to whatever CRDs exist at the given ref
-- github.com/Kuadrant/developer-portal-controller/config/crd?ref=v0.2.0
+- github.com/Kuadrant/developer-portal-controller/config/crd?ref=v0.2.1
 # RBAC resources
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.0/config/rbac/service_account.yaml
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.0/config/rbac/role.yaml
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.0/config/rbac/role_binding.yaml
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.0/config/rbac/leader_election_role.yaml
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.0/config/rbac/leader_election_role_binding.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.1/config/rbac/service_account.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.1/config/rbac/role.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.1/config/rbac/role_binding.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.1/config/rbac/leader_election_role.yaml
+- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/v0.2.1/config/rbac/leader_election_role_binding.yaml

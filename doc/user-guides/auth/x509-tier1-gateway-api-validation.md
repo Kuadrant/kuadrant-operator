@@ -97,10 +97,9 @@ kubectl create configmap client-ca-bundle \
   --from-file=ca.crt=/tmp/ca.crt
 
 # Secret for Authorino validation (Layer 2)
-kubectl create secret tls trusted-client-ca \
+kubectl create secret generic trusted-client-ca \
   -n kuadrant-system \
-  --cert=/tmp/ca.crt \
-  --key=/tmp/ca.key
+  --from-file=ca.crt=/tmp/ca.crt
 
 # Label the secret so Authorino can discover it
 kubectl label secret trusted-client-ca \

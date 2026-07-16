@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -128,11 +129,27 @@ func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gatew
 		targetRefs = append(targetRefs, collectRouteTargetRefs(gateway, topology)...)
 	}
 
-	// When no actionsets exist but extension policies have pipeline actions,
-	// create skeleton actionsets from the topology so the mutator's append logic works.
-	if len(wasmConfig.ActionSets) == 0 && topology != nil {
-		if r.hasRelevantPipelineActions(targetRefs) {
-			wasmConfig.ActionSets = buildActionSetsFromTopology(gateway, topology)
+	// When extension policies have pipeline actions, ensure skeleton action sets
+	// exist for their targeted routes so the mutator's append logic works.
+	if topology != nil && r.hasRelevantPipelineActions(targetRefs) {
+		skeletons := buildActionSetsFromTopology(gateway, topology)
+		if len(wasmConfig.ActionSets) == 0 {
+			wasmConfig.ActionSets = skeletons
+		} else {
+			neededRoutes := r.routesNeedingSkeletons(targetRefs)
+			if len(neededRoutes) > 0 {
+				existingRoutes := make(map[string]bool)
+				for _, as := range wasmConfig.ActionSets {
+					if as.SourceRoute != "" {
+						existingRoutes[as.SourceRoute] = true
+					}
+				}
+				for _, sk := range skeletons {
+					if neededRoutes[sk.SourceRoute] && !existingRoutes[sk.SourceRoute] {
+						wasmConfig.ActionSets = append(wasmConfig.ActionSets, sk)
+					}
+				}
+			}
 		}
 	}
 
@@ -179,8 +196,8 @@ func (r *MutatorRegistry) hasRelevantPipelineActions(targetRefs []machinery.Poli
 		// Check policies with registered upstreams
 		relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
 		policyIDs := lo.Uniq(lo.Map(lo.Keys(relevantUpstreamKeys), func(k RegisteredUpstreamKey, _ int) ResourceID { return k.Policy }))
-		// Also include policies that have pipeline actions but no upstreams
-		policyIDs = append(policyIDs, m.store.GetPoliciesWithPipelineActions()...)
+		// Also include pipeline-only policies whose target refs match this gateway
+		policyIDs = append(policyIDs, m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...)
 		policyIDs = lo.Uniq(policyIDs)
 		for _, policyID := range policyIDs {
 			for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
@@ -191,6 +208,27 @@ func (r *MutatorRegistry) hasRelevantPipelineActions(targetRefs []machinery.Poli
 		}
 	}
 	return false
+}
+
+// routesNeedingSkeletons returns the set of route locators (Kind/Namespace/Name)
+// for routes targeted by extension pipeline policies that don't have action sets
+// from core policies. These routes need skeleton action sets.
+func (r *MutatorRegistry) routesNeedingSkeletons(targetRefs []machinery.PolicyTargetReference) map[string]bool {
+	routes := make(map[string]bool)
+	for _, mutator := range r.wasmConfigMutators {
+		m, ok := mutator.(*RegisteredDataMutator[*wasm.Config])
+		if !ok {
+			continue
+		}
+		for _, policyID := range m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs) {
+			for _, tr := range m.store.GetPipelineTargetRefs(policyID) {
+				if tr.Kind == "HTTPRoute" || tr.Kind == "GRPCRoute" {
+					routes[fmt.Sprintf("%s/%s/%s", tr.Kind, tr.Namespace, tr.Name)] = true
+				}
+			}
+		}
+	}
+	return routes
 }
 
 // collectRouteTargetRefs traverses the topology from a gateway through listeners to
@@ -357,9 +395,10 @@ type RegisteredDataStore struct {
 	protoCache          *ProtoCache
 	upstreamsMutex      sync.RWMutex
 
-	pipelineActions  map[pipelineKey][]PipelineActionEntry
-	pipelineCounters map[pipelineKey]int
-	pipelineMutex    sync.RWMutex
+	pipelineActions    map[pipelineKey][]PipelineActionEntry
+	pipelineCounters   map[pipelineKey]int
+	pipelineTargetRefs map[ResourceID][]TargetRef
+	pipelineMutex      sync.RWMutex
 }
 
 func NewRegisteredDataStore() *RegisteredDataStore {
@@ -370,6 +409,7 @@ func NewRegisteredDataStore() *RegisteredDataStore {
 		protoCache:          NewProtoCache(),
 		pipelineActions:     make(map[pipelineKey][]PipelineActionEntry),
 		pipelineCounters:    make(map[pipelineKey]int),
+		pipelineTargetRefs:  make(map[ResourceID][]TargetRef),
 	}
 }
 
@@ -782,7 +822,34 @@ func (r *RegisteredDataStore) ClearPipelineActions(policy ResourceID) int {
 		delete(r.pipelineActions, key)
 		delete(r.pipelineCounters, key)
 	}
+	delete(r.pipelineTargetRefs, policy)
 	return cleared
+}
+
+func (r *RegisteredDataStore) SetPipelineTargetRefs(policy ResourceID, refs []TargetRef) {
+	r.pipelineMutex.Lock()
+	defer r.pipelineMutex.Unlock()
+
+	if len(refs) == 0 {
+		delete(r.pipelineTargetRefs, policy)
+		return
+	}
+	dst := make([]TargetRef, len(refs))
+	copy(dst, refs)
+	r.pipelineTargetRefs[policy] = dst
+}
+
+func (r *RegisteredDataStore) GetPipelineTargetRefs(policy ResourceID) []TargetRef {
+	r.pipelineMutex.RLock()
+	defer r.pipelineMutex.RUnlock()
+
+	refs := r.pipelineTargetRefs[policy]
+	if refs == nil {
+		return nil
+	}
+	dst := make([]TargetRef, len(refs))
+	copy(dst, refs)
+	return dst
 }
 
 // GetPoliciesWithPipelineActions returns the set of policy IDs that have any
@@ -804,7 +871,44 @@ func (r *RegisteredDataStore) GetPoliciesWithPipelineActions() []ResourceID {
 	return result
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
+// GetPoliciesWithPipelineActionsForTargetRefs returns the set of policy IDs
+// that have pipeline actions AND whose stored target refs overlap with the
+// given target references.
+func (r *RegisteredDataStore) GetPoliciesWithPipelineActionsForTargetRefs(targetRefs []machinery.PolicyTargetReference) []ResourceID {
+	r.pipelineMutex.RLock()
+	defer r.pipelineMutex.RUnlock()
+
+	seen := make(map[ResourceID]bool)
+	for key, actions := range r.pipelineActions {
+		if len(actions) == 0 || seen[key.Policy] {
+			continue
+		}
+		storedRefs := r.pipelineTargetRefs[key.Policy]
+		if pipelineTargetRefsMatch(storedRefs, targetRefs) {
+			seen[key.Policy] = true
+		}
+	}
+	result := make([]ResourceID, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+	return result
+}
+
+func pipelineTargetRefsMatch(storedRefs []TargetRef, targetRefs []machinery.PolicyTargetReference) bool {
+	for _, stored := range storedRefs {
+		for _, tr := range targetRefs {
+			if stored.Kind == tr.GroupVersionKind().Kind &&
+				stored.Name == tr.GetName() &&
+				stored.Namespace == tr.GetNamespace() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int, clearedPipelineActions int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	r.upstreamsMutex.Lock()
@@ -865,14 +969,16 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 		}
 	}
 
-	// clear pipeline actions (lock already held)
+	// clear pipeline actions and target refs (lock already held)
 	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
 		key := pipelineKey{Policy: policy, Phase: phase}
+		clearedPipelineActions += len(r.pipelineActions[key])
 		delete(r.pipelineActions, key)
 		delete(r.pipelineCounters, key)
 	}
+	delete(r.pipelineTargetRefs, policy)
 
-	return clearedMutators, clearedSubscriptions, clearedUpstreams
+	return clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {
@@ -1001,8 +1107,9 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		wasmConfig.DescriptorService = "kuadrant-operator-grpc"
 	}
 
-	// Translate pipeline actions into TypedAction entries (deterministic order across policies)
-	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActions()...))
+	// Translate pipeline actions into TypedAction entries (deterministic order across policies).
+	// Only include pipeline policies whose stored target refs match this gateway's routes.
+	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...))
 	sort.Slice(policyIDs, func(i, j int) bool {
 		if policyIDs[i].Kind != policyIDs[j].Kind {
 			return policyIDs[i].Kind < policyIDs[j].Kind
@@ -1016,15 +1123,28 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	// Build upstream lookup: policy+method → RegisteredUpstreamEntry (for MessageTemplate)
 	// Also build policy → route locator mapping for action set filtering.
 	upstreamByMethod := make(map[ResourceID]map[string]RegisteredUpstreamEntry)
-	policyRouteLocator := make(map[ResourceID]string)
+	policyRouteLocators := make(map[ResourceID][]string)
 	for key, entry := range relevantUpstreamKeys {
 		if upstreamByMethod[key.Policy] == nil {
 			upstreamByMethod[key.Policy] = make(map[string]RegisteredUpstreamEntry)
 		}
 		upstreamByMethod[key.Policy][key.Name] = entry
 		if entry.TargetRef.Kind == "HTTPRoute" || entry.TargetRef.Kind == "GRPCRoute" {
-			policyRouteLocator[key.Policy] = fmt.Sprintf("%s/%s/%s", entry.TargetRef.Kind, entry.TargetRef.Namespace, entry.TargetRef.Name)
+			locator := fmt.Sprintf("%s/%s/%s", entry.TargetRef.Kind, entry.TargetRef.Namespace, entry.TargetRef.Name)
+			policyRouteLocators[key.Policy] = append(policyRouteLocators[key.Policy], locator)
 		}
+	}
+
+	// Merge stored pipeline target refs into policyRouteLocators so policies
+	// that target routes via both upstreams and pipeline actions see all routes.
+	for _, policyID := range policyIDs {
+		for _, tr := range m.store.GetPipelineTargetRefs(policyID) {
+			if tr.Kind == "HTTPRoute" || tr.Kind == "GRPCRoute" {
+				locator := fmt.Sprintf("%s/%s/%s", tr.Kind, tr.Namespace, tr.Name)
+				policyRouteLocators[policyID] = append(policyRouteLocators[policyID], locator)
+			}
+		}
+		policyRouteLocators[policyID] = lo.Uniq(policyRouteLocators[policyID])
 	}
 
 	for _, policyID := range policyIDs {
@@ -1043,10 +1163,10 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			continue
 		}
 
-		routeLocator := policyRouteLocator[policyID]
+		routeLocators := policyRouteLocators[policyID]
 		for i := range wasmConfig.ActionSets {
 			asRoute := wasmConfig.ActionSets[i].SourceRoute
-			if routeLocator != "" && asRoute != "" && asRoute != routeLocator {
+			if len(routeLocators) > 0 && asRoute != "" && !slices.Contains(routeLocators, asRoute) {
 				continue
 			}
 			wasmConfig.ActionSets[i].TypedActions = append(wasmConfig.ActionSets[i].TypedActions, typedActions...)
@@ -1151,6 +1271,9 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
 		return true
 	}
+	if entry.WithBody != "" && pattern.MatchString(entry.WithBody) {
+		return true
+	}
 	return false
 }
 
@@ -1187,8 +1310,7 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 		parts = append(parts, fmt.Sprintf("headers: %s", headers))
 	}
 	if body != "" {
-		escaped := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", `\n`, "\r", `\r`).Replace(body)
-		parts = append(parts, fmt.Sprintf("body: '%s'", escaped))
+		parts = append(parts, fmt.Sprintf("body: %s", body))
 	}
 	if len(parts) == 0 {
 		return "DenyResponse{}"

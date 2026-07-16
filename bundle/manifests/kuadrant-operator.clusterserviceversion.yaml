@@ -224,14 +224,14 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
-    containerImage: quay.io/kuadrant/kuadrant-operator:v1.5.0
-    createdAt: "2026-06-26T14:14:32Z"
+    containerImage: quay.io/kuadrant/kuadrant-operator:v1.5.1
+    createdAt: "2026-07-15T16:02:35Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v1.5.0
+  name: kuadrant-operator.v1.5.1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -760,16 +760,16 @@ spec:
                 - name: RELATED_IMAGE_WASMSHIM
                   value: quay.io/kuadrant/wasm-shim:v0.14.1
                 - name: RELATED_IMAGE_DEVELOPERPORTAL
-                  value: quay.io/kuadrant/developer-portal-controller:v0.2.0
+                  value: quay.io/kuadrant/developer-portal-controller:v0.2.1
                 - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-                  value: quay.io/kuadrant/console-plugin:v0.4.0
+                  value: quay.io/kuadrant/console-plugin:v0.4.1
                 - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
                   value: quay.io/kuadrant/console-plugin:v0.1.5-2
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
-                image: quay.io/kuadrant/kuadrant-operator:v1.5.0
+                image: quay.io/kuadrant/kuadrant-operator:v1.5.1
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -922,10 +922,10 @@ spec:
   relatedImages:
   - image: quay.io/kuadrant/wasm-shim:v0.14.1
     name: wasmshim
-  - image: quay.io/kuadrant/developer-portal-controller:v0.2.0
+  - image: quay.io/kuadrant/developer-portal-controller:v0.2.1
     name: developerportal
-  - image: quay.io/kuadrant/console-plugin:v0.4.0
+  - image: quay.io/kuadrant/console-plugin:v0.4.1
     name: console-plugin-latest
   - image: quay.io/kuadrant/console-plugin:v0.1.5-2
     name: console-plugin-pf5
-  version: 1.5.0
+  version: 1.5.1

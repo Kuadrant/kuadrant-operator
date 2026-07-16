@@ -458,19 +458,22 @@ Request Flow (29.4ms total):
 ├─ Envoy Gateway Span (34.7ms)
 │  └─ kuadrant_filter (29.4ms)
 │     │
-│     ├─ auth (6.8ms)
-│     │  ├─ auth_request (1.2ms)
+│     ├─ grpc [action=auth] (6.8ms)
+│     │  ├─ grpc_request (1.2ms) [grpc_service=..., grpc_method=...]
 │     │  │  └─ Authorino gRPC Call
 │     │  │     └─ envoy.service.auth.v3.Authorization/Check (2.0ms)
 │     │  │        └─ Check (1.7ms)
-│     │  └─ auth_response (56μs)
+│     │  └─ grpc_response (56μs) [grpc_service=..., grpc_method=...]
 │     │
-│     └─ ratelimit (6.0ms)
-│        ├─ ratelimit_request (576μs)
-│        │  └─ Limitador gRPC Call
-│        │     └─ should_rate_limit (309μs)
-│        │        └─ check_and_update (36μs)
-│        └─ ratelimit_response (38μs)
+│     ├─ grpc [action=ratelimit] (6.0ms)
+│     │  ├─ grpc_request (576μs) [grpc_service=..., grpc_method=...]
+│     │  │  └─ Limitador gRPC Call
+│     │  │     └─ should_rate_limit (309μs)
+│     │  │        └─ check_and_update (36μs)
+│     │  └─ grpc_response (38μs) [grpc_service=..., grpc_method=...]
+│     │
+│     ├─ headers [target=HttpRequestHeaders|HttpResponseHeaders]
+│     └─ send_reply [status_code=...]
 │
 └─ Backend Service: httpbin (34.7ms)
 ```
@@ -480,10 +483,12 @@ Request Flow (29.4ms total):
 Data plane traces include rich context from multiple services:
 
 **Wasm-shim Spans** (service: `wasm-shim`):
+- `grpc`: Outer span wrapping a gRPC action, with `action` attribute (e.g., `auth`, `ratelimit`) and `sources` identifying the originating policy
+- `grpc_request` / `grpc_response`: Inner spans for gRPC call lifecycle, with `grpc_service` and `grpc_method` attributes identifying the upstream service
+- `headers`: Span for HTTP header modifications, with `target` attribute (`HttpRequestHeaders` or `HttpResponseHeaders`)
+- `send_reply`: Span for direct responses (e.g., deny actions), with `status_code` attribute
 - Request correlation IDs from `httpHeaderIdentifier` configuration
-- Matched hostname and route configuration details
-- Policy attribution showing which AuthPolicy/RateLimitPolicy rules were evaluated
-- At DEBUG level: Detailed gRPC call information, property updates, and header manipulations
+- Policy attribution via the `sources` attribute showing which AuthPolicy/RateLimitPolicy rules were evaluated
 
 **Authorino Spans** (service: `authorino`):
 - Request ID correlation
@@ -505,13 +510,15 @@ Tags: request_id=adefc8cf-78af-9db7-97e5-5ae5e2b22c05
 **Filter by Operation:**
 ```text
 Service: wasm-shim
-Operation: kuadrant_filter
+Operation: grpc
+Tags: action=auth
 Min Duration: 10ms
 ```
 
 **Examine Specific Policy:**
 ```text
 Service: wasm-shim
+Operation: grpc
 Tags: sources=authpolicy.kuadrant.io:kuadrant/my-auth-policy
 ```
 
@@ -526,15 +533,15 @@ Tags: sources=authpolicy.kuadrant.io:kuadrant/my-auth-policy
 
 3. **Policy Attribution**: Trace attributes identify which policies (AuthPolicy, RateLimitPolicy) were evaluated for each request
 
-4. **gRPC Call Details**: At DEBUG level, traces include detailed information about calls to Authorino and Limitador services
+4. **gRPC Call Details**: At DEBUG level, traces include `grpc_service` and `grpc_method` attributes on request/response spans, identifying the exact upstream service and method called
 
 ### Troubleshooting Scenarios with Traces
 
 **Scenario: Auth is slow**
 
 1. Find the trace in Jaeger by `request_id`
-2. Expand the `auth` span
-3. Check the `auth_request` → `Check` span duration
+2. Expand the `grpc` span with `action=auth`
+3. Check the `grpc_request` → `Check` span duration
 4. Check Authorino pod logs for detailed errors or retries:
    ```bash
    kubectl logs -n kuadrant-system -l app=authorino --tail=100 | grep <request_id>
@@ -542,7 +549,7 @@ Tags: sources=authpolicy.kuadrant.io:kuadrant/my-auth-policy
 
 **Scenario: Rate limit not working**
 
-1. Search for traces with `operation: ratelimit`
+1. Search for traces with `operation: grpc` and `action=ratelimit`
 2. Check the `sources` tag - is your RateLimitPolicy listed?
 3. Check Limitador's `should_rate_limit` span for the decision
 4. Check Limitador pod logs for the limit descriptors sent:

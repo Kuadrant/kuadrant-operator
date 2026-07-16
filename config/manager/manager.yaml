@@ -38,9 +38,9 @@ spec:
             - name: RELATED_IMAGE_WASMSHIM
               value: "quay.io/kuadrant/wasm-shim:v0.14.1"
             - name: RELATED_IMAGE_DEVELOPERPORTAL
-              value: "quay.io/kuadrant/developer-portal-controller:v0.2.0"
+              value: "quay.io/kuadrant/developer-portal-controller:v0.2.1"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-              value: "quay.io/kuadrant/console-plugin:v0.4.0"
+              value: "quay.io/kuadrant/console-plugin:v0.4.1"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
               value: "quay.io/kuadrant/console-plugin:v0.1.5-2"
             - name: OPERATOR_NAMESPACE

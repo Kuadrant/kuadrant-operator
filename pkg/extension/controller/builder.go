@@ -154,7 +154,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	}
 
 	objType := reflect.TypeOf(b.forType)
-	if objType.Kind() == reflect.Ptr {
+	if objType.Kind() == reflect.Pointer {
 		objType = objType.Elem()
 	}
 	policyKind := objType.Name()

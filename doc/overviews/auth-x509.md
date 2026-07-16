@@ -229,10 +229,9 @@ This enables sophisticated trust models such as:
 Trusted CA certificates must be stored in Kubernetes TLS secrets in the Kuadrant namespace with appropriate labels:
 
 ```bash
-kubectl create secret tls customer-a-ca \
+kubectl create secret generic customer-a-ca \
   -n kuadrant-system \
-  --cert=customer-a-ca.crt \
-  --key=customer-a-ca.key
+  --from-file=ca.crt=customer-a-ca.crt
 
 kubectl label secret customer-a-ca \
   -n kuadrant-system \

@@ -554,11 +554,11 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		Name:      request.Policy.Metadata.Name,
 	}
 
-	clearedMutators, clearedSubscriptions, clearedUpstreams := s.registeredData.ClearPolicyData(policyID)
+	clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions := s.registeredData.ClearPolicyData(policyID)
 
-	// Trigger notifier when mutators or upstreams are cleared
-	if (clearedMutators > 0 || clearedUpstreams > 0) && s.changeNotifier != nil {
-		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, clearedMutators, clearedUpstreams)
+	// Trigger notifier when mutators, upstreams, or pipeline actions are cleared
+	if (clearedMutators > 0 || clearedUpstreams > 0 || clearedPipelineActions > 0) && s.changeNotifier != nil {
+		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d, pipeline actions: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, clearedMutators, clearedUpstreams, clearedPipelineActions)
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}
@@ -761,9 +761,26 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 		return nil, err
 	}
 
+	if len(request.Policy.TargetRefs) == 0 {
+		return nil, fmt.Errorf("pipeline commit for policy %s/%s: policy must have target references", policyID.Namespace, policyID.Name)
+	}
+	targetRefs := make([]TargetRef, 0, len(request.Policy.TargetRefs))
+	for _, ref := range request.Policy.TargetRefs {
+		if ref == nil {
+			return nil, fmt.Errorf("pipeline commit for policy %s/%s: target reference cannot be nil", policyID.Namespace, policyID.Name)
+		}
+		targetRefs = append(targetRefs, TargetRef{
+			Group:     ref.Group,
+			Kind:      ref.Kind,
+			Name:      ref.Name,
+			Namespace: ref.Namespace,
+		})
+	}
+
 	if err := s.registeredData.ReplacePipelineActions(policyID, entries); err != nil {
 		return nil, err
 	}
+	s.registeredData.SetPipelineTargetRefs(policyID, targetRefs)
 
 	s.logger.Info("pipeline committed",
 		"policy", fmt.Sprintf("%s/%s", policyID.Namespace, policyID.Name),
@@ -773,7 +790,7 @@ func (s *extensionService) PipelineCommit(_ context.Context, request *extpb.Pipe
 		reason := fmt.Sprintf("pipeline committed for policy %s/%s (%d actions)",
 			policyID.Namespace, policyID.Name, len(entries))
 		if err := s.changeNotifier(reason); err != nil {
-			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+			return nil, fmt.Errorf("pipeline committed but failed to trigger reconciliation: %w", err)
 		}
 	}
 

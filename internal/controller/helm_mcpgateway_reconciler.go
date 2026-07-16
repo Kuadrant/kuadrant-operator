@@ -81,6 +81,12 @@ func (r *HelmMCPGatewayReconciler) Reconcile(ctx context.Context, _ []controller
 	logger.Info("rendered mcp-gateway chart", "resourceCount", len(objects))
 
 	for _, obj := range objects {
+		if shouldSkipResource(obj.GetKind()) {
+			logger.Info("skipping cluster-scoped resource managed by installer",
+				"kind", obj.GetKind(), "name", obj.GetName())
+			continue
+		}
+
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{
 				APIVersion: kuadrantObj.APIVersion,

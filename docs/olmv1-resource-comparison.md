@@ -53,10 +53,10 @@ Without this, deleting the Kuadrant CR is a race between the cascade deleting th
 
 | Deployment | main selector | Phase 1 selector | Breaking? |
 |------------|---------------|-------------------|-----------|
-| `limitador-operator-controller-manager` | `control-plane: controller-manager` | `control-plane: limitador-operator-controller-manager` | **Yes** (selector is immutable, cannot adopt existing Deployment) |
+| `limitador-operator-controller-manager` | `control-plane: controller-manager` | `control-plane: controller-manager` (unchanged) | **Known issue** |
 | All others | unchanged | unchanged | No |
 
-**Impact**: The limitador-operator selector was patched in Phase 1 (POC hack) to fix a collision with kuadrant-operator. This means the existing Deployment cannot be adopted via SSA during migration. It must be deleted and recreated.
+**Known issue**: The limitador-operator Deployment uses the generic selector `control-plane: controller-manager` which also matches kuadrant-operator and authorino pods (3 pods match a 1-replica Deployment). The ReplicaSet controller uses ownerReferences to avoid managing the wrong pods, but the ambiguous selector could cause issues during rolling updates or pod adoption. This is a pre-existing bug in the limitador-operator chart that must be fixed upstream by using a unique selector (e.g. `control-plane: limitador-operator-controller-manager`).
 
 ## Changed: Labels
 
@@ -94,7 +94,7 @@ The following are identical between main and Phase 1:
 
 | Issue | Severity | Action Required |
 |-------|----------|-----------------|
-| limitador-operator selector change | **High** | Deployment must be deleted and recreated (POC hack, fix upstream) |
+| limitador-operator selector collision | **High** | Pre-existing bug. Selector matches 3 pods for a 1-replica Deployment. Must fix upstream to use unique selector |
 | Child operator Deployments gain ownerRef to Kuadrant CR | **High** | Cascade deletion will break finalizers on Authorino CR and DNSRecords. Umbrella operator must handle deletion order explicitly |
 | `app.kubernetes.io/managed-by` label changes (kustomize to helm) | **Low** | Cosmetic, SSA can update labels |
 | Added `app.kubernetes.io/managed-by: helm` labels | **Low** | Cosmetic, SSA can add labels |

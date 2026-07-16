@@ -11,7 +11,7 @@ resources:
   - bases/extensions.kuadrant.io_oidcpolicies.yaml
   - bases/extensions.kuadrant.io_planpolicies.yaml
   - bases/extensions.kuadrant.io_telemetrypolicies.yaml
-  # NOTE: Child operator CRDs are in config/dependencies/child-operators/
+  # NOTE: Child operator CRDs are in config/child-operators/
   # and are included WITHOUT namePrefix
 #+kubebuilder:scaffold:crdkustomizeresource
 

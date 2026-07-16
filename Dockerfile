@@ -68,8 +68,8 @@ WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/extensions /extensions
 COPY --from=wasm-shim /plugin.wasm /wasm/plugin.wasm
-# Copy charts directly from build context (not from builder) to avoid invalidating Go build cache
-COPY charts/ /charts/
+# Copy child operator charts for runtime Helm rendering
+COPY config/child-operators/charts/ /charts/
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

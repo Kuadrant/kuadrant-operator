@@ -109,7 +109,7 @@ local-deploy: ## Deploy Kuadrant Operator from the current code
 
 .PHONY: deploy-child-operator-dependencies
 deploy-child-operator-dependencies: kustomize ## Deploy child operator CRDs and ClusterRoles (without namePrefix)
-	$(KUSTOMIZE) build config/dependencies/child-operators | kubectl apply -f -
+	$(KUSTOMIZE) build $(CHILD_OPERATORS_DIR) | kubectl apply -f -
 
 .PHONY: env-setup
 env-setup: ## Install deploy kuadrant dependencies and configured gatewayapi provider

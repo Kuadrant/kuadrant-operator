@@ -23,52 +23,52 @@ graph LR
         MG["Kuadrant/mcp-gateway"]
     end
 
-    SYNC["make sync-child-operator-charts"]
+    SYNC["make sync-child-operator-charts<br/>Go tool: hack/sync-child-charts/"]
 
     AO -->|GITREF| SYNC
     LO -->|GITREF| SYNC
     DO -->|GITREF| SYNC
     MG -->|GITREF| SYNC
 
-    subgraph local["charts/"]
-        subgraph ao["authorino-operator/"]
-            ao_c["crds/"] ~~~ ao_s["static/"] ~~~ ao_t["templates/"]
+    subgraph local["config/child-operators/"]
+        subgraph crds["crds/"]
+            ao_c["authorino-operator.yaml"]
+            lo_c["limitador-operator.yaml"]
+            do_c["dns-operator.yaml"]
+            mg_c["mcp-gateway.yaml"]
         end
-        subgraph lo["limitador-operator/"]
-            lo_c["crds/"] ~~~ lo_s["static/"] ~~~ lo_t["templates/"]
+        subgraph rbac["rbac/"]
+            ao_r["authorino-operator.yaml"]
+            lo_r["limitador-operator.yaml"]
+            do_r["dns-operator.yaml"]
+            mg_r["mcp-gateway.yaml"]
         end
-        subgraph do["dns-operator/"]
-            do_c["crds/"] ~~~ do_s["static/"] ~~~ do_t["templates/"]
-        end
-        subgraph mg["mcp-gateway/"]
-            mg_c["crds/"] ~~~ mg_s["static/"] ~~~ mg_t["templates/"]
+        subgraph charts["charts/"]
+            ao_t["authorino-operator/"]
+            lo_t["limitador-operator/"]
+            do_t["dns-operator/"]
+            mg_t["mcp-gateway/"]
         end
     end
 
-    SYNC --> ao
-    SYNC --> lo
-    SYNC --> do
-    SYNC --> mg
+    SYNC --> crds
+    SYNC --> rbac
+    SYNC --> charts
 ```
 
 ```mermaid
 graph LR
-    subgraph local["Per child operator chart"]
+    subgraph local["config/child-operators/"]
         CRDs["crds/"]
-        CR["static/"]
-        TPL["templates/"]
+        RBAC["rbac/"]
+        CHARTS["charts/"]
     end
 
-    subgraph deps["config/dependencies/<br/>child-operators/"]
-        DEP["CRDs + ClusterRoles"]
-    end
-
-    CRDs --> DEP
-    CR --> DEP
-
-    DEP -->|"make bundle"| BUNDLE["OLM Bundle"]
-    DEP -->|"make helm-build"| HELM["Helm Chart"]
-    TPL -->|"used at runtime<br/>by operator"| RUNTIME["Helm renderer<br/>in operator"]
+    CRDs -->|"make bundle"| BUNDLE["OLM Bundle"]
+    RBAC -->|"make bundle"| BUNDLE
+    CRDs -->|"make helm-build"| HELM["Helm Chart"]
+    RBAC -->|"make helm-build"| HELM
+    CHARTS -->|"copied to /charts/<br/>in container image"| RUNTIME["Helm renderer<br/>in operator"]
 ```
 
 ## Cluster State After Installation (no Kuadrant CR)
@@ -102,10 +102,10 @@ graph TB
     USER["User"] -->|"creates"| KCR["Kuadrant CR"]
     KCR -->|"triggers"| KOP["kuadrant-operator"]
 
-    KOP -->|"renders and applies"| AO["authorino-operator<br/>Deployment + SA + CRB"]
-    KOP -->|"renders and applies"| LO["limitador-operator<br/>Deployment + SA + CRB"]
-    KOP -->|"renders and applies"| DO["dns-operator<br/>Deployment + SA + CRB"]
-    KOP -->|"renders and applies"| MG["mcp-gateway<br/>Deployment + SA + CRB"]
+    KOP -->|"renders /charts/authorino-operator"| AO["authorino-operator<br/>Deployment + SA + CRB"]
+    KOP -->|"renders /charts/limitador-operator"| LO["limitador-operator<br/>Deployment + SA + CRB"]
+    KOP -->|"renders /charts/dns-operator"| DO["dns-operator<br/>Deployment + SA + CRB"]
+    KOP -->|"renders /charts/mcp-gateway"| MG["mcp-gateway<br/>Deployment + SA + CRB"]
     KOP -->|"creates wrapper CR"| ACR["Authorino CR"]
     KOP -->|"creates wrapper CR"| LCR["Limitador CR"]
 
@@ -159,23 +159,23 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph helm_olm["Owned by Helm or OLM"]
+    USER["User"] -->|"creates"| KCR["Kuadrant CR"]
+    USER -->|"creates"| POLICIES["AuthPolicy, RateLimitPolicy<br/>DNSPolicy, TLSPolicy"]
+
+    subgraph installer["Installed by Helm or OLM"]
         CRDs["All CRDs"]
-        CR["Child operator ClusterRoles"]
-        KOP["kuadrant-operator<br/>Deployment, SA, ClusterRole, CRB"]
+        CR["Component ClusterRoles"]
+        KOP_DEP["kuadrant-operator Deployment"]
+        KOP_RBAC["kuadrant-operator SA, ClusterRole, CRB"]
     end
 
-    subgraph kuadrant_op["Owned by kuadrant-operator (ownerRef → Kuadrant CR)"]
-        CHILD["Per child operator:<br/>Deployment, SA, CRB,<br/>Roles, RoleBindings,<br/>ConfigMap, Service"]
-        WRAPPER["Wrapper CRs<br/>Authorino CR, Limitador CR"]
-    end
+    KCR -->|"ownerRef"| AUTH_OP["authorino-operator Deployment"]
+    KCR -->|"ownerRef"| LIM_OP["limitador-operator Deployment"]
+    KCR -->|"ownerRef"| DNS_OP["dns-operator Deployment"]
+    KCR -->|"ownerRef"| MCP_OP["mcp-gateway Deployment"]
+    KCR -->|"ownerRef"| AUTH_CR["Authorino CR"]
+    KCR -->|"ownerRef"| LIM_CR["Limitador CR"]
 
-    subgraph child_op["Owned by child operators (ownerRef → wrapper CR)"]
-        WORKLOAD["Workload resources<br/>Deployment, Service, ConfigMap"]
-    end
-
-    subgraph user["Owned by User"]
-        KCR["Kuadrant CR"]
-        POLICIES["Policies<br/>AuthPolicy, RateLimitPolicy<br/>DNSPolicy, TLSPolicy"]
-    end
+    AUTH_CR -->|"ownerRef"| AUTH_WL["Authorino Deployment"]
+    LIM_CR -->|"ownerRef"| LIM_WL["Limitador Deployment"]
 ```

@@ -18,16 +18,8 @@ helm-build: yq kustomize manifests ## Build the helm chart from kustomize manife
 	# Build the helm chart templates from kustomize manifests
 	$(KUSTOMIZE) build config/helm > $(CHART_DIRECTORY)/templates/manifests.yaml
 	# Include child operator CRDs and ClusterRoles in the chart
-	@for operator in authorino-operator limitador-operator dns-operator mcp-gateway; do \
-		for f in charts/$$operator/crds/*.yaml; do cat "$$f"; echo "---"; done; \
-	done > $(CHART_DIRECTORY)/templates/child-operator-crds.yaml
-	@for operator in authorino-operator limitador-operator dns-operator mcp-gateway; do \
-		if [ -f "charts/$$operator/static/clusterroles.yaml" ]; then \
-			cat "charts/$$operator/static/clusterroles.yaml"; echo "---"; \
-		fi; \
-	done > $(CHART_DIRECTORY)/templates/child-operator-clusterroles.yaml
-	@# mcp-gateway ClusterRole is manually maintained in config/dependencies/child-operators/
-	@cat $(CHILD_OPERATORS_DIR)/mcp-gateway-clusterroles.yaml >> $(CHART_DIRECTORY)/templates/child-operator-clusterroles.yaml
+	$(KUSTOMIZE) build $(CHILD_OPERATORS_DIR)/crds > $(CHART_DIRECTORY)/templates/child-operator-crds.yaml
+	$(KUSTOMIZE) build $(CHILD_OPERATORS_DIR)/rbac > $(CHART_DIRECTORY)/templates/child-operator-clusterroles.yaml
 	# Set the helm chart version
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.version = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.appVersion = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml

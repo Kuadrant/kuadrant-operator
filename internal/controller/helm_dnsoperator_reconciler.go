@@ -80,6 +80,12 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	// Apply each rendered resource using Server-Side Apply
 	for _, obj := range objects {
+		if shouldSkipResource(obj.GetKind()) {
+			logger.Info("skipping cluster-scoped resource managed by installer",
+				"kind", obj.GetKind(), "name", obj.GetName())
+			continue
+		}
+
 		// Set owner reference to Kuadrant CR
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{

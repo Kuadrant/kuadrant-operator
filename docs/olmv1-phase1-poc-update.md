@@ -18,8 +18,12 @@ The kuadrant-operator becomes an umbrella operator that deploys component contro
 
 - When a user creates a Kuadrant CR, the umbrella operator renders each component controller's Helm chart and applies the resources (Deployment, ServiceAccount, ClusterRoleBinding, etc.) via Server-Side Apply
 - **All** component controllers now hang off the Kuadrant CR, including dns-operator, which previously ran independently and did not require a Kuadrant CR to function
-- Charts are pulled from the upstream component repos and committed to the kuadrant-operator repo
-- A generic `make sync-child-operator-charts` target handles both simple charts (dns/authorino/limitador) and mature charts with full Helm templating (mcp-gateway)
+- Charts are pulled from upstream component repos using a Go sync tool (`hack/sync-child-charts/`) that uses the Helm SDK to render charts, classify resources by kind, and output them to a structured directory layout
+- `make sync-child-operator-charts` handles both simple charts (dns/authorino/limitador) and mature charts with full Helm templating (mcp-gateway)
+- Output is split into three directories under `config/child-operators/`:
+  - `config/child-operators/crds/` - rendered CRDs for bundle/Helm chart inclusion (one file per component)
+  - `config/child-operators/rbac/` - rendered ClusterRoles for bundle/Helm chart inclusion (one file per component)
+  - `config/child-operators/charts/` - raw chart templates for runtime rendering by the operator (copied to `/charts/` in the container image)
 
 ### 2. RBAC: bind/escalate only, no permission duplication
 
@@ -38,7 +42,7 @@ The kuadrant-operator becomes an umbrella operator that deploys component contro
 
 - **Cluster-scoped resources** (CRDs, ClusterRoles) for all components are owned and managed by the kuadrant-operator itself, distributed via its OLM bundle or Helm chart. These are installed before the operator starts and before any Kuadrant CR is created. The operator will not attempt to create or modify these resources at runtime.
 - **Namespaced resources** (Deployments, ServiceAccounts, Roles, RoleBindings, ConfigMaps, Services) and **ClusterRoleBindings** are created by the kuadrant-operator at runtime when a Kuadrant CR is created. The operator uses Helm chart templating internally to render these resources from the child operator charts.
-- CRDs and ClusterRoles are extracted from component charts at build time during `make sync-child-operator-charts` and included in the kuadrant-operator's own Helm chart and OLM bundle. The child operator charts are the source of these resources, but the kuadrant-operator is the owner.
+- CRDs and ClusterRoles are extracted from component charts at sync time by the Go sync tool, which renders the charts using the Helm SDK and classifies resources by kind. The rendered CRDs and ClusterRoles are stored in `config/child-operators/crds/` and `config/child-operators/rbac/`, then included in the kuadrant-operator's Helm chart and OLM bundle via kustomize. The child operator charts are the source of these resources, but the kuadrant-operator is the owner.
 
 ### 5. Simplified OLM bundle/catalog pipeline
 
@@ -122,7 +126,7 @@ The current release process (`make prepare-release` / `automated-release.yaml`) 
 
 | Aspect | Before | After |
 |--------|--------|-------|
-| **Bundle generation** | `make bundle` pulled child operator bundle images, injected `olm.package.required` dependencies, assembled 4 bundles | `make bundle` generates a single self-contained bundle. Component CRDs and ClusterRoles are already in `config/dependencies/child-operators/` from chart sync |
+| **Bundle generation** | `make bundle` pulled child operator bundle images, injected `olm.package.required` dependencies, assembled 4 bundles | `make bundle` generates a single self-contained bundle. Component CRDs and ClusterRoles are in `config/child-operators/crds/` and `config/child-operators/rbac/` from chart sync |
 | **Catalog generation** | `generate-catalog.sh` rendered 4 bundle images (kuadrant + 3 children) into the catalog | Renders only the kuadrant-operator bundle. Single package in catalog |
 | **Dependencies phase** | `dependencies-manifests.sh` generated kustomize overlays pulling from upstream repos at release time | Simplified — component charts are pre-synced and committed via `make sync-child-operator-charts`. Only developer-portal template remains |
 | **Chart dependencies** | `Chart.yaml` declared authorino-operator, limitador-operator, dns-operator as Helm dependencies pulled from `kuadrant.io/helm-charts` | No Helm dependencies. Component charts are embedded in the kuadrant-operator repo and rendered at runtime |

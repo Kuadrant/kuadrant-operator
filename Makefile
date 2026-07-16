@@ -364,23 +364,14 @@ dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITRE
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
-CHILD_OPERATORS_DIR = $(PROJECT_PATH)/config/dependencies/child-operators
+CHILD_OPERATORS_DIR = $(PROJECT_PATH)/config/child-operators
 
 .PHONY: sync-child-operator-charts
-sync-child-operator-charts: export YQ := $(YQ)
-sync-child-operator-charts: yq ## Sync child operator Helm charts from upstream repos and update bundle dependencies.
-	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/authorino-operator $(AUTHORINO_OPERATOR_GITREF) authorino-operator $(PROJECT_PATH)/charts/authorino-operator
-	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/limitador-operator $(LIMITADOR_OPERATOR_GITREF) limitador-operator $(PROJECT_PATH)/charts/limitador-operator
-	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/dns-operator $(DNS_OPERATOR_GITREF) dns-operator $(PROJECT_PATH)/charts/dns-operator
-	$(PROJECT_PATH)/utils/pull-child-chart.sh Kuadrant/mcp-gateway $(MCP_GATEWAY_GITREF) mcp-gateway $(PROJECT_PATH)/charts/mcp-gateway
-	@# Sync CRDs and ClusterRoles to config/dependencies/child-operators/ for kustomize/bundle
-	@for operator in authorino-operator limitador-operator dns-operator mcp-gateway; do \
-		cat $(PROJECT_PATH)/charts/$$operator/crds/*.yaml > $(CHILD_OPERATORS_DIR)/$${operator}-crds.yaml; \
-		if [ -f $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml ]; then \
-			cp $(PROJECT_PATH)/charts/$$operator/static/clusterroles.yaml $(CHILD_OPERATORS_DIR)/$${operator}-clusterroles.yaml; \
-		fi; \
-	done
-	@echo "Synced CRDs and ClusterRoles to $(CHILD_OPERATORS_DIR)"
+sync-child-operator-charts: ## Sync child operator Helm charts from upstream repos.
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/authorino-operator --ref $(AUTHORINO_OPERATOR_GITREF) --chart authorino-operator --output $(CHILD_OPERATORS_DIR)
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/limitador-operator --ref $(LIMITADOR_OPERATOR_GITREF) --chart limitador-operator --output $(CHILD_OPERATORS_DIR)
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/dns-operator --ref $(DNS_OPERATOR_GITREF) --chart dns-operator --output $(CHILD_OPERATORS_DIR)
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/mcp-gateway --ref $(MCP_GATEWAY_GITREF) --chart mcp-gateway --output $(CHILD_OPERATORS_DIR)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

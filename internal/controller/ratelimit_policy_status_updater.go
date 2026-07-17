@@ -220,7 +220,7 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 		if !kuadrantgatewayapi.IsListenerReady(parsed.Listener.Listener, parsed.Gateway.Gateway) {
 			continue
 		}
-		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && !kuadrantgatewayapi.IsHTTPRouteReady(parsed.HTTPRoute.HTTPRoute, parsed.Gateway.Gateway, parsed.GatewayClass.Spec.ControllerName) {
+		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeHTTP && !kuadrantgatewayapi.IsHTTPRouteReady(parsed.HTTPRoute.HTTPRoute, parsed.Gateway.Gateway, parsed.Listener.Listener, parsed.GatewayClass.Spec.ControllerName) {
 			continue
 		}
 		if parsed.RouteType == kuadrantpolicymachinery.RouteTypeGRPC && !kuadrantgatewayapi.IsGRPCRouteReady(parsed.GRPCRoute.GRPCRoute, parsed.Gateway.Gateway, parsed.Listener.Listener, parsed.GatewayClass.Spec.ControllerName) {
@@ -282,13 +282,11 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 			// EnvoyFilter (rate limit clusters)
 			istioRateLimitClustersModifiedGateways, _ := state.Load(StateIstioRateLimitClustersModified)
 			componentsToSync = append(componentsToSync, gatewayComponentsToSyncWithName(g.gateway, kuadrantistio.EnvoyFilterGroupKind, RateLimitClusterName(g.gateway.GetName()), istioRateLimitClustersModifiedGateways, topology, func(_ machinery.Object) bool {
-				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
 			// EnvoyFilter (wasm plugin)
 			istioExtensionsModifiedGateways, _ := state.Load(StateIstioExtensionsModified)
 			componentsToSync = append(componentsToSync, gatewayComponentsToSyncWithName(g.gateway, kuadrantistio.EnvoyFilterGroupKind, wasm.ExtensionName(g.gateway.GetName()), istioExtensionsModifiedGateways, topology, func(_ machinery.Object) bool {
-				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
 		case defaultEnvoyGatewayGatewayControllerName:

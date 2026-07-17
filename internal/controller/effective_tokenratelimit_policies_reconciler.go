@@ -39,7 +39,7 @@ func (r *EffectiveTokenRateLimitPolicyReconciler) Reconcile(ctx context.Context,
 	logger.V(1).Info("generating effective token rate limit policy", "status", "started")
 	defer logger.V(1).Info("generating effective token rate limit policy", "status", "completed")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}

@@ -63,7 +63,7 @@ func (p *PeerAuthenticationReconciler) Run(baseCtx context.Context, _ []controll
 	logger.V(1).Info("reconciling peerauthentication", "status", "started")
 	defer logger.V(1).Info("reconciling peerauthentication", "status", "completed")
 
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 
 	if kObj == nil {
 		// Nothing to be done. It is expected the limitador and authorino resources

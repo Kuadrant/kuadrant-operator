@@ -25,7 +25,6 @@ import (
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -85,7 +84,10 @@ var (
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
-func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*controller.Controller, error) {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*KuadrantController, error) {
+	// Create error tracker for non-blocking error handling
+	errorTracker := NewPersistentErrorTracker(logger)
+
 	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
@@ -173,6 +175,18 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 	// Boot options and reconciler based on detected dependencies
 	bootOptions := NewBootOptionsBuilder(manager, client, logger)
+	bootOptions.errorTracker = errorTracker
+
+	// Create KuadrantController wrapper first so we can pass its ScheduleRetry method to the error handler
+	// We'll set the actual policy-machinery controller later
+	kuadrantController := &KuadrantController{
+		errorTracker: errorTracker,
+		logger:       logger.WithName("KuadrantController"),
+	}
+
+	// Now create the error handler with the retry scheduler callback
+	bootOptions.retryScheduler = kuadrantController.ScheduleRetry
+
 	options, err := bootOptions.getOptions()
 	if err != nil {
 		return nil, err
@@ -180,7 +194,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 	controllerOpts = append(controllerOpts, options...)
 	controllerOpts = append(controllerOpts, controller.WithReconcile(bootOptions.Reconciler()))
 
-	return controller.NewController(controllerOpts...), nil
+	policyMachineryController := controller.NewController(controllerOpts...)
+
+	// Set the controller in the wrapper
+	kuadrantController.Controller = policyMachineryController
+
+	return kuadrantController, nil
 }
 
 // NewBootOptionsBuilder is used to return a list of controller.ControllerOption and a controller.ReconcileFunc that depend
@@ -210,6 +229,10 @@ type BootOptionsBuilder struct {
 	isAuthorinoOperatorInstalled  bool
 	isPrometheusOperatorInstalled bool
 	isUsingExtensions             bool
+
+	// Error tracking for non-blocking errors
+	errorTracker   *PersistentErrorTracker
+	retryScheduler RetryScheduler
 }
 
 func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
@@ -277,7 +300,7 @@ func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error)
 }
 
 func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 4)
 	var err error
 	b.isGatewayAPIInstalled, err = kuadrantgatewayapi.IsGatewayAPIInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -315,7 +338,7 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOpti
 }
 
 func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 4)
 	var err error
 	b.isEnvoyGatewayInstalled, err = envoygateway.IsEnvoyGatewayInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -358,7 +381,7 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOp
 }
 
 func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 5)
 	var err error
 	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -387,29 +410,22 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*istiosecurity.PeerAuthentication](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
-		controller.WithRunnable("wasmplugin watcher", controller.Watch(
-			&istioclientgoextensionv1alpha1.WasmPlugin{},
-			istio.WasmPluginsResource,
-			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-		)),
 		controller.WithObjectKinds(
 			istio.EnvoyFilterGroupKind,
-			istio.WasmPluginGroupKind,
 			istio.PeerAuthenticationGroupKind,
 		),
 		controller.WithObjectLinks(
 			istio.LinkGatewayToEnvoyFilter,
-			istio.LinkGatewayToWasmPlugin,
 			istio.LinkKuadrantToPeerAuthentication,
 		),
+		controller.WithRunnable("wasm server", wasmServerRunnable(b.logger)),
 	)
 
 	return opts, nil
 }
 
 func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 1)
 	var err error
 	b.isCertManagerInstalled, err = kuadrantgatewayapi.IsCertManagerInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil {
@@ -432,7 +448,7 @@ func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOpt
 }
 
 func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
 	b.isConsolePluginInstalled, err = openshift.IsConsolePluginInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -465,7 +481,7 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 }
 
 func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
 	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), DNSRecordGroupKind.Group, DNSRecordGroupKind.Kind, kuadrantdnsv1alpha1.GroupVersion.Version)
 	if err != nil {
@@ -499,7 +515,7 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 }
 
 func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
 	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
 	if err != nil {
@@ -535,7 +551,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 }
 
 func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 5)
 	var err error
 	b.isAuthorinoOperatorInstalled, err = authorino.IsAuthorinoOperatorInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil {
@@ -579,7 +595,7 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 }
 
 func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 4)
 	var err error
 
 	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.ServiceMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
@@ -624,7 +640,7 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 // getExtensionsOptions configures controller options for Kuadrant extensions.
 // Extensions are dynamically discovered from the EXTENSIONS_DIR (default: "/extensions").
 func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 1)
 
 	// Disable extensions if WITH_EXTENSIONS is set to false
 	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", true)
@@ -769,25 +785,13 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			&certmanagerv1.Issuer{},
 			CertManagerIssuersResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
-					oldStatus := e.ObjectOld.GetStatus()
-					newStatus := e.ObjectOld.GetStatus()
-					return !reflect.DeepEqual(oldStatus, newStatus)
-				},
-			})),
+			controller.WithPredicates(issuerStatusChangedPredicate())),
 		),
 		controller.WithRunnable("clusterissuers watcher", controller.Watch(
 			&certmanagerv1.ClusterIssuer{},
-			CertMangerClusterIssuersResource,
+			CertManagerClusterIssuersResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
-				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
-					oldStatus := e.ObjectOld.GetStatus()
-					newStatus := e.ObjectOld.GetStatus()
-					return !reflect.DeepEqual(oldStatus, newStatus)
-				},
-			})),
+			controller.WithPredicates(clusterIssuerStatusChangedPredicate())),
 		),
 		controller.WithObjectKinds(
 			CertManagerCertificateKind,
@@ -799,6 +803,22 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			LinkTLSPolicyToIssuerFunc,
 			LinkTLSPolicyToClusterIssuerFunc,
 		),
+	}
+}
+
+func issuerStatusChangedPredicate() ctrlruntimepredicate.TypedPredicate[*certmanagerv1.Issuer] {
+	return ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetStatus(), e.ObjectNew.GetStatus())
+		},
+	}
+}
+
+func clusterIssuerStatusChangedPredicate() ctrlruntimepredicate.TypedPredicate[*certmanagerv1.ClusterIssuer] {
+	return ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
+			return !reflect.DeepEqual(e.ObjectOld.GetStatus(), e.ObjectNew.GetStatus())
+		},
 	}
 }
 
@@ -830,10 +850,26 @@ func (b *BootOptionsBuilder) finalStepsWorkflow() *controller.Workflow {
 		workflow.Tasks = append(workflow.Tasks, traceReconcileFunc("finalize.extensions", extension.Reconcile))
 	}
 
+	// Add error handler as the final postcondition to collect and process non-blocking errors
+	// The scheduleRetry callback is provided by the KuadrantController wrapper
+	errorHandler := NewReconciliationErrorHandler(b.errorTracker, b.retryScheduler)
+	workflow.Postcondition = traceReconcileFunc("finalize.error_handler", errorHandler.Reconcile)
+
 	return workflow
 }
 
-func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuadrant {
+func GetKuadrantFromTopology(topology *machinery.Topology, state *sync.Map) *kuadrantv1beta1.Kuadrant {
+	const stateKuadrantKey = "kuadrant"
+
+	//PERF: The lo.FilterMap function is extremely slow.
+	//In large topologies it is faster to get the kuadrant CR from the state object
+	if state != nil {
+		stateKuadrant, ok := state.Load(stateKuadrantKey)
+		if ok {
+			kuadrant, _ := stateKuadrant.(*kuadrantv1beta1.Kuadrant)
+			return kuadrant
+		}
+	}
 	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
 		o, isSortable := root.(controller.Object)
 		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
@@ -843,6 +879,9 @@ func GetKuadrantFromTopology(topology *machinery.Topology) *kuadrantv1beta1.Kuad
 	}
 	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
 	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	if state != nil {
+		state.Store(stateKuadrantKey, kuadrant)
+	}
 	return kuadrant
 }
 

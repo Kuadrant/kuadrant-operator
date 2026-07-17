@@ -13,11 +13,14 @@ import (
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
+
+const AuthorinoReconcilerName = "AuthorinoReconciler"
 
 type AuthorinoReconciler struct {
 	Client *dynamic.DynamicClient
@@ -40,13 +43,13 @@ func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	span := trace.SpanFromContext(ctx)
 	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler").WithValues("context", ctx)
 	logger.V(1).Info("reconciling authorino resource", "status", "started")
 	defer logger.V(1).Info("reconciling authorino resource", "status", "completed")
 
-	kobj := GetKuadrantFromTopology(topology)
+	kobj := GetKuadrantFromTopology(topology, state)
 	if kobj == nil {
 		span.AddEvent("no kuadrant object found")
 		span.SetStatus(codes.Ok, "")
@@ -59,7 +62,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		attribute.String("kuadrant.namespace", kobj.Namespace),
 	)
 
-	clusterAuthorino := GetAuthorinoFromTopology(topology)
+	clusterAuthorino := GetAuthorinoFromTopology(topology, state)
 
 	if clusterAuthorino != nil {
 		span.AddEvent("Authorino resource already exists")
@@ -199,7 +202,15 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "failed to create authorino")
 			logger.Error(err, "failed to create authorino resource", "status", "error")
-			return err
+
+			// Record error for deferred retry
+			GetOrCreateErrorRegistry(state).Record(
+				AuthorinoReconcilerName,
+				OperationCreate,
+				k8stypes.NamespacedName{Name: authorino.GetName(), Namespace: authorino.GetNamespace()},
+				v1beta1.AuthorinoGroupKind,
+				err,
+			)
 		}
 	} else {
 		span.AddEvent("Authorino resource created successfully")

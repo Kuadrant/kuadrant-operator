@@ -1,0 +1,45 @@
+# API Consumer ClusterRole
+# Enables developers to create and manage API access requests in their own namespace
+#
+# Usage:
+#   kubectl apply -f api-consumer-clusterrole.yaml
+#
+#   Bind to users or groups in their namespace using RoleBinding:
+#   kubectl create rolebinding api-consumer-binding \
+#     --clusterrole=api-consumer \
+#     --user=<username> \
+#     -n <consumer-namespace>
+#
+#   For catalog browsing, also create a ClusterRoleBinding for api-catalog-browser:
+#   kubectl create clusterrolebinding api-catalog-browser-consumers \
+#     --clusterrole=api-catalog-browser \
+#     --group=<consumer-group>
+#
+# Binding strategy: RoleBinding per consumer namespace (namespace-scoped APIKey and Secret management)
+#
+# Key characteristics:
+#   - Consumers create secrets containing API keys before creating APIKey resources
+#   - Cross-namespace APIProduct references allowed via spec.apiProductRef.namespace
+#   - Strict RBAC enforcement: consumers can only access their own namespace's resources
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: api-consumer
+rules:
+  # Create and manage API keys in consumer's own namespace (namespace-scoped via RoleBinding)
+  # Consumers can create, update, patch, and delete their own APIKeys
+  - apiGroups: ["devportal.kuadrant.io"]
+    resources: ["apikeys"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Manage secrets in consumer's own namespace (namespace-scoped via RoleBinding)
+  # Consumer creates secret with API key before creating APIKey (spec.secretRef references this secret)
+  # On approval, controller creates enforcement secret in kuadrant namespace (consumer cannot access)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+  # NOTE: Catalog browsing permissions are in the separate api-catalog-browser ClusterRole
+  # NOTE: Consumers do NOT have apikeyapprovals permissions (architectural principle)
+  # Only API owners can approve/reject requests

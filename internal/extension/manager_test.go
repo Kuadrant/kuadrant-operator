@@ -72,35 +72,36 @@ func testTargetRef(group, kind, name, namespace string) *extpb.TargetRef {
 	}
 }
 
-func validRequest() *extpb.RegisterUpstreamMethodRequest {
-	return &extpb.RegisterUpstreamMethodRequest{
+func validRequest() *extpb.RegisterActionMethodRequest {
+	return &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
 	}
 }
 
-func TestRegisterUpstreamMethod_NilRequest(t *testing.T) {
+func TestRegisterActionMethod_NilRequest(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), nil)
+	_, err := svc.RegisterActionMethod(context.Background(), nil)
 	if err == nil {
 		t.Fatal("Expected error for nil request")
 	}
 }
 
-func TestRegisterUpstreamMethod_NilPolicy(t *testing.T) {
+func TestRegisterActionMethod_NilPolicy(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), &extpb.RegisterUpstreamMethodRequest{})
+	_, err := svc.RegisterActionMethod(context.Background(), &extpb.RegisterActionMethodRequest{})
 	if err == nil {
 		t.Fatal("Expected error for nil policy")
 	}
 }
 
-func TestRegisterUpstreamMethod_NilMetadata(t *testing.T) {
+func TestRegisterActionMethod_NilMetadata(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), &extpb.RegisterUpstreamMethodRequest{
+	_, err := svc.RegisterActionMethod(context.Background(), &extpb.RegisterActionMethodRequest{
 		Policy: &extpb.Policy{},
 	})
 	if err == nil {
@@ -108,9 +109,9 @@ func TestRegisterUpstreamMethod_NilMetadata(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_MissingPolicyFields(t *testing.T) {
+func TestRegisterActionMethod_MissingPolicyFields(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), &extpb.RegisterUpstreamMethodRequest{
+	_, err := svc.RegisterActionMethod(context.Background(), &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("", "ns", "name"),
 		Url:    "grpc://svc:8081",
 	})
@@ -119,23 +120,24 @@ func TestRegisterUpstreamMethod_MissingPolicyFields(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_MissingURL(t *testing.T) {
+func TestRegisterActionMethod_MissingURL(t *testing.T) {
 	svc := newTestExtensionService()
-	_, err := svc.RegisterUpstreamMethod(context.Background(), &extpb.RegisterUpstreamMethodRequest{
+	_, err := svc.RegisterActionMethod(context.Background(), &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name: "assess-threat",
 	})
 	if err == nil {
 		t.Fatal("Expected error for missing URL")
 	}
 }
 
-func TestRegisterUpstreamMethod_InvalidScheme(t *testing.T) {
+func TestRegisterActionMethod_InvalidScheme(t *testing.T) {
 	svc := newTestExtensionService()
 	req := validRequest()
 	req.Url = "http://svc:8081"
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err := svc.RegisterActionMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for non-grpc scheme")
 	}
@@ -144,12 +146,12 @@ func TestRegisterUpstreamMethod_InvalidScheme(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_NoTargetRefs(t *testing.T) {
+func TestRegisterActionMethod_NoTargetRefs(t *testing.T) {
 	svc := newTestExtensionService()
 	req := validRequest()
 	req.Policy.TargetRefs = nil
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err := svc.RegisterActionMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for no target refs")
 	}
@@ -158,12 +160,26 @@ func TestRegisterUpstreamMethod_NoTargetRefs(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_MissingService(t *testing.T) {
+func TestRegisterActionMethod_NilTargetRefElement(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Policy.TargetRefs = []*extpb.TargetRef{nil}
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for nil target ref element")
+	}
+	if !strings.Contains(err.Error(), "first target reference in policy is nil") {
+		t.Errorf("Expected nil target ref error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_MissingService(t *testing.T) {
 	svc := newTestExtensionService()
 	req := validRequest()
 	req.Service = ""
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err := svc.RegisterActionMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for missing service")
 	}
@@ -172,12 +188,12 @@ func TestRegisterUpstreamMethod_MissingService(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_MissingMethod(t *testing.T) {
+func TestRegisterActionMethod_MissingMethod(t *testing.T) {
 	svc := newTestExtensionService()
 	req := validRequest()
 	req.Method = ""
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err := svc.RegisterActionMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for missing method")
 	}
@@ -186,16 +202,17 @@ func TestRegisterUpstreamMethod_MissingMethod(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_Success(t *testing.T) {
+func TestRegisterActionMethod_Success(t *testing.T) {
 	svc := newTestExtensionService()
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), validRequest())
+	_, err := svc.RegisterActionMethod(context.Background(), validRequest())
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	key := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -212,7 +229,7 @@ func TestRegisterUpstreamMethod_Success(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
+func TestRegisterActionMethod_ClusterNameGeneration(t *testing.T) {
 	tests := []struct {
 		name            string
 		url             string
@@ -239,21 +256,23 @@ func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newTestExtensionService()
 
-			req := &extpb.RegisterUpstreamMethodRequest{
+			req := &extpb.RegisterActionMethodRequest{
 				Policy: testPolicy("DemoPolicy", "default", "demo",
 					testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+				Name:    "assess-threat",
 				Url:     tt.url,
 				Service: "example.v1.ExampleService",
 				Method:  "ExampleMethod",
 			}
 
-			_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+			_, err := svc.RegisterActionMethod(context.Background(), req)
 			if err != nil {
 				t.Fatalf("Expected no error, got %v", err)
 			}
 
 			key := RegisteredUpstreamKey{
 				Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+				Name:    "assess-threat",
 				URL:     tt.url,
 				Service: "example.v1.ExampleService",
 				Method:  "ExampleMethod",
@@ -269,7 +288,7 @@ func TestRegisterUpstreamMethod_ClusterNameGeneration(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_ChangeNotifier(t *testing.T) {
+func TestRegisterActionMethod_ChangeNotifier(t *testing.T) {
 	svc := newTestExtensionService()
 
 	notified := false
@@ -278,7 +297,7 @@ func TestRegisterUpstreamMethod_ChangeNotifier(t *testing.T) {
 		return nil
 	}
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), validRequest())
+	_, err := svc.RegisterActionMethod(context.Background(), validRequest())
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -288,18 +307,19 @@ func TestRegisterUpstreamMethod_ChangeNotifier(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_InvalidMethod(t *testing.T) {
+func TestRegisterActionMethod_InvalidMethod(t *testing.T) {
 	svc := newTestExtensionService()
 
-	req := &extpb.RegisterUpstreamMethodRequest{
+	req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "NonExistentMethod",
 	}
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err := svc.RegisterActionMethod(context.Background(), req)
 	if err == nil {
 		t.Fatal("Expected error for non-existent method")
 	}
@@ -316,28 +336,30 @@ func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	svc := newTestExtensionService()
 
 	// Register the same upstream service from two different policies
-	policy1Req := &extpb.RegisterUpstreamMethodRequest{
+	policy1Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "policy1",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route1", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
 	}
 
-	policy2Req := &extpb.RegisterUpstreamMethodRequest{
+	policy2Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "policy2",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route2", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "AnotherMethod",
 	}
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), policy1Req)
+	_, err := svc.RegisterActionMethod(context.Background(), policy1Req)
 	if err != nil {
 		t.Fatalf("Failed to register policy1: %v", err)
 	}
 
-	_, err = svc.RegisterUpstreamMethod(context.Background(), policy2Req)
+	_, err = svc.RegisterActionMethod(context.Background(), policy2Req)
 	if err != nil {
 		t.Fatalf("Failed to register policy2: %v", err)
 	}
@@ -497,31 +519,33 @@ func TestGetServiceDescriptors_MissingService(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_MultipleMethodsSamePolicy(t *testing.T) {
+func TestRegisterActionMethod_MultipleMethodsSamePolicy(t *testing.T) {
 	svc := newTestExtensionService()
 
-	method1Req := &extpb.RegisterUpstreamMethodRequest{
+	method1Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
 	}
 
-	method2Req := &extpb.RegisterUpstreamMethodRequest{
+	method2Req := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "another-action",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "AnotherMethod",
 	}
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), method1Req)
+	_, err := svc.RegisterActionMethod(context.Background(), method1Req)
 	if err != nil {
 		t.Fatalf("Failed to register first method: %v", err)
 	}
 
-	_, err = svc.RegisterUpstreamMethod(context.Background(), method2Req)
+	_, err = svc.RegisterActionMethod(context.Background(), method2Req)
 	if err != nil {
 		t.Fatalf("Failed to register second method: %v", err)
 	}
@@ -529,6 +553,7 @@ func TestRegisterUpstreamMethod_MultipleMethodsSamePolicy(t *testing.T) {
 	// Verify both methods are stored independently
 	key1 := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -540,6 +565,7 @@ func TestRegisterUpstreamMethod_MultipleMethodsSamePolicy(t *testing.T) {
 
 	key2 := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "another-action",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "AnotherMethod",
@@ -565,7 +591,7 @@ func TestRegisterUpstreamMethod_MultipleMethodsSamePolicy(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_ReregistrationIdempotent(t *testing.T) {
+func TestRegisterActionMethod_ReregistrationIdempotent(t *testing.T) {
 	svc := newTestExtensionService()
 
 	notifyCount := 0
@@ -577,7 +603,7 @@ func TestRegisterUpstreamMethod_ReregistrationIdempotent(t *testing.T) {
 	req := validRequest()
 
 	// First registration
-	_, err := svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err := svc.RegisterActionMethod(context.Background(), req)
 	if err != nil {
 		t.Fatalf("First registration failed: %v", err)
 	}
@@ -587,7 +613,7 @@ func TestRegisterUpstreamMethod_ReregistrationIdempotent(t *testing.T) {
 	}
 
 	// Re-register the same method
-	_, err = svc.RegisterUpstreamMethod(context.Background(), req)
+	_, err = svc.RegisterActionMethod(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Re-registration failed: %v", err)
 	}
@@ -599,6 +625,7 @@ func TestRegisterUpstreamMethod_ReregistrationIdempotent(t *testing.T) {
 	// Verify only one entry exists (not duplicated)
 	key := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -616,7 +643,7 @@ func TestRegisterUpstreamMethod_ReregistrationIdempotent(t *testing.T) {
 	}
 }
 
-func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
+func TestRegisterActionMethod_PartialFailure(t *testing.T) {
 	svc := newTestExtensionService()
 
 	notifyCount := 0
@@ -626,15 +653,16 @@ func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
 	}
 
 	// First registration succeeds
-	validReq := &extpb.RegisterUpstreamMethodRequest{
+	validReq := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
 	}
 
-	_, err := svc.RegisterUpstreamMethod(context.Background(), validReq)
+	_, err := svc.RegisterActionMethod(context.Background(), validReq)
 	if err != nil {
 		t.Fatalf("First registration should succeed, got error: %v", err)
 	}
@@ -644,15 +672,16 @@ func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
 	}
 
 	// Second registration fails (invalid method)
-	invalidReq := &extpb.RegisterUpstreamMethodRequest{
+	invalidReq := &extpb.RegisterActionMethodRequest{
 		Policy: testPolicy("DemoPolicy", "default", "demo",
 			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "invalid-action",
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "NonExistentMethod",
 	}
 
-	_, err = svc.RegisterUpstreamMethod(context.Background(), invalidReq)
+	_, err = svc.RegisterActionMethod(context.Background(), invalidReq)
 	if err == nil {
 		t.Fatal("Second registration should fail for non-existent method")
 	}
@@ -665,6 +694,7 @@ func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
 	// Verify first registration is still intact
 	validKey := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
@@ -677,6 +707,7 @@ func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
 	// Verify failed registration left no partial entry
 	invalidKey := RegisteredUpstreamKey{
 		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "invalid-action",
 		URL:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "NonExistentMethod",
@@ -684,5 +715,616 @@ func TestRegisterUpstreamMethod_PartialFailure(t *testing.T) {
 	_, exists = svc.registeredData.GetUpstream(invalidKey)
 	if exists {
 		t.Fatal("Failed registration should not leave any entry in storage")
+	}
+}
+
+func TestRegisterActionMethod_MissingName(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Name = ""
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for missing name")
+	}
+	if !strings.Contains(err.Error(), "name must be specified") {
+		t.Errorf("Expected name error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_WhitespaceOnlyName(t *testing.T) {
+	svc := newTestExtensionService()
+	req := validRequest()
+	req.Name = "   "
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err == nil {
+		t.Fatal("Expected error for whitespace-only name")
+	}
+	if !strings.Contains(err.Error(), "name must be specified") {
+		t.Errorf("Expected name error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_DuplicateNameSamePolicy(t *testing.T) {
+	svc := newTestExtensionService()
+
+	// First registration succeeds
+	req1 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	_, err := svc.RegisterActionMethod(context.Background(), req1)
+	if err != nil {
+		t.Fatalf("First registration should succeed: %v", err)
+	}
+
+	// Second registration with same name but different method should fail
+	req2 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "demo",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "AnotherMethod",
+	}
+
+	_, err = svc.RegisterActionMethod(context.Background(), req2)
+	if err == nil {
+		t.Fatal("Expected error for duplicate name within same policy")
+	}
+	if st, ok := grpcstatus.FromError(err); !ok || st.Code() != codes.AlreadyExists {
+		t.Errorf("Expected AlreadyExists gRPC status, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "already registered") {
+		t.Errorf("Expected duplicate name error, got: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_SameNameDifferentPolicies(t *testing.T) {
+	svc := newTestExtensionService()
+
+	// Two different policies can use the same name
+	req1 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "policy1",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route1", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	req2 := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", "policy2",
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route2", "default")),
+		Name:    "assess-threat",
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+
+	_, err := svc.RegisterActionMethod(context.Background(), req1)
+	if err != nil {
+		t.Fatalf("First policy registration should succeed: %v", err)
+	}
+
+	_, err = svc.RegisterActionMethod(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("Second policy with same name should succeed: %v", err)
+	}
+}
+
+func TestRegisterActionMethod_MessageTemplatePassthrough(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := validRequest()
+	req.MessageTemplate = `ThreatRequest { uri: request.path, method: request.method }`
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	key := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	entry, exists := svc.registeredData.GetUpstream(key)
+	if !exists {
+		t.Fatal("Expected upstream to be stored")
+	}
+	if entry.MessageTemplate != `ThreatRequest { uri: request.path, method: request.method }` {
+		t.Errorf("Expected MessageTemplate to be stored as-is, got %q", entry.MessageTemplate)
+	}
+}
+
+func TestRegisterActionMethod_EmptyMessageTemplate(t *testing.T) {
+	svc := newTestExtensionService()
+
+	req := validRequest()
+	// MessageTemplate is optional, empty is allowed
+
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Expected no error with empty MessageTemplate, got %v", err)
+	}
+
+	key := RegisteredUpstreamKey{
+		Policy:  ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"},
+		Name:    "assess-threat",
+		URL:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	entry, exists := svc.registeredData.GetUpstream(key)
+	if !exists {
+		t.Fatal("Expected upstream to be stored")
+	}
+	if entry.MessageTemplate != "" {
+		t.Errorf("Expected empty MessageTemplate, got %q", entry.MessageTemplate)
+	}
+}
+
+// --- PipelineCommit tests ---
+
+func registerTestActionMethod(t *testing.T, svc *extensionService, policyName, methodName string) {
+	t.Helper()
+	req := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", policyName,
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    methodName,
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Failed to register action method %q: %v", methodName, err)
+	}
+}
+
+func testPipelinePolicy() *extpb.Policy {
+	return testPolicy("DemoPolicy", "default", "demo",
+		testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default"))
+}
+
+func TestPipelineCommit_NilRequest(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), nil)
+	if err == nil {
+		t.Fatal("Expected error for nil request")
+	}
+}
+
+func TestPipelineCommit_NilPolicy(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{})
+	if err == nil {
+		t.Fatal("Expected error for nil policy")
+	}
+}
+
+func TestPipelineCommit_EmptyBothPhases(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+	})
+	if err != nil {
+		t.Fatalf("Expected no error for empty commit, got %v", err)
+	}
+
+	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
+	if actions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseRequest); len(actions) != 0 {
+		t.Errorf("Expected 0 request actions, got %d", len(actions))
+	}
+	if actions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseResponse); len(actions) != 0 {
+		t.Errorf("Expected 0 response actions, got %d", len(actions))
+	}
+}
+
+func TestPipelineCommit_BothPhases(t *testing.T) {
+	svc := newTestExtensionService()
+	registerTestActionMethod(t, svc, "demo", "assess-threat")
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Predicate: "true", Var: "threatResponse"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: `{"x-checked": "true"}`, Predicate: "true"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, Phase: "response", LogMessage: "internal error"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
+	reqActions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseRequest)
+	if len(reqActions) != 2 {
+		t.Fatalf("Expected 2 request actions, got %d", len(reqActions))
+	}
+	if reqActions[0].ActionType != extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+		t.Errorf("Expected first request action GRPC_METHOD, got %s", reqActions[0].ActionType)
+	}
+	if reqActions[0].Method != "assess-threat" {
+		t.Errorf("Expected method 'assess-threat', got %q", reqActions[0].Method)
+	}
+	if reqActions[0].Var != "threatResponse" {
+		t.Errorf("Expected var 'threatResponse', got %q", reqActions[0].Var)
+	}
+	if reqActions[1].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
+		t.Errorf("Expected second request action DENY, got %s", reqActions[1].ActionType)
+	}
+	if reqActions[1].WithStatus != 403 {
+		t.Errorf("Expected WithStatus 403, got %d", reqActions[1].WithStatus)
+	}
+
+	respActions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseResponse)
+	if len(respActions) != 2 {
+		t.Fatalf("Expected 2 response actions, got %d", len(respActions))
+	}
+	if respActions[0].HeadersToAdd != `{"x-checked": "true"}` {
+		t.Errorf("Expected headers_to_add, got %q", respActions[0].HeadersToAdd)
+	}
+	if respActions[1].LogMessage != "internal error" {
+		t.Errorf("Expected log message 'internal error', got %q", respActions[1].LogMessage)
+	}
+}
+
+func TestPipelineCommit_InvalidPhase_RejectsAll(t *testing.T) {
+	svc := newTestExtensionService()
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "invalid", WithStatus: 403},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid response action")
+	}
+
+	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
+	if actions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseRequest); len(actions) != 0 {
+		t.Errorf("Expected no request actions stored after response validation failure, got %d", len(actions))
+	}
+}
+
+func TestPipelineCommit_NilActionEntry(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			nil,
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for nil action entry")
+	}
+	if !strings.Contains(err.Error(), "cannot be nil") {
+		t.Errorf("Expected nil entry error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_InvalidActionType(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_UNSPECIFIED, Phase: "request"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for unspecified action type")
+	}
+	if !strings.Contains(err.Error(), "action_type must be specified") {
+		t.Errorf("Expected action_type error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_InvalidPredicate(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403, Predicate: "!!!invalid cel"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid CEL predicate")
+	}
+	if !strings.Contains(err.Error(), "predicate") {
+		t.Errorf("Expected predicate error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_GRPCMethod_UnregisteredMethod(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "nonexistent"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for unregistered method")
+	}
+	if !strings.Contains(err.Error(), "not a registered action method") {
+		t.Errorf("Expected registered method error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_GRPCMethod_MissingMethod(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing method")
+	}
+	if !strings.Contains(err.Error(), "method must be specified") {
+		t.Errorf("Expected method error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_GRPCMethod_InvalidVarName(t *testing.T) {
+	svc := newTestExtensionService()
+	registerTestActionMethod(t, svc, "demo", "assess-threat")
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Var: "invalid var!"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid var name")
+	}
+	if !strings.Contains(err.Error(), "var") {
+		t.Errorf("Expected var name error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Deny_InvalidStatusCode(t *testing.T) {
+	svc := newTestExtensionService()
+	tests := []struct {
+		name       string
+		withStatus int32
+	}{
+		{"too low", 99},
+		{"too high", 600},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+				Policy: testPipelinePolicy(),
+				Actions: []*extpb.ActionEntry{
+					{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: tt.withStatus},
+				},
+			})
+			if err == nil {
+				t.Fatalf("Expected error for WithStatus=%d", tt.withStatus)
+			}
+		})
+	}
+}
+
+func TestPipelineCommit_AddHeaders_MissingHeadersToAdd(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing headers_to_add")
+	}
+	if !strings.Contains(err.Error(), "headers_to_add must be specified") {
+		t.Errorf("Expected headers_to_add error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_AddHeaders_InvalidCEL(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: "!!!invalid cel"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid CEL in headers_to_add")
+	}
+	if !strings.Contains(err.Error(), "headers_to_add") {
+		t.Errorf("Expected headers_to_add error, got: %v", err)
+	}
+}
+
+func testFDSWithMessages() *descriptorpb.FileDescriptorSet {
+	return &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			{
+				Name:    proto.String("test.proto"),
+				Package: proto.String("example.v1"),
+				Service: []*descriptorpb.ServiceDescriptorProto{
+					{
+						Name: proto.String("ExampleService"),
+						Method: []*descriptorpb.MethodDescriptorProto{
+							{
+								Name:       proto.String("ExampleMethod"),
+								InputType:  proto.String(".example.v1.ExampleRequest"),
+								OutputType: proto.String(".example.v1.ExampleResponse"),
+							},
+						},
+					},
+				},
+				MessageType: []*descriptorpb.DescriptorProto{
+					{
+						Name: proto.String("ExampleRequest"),
+						Field: []*descriptorpb.FieldDescriptorProto{
+							{Name: proto.String("query"), Type: descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()},
+						},
+					},
+					{
+						Name: proto.String("ExampleResponse"),
+						Field: []*descriptorpb.FieldDescriptorProto{
+							{Name: proto.String("threat_level"), Type: descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum()},
+							{Name: proto.String("category"), Type: descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func registerTestActionMethodWithFDS(t *testing.T, svc *extensionService, policyName, methodName string) {
+	t.Helper()
+	fds := testFDSWithMessages()
+	svc.reflectionFetcher = func(_ context.Context, _, serviceName, method string) (*descriptorpb.FileDescriptorSet, error) {
+		if !validateMethodExists(fds, serviceName, method) {
+			return nil, fmt.Errorf("method %q not found in service %q", method, serviceName)
+		}
+		return fds, nil
+	}
+	req := &extpb.RegisterActionMethodRequest{
+		Policy: testPolicy("DemoPolicy", "default", policyName,
+			testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "my-route", "default")),
+		Name:    methodName,
+		Url:     "grpc://svc:8081",
+		Service: "example.v1.ExampleService",
+		Method:  "ExampleMethod",
+	}
+	_, err := svc.RegisterActionMethod(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Failed to register action method %q: %v", methodName, err)
+	}
+}
+
+func TestPipelineCommit_CrossAction_ValidVarFieldAccess(t *testing.T) {
+	svc := newTestExtensionService()
+	registerTestActionMethodWithFDS(t, svc, "demo", "assess-threat")
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Var: "threatResponse"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "response", WithStatus: 403, Predicate: "threatResponse.threat_level >= 5"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected no error for valid field access, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_CrossAction_InvalidVarFieldAccess(t *testing.T) {
+	svc := newTestExtensionService()
+	registerTestActionMethodWithFDS(t, svc, "demo", "assess-threat")
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Var: "threatResponse"},
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "response", WithStatus: 403, Predicate: "threatResponse.nonexistent_field >= 5"},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid field access on proto response")
+	}
+	if !strings.Contains(err.Error(), "nonexistent_field") {
+		t.Errorf("Expected field name in error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_AtomicReplacement(t *testing.T) {
+	svc := newTestExtensionService()
+	registerTestActionMethod(t, svc, "demo", "assess-threat")
+
+	// First commit
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+		},
+	})
+	if err != nil {
+		t.Fatalf("First commit failed: %v", err)
+	}
+
+	// Second commit replaces, not appends
+	_, err = svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 401},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Second commit failed: %v", err)
+	}
+
+	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
+	actions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseRequest)
+	if len(actions) != 1 {
+		t.Fatalf("Expected 1 action after replacement, got %d", len(actions))
+	}
+	if actions[0].WithStatus != 401 {
+		t.Errorf("Expected replaced action with WithStatus 401, got %d", actions[0].WithStatus)
+	}
+}
+
+func TestPipelineCommit_ChangeNotifier(t *testing.T) {
+	svc := newTestExtensionService()
+
+	notified := false
+	svc.changeNotifier = func(reason string) error {
+		notified = true
+		return nil
+	}
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if !notified {
+		t.Fatal("Expected change notifier to have been called")
+	}
+}
+
+func TestPipelineCommit_ChangeNotifierError(t *testing.T) {
+	svc := newTestExtensionService()
+
+	svc.changeNotifier = func(reason string) error {
+		return fmt.Errorf("no Kuadrant resources found in cluster")
+	}
+
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error when change notifier fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to trigger reconciliation") {
+		t.Errorf("Expected error about failed reconciliation, got: %v", err)
 	}
 }

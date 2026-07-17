@@ -2,10 +2,13 @@ package istio
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioapiv1beta1 "istio.io/api/type/v1beta1"
@@ -62,6 +65,103 @@ func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatch
 	}, nil
 }
 
+// BuildEnvoyFilterWasmPatch returns an envoy config patch that adds a wasm HTTP filter to the gateway.
+func BuildEnvoyFilterWasmPatch(wasmURL, imagePullSecret, imageSHA, clusterName string, pluginConfig *structpb.Struct) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+	wasmFilterConfig, err := buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName, pluginConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	patchValue := map[string]any{
+		"name": "envoy.filters.http.wasm",
+		"typed_config": map[string]any{
+			"@type":    "type.googleapis.com/udpa.type.v1.TypedStruct",
+			"type_url": "type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm",
+			"value":    wasmFilterConfig,
+		},
+	}
+
+	patchRaw, _ := json.Marshal(map[string]any{
+		"operation": "INSERT_BEFORE",
+		"value":     patchValue,
+	})
+	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
+	if err := patch.UnmarshalJSON(patchRaw); err != nil {
+		return nil, err
+	}
+
+	return []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+		{
+			ApplyTo: istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+			Match: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
+				Context: istioapinetworkingv1alpha3.EnvoyFilter_GATEWAY,
+				ObjectTypes: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
+					Listener: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch{
+						FilterChain: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
+							Filter: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
+								Name: "envoy.filters.network.http_connection_manager",
+								SubFilter: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_SubFilterMatch{
+									Name: "envoy.filters.http.router",
+								},
+							},
+						},
+					},
+				},
+			},
+			Patch: patch,
+		},
+	}, nil
+}
+
+// buildWasmFilterConfig builds the Envoy wasm filter configuration
+func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName string, pluginConfig *structpb.Struct) (map[string]any, error) {
+	config := map[string]any{
+		"name":    "kuadrant-wasm-shim",
+		"root_id": "kuadrant_wasm_shim",
+		"vm_config": map[string]any{
+			"runtime": "envoy.wasm.runtime.v8",
+			"code": map[string]any{
+				"remote": map[string]any{
+					"http_uri": map[string]any{
+						"uri":     wasmURL,
+						"timeout": "10s",
+						"cluster": clusterName,
+					},
+					"sha256": imageSHA,
+				},
+			},
+			"allow_precompiled": true,
+		},
+		"failure_policy": "FAIL_RELOAD",
+	}
+
+	if pluginConfig != nil {
+		configJSON, err := pluginConfig.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal plugin config: %w", err)
+		}
+		config["configuration"] = map[string]any{
+			"@type": "type.googleapis.com/google.protobuf.StringValue",
+			"value": string(configJSON),
+		}
+	}
+
+	// Add image pull secret if provided
+	if imagePullSecret != "" {
+		if vmConfig, ok := config["vm_config"].(map[string]any); ok {
+			if code, ok := vmConfig["code"].(map[string]any); ok {
+				if remote, ok := code["remote"].(map[string]any); ok {
+					remote["image_pull_secret"] = imagePullSecret
+				}
+			}
+		}
+	}
+
+	return map[string]any{
+		"config": config,
+	}, nil
+}
+
 func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 	if a.Spec.Priority != b.Spec.Priority || !EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
 		return false
@@ -86,14 +186,36 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				return false
 			}
 
-			// cluster match
-			aCluster := aConfigPatch.Match.GetCluster()
-			bCluster := bConfigPatch.Match.GetCluster()
-			if aCluster == nil || bCluster == nil {
-				return false
-			}
-			if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {
-				return false
+			// match comparison depends on patch type
+			switch aConfigPatch.ApplyTo {
+			case istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER:
+				// HTTP_FILTER uses listener match
+				aListener := aConfigPatch.Match.GetListener()
+				bListener := bConfigPatch.Match.GetListener()
+				if (aListener == nil) != (bListener == nil) {
+					return false
+				}
+				// For HTTP_FILTER patches, compare the match structure using protobuf equality
+				if aListener != nil && bListener != nil {
+					if !proto.Equal(aConfigPatch.Match, bConfigPatch.Match) {
+						return false
+					}
+				}
+			case istioapinetworkingv1alpha3.EnvoyFilter_CLUSTER:
+				// CLUSTER uses cluster match
+				aCluster := aConfigPatch.Match.GetCluster()
+				bCluster := bConfigPatch.Match.GetCluster()
+				if aCluster == nil || bCluster == nil {
+					return false
+				}
+				if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {
+					return false
+				}
+			default:
+				// For other patch types, compare the match structure using protobuf equality
+				if !proto.Equal(aConfigPatch.Match, bConfigPatch.Match) {
+					return false
+				}
 			}
 
 			// patch
@@ -103,9 +225,9 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 			if aPatch.Operation != bPatch.Operation || aPatch.FilterClass != bPatch.FilterClass {
 				return false
 			}
-			aPatchJSON, _ := aPatch.Value.MarshalJSON()
-			bPatchJSON, _ := bPatch.Value.MarshalJSON()
-			return string(aPatchJSON) == string(bPatchJSON)
+
+			// Use protobuf equality for patch values to handle non-deterministic map ordering.
+			return proto.Equal(aPatch.Value, bPatch.Value)
 		})
 	})
 }

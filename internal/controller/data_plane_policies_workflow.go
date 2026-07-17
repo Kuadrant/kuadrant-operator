@@ -34,6 +34,7 @@ const (
 
 var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "quay.io/kuadrant/wasm-shim:latest")
+	WASMFilterImageSHA = env.GetString("RELATED_IMAGE_WASMSHIM_SHA", "b937dee6dd5e496b5b6fc28aba9b23254dfd5ec304d7565125b3e14d69511d7a")
 	// protectedRegistry this defines a default protected registry. If this is in the wasm image URL we add a pull secret name to the WASMPLugin resource
 	ProtectedRegistry = env.GetString("PROTECTED_REGISTRY", "registry.redhat.io")
 
@@ -56,7 +57,6 @@ var (
 		{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
-		{Kind: &kuadrantistio.WasmPluginGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 	}
@@ -159,6 +159,20 @@ func gatewayComponentsToSync(gateway *machinery.Gateway, componentGroupKind sche
 	return nil
 }
 
+// gatewayComponentsToSyncWithName is like gatewayComponentsToSync but also matches by object name
+func gatewayComponentsToSyncWithName(gateway *machinery.Gateway, componentGroupKind schema.GroupKind, componentName string, modifiedGatewayLocators any, topology *machinery.Topology, requiredCondition func(machinery.Object) bool) []string {
+	missingConditionInTopologyFunc := func() bool {
+		obj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
+			return child.GroupVersionKind().GroupKind() == componentGroupKind && child.GetName() == componentName
+		})
+		return !found || !requiredCondition(obj)
+	}
+	if (modifiedGatewayLocators != nil && lo.Contains(modifiedGatewayLocators.([]string), gateway.GetLocator())) || missingConditionInTopologyFunc() {
+		return []string{fmt.Sprintf("%s (%s/%s)", componentGroupKind.Kind, gateway.GetNamespace(), gateway.GetName())}
+	}
+	return nil
+}
+
 func getGatewayControllerNames(envName string, defaultGatewayControllerName string) []gatewayapiv1.GatewayController {
 	envValue := env.GetString(envName, defaultGatewayControllerName)
 	gatewayControllers := lo.Map(strings.Split(envValue, ","), func(c string, _ int) gatewayapiv1.GatewayController {
@@ -205,6 +219,14 @@ func mergeAndVerify(ctx context.Context, actions []wasm.Action) ([]wasm.Action, 
 			// Merge source policy locators - deduplicate them
 			lastAction.SourcePolicyLocators = lo.Uniq(append(lastAction.SourcePolicyLocators, currentAction.SourcePolicyLocators...))
 			slices.Sort(lastAction.SourcePolicyLocators)
+
+			// Sort by the first predicate (if any), then by the concatenation of all predicates
+			slices.SortFunc(lastAction.ConditionalData, func(a, b wasm.ConditionalData) int {
+				// Compare by predicates (join them into a single string for comparison)
+				aKey := strings.Join(a.Predicates, "|")
+				bKey := strings.Join(b.Predicates, "|")
+				return strings.Compare(aKey, bKey)
+			})
 		} else {
 			result = append(result, currentAction)
 		}

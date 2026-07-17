@@ -48,13 +48,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code at git ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.gitRef }}
           token: ${{ secrets.KUADRANT_WORKFLOWS_PAT }}
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
           go-version-file: go.mod
         id: go
@@ -72,9 +72,16 @@ jobs:
         id: create-release-branch
         shell: bash
         run: |
-          base_branch=release-v$(echo "${{ github.event.inputs.kuadrantOperatorVersion }}" | sed 's/[+-].*//; s/\.[0-9]*$//')
+          version="${{ github.event.inputs.kuadrantOperatorVersion }}"
+          if ! echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([+-].+)?$'; then
+            echo "Error: version must be semver format (e.g., 1.4.1, 1.5.0-rc1)"
+            exit 1
+          fi
+          # Extract major.minor from version (e.g., 1.4.1 → 1.4)
+          # Removes: pre-release suffix ([+-].*) and patch version (\.[0-9]*$)
+          base_branch=release-$(echo "$version" | sed 's/[+-].*//; s/\.[0-9]*$//')
           echo BASE_BRANCH=$base_branch >> $GITHUB_ENV
-          
+
           if git ls-remote --exit-code --heads origin $base_branch ; then
             echo "Base branch $base_branch already exists"
           else
@@ -117,7 +124,7 @@ jobs:
       - name: Create Pull Request
         id: cpr
         if: ${{ !env.ACT }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # ratchet:peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.KUADRANT_DEV_PAT }}
           commit-message: Prepare release ${{ github.event.inputs.kuadrantOperatorVersion }}
@@ -125,7 +132,7 @@ jobs:
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: true
           base: ${{ env.BASE_BRANCH }}
-          branch: release-v${{ github.event.inputs.kuadrantOperatorVersion }}
+          branch: release-${{ github.event.inputs.kuadrantOperatorVersion }}
           delete-branch: true
           title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
           body: |

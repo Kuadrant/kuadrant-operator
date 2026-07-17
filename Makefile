@@ -43,6 +43,17 @@ DEFAULT_CHANNEL ?= alpha
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
+# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
+# You can enable this value if you would like to use SHA Based Digests
+# To enable set flag to true
+USE_IMAGE_DIGESTS ?= false
+
+# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) --extra-service-accounts=developer-portal-controller-manager
+ifeq ($(USE_IMAGE_DIGESTS), true)
+	BUNDLE_GEN_FLAGS += --use-image-digests
+endif
+
 DEFAULT_IMAGE_TAG = latest
 
 # Semantic versioning (i.e. Major.Minor.Patch)
@@ -116,6 +127,7 @@ KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
 
 #Kuadrant Extensions
 WITH_EXTENSIONS ?= true
+EXTRA_EXTENSIONS ?=
 EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 
 # Kuadrant component versions
@@ -253,6 +265,7 @@ ACT ?= $(LOCALBIN)/act
 GINKGO ?= $(LOCALBIN)/ginkgo
 HELM ?= $(LOCALBIN)/helm
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+RATCHET ?= $(LOCALBIN)/ratchet
 
 ## Tool Versions
 OPERATOR_SDK_VERSION ?= v1.33.0
@@ -263,7 +276,8 @@ OPM_VERSION ?= v1.48.0
 KIND_VERSION ?= v0.31.0
 ACT_VERSION ?= latest
 HELM_VERSION ?= v3.15.0
-GOLANGCI_LINT_VERSION ?= v2.7.2
+GOLANGCI_LINT_VERSION ?= v2.12.2
+RATCHET_VERSION ?= v0.11.4
 
 ## Versioned Binaries
 OPERATOR_SDK_V_BINARY := $(LOCALBIN)/operator-sdk-$(OPERATOR_SDK_VERSION)
@@ -275,6 +289,7 @@ KIND_V_BINARY := $(LOCALBIN)/kind-$(KIND_VERSION)
 ACT_V_BINARY := $(LOCALBIN)/act-$(ACT_VERSION)
 HELM_V_BINARY := $(LOCALBIN)/helm-$(HELM_VERSION)
 GOLANGCI_LINT_V_BINARY := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+RATCHET_V_BINARY := $(LOCALBIN)/ratchet-$(RATCHET_VERSION)
 
 .PHONY: operator-sdk
 operator-sdk: $(OPERATOR_SDK_V_BINARY) ## Download operator-sdk locally if necessary.
@@ -325,6 +340,11 @@ $(GINKGO): $(LOCALBIN) go.mod
 helm: $(HELM_V_BINARY) ## Download helm locally if necessary.
 $(HELM_V_BINARY): $(LOCALBIN)
 	$(call go-install-tool,$(HELM),helm.sh/helm/v3/cmd/helm,$(HELM_VERSION))
+
+.PHONY: ratchet
+ratchet: $(RATCHET_V_BINARY) ## Download ratchet locally if necessary.
+$(RATCHET_V_BINARY): $(LOCALBIN)
+	$(call go-install-tool,$(RATCHET),github.com/sethvargo/ratchet,$(RATCHET_VERSION))
 
 ##@ Development
 define patch-config
@@ -401,12 +421,21 @@ build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 build: generate fmt vet ## Build manager binary.
 	go build -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o bin/manager cmd/main.go
 
+WASM_BIN_DIR := $(PROJECT_PATH)/bin/wasm
+WASM_BIN := $(WASM_BIN_DIR)/plugin.wasm
+
+$(WASM_BIN): ## Fetch and extract the wasm-shim binary from the OCI image.
+	@mkdir -p $(WASM_BIN_DIR)
+	$(CONTAINER_ENGINE) pull $(RELATED_IMAGE_WASMSHIM)
+	$(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout $$($(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar tf - | grep -E '^[a-f0-9]+\.tar$$' | while IFS= read -r layer; do $(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout "$$layer" | tar tf - 2>/dev/null | grep -q plugin.wasm && echo "$$layer"; done | head -1) | tar xf - -C $(WASM_BIN_DIR)
+
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
 run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
+run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
-run: generate fmt vet ## Run a controller from your host.
+run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.
 	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -race ./cmd/main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
@@ -418,6 +447,8 @@ docker-build: ## Build docker image with the manager.
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg VERSION=v$(VERSION) \
 		--build-arg WITH_EXTENSIONS=$(WITH_EXTENSIONS) \
+		--build-arg WASM_SHIM_IMAGE=$(RELATED_IMAGE_WASMSHIM) \
+		--build-arg EXTRA_EXTENSIONS="$(EXTRA_EXTENSIONS)" \
 		$(CONTAINER_ENGINE_EXTRA_FLAGS) \
 		-t $(IMG) .
 
@@ -480,7 +511,7 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	$(call update-csv-config,$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.version)
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
-	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) --extra-service-accounts=developer-portal-controller-manager
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
 	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
 		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
 		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
@@ -503,6 +534,10 @@ bundle-post-generate: yq opm
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_BUNDLE_IMG)
+ifeq ($(USE_IMAGE_DIGESTS),true)
+	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
+	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml
+endif
 
 .PHONY: bundle-ignore-createdAt
 bundle-ignore-createdAt:
@@ -553,6 +588,10 @@ update-catalogsource:
 
 ##@ Code Style
 
+.PHONY: ratchet-pin
+ratchet-pin: ratchet ## Pin GitHub Actions to commit SHAs.
+	$(RATCHET) pin $$(find .github/workflows -name '*.yaml' -o -name '*.yml')
+
 .PHONY: run-lint
 run-lint: golangci-lint ## Run lint tests
 	$(GOLANGCI_LINT) run
@@ -560,7 +599,7 @@ run-lint: golangci-lint ## Run lint tests
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT_V_BINARY) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT_V_BINARY): $(LOCALBIN)
-	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LOCALBIN) $(GOLANGCI_LINT_VERSION)
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/$(GOLANGCI_LINT_VERSION)/install.sh | sh -s -- -b $(LOCALBIN) $(GOLANGCI_LINT_VERSION)
 	@mv $(GOLANGCI_LINT) $(GOLANGCI_LINT)-$(GOLANGCI_LINT_VERSION)
 	@ln -sf $(shell basename $(GOLANGCI_LINT))-$(GOLANGCI_LINT_VERSION) $(GOLANGCI_LINT)
 

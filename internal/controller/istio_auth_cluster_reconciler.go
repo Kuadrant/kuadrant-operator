@@ -53,7 +53,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	logger.V(1).Info("building istio auth clusters")
 	defer logger.V(1).Info("finished building istio auth clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}
@@ -84,7 +84,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	})
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
-	var modifiedGateways []string
+	modifiedGateways := make([]string, 0, len(gateways))
 
 	// reconcile istio cluster for gateway
 	for _, gateway := range gateways {

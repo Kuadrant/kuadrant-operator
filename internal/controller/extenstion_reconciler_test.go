@@ -3,13 +3,14 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/policy-machinery/machinery"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -35,72 +36,144 @@ var (
 	}
 )
 
-func Test_buildIstioWasmPluginForGateway(t *testing.T) {
-	testCases := []struct {
-		Name                    string
-		WASMImageURLS           func() []string
-		ProtectedRegistryPrefix string
-		Assert                  func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin)
-	}{
-		{
-			Name: "ensure image pull secret is set in wasmPlugin for protected registry",
-			WASMImageURLS: func() []string {
-				// note currently this is a package global
-				return []string{protectedRegImage}
-			},
-			ProtectedRegistryPrefix: registry,
-			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
-				if plugin == nil {
-					t.Fatalf("Expected a wasmplugin")
-				}
-				if plugin.Spec.ImagePullSecret != RegistryPullSecretName {
-					t.Fatalf("Expected wasm plugin to have imagePullSecret %s but got %s", RegistryPullSecretName, plugin.Spec.ImagePullSecret)
-				}
-			},
-		},
-		{
-			Name: "ensure image pull secret is NOT set in wasmPlugin for unprotected registry",
-			WASMImageURLS: func() []string {
-				return []string{WASMFilterImageURL}
-			},
-			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
-				if plugin == nil {
-					t.Fatalf("Expected a wasmplugin")
-				}
-				if plugin.Spec.ImagePullSecret != "" {
-					t.Fatalf("Expected wasm plugin to NOT have imagePullSecret %v", plugin.Spec.ImagePullSecret)
-				}
-			},
-		},
-		{
-			Name: "ensure image pull secret is set in wasmPlugin for protected registry and unset for unprotected registry",
-			WASMImageURLS: func() []string {
-				return []string{ProtectedRegistry, WASMFilterImageURL}
-			},
-			Assert: func(t *testing.T, plugin *istioclientgoextensionv1alpha1.WasmPlugin) {
-				if plugin == nil {
-					t.Fatalf("Expected a wasmplugin")
-				}
-				if plugin.Spec.Url == protectedRegImage && plugin.Spec.ImagePullSecret == "" {
-					t.Fatalf("Expected wasm plugin to have imagePullSecret set but got none")
-				}
-				if plugin.Spec.Url == WASMFilterImageURL && plugin.Spec.ImagePullSecret != "" {
-					t.Fatalf("Expected wasm plugin to not have imagePullSecret set but got %v", plugin.Spec.ImagePullSecret)
-				}
-			},
-		},
+// extractImagePullSecretFromEnvoyFilter extracts the image pull secret from EnvoyFilter's nested structure
+func extractImagePullSecretFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) string {
+	if len(ef.Spec.ConfigPatches) == 0 {
+		return ""
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			images := testCase.WASMImageURLS()
-			for _, image := range images {
-				plugin := buildIstioWasmPluginForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image)
-				testCase.Assert(t, plugin)
-			}
-		})
+	patchValue := ef.Spec.ConfigPatches[0].Patch.Value
+	if patchValue == nil {
+		return ""
 	}
 
+	valueJSON, err := patchValue.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	var filterConfig map[string]any
+	if err := json.Unmarshal(valueJSON, &filterConfig); err != nil {
+		return ""
+	}
+
+	// Navigate: typed_config -> value -> config -> vm_config -> code -> remote -> image_pull_secret
+	typedConfig, ok := filterConfig["typed_config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	value, ok := typedConfig["value"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	config, ok := value["config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	vmConfig, ok := config["vm_config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	code, ok := vmConfig["code"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	remote, ok := code["remote"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	imagePullSecret, ok := remote["image_pull_secret"].(string)
+	if !ok {
+		return ""
+	}
+
+	return imagePullSecret
+}
+
+// extractImageURLFromEnvoyFilter extracts the image URL from EnvoyFilter's nested structure
+func extractImageURLFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) string {
+	if len(ef.Spec.ConfigPatches) == 0 {
+		return ""
+	}
+
+	patchValue := ef.Spec.ConfigPatches[0].Patch.Value
+	if patchValue == nil {
+		return ""
+	}
+
+	valueJSON, err := patchValue.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	var filterConfig map[string]any
+	if err := json.Unmarshal(valueJSON, &filterConfig); err != nil {
+		return ""
+	}
+
+	// Navigate: typed_config -> value -> config -> vm_config -> code -> remote -> http_uri -> uri
+	typedConfig, ok := filterConfig["typed_config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	value, ok := typedConfig["value"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	config, ok := value["config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	vmConfig, ok := config["vm_config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	code, ok := vmConfig["code"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	remote, ok := code["remote"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	httpURI, ok := remote["http_uri"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	uri, ok := httpURI["uri"].(string)
+	if !ok {
+		return ""
+	}
+
+	return uri
+}
+
+func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
+	wasmURL := "http://kuadrant-operator-wasm.kuadrant-system.svc.cluster.local:8082/plugin.wasm"
+
+	t.Run("ensure wasm URL is set in envoyfilter", func(t *testing.T) {
+		envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
+		if envoyFilter == nil {
+			t.Fatalf("Expected an envoyfilter")
+		}
+		imageURL := extractImageURLFromEnvoyFilter(envoyFilter)
+		if imageURL != wasmURL {
+			t.Fatalf("Expected envoyfilter URI to be %s but got %s", wasmURL, imageURL)
+		}
+	})
 }
 
 func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {

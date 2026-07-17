@@ -19,7 +19,7 @@ jobs:
       image: ${{ steps.push-to-quay.outputs.registry-path }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
       - name: Set environment variables
         run: |
           bash ./utils/release/load_github_envvar.sh
@@ -36,11 +36,11 @@ jobs:
 
       - name: Build Image
         id: build-image
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # ratchet:redhat-actions/buildah-build@v2
         with:
           image: ${{ env.OPERATOR_NAME }}
           tags: ${{ github.ref_name }}
-          platforms: linux/amd64,linux/arm64,linux/s390x
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           build-args: |
             GIT_SHA=${{ github.sha }}
             DIRTY=false
@@ -55,7 +55,7 @@ jobs:
       - name: Push Image
         if: github.repository_owner == 'kuadrant'
         id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # ratchet:redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
@@ -75,7 +75,7 @@ jobs:
       image: ${{ steps.push-to-quay.outputs.registry-path }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
@@ -98,11 +98,11 @@ jobs:
 
       - name: Build Image
         id: build-image
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # ratchet:redhat-actions/buildah-build@v2
         with:
           image: ${{ env.OPERATOR_NAME }}-bundle
           tags: ${{ needs.build.outputs.build-tags }}
-          platforms: linux/amd64,linux/arm64,linux/s390x
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           dockerfiles: |
             ./bundle.Dockerfile
 
@@ -112,7 +112,7 @@ jobs:
       - name: Push Image
         if: github.repository_owner == 'kuadrant'
         id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # ratchet:redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
@@ -132,7 +132,7 @@ jobs:
       image: ${{ steps.push-to-quay.outputs.registry-path }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
@@ -177,11 +177,11 @@ jobs:
           sudo apt-get install -y qemu-user-static
       - name: Build Image
         id: build-image
-        uses: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # ratchet:redhat-actions/buildah-build@v2
         with:
           image: ${{ env.OPERATOR_NAME }}-catalog
           tags: ${{ needs.build.outputs.build-tags }}
-          platforms: linux/amd64,linux/arm64,linux/s390x
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
           context: ./catalog
           dockerfiles: ./catalog/${{ env.OPERATOR_NAME }}-catalog.Dockerfile
 
@@ -194,7 +194,7 @@ jobs:
       - name: Push Image
         if: github.repository_owner == 'kuadrant'
         id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # ratchet:redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}

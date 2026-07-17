@@ -55,12 +55,12 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	logger.V(1).Info("building istio rate limit clusters")
 	defer logger.V(1).Info("finished building istio rate limit clusters")
 
-	kuadrant := GetKuadrantFromTopology(topology)
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}
 
-	limitador := GetLimitadorFromTopology(topology)
+	limitador := GetLimitadorFromTopology(topology, state)
 	if limitador == nil {
 		logger.V(1).Info(ErrMissingLimitador.Error())
 		return nil
@@ -101,7 +101,7 @@ func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	})
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
-	var modifiedGateways []string
+	modifiedGateways := make([]string, 0, len(gateways))
 
 	if len(gateways) == 0 {
 		logger.V(1).Info("no gateways with rate limiting policies found")

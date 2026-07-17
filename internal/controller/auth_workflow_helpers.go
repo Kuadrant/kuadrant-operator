@@ -35,8 +35,8 @@ var (
 	ErrMissingStateEffectiveAuthPolicies = fmt.Errorf("missing auth effective policies stored in the reconciliation state")
 )
 
-func GetAuthorinoFromTopology(topology *machinery.Topology) *authorinooperatorv1beta1.Authorino {
-	kuadrant := GetKuadrantFromTopology(topology)
+func GetAuthorinoFromTopology(topology *machinery.Topology, state *sync.Map) *authorinooperatorv1beta1.Authorino {
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}

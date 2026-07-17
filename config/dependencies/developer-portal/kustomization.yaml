@@ -7,9 +7,8 @@ kind: Kustomization
 namePrefix: developer-portal-
 
 resources:
-# CRDs
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apikeys.yaml
-- https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/crd/bases/devportal.kuadrant.io_apiproducts.yaml
+# CRDs - directory ref adapts to whatever CRDs exist at the given ref
+- github.com/Kuadrant/developer-portal-controller/config/crd?ref=main
 # RBAC resources
 - https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/service_account.yaml
 - https://raw.githubusercontent.com/Kuadrant/developer-portal-controller/main/config/rbac/role.yaml

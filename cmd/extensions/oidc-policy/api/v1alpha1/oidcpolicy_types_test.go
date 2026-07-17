@@ -163,6 +163,103 @@ func TestOIDCPolicyStatus_Equals(t *testing.T) {
 	}
 }
 
+func TestGetBaseURL(t *testing.T) {
+	tests := []struct {
+		name         string
+		redirectURI  string
+		igwURL       string
+		expectedBase string
+	}{
+		{
+			name:         "No custom redirectURI - uses igwURL",
+			redirectURI:  "",
+			igwURL:       "http://gateway.example.com:8001",
+			expectedBase: "http://gateway.example.com:8001",
+		},
+		{
+			name:         "Custom redirectURI with non-standard port",
+			redirectURI:  "https://public.example.com:8443/auth/callback",
+			igwURL:       "http://gateway.example.com:8001",
+			expectedBase: "https://public.example.com:8443",
+		},
+		{
+			name:         "Custom redirectURI with standard port",
+			redirectURI:  "https://public.example.com/auth/callback",
+			igwURL:       "http://gateway.example.com:8001",
+			expectedBase: "https://public.example.com",
+		},
+		{
+			name:         "Custom redirectURI with different scheme",
+			redirectURI:  "http://external.example.com:9000/custom/callback",
+			igwURL:       "https://gateway.example.com",
+			expectedBase: "http://external.example.com:9000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &OIDCPolicy{
+				Spec: OIDCPolicySpec{
+					OIDCPolicySpecProper: OIDCPolicySpecProper{
+						Provider: &Provider{
+							IssuerURL:   "https://issuer.com",
+							ClientID:    "client123",
+							RedirectURI: tt.redirectURI,
+						},
+					},
+				},
+			}
+
+			igwURL, err := url.Parse(tt.igwURL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			baseURL, err := policy.GetBaseURL(igwURL)
+			if err != nil {
+				t.Fatalf("GetBaseURL() error = %v", err)
+			}
+
+			if baseURL.String() != tt.expectedBase {
+				t.Errorf("GetBaseURL() = %v, want %v", baseURL.String(), tt.expectedBase)
+			}
+		})
+	}
+}
+
+func TestGetBaseURL_ExtractsBaseFromRedirectURI(t *testing.T) {
+	policy := &OIDCPolicy{
+		Spec: OIDCPolicySpec{
+			OIDCPolicySpecProper: OIDCPolicySpecProper{
+				Provider: &Provider{
+					IssuerURL:   "https://issuer.com",
+					ClientID:    "client123",
+					RedirectURI: "https://public.example.com:8443/auth/callback?foo=bar",
+				},
+			},
+		},
+	}
+
+	igwURL, _ := url.Parse("http://gateway.example.com:8001")
+	baseURL, err := policy.GetBaseURL(igwURL)
+	if err != nil {
+		t.Fatalf("GetBaseURL() error = %v", err)
+	}
+
+	// Base URL should only have scheme and host, no path or query
+	if baseURL.String() != "https://public.example.com:8443" {
+		t.Errorf("GetBaseURL() = %v, want https://public.example.com:8443", baseURL.String())
+	}
+
+	if baseURL.Path != "" {
+		t.Errorf("GetBaseURL() path should be empty, got %v", baseURL.Path)
+	}
+
+	if baseURL.RawQuery != "" {
+		t.Errorf("GetBaseURL() query should be empty, got %v", baseURL.RawQuery)
+	}
+}
+
 func mockMinimalOIDCPolicy() *OIDCPolicy {
 	return &OIDCPolicy{
 		TypeMeta:   metav1.TypeMeta{},

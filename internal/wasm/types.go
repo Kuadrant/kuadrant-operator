@@ -42,7 +42,24 @@ func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
 	return &apiextensionsv1.JSON{Raw: configJSON}, nil
 }
 
+// EqualTo performs semantic equality comparison between two Config instances.
+// This is not a strict equality check - it considers two configs equal if they are
+// functionally equivalent, even if some collection orderings differ.
+//
+// Order-sensitive fields:
+//   - ActionSets: Order matters - compared by index position
+//   - RequestData: Map comparison (order doesn't apply)
+//   - Services: Map comparison (order doesn't apply)
+//   - DescriptorService: String comparison
+//   - Observability: Strict equality via nested EqualTo
+//
+// Note: ActionSets order is significant because it affects the evaluation order
+// in the data plane.
 func (c *Config) EqualTo(other *Config) bool {
+	if other == nil {
+		return false
+	}
+
 	if len(c.RequestData) != len(other.RequestData) || len(c.Services) != len(other.Services) || len(c.ActionSets) != len(other.ActionSets) {
 		return false
 	}
@@ -129,18 +146,106 @@ type ActionSet struct {
 	// Conditions that activate the action set
 	RouteRuleConditions RouteRuleConditions `json:"routeRuleConditions,omitempty"`
 
-	// Actions that will be invoked when the conditions are met
+	// Actions that will be invoked when the conditions are met (legacy format)
 	// +optional
-	Actions []Action `json:"actions,omitempty"`
+	Actions []Action `json:"-"`
+
+	// TypedActions are extension pipeline actions in the new TypedAction format.
+	// +optional
+	TypedActions []TypedAction `json:"-"`
+
+	// SourceRoute records which route (Kind/Namespace/Name) this action set was
+	// created from. Not serialized — used only to match pipeline actions to the
+	// correct action sets at reconcile time.
+	SourceRoute string `json:"-"`
 }
 
+// actionSetJSON is the intermediate representation used for custom JSON marshaling.
+type actionSetJSON struct {
+	Name                string              `json:"name"`
+	RouteRuleConditions RouteRuleConditions `json:"routeRuleConditions,omitempty"`
+	Actions             []json.RawMessage   `json:"actions,omitempty"`
+}
+
+func (s ActionSet) MarshalJSON() ([]byte, error) {
+	alias := actionSetJSON{
+		Name:                s.Name,
+		RouteRuleConditions: s.RouteRuleConditions,
+	}
+
+	for _, action := range s.Actions {
+		raw, err := json.Marshal(action)
+		if err != nil {
+			return nil, err
+		}
+		alias.Actions = append(alias.Actions, raw)
+	}
+	for _, typed := range s.TypedActions {
+		raw, err := json.Marshal(typed)
+		if err != nil {
+			return nil, err
+		}
+		alias.Actions = append(alias.Actions, raw)
+	}
+
+	return json.Marshal(alias)
+}
+
+func (s *ActionSet) UnmarshalJSON(data []byte) error {
+	var alias actionSetJSON
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+
+	s.Name = alias.Name
+	s.RouteRuleConditions = alias.RouteRuleConditions
+	s.Actions = nil
+	s.TypedActions = nil
+
+	for _, raw := range alias.Actions {
+		var probe struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &probe); err == nil && probe.Type != "" {
+			var typed TypedAction
+			if err := json.Unmarshal(raw, &typed); err != nil {
+				return err
+			}
+			s.TypedActions = append(s.TypedActions, typed)
+		} else {
+			var action Action
+			if err := json.Unmarshal(raw, &action); err != nil {
+				return err
+			}
+			s.Actions = append(s.Actions, action)
+		}
+	}
+
+	return nil
+}
+
+// EqualTo performs semantic equality comparison between two ActionSet instances.
+//
+// Order-sensitive fields:
+//   - Name: String comparison
+//   - RouteRuleConditions: Uses RouteRuleConditions.EqualTo (which has its own ordering rules)
+//   - Actions: Order matters - compared by index position
+//
+// Note: Actions order is significant because it affects the evaluation order
+// in the data plane.
 func (s *ActionSet) EqualTo(other ActionSet) bool {
-	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) {
+	if s.Name != other.Name || !s.RouteRuleConditions.EqualTo(other.RouteRuleConditions) || len(s.Actions) != len(other.Actions) || len(s.TypedActions) != len(other.TypedActions) {
 		return false
 	}
 
 	for i := range s.Actions {
 		if !s.Actions[i].EqualTo(other.Actions[i]) {
+			return false
+		}
+	}
+
+	for i := range s.TypedActions {
+		if !s.TypedActions[i].EqualTo(other.TypedActions[i]) {
 			return false
 		}
 	}
@@ -155,6 +260,14 @@ type RouteRuleConditions struct {
 	Predicates []string `json:"predicates,omitempty"`
 }
 
+// EqualTo performs semantic equality comparison between two RouteRuleConditions instances.
+//
+// Order-sensitive fields:
+//   - Hostnames: Order matters - compared by index position
+//   - Predicates: Order matters - compared by index position
+//
+// Note: Hostname order is preserved as it may reflect priority or specificity,
+// while predicates are order-insensitive as they are evaluated independently.
 func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 	if len(r.Hostnames) != len(other.Hostnames) || len(r.Predicates) != len(other.Predicates) {
 		return false
@@ -225,6 +338,15 @@ func (a *Action) HasAuthAccess() bool {
 	return false
 }
 
+// EqualTo performs semantic equality comparison between two ConditionalData instances.
+// Note: This has mixed ordering semantics for different fields.
+//
+// Order-sensitive fields:
+//   - Predicates: Order matters - strict slice equality
+//   - Data: Order matters - compared by index position
+//
+// Note: Both predicates and data order are significant as they may affect
+// evaluation order in the data plane.
 func (c *ConditionalData) EqualTo(other ConditionalData) bool {
 	if len(c.Predicates) != len(other.Predicates) || len(c.Data) != len(other.Data) {
 		return false
@@ -243,6 +365,17 @@ func (c *ConditionalData) EqualTo(other ConditionalData) bool {
 	return true
 }
 
+// EqualTo performs semantic equality comparison between two Action instances.
+// Note: This has mixed ordering semantics for different fields.
+//
+// Order-insensitive fields:
+//   - ConditionalData: Checks that the same conditional data exists, regardless of order
+//
+// Order-sensitive fields (strict equality):
+//   - Scope: String comparison
+//   - ServiceName: String comparison
+//   - Predicates: Strict slice equality - order matters
+//   - SourcePolicyLocators: Strict slice equality - order matters
 func (a *Action) EqualTo(other Action) bool {
 	if a.Scope != other.Scope ||
 		a.ServiceName != other.ServiceName ||
@@ -259,7 +392,7 @@ func (a *Action) EqualTo(other Action) bool {
 	}
 
 	for i := range a.ConditionalData {
-		if !a.ConditionalData[i].EqualTo(other.ConditionalData[i]) {
+		if !slices.ContainsFunc(other.ConditionalData, a.ConditionalData[i].EqualTo) {
 			return false
 		}
 	}
@@ -268,12 +401,12 @@ func (a *Action) EqualTo(other Action) bool {
 }
 
 type DataType struct {
-	Value interface{}
+	Value any
 }
 
 func (d *DataType) UnmarshalJSON(data []byte) error {
 	// Precisely one of "static", "selector" must be set.
-	types := []interface{}{
+	types := []any{
 		&Static{},
 		&Expression{},
 	}
@@ -336,6 +469,48 @@ type ExpressionItem struct {
 type Expression struct {
 	// Data to be sent to the service
 	ExpressionItem ExpressionItem `json:"expression"`
+}
+
+// TypedAction represents an extension pipeline action in the new wasm-shim format.
+// The "type" field discriminates the action kind (grpc, deny, headers).
+type TypedAction struct {
+	Type           string        `json:"type"`
+	Predicate      string        `json:"predicate"`
+	Terminal       bool          `json:"terminal"`
+	Var            string        `json:"var,omitempty"`
+	Service        string        `json:"service,omitempty"`
+	MessageBuilder string        `json:"messageBuilder,omitempty"`
+	OnReply        []TypedAction `json:"onReply,omitempty"`
+	DenyWith       string        `json:"denyWith,omitempty"`
+	Target         string        `json:"target,omitempty"`
+	Headers        string        `json:"headers,omitempty"`
+	LogMessage     string        `json:"logMessage,omitempty"`
+	// SourcePolicyLocators tracks all policies that contributed to this action.
+	// Format: "kind/namespace/name"
+	SourcePolicyLocators []string `json:"sources,omitempty"`
+}
+
+func (t TypedAction) EqualTo(other TypedAction) bool {
+	if t.Type != other.Type ||
+		t.Predicate != other.Predicate ||
+		t.Terminal != other.Terminal ||
+		t.Var != other.Var ||
+		t.Service != other.Service ||
+		t.MessageBuilder != other.MessageBuilder ||
+		t.DenyWith != other.DenyWith ||
+		t.Target != other.Target ||
+		t.Headers != other.Headers ||
+		t.LogMessage != other.LogMessage ||
+		!slices.Equal(t.SourcePolicyLocators, other.SourcePolicyLocators) ||
+		len(t.OnReply) != len(other.OnReply) {
+		return false
+	}
+	for i := range t.OnReply {
+		if !t.OnReply[i].EqualTo(other.OnReply[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 type Observability struct {

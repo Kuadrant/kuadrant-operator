@@ -292,8 +292,9 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:    ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions: actions,
+					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:     actions,
+					SourceRoute: fmt.Sprintf("HTTPRoute/%s/%s", parsed.HTTPRoute.GetNamespace(), parsed.HTTPRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
 					Hostnames: []string{string(hostname)},
@@ -360,8 +361,9 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 				}
 
 				actionSet := ActionSet{
-					Name:    ActionSetNameForPath(pathID, j, string(hostname)),
-					Actions: actions,
+					Name:        ActionSetNameForPath(pathID, j, string(hostname)),
+					Actions:     actions,
+					SourceRoute: fmt.Sprintf("GRPCRoute/%s/%s", parsed.GRPCRoute.GetNamespace(), parsed.GRPCRoute.GetName()),
 				}
 				routeRuleConditions := RouteRuleConditions{
 					Hostnames: []string{string(hostname)},
@@ -430,6 +432,75 @@ func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname strin
 	source := fmt.Sprintf("%s|%d|%s", pathID, httpRouteMatchIndex+1, hostname)
 	hash := sha256.Sum256([]byte(source))
 	return hex.EncodeToString(hash[:])
+}
+
+// BuildSkeletonActionSetsForRoute creates ActionSets with proper RouteRuleConditions
+// (hostnames and predicates) but no actions, for all hostname/match combinations of a route.
+// Supports both HTTPRoute and GRPCRoute. Returns nil for unsupported route types.
+func BuildSkeletonActionSetsForRoute(listener *machinery.Listener, route machinery.Targetable) []ActionSet {
+	var hostnames []gatewayapiv1.Hostname
+	// matchPredicates holds predicates per match per rule: [ruleIdx][matchIdx] → predicates
+	var matchPredicates [][][]string
+
+	switch r := route.(type) {
+	case *machinery.HTTPRoute:
+		hostnames = kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, r.HTTPRoute)
+		for _, rule := range r.Spec.Rules {
+			matches := rule.Matches
+			if len(matches) == 0 {
+				matches = []gatewayapiv1.HTTPRouteMatch{{
+					Path: &gatewayapiv1.HTTPPathMatch{
+						Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+						Value: ptr.To("/"),
+					},
+				}}
+			}
+			var preds [][]string
+			for _, m := range matches {
+				preds = append(preds, PredicatesFromHTTPRouteMatch(m))
+			}
+			matchPredicates = append(matchPredicates, preds)
+		}
+	case *machinery.GRPCRoute:
+		hostnames = kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, &gatewayapiv1.HTTPRoute{
+			Spec: gatewayapiv1.HTTPRouteSpec{
+				Hostnames: r.Spec.Hostnames,
+			},
+		})
+		for _, rule := range r.Spec.Rules {
+			matches := rule.Matches
+			if len(matches) == 0 {
+				matches = []gatewayapiv1.GRPCRouteMatch{{}}
+			}
+			var preds [][]string
+			for _, m := range matches {
+				preds = append(preds, PredicatesFromGRPCRouteMatch(m))
+			}
+			matchPredicates = append(matchPredicates, preds)
+		}
+	default:
+		return nil
+	}
+
+	var actionSets []ActionSet
+	for ruleIdx, rulePreds := range matchPredicates {
+		for _, hostname := range hostnames {
+			for matchIdx, predicates := range rulePreds {
+				pathID := fmt.Sprintf("ext|%s/%s|%s|rule-%d", route.GetNamespace(), route.GetName(), listener.GetName(), ruleIdx)
+				actionSet := ActionSet{
+					Name: ActionSetNameForPath(pathID, matchIdx, string(hostname)),
+					RouteRuleConditions: RouteRuleConditions{
+						Hostnames: []string{string(hostname)},
+					},
+				}
+				if len(predicates) > 0 {
+					actionSet.RouteRuleConditions.Predicates = predicates
+				}
+				actionSets = append(actionSets, actionSet)
+			}
+		}
+	}
+	return actionSets
 }
 
 func ConfigFromStruct(structure *structpb.Struct) (*Config, error) {

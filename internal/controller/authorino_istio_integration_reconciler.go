@@ -62,7 +62,7 @@ func (a *AuthorinoIstioIntegrationReconciler) Run(baseCtx context.Context, _ []c
 	logger.V(1).Info("reconciling authorino integration in istio", "status", "started")
 	defer logger.V(1).Info("reconciling authorino integration in istio", "status", "completed")
 
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 
 	if kObj == nil {
 		// Nothing to be done. It is expected that the authorino resource managed by kuadrant

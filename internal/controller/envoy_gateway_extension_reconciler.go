@@ -95,7 +95,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 		// Get the wasm config for this gateway and apply mutators
 		wasmConfig := wasmConfigs[gateway.GetLocator()]
-		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway); err != nil {
+		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway, topology); err != nil {
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
@@ -333,7 +333,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 	serviceBuilder := wasm.NewServiceBuilder(&logger)
 	// Get Kuadrant CR to access observability settings
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 	var observability *wasm.Observability
 	if kObj != nil {
 		observability = wasm.BuildObservabilityConfig(serviceBuilder, &kObj.Spec.Observability)
@@ -375,7 +375,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	// unique paths by key
 	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
-	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
+	wasmActionSets := kuadrantgatewayapi.GroupedHTTPRouteMatchConfigs{}
 	celValidationIssues := celvalidator.NewIssueCollection()
 
 	tracer := controller.TracerFromContext(ctx)

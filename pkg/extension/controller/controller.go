@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -309,18 +310,20 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 	return err
 }
 
-// RegisterUpstreamMethod registers an external gRPC service with the operator
+// RegisterActionMethod registers an external gRPC service with the operator
 // so that it becomes available to the data plane. The operator performs a
 // reachability check and, if successful, creates the necessary Envoy cluster
 // and wasm service entries.
-func (ec *ExtensionController) RegisterUpstreamMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.UpstreamConfig) error {
+func (ec *ExtensionController) RegisterActionMethod(ctx context.Context, policy exttypes.Policy, svc exttypes.ActionMethodConfig) error {
 	pbPolicy := convertPolicyToProtobuf(policy)
 
-	_, err := ec.extensionClient.client.RegisterUpstreamMethod(ctx, &extpb.RegisterUpstreamMethodRequest{
-		Policy:  pbPolicy,
-		Url:     svc.URL,
-		Service: svc.Service,
-		Method:  svc.Method,
+	_, err := ec.extensionClient.client.RegisterActionMethod(ctx, &extpb.RegisterActionMethodRequest{
+		Policy:          pbPolicy,
+		Name:            svc.Name,
+		Url:             svc.URL,
+		Service:         svc.Service,
+		Method:          svc.Method,
+		MessageTemplate: svc.MessageTemplate,
 	})
 	if err != nil {
 		if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
@@ -329,6 +332,136 @@ func (ec *ExtensionController) RegisterUpstreamMethod(ctx context.Context, polic
 		return err
 	}
 	return nil
+}
+
+// NewPipeline creates a Pipeline bound to the given policy. No I/O is performed;
+// the returned Pipeline captures the policy and gRPC client for later use.
+func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipeline {
+	return &PipelineImpl{
+		policy:        policy,
+		client:        ec.extensionClient.client,
+		populatedVars: make(map[string]bool),
+	}
+}
+
+type pipelinePhase = string
+
+const (
+	phaseRequest  pipelinePhase = "request"
+	phaseResponse pipelinePhase = "response"
+)
+
+type pipelineEntry struct {
+	action exttypes.Action
+	phase  pipelinePhase
+}
+
+// PipelineImpl implements Pipeline by accumulating actions locally with
+// ordering validation. Commit sends all actions to the operator atomically.
+type PipelineImpl struct {
+	policy        exttypes.Policy
+	client        extpb.ExtensionServiceClient
+	actions       []pipelineEntry
+	populatedVars map[string]bool
+}
+
+func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
+	for _, entry := range p.actions {
+		if entry.phase == phaseResponse {
+			return fmt.Errorf("cannot add request actions after response actions have been added")
+		}
+	}
+	return p.validateAndAppend(phaseRequest, actions)
+}
+
+func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
+	return p.validateAndAppend(phaseResponse, actions)
+}
+
+func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action) error {
+	batchVars := make(map[string]bool)
+	for _, action := range actions {
+		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+			batchVars[grpc.Var] = true
+		}
+	}
+
+	varPatterns := make(map[string]*regexp.Regexp, len(batchVars)+len(p.populatedVars))
+	for varName := range p.populatedVars {
+		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	}
+	for varName := range batchVars {
+		if _, exists := varPatterns[varName]; !exists {
+			varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+		}
+	}
+
+	localPopulated := make(map[string]bool, len(p.populatedVars))
+	for k := range p.populatedVars {
+		localPopulated[k] = true
+	}
+
+	for _, action := range actions {
+		if _, ok := action.(exttypes.FailAction); ok {
+			refsVar := false
+			for _, expr := range action.CelExpressions() {
+				for _, pattern := range varPatterns {
+					if pattern.MatchString(expr) {
+						refsVar = true
+						break
+					}
+				}
+				if refsVar {
+					break
+				}
+			}
+			if !refsVar {
+				return fmt.Errorf("fail action must reference a gRPC response variable")
+			}
+		}
+
+		exprs := action.CelExpressions()
+		for _, expr := range exprs {
+			for varName, pattern := range varPatterns {
+				if !localPopulated[varName] && pattern.MatchString(expr) {
+					return fmt.Errorf("action references variable %q before it is populated", varName)
+				}
+			}
+		}
+
+		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+			if localPopulated[grpc.Var] {
+				return fmt.Errorf("duplicate variable name %q", grpc.Var)
+			}
+			localPopulated[grpc.Var] = true
+		}
+	}
+
+	for k := range localPopulated {
+		p.populatedVars[k] = true
+	}
+	for _, action := range actions {
+		p.actions = append(p.actions, pipelineEntry{action: action, phase: phase})
+	}
+	return nil
+}
+
+func (p *PipelineImpl) Commit(ctx context.Context) error {
+	entries := make([]*extpb.ActionEntry, 0, len(p.actions))
+	for _, pe := range p.actions {
+		entries = append(entries, convertAction(pe))
+	}
+	_, err := p.client.PipelineCommit(ctx, &extpb.PipelineCommitRequest{
+		Policy:  convertPolicyToProtobuf(p.policy),
+		Actions: entries,
+	})
+	return err
+}
+
+func convertAction(pe pipelineEntry) *extpb.ActionEntry {
+	entry := &extpb.ActionEntry{Phase: pe.phase}
+	pe.action.PopulateProtobuf(entry)
+	return entry
 }
 
 // Manager returns the underlying controller-runtime Manager.

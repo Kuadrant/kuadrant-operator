@@ -1,5 +1,9 @@
+# Extract the wasm-shim binary (platform-independent) from the OCI image
+ARG WASM_SHIM_IMAGE=quay.io/kuadrant/wasm-shim:latest
+FROM ${WASM_SHIM_IMAGE} AS wasm-shim
+
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.25 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26 AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -24,6 +28,7 @@ ARG GIT_SHA
 ARG DIRTY
 ARG VERSION
 ARG WITH_EXTENSIONS=true
+ARG EXTRA_EXTENSIONS=""
 
 ENV GIT_SHA=${GIT_SHA:-unknown}
 ENV DIRTY=${DIRTY:-unknown}
@@ -46,12 +51,22 @@ RUN if [ "$WITH_EXTENSIONS" = "true" ]; then \
     echo "Skipping extensions build"; \
     fi
 
+# Build additional extensions specified via EXTRA_EXTENSIONS (space-separated list of directory names under cmd/extensions/)
+RUN set -e; \
+    for ext in $EXTRA_EXTENSIONS; do \
+      echo "Building extra extension: $ext"; \
+      mkdir -p "extensions/$ext"; \
+      CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+        go build -a -o "extensions/$ext/$ext" "cmd/extensions/$ext/main.go"; \
+    done
+
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/extensions /extensions
+COPY --from=wasm-shim /plugin.wasm /wasm/plugin.wasm
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

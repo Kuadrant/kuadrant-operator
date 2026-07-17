@@ -100,6 +100,9 @@ func dnsOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
 					"control-plane": "dns-operator-controller-manager",
 				},
 			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
+			},
 		},
 	}
 }
@@ -129,6 +132,9 @@ func authOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
 					"control-plane": "authorino-operator",
 				},
 			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
+			},
 		},
 	}
 }
@@ -157,6 +163,9 @@ func limitOpMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
 				MatchLabels: map[string]string{
 					"control-plane": "controller-manager",
 				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
 			},
 		},
 	}
@@ -238,6 +247,9 @@ func istioPodMonitorBuild(ns string) *monitoringv1.PodMonitor {
 					},
 				},
 			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
+			},
 		},
 	}
 }
@@ -310,6 +322,9 @@ func authorinoMonitorBuild(ns string) *monitoringv1.ServiceMonitor {
 					"app.kubernetes.io/part-of":   "authorino",
 				},
 			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
+			},
 		},
 	}
 }
@@ -336,6 +351,9 @@ func envoyStatsMonitorBuild(ns string) *monitoringv1.PodMonitor {
 				MatchLabels: map[string]string{
 					"app": "kuadrant-ingressgateway",
 				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{ns},
 			},
 		},
 	}
@@ -374,7 +392,7 @@ func (r *ObservabilityReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(baseCtx).WithName("ObservabilityReconciler")
 	ctx := logr.NewContext(baseCtx, logger)
 	logger.V(1).Info("reconciling observability", "status", "started")
@@ -390,7 +408,7 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 
 	// Check that a kuadrant resource exists, and observability enabled,
 	// otherwise delete all monitors
-	kObj := GetKuadrantFromTopology(topology)
+	kObj := GetKuadrantFromTopology(topology, state)
 	if kObj == nil || !kObj.Spec.Observability.Enable {
 		logger.V(1).Info("deleting any existing monitors", "kuadrant", kObj != nil)
 		r.deleteAllMonitors(ctx, monitorObjs, logger)

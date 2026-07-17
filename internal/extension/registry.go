@@ -20,6 +20,11 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"maps"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+
 	"sync"
 
 	"github.com/google/cel-go/cel"
@@ -113,9 +118,39 @@ func (r *MutatorRegistry) applyMutatorsWithTargetRefs(authConfig *authorinov1bet
 	return nil
 }
 
-func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway) error {
+func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway, topology *machinery.Topology) error {
 	targetRefs := []machinery.PolicyTargetReference{
 		policyTargetRef("Gateway", gateway.GetName(), gateway.GetNamespace()),
+	}
+
+	// Include route-level targetRefs so mutators can find upstreams and pipeline
+	// actions registered by policies that target HTTPRoutes/GRPCRoutes.
+	if topology != nil {
+		targetRefs = append(targetRefs, collectRouteTargetRefs(gateway, topology)...)
+	}
+
+	// When extension policies have pipeline actions, ensure skeleton action sets
+	// exist for their targeted routes so the mutator's append logic works.
+	if topology != nil && r.hasRelevantPipelineActions(targetRefs) {
+		skeletons := buildActionSetsFromTopology(gateway, topology)
+		if len(wasmConfig.ActionSets) == 0 {
+			wasmConfig.ActionSets = skeletons
+		} else {
+			neededRoutes := r.routesNeedingSkeletons(targetRefs)
+			if len(neededRoutes) > 0 {
+				existingRoutes := make(map[string]bool)
+				for _, as := range wasmConfig.ActionSets {
+					if as.SourceRoute != "" {
+						existingRoutes[as.SourceRoute] = true
+					}
+				}
+				for _, sk := range skeletons {
+					if neededRoutes[sk.SourceRoute] && !existingRoutes[sk.SourceRoute] {
+						wasmConfig.ActionSets = append(wasmConfig.ActionSets, sk)
+					}
+				}
+			}
+		}
 	}
 
 	r.mutex.RLock()
@@ -126,12 +161,134 @@ func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gatew
 			return err
 		}
 	}
+
+	// Remove skeleton action sets that received no actions after mutation.
+	// The wasm-shim requires a non-empty actions field in every action set.
+	filtered := wasmConfig.ActionSets[:0]
+	for _, as := range wasmConfig.ActionSets {
+		if len(as.Actions) > 0 || len(as.TypedActions) > 0 {
+			filtered = append(filtered, as)
+		}
+	}
+	wasmConfig.ActionSets = filtered
+
 	return nil
 }
 
 // ApplyWasmConfigMutators applies all registered wasm config mutators for a specific gateway
-func ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway) error {
-	return GlobalMutatorRegistry.ApplyWasmConfigMutators(wasmConfig, gateway)
+func ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway, topology *machinery.Topology) error {
+	return GlobalMutatorRegistry.ApplyWasmConfigMutators(wasmConfig, gateway, topology)
+}
+
+// hasRelevantPipelineActions checks whether any wasm config mutator has pipeline actions
+// for policies targeting the given gateway. This checks both policies with registered
+// upstream methods and policies that only have pipeline actions (e.g., pure allow or
+// response-only extensions).
+func (r *MutatorRegistry) hasRelevantPipelineActions(targetRefs []machinery.PolicyTargetReference) bool {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	for _, mutator := range r.wasmConfigMutators {
+		m, ok := mutator.(*RegisteredDataMutator[*wasm.Config])
+		if !ok {
+			continue
+		}
+		// Check policies with registered upstreams
+		relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
+		policyIDs := lo.Uniq(lo.Map(lo.Keys(relevantUpstreamKeys), func(k RegisteredUpstreamKey, _ int) ResourceID { return k.Policy }))
+		// Also include pipeline-only policies whose target refs match this gateway
+		policyIDs = append(policyIDs, m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...)
+		policyIDs = lo.Uniq(policyIDs)
+		for _, policyID := range policyIDs {
+			for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+				if actions := m.store.GetPipelineActions(policyID, phase); len(actions) > 0 {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// routesNeedingSkeletons returns the set of route locators (Kind/Namespace/Name)
+// for routes targeted by extension pipeline policies that don't have action sets
+// from core policies. These routes need skeleton action sets.
+func (r *MutatorRegistry) routesNeedingSkeletons(targetRefs []machinery.PolicyTargetReference) map[string]bool {
+	routes := make(map[string]bool)
+	for _, mutator := range r.wasmConfigMutators {
+		m, ok := mutator.(*RegisteredDataMutator[*wasm.Config])
+		if !ok {
+			continue
+		}
+		for _, policyID := range m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs) {
+			for _, tr := range m.store.GetPipelineTargetRefs(policyID) {
+				if tr.Kind == "HTTPRoute" || tr.Kind == "GRPCRoute" {
+					routes[fmt.Sprintf("%s/%s/%s", tr.Kind, tr.Namespace, tr.Name)] = true
+				}
+			}
+		}
+	}
+	return routes
+}
+
+// collectRouteTargetRefs traverses the topology from a gateway through listeners to
+// routes and returns a PolicyTargetReference for each unique HTTPRoute/GRPCRoute.
+func collectRouteTargetRefs(gateway *machinery.Gateway, topology *machinery.Topology) []machinery.PolicyTargetReference {
+	var refs []machinery.PolicyTargetReference
+	seen := make(map[string]bool)
+
+	for _, child := range topology.Targetables().Children(gateway) {
+		for _, grandchild := range topology.Targetables().Children(child) {
+			var kind, name, namespace string
+			switch route := grandchild.(type) {
+			case *machinery.HTTPRoute:
+				kind, name, namespace = "HTTPRoute", route.GetName(), route.GetNamespace()
+			case *machinery.GRPCRoute:
+				kind, name, namespace = "GRPCRoute", route.GetName(), route.GetNamespace()
+			default:
+				continue
+			}
+			routeKey := kind + "/" + namespace + "/" + name
+			if seen[routeKey] {
+				continue
+			}
+			seen[routeKey] = true
+			refs = append(refs, policyTargetRef(kind, name, namespace))
+		}
+	}
+	return refs
+}
+
+// buildActionSetsFromTopology creates skeleton ActionSets by traversing the topology
+// from a gateway through its listeners to routes. Each route/hostname/match combination
+// produces one ActionSet with proper RouteRuleConditions but no actions.
+func buildActionSetsFromTopology(gateway *machinery.Gateway, topology *machinery.Topology) []wasm.ActionSet {
+	var actionSets []wasm.ActionSet
+	seen := make(map[string]bool)
+
+	for _, child := range topology.Targetables().Children(gateway) {
+		listener, ok := child.(*machinery.Listener)
+		if !ok {
+			continue
+		}
+		for _, grandchild := range topology.Targetables().Children(listener) {
+			var routeLocator string
+			switch route := grandchild.(type) {
+			case *machinery.HTTPRoute:
+				routeLocator = fmt.Sprintf("HTTPRoute/%s/%s", route.GetNamespace(), route.GetName())
+			case *machinery.GRPCRoute:
+				routeLocator = fmt.Sprintf("GRPCRoute/%s/%s", route.GetNamespace(), route.GetName())
+			}
+			for _, as := range wasm.BuildSkeletonActionSetsForRoute(listener, grandchild) {
+				if !seen[as.Name] {
+					seen[as.Name] = true
+					as.SourceRoute = routeLocator
+					actionSets = append(actionSets, as)
+				}
+			}
+		}
+	}
+	return actionSets
 }
 
 // ApplyAuthConfigMutators applies all registered auth config mutators to an auth config
@@ -173,20 +330,22 @@ type SubscriptionKey struct {
 
 type RegisteredUpstreamKey struct {
 	Policy  ResourceID
+	Name    string
 	URL     string
 	Service string
 	Method  string
 }
 
 type RegisteredUpstreamEntry struct {
-	ClusterName string
-	Host        string
-	Port        int
-	TargetRef   TargetRef
-	Service     string
-	Method      string
-	FailureMode string
-	Timeout     string
+	ClusterName     string
+	Host            string
+	Port            int
+	TargetRef       TargetRef
+	Service         string
+	Method          string
+	FailureMode     string
+	Timeout         string
+	MessageTemplate string
 }
 
 type TargetRef struct {
@@ -194,6 +353,35 @@ type TargetRef struct {
 	Kind      string
 	Name      string
 	Namespace string
+}
+
+// PipelinePhase identifies whether actions run in the request or response phase.
+type PipelinePhase string
+
+const (
+	PipelinePhaseRequest  PipelinePhase = "request"
+	PipelinePhaseResponse PipelinePhase = "response"
+)
+
+// PipelineActionEntry represents a single stored pipeline action.
+type PipelineActionEntry struct {
+	Index        int
+	ActionType   extpb.ActionType
+	Predicate    string
+	Phase        string // "request" or "response"
+	Method       string // registered action method name (grpc_method)
+	Var          string // variable name for gRPC response (grpc_method)
+	WithStatus   int    // HTTP status code (deny); 0 means unset
+	WithHeaders  string // CEL expression — array of [name, value] pairs (deny)
+	WithBody     string // response body string (deny)
+	HeadersToAdd string // CEL expression for headers (add_headers)
+	LogMessage   string // error message to log (fail)
+}
+
+// pipelineKey identifies a set of actions for a specific policy and phase.
+type pipelineKey struct {
+	Policy ResourceID
+	Phase  PipelinePhase
 }
 
 type RegisteredDataStore struct {
@@ -206,6 +394,11 @@ type RegisteredDataStore struct {
 	registeredUpstreams map[RegisteredUpstreamKey]RegisteredUpstreamEntry
 	protoCache          *ProtoCache
 	upstreamsMutex      sync.RWMutex
+
+	pipelineActions    map[pipelineKey][]PipelineActionEntry
+	pipelineCounters   map[pipelineKey]int
+	pipelineTargetRefs map[ResourceID][]TargetRef
+	pipelineMutex      sync.RWMutex
 }
 
 func NewRegisteredDataStore() *RegisteredDataStore {
@@ -214,6 +407,9 @@ func NewRegisteredDataStore() *RegisteredDataStore {
 		subscriptions:       make(map[SubscriptionKey]Subscription),
 		registeredUpstreams: make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry),
 		protoCache:          NewProtoCache(),
+		pipelineActions:     make(map[pipelineKey][]PipelineActionEntry),
+		pipelineCounters:    make(map[pipelineKey]int),
+		pipelineTargetRefs:  make(map[ResourceID][]TargetRef),
 	}
 }
 
@@ -382,6 +578,43 @@ func (r *RegisteredDataStore) SetUpstream(key RegisteredUpstreamKey, entry Regis
 	r.protoCache.Set(cacheKey, fds)
 }
 
+// IsUpstreamNameTaken returns true when another key for the same policy already
+// uses the given name. This is a cheap read-lock check intended as a fast-path
+// rejection before expensive operations; the authoritative check remains in
+// SetUpstreamIfNameAvailable.
+func (r *RegisteredDataStore) IsUpstreamNameTaken(key RegisteredUpstreamKey) bool {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	for k := range r.registeredUpstreams {
+		if k.Policy == key.Policy && k.Name == key.Name && k != key {
+			return true
+		}
+	}
+	return false
+}
+
+// SetUpstreamIfNameAvailable atomically checks that no other key for the same
+// policy already uses the given name, then writes the upstream and proto cache
+// entries. Returns true on success; false when a name conflict was detected.
+func (r *RegisteredDataStore) SetUpstreamIfNameAvailable(key RegisteredUpstreamKey, entry RegisteredUpstreamEntry, fds *descriptorpb.FileDescriptorSet) bool {
+	r.upstreamsMutex.Lock()
+	defer r.upstreamsMutex.Unlock()
+
+	for k := range r.registeredUpstreams {
+		if k.Policy == key.Policy && k.Name == key.Name && k != key {
+			return false
+		}
+	}
+
+	r.registeredUpstreams[key] = entry
+	cacheKey := ProtoCacheKey{
+		ClusterName: entry.ClusterName,
+		Service:     entry.Service,
+	}
+	r.protoCache.Set(cacheKey, fds)
+	return true
+}
+
 func (r *RegisteredDataStore) GetUpstream(key RegisteredUpstreamKey) (RegisteredUpstreamEntry, bool) {
 	r.upstreamsMutex.RLock()
 	defer r.upstreamsMutex.RUnlock()
@@ -409,6 +642,29 @@ func (r *RegisteredDataStore) GetUpstreamsByTargetRef(targetRef TargetRef) []Reg
 	return result
 }
 
+// GetRelevantUpstreamKeys returns upstream key/entry pairs whose TargetRef
+// matches any of the given target references.
+func (r *RegisteredDataStore) GetRelevantUpstreamKeys(targetRefs []machinery.PolicyTargetReference) map[RegisteredUpstreamKey]RegisteredUpstreamEntry {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+
+	result := make(map[RegisteredUpstreamKey]RegisteredUpstreamEntry)
+	for _, targetRef := range targetRefs {
+		tr := TargetRef{
+			Group:     targetRef.GroupVersionKind().Group,
+			Kind:      targetRef.GroupVersionKind().Kind,
+			Name:      targetRef.GetName(),
+			Namespace: targetRef.GetNamespace(),
+		}
+		for key, entry := range r.registeredUpstreams {
+			if entry.TargetRef == tr {
+				result[key] = entry
+			}
+		}
+	}
+	return result
+}
+
 func (r *RegisteredDataStore) GetRelevantUpstreams(targetRefs []machinery.PolicyTargetReference) []RegisteredUpstreamEntry {
 	return lo.FlatMap(targetRefs, func(targetRef machinery.PolicyTargetReference, _ int) []RegisteredUpstreamEntry {
 		return r.GetUpstreamsByTargetRef(TargetRef{
@@ -430,6 +686,30 @@ func (r *RegisteredDataStore) DeleteUpstream(key RegisteredUpstreamKey) bool {
 	return existed
 }
 
+// HasUpstreamName returns true when a registered upstream with the given name
+// exists for the specified policy.
+func (r *RegisteredDataStore) HasUpstreamName(policy ResourceID, name string) bool {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	for k := range r.registeredUpstreams {
+		if k.Policy == policy && k.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *RegisteredDataStore) GetUpstreamByName(policy ResourceID, name string) (RegisteredUpstreamKey, RegisteredUpstreamEntry, bool) {
+	r.upstreamsMutex.RLock()
+	defer r.upstreamsMutex.RUnlock()
+	for k, v := range r.registeredUpstreams {
+		if k.Policy == policy && k.Name == name {
+			return k, v, true
+		}
+	}
+	return RegisteredUpstreamKey{}, RegisteredUpstreamEntry{}, false
+}
+
 func (r *RegisteredDataStore) GetUpstreamsForPolicy(policy ResourceID) []RegisteredUpstreamEntry {
 	r.upstreamsMutex.RLock()
 	defer r.upstreamsMutex.RUnlock()
@@ -446,13 +726,197 @@ func (r *RegisteredDataStore) GetProtoDescriptor(cacheKey ProtoCacheKey) (*descr
 	return r.protoCache.Get(cacheKey)
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int) {
+// AppendPipelineActions atomically appends actions to the given policy and phase,
+// assigning sequential indices starting from the current counter value.
+// Returns the index of the first appended action.
+func (r *RegisteredDataStore) AppendPipelineActions(policy ResourceID, phase PipelinePhase, actions []PipelineActionEntry) int {
+	r.pipelineMutex.Lock()
+	defer r.pipelineMutex.Unlock()
+
+	key := pipelineKey{Policy: policy, Phase: phase}
+	startIndex := r.pipelineCounters[key]
+
+	for i := range actions {
+		actions[i].Index = startIndex + i
+		r.pipelineActions[key] = append(r.pipelineActions[key], actions[i])
+	}
+	r.pipelineCounters[key] = startIndex + len(actions)
+
+	return startIndex
+}
+
+// GetPipelineActions returns the ordered pipeline actions for a policy and phase.
+func (r *RegisteredDataStore) GetPipelineActions(policy ResourceID, phase PipelinePhase) []PipelineActionEntry {
+	r.pipelineMutex.RLock()
+	defer r.pipelineMutex.RUnlock()
+
+	key := pipelineKey{Policy: policy, Phase: phase}
+	actions := r.pipelineActions[key]
+	if actions == nil {
+		return nil
+	}
+
+	result := make([]PipelineActionEntry, len(actions))
+	copy(result, actions)
+	return result
+}
+
+// ClearPipelinePhase removes all pipeline actions for a policy in a single phase
+// and resets the index counter.
+func (r *RegisteredDataStore) ClearPipelinePhase(policy ResourceID, phase PipelinePhase) {
+	r.pipelineMutex.Lock()
+	defer r.pipelineMutex.Unlock()
+
+	key := pipelineKey{Policy: policy, Phase: phase}
+	delete(r.pipelineActions, key)
+	delete(r.pipelineCounters, key)
+}
+
+// ReplacePipelineActions atomically clears all pipeline actions for a policy
+// and replaces them with the provided entries, grouped by their Phase field.
+// Returns an error if any entry has an invalid phase.
+func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries []PipelineActionEntry) error {
+	for i, entry := range entries {
+		if entry.Phase != string(PipelinePhaseRequest) && entry.Phase != string(PipelinePhaseResponse) {
+			return fmt.Errorf("entries[%d]: invalid phase %q, must be %q or %q", i, entry.Phase, PipelinePhaseRequest, PipelinePhaseResponse)
+		}
+	}
+
+	r.pipelineMutex.Lock()
+	defer r.pipelineMutex.Unlock()
+
+	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+		key := pipelineKey{Policy: policy, Phase: phase}
+		delete(r.pipelineActions, key)
+		delete(r.pipelineCounters, key)
+	}
+
+	grouped := map[PipelinePhase][]PipelineActionEntry{}
+	for _, entry := range entries {
+		phase := PipelinePhase(entry.Phase)
+		grouped[phase] = append(grouped[phase], entry)
+	}
+
+	for phase, phaseEntries := range grouped {
+		key := pipelineKey{Policy: policy, Phase: phase}
+		for i := range phaseEntries {
+			phaseEntries[i].Index = i
+		}
+		r.pipelineActions[key] = phaseEntries
+		r.pipelineCounters[key] = len(phaseEntries)
+	}
+
+	return nil
+}
+
+// ClearPipelineActions removes all pipeline actions for a policy across both phases
+// and resets the index counters. Returns the number of actions cleared.
+func (r *RegisteredDataStore) ClearPipelineActions(policy ResourceID) int {
+	r.pipelineMutex.Lock()
+	defer r.pipelineMutex.Unlock()
+
+	cleared := 0
+	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+		key := pipelineKey{Policy: policy, Phase: phase}
+		cleared += len(r.pipelineActions[key])
+		delete(r.pipelineActions, key)
+		delete(r.pipelineCounters, key)
+	}
+	delete(r.pipelineTargetRefs, policy)
+	return cleared
+}
+
+func (r *RegisteredDataStore) SetPipelineTargetRefs(policy ResourceID, refs []TargetRef) {
+	r.pipelineMutex.Lock()
+	defer r.pipelineMutex.Unlock()
+
+	if len(refs) == 0 {
+		delete(r.pipelineTargetRefs, policy)
+		return
+	}
+	dst := make([]TargetRef, len(refs))
+	copy(dst, refs)
+	r.pipelineTargetRefs[policy] = dst
+}
+
+func (r *RegisteredDataStore) GetPipelineTargetRefs(policy ResourceID) []TargetRef {
+	r.pipelineMutex.RLock()
+	defer r.pipelineMutex.RUnlock()
+
+	refs := r.pipelineTargetRefs[policy]
+	if refs == nil {
+		return nil
+	}
+	dst := make([]TargetRef, len(refs))
+	copy(dst, refs)
+	return dst
+}
+
+// GetPoliciesWithPipelineActions returns the set of policy IDs that have any
+// pipeline actions (request or response phase).
+func (r *RegisteredDataStore) GetPoliciesWithPipelineActions() []ResourceID {
+	r.pipelineMutex.RLock()
+	defer r.pipelineMutex.RUnlock()
+
+	seen := make(map[ResourceID]bool)
+	for key, actions := range r.pipelineActions {
+		if len(actions) > 0 {
+			seen[key.Policy] = true
+		}
+	}
+	result := make([]ResourceID, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+	return result
+}
+
+// GetPoliciesWithPipelineActionsForTargetRefs returns the set of policy IDs
+// that have pipeline actions AND whose stored target refs overlap with the
+// given target references.
+func (r *RegisteredDataStore) GetPoliciesWithPipelineActionsForTargetRefs(targetRefs []machinery.PolicyTargetReference) []ResourceID {
+	r.pipelineMutex.RLock()
+	defer r.pipelineMutex.RUnlock()
+
+	seen := make(map[ResourceID]bool)
+	for key, actions := range r.pipelineActions {
+		if len(actions) == 0 || seen[key.Policy] {
+			continue
+		}
+		storedRefs := r.pipelineTargetRefs[key.Policy]
+		if pipelineTargetRefsMatch(storedRefs, targetRefs) {
+			seen[key.Policy] = true
+		}
+	}
+	result := make([]ResourceID, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+	return result
+}
+
+func pipelineTargetRefsMatch(storedRefs []TargetRef, targetRefs []machinery.PolicyTargetReference) bool {
+	for _, stored := range storedRefs {
+		for _, tr := range targetRefs {
+			if stored.Kind == tr.GroupVersionKind().Kind &&
+				stored.Name == tr.GetName() &&
+				stored.Namespace == tr.GetNamespace() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int, clearedPipelineActions int) {
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	r.upstreamsMutex.Lock()
+	r.pipelineMutex.Lock()
 	defer r.dataMutex.Unlock()
 	defer r.subsMutex.Unlock()
 	defer r.upstreamsMutex.Unlock()
+	defer r.pipelineMutex.Unlock()
 
 	// clear data providers
 	for key := range r.dataProviders {
@@ -505,7 +969,16 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 		}
 	}
 
-	return clearedMutators, clearedSubscriptions, clearedUpstreams
+	// clear pipeline actions and target refs (lock already held)
+	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+		key := pipelineKey{Policy: policy, Phase: phase}
+		clearedPipelineActions += len(r.pipelineActions[key])
+		delete(r.pipelineActions, key)
+		delete(r.pipelineCounters, key)
+	}
+	delete(r.pipelineTargetRefs, policy)
+
+	return clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {
@@ -602,8 +1075,15 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 	wasmConfig.RequestData = requestData
 
 	// Inject registered upstream services matching the current target refs
-	relevantUpstreams := m.store.GetRelevantUpstreams(targetRefs)
-	for _, entry := range relevantUpstreams {
+	relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
+
+	if wasmConfig.Services == nil {
+		wasmConfig.Services = make(map[string]wasm.Service)
+	}
+
+	// Build method name → wasm service key lookup and inject services
+	methodServiceKeys := make(map[ResourceID]map[string]string) // policy → method name → service key
+	for key, entry := range relevantUpstreamKeys {
 		timeout := entry.Timeout
 		svc := wasm.Service{
 			Endpoint:    entry.ClusterName,
@@ -614,18 +1094,242 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			GrpcMethod:  &entry.Method,
 		}
 		wasmServiceKey := "ext-" + HashUpstreamServiceConfig(svc)
-		if wasmConfig.Services == nil {
-			wasmConfig.Services = make(map[string]wasm.Service)
-		}
 		wasmConfig.Services[wasmServiceKey] = svc
+
+		if methodServiceKeys[key.Policy] == nil {
+			methodServiceKeys[key.Policy] = make(map[string]string)
+		}
+		methodServiceKeys[key.Policy][key.Name] = wasmServiceKey
 	}
 
 	// Set descriptor service cluster name if there are any dynamic services
-	if len(relevantUpstreams) > 0 {
+	if len(relevantUpstreamKeys) > 0 {
 		wasmConfig.DescriptorService = "kuadrant-operator-grpc"
 	}
 
+	// Translate pipeline actions into TypedAction entries (deterministic order across policies).
+	// Only include pipeline policies whose stored target refs match this gateway's routes.
+	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...))
+	sort.Slice(policyIDs, func(i, j int) bool {
+		if policyIDs[i].Kind != policyIDs[j].Kind {
+			return policyIDs[i].Kind < policyIDs[j].Kind
+		}
+		if policyIDs[i].Namespace != policyIDs[j].Namespace {
+			return policyIDs[i].Namespace < policyIDs[j].Namespace
+		}
+		return policyIDs[i].Name < policyIDs[j].Name
+	})
+
+	// Build upstream lookup: policy+method → RegisteredUpstreamEntry (for MessageTemplate)
+	// Also build policy → route locator mapping for action set filtering.
+	upstreamByMethod := make(map[ResourceID]map[string]RegisteredUpstreamEntry)
+	policyRouteLocators := make(map[ResourceID][]string)
+	for key, entry := range relevantUpstreamKeys {
+		if upstreamByMethod[key.Policy] == nil {
+			upstreamByMethod[key.Policy] = make(map[string]RegisteredUpstreamEntry)
+		}
+		upstreamByMethod[key.Policy][key.Name] = entry
+		if entry.TargetRef.Kind == "HTTPRoute" || entry.TargetRef.Kind == "GRPCRoute" {
+			locator := fmt.Sprintf("%s/%s/%s", entry.TargetRef.Kind, entry.TargetRef.Namespace, entry.TargetRef.Name)
+			policyRouteLocators[key.Policy] = append(policyRouteLocators[key.Policy], locator)
+		}
+	}
+
+	// Merge stored pipeline target refs into policyRouteLocators so policies
+	// that target routes via both upstreams and pipeline actions see all routes.
+	for _, policyID := range policyIDs {
+		for _, tr := range m.store.GetPipelineTargetRefs(policyID) {
+			if tr.Kind == "HTTPRoute" || tr.Kind == "GRPCRoute" {
+				locator := fmt.Sprintf("%s/%s/%s", tr.Kind, tr.Namespace, tr.Name)
+				policyRouteLocators[policyID] = append(policyRouteLocators[policyID], locator)
+			}
+		}
+		policyRouteLocators[policyID] = lo.Uniq(policyRouteLocators[policyID])
+	}
+
+	for _, policyID := range policyIDs {
+		methods := methodServiceKeys[policyID]
+		policyLocator := fmt.Sprintf("%s/%s/%s", policyID.Kind, policyID.Namespace, policyID.Name)
+		sources := []string{policyLocator}
+
+		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
+		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
+
+		typedActions := translatePipelineToTypedActions(
+			requestEntries, responseEntries,
+			methods, upstreamByMethod[policyID], sources,
+		)
+		if len(typedActions) == 0 {
+			continue
+		}
+
+		routeLocators := policyRouteLocators[policyID]
+		for i := range wasmConfig.ActionSets {
+			asRoute := wasmConfig.ActionSets[i].SourceRoute
+			if len(routeLocators) > 0 && asRoute != "" && !slices.Contains(routeLocators, asRoute) {
+				continue
+			}
+			wasmConfig.ActionSets[i].TypedActions = append(wasmConfig.ActionSets[i].TypedActions, typedActions...)
+		}
+	}
+
 	return nil
+}
+
+func predicateOrTrue(predicate string) string {
+	if predicate == "" {
+		return "true"
+	}
+	return predicate
+}
+
+func translatePipelineToTypedActions(
+	requestEntries, responseEntries []PipelineActionEntry,
+	methods map[string]string,
+	upstreamByMethod map[string]RegisteredUpstreamEntry,
+	sources []string,
+) []wasm.TypedAction {
+	varToMethod := make(map[string]string)
+	for _, e := range requestEntries {
+		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+			varToMethod[e.Var] = e.Method
+		}
+	}
+	for _, e := range responseEntries {
+		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+			varToMethod[e.Var] = e.Method
+		}
+	}
+
+	varPatterns := make(map[string]*regexp.Regexp, len(varToMethod))
+	for varName := range varToMethod {
+		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	}
+
+	grpcOnReply := make(map[string][]wasm.TypedAction)
+
+	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
+		for _, e := range entries {
+			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+				continue
+			}
+			ta := entryToTypedAction(e, sources, phase)
+			for varName, methodName := range varToMethod {
+				if entryMatchesVar(e, varPatterns[varName]) {
+					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
+					break
+				}
+			}
+		}
+	}
+	classifyAndConvert(requestEntries, string(PipelinePhaseRequest))
+	classifyAndConvert(responseEntries, string(PipelinePhaseResponse))
+
+	var result []wasm.TypedAction
+	emittedGRPC := make(map[string]bool)
+
+	emit := func(entries []PipelineActionEntry, phase string) {
+		for _, e := range entries {
+			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+				if emittedGRPC[e.Method] {
+					continue
+				}
+				emittedGRPC[e.Method] = true
+				ta := grpcToTypedAction(e, methods, upstreamByMethod, sources)
+				ta.OnReply = grpcOnReply[e.Method]
+				result = append(result, ta)
+				continue
+			}
+			isVarDependent := false
+			for varName := range varToMethod {
+				if entryMatchesVar(e, varPatterns[varName]) {
+					isVarDependent = true
+					break
+				}
+			}
+			if !isVarDependent {
+				result = append(result, entryToTypedAction(e, sources, phase))
+			}
+		}
+	}
+	emit(requestEntries, string(PipelinePhaseRequest))
+	emit(responseEntries, string(PipelinePhaseResponse))
+
+	return result
+}
+
+func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
+	if entry.Predicate != "" && pattern.MatchString(entry.Predicate) {
+		return true
+	}
+	if entry.HeadersToAdd != "" && pattern.MatchString(entry.HeadersToAdd) {
+		return true
+	}
+	if entry.WithHeaders != "" && pattern.MatchString(entry.WithHeaders) {
+		return true
+	}
+	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
+		return true
+	}
+	if entry.WithBody != "" && pattern.MatchString(entry.WithBody) {
+		return true
+	}
+	return false
+}
+
+func entryToTypedAction(entry PipelineActionEntry, sources []string, phase string) wasm.TypedAction {
+	ta := wasm.TypedAction{
+		Predicate:            predicateOrTrue(entry.Predicate),
+		SourcePolicyLocators: sources,
+	}
+	switch entry.ActionType {
+	case extpb.ActionType_ACTION_TYPE_DENY:
+		ta.Type = "deny"
+		ta.Terminal = true
+		ta.DenyWith = buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)
+	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
+		ta.Type = "headers"
+		ta.Headers = entry.HeadersToAdd
+		if phase == string(PipelinePhaseResponse) {
+			ta.Target = "response"
+		}
+	case extpb.ActionType_ACTION_TYPE_FAIL:
+		ta.Type = "fail"
+		ta.Terminal = true
+		ta.LogMessage = entry.LogMessage
+	}
+	return ta
+}
+
+func buildDenyResponseExpr(status int, headers, body string) string {
+	var parts []string
+	if status != 0 {
+		parts = append(parts, fmt.Sprintf("status: %du", status))
+	}
+	if headers != "" {
+		parts = append(parts, fmt.Sprintf("headers: %s", headers))
+	}
+	if body != "" {
+		parts = append(parts, fmt.Sprintf("body: %s", body))
+	}
+	if len(parts) == 0 {
+		return "DenyResponse{}"
+	}
+	return fmt.Sprintf("DenyResponse{%s}", strings.Join(parts, ", "))
+}
+
+func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) wasm.TypedAction {
+	ta := wasm.TypedAction{
+		Type:                 "grpc",
+		Predicate:            predicateOrTrue(entry.Predicate),
+		Var:                  entry.Var,
+		Service:              methods[entry.Method],
+		SourcePolicyLocators: sources,
+	}
+	if upstream, ok := upstreamByMethod[entry.Method]; ok {
+		ta.MessageBuilder = upstream.MessageTemplate
+	}
+	return ta
 }
 
 // HashUpstreamServiceConfig produces a deterministic short hash from a wasm.Service

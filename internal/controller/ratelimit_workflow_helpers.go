@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"unicode"
 
@@ -44,8 +46,8 @@ var (
 	ErrMissingStateEffectiveTokenRateLimitPolicies = fmt.Errorf("missing token rate limit effective policies stored in the reconciliation state")
 )
 
-func GetLimitadorFromTopology(topology *machinery.Topology) *limitadorv1alpha1.Limitador {
-	kuadrant := GetKuadrantFromTopology(topology)
+func GetLimitadorFromTopology(topology *machinery.Topology, state *sync.Map) *limitadorv1alpha1.Limitador {
+	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
 		return nil
 	}
@@ -124,7 +126,7 @@ func wasmActionFromLimit(limit *kuadrantv1.Limit, limitIdentifier, scope, source
 }
 
 func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1.Limit) []wasm.DataType {
-	data := make([]wasm.DataType, 0)
+	data := make([]wasm.DataType, 0, 1+len(limit.Counters))
 
 	// static key representing the limit
 	data = append(data,
@@ -225,16 +227,15 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	}
 
 	// common both actions
-	commonData := []wasm.DataType{
-		{
-			Value: &wasm.Expression{
-				ExpressionItem: wasm.ExpressionItem{
-					Key:   limitIdentifier,
-					Value: "1",
-				},
+	commonData := make([]wasm.DataType, 0, 1+len(tokenLimit.Counters))
+	commonData = append(commonData, wasm.DataType{
+		Value: &wasm.Expression{
+			ExpressionItem: wasm.ExpressionItem{
+				Key:   limitIdentifier,
+				Value: "1",
 			},
 		},
-	}
+	})
 
 	// add counters if specified
 	for _, counter := range tokenLimit.Counters {
@@ -331,7 +332,12 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
-	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+	rulesEntries := lo.Entries(rules)
+	slices.SortFunc(rulesEntries, func(a, b lo.Entry[string, kuadrantv1.MergeableRule]) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+
+	topLevelRules, limitRules := lo.FilterReject(rulesEntries,
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
 			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates
 		},
@@ -386,7 +392,12 @@ func buildWasmActionsForAnyRateLimit(
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
-	topLevelRules, limitRules := lo.FilterReject(lo.Entries(rules),
+	rulesEntries := lo.Entries(rules)
+	slices.SortFunc(rulesEntries, func(a, b lo.Entry[string, kuadrantv1.MergeableRule]) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+
+	topLevelRules, limitRules := lo.FilterReject(rulesEntries,
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
 			return r.Key == topLevelPredicatesKey
 		},

@@ -98,6 +98,20 @@ make deploy
 
 # Deploy dependencies only
 make deploy-dependencies
+
+# Local setup with a custom wasm-shim and extra extensions (e.g. threat-policy)
+# 1. Build wasm-shim from local repo
+docker build -t quay.io/kuadrant/wasm-shim:dev /path/to/wasm-shim
+# 2. Build operator with extra extensions, load images, and deploy
+make docker-build IMG=quay.io/kuadrant/kuadrant-operator:dev EXTRA_EXTENSIONS=threat-policy
+make local-setup IMG=quay.io/kuadrant/kuadrant-operator:dev
+# 3. Push wasm-shim to Kind's local registry (Istio fetches wasm via OCI, not container runtime)
+docker tag quay.io/kuadrant/wasm-shim:dev localhost:5001/kuadrant/wasm-shim:dev
+docker push localhost:5001/kuadrant/wasm-shim:dev
+# 4. Point operator at the local registry (use the registry's Kind-network IP)
+REGISTRY_IP=$(docker inspect kind-registry --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+kubectl set env deployment/kuadrant-operator-controller-manager -n kuadrant-system \
+  RELATED_IMAGE_WASMSHIM=oci://${REGISTRY_IP}:5000/kuadrant/wasm-shim:dev
 ```
 
 ### Code Generation

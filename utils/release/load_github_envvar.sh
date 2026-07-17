@@ -21,6 +21,8 @@ if [[ $_log == "1" ]]; then
   log "authorinoOperatorVersion=$AUTHORINO_OPERATOR_VERSION"
   log "dnsOperatorVersion=$DNS_OPERATOR_VERSION"
   log "developerPortalVersion=$DEVELOPERPORTAL_VERSION"
+  log "wasmShimVersion=$WASM_SHIM_VERSION"
+  log "consolePluginVersion=$CONSOLEPLUGIN_VERSION"
 fi
 
 if [[ $dry_run == "0" ]]; then

@@ -974,21 +974,21 @@ func TestIsHTTPRouteReady(t *testing.T) {
 			expected:       true,
 		},
 		{
-			name: "Not Ready - matching listener but not accepted",
+			name: "Not Ready - different controller name",
 			httpRoute: &gatewayapiv1.HTTPRoute{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Status: gatewayapiv1.HTTPRouteStatus{
 					RouteStatus: gatewayapiv1.RouteStatus{
 						Parents: []gatewayapiv1.RouteParentStatus{
 							{
-								ControllerName: controllerName,
+								ControllerName: gatewayapiv1.GatewayController("other-controller"),
 								ParentRef: gatewayapiv1.ParentReference{
 									Name: "my-gateway",
 								},
 								Conditions: []metav1.Condition{
 									{
 										Type:   string(gatewayapiv1.RouteConditionAccepted),
-										Status: metav1.ConditionFalse,
+										Status: metav1.ConditionTrue,
 									},
 								},
 							},
@@ -1002,7 +1002,7 @@ func TestIsHTTPRouteReady(t *testing.T) {
 			expected:       false,
 		},
 		{
-			name: "Not Ready - no matching parent status",
+			name: "Not Ready - different gateway name but matching section and port",
 			httpRoute: &gatewayapiv1.HTTPRoute{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Status: gatewayapiv1.HTTPRouteStatus{
@@ -1011,7 +1011,9 @@ func TestIsHTTPRouteReady(t *testing.T) {
 							{
 								ControllerName: controllerName,
 								ParentRef: gatewayapiv1.ParentReference{
-									Name: "other-gateway",
+									Name:        "other-gateway",
+									SectionName: ptr.To(gatewayapiv1.SectionName("http")),
+									Port:        ptr.To(gatewayapiv1.PortNumber(80)),
 								},
 								Conditions: []metav1.Condition{
 									{

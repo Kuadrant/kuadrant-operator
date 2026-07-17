@@ -31,4 +31,6 @@ if [[ $dry_run == "0" ]]; then
   echo "authorinoOperatorVersion=$AUTHORINO_OPERATOR_VERSION" >> "$GITHUB_ENV"
   echo "dnsOperatorVersion=$DNS_OPERATOR_VERSION" >> "$GITHUB_ENV"
   echo "developerPortalVersion=$DEVELOPERPORTAL_VERSION" >> "$GITHUB_ENV"
+  echo "wasmShimVersion=$WASM_SHIM_VERSION" >> "$GITHUB_ENV"
+  echo "consolePluginVersion=$CONSOLEPLUGIN_VERSION" >> "$GITHUB_ENV"
 fi

@@ -57,7 +57,7 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 
 	// Only build tracing clusters if tracing is configured
 	if kuadrant.Spec.Observability.Tracing != nil && kuadrant.Spec.Observability.Tracing.DefaultEndpoint != "" {
-		// Get all istio gateways that have effective policies
+		// Get all istio gateways
 		gateways = lo.FilterMap(
 			topology.Targetables().Items(func(o machinery.Object) bool {
 				return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
@@ -71,7 +71,7 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 					return nil, false
 				}
 				isIstioGateway := lo.Contains(istioGatewayControllerNames, gatewayClass.(*machinery.GatewayClass).Spec.ControllerName)
-				return gateway, isIstioGateway && targetIsInEffectivePolicyPath(gateway, state)
+				return gateway, isIstioGateway
 			},
 		)
 	} else {

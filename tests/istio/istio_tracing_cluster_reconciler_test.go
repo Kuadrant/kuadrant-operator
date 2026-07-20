@@ -11,12 +11,8 @@ import (
 	. "github.com/onsi/gomega"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -31,34 +27,6 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 	var (
 		testNamespace string
 	)
-
-	createAuthPolicy := func(ctx SpecContext) {
-		policy := &kuadrantv1.AuthPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "AuthPolicy",
-				APIVersion: kuadrantv1.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "toystore-auth",
-				Namespace: testNamespace,
-			},
-			Spec: kuadrantv1.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
-					},
-				},
-				Defaults: &kuadrantv1.MergeableAuthPolicySpec{
-					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
-						AuthScheme: tests.BuildBasicAuthScheme(),
-					},
-				},
-			},
-		}
-		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
-	}
 
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
@@ -101,9 +69,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
 		})
 
-		It("EnvoyFilter created with tracing cluster when gateway has effective policy", func(ctx SpecContext) {
-			createAuthPolicy(ctx)
-
+		It("EnvoyFilter created with tracing cluster when tracing is configured", func(ctx SpecContext) {
 			// Check envoy filter has been created
 			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -155,8 +121,6 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 		})
 
 		It("envoy filter has transport configured with mTLS", func(ctx SpecContext) {
-			createAuthPolicy(ctx)
-
 			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 			Eventually(func(g Gomega, ctx context.Context) {
 				efKey := client.ObjectKey{Name: controllers.TracingClusterName(TestGatewayName), Namespace: testNamespace}
@@ -254,14 +218,23 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
 		})
 
-		It("EnvoyFilter is not created", func(ctx SpecContext) {
-			// Check envoy filter has not been created even though tracing is configured
-			Consistently(func(g Gomega, ctx context.Context) {
-				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
+		It("EnvoyFilter is created for gateway without policies", func(ctx SpecContext) {
+			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
+			Eventually(func(g Gomega, ctx context.Context) {
 				efKey := client.ObjectKey{Name: controllers.TracingClusterName(TestGatewayName), Namespace: testNamespace}
-				err := testClient().Get(ctx, efKey, existingEF)
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+				g.Expect(testClient().Get(ctx, efKey, existingEF)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
+
+			Expect(existingEF.Spec.ConfigPatches).To(HaveLen(1))
+			Expect(existingEF.Spec.ConfigPatches[0].Patch).NotTo(BeNil())
+			Expect(existingEF.Spec.ConfigPatches[0].Patch.Value).NotTo(BeNil())
+
+			patchValueRaw, err := json.Marshal(existingEF.Spec.ConfigPatches[0].Patch.Value)
+			Expect(err).ToNot(HaveOccurred())
+			var patchValue map[string]any
+			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
+			Expect(patchValue).To(HaveKey("name"))
+			Expect(patchValue["name"]).To(Equal(kuadrant.KuadrantTracingClusterName))
 		}, testTimeOut)
 	})
 
@@ -280,8 +253,6 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 		})
 
 		It("EnvoyFilter is deleted when tracing config is removed", func(ctx SpecContext) {
-			createAuthPolicy(ctx)
-
 			// Verify EnvoyFilter is created
 			efKey := client.ObjectKey{Name: controllers.TracingClusterName(TestGatewayName), Namespace: testNamespace}
 			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}

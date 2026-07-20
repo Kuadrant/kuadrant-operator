@@ -84,7 +84,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	r.reconcileUpstreamClusters(ctx, topology, gateways, errorRegistry)
 
 	// build wasm plugin configs for each gateway
-	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
+	wasmConfigs, observability, serviceBuilder, err := r.buildWasmConfigs(ctx, topology, state)
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveAuthPolicies) || errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
@@ -100,8 +100,20 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 
 		// Get the wasm config for this gateway and apply mutators
 		wasmConfig := wasmConfigs[gateway.GetLocator()]
+		hadActionSets := len(wasmConfig.ActionSets) > 0
 		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway, topology); err != nil {
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
+		}
+
+		if len(wasmConfig.ActionSets) > 0 && !hadActionSets {
+			if observability != nil {
+				wasmConfig.Observability = observability
+				for k, v := range serviceBuilder.Build() {
+					if _, exists := wasmConfig.Services[k]; !exists {
+						wasmConfig.Services[k] = v
+					}
+				}
+			}
 		}
 
 		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
@@ -381,7 +393,7 @@ func buildUpstreamEnvoyPatchPolicy(logger logr.Logger, gateway *machinery.Gatewa
 }
 
 // buildWasmConfigs returns a map of envoy gateway gateway locators to an ordered list of corresponding wasm policies
-func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, topology *machinery.Topology, state *sync.Map) (map[string]wasm.Config, error) {
+func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, topology *machinery.Topology, state *sync.Map) (map[string]wasm.Config, *wasm.Observability, *wasm.ServiceBuilder, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("buildWasmConfigs").WithValues("context", ctx)
 
 	serviceBuilder := wasm.NewServiceBuilder(&logger)
@@ -394,7 +406,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		return nil, ErrMissingStateEffectiveAuthPolicies
+		return nil, nil, nil, ErrMissingStateEffectiveAuthPolicies
 	}
 	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
 
@@ -525,7 +537,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			pathSpan.RecordError(err)
 			pathSpan.SetStatus(codes.Error, "failed to merge/verify specs")
 			pathSpan.End()
-			return nil, fmt.Errorf("failed to merge/verify action specs for path %s: %w", pathID, err)
+			return nil, nil, nil, fmt.Errorf("failed to merge/verify action specs for path %s: %w", pathID, err)
 		}
 
 		if len(specs) == 0 {
@@ -539,7 +551,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			pathSpan.RecordError(err)
 			pathSpan.SetStatus(codes.Error, "failed to build validator")
 			pathSpan.End()
-			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
+			return nil, nil, nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
 
 		// Validate specs, then build validated ones into Actions
@@ -604,7 +616,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		}), &logger, observability, serviceBuilder)
 	})
 
-	return wasmConfigs, nil
+	return wasmConfigs, observability, serviceBuilder, nil
 }
 
 // buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config

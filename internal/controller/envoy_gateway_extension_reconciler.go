@@ -103,6 +103,9 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 		if len(wasmConfig.ActionSets) > 0 && !hadActionSets {
 			if observability != nil {
 				wasmConfig.Observability = observability
+				if wasmConfig.Services == nil {
+					wasmConfig.Services = make(map[string]wasm.Service)
+				}
 				for k, v := range serviceBuilder.Build() {
 					if _, exists := wasmConfig.Services[k]; !exists {
 						wasmConfig.Services[k] = v
@@ -353,7 +356,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		return nil, nil, nil, ErrMissingStateEffectiveAuthPolicies
+		return nil, observability, serviceBuilder, ErrMissingStateEffectiveAuthPolicies
 	}
 	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
 

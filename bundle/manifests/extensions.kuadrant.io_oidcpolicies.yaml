@@ -53,13 +53,20 @@ spec:
                     description: |-
                       TokenSource informs where the JWT token will be found in the request for authentication
                       If omitted, it defaults to credentials passed in cookies.
+                    maxProperties: 1
                     properties:
                       authorizationHeader:
+                        description: |-
+                          Extract the credential from the HTTP Authorization header.
+                          The prefix specifies the authentication scheme to strip from the header value (e.g. "Bearer", "APIKEY", "Basic").
+                          Defaults to "Bearer" when prefix is omitted.
                         properties:
                           prefix:
                             type: string
                         type: object
                       cookie:
+                        description: Extract the credential from a cookie specified
+                          by name.
                         properties:
                           name:
                             type: string
@@ -67,6 +74,8 @@ spec:
                         - name
                         type: object
                       customHeader:
+                        description: Extract the credential from a custom HTTP header
+                          specified by name.
                         properties:
                           name:
                             type: string
@@ -74,6 +83,8 @@ spec:
                         - name
                         type: object
                       queryString:
+                        description: Extract the credential from a query string parameter
+                          specified by name.
                         properties:
                           name:
                             type: string

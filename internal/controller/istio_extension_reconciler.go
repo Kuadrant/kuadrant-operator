@@ -115,6 +115,9 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		if len(wasmConfig.ActionSets) > 0 && !hadActionSets {
 			if observability != nil {
 				wasmConfig.Observability = observability
+				if wasmConfig.Services == nil {
+					wasmConfig.Services = make(map[string]wasm.Service)
+				}
 				for k, v := range serviceBuilder.Build() {
 					if _, exists := wasmConfig.Services[k]; !exists {
 						wasmConfig.Services[k] = v
@@ -422,7 +425,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		return nil, nil, nil, ErrMissingStateEffectiveAuthPolicies
+		return nil, observability, serviceBuilder, ErrMissingStateEffectiveAuthPolicies
 	}
 	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
 

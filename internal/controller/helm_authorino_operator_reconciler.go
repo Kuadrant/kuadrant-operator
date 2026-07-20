@@ -91,6 +91,10 @@ func (r *HelmAuthorinoOperatorReconciler) Reconcile(ctx context.Context, _ []con
 			continue
 		}
 
+		patchDeploymentImage(obj, AuthorinoOperatorImage, map[string]string{
+			"RELATED_IMAGE_AUTHORINO": AuthorinoImage,
+		})
+
 		// Set owner reference to Kuadrant CR
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{

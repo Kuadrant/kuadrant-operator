@@ -86,6 +86,10 @@ func (r *HelmLimitadorOperatorReconciler) Reconcile(ctx context.Context, _ []con
 			continue
 		}
 
+		patchDeploymentImage(obj, LimitadorOperatorImage, map[string]string{
+			"RELATED_IMAGE_LIMITADOR": LimitadorImage,
+		})
+
 		// Set owner reference to Kuadrant CR
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{

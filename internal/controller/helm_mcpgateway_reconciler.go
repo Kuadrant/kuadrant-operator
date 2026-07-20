@@ -65,9 +65,14 @@ func (r *HelmMCPGatewayReconciler) Reconcile(ctx context.Context, _ []controller
 	logger = logger.WithValues("kuadrant", kuadrantObj.Namespace+"/"+kuadrantObj.Name)
 
 	renderer := helm.NewRenderer(r.ChartPath)
+	mcpRepo, mcpTag := splitImageRef(MCPGatewayImage)
 	values := map[string]interface{}{
 		"mcpGatewayExtension": map[string]interface{}{
 			"create": false,
+		},
+		"imageController": map[string]interface{}{
+			"repository": mcpRepo,
+			"tag":        mcpTag,
 		},
 	}
 	objects, err := renderer.Render("mcp-gateway", kuadrantObj.Namespace, values)

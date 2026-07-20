@@ -86,6 +86,8 @@ func (r *HelmDNSOperatorReconciler) Reconcile(ctx context.Context, _ []controlle
 			continue
 		}
 
+		patchDeploymentImage(obj, DNSOperatorImage, nil)
+
 		// Set owner reference to Kuadrant CR
 		obj.SetOwnerReferences([]metav1.OwnerReference{
 			{

@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-07-16T21:29:39Z"
+    createdAt: "2026-07-21T16:23:07Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -874,6 +874,18 @@ spec:
                   value: quay.io/kuadrant/console-plugin:latest
                 - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
                   value: quay.io/kuadrant/console-plugin:v0.1.5-2
+                - name: RELATED_IMAGE_AUTHORINO_OPERATOR
+                  value: quay.io/kuadrant/authorino-operator:latest
+                - name: RELATED_IMAGE_AUTHORINO
+                  value: quay.io/kuadrant/authorino:latest
+                - name: RELATED_IMAGE_LIMITADOR_OPERATOR
+                  value: quay.io/kuadrant/limitador-operator:latest
+                - name: RELATED_IMAGE_LIMITADOR
+                  value: quay.io/kuadrant/limitador:latest
+                - name: RELATED_IMAGE_DNS_OPERATOR
+                  value: quay.io/kuadrant/dns-operator:latest
+                - name: RELATED_IMAGE_MCP_GATEWAY
+                  value: ghcr.io/kuadrant/mcp-controller:latest
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -1037,4 +1049,16 @@ spec:
     name: console-plugin-latest
   - image: quay.io/kuadrant/console-plugin:v0.1.5-2
     name: console-plugin-pf5
+  - image: quay.io/kuadrant/authorino-operator:latest
+    name: authorino-operator
+  - image: quay.io/kuadrant/authorino:latest
+    name: authorino
+  - image: quay.io/kuadrant/limitador-operator:latest
+    name: limitador-operator
+  - image: quay.io/kuadrant/limitador:latest
+    name: limitador
+  - image: quay.io/kuadrant/dns-operator:latest
+    name: dns-operator
+  - image: ghcr.io/kuadrant/mcp-controller:latest
+    name: mcp-gateway
   version: 0.0.0

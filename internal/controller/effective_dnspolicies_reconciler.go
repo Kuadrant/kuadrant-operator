@@ -267,14 +267,12 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 	state.Store(StateDNSPolicyErrorsKey, policyErrors)
 
-	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology, state)
+	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology, errorRegistry)
 }
 
 // deleteOrphanDNSRecords deletes any DNSRecord resources that exist in the topology but have no parent targettable, policy or path back to the policy.
-func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology, state *sync.Map) error {
+func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology, errorRegistry *ErrorRegistry) error {
 	logger := controller.LoggerFromContext(ctx).WithName("deleteOrphanDNSRecords").WithValues("context", ctx)
-
-	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	orphanRecords := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
 		if item.GroupVersionKind().GroupKind() == DNSRecordGroupKind {

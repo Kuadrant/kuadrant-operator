@@ -23,10 +23,15 @@ import (
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 )
 
+// approximate number of reconcilers that call GetKuadrantFromTopology per cycle
+const kuadrantLookupsPerCycle = 28
+
 // benchTopologyParams controls the shape of the synthetic topology.
-// Policies can target gateways (policyTarget="gateway") or routes (policyTarget="route").
+// A single GatewayClass is always created (matching real deployments where one
+// controller manages all gateways). numGateways controls the number of Gateways
+// under that class — routes are distributed evenly across them.
 type benchTopologyParams struct {
-	numGatewayClasses  int
+	numGateways        int
 	numRoutesPerGW     int
 	numRulesPerRoute   int
 	listenersPerGW     int
@@ -36,17 +41,15 @@ type benchTopologyParams struct {
 	policyTarget       string // "gateway" (default) or "route"
 }
 
-func (p benchTopologyParams) label() string {
-	listeners := p.listenersPerGW
-	if listeners == 0 {
-		listeners = 1
-	}
-	return fmt.Sprintf("gw=%d_listen=%d_routes=%d", p.numGatewayClasses, listeners, p.numRoutesPerGW)
-}
-
 func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.Topology, *kuadrantv1beta1.Kuadrant, *sync.Map) {
 	b.Helper()
 
+	if params.numGateways < 1 {
+		params.numGateways = 1
+	}
+	if params.numRoutesPerGW < 1 {
+		params.numRoutesPerGW = 1
+	}
 	if params.listenersPerGW == 0 {
 		params.listenersPerGW = 1
 	}
@@ -74,36 +77,37 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 		Status: metav1.ConditionTrue,
 	}
 
-	var gatewayClasses []*gatewayapiv1.GatewayClass
+	gcName := "istio"
+	gatewayClass := &gatewayapiv1.GatewayClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       machinery.GatewayClassGroupKind.Kind,
+			APIVersion: gatewayapiv1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: gcName,
+			UID:  types.UID("uid-gc"),
+		},
+		Spec: gatewayapiv1.GatewayClassSpec{
+			// Synthetic name — benchmarks test topology traversal and policy calculation,
+			// not provider-specific reconcilers (status updaters, envoy extensions) that
+			// depend on a real Istio/EnvoyGateway controller name.
+			ControllerName: "kuadrant.io/policy-controller",
+		},
+	}
+	store[string(gatewayClass.UID)] = gatewayClass
+
 	var gateways []*gatewayapiv1.Gateway
 	var httpRoutes []*gatewayapiv1.HTTPRoute
 	var policies []machinery.Policy
 
-	for gc := 0; gc < params.numGatewayClasses; gc++ {
-		gcName := fmt.Sprintf("gc-%d", gc)
-		gatewayClass := &gatewayapiv1.GatewayClass{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       machinery.GatewayClassGroupKind.Kind,
-				APIVersion: gatewayapiv1.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: gcName,
-				UID:  types.UID(fmt.Sprintf("uid-gc-%d", gc)),
-			},
-			Spec: gatewayapiv1.GatewayClassSpec{
-				ControllerName: "kuadrant.io/policy-controller",
-			},
-		}
-		gatewayClasses = append(gatewayClasses, gatewayClass)
-		store[string(gatewayClass.UID)] = gatewayClass
-
-		gwName := fmt.Sprintf("gw-%d", gc)
+	for gw := 0; gw < params.numGateways; gw++ {
+		gwName := fmt.Sprintf("gw-%d", gw)
 
 		listeners := make([]gatewayapiv1.Listener, params.listenersPerGW)
 		for l := 0; l < params.listenersPerGW; l++ {
 			listeners[l] = gatewayapiv1.Listener{
 				Name:     gatewayapiv1.SectionName(fmt.Sprintf("listener-%d", l)),
-				Hostname: ptr.To(gatewayapiv1.Hostname(fmt.Sprintf("*.gw%d-l%d.example.com", gc, l))),
+				Hostname: ptr.To(gatewayapiv1.Hostname(fmt.Sprintf("*.gw%d-l%d.example.com", gw, l))),
 			}
 		}
 
@@ -115,10 +119,10 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      gwName,
 				Namespace: "default",
-				UID:       types.UID(fmt.Sprintf("uid-gw-%d", gc)),
+				UID:       types.UID(fmt.Sprintf("uid-gw-%d", gw)),
 			},
 			Spec: gatewayapiv1.GatewaySpec{
-				GatewayClassName: gatewayapiv1.ObjectName(gcName),
+				GatewayClassName: gatewayapiv1.ObjectName("istio"),
 				Listeners:        listeners,
 			},
 		}
@@ -137,7 +141,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 			if params.attachAuthPolicies {
 				p := &kuadrantv1.AuthPolicy{
 					TypeMeta:   metav1.TypeMeta{Kind: "AuthPolicy", APIVersion: kuadrantv1.GroupVersion.String()},
-					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("auth-gw-%d", gc), Namespace: "default", UID: types.UID(fmt.Sprintf("uid-auth-gw-%d", gc))},
+					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("auth-gw-%d", gw), Namespace: "default", UID: types.UID(fmt.Sprintf("uid-auth-gw-%d", gw))},
 					Spec: kuadrantv1.AuthPolicySpec{
 						TargetRef: gwTargetRef,
 						AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
@@ -156,7 +160,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 			if params.attachRLPolicies {
 				p := &kuadrantv1.RateLimitPolicy{
 					TypeMeta:   metav1.TypeMeta{Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String()},
-					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("rlp-gw-%d", gc), Namespace: "default", UID: types.UID(fmt.Sprintf("uid-rlp-gw-%d", gc))},
+					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("rlp-gw-%d", gw), Namespace: "default", UID: types.UID(fmt.Sprintf("uid-rlp-gw-%d", gw))},
 					Spec: kuadrantv1.RateLimitPolicySpec{
 						TargetRef:                 gwTargetRef,
 						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{Limits: map[string]kuadrantv1.Limit{"requests": {Rates: []kuadrantv1.Rate{{Limit: 10, Window: "10s"}}}}},
@@ -169,7 +173,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 			if params.attachTRLPolicies {
 				p := &kuadrantv1alpha1.TokenRateLimitPolicy{
 					TypeMeta:   metav1.TypeMeta{Kind: "TokenRateLimitPolicy", APIVersion: kuadrantv1alpha1.GroupVersion.String()},
-					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("trlp-gw-%d", gc), Namespace: "default", UID: types.UID(fmt.Sprintf("uid-trlp-gw-%d", gc))},
+					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("trlp-gw-%d", gw), Namespace: "default", UID: types.UID(fmt.Sprintf("uid-trlp-gw-%d", gw))},
 					Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
 						TargetRef:                      gwTargetRef,
 						TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{},
@@ -182,7 +186,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 		}
 
 		for r := 0; r < params.numRoutesPerGW; r++ {
-			routeName := fmt.Sprintf("route-%d-%d", gc, r)
+			routeName := fmt.Sprintf("route-%d-%d", gw, r)
 			rules := make([]gatewayapiv1.HTTPRouteRule, params.numRulesPerRoute)
 			for k := 0; k < params.numRulesPerRoute; k++ {
 				rules[k] = gatewayapiv1.HTTPRouteRule{
@@ -204,7 +208,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      routeName,
 					Namespace: "default",
-					UID:       types.UID(fmt.Sprintf("uid-route-%d-%d", gc, r)),
+					UID:       types.UID(fmt.Sprintf("uid-route-%d-%d", gw, r)),
 				},
 				Spec: gatewayapiv1.HTTPRouteSpec{
 					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
@@ -212,7 +216,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 							{Name: gatewayapiv1.ObjectName(gwName)},
 						},
 					},
-					Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(fmt.Sprintf("app-%d-%d.example.com", gc, r))},
+					Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(fmt.Sprintf("app-%d-%d.example.com", gw, r))},
 					Rules:     rules,
 				},
 			}
@@ -227,7 +231,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 						Name:  gatewayapiv1alpha2.ObjectName(routeName),
 					},
 				}
-				globalRouteIdx := gc*params.numRoutesPerGW + r
+				globalRouteIdx := gw*params.numRoutesPerGW + r
 
 				if params.attachAuthPolicies {
 					p := &kuadrantv1.AuthPolicy{
@@ -279,7 +283,7 @@ func buildBenchTopology(b testing.TB, params benchTopologyParams) (*machinery.To
 	}
 
 	topology, err := machinery.NewGatewayAPITopology(
-		machinery.WithGatewayClasses(gatewayClasses...),
+		machinery.WithGatewayClasses(gatewayClass),
 		machinery.WithGateways(gateways...),
 		machinery.ExpandGatewayListeners(),
 		machinery.WithHTTPRoutes(httpRoutes...),
@@ -305,8 +309,8 @@ func BenchmarkCalculateEffectiveAuthPolicies(b *testing.B) {
 		name string
 		p    benchTopologyParams
 	}{
-		{"1gc-300routes", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 2, attachAuthPolicies: true}},
-		{"3gc-100routes", benchTopologyParams{numGatewayClasses: 3, numRoutesPerGW: 100, numRulesPerRoute: 2, attachAuthPolicies: true}},
+		{"1gc-300routes", benchTopologyParams{numGateways: 1, numRoutesPerGW: 300, numRulesPerRoute: 2, attachAuthPolicies: true}},
+		{"3gw-100routes", benchTopologyParams{numGateways: 3, numRoutesPerGW: 100, numRulesPerRoute: 2, attachAuthPolicies: true}},
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -322,7 +326,7 @@ func BenchmarkCalculateEffectiveAuthPolicies(b *testing.B) {
 
 // BenchmarkTopologyToDot measures the DAG-to-DOT serialization called every reconciliation cycle.
 func BenchmarkTopologyToDot(b *testing.B) {
-	topology, _, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 200, numRulesPerRoute: 2})
+	topology, _, _ := buildBenchTopology(b, benchTopologyParams{numGateways: 1, numRoutesPerGW: 200, numRulesPerRoute: 2})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		topology.ToDot()
@@ -331,7 +335,7 @@ func BenchmarkTopologyToDot(b *testing.B) {
 
 // BenchmarkBuildDesiredAuthConfig measures AuthConfig generation for N route rules.
 func BenchmarkBuildDesiredAuthConfig(b *testing.B) {
-	topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 1, numRulesPerRoute: 300, attachAuthPolicies: true})
+	topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGateways: 1, numRoutesPerGW: 1, numRulesPerRoute: 300, attachAuthPolicies: true})
 	ctx := context.Background()
 
 	effectivePolicies := CalculateEffectiveAuthPolicies(ctx, topology, kuadrant, state)
@@ -363,7 +367,7 @@ func BenchmarkBuildDesiredAuthConfig(b *testing.B) {
 
 // BenchmarkBuildLimitadorLimits measures merging effective rate limit policies into Limitador limits.
 func BenchmarkBuildLimitadorLimits(b *testing.B) {
-	topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 150, numRulesPerRoute: 2, attachRLPolicies: true})
+	topology, kuadrant, state := buildBenchTopology(b, benchTopologyParams{numGateways: 1, numRoutesPerGW: 150, numRulesPerRoute: 2, attachRLPolicies: true})
 	ctx := context.Background()
 
 	targetables := topology.Targetables()
@@ -410,7 +414,7 @@ func BenchmarkBuildLimitadorLimits(b *testing.B) {
 
 // BenchmarkTopologyPaths measures the Paths() DFS traversal in isolation.
 func BenchmarkTopologyPaths(b *testing.B) {
-	topology, kuadrant, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 2})
+	topology, kuadrant, _ := buildBenchTopology(b, benchTopologyParams{numGateways: 1, numRoutesPerGW: 300, numRulesPerRoute: 2})
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant)
@@ -431,9 +435,10 @@ func BenchmarkTopologyPaths(b *testing.B) {
 }
 
 // BenchmarkListenerFanout measures the impact of listener count on Paths() DFS traversal.
-// Reproduces the scaling pattern from #1085 where 63 listeners caused 30-minute reconciliation.
+// Tests listener fan-out scaling inspired by #1085 (63 listeners). Uses 32 listeners
+// to keep CI runtime reasonable while still exercising the multiplicative Paths() cost.
 func BenchmarkListenerFanout(b *testing.B) {
-	topology, kuadrant, _ := buildBenchTopology(b, benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 32, attachAuthPolicies: true, policyTarget: "route"})
+	topology, kuadrant, _ := buildBenchTopology(b, benchTopologyParams{numGateways: 1, numRoutesPerGW: 100, numRulesPerRoute: 1, listenersPerGW: 32, attachAuthPolicies: true, policyTarget: "route"})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		state := &sync.Map{}
@@ -447,8 +452,8 @@ func BenchmarkTopologyBuild(b *testing.B) {
 		name string
 		p    benchTopologyParams
 	}{
-		{"300routes", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1}},
-		{"300routes-32listeners", benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, listenersPerGW: 32}},
+		{"300routes", benchTopologyParams{numGateways: 1, numRoutesPerGW: 300, numRulesPerRoute: 1}},
+		{"300routes-32listeners", benchTopologyParams{numGateways: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, listenersPerGW: 32}},
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -464,7 +469,7 @@ func BenchmarkTopologyBuild(b *testing.B) {
 // build topology, look up Kuadrant CR, then calculate effective policies
 // for all three policy types.
 func BenchmarkFullReconciliationCycle(b *testing.B) {
-	p := benchTopologyParams{numGatewayClasses: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, attachAuthPolicies: true, attachRLPolicies: true, attachTRLPolicies: true, policyTarget: "route"}
+	p := benchTopologyParams{numGateways: 1, numRoutesPerGW: 300, numRulesPerRoute: 1, attachAuthPolicies: true, attachRLPolicies: true, attachTRLPolicies: true, policyTarget: "route"}
 
 	authReconciler := &EffectiveAuthPolicyReconciler{}
 	rlpReconciler := &EffectiveRateLimitPolicyReconciler{}
@@ -475,7 +480,7 @@ func BenchmarkFullReconciliationCycle(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		topology, _, _ := buildBenchTopology(b, p)
 		state := &sync.Map{}
-		for j := 0; j < 28; j++ {
+		for j := 0; j < kuadrantLookupsPerCycle; j++ {
 			GetKuadrantFromTopology(topology, state)
 		}
 		authReconciler.Reconcile(ctx, nil, topology, nil, state)

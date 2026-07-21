@@ -78,9 +78,11 @@ jobs:
 
       - name: Post PR comment
         if: steps.benchstat.outputs.regression == 'true' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: marocchino/sticky-pull-request-comment@f3bbb8300013c686241004a1c1b5d4045b10bc30 # ratchet:marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # ratchet:marocchino/sticky-pull-request-comment@v3
         with:
           path: benchmark-report.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4

@@ -69,3 +69,15 @@ spec:
   configMapRef:
     name: grafana-dns-operator
     key: dns-operator.json
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: grafana-kuadrant-pod-resources
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  configMapRef:
+    name: grafana-kuadrant-pod-resources
+    key: kuadrant-pod-resources.json

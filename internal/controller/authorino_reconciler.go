@@ -18,28 +18,35 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 )
 
 const AuthorinoReconcilerName = "AuthorinoReconciler"
 
 type AuthorinoReconciler struct {
-	Client *dynamic.DynamicClient
+	Client                           *dynamic.DynamicClient
+	IsOpenShiftServerConfigInstalled bool
 }
 
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
+//+kubebuilder:rbac:groups=config.openshift.io,resources=apiservers,verbs=get;list;watch
 
-func NewAuthorinoReconciler(client *dynamic.DynamicClient) *AuthorinoReconciler {
-	return &AuthorinoReconciler{Client: client}
+func NewAuthorinoReconciler(client *dynamic.DynamicClient, isOpenShiftServerConfigInstalled bool) *AuthorinoReconciler {
+	return &AuthorinoReconciler{Client: client, IsOpenShiftServerConfigInstalled: isOpenShiftServerConfigInstalled}
 }
 
 func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
+	events := []controller.ResourceEventMatcher{
+		{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
+		{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+		{Kind: ptr.To(v1beta1.AuthorinoGroupKind)},
+	}
+	if r.IsOpenShiftServerConfigInstalled {
+		events = append(events, controller.ResourceEventMatcher{Kind: ptr.To(openshift.APIServerGroupKind)})
+	}
 	return &controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events: []controller.ResourceEventMatcher{
-			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
-			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},
-			{Kind: ptr.To(v1beta1.AuthorinoGroupKind)},
-		},
+		Events:        events,
 	}
 }
 
@@ -62,6 +69,8 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		attribute.String("kuadrant.namespace", kobj.Namespace),
 	)
 
+	tlsMinVersion, tlsCipherSuites := openshift.ResolveTLSProfileFromTopology(topology, kobj, r.IsOpenShiftServerConfigInstalled)
+
 	clusterAuthorino := GetAuthorinoFromTopology(topology, state)
 
 	if clusterAuthorino != nil {
@@ -77,12 +86,11 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				Namespace: kobj.Namespace,
 			},
 			Spec: authorinoopapi.AuthorinoSpec{
-				// Required fields for SSA to succeed as required fields cannot be omitted
 				OIDCServer: authorinoopapi.OIDCServer{
-					Tls: clusterAuthorino.Spec.OIDCServer.Tls,
+					Tls: buildTLSPatch(clusterAuthorino.Spec.OIDCServer.Tls, tlsMinVersion, tlsCipherSuites),
 				},
 				Listener: authorinoopapi.Listener{
-					Tls: clusterAuthorino.Spec.Listener.Tls,
+					Tls: buildTLSPatch(clusterAuthorino.Spec.Listener.Tls, tlsMinVersion, tlsCipherSuites),
 				},
 			},
 		}
@@ -223,4 +231,14 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	return nil
+}
+
+func buildTLSPatch(existing authorinoopapi.Tls, minVersion string, cipherSuites []string) authorinoopapi.Tls {
+	if existing.Enabled != nil && *existing.Enabled {
+		return authorinoopapi.Tls{
+			MinVersion:   minVersion,
+			CipherSuites: cipherSuites,
+		}
+	}
+	return authorinoopapi.Tls{}
 }

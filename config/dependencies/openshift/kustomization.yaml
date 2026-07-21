@@ -1,0 +1,2 @@
+resources:
+- https://raw.githubusercontent.com/openshift/api/f89ab92f1597/config/v1/zz_generated.crd-manifests/0000_10_config-operator_01_apiservers.crd.yaml

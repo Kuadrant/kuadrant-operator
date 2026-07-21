@@ -1,0 +1,99 @@
+name: Benchmark
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'internal/**'
+      - 'pkg/**'
+      - 'api/**'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      # Run benchmarks on PR branch
+      - name: Run benchmarks (PR)
+        run: make test-bench
+      - name: Save PR results
+        run: mv benchmark-results.txt pr-bench.txt
+
+      # Run benchmarks on base branch
+      - name: Check out base branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          clean: false
+          path: base
+          persist-credentials: false
+      - name: Run benchmarks (base)
+        run: cd base && make test-bench && mv benchmark-results.txt ../base-bench.txt
+        continue-on-error: true
+
+      # Compare with benchstat
+      - name: Compare results
+        id: benchstat
+        run: |
+          BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1 || true)
+
+          REGRESSIONS=$(echo "$BENCHSTAT_OUTPUT" | sed '/B\/op/,$d' | grep -E '\+[0-9]+\.[0-9]+% \(p=' | awk -F'+' '{split($2,a,"%"); if (a[1]+0 >= 5) print $0}' || true)
+          if [ -n "$REGRESSIONS" ]; then
+            {
+              echo '## Benchmark: regression detected'
+              echo '```'
+              echo "$REGRESSIONS"
+              echo '```'
+              echo '<details><summary>Full benchstat output</summary>'
+              echo ''
+              echo '```'
+              echo "$BENCHSTAT_OUTPUT"
+              echo '```'
+              echo '</details>'
+            } > benchmark-report.md
+            echo 'regression=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post PR comment
+        if: steps.benchstat.outputs.regression == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # ratchet:marocchino/sticky-pull-request-comment@v3
+        with:
+          path: benchmark-report.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            pr-bench.txt
+            base-bench.txt
+
+      - name: Check for regressions
+        if: steps.benchstat.outputs.regression == 'true'
+        run: |
+          echo "::warning::Benchmark regression detected. Check the PR comment for details."
+          exit 1

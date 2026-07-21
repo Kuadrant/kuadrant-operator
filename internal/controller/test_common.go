@@ -34,6 +34,7 @@ import (
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	configv1 "github.com/openshift/api/config/v1"
 	consolev1 "github.com/openshift/api/console/v1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -106,6 +107,7 @@ func BootstrapScheme() *runtime.Scheme {
 		istioclientgoextensionv1alpha1.AddToScheme,
 		certmanv1.AddToScheme,
 		egv1alpha1.AddToScheme,
+		configv1.AddToScheme,
 		consolev1.AddToScheme,
 		monitoringv1.AddToScheme,
 		istiosecurity.AddToScheme,

@@ -218,17 +218,18 @@ type BootOptionsBuilder struct {
 	client  *dynamic.DynamicClient
 
 	// Internal configurations
-	isGatewayAPIInstalled         bool
-	isEnvoyGatewayInstalled       bool
-	isIstioInstalled              bool
-	isCertManagerInstalled        bool
-	isConsolePluginInstalled      bool
-	isClusterVersionInstalled     bool
-	isDNSOperatorInstalled        bool
-	isLimitadorOperatorInstalled  bool
-	isAuthorinoOperatorInstalled  bool
-	isPrometheusOperatorInstalled bool
-	isUsingExtensions             bool
+	isGatewayAPIInstalled            bool
+	isEnvoyGatewayInstalled          bool
+	isIstioInstalled                 bool
+	isCertManagerInstalled           bool
+	isConsolePluginInstalled         bool
+	isClusterVersionInstalled        bool
+	isDNSOperatorInstalled           bool
+	isLimitadorOperatorInstalled     bool
+	isAuthorinoOperatorInstalled     bool
+	isPrometheusOperatorInstalled    bool
+	isOpenShiftServerConfigInstalled bool
+	isUsingExtensions                bool
 
 	// Error tracking for non-blocking errors
 	errorTracker   *PersistentErrorTracker
@@ -270,6 +271,13 @@ func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error)
 		return opts, optionErr
 	}
 	opts = append(opts, consoleOpts...)
+
+	openShiftServerConfigOpts, optionErr := b.getOpenShiftServerConfigOptions()
+	if optionErr != nil {
+		return opts, optionErr
+	}
+	opts = append(opts, openShiftServerConfigOpts...)
+
 	opts = append(opts, b.getExtensionsOptions()...)
 
 	dnsOpts, optionErr := b.getDNSOperatorOptions()
@@ -475,6 +483,32 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 			metav1.NamespaceAll,
 		)),
 		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
+	)
+
+	return opts, nil
+}
+
+func (b *BootOptionsBuilder) getOpenShiftServerConfigOptions() ([]controller.ControllerOption, error) {
+	opts := make([]controller.ControllerOption, 0, 3)
+	var err error
+	b.isOpenShiftServerConfigInstalled, err = openshift.IsOpenShiftServerConfigInstalled(b.manager.GetRESTMapper())
+	if err != nil {
+		return nil, err
+	}
+
+	if !b.isOpenShiftServerConfigInstalled {
+		b.logger.Info("openshift apiserver CRD is not installed, skipping TLS profile watch")
+		return opts, nil
+	}
+
+	opts = append(opts,
+		controller.WithRunnable("apiserver watcher", controller.Watch(
+			&configv1.APIServer{},
+			openshift.APIServersResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithObjectKinds(openshift.APIServerGroupKind),
+		controller.WithObjectLinks(openshift.LinkKuadrantToAPIServer),
 	)
 
 	return opts, nil
@@ -766,7 +800,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 
 	if b.isAuthorinoOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client).Subscription().Reconcile))
+			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client, b.isOpenShiftServerConfigInstalled).Subscription().Reconcile))
 	}
 
 	// Wrap the entire main workflow with tracing

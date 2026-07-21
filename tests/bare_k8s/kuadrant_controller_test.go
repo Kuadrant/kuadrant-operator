@@ -3,6 +3,7 @@
 package bare_k8s_test
 
 import (
+	"context"
 	"time"
 
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -11,6 +12,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -22,6 +24,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -446,5 +449,157 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				g.Expect(*limitador.Spec.Image).To(Equal("limitador-image:test"))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
+	})
+
+	Context("TLS profile configuration", func() {
+		var kuadrantCR *kuadrantv1beta1.Kuadrant
+
+		tlsTestTimeOut := SpecTimeout(60 * time.Second)
+
+		BeforeEach(func(ctx SpecContext) {
+			kuadrantCR = &kuadrantv1beta1.Kuadrant{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Kuadrant",
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "local",
+					Namespace: testNamespace,
+				},
+			}
+			Expect(testClient().Create(ctx, kuadrantCR)).To(Succeed())
+		})
+
+		enableTLS := func(ctx context.Context) {
+			authorino := &authorinoopapi.Authorino{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+			if authorino.Spec.Listener.Tls.Enabled != nil && *authorino.Spec.Listener.Tls.Enabled {
+				return
+			}
+			og := authorino.DeepCopy()
+			authorino.Spec.Listener.Tls.Enabled = ptr.To(true)
+			authorino.Spec.OIDCServer.Tls.Enabled = ptr.To(true)
+			Expect(testClient().Patch(ctx, authorino, client.MergeFrom(og))).To(Succeed())
+		}
+
+		It("Propagates default TLS profile to Authorino when TLS is enabled", func(ctx SpecContext) {
+			expectedMinVersion, expectedCipherSuites := openshift.ResolveTLSProfile(nil)
+
+			By("Verifying Authorino is created with TLS disabled and no profile fields")
+			Eventually(func(g Gomega) {
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.Enabled).ToNot(BeNil())
+				g.Expect(*authorino.Spec.Listener.Tls.Enabled).To(BeFalse())
+				g.Expect(authorino.Spec.Listener.Tls.MinVersion).To(BeEmpty())
+				g.Expect(authorino.Spec.Listener.Tls.CipherSuites).To(BeEmpty())
+				g.Expect(authorino.Spec.OIDCServer.Tls.Enabled).ToNot(BeNil())
+				g.Expect(*authorino.Spec.OIDCServer.Tls.Enabled).To(BeFalse())
+				g.Expect(authorino.Spec.OIDCServer.Tls.MinVersion).To(BeEmpty())
+				g.Expect(authorino.Spec.OIDCServer.Tls.CipherSuites).To(BeEmpty())
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Enabling TLS and verifying default Intermediate profile is applied")
+			enableTLS(ctx)
+			Eventually(func(g Gomega) {
+				enableTLS(ctx)
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.MinVersion).To(Equal(expectedMinVersion))
+				g.Expect(authorino.Spec.Listener.Tls.CipherSuites).To(Equal(expectedCipherSuites))
+				g.Expect(authorino.Spec.OIDCServer.Tls.MinVersion).To(Equal(expectedMinVersion))
+				g.Expect(authorino.Spec.OIDCServer.Tls.CipherSuites).To(Equal(expectedCipherSuites))
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Disabling TLS on Authorino")
+			Eventually(func(g Gomega) {
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				og := authorino.DeepCopy()
+				authorino.Spec.Listener.Tls.Enabled = ptr.To(false)
+				authorino.Spec.OIDCServer.Tls.Enabled = ptr.To(false)
+				g.Expect(testClient().Patch(ctx, authorino, client.MergeFrom(og))).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Verifying TLS profile fields are cleared")
+			Eventually(func(g Gomega) {
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.MinVersion).To(BeEmpty())
+				g.Expect(authorino.Spec.Listener.Tls.CipherSuites).To(BeEmpty())
+				g.Expect(authorino.Spec.OIDCServer.Tls.MinVersion).To(BeEmpty())
+				g.Expect(authorino.Spec.OIDCServer.Tls.CipherSuites).To(BeEmpty())
+			}).WithContext(ctx).Should(Succeed())
+		}, tlsTestTimeOut)
+
+		It("Propagates OpenShift APIServer TLS profile to Authorino", func(ctx SpecContext) {
+			By("Waiting for Authorino to be created with TLS disabled")
+			Eventually(func(g Gomega) {
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.Enabled).To(Equal(ptr.To(false)))
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Enabling TLS and waiting for Intermediate profile to stabilize")
+			enableTLS(ctx)
+			defaultMinVersion, defaultCipherSuites := openshift.ResolveTLSProfile(nil)
+			Eventually(func(g Gomega) {
+				enableTLS(ctx)
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.Enabled).To(Equal(ptr.To(true)))
+				g.Expect(authorino.Spec.Listener.Tls.MinVersion).To(Equal(defaultMinVersion))
+				g.Expect(authorino.Spec.Listener.Tls.CipherSuites).To(Equal(defaultCipherSuites))
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Creating an APIServer CR with Old TLS profile")
+			apiServer := &configv1.APIServer{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: openshift.DefaultAPIServerCRName,
+				},
+				Spec: configv1.APIServerSpec{
+					TLSSecurityProfile: &configv1.TLSSecurityProfile{
+						Type: configv1.TLSProfileOldType,
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, apiServer)).To(Succeed())
+			defer func() {
+				_ = testClient().Delete(context.Background(), apiServer)
+			}()
+
+			expectedMinVersion, expectedCipherSuites := openshift.ResolveTLSProfile(apiServer.Spec.TLSSecurityProfile)
+
+			By("Verifying Old TLS profile is applied")
+			Eventually(func(g Gomega) {
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.MinVersion).To(Equal(expectedMinVersion))
+				g.Expect(authorino.Spec.Listener.Tls.CipherSuites).To(Equal(expectedCipherSuites))
+				g.Expect(authorino.Spec.OIDCServer.Tls.MinVersion).To(Equal(expectedMinVersion))
+				g.Expect(authorino.Spec.OIDCServer.Tls.CipherSuites).To(Equal(expectedCipherSuites))
+			}).WithContext(ctx).Should(Succeed())
+
+			By("Updating APIServer CR to Modern TLS profile")
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(apiServer), apiServer)).To(Succeed())
+				apiServer.Spec.TLSSecurityProfile = &configv1.TLSSecurityProfile{
+					Type: configv1.TLSProfileModernType,
+				}
+				g.Expect(testClient().Update(ctx, apiServer)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			expectedMinVersion, expectedCipherSuites = openshift.ResolveTLSProfile(apiServer.Spec.TLSSecurityProfile)
+
+			By("Verifying Modern TLS profile is applied")
+			Eventually(func(g Gomega) {
+				authorino := &authorinoopapi.Authorino{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, authorino)).To(Succeed())
+				g.Expect(authorino.Spec.Listener.Tls.MinVersion).To(Equal(expectedMinVersion))
+				g.Expect(authorino.Spec.Listener.Tls.CipherSuites).To(Equal(expectedCipherSuites))
+				g.Expect(authorino.Spec.OIDCServer.Tls.MinVersion).To(Equal(expectedMinVersion))
+				g.Expect(authorino.Spec.OIDCServer.Tls.CipherSuites).To(Equal(expectedCipherSuites))
+			}).WithContext(ctx).Should(Succeed())
+		}, tlsTestTimeOut)
 	})
 })

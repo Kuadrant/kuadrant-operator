@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	ctrlruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 )
 
 type manager struct {
@@ -96,4 +98,20 @@ func (m *manager) GetRESTMapper() meta.RESTMapper {
 
 func (m *manager) GetAPIReader() client.Reader {
 	return m.apiReader
+}
+
+func (m *manager) GetEventRecorder(name string) events.EventRecorder {
+	panic("Not Implemented")
+}
+
+func (m *manager) GetConverterRegistry() conversion.Registry {
+	panic("Not Implemented")
+}
+
+func (m *manager) NeedLeaderElection() bool {
+	panic("Not Implemented")
+}
+
+func (m *manager) Warmup(context.Context) error {
+	panic("Not Implemented")
 }

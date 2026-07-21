@@ -5,6 +5,7 @@ resources:
   - limitador
   - dns
   - developer-portal
+  - openshift
 
 patchesStrategicMerge:
   - authorino/delete-ns.yaml

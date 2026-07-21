@@ -88,7 +88,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	})
 
 	// Reconcile EnvoyFilter cluster patches for registered upstreams
-	r.reconcileUpstreamClusters(ctx, topology, gateways)
+	r.reconcileUpstreamClusters(ctx, topology, gateways, errorRegistry)
 
 	// build wasm plugin configs for each gateway
 	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
@@ -204,7 +204,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
-func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway) {
+func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway, errorRegistry *ErrorRegistry) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("reconcileUpstreamClusters")
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
@@ -262,6 +262,14 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 			}
 			if _, err = resource.Create(ctx, unstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create upstream envoyfilter", "gateway", gatewayKey.String())
+
+				errorRegistry.Record(
+					IstioExtensionReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()},
+					kuadrantistio.EnvoyFilterGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -282,6 +290,14 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 		}
 		if _, err = resource.Update(ctx, unstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update upstream envoyfilter", "gateway", gatewayKey.String())
+
+			errorRegistry.Record(
+				IstioExtensionReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existing.GetName(), Namespace: existing.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -295,6 +311,14 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 	for _, ef := range stale {
 		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(ef.GetNamespace()).Delete(ctx, ef.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete stale upstream envoyfilter", "envoyfilter", fmt.Sprintf("%s/%s", ef.GetNamespace(), ef.GetName()))
+
+			errorRegistry.Record(
+				IstioExtensionReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: ef.GetName(), Namespace: ef.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 }

@@ -81,7 +81,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	})
 
 	// Reconcile EnvoyPatchPolicy cluster patches for registered upstreams
-	r.reconcileUpstreamClusters(ctx, topology, gateways)
+	r.reconcileUpstreamClusters(ctx, topology, gateways, errorRegistry)
 
 	// build wasm plugin configs for each gateway
 	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
@@ -190,7 +190,7 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway) {
+func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.Context, topology *machinery.Topology, gateways []*machinery.Gateway, errorRegistry *ErrorRegistry) {
 	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("reconcileUpstreamClusters")
 
 	desiredPolicies := make(map[k8stypes.NamespacedName]struct{})
@@ -248,6 +248,14 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 			}
 			if _, err = resource.Create(ctx, unstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create upstream envoypatchpolicy", "gateway", gatewayKey.String())
+
+				errorRegistry.Record(
+					EnvoyGatewayExtensionReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredPolicy.GetName(), Namespace: desiredPolicy.GetNamespace()},
+					kuadrantenvoygateway.EnvoyPatchPolicyGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -269,6 +277,14 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 		}
 		if _, err = resource.Update(ctx, unstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update upstream envoypatchpolicy", "gateway", gatewayKey.String())
+
+			errorRegistry.Record(
+				EnvoyGatewayExtensionReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existing.GetName(), Namespace: existing.GetNamespace()},
+				kuadrantenvoygateway.EnvoyPatchPolicyGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -282,6 +298,14 @@ func (r *EnvoyGatewayExtensionReconciler) reconcileUpstreamClusters(ctx context.
 	for _, pp := range stale {
 		if err := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(pp.GetNamespace()).Delete(ctx, pp.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete stale upstream envoypatchpolicy", "envoypatchpolicy", fmt.Sprintf("%s/%s", pp.GetNamespace(), pp.GetName()))
+
+			errorRegistry.Record(
+				EnvoyGatewayExtensionReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: pp.GetName(), Namespace: pp.GetNamespace()},
+				kuadrantenvoygateway.EnvoyPatchPolicyGroupKind,
+				err,
+			)
 		}
 	}
 }

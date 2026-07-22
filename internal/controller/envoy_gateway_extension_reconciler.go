@@ -418,7 +418,14 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			rlAction, rlErr := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if rlErr != nil {
+				logger.Error(rlErr, "failed to build wasm actions for rate limit policy", "pathID", pathID)
+				pathSpan.RecordError(rlErr)
+				pathSpan.SetStatus(codes.Error, "failed to build rate limit actions")
+				pathSpan.End()
+				continue
+			}
 			if hasAuthAccess(rlAction) {
 				actions = append(actions, rlAction...)
 			} else {
@@ -429,7 +436,14 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			trlAction, trlErr := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if trlErr != nil {
+				logger.Error(trlErr, "failed to build wasm actions for token rate limit policy", "pathID", pathID)
+				pathSpan.RecordError(trlErr)
+				pathSpan.SetStatus(codes.Error, "failed to build token rate limit actions")
+				pathSpan.End()
+				continue
+			}
 			if hasAuthAccess(trlAction) {
 				actions = append(actions, trlAction...)
 			} else {

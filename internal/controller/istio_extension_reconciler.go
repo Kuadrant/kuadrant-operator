@@ -87,7 +87,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	r.reconcileUpstreamClusters(ctx, topology, gateways)
 
 	// build wasm plugin configs for each gateway
-	wasmConfigs, err := r.buildWasmConfigs(ctx, topology, state)
+	wasmConfigs, observability, serviceBuilder, err := r.buildWasmConfigs(ctx, topology, state)
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveAuthPolicies) || errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
@@ -103,8 +103,23 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 		// Get the wasm config for this gateway and apply mutators
 		wasmConfig := wasmConfigs[gateway.GetLocator()]
+		hadActionSets := len(wasmConfig.ActionSets) > 0
 		if err := extension.ApplyWasmConfigMutators(&wasmConfig, gateway, topology); err != nil {
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
+		}
+
+		if len(wasmConfig.ActionSets) > 0 && !hadActionSets {
+			if observability != nil {
+				wasmConfig.Observability = observability
+				if wasmConfig.Services == nil {
+					wasmConfig.Services = make(map[string]wasm.Service)
+				}
+				for k, v := range serviceBuilder.Build() {
+					if _, exists := wasmConfig.Services[k]; !exists {
+						wasmConfig.Services[k] = v
+					}
+				}
+			}
 		}
 
 		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
@@ -343,7 +358,7 @@ func buildUpstreamEnvoyFilter(logger logr.Logger, gateway *machinery.Gateway, up
 }
 
 // buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
-func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topology *machinery.Topology, state *sync.Map) (map[string]wasm.Config, error) {
+func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topology *machinery.Topology, state *sync.Map) (map[string]wasm.Config, *wasm.Observability, *wasm.ServiceBuilder, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IstioExtensionReconciler").WithName("buildWasmConfigs").WithValues("context", ctx)
 	logger.Info("build Wasm configuration", "status", "started")
 	logger.Info("build Wasm configuration", "status", "completed")
@@ -358,7 +373,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 
 	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		return nil, ErrMissingStateEffectiveAuthPolicies
+		return nil, observability, serviceBuilder, ErrMissingStateEffectiveAuthPolicies
 	}
 	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
 
@@ -480,7 +495,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			pathSpan.RecordError(err)
 			pathSpan.SetStatus(codes.Error, "failed to merge/verify actions")
 			pathSpan.End()
-			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
+			return nil, nil, nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
 		}
 
 		if len(actions) == 0 {
@@ -494,7 +509,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			pathSpan.RecordError(err)
 			pathSpan.SetStatus(codes.Error, "failed to build validator")
 			pathSpan.End()
-			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
+			return nil, nil, nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
 		var validatedActions []wasm.Action
 
@@ -551,7 +566,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		}), &logger, observability, serviceBuilder)
 	})
 
-	return wasmConfigs, nil
+	return wasmConfigs, observability, serviceBuilder, nil
 }
 
 func hasAuthAccess(actionSet []wasm.Action) bool {

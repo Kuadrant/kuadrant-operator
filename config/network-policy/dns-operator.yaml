@@ -1,0 +1,55 @@
+apiVersion: policy.networking.k8s.io/v1alpha1
+kind: AdminNetworkPolicy
+metadata:
+  name: kuadrant-dns-operator
+spec:
+  priority: 53
+  subject:
+    pods:
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kuadrant-system
+      podSelector:
+        matchLabels:
+          control-plane: dns-operator-controller-manager
+  # ingress:
+    # only need if we plan to share the golang exposed metrics.
+    # - name: allow-metrics
+    #   action: Allow
+    #   from:
+    #     - namespaces: {}
+    #   ports:
+    #     - portNumber:
+    #         protocol: TCP
+    #         port: 8080
+  egress:
+    # TODO: Scope 0.0.0.0/0 to specific DNS provider API CIDRs (e.g. AWS, Azure, GCP)
+    - name: allow-external-dns-providers
+      action: Allow
+      to:
+        - networks:
+            - 0.0.0.0/0
+      ports:
+        - portNumber:
+            protocol: TCP
+            port: 443
+    # TODO: Scope 0.0.0.0/0 to known remote cluster API server IPs
+    - name: allow-remote-api-servers
+      action: Allow
+      to:
+        - networks:
+            - 0.0.0.0/0
+      ports:
+        - portNumber:
+            protocol: TCP
+            port: 6443
+    - name: allow-dns
+      action: Allow
+      to:
+        - namespaces:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - portNumber:
+            protocol: UDP
+            port: 5353

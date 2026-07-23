@@ -2,6 +2,7 @@ package wasm
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -59,8 +60,24 @@ const (
 	rateLimitResponseVar = "ratelimit_response"
 	reportResponseVar    = "report_response"
 
+	AuthStorePath           = "auth"
 	RateLimitCompleteSignal = "kuadrant.internal.ratelimit.complete"
 )
+
+// IsGuard returns true if this spec produces a guard action (runs during request phase).
+func (s ActionSpec) IsGuard() bool {
+	return s.ServiceName != RateLimitReportServiceName
+}
+
+// ProducedStorePaths returns the store paths that this spec's onReply chain will produce.
+func (s ActionSpec) ProducedStorePaths() []string {
+	switch s.ServiceName {
+	case AuthServiceName:
+		return []string{AuthStorePath}
+	default:
+		return nil
+	}
+}
 
 // Build materializes this ActionSpec into a concrete Action by dispatching on ServiceName.
 func (s ActionSpec) Build() Action {
@@ -77,11 +94,180 @@ func (s ActionSpec) Build() Action {
 	}
 }
 
+// BuildActions materializes a slice of ActionSpecs into Actions.
+// Body field references (responseBodyJSON/requestBodyJSON) across all specs are
+// extracted into a single StoreAction per direction, prepended to the result.
+func BuildActions(specs []ActionSpec) []Action {
+	type refEntry struct {
+		ref     bodyRef
+		sources []string
+	}
+
+	// Collect all body refs across all specs, grouped by direction.
+	// Key: direction ("response"/"request"), value: fieldName -> refEntry
+	byDirection := make(map[string]map[string]refEntry)
+
+	for _, spec := range specs {
+		for _, cd := range spec.ConditionalData {
+			for _, item := range cd.Data {
+				if expr, ok := item.Value.(*Expression); ok {
+					for _, ref := range extractBodyRefs(expr.ExpressionItem.Value) {
+						if byDirection[ref.Direction] == nil {
+							byDirection[ref.Direction] = make(map[string]refEntry)
+						}
+						entry := byDirection[ref.Direction][ref.FieldName]
+						entry.ref = ref
+						entry.sources = appendUnique(entry.sources, spec.Sources...)
+						byDirection[ref.Direction][ref.FieldName] = entry
+					}
+				}
+			}
+		}
+		for _, b := range spec.Bindings {
+			for _, ref := range extractBodyRefs(b.Expression) {
+				if byDirection[ref.Direction] == nil {
+					byDirection[ref.Direction] = make(map[string]refEntry)
+				}
+				entry := byDirection[ref.Direction][ref.FieldName]
+				entry.ref = ref
+				entry.sources = appendUnique(entry.sources, spec.Sources...)
+				byDirection[ref.Direction][ref.FieldName] = entry
+			}
+		}
+	}
+
+	if len(byDirection) == 0 {
+		actions := make([]Action, len(specs))
+		for i, spec := range specs {
+			actions[i] = spec.Build()
+		}
+		return actions
+	}
+
+	// Build store actions and a replacement map
+	replacements := make(map[string]string) // original call -> store path
+	var storeActions []Action
+
+	for _, direction := range []string{"request", "response"} {
+		fields, ok := byDirection[direction]
+		if !ok {
+			continue
+		}
+
+		fieldNames := sortedKeys(fields)
+
+		// Build map expression: {"field1": bodyJSON("/path1"), "field2": bodyJSON("/path2")}
+		var mapEntries []string
+		var allSources []string
+		for _, fieldName := range fieldNames {
+			entry := fields[fieldName]
+			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, fieldName, entry.ref.Original))
+			replacements[entry.ref.Original] = bodyRefStorePath(direction, fieldName)
+			allSources = appendUnique(allSources, entry.sources...)
+		}
+
+		var storePath string
+		if direction == "request" {
+			storePath = requestBodyStorePath
+		} else {
+			storePath = responseBodyStorePath
+		}
+
+		mapExpr := fmt.Sprintf("{%s}", strings.Join(mapEntries, ", "))
+		storeActions = append(storeActions,
+			NewStoreAction("true", storePath, mapExpr).
+				WithGuard(false).
+				WithSources(allSources),
+		)
+	}
+
+	// Replace body refs in all specs and build
+	modified := make([]ActionSpec, len(specs))
+	for i, spec := range specs {
+		modified[i] = spec.replaceBodyRefs(replacements)
+	}
+
+	actions := make([]Action, 0, len(storeActions)+len(modified))
+	actions = append(actions, storeActions...)
+	for _, spec := range modified {
+		actions = append(actions, spec.Build())
+	}
+	return actions
+}
+
+func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
+	newCD := make([]ConditionalData, len(s.ConditionalData))
+	for i, cd := range s.ConditionalData {
+		newData := make([]DataType, len(cd.Data))
+		for j, item := range cd.Data {
+			if expr, ok := item.Value.(*Expression); ok {
+				newValue := expr.ExpressionItem.Value
+				for original, storePath := range replacements {
+					newValue = strings.ReplaceAll(newValue, original, storePath)
+				}
+				if newValue != expr.ExpressionItem.Value {
+					newData[j] = DataType{Value: &Expression{
+						ExpressionItem: ExpressionItem{
+							Key:   expr.ExpressionItem.Key,
+							Value: newValue,
+						},
+					}}
+				} else {
+					newData[j] = item
+				}
+			} else {
+				newData[j] = item
+			}
+		}
+		newCD[i] = ConditionalData{Predicates: cd.Predicates, Data: newData}
+	}
+
+	newBindings := make([]DataBinding, len(s.Bindings))
+	for i, b := range s.Bindings {
+		newExpr := b.Expression
+		for original, storePath := range replacements {
+			newExpr = strings.ReplaceAll(newExpr, original, storePath)
+		}
+		newBindings[i] = DataBinding{Domain: b.Domain, Field: b.Field, Expression: newExpr}
+	}
+
+	return ActionSpec{
+		ServiceName:     s.ServiceName,
+		Scope:           s.Scope,
+		Predicates:      s.Predicates,
+		ConditionalData: newCD,
+		Sources:         s.Sources,
+		Bindings:        newBindings,
+	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func appendUnique(dest []string, items ...string) []string {
+	seen := make(map[string]bool, len(dest))
+	for _, s := range dest {
+		seen[s] = true
+	}
+	for _, item := range items {
+		if !seen[item] {
+			dest = append(dest, item)
+			seen[item] = true
+		}
+	}
+	return dest
+}
+
 func (s ActionSpec) buildAuth() *GrpcAction {
-	bindings := filterBindings(s.Bindings, false)
 	request := CheckRequestCEL{
 		Scope:           s.Scope,
-		MetadataContext: buildMetadataContext(bindings),
+		MetadataContext: buildMetadataContext(s.Bindings),
 	}
 	predicate := buildActionPredicate(s.Predicates)
 
@@ -91,9 +277,7 @@ func (s ActionSpec) buildAuth() *GrpcAction {
 }
 
 func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label string) *GrpcAction {
-	includeAll := !isGuard
-	bindings := filterBindings(s.Bindings, includeAll)
-	request := buildRateLimitRequest(s.Scope, s.ConditionalData, bindings)
+	request := buildRateLimitRequest(s.Scope, s.ConditionalData, s.Bindings)
 	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
 
 	var onReply []Action
@@ -169,17 +353,120 @@ func DomainAndFieldName(name string) (string, string) {
 	return name[:idx], name[idx+1:]
 }
 
-func filterBindings(bindings []DataBinding, includeAll bool) []DataBinding {
-	if includeAll {
+func isResponsePhaseExpression(expr string) bool {
+	return strings.Contains(expr, "responseBodyJSON(") ||
+		strings.Contains(expr, "requestBodyJSON(") ||
+		strings.Contains(expr, responseBodyStorePath) ||
+		strings.Contains(expr, requestBodyStorePath)
+}
+
+// AttachBindings walks specs in pipeline order and attaches only bindings whose
+// dependencies are satisfied at each position. Two checks are applied:
+//   - Store-path availability: specs declare produced store paths via
+//     ProducedStorePaths(); bindings referencing a path not yet produced are excluded.
+//   - Response-phase access: guard specs (request phase) cannot evaluate
+//     response-body expressions, so those bindings are excluded.
+func AttachBindings(specs []ActionSpec, bindings []DataBinding) {
+	if len(bindings) == 0 {
+		return
+	}
+
+	pendingPaths := make(map[string]bool)
+	for _, spec := range specs {
+		for _, path := range spec.ProducedStorePaths() {
+			pendingPaths[path] = true
+		}
+	}
+
+	for i := range specs {
+		for _, path := range specs[i].ProducedStorePaths() {
+			delete(pendingPaths, path)
+		}
+
+		pending := make([]string, 0, len(pendingPaths))
+		for p := range pendingPaths {
+			pending = append(pending, p)
+		}
+
+		specs[i].Bindings = append(specs[i].Bindings,
+			availableBindings(bindings, pending, specs[i].IsGuard())...)
+	}
+}
+
+func availableBindings(bindings []DataBinding, pendingPaths []string, guard bool) []DataBinding {
+	if len(pendingPaths) == 0 && !guard {
 		return bindings
 	}
 	var filtered []DataBinding
 	for _, b := range bindings {
-		if !strings.Contains(b.Expression, "responseBodyJSON(") {
-			filtered = append(filtered, b)
+		if referencesPendingPath(b.Expression, pendingPaths) {
+			continue
 		}
+		if guard && isResponsePhaseExpression(b.Expression) {
+			continue
+		}
+		filtered = append(filtered, b)
 	}
 	return filtered
+}
+
+func referencesPendingPath(expr string, pendingPaths []string) bool {
+	for _, path := range pendingPaths {
+		if strings.Contains(expr, path+".") {
+			return true
+		}
+	}
+	return false
+}
+
+// bodyJSONPattern matches responseBodyJSON("...") and requestBodyJSON("...") with either quote style.
+var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(["']([^"']+)["']\)`)
+
+const (
+	responseBodyStorePath = "kuadrant.internal.response.body"
+	requestBodyStorePath  = "kuadrant.internal.request.body"
+)
+
+type bodyRef struct {
+	Original  string // the full matched call, e.g. responseBodyJSON("/usage/total_tokens")
+	Direction string // "response" or "request"
+	FieldName string // derived map key, e.g. "total_tokens"
+	Pointer   string // the JSON pointer, e.g. "/usage/total_tokens"
+}
+
+func bodyRefFieldName(jsonPointer string) string {
+	segments := strings.Split(strings.TrimPrefix(jsonPointer, "/"), "/")
+	return segments[len(segments)-1]
+}
+
+func bodyRefStorePath(direction, fieldName string) string {
+	if direction == "request" {
+		return requestBodyStorePath + "." + fieldName
+	}
+	return responseBodyStorePath + "." + fieldName
+}
+
+func extractBodyRefs(expr string) []bodyRef {
+	matches := bodyJSONPattern.FindAllStringSubmatch(expr, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var refs []bodyRef
+	for _, m := range matches {
+		original := m[0]
+		if seen[original] {
+			continue
+		}
+		seen[original] = true
+		refs = append(refs, bodyRef{
+			Original:  original,
+			Direction: m[1],
+			FieldName: bodyRefFieldName(m[2]),
+			Pointer:   m[2],
+		})
+	}
+	return refs
 }
 
 // --- Auth message construction ---
@@ -242,7 +529,7 @@ func buildAuthOnReply(name string) []Action {
 		),
 		NewStoreAction(
 			fmt.Sprintf("has(%s.ok_response) && has(%s.dynamic_metadata)", name, name),
-			"auth",
+			AuthStorePath,
 			fmt.Sprintf("%s.dynamic_metadata", name),
 		).WithExportToHost(true),
 		NewHeadersAction(

@@ -8,12 +8,13 @@ This guide covers monitoring and troubleshooting outbound traffic through an Ist
 - Egress gateway environment deployed. See the [Egress Gateway Setup](egress-gateway.md) guide.
 - Prometheus configured to scrape Istio proxy metrics (included in the [observability stack](../../observability/README.md)).
 
-Export the gateway address for use in examples:
+The examples in this guide use:
 
-```sh
-export EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n gateway-system \
-    -o jsonpath='{.status.addresses[0].value}')
-```
+| Resource | Value |
+|----------|-------|
+| Gateway namespace | `gateway-system` |
+| Gateway name | `kuadrant-egressgateway` |
+| External service | `httpbin.org` |
 
 ## How Egress Observability Differs from Ingress
 
@@ -50,7 +51,7 @@ The same labels appear on egress metrics as on ingress, but their values differ 
 | `destination_service` | External hostname (for example, `httpbin.org`) | From the ServiceEntry |
 | `destination_service_name` | External hostname (for example, `httpbin.org`) | Same as `destination_service` |
 | `destination_service_namespace` | Gateway namespace (for example, `gateway-system`) | Namespace where ServiceEntry is deployed |
-| `destination_workload` | `unknown` | External services have no workload identity |
+| `destination_workload` | ServiceEntry name or `unknown` | ServiceEntry name for requests that reach the external service, `unknown` for requests rejected by policies |
 | `source_workload` | Gateway deployment name | The egress gateway, NOT the calling workload |
 | `source_workload_namespace` | `gateway-system` | Gateway namespace |
 | `reporter` | `source` | Always (no destination-side proxy exists) |
@@ -70,7 +71,7 @@ EGRESS_POD=$(kubectl get pods -n gateway-system \
     -o jsonpath='{.items[0].metadata.name}')
 
 kubectl exec -n gateway-system $EGRESS_POD -- \
-    curl -s localhost:15020/stats/prometheus | grep "^istio_requests_total"
+    pilot-agent request GET /stats/prometheus 2>/dev/null | grep "^istio_requests_total"
 ```
 
 Example output:
@@ -96,7 +97,7 @@ sum(rate(istio_requests_total{source_workload="kuadrant-egressgateway-istio"}[5m
 ```promql
 sum(rate(istio_requests_total{
     source_workload="kuadrant-egressgateway-istio",
-    response_code!~"2.."
+    response_code=~"[45].."
 }[5m]))
 /
 sum(rate(istio_requests_total{
@@ -212,7 +213,7 @@ EGRESS_POD=$(kubectl get pods -n gateway-system \
     -o jsonpath='{.items[0].metadata.name}')
 
 kubectl exec -n gateway-system $EGRESS_POD -- \
-    curl -s localhost:15000/clusters | grep "outbound|443||httpbin.org::" | \
+    pilot-agent request GET /clusters 2>/dev/null | grep "outbound|443||httpbin.org::" | \
     grep -E "(cx_total|cx_connect_fail|rq_total|rq_error|rq_success|rq_timeout|health_flags)"
 ```
 

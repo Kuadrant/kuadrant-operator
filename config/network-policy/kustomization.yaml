@@ -5,6 +5,7 @@ resources:
   - kuadrant-operator.yaml
   - authorino.yaml
   - authorino-operator.yaml
+  - console-plugin.yaml
   - dns-operator.yaml
   - limitador.yaml
   - limitador-operator.yaml

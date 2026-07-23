@@ -452,7 +452,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 				// pre auth rate limiting
 				if hasAuth {
 					for i := range specs {
-						if specs[i].ServiceName == wasm.AuthServiceName {
+						if specs[i].ServiceName == wasm.AuthServiceName && !lo.Contains(specs[i].Predicates, wasm.RateLimitCompleteSignal) {
 							specs[i].Predicates = append(specs[i].Predicates, wasm.RateLimitCompleteSignal)
 						}
 					}
@@ -470,7 +470,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 				// pre auth rate limiting
 				if hasAuth {
 					for i := range specs {
-						if specs[i].ServiceName == wasm.AuthServiceName {
+						if specs[i].ServiceName == wasm.AuthServiceName && !lo.Contains(specs[i].Predicates, wasm.RateLimitCompleteSignal) {
 							specs[i].Predicates = append(specs[i].Predicates, wasm.RateLimitCompleteSignal)
 						}
 					}
@@ -480,7 +480,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		// Attach extension request bindings to specs before Build()
+		// Attach extension request bindings to specs based on store-path availability
 		var routeLocator string
 		switch parsed.RouteType {
 		case kuadrantpolicymachinery.RouteTypeHTTP:
@@ -488,11 +488,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		case kuadrantpolicymachinery.RouteTypeGRPC:
 			routeLocator = parsed.GRPCRoute.GetLocator()
 		}
-		if bindings := extension.GetRequestBindings([]string{parsed.Gateway.GetLocator(), routeLocator}); len(bindings) > 0 {
-			for i := range specs {
-				specs[i].Bindings = append(specs[i].Bindings, bindings...)
-			}
-		}
+		wasm.AttachBindings(specs, extension.GetRequestBindings([]string{parsed.Gateway.GetLocator(), routeLocator}))
 
 		pathSpan.SetAttributes(attribute.Int("specs.before_merge", len(specs)))
 
@@ -526,8 +522,8 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
 
-		// Validate specs, then Build() validated ones into Actions
-		var builtActions []wasm.Action
+		// Validate specs, then build validated ones into Actions
+		var validSpecs []wasm.ActionSpec
 		invalidCount := 0
 
 		for _, spec := range specs {
@@ -536,13 +532,14 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 				celValidationIssues.Add(celvalidator.NewIssue(spec, pathID, err))
 				invalidCount++
 			} else {
-				builtActions = append(builtActions, spec.Build())
+				validSpecs = append(validSpecs, spec)
 			}
 		}
+		builtActions := wasm.BuildActions(validSpecs)
 
 		pathSpan.SetAttributes(
 			attribute.Int("specs.after_merge", len(specs)),
-			attribute.Int("specs.validated", len(builtActions)),
+			attribute.Int("specs.validated", len(validSpecs)),
 			attribute.Int("specs.invalid", invalidCount),
 		)
 

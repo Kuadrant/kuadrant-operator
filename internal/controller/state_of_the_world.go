@@ -726,15 +726,15 @@ func additionalMainTraceAttributes(resourceEvents []controller.ResourceEvent, _ 
 
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: metricsReconcileFunc("init", traceReconcileFunc("workflow.init", initWorkflow(b.client).Run)),
+		Precondition: metricsReconcileFunc("workflow.init", traceReconcileFunc("workflow.init", initWorkflow(b.client).Run)),
 		Tasks: []controller.ReconcileFunc{
-			metricsReconcileFunc("dns", traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run)),
-			metricsReconcileFunc("tls", traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run)),
-			metricsReconcileFunc("data_plane", traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run)),
-			metricsReconcileFunc("observability", traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile)),
-			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
+			metricsReconcileFunc("workflow.dns", traceReconcileFunc("workflow.dns", NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run)),
+			metricsReconcileFunc("workflow.tls", traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run)),
+			metricsReconcileFunc("workflow.data_plane_policies", traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run)),
+			metricsReconcileFunc("workflow.observability", traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile)),
+			metricsReconcileFunc("workflow.developer_portal", traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile)),
 		},
-		Postcondition: metricsReconcileFunc("finalize", traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run)),
+		Postcondition: metricsReconcileFunc("workflow.finalize", traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run)),
 	}
 
 	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {

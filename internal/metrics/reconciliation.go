@@ -8,11 +8,13 @@ import (
 )
 
 var (
+	reconciliationBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60}
+
 	reconciliationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "kuadrant_reconciliation_duration_seconds",
 			Help:    "Duration of each top-level workflow phase in seconds",
-			Buckets: prometheus.DefBuckets,
+			Buckets: reconciliationBuckets,
 		},
 		[]string{"workflow"})
 
@@ -20,7 +22,7 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "kuadrant_effective_policy_duration_seconds",
 			Help:    "Duration of effective policy calculation in seconds",
-			Buckets: prometheus.DefBuckets,
+			Buckets: reconciliationBuckets,
 		},
 		[]string{"policy_type"})
 
@@ -28,21 +30,21 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "kuadrant_topology_rebuild_duration_seconds",
 			Help:    "Duration of topology reconciliation including ToDot serialization and ConfigMap write in seconds",
-			Buckets: prometheus.DefBuckets,
+			Buckets: reconciliationBuckets,
 		})
 
 	authconfigGenerationDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "kuadrant_authconfig_generation_duration_seconds",
 			Help:    "Duration of AuthConfig reconciliation in seconds",
-			Buckets: prometheus.DefBuckets,
+			Buckets: reconciliationBuckets,
 		})
 
 	limitadorLimitsGenerationDuration = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "kuadrant_limitador_limits_generation_duration_seconds",
 			Help:    "Duration of Limitador limits reconciliation in seconds",
-			Buckets: prometheus.DefBuckets,
+			Buckets: reconciliationBuckets,
 		})
 
 	topologyObjects = prometheus.NewGaugeVec(

@@ -1,0 +1,106 @@
+package metrics
+
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+)
+
+var (
+	reconciliationBuckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60}
+
+	reconciliationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "kuadrant_reconciliation_duration_seconds",
+			Help:    "Duration of each top-level workflow phase in seconds",
+			Buckets: reconciliationBuckets,
+		},
+		[]string{"workflow"})
+
+	effectivePolicyDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "kuadrant_effective_policy_duration_seconds",
+			Help:    "Duration of effective policy calculation in seconds",
+			Buckets: reconciliationBuckets,
+		},
+		[]string{"policy_type"})
+
+	topologyRebuildDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "kuadrant_topology_rebuild_duration_seconds",
+			Help:    "Duration of topology reconciliation including ToDot serialization and ConfigMap write in seconds",
+			Buckets: reconciliationBuckets,
+		})
+
+	authconfigGenerationDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "kuadrant_authconfig_generation_duration_seconds",
+			Help:    "Duration of AuthConfig reconciliation in seconds",
+			Buckets: reconciliationBuckets,
+		})
+
+	limitadorLimitsGenerationDuration = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "kuadrant_limitador_limits_generation_duration_seconds",
+			Help:    "Duration of Limitador limits reconciliation in seconds",
+			Buckets: reconciliationBuckets,
+		})
+
+	topologyObjects = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "kuadrant_topology_objects",
+			Help: "Number of objects in the topology DAG by kind",
+		},
+		[]string{"kind"})
+
+	authconfigsGenerated = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "kuadrant_authconfigs_generated",
+			Help: "Number of AuthConfigs generated in the last reconciliation cycle",
+		})
+)
+
+func init() {
+	metrics.Registry.MustRegister(
+		reconciliationDuration,
+		effectivePolicyDuration,
+		topologyRebuildDuration,
+		authconfigGenerationDuration,
+		limitadorLimitsGenerationDuration,
+		topologyObjects,
+		authconfigsGenerated,
+	)
+}
+
+func ObserveReconciliationDuration(workflow string, start time.Time) {
+	reconciliationDuration.WithLabelValues(workflow).Observe(time.Since(start).Seconds())
+}
+
+func ObserveEffectivePolicyDuration(policyType string, start time.Time) {
+	effectivePolicyDuration.WithLabelValues(policyType).Observe(time.Since(start).Seconds())
+}
+
+func ObserveTopologyRebuildDuration(start time.Time) {
+	topologyRebuildDuration.Observe(time.Since(start).Seconds())
+}
+
+func ObserveAuthconfigGenerationDuration(start time.Time) {
+	authconfigGenerationDuration.Observe(time.Since(start).Seconds())
+}
+
+func ObserveLimitadorLimitsGenerationDuration(start time.Time) {
+	limitadorLimitsGenerationDuration.Observe(time.Since(start).Seconds())
+}
+
+func ResetTopologyObjects() {
+	topologyObjects.Reset()
+}
+
+func SetTopologyObjects(kind string, count int) {
+	topologyObjects.WithLabelValues(kind).Set(float64(count))
+}
+
+func SetAuthconfigsGenerated(count int) {
+	authconfigsGenerated.Set(float64(count))
+}

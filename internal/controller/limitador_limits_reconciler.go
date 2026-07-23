@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -20,6 +21,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantmetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/ratelimit"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
@@ -49,6 +51,9 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 }
 
 func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	startTime := time.Now()
+	defer kuadrantmetrics.ObserveLimitadorLimitsGenerationDuration(startTime)
+
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithValues("context", ctx)
 	logger.Info("Limitador limits reconciler", "status", "started")
 	defer logger.Info("Limitador limits reconciler", "status", "completed")

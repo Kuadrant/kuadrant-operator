@@ -544,6 +544,23 @@ func TestBodyRefFieldName(t *testing.T) {
 	}
 }
 
+func TestSanitizePointer(t *testing.T) {
+	tests := []struct {
+		pointer  string
+		expected string
+	}{
+		{"/usage/total_tokens", "usage_total_tokens"},
+		{"/model", "model"},
+		{"/a/b/c", "a_b_c"},
+	}
+	for _, tc := range tests {
+		got := sanitizePointer(tc.pointer)
+		if got != tc.expected {
+			t.Errorf("sanitizePointer(%q) = %q, want %q", tc.pointer, got, tc.expected)
+		}
+	}
+}
+
 func TestExtractBodyRefs(t *testing.T) {
 	t.Run("no refs", func(t *testing.T) {
 		refs := extractBodyRefs("request.method == 'GET'")
@@ -751,6 +768,59 @@ func TestBuildActions_MergedBodyRefs(t *testing.T) {
 	}
 	if !strings.Contains(grpc.MessageBuilder, "kuadrant.internal.response.body.model") {
 		t.Errorf("grpc message should reference store path for model, got:\n%s", grpc.MessageBuilder)
+	}
+}
+
+func TestBuildActions_CollidingLeafFieldNames(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "ratelimit.hits_addend",
+						Value: `responseBodyJSON("/usage/total_tokens")`,
+					}}},
+				},
+			}},
+			Bindings: []DataBinding{
+				{Domain: "metrics.labels", Field: "tokens", Expression: `responseBodyJSON("/metadata/total_tokens")`},
+			},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+
+	// Both refs share leaf "total_tokens" so should use sanitized pointer as key
+	if !strings.Contains(store.Value, `"usage_total_tokens": responseBodyJSON("/usage/total_tokens")`) {
+		t.Errorf("store value should contain usage_total_tokens field, got: %s", store.Value)
+	}
+	if !strings.Contains(store.Value, `"metadata_total_tokens": responseBodyJSON("/metadata/total_tokens")`) {
+		t.Errorf("store value should contain metadata_total_tokens field, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if strings.Contains(grpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("grpc message should not contain responseBodyJSON after replacement")
+	}
+	if !strings.Contains(grpc.MessageBuilder, "kuadrant.internal.response.body.usage_total_tokens") {
+		t.Errorf("grpc message should reference store path for usage_total_tokens, got:\n%s", grpc.MessageBuilder)
+	}
+	if !strings.Contains(grpc.MessageBuilder, "kuadrant.internal.response.body.metadata_total_tokens") {
+		t.Errorf("grpc message should reference store path for metadata_total_tokens, got:\n%s", grpc.MessageBuilder)
 	}
 }
 

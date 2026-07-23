@@ -104,7 +104,7 @@ func BuildActions(specs []ActionSpec) []Action {
 	}
 
 	// Collect all body refs across all specs, grouped by direction.
-	// Key: direction ("response"/"request"), value: fieldName -> refEntry
+	// Key: direction ("response"/"request"), value: pointer -> refEntry
 	byDirection := make(map[string]map[string]refEntry)
 
 	for _, spec := range specs {
@@ -115,10 +115,10 @@ func BuildActions(specs []ActionSpec) []Action {
 						if byDirection[ref.Direction] == nil {
 							byDirection[ref.Direction] = make(map[string]refEntry)
 						}
-						entry := byDirection[ref.Direction][ref.FieldName]
+						entry := byDirection[ref.Direction][ref.Pointer]
 						entry.ref = ref
 						entry.sources = appendUnique(entry.sources, spec.Sources...)
-						byDirection[ref.Direction][ref.FieldName] = entry
+						byDirection[ref.Direction][ref.Pointer] = entry
 					}
 				}
 			}
@@ -128,10 +128,10 @@ func BuildActions(specs []ActionSpec) []Action {
 				if byDirection[ref.Direction] == nil {
 					byDirection[ref.Direction] = make(map[string]refEntry)
 				}
-				entry := byDirection[ref.Direction][ref.FieldName]
+				entry := byDirection[ref.Direction][ref.Pointer]
 				entry.ref = ref
 				entry.sources = appendUnique(entry.sources, spec.Sources...)
-				byDirection[ref.Direction][ref.FieldName] = entry
+				byDirection[ref.Direction][ref.Pointer] = entry
 			}
 		}
 	}
@@ -154,15 +154,25 @@ func BuildActions(specs []ActionSpec) []Action {
 			continue
 		}
 
-		fieldNames := sortedKeys(fields)
+		pointers := sortedKeys(fields)
+
+		// Detect leaf-name collisions: count how many pointers share each leaf field
+		leafCount := make(map[string]int)
+		for _, entry := range fields {
+			leafCount[entry.ref.FieldName]++
+		}
 
 		// Build map expression: {"field1": bodyJSON("/path1"), "field2": bodyJSON("/path2")}
 		var mapEntries []string
 		var allSources []string
-		for _, fieldName := range fieldNames {
-			entry := fields[fieldName]
-			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, fieldName, entry.ref.Original))
-			replacements[entry.ref.Original] = bodyRefStorePath(direction, fieldName)
+		for _, pointer := range pointers {
+			entry := fields[pointer]
+			mapKey := entry.ref.FieldName
+			if leafCount[mapKey] > 1 {
+				mapKey = sanitizePointer(entry.ref.Pointer)
+			}
+			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, mapKey, entry.ref.Original))
+			replacements[entry.ref.Original] = bodyRefStorePath(direction, mapKey)
 			allSources = appendUnique(allSources, entry.sources...)
 		}
 
@@ -437,6 +447,10 @@ type bodyRef struct {
 func bodyRefFieldName(jsonPointer string) string {
 	segments := strings.Split(strings.TrimPrefix(jsonPointer, "/"), "/")
 	return segments[len(segments)-1]
+}
+
+func sanitizePointer(jsonPointer string) string {
+	return strings.ReplaceAll(strings.TrimPrefix(jsonPointer, "/"), "/", "_")
 }
 
 func bodyRefStorePath(direction, fieldName string) string {

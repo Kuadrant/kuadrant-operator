@@ -80,7 +80,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 			name:            "limit without conditions nor counters",
 			limit:           &kuadrantv1.Limit{},
 			limitIdentifier: "limit.myLimit__d681f6c3",
-			scope:           "my-ns/my-route",
+			scope:           string(ActionScope("my-ns/my-route")),
 			expectedAction: wasm.Action{
 				SourcePolicyLocators: []string{"test/policy/locator"},
 				ServiceName:          wasm.RateLimitServiceName,
@@ -236,7 +236,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
+			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, ActionScope(tc.scope), "test/policy/locator", tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedAction, computedRule); diff != "" {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}

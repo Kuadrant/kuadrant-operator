@@ -103,7 +103,8 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) updateRouteStatus(ctx context
 }
 
 func getRoutePath(topology *machinery.Topology, route *machinery.HTTPRoute) []machinery.Targetable {
-	path := []machinery.Targetable{route}
+	path := make([]machinery.Targetable, 0, 4) //nolint:prealloc
+	path = append(path, route)
 	for _, listener := range topology.Targetables().Parents(route) {
 		path = append(path, listener)
 		path = append(path, topology.Targetables().Parents(listener)...)

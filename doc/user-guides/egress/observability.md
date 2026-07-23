@@ -51,7 +51,7 @@ The same labels appear on egress metrics as on ingress, but their values differ 
 | `destination_service` | External hostname (for example, `httpbin.org`) | From the ServiceEntry |
 | `destination_service_name` | External hostname (for example, `httpbin.org`) | Same as `destination_service` |
 | `destination_service_namespace` | Gateway namespace (for example, `gateway-system`) | Namespace where ServiceEntry is deployed |
-| `destination_workload` | ServiceEntry name or `unknown` | ServiceEntry name for requests that reach the external service, `unknown` for requests rejected by policies |
+| `destination_workload` | Varies: ServiceEntry name or `unknown` | Value depends on Istio version and configuration |
 | `source_workload` | Gateway deployment name | The egress gateway, NOT the calling workload |
 | `source_workload_namespace` | `gateway-system` | Gateway namespace |
 | `reporter` | `source` | Always (no destination-side proxy exists) |

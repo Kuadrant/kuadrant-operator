@@ -166,7 +166,7 @@ func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gatew
 	// The wasm-shim requires a non-empty actions field in every action set.
 	filtered := wasmConfig.ActionSets[:0]
 	for _, as := range wasmConfig.ActionSets {
-		if len(as.Actions) > 0 || len(as.TypedActions) > 0 {
+		if len(as.Actions) > 0 {
 			filtered = append(filtered, as)
 		}
 	}
@@ -1059,21 +1059,6 @@ func (m *RegisteredDataMutator[TResource]) mutateAuthConfig(authConfig *authorin
 
 // mutateWasmConfig handles WasmConfig-specific mutations
 func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Config, targetRefs []machinery.PolicyTargetReference) error {
-	requestData := make(map[string]string)
-
-	for _, targetRef := range targetRefs {
-		providerEntries := m.store.GetAllForTargetRef(targetRef.GetLocator(), extpb.Domain_DOMAIN_REQUEST)
-
-		for _, entry := range providerEntries {
-			// Add if it doesn't exist
-			if _, exists := requestData[entry.Binding]; !exists {
-				requestData[entry.Binding] = entry.Expression
-			}
-		}
-	}
-
-	wasmConfig.RequestData = requestData
-
 	// Inject registered upstream services matching the current target refs
 	relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
 
@@ -1107,7 +1092,7 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		wasmConfig.DescriptorService = "kuadrant-operator-grpc"
 	}
 
-	// Translate pipeline actions into TypedAction entries (deterministic order across policies).
+	// Translate pipeline actions into Action entries (deterministic order across policies).
 	// Only include pipeline policies whose stored target refs match this gateway's routes.
 	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...))
 	sort.Slice(policyIDs, func(i, j int) bool {
@@ -1155,11 +1140,11 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
 		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
 
-		typedActions := translatePipelineToTypedActions(
+		pipelineActions := translatePipelineToActions(
 			requestEntries, responseEntries,
 			methods, upstreamByMethod[policyID], sources,
 		)
-		if len(typedActions) == 0 {
+		if len(pipelineActions) == 0 {
 			continue
 		}
 
@@ -1169,7 +1154,7 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			if len(routeLocators) > 0 && asRoute != "" && !slices.Contains(routeLocators, asRoute) {
 				continue
 			}
-			wasmConfig.ActionSets[i].TypedActions = append(wasmConfig.ActionSets[i].TypedActions, typedActions...)
+			wasmConfig.ActionSets[i].Actions = append(wasmConfig.ActionSets[i].Actions, pipelineActions...)
 		}
 	}
 
@@ -1183,12 +1168,12 @@ func predicateOrTrue(predicate string) string {
 	return predicate
 }
 
-func translatePipelineToTypedActions(
+func translatePipelineToActions(
 	requestEntries, responseEntries []PipelineActionEntry,
 	methods map[string]string,
 	upstreamByMethod map[string]RegisteredUpstreamEntry,
 	sources []string,
-) []wasm.TypedAction {
+) []wasm.Action {
 	varToMethod := make(map[string]string)
 	for _, e := range requestEntries {
 		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
@@ -1206,14 +1191,14 @@ func translatePipelineToTypedActions(
 		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
 	}
 
-	grpcOnReply := make(map[string][]wasm.TypedAction)
+	grpcOnReply := make(map[string][]wasm.Action)
 
 	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
 		for _, e := range entries {
 			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
 				continue
 			}
-			ta := entryToTypedAction(e, sources, phase)
+			ta := entryToAction(e, sources, phase)
 			for varName, methodName := range varToMethod {
 				if entryMatchesVar(e, varPatterns[varName]) {
 					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
@@ -1225,7 +1210,7 @@ func translatePipelineToTypedActions(
 	classifyAndConvert(requestEntries, string(PipelinePhaseRequest))
 	classifyAndConvert(responseEntries, string(PipelinePhaseResponse))
 
-	var result []wasm.TypedAction
+	var result []wasm.Action
 	emittedGRPC := make(map[string]bool)
 
 	emit := func(entries []PipelineActionEntry, phase string) {
@@ -1235,8 +1220,8 @@ func translatePipelineToTypedActions(
 					continue
 				}
 				emittedGRPC[e.Method] = true
-				ta := grpcToTypedAction(e, methods, upstreamByMethod, sources)
-				ta.OnReply = grpcOnReply[e.Method]
+				ta := grpcToAction(e, methods, upstreamByMethod, sources)
+				ta.WithOnReply(grpcOnReply[e.Method]...)
 				result = append(result, ta)
 				continue
 			}
@@ -1248,7 +1233,7 @@ func translatePipelineToTypedActions(
 				}
 			}
 			if !isVarDependent {
-				result = append(result, entryToTypedAction(e, sources, phase))
+				result = append(result, entryToAction(e, sources, phase))
 			}
 		}
 	}
@@ -1277,28 +1262,26 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	return false
 }
 
-func entryToTypedAction(entry PipelineActionEntry, sources []string, phase string) wasm.TypedAction {
-	ta := wasm.TypedAction{
-		Predicate:            predicateOrTrue(entry.Predicate),
-		SourcePolicyLocators: sources,
-	}
+func entryToAction(entry PipelineActionEntry, sources []string, phase string) wasm.Action {
+	predicate := predicateOrTrue(entry.Predicate)
 	switch entry.ActionType {
 	case extpb.ActionType_ACTION_TYPE_DENY:
-		ta.Type = "deny"
-		ta.Terminal = true
-		ta.DenyWith = buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)
+		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)).
+			WithSources(sources)
 	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-		ta.Type = "headers"
-		ta.Headers = entry.HeadersToAdd
+		target := ""
 		if phase == string(PipelinePhaseResponse) {
-			ta.Target = "response"
+			target = "response"
 		}
+		return wasm.NewHeadersAction(predicate, target, entry.HeadersToAdd).
+			WithSources(sources)
 	case extpb.ActionType_ACTION_TYPE_FAIL:
-		ta.Type = "fail"
-		ta.Terminal = true
-		ta.LogMessage = entry.LogMessage
+		return wasm.NewFailAction(predicate, entry.LogMessage).
+			WithSources(sources)
+	default:
+		return wasm.NewFailAction(predicate, "unknown action type").
+			WithSources(sources)
 	}
-	return ta
 }
 
 func buildDenyResponseExpr(status int, headers, body string) string {
@@ -1318,18 +1301,13 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 	return fmt.Sprintf("DenyResponse{%s}", strings.Join(parts, ", "))
 }
 
-func grpcToTypedAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) wasm.TypedAction {
-	ta := wasm.TypedAction{
-		Type:                 "grpc",
-		Predicate:            predicateOrTrue(entry.Predicate),
-		Var:                  entry.Var,
-		Service:              methods[entry.Method],
-		SourcePolicyLocators: sources,
-	}
+func grpcToAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) *wasm.GrpcAction {
+	mb := ""
 	if upstream, ok := upstreamByMethod[entry.Method]; ok {
-		ta.MessageBuilder = upstream.MessageTemplate
+		mb = upstream.MessageTemplate
 	}
-	return ta
+	return wasm.NewGrpcAction(predicateOrTrue(entry.Predicate), entry.Var, methods[entry.Method], mb, "").
+		WithSources(sources)
 }
 
 // HashUpstreamServiceConfig produces a deterministic short hash from a wasm.Service
@@ -1402,4 +1380,37 @@ func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstream
 		}
 	}
 	return result
+}
+
+// GetRequestBindings returns DOMAIN_REQUEST bindings from all registered wasm
+// config mutators for the given target ref locators, converted to DataBinding.
+func GetRequestBindings(targetRefLocators []string) []wasm.DataBinding {
+	GlobalMutatorRegistry.mutex.RLock()
+	defer GlobalMutatorRegistry.mutex.RUnlock()
+
+	seen := make(map[string]struct{})
+	var bindings []wasm.DataBinding
+
+	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
+		m, ok := mutator.(*RegisteredDataMutator[*wasm.Config])
+		if !ok {
+			continue
+		}
+		for _, locator := range targetRefLocators {
+			for _, entry := range m.store.GetAllForTargetRef(locator, extpb.Domain_DOMAIN_REQUEST) {
+				if _, exists := seen[entry.Binding]; exists {
+					continue
+				}
+				seen[entry.Binding] = struct{}{}
+				domain, field := wasm.DomainAndFieldName(entry.Binding)
+				bindings = append(bindings, wasm.DataBinding{
+					Domain:     domain,
+					Field:      field,
+					Expression: entry.Expression,
+				})
+			}
+		}
+	}
+
+	return bindings
 }

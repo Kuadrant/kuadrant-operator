@@ -51,21 +51,21 @@ func TestTokenLimitNameToLimitadorIdentifier(t *testing.T) {
 	}
 }
 
-func TestWasmActionsFromTokenLimit(t *testing.T) {
+func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 	testCases := []struct {
 		name               string
 		tokenLimit         *kuadrantv1alpha1.TokenLimit
 		limitIdentifier    string
 		scope              string
 		topLevelPredicates kuadrantv1.WhenPredicates
-		expectedActions    []wasm.Action
+		expectedActions    []wasm.ActionSpec
 	}{
 		{
 			name:            "token limit without conditions nor counters",
 			tokenLimit:      &kuadrantv1alpha1.TokenLimit{},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			expectedActions: []wasm.Action{
+			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
@@ -93,13 +93,13 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							},
 						},
 					},
-					SourcePolicyLocators: []string{"test/policy/locator"},
+					Sources: []string{"test/policy/locator"},
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					Scope:                "my-ns/my-route",
-					SourcePolicyLocators: []string{"test/policy/locator"},
+					ServiceName: wasm.RateLimitReportServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{},
@@ -135,7 +135,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			expectedActions: []wasm.Action{
+			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
@@ -171,13 +171,13 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							},
 						},
 					},
-					SourcePolicyLocators: []string{"test/policy/locator"},
+					Sources: []string{"test/policy/locator"},
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					SourcePolicyLocators: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					ServiceName: wasm.RateLimitReportServiceName,
+					Sources:     []string{"test/policy/locator"},
+					Scope:       "my-ns/my-route",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{},
@@ -224,7 +224,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			expectedActions: []wasm.Action{
+			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
@@ -260,13 +260,13 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							},
 						},
 					},
-					SourcePolicyLocators: []string{"test/policy/locator"},
+					Sources: []string{"test/policy/locator"},
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					SourcePolicyLocators: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					ServiceName: wasm.RateLimitReportServiceName,
+					Sources:     []string{"test/policy/locator"},
+					Scope:       "my-ns/my-route",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.auth.claims["kuadrant.io/groups"].split(",").exists(g, g == "free")`},
@@ -311,7 +311,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 			limitIdentifier:    "tokenlimit.myTokenLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			topLevelPredicates: kuadrantv1.WhenPredicates{{Predicate: `request.method == "POST"`}},
-			expectedActions: []wasm.Action{
+			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
@@ -339,13 +339,13 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 							},
 						},
 					},
-					SourcePolicyLocators: []string{"test/policy/locator"},
+					Sources: []string{"test/policy/locator"},
 				},
 				// Response phase action
 				{
-					ServiceName:          wasm.RateLimitReportServiceName,
-					SourcePolicyLocators: []string{"test/policy/locator"},
-					Scope:                "my-ns/my-route",
+					ServiceName: wasm.RateLimitReportServiceName,
+					Sources:     []string{"test/policy/locator"},
+					Scope:       "my-ns/my-route",
 					ConditionalData: []wasm.ConditionalData{
 						{
 							Predicates: []string{`request.method == "POST"`, `request.auth.claims["tier"] == "free"`},
@@ -376,7 +376,7 @@ func TestWasmActionsFromTokenLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedActions := wasmActionsFromTokenLimit(tc.tokenLimit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
+			computedActions := wasmActionSpecsFromTokenLimit(tc.tokenLimit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedActions, computedActions); diff != "" {
 				t.Errorf("unexpected wasm actions (-want +got):\n%s", diff)
 			}

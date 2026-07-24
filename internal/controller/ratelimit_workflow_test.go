@@ -67,24 +67,24 @@ func TestLimitNameToLimitadorIdentifier(t *testing.T) {
 	}
 }
 
-func TestWasmActionFromLimit(t *testing.T) {
+func TestWasmActionSpecFromLimit(t *testing.T) {
 	testCases := []struct {
 		name               string
 		limit              *kuadrantv1.Limit
 		limitIdentifier    string
 		scope              string
 		topLevelPredicates kuadrantv1.WhenPredicates
-		expectedAction     wasm.Action
+		expectedAction     wasm.ActionSpec
 	}{
 		{
 			name:            "limit without conditions nor counters",
 			limit:           &kuadrantv1.Limit{},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			expectedAction: wasm.Action{
-				SourcePolicyLocators: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+			expectedAction: wasm.ActionSpec{
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Data: []wasm.DataType{
@@ -108,10 +108,10 @@ func TestWasmActionFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			expectedAction: wasm.Action{
-				SourcePolicyLocators: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+			expectedAction: wasm.ActionSpec{
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Data: []wasm.DataType{
@@ -144,10 +144,10 @@ func TestWasmActionFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			expectedAction: wasm.Action{
-				SourcePolicyLocators: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+			expectedAction: wasm.ActionSpec{
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{"auth.identity.group != admin"},
@@ -179,10 +179,10 @@ func TestWasmActionFromLimit(t *testing.T) {
 			topLevelPredicates: kuadrantv1.NewWhenPredicates("auth.identity.group != admin"),
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
-			expectedAction: wasm.Action{
-				SourcePolicyLocators: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+			expectedAction: wasm.ActionSpec{
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{"auth.identity.group != admin"},
@@ -208,10 +208,10 @@ func TestWasmActionFromLimit(t *testing.T) {
 			topLevelPredicates: kuadrantv1.NewWhenPredicates("auth.identity.from-top-level"),
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
-			expectedAction: wasm.Action{
-				SourcePolicyLocators: []string{"test/policy/locator"},
-				ServiceName:          wasm.RateLimitServiceName,
-				Scope:                "my-ns/my-route",
+			expectedAction: wasm.ActionSpec{
+				Sources:     []string{"test/policy/locator"},
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
 				ConditionalData: []wasm.ConditionalData{
 					{
 						Predicates: []string{
@@ -236,7 +236,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
+			computedRule := wasmActionSpecFromLimit(tc.limit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedAction, computedRule); diff != "" {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}

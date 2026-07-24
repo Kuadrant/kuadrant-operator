@@ -486,57 +486,82 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
-		var actions []wasm.Action
+		var specs []wasm.ActionSpec
 
 		// auth
-		if effectivePolicy, ok := effectiveAuthPoliciesMap[pathID]; ok {
-			actions = append(actions, buildWasmActionsForAuth(pathID, effectivePolicy)...)
+		effectiveAuthPolicy, hasAuth := effectiveAuthPoliciesMap[pathID]
+		if hasAuth {
+			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy)...)
 			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlAction := buildWasmActionsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			if hasAuthAccess(rlAction) {
-				actions = append(actions, rlAction...)
+			rlSpecs := buildWasmActionSpecsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if specsHaveAuthAccess(rlSpecs) {
+				specs = append(specs, rlSpecs...)
 			} else {
 				// pre auth rate limiting
-				actions = append(rlAction, actions...)
+				if hasAuth {
+					for i := range specs {
+						if specs[i].ServiceName == wasm.AuthServiceName && !lo.Contains(specs[i].Predicates, wasm.RateLimitCompleteSignal) {
+							specs[i].Predicates = append(specs[i].Predicates, wasm.RateLimitCompleteSignal)
+						}
+					}
+				}
+				specs = append(rlSpecs, specs...)
 			}
 			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlAction := buildWasmActionsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-			if hasAuthAccess(trlAction) {
-				actions = append(actions, trlAction...)
+			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if specsHaveAuthAccess(trlSpecs) {
+				specs = append(specs, trlSpecs...)
 			} else {
 				// pre auth rate limiting
-				actions = append(trlAction, actions...)
+				if hasAuth {
+					for i := range specs {
+						if specs[i].ServiceName == wasm.AuthServiceName && !lo.Contains(specs[i].Predicates, wasm.RateLimitCompleteSignal) {
+							specs[i].Predicates = append(specs[i].Predicates, wasm.RateLimitCompleteSignal)
+						}
+					}
+				}
+				specs = append(trlSpecs, specs...)
 			}
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		pathSpan.SetAttributes(attribute.Int("actions.before_merge", len(actions)))
+		// Attach extension request bindings to specs based on store-path availability
+		var routeLocator string
+		switch parsed.RouteType {
+		case kuadrantpolicymachinery.RouteTypeHTTP:
+			routeLocator = parsed.HTTPRoute.GetLocator()
+		case kuadrantpolicymachinery.RouteTypeGRPC:
+			routeLocator = parsed.GRPCRoute.GetLocator()
+		}
+		wasm.AttachBindings(specs, extension.GetRequestBindings([]string{parsed.Gateway.GetLocator(), routeLocator}))
+
+		pathSpan.SetAttributes(attribute.Int("specs.before_merge", len(specs)))
 
 		// Extract and track source policies before merging
-		sourcePolicies := lo.Uniq(lo.FlatMap(actions, func(a wasm.Action, _ int) []string {
-			return a.SourcePolicyLocators
+		sourcePolicies := lo.Uniq(lo.FlatMap(specs, func(s wasm.ActionSpec, _ int) []string {
+			return s.Sources
 		}))
 		if len(sourcePolicies) > 0 {
 			pathSpan.SetAttributes(attribute.StringSlice("source_policies", sourcePolicies))
 		}
 
-		actions, err := mergeAndVerify(pathCtx, actions)
+		specs, err := mergeAndVerifySpecs(pathCtx, specs)
 		if err != nil {
 			pathSpan.RecordError(err)
-			pathSpan.SetStatus(codes.Error, "failed to merge/verify actions")
+			pathSpan.SetStatus(codes.Error, "failed to merge/verify specs")
 			pathSpan.End()
-			return nil, fmt.Errorf("failed to merge/verify actions for path %s: %w", pathID, err)
+			return nil, fmt.Errorf("failed to merge/verify action specs for path %s: %w", pathID, err)
 		}
 
-		if len(actions) == 0 {
-			pathSpan.SetStatus(codes.Ok, "no actions after merge")
+		if len(specs) == 0 {
+			pathSpan.SetStatus(codes.Ok, "no specs after merge")
 			pathSpan.End()
 			continue
 		}
@@ -548,30 +573,35 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			pathSpan.End()
 			return nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
 		}
-		var validatedActions []wasm.Action
 
-		for _, action := range actions {
-			if err := celvalidator.ValidateWasmAction(action, validator); err != nil {
-				logger.V(1).Info("WASM action is invalid", "action", action, "path", pathID, "error", err)
-				celValidationIssues.Add(celvalidator.NewIssue(action, pathID, err))
+		// Validate specs, then build validated ones into Actions
+		var validSpecs []wasm.ActionSpec
+		invalidCount := 0
+
+		for _, spec := range specs {
+			if err := celvalidator.ValidateWasmActionSpec(spec, validator); err != nil {
+				logger.V(1).Info("WASM action spec is invalid", "spec", spec, "path", pathID, "error", err)
+				celValidationIssues.Add(celvalidator.NewIssue(spec, pathID, err))
+				invalidCount++
 			} else {
-				validatedActions = append(validatedActions, action)
+				validSpecs = append(validSpecs, spec)
 			}
 		}
+		builtActions := wasm.BuildActions(validSpecs)
 
 		pathSpan.SetAttributes(
-			attribute.Int("actions.after_merge", len(actions)),
-			attribute.Int("actions.validated", len(validatedActions)),
-			attribute.Int("actions.invalid", len(actions)-len(validatedActions)),
+			attribute.Int("specs.after_merge", len(specs)),
+			attribute.Int("specs.validated", len(validSpecs)),
+			attribute.Int("specs.invalid", invalidCount),
 		)
 
-		if len(validatedActions) == 0 {
+		if len(builtActions) == 0 {
 			pathSpan.SetStatus(codes.Ok, "no validated actions")
 			pathSpan.End()
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathCtx, pathID, path, validatedActions)
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathCtx, pathID, path, builtActions)
 		if err != nil {
 			if errors.As(err, &kuadrantpolicymachinery.ErrInvalidPath{}) {
 				logger.V(1).Info("ingoring invalid paths", "error", err.Error(), "status", "skipping", "pathID", pathID)
@@ -606,9 +636,9 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 	return wasmConfigs, nil
 }
 
-func hasAuthAccess(actionSet []wasm.Action) bool {
-	for _, action := range actionSet {
-		if action.HasAuthAccess() {
+func specsHaveAuthAccess(specs []wasm.ActionSpec) bool {
+	for _, spec := range specs {
+		if spec.HasAuthAccess() {
 			return true
 		}
 	}

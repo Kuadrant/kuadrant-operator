@@ -89,17 +89,15 @@ func AuthConfigNameForPath(pathID string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.Action {
+func buildWasmActionSpecsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.ActionSpec {
 	spec := effectivePolicy.Spec.Spec.Proper()
 
-	action := wasm.Action{
-		ServiceName:          wasm.AuthServiceName,
-		Scope:                AuthConfigNameForPath(pathID),
-		Predicates:           spec.Predicates.Into(),
-		SourcePolicyLocators: effectivePolicy.SourcePolicies,
-	}
-
-	return []wasm.Action{action}
+	return []wasm.ActionSpec{{
+		ServiceName: wasm.AuthServiceName,
+		Scope:       AuthConfigNameForPath(pathID),
+		Predicates:  spec.Predicates.Into(),
+		Sources:     effectivePolicy.SourcePolicies,
+	}}
 }
 
 func isAuthPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.Policy) bool {

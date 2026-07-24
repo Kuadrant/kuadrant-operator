@@ -523,17 +523,17 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 bundle-post-generate: OPENSHIFT_VERSIONS_ANNOTATION_KEY="com.redhat.openshift.versions"
 # Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
 bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.14"
-bundle-post-generate: yq opm
+bundle-post-generate: yq
 	# Set Openshift version in bundle annotations
 	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
 	$(YQ) -i '(.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
-	# Update operator dependencies
+	# Update operator dependencies from version strings (not Quay images)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_BUNDLE_IMG)
+			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_VERSION)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_BUNDLE_IMG)
+			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_VERSION)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_BUNDLE_IMG)
+			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_VERSION)
 ifeq ($(USE_IMAGE_DIGESTS),true)
 	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
 	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml

@@ -1,0 +1,29 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: toystore
+  labels:
+    app: toystore
+spec:
+  parentRefs:
+    - name: kuadrant-ingressgateway
+      namespace: gateway-system
+  hostnames: ["toystore.apps-crc.testing"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/toy"
+          method: GET
+        - path:
+            type: Exact
+            value: "/admin/toy"
+          method: POST
+        - path:
+            type: Exact
+            value: "/admin/toy"
+          method: DELETE
+      backendRefs:
+        - name: toystore
+          port: 80

@@ -22,7 +22,10 @@ configMapGenerator:
   - ./controller-resources-metrics.json    
 - name: grafana-dns-operator
   files:
-  - ./dns-operator.json    
+  - ./dns-operator.json
+- name: grafana-kuadrant-pod-resources
+  files:
+  - ./kuadrant-pod-resources.json
 
 generatorOptions:
   disableNameSuffixHash: true

@@ -1,0 +1,15 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: toystore
+  namespace: gateway-system
+spec:
+  host: toystore.apps-crc.testing
+  to:
+    kind: Service
+    name: kuadrant-ingressgateway-istio
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -21,6 +21,7 @@ dashboard-cleanup:
 
 JAEGER_NAMESPACE ?= observability
 JAEGER_RELEASE_NAME ?= jaeger
+JAEGER_HELM_EXTRA_ARGS ?=
 
 .PHONY: install-jaeger
 install-jaeger: helm ## Install Jaeger v2 using Helm for distributed tracing
@@ -30,7 +31,8 @@ install-jaeger: helm ## Install Jaeger v2 using Helm for distributed tracing
 	$(HELM) repo update jaegertracing
 	$(HELM) upgrade --install $(JAEGER_RELEASE_NAME) jaegertracing/jaeger \
 		--namespace $(JAEGER_NAMESPACE) \
-		--wait
+		--wait \
+		$(JAEGER_HELM_EXTRA_ARGS)
 	@echo "✅ Jaeger v2 installed successfully!"
 	@echo "   Service: $(JAEGER_RELEASE_NAME).$(JAEGER_NAMESPACE).svc.cluster.local:4317 (OTLP gRPC)"
 	@echo "   Query UI: make jaeger-port-forward (then open http://localhost:16686)"

@@ -4,18 +4,13 @@ echo "Verifying dependency images exist on Quay"
 file=$env/release.yaml
 FAILED=0
 
-# Check Quay API is reachable before proceeding
-if ! curl -sf "https://quay.io/api/v1/discovery" > /dev/null 2>&1; then
-  echo "Cannot reach Quay API — verify network connectivity"
-  exit 1
-fi
-
 check_image() {
-  local repo=$1 tag=$2
-  if curl -sf "https://quay.io/api/v1/repository/kuadrant/$repo/tag/?specificTag=$tag" | grep -q '"name"'; then
-    echo "  OK: quay.io/kuadrant/$repo:$tag"
+  local image=$1
+  local output
+  if output=$(crane digest "$image" 2>&1); then
+    echo "  OK: $image ($output)"
   else
-    echo "  MISSING: quay.io/kuadrant/$repo:$tag"
+    echo "  MISSING: $image — $output"
     FAILED=1
   fi
 }
@@ -46,12 +41,12 @@ for op in "${operators[@]}"; do
   fi
   tag=$(mod_version "$version")
   echo "Checking $op $tag images..."
-  check_image "$op" "$tag"
-  check_image "$op-bundle" "$tag"
-  check_image "$op-catalog" "$tag"
+  check_image "quay.io/kuadrant/$op:$tag"
+  check_image "quay.io/kuadrant/$op-bundle:$tag"
+  check_image "quay.io/kuadrant/$op-catalog:$tag"
 done
 
-# Supporting components: check operator image only
+# Supporting components: check image only
 components=("console-plugin" "wasm-shim" "developer-portal-controller")
 for comp in "${components[@]}"; do
   version=$(yq "(.dependencies.\"$comp\")" "$file")
@@ -61,7 +56,7 @@ for comp in "${components[@]}"; do
   fi
   tag=$(mod_version "$version")
   echo "Checking $comp $tag image..."
-  check_image "$comp" "$tag"
+  check_image "quay.io/kuadrant/$comp:$tag"
 done
 
 if [[ $FAILED -ne 0 ]]; then

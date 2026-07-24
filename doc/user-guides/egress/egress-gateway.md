@@ -329,6 +329,7 @@ For Kuadrant policies to inspect request headers and apply rate limiting, the ap
 
 ## Next Steps
 
+- [Observability](observability.md) - monitor egress traffic health with Prometheus metrics and troubleshoot with access logs
 - [DNS Routing](dns-routing.md) - configure how pods reach the egress gateway (internal hostname, CoreDNS)
 - [Credential Injection](credential-injection.md) - inject external API credentials (e.g., from Vault) into outbound requests
 

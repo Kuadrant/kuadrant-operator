@@ -34,7 +34,7 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 		From: KuadrantGroupKind,
 		To:   schema.GroupKind{Group: gatewayapiv1.GroupVersion.Group, Kind: "GatewayClass"},
 		Func: func(_ machinery.Object) []machinery.Object {
-			parents := make([]machinery.Object, len(kuadrants))
+			parents := make([]machinery.Object, 0, len(kuadrants))
 			for _, parent := range kuadrants {
 				parents = append(parents, parent)
 			}

@@ -275,7 +275,7 @@ func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error)
 }
 
 func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 4)
 	var err error
 	b.isGatewayAPIInstalled, err = kuadrantgatewayapi.IsGatewayAPIInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -308,7 +308,7 @@ func (b *BootOptionsBuilder) getGatewayAPIOptions() ([]controller.ControllerOpti
 }
 
 func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 4)
 	var err error
 	b.isEnvoyGatewayInstalled, err = envoygateway.IsEnvoyGatewayInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -351,7 +351,7 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() ([]controller.ControllerOp
 }
 
 func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 5)
 	var err error
 	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -402,7 +402,7 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 }
 
 func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 1)
 	var err error
 	b.isCertManagerInstalled, err = kuadrantgatewayapi.IsCertManagerInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil {
@@ -425,7 +425,7 @@ func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOpt
 }
 
 func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
 	b.isConsolePluginInstalled, err = openshift.IsConsolePluginInstalled(b.manager.GetRESTMapper())
 	if err != nil {
@@ -458,7 +458,7 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 }
 
 func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
 	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), DNSRecordGroupKind.Group, DNSRecordGroupKind.Kind, kuadrantdnsv1alpha1.GroupVersion.Version)
 	if err != nil {
@@ -492,7 +492,7 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 }
 
 func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 3)
 	var err error
 	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
 	if err != nil {
@@ -528,7 +528,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 }
 
 func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 5)
 	var err error
 	b.isAuthorinoOperatorInstalled, err = authorino.IsAuthorinoOperatorInstalled(b.manager.GetRESTMapper(), b.logger)
 	if err != nil {
@@ -571,7 +571,7 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 }
 
 func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerOption, error) {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 4)
 	var err error
 
 	b.isPrometheusOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), monitoringv1.SchemeGroupVersion.Group, monitoringv1.ServiceMonitorsKind, monitoringv1.SchemeGroupVersion.Version)
@@ -616,7 +616,7 @@ func (b *BootOptionsBuilder) getObservabilityOptions() ([]controller.ControllerO
 // getExtensionsOptions configures controller options for Kuadrant extensions.
 // Extensions are dynamically discovered from the EXTENSIONS_DIR (default: "/extensions").
 func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOption {
-	var opts []controller.ControllerOption
+	opts := make([]controller.ControllerOption, 0, 1)
 
 	// Disable extensions if WITH_EXTENSIONS is set to false
 	b.isUsingExtensions, _ = env.GetBool("WITH_EXTENSIONS", true)

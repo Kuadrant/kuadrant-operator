@@ -70,3 +70,7 @@ Check out the following user guides for examples of using the Kuadrant TLSPolicy
 ### Known limitations
 
 [//]: # (ToDo mnairn)
+
+### OpenShift TLS compliance
+
+On OpenShift clusters, Kuadrant automatically detects and propagates the cluster's TLS security profile to managed components such as Authorino. This is separate from TLSPolicy and does not configure Gateway listener TLS. See [OpenShift TLS Security Profile Propagation](openshift-tls-profile.md) for details.

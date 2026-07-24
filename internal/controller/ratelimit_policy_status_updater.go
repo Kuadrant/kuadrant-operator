@@ -36,6 +36,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
+const RateLimitPolicyStatusUpdaterName = "RateLimitPolicyStatusUpdater"
+
 type RateLimitPolicyStatusUpdater struct {
 	client *dynamic.DynamicClient
 }
@@ -72,6 +74,8 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 
 	logger.V(1).Info("updating ratelimitpolicy statuses", "policies", len(policies))
 	defer logger.V(1).Info("finished updating ratelimitpolicy statuses")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	for _, policy := range policies {
 		policyCtx, span := tracer.Start(ctx, "policy.RateLimitPolicy")
@@ -140,7 +144,15 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "unable to update status")
 			span.End()
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				RateLimitPolicyStatusUpdaterName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()},
+				kuadrantv1.RateLimitPolicyGroupKind,
+				err,
+			)
 			continue
 		}
 

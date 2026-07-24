@@ -12,6 +12,7 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -25,6 +26,8 @@ import (
 )
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
+
+const IstioAuthClusterReconcilerName = "IstioAuthClusterReconciler"
 
 // IstioAuthClusterReconciler reconciles Istio EnvoyFilter custom resources for auth
 type IstioAuthClusterReconciler struct {
@@ -52,6 +55,8 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 
 	logger.V(1).Info("building istio auth clusters")
 	defer logger.V(1).Info("finished building istio auth clusters")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
@@ -113,7 +118,15 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					IstioAuthClusterReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()},
+					kuadrantistio.EnvoyFilterGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -139,7 +152,15 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 		}
 		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioAuthClusterReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existingEnvoyFilter.GetName(), Namespace: existingEnvoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -151,9 +172,17 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels()) && !desired
 	})
 	for _, envoyFilter := range staleEnvoyFilters {
-		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete envoyfilter object", "envoyfilter", fmt.Sprintf("%s/%s", envoyFilter.GetNamespace(), envoyFilter.GetName()))
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioAuthClusterReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: envoyFilter.GetName(), Namespace: envoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 

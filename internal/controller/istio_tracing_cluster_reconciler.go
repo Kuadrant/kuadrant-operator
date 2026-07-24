@@ -11,6 +11,7 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -22,6 +23,8 @@ import (
 )
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
+
+const IstioTracingClusterReconcilerName = "IstioTracingClusterReconciler"
 
 // IstioTracingClusterReconciler reconciles Istio EnvoyFilter custom resources for tracing
 type IstioTracingClusterReconciler struct {
@@ -46,6 +49,8 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 
 	logger.V(1).Info("building istio tracing clusters")
 	defer logger.V(1).Info("finished building istio tracing clusters")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {
@@ -115,7 +120,15 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyFilterUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilterUnstructured.Object)
-				// TODO: handle error
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					IstioTracingClusterReconcilerName,
+					OperationCreate,
+					k8stypes.NamespacedName{Name: desiredEnvoyFilter.GetName(), Namespace: desiredEnvoyFilter.GetNamespace()},
+					kuadrantistio.EnvoyFilterGroupKind,
+					err,
+				)
 			}
 			continue
 		}
@@ -141,7 +154,15 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 		}
 		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
 			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioTracingClusterReconcilerName,
+				OperationUpdate,
+				k8stypes.NamespacedName{Name: existingEnvoyFilter.GetName(), Namespace: existingEnvoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 
@@ -156,9 +177,17 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 	})
 
 	for _, envoyFilter := range staleEnvoyFilters {
-		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete envoyfilter object", "envoyfilter", fmt.Sprintf("%s/%s", envoyFilter.GetNamespace(), envoyFilter.GetName()))
-			// TODO: handle error
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				IstioTracingClusterReconcilerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: envoyFilter.GetName(), Namespace: envoyFilter.GetNamespace()},
+				kuadrantistio.EnvoyFilterGroupKind,
+				err,
+			)
 		}
 	}
 

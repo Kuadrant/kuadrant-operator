@@ -26,6 +26,8 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
+const EffectiveTLSPoliciesReconcilerName = "EffectiveTLSPoliciesReconciler"
+
 type EffectiveTLSPoliciesReconciler struct {
 	client *dynamic.DynamicClient
 	scheme *runtime.Scheme
@@ -54,6 +56,8 @@ type CertTarget struct {
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile").WithValues("context", ctx)
 	tracer := controller.TracerFromContext(ctx)
+
+	errorRegistry := GetOrCreateErrorRegistry(s)
 
 	certs := getCertificatesFromTopology(topology)
 	listeners := getListenersFromTopology(topology)
@@ -119,7 +123,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		}
 	}
 
-	expectedCerts := t.reconcileCertificates(ctx, certTargets, topology, logger)
+	expectedCerts := t.reconcileCertificates(ctx, certTargets, topology, logger, errorRegistry)
 
 	// Clean up orphaned certs
 	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanagerv1.Certificate) types.UID {
@@ -130,6 +134,15 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(orphanedCert.GetNamespace())
 		if err := resource.Delete(ctx, orphanedCert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "unable to delete orphaned certificate", "name", orphanedCert.GetName(), "namespace", orphanedCert.GetNamespace(), "uid", orphanedCert.GetUID())
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				EffectiveTLSPoliciesReconcilerName,
+				OperationDelete,
+				types.NamespacedName{Name: orphanedCert.GetName(), Namespace: orphanedCert.GetNamespace()},
+				CertManagerCertificateKind,
+				err,
+			)
 			continue
 		}
 	}
@@ -137,7 +150,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	return nil
 }
 
-func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Context, certTargets []CertTarget, topology *machinery.Topology, logger logr.Logger) []*certmanagerv1.Certificate {
+func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Context, certTargets []CertTarget, topology *machinery.Topology, logger logr.Logger, errorRegistry *ErrorRegistry) []*certmanagerv1.Certificate {
 	expectedCerts := make([]*certmanagerv1.Certificate, 0, len(certTargets))
 	for _, certTarget := range certTargets {
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(certTarget.cert.GetNamespace())
@@ -159,6 +172,15 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 			_, err = resource.Create(ctx, un, metav1.CreateOptions{})
 			if err != nil {
 				logger.Error(err, "unable to create certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
+
+				// Record error for deferred retry
+				errorRegistry.Record(
+					EffectiveTLSPoliciesReconcilerName,
+					OperationCreate,
+					types.NamespacedName{Name: certTarget.cert.GetName(), Namespace: certTarget.cert.GetNamespace()},
+					CertManagerCertificateKind,
+					err,
+				)
 			}
 
 			continue
@@ -181,6 +203,15 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 		_, err = resource.Update(ctx, un, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "unable to update certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
+
+			// Record error for deferred retry
+			errorRegistry.Record(
+				EffectiveTLSPoliciesReconcilerName,
+				OperationUpdate,
+				types.NamespacedName{Name: certTarget.cert.GetName(), Namespace: certTarget.cert.GetNamespace()},
+				CertManagerCertificateKind,
+				err,
+			)
 		}
 	}
 	return expectedCerts

@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - kuadrant-operator.yaml
+  - authorino.yaml
+  - authorino-operator.yaml
+  - console-plugin.yaml
+  - dns-operator.yaml
+  - limitador.yaml
+  - limitador-operator.yaml
+  - deny-all.yaml

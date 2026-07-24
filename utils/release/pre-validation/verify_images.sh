@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
+if [[ -z "${env:-}" ]]; then
+  echo "ERROR: \$env is not set"
+  exit 1
+fi
+
+if ! command -v crane &>/dev/null; then
+  echo "WARNING: crane not installed, skipping image verification"
+  exit 0
+fi
+
 echo "Verifying dependency images exist on Quay"
 file=$env/release.yaml
 FAILED=0

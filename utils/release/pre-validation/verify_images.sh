@@ -4,6 +4,12 @@ echo "Verifying dependency images exist on Quay"
 file=$env/release.yaml
 FAILED=0
 
+# Check Quay API is reachable before proceeding
+if ! curl -sf "https://quay.io/api/v1/discovery" > /dev/null 2>&1; then
+  echo "Cannot reach Quay API — verify network connectivity"
+  exit 1
+fi
+
 check_image() {
   local repo=$1 tag=$2
   if curl -sf "https://quay.io/api/v1/repository/kuadrant/$repo/tag/?specificTag=$tag" | grep -q '"name"'; then
@@ -34,6 +40,10 @@ fi
 operators=("authorino-operator" "limitador-operator" "dns-operator")
 for op in "${operators[@]}"; do
   version=$(yq "(.dependencies.\"$op\")" "$file")
+  if [[ "$version" == "0.0.0" ]]; then
+    echo "Skipping $op (version 0.0.0)"
+    continue
+  fi
   tag=$(mod_version "$version")
   echo "Checking $op $tag images..."
   check_image "$op" "$tag"
@@ -45,6 +55,10 @@ done
 components=("console-plugin" "wasm-shim" "developer-portal-controller")
 for comp in "${components[@]}"; do
   version=$(yq "(.dependencies.\"$comp\")" "$file")
+  if [[ "$version" == "0.0.0" ]]; then
+    echo "Skipping $comp (version 0.0.0)"
+    continue
+  fi
   tag=$(mod_version "$version")
   echo "Checking $comp $tag image..."
   check_image "$comp" "$tag"

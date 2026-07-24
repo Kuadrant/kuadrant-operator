@@ -107,6 +107,9 @@ jobs:
       - name: Verify manifests
         if: ${{ !cancelled() }}
         run: make verify-manifests
+      - name: Install crane
+        if: ${{ !cancelled() }}
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
       - name: Validate release data
         if: ${{ !cancelled() }}
         run: make verify-prepare-release

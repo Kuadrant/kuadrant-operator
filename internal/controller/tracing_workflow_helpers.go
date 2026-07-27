@@ -80,8 +80,10 @@ func parseTracingEndpoint(endpoint string) (string, int, error) {
 func targetIsInEffectivePolicyPath(gateway *machinery.Gateway, topology *machinery.Topology, state *sync.Map) bool {
 	locator := gateway.GetLocator()
 
+	// Check for effective auth policies
 	if effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies); ok {
-		for _, policy := range effectiveAuthPolicies.(EffectiveAuthPolicies) {
+		effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
+		for _, policy := range effectiveAuthPoliciesMap {
 			for _, targetable := range policy.Path {
 				if targetable.GetLocator() == locator {
 					return true
@@ -90,8 +92,10 @@ func targetIsInEffectivePolicyPath(gateway *machinery.Gateway, topology *machine
 		}
 	}
 
+	// Check for effective rate limit policies
 	if effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
-		for _, policy := range effectiveRateLimitPolicies.(EffectiveRateLimitPolicies) {
+		effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
+		for _, policy := range effectiveRateLimitPoliciesMap {
 			for _, targetable := range policy.Path {
 				if targetable.GetLocator() == locator {
 					return true
@@ -100,8 +104,10 @@ func targetIsInEffectivePolicyPath(gateway *machinery.Gateway, topology *machine
 		}
 	}
 
+	// Check for effective token rate limit policies
 	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
-		for _, policy := range effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies) {
+		effectiveTokenRateLimitPoliciesMap := effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies)
+		for _, policy := range effectiveTokenRateLimitPoliciesMap {
 			for _, targetable := range policy.Path {
 				if targetable.GetLocator() == locator {
 					return true
@@ -110,6 +116,7 @@ func targetIsInEffectivePolicyPath(gateway *machinery.Gateway, topology *machine
 		}
 	}
 
+	// Check for extension policies with pipeline actions
 	if extension.HasPipelineForTarget(gateway, topology) {
 		return true
 	}

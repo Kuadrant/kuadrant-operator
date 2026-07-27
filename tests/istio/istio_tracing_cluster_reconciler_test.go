@@ -255,6 +255,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 		})
 
 		It("EnvoyFilter is not created", func(ctx SpecContext) {
+			// Check envoy filter has not been created even though tracing is configured
 			Consistently(func(g Gomega, ctx context.Context) {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 				efKey := client.ObjectKey{Name: controllers.TracingClusterName(TestGatewayName), Namespace: testNamespace}

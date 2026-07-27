@@ -105,18 +105,9 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			logger.Error(err, "failed to apply wasm config mutators", "gateway", gatewayKey.String())
 		}
 
-		if len(wasmConfig.ActionSets) > 0 && !hadActionSets {
-			if observability != nil {
-				wasmConfig.Observability = observability
-				if wasmConfig.Services == nil {
-					wasmConfig.Services = make(map[string]wasm.Service)
-				}
-				for k, v := range serviceBuilder.Build() {
-					if _, exists := wasmConfig.Services[k]; !exists {
-						wasmConfig.Services[k] = v
-					}
-				}
-			}
+		if len(wasmConfig.ActionSets) > 0 && !hadActionSets && observability != nil {
+			wasmConfig.Observability = observability
+			wasmConfig.Services = lo.Assign(wasmConfig.Services, serviceBuilder.Build())
 		}
 
 		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)

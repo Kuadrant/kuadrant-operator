@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"sync"
 
+	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
@@ -69,4 +72,47 @@ func parseTracingEndpoint(endpoint string) (string, int, error) {
 	}
 
 	return host, port, nil
+}
+
+// targetIsInEffectivePolicyPath checks if a gateway is in the path of any effective
+// core policies (AuthPolicy, RateLimitPolicy, TokenRateLimitPolicy) or has extension
+// policies with pipeline actions targeting it.
+func targetIsInEffectivePolicyPath(gateway *machinery.Gateway, topology *machinery.Topology, state *sync.Map) bool {
+	locator := gateway.GetLocator()
+
+	if effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies); ok {
+		for _, policy := range effectiveAuthPolicies.(EffectiveAuthPolicies) {
+			for _, targetable := range policy.Path {
+				if targetable.GetLocator() == locator {
+					return true
+				}
+			}
+		}
+	}
+
+	if effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies); ok {
+		for _, policy := range effectiveRateLimitPolicies.(EffectiveRateLimitPolicies) {
+			for _, targetable := range policy.Path {
+				if targetable.GetLocator() == locator {
+					return true
+				}
+			}
+		}
+	}
+
+	if effectiveTokenRateLimitPolicies, ok := state.Load(StateEffectiveTokenRateLimitPolicies); ok {
+		for _, policy := range effectiveTokenRateLimitPolicies.(EffectiveTokenRateLimitPolicies) {
+			for _, targetable := range policy.Path {
+				if targetable.GetLocator() == locator {
+					return true
+				}
+			}
+		}
+	}
+
+	if extension.HasPipelineForTarget(gateway, topology) {
+		return true
+	}
+
+	return false
 }

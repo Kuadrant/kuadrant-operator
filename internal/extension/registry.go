@@ -131,7 +131,7 @@ func (r *MutatorRegistry) ApplyWasmConfigMutators(wasmConfig *wasm.Config, gatew
 
 	// When extension policies have pipeline actions, ensure skeleton action sets
 	// exist for their targeted routes so the mutator's append logic works.
-	if topology != nil && r.hasRelevantPipelineActions(targetRefs) {
+	if topology != nil && r.HasRelevantPipelineActions(targetRefs) {
 		skeletons := buildActionSetsFromTopology(gateway, topology)
 		if len(wasmConfig.ActionSets) == 0 {
 			wasmConfig.ActionSets = skeletons
@@ -180,11 +180,11 @@ func ApplyWasmConfigMutators(wasmConfig *wasm.Config, gateway *machinery.Gateway
 	return GlobalMutatorRegistry.ApplyWasmConfigMutators(wasmConfig, gateway, topology)
 }
 
-// hasRelevantPipelineActions checks whether any wasm config mutator has pipeline actions
+// HasRelevantPipelineActions checks whether any wasm config mutator has pipeline actions
 // for policies targeting the given gateway. This checks both policies with registered
 // upstream methods and policies that only have pipeline actions (e.g., pure allow or
 // response-only extensions).
-func (r *MutatorRegistry) hasRelevantPipelineActions(targetRefs []machinery.PolicyTargetReference) bool {
+func (r *MutatorRegistry) HasRelevantPipelineActions(targetRefs []machinery.PolicyTargetReference) bool {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
@@ -289,6 +289,18 @@ func buildActionSetsFromTopology(gateway *machinery.Gateway, topology *machinery
 		}
 	}
 	return actionSets
+}
+
+// HasPipelineForTarget returns true when any registered extension has pipeline
+// actions targeting the given gateway (or its child routes in the topology).
+func HasPipelineForTarget(gateway *machinery.Gateway, topology *machinery.Topology) bool {
+	targetRefs := []machinery.PolicyTargetReference{
+		policyTargetRef("Gateway", gateway.GetName(), gateway.GetNamespace()),
+	}
+	if topology != nil {
+		targetRefs = append(targetRefs, collectRouteTargetRefs(gateway, topology)...)
+	}
+	return GlobalMutatorRegistry.HasRelevantPipelineActions(targetRefs)
 }
 
 // ApplyAuthConfigMutators applies all registered auth config mutators to an auth config

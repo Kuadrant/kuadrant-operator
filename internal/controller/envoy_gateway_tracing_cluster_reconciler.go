@@ -76,7 +76,7 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 					return nil, false
 				}
 				isEnvoyGateway := lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.(*machinery.GatewayClass).Spec.ControllerName)
-				return gateway, isEnvoyGateway
+				return gateway, isEnvoyGateway && targetIsInEffectivePolicyPath(gateway, topology, state)
 			},
 		)
 	} else {

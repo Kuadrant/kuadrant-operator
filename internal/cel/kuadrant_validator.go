@@ -1,8 +1,6 @@
 package cel
 
 import (
-	"strings"
-
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/samber/lo"
@@ -105,14 +103,9 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	return builder
 }
 
-const internalPredicatePrefix = "kuadrant.internal."
-
 func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 	pol := policyKindFromWasmServiceName(spec.ServiceName)
 	for _, predicate := range spec.Predicates {
-		if strings.HasPrefix(predicate, internalPredicatePrefix) {
-			continue
-		}
 		if _, err := validator.Validate(pol, predicate); err != nil {
 			return err
 		}

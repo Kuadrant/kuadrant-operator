@@ -216,7 +216,10 @@ func istioPodMonitorBuild(ns string) *monitoringv1.PodMonitor {
 								"__meta_kubernetes_pod_annotation_prometheus_io_port",
 								"__meta_kubernetes_pod_ip",
 							},
-							Regex:       `(\\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})`,
+							// Raw-string regex must use \d/\. (not \\d/\\.) so Prometheus
+							// rewrites __address__ to the annotated metrics port (15020)
+							// instead of falling back to status port 15021.
+							Regex:       `(\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})`,
 							Replacement: &istioPodMonitorPortReplacement1,
 							TargetLabel: "__address__",
 						},
@@ -226,7 +229,7 @@ func istioPodMonitorBuild(ns string) *monitoringv1.PodMonitor {
 								"__meta_kubernetes_pod_annotation_prometheus_io_port",
 								"__meta_kubernetes_pod_ip",
 							},
-							Regex:       `(\\d+);((([0-9]+?)(\\.|$)){4})`,
+							Regex:       `(\d+);((([0-9]+?)(\.|$)){4})`,
 							Replacement: &istioPodMonitorPortReplacement2,
 							TargetLabel: "__address__",
 						},

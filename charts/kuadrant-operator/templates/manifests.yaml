@@ -207,6 +207,10 @@ spec:
                 required:
                 - name
                 type: object
+              expiresAt:
+                description: ExpiresAt is the expiration time requested by the consumer
+                format: date-time
+                type: string
               planTier:
                 description: PlanTier is the tier of the plan (e.g., "premium", "basic",
                   "enterprise")
@@ -375,6 +379,11 @@ spec:
                 required:
                 - name
                 type: object
+              expiresAt:
+                description: ExpiresAt is the time after which the API key should
+                  be revoked
+                format: date-time
+                type: string
               planTier:
                 description: PlanTier is the tier of the plan (e.g., "premium", "basic",
                   "enterprise")

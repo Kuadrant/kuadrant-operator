@@ -291,6 +291,18 @@ func buildActionSetsFromTopology(gateway *machinery.Gateway, topology *machinery
 	return actionSets
 }
 
+// HasPipelineForTarget returns true when any registered extension has pipeline
+// actions targeting the given gateway (or its child routes in the topology).
+func HasPipelineForTarget(gateway *machinery.Gateway, topology *machinery.Topology) bool {
+	targetRefs := []machinery.PolicyTargetReference{
+		policyTargetRef("Gateway", gateway.GetName(), gateway.GetNamespace()),
+	}
+	if topology != nil {
+		targetRefs = append(targetRefs, collectRouteTargetRefs(gateway, topology)...)
+	}
+	return GlobalMutatorRegistry.hasRelevantPipelineActions(targetRefs)
+}
+
 // ApplyAuthConfigMutators applies all registered auth config mutators to an auth config
 func ApplyAuthConfigMutators(authConfig *authorinov1beta3.AuthConfig, path []machinery.Targetable) error {
 	return GlobalMutatorRegistry.ApplyAuthConfigMutators(authConfig, path)

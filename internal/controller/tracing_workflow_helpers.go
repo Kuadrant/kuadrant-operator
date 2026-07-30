@@ -9,6 +9,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/apimachinery/pkg/labels"
 
+	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
@@ -73,9 +74,11 @@ func parseTracingEndpoint(endpoint string) (string, int, error) {
 	return host, port, nil
 }
 
-// targetIsInEffectivePolicyPath checks if a target is in the path of any effective policies
-func targetIsInEffectivePolicyPath(target machinery.Targetable, state *sync.Map) bool {
-	locator := target.GetLocator()
+// targetIsInEffectivePolicyPath checks if a gateway is in the path of any effective
+// core policies (AuthPolicy, RateLimitPolicy, TokenRateLimitPolicy) or has extension
+// policies with pipeline actions targeting it.
+func targetIsInEffectivePolicyPath(gateway *machinery.Gateway, topology *machinery.Topology, state *sync.Map) bool {
+	locator := gateway.GetLocator()
 
 	// Check for effective auth policies
 	if effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies); ok {
@@ -111,6 +114,11 @@ func targetIsInEffectivePolicyPath(target machinery.Targetable, state *sync.Map)
 				}
 			}
 		}
+	}
+
+	// Check for extension policies with pipeline actions
+	if extension.HasPipelineForTarget(gateway, topology) {
+		return true
 	}
 
 	return false

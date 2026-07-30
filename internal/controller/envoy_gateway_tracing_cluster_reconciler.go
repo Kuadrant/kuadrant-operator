@@ -62,7 +62,7 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 
 	// Only build tracing clusters if tracing is configured
 	if kuadrant.Spec.Observability.Tracing != nil && kuadrant.Spec.Observability.Tracing.DefaultEndpoint != "" {
-		// Get all envoy gateway gateways that have effective policies
+		// Get all envoy gateway gateways that have effective policies or extension policy actions
 		gateways = lo.FilterMap(
 			topology.Targetables().Items(func(o machinery.Object) bool {
 				return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
@@ -76,7 +76,7 @@ func (r *EnvoyGatewayTracingClusterReconciler) Reconcile(ctx context.Context, _ 
 					return nil, false
 				}
 				isEnvoyGateway := lo.Contains(envoyGatewayGatewayControllerNames, gatewayClass.(*machinery.GatewayClass).Spec.ControllerName)
-				return gateway, isEnvoyGateway && targetIsInEffectivePolicyPath(gateway, state)
+				return gateway, isEnvoyGateway && targetIsInEffectivePolicyPath(gateway, topology, state)
 			},
 		)
 	} else {

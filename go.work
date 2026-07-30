@@ -1,0 +1,7 @@
+go 1.25.9
+
+use .
+
+// examples/payload-processor is intentionally excluded
+// It's a separate module with different dependencies and should not
+// interfere with the main operator module

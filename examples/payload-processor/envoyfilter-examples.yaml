@@ -1,0 +1,268 @@
+# Example EnvoyFilter configurations for the Golang payload processor
+
+---
+# Example 1: Export to dynamic_metadata
+# Result: {"envoy.filters.http.golang.payload_processor":{"model":"gpt-4"}}
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-model-dynamic-metadata
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              pattern: '"model"\s*:\s*"([^"]+)"'
+              export_as: "dynamic_metadata"
+              metadata_namespace: "envoy.filters.http.golang.payload_processor"
+              object_key: "model"
+              object_value: "self.extractedValue"
+              max_buffer_size: 512
+              content_types:
+                - "application/json"
+
+---
+# Example 2: Export to filter_state with simple value
+# Result: filter_state["envoy.filters.http.golang.payload_processor.model"] = "gpt-4"
+# Wasm-shim reads: filter_state.envoy.filters.http.golang.payload_processor.model
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-model-filter-state
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              pattern: '"model"\s*:\s*"([^"]+)"'
+              export_as: "filter_state"
+              object_key: "envoy.filters.http.golang.payload_processor.model"
+              object_value: "self.extractedValue"
+              max_buffer_size: 512
+              content_types:
+                - "application/json"
+
+---
+# Example 3: Export to filter_state with JSON-wrapped value
+# Pattern captures the entire matched substring
+# Result: filter_state["envoy.filters.http.golang.payload_processor"] = "{\"model\":\"gpt-4\"}"
+# Useful when you want to preserve the original JSON structure
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-model-filter-state-json
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              # Wrap the entire model field match in a capture group
+              pattern: '("model"\s*:\s*"([^"]+)")'
+              export_as: "filter_state"
+              object_key: "envoy.filters.http.golang.payload_processor"
+              # Wrap the extracted value in JSON braces
+              object_value: '"{" + self.extractedValue + "}"'
+              max_buffer_size: 512
+              content_types:
+                - "application/json"
+
+---
+# Example 4: Extract tenant_id from request body
+# Useful for multi-tenant rate limiting or authorization
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-tenant-id
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              pattern: '"tenant_id"\s*:\s*"([^"]+)"'
+              export_as: "filter_state"
+              object_key: "envoy.filters.http.golang.payload_processor.tenant_id"
+              object_value: "self.extractedValue"
+              max_buffer_size: 512
+              content_types:
+                - "application/json"
+
+---
+# Example 5: Extract multiple fields with CEL transformation
+# Pattern captures version number, CEL prepends "v" prefix
+# Pattern: "api_version":1 → filter_state value: "v1"
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-api-version
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              pattern: '"api_version"\s*:\s*(\d+)'
+              export_as: "filter_state"
+              object_key: "envoy.filters.http.golang.payload_processor.api_version"
+              # Prepend "v" to the version number
+              object_value: '"v" + self.extractedValue'
+              max_buffer_size: 512
+              content_types:
+                - "application/json"
+
+---
+# Example 6: Process JSONL (newline-delimited JSON)
+# Useful for streaming APIs
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: extract-from-jsonl
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_FIRST
+      value:
+        name: envoy.filters.http.golang
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.golang.v3alpha.Config
+          library_id: payload_processor
+          library_path: /var/lib/golang-filters/extract_model.so
+          plugin_name: payload_processor
+          plugin_config:
+            "@type": type.googleapis.com/xds.type.v3.TypedStruct
+            value:
+              pattern: '"model"\s*:\s*"([^"]+)"'
+              export_as: "filter_state"
+              object_key: "envoy.filters.http.golang.payload_processor.model"
+              object_value: "self.extractedValue"
+              max_buffer_size: 512
+              content_types:
+                - "application/json"
+                - "application/x-ndjson"

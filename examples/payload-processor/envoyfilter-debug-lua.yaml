@@ -1,0 +1,78 @@
+# Optional EnvoyFilter to debug Dynamic Metadata and Filter State using Lua
+
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: debug-filter-state-lua
+  namespace: gateway-system
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+
+  configPatches:
+  # Insert Lua filter before the wasm plugin
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        portNumber: 80
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+            subFilter:
+              name: extensions.istio.io/wasmplugin/gateway-system.kuadrant-kuadrant-ingressgateway
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          default_source_code:
+            inline_string: |
+              function envoy_on_request(request_handle)
+                request_handle:logInfo("========== LUA DEBUG: Inspecting filter_state ==========")
+
+                -- Get filterState object
+                local filter_state = request_handle:streamInfo():filterState()
+                request_handle:logInfo("filterState type: " .. type(filter_state))
+
+                -- Try to read the "payload_processor" key
+                local key = "payload_processor"
+
+                -- Attempt to read using correct Lua API
+                local success, value = pcall(function()
+                  return filter_state:get(key)
+                end)
+
+                if success and value ~= nil then
+                  request_handle:logInfo("✓ filter_state:get('" .. key .. "') = " .. value .. " (type: " .. type(value) .. ")")
+                else
+                  request_handle:logWarn("✗ filter_state:get('" .. key .. "') failed or returned nil")
+                  if not success then
+                    request_handle:logWarn("  Error: " .. tostring(value))
+                  end
+                end
+
+                -- Also check dynamic_metadata for comparison
+                local metadata = request_handle:streamInfo():dynamicMetadata()
+                local dm_success, dm_value = pcall(function()
+                  return metadata:get("payload_processor")
+                end)
+
+                if dm_success and dm_value ~= nil then
+                  request_handle:logInfo("✓ dynamic_metadata['payload_processor'] exists")
+                  if type(dm_value) == "table" and dm_value["model"] then
+                    request_handle:logInfo("  model = " .. dm_value["model"])
+                  end
+                else
+                  request_handle:logInfo("✗ dynamic_metadata['payload_processor'] is nil")
+                end
+
+                request_handle:logInfo("========== LUA DEBUG: End ==========")
+              end
+
+              function envoy_on_response(response_handle)
+                -- No-op
+              end

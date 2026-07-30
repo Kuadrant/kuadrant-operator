@@ -29,6 +29,87 @@ import (
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 )
 
+var (
+	// defaultRequestData holds the default request data injected into wasm config.
+	// This can be configured via WASM_REQUEST_DATA environment variable at startup.
+	// Format: key1=value1,key2=value2 (values with commas must be wrapped in quotes)
+	// Example: WASM_REQUEST_DATA='my_filter_value=metadata.filter_metadata.my_filter.value'
+	defaultRequestData = map[string]string{}
+)
+
+func init() {
+	// Parse WASM_REQUEST_DATA environment variable if set
+	if requestDataEnv := env.GetString("WASM_REQUEST_DATA", ""); requestDataEnv != "" {
+		if parsed, err := parseRequestDataEnv(requestDataEnv); err == nil {
+			defaultRequestData = parsed
+		}
+		// Errors are silently ignored - we'll use the default values
+	}
+}
+
+// parseRequestDataEnv parses a comma-separated list of key=value pairs.
+// Values containing commas must be wrapped in quotes.
+// Example: key1=value1,key2="value,with,commas",key3=value3
+func parseRequestDataEnv(input string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	// State machine for parsing
+	var key, value strings.Builder
+	inQuotes := false
+	inValue := false
+
+	for i := 0; i < len(input); i++ {
+		ch := input[i]
+
+		switch ch {
+		case '=':
+			if inQuotes {
+				value.WriteByte(ch)
+			} else if inValue {
+				// Multiple '=' in unquoted value - treat as part of value
+				value.WriteByte(ch)
+			} else {
+				inValue = true
+			}
+		case '"':
+			inQuotes = !inQuotes
+		case ',':
+			if inQuotes {
+				value.WriteByte(ch)
+			} else {
+				// End of key=value pair
+				k := strings.TrimSpace(key.String())
+				v := strings.TrimSpace(value.String())
+				if k != "" {
+					result[k] = v
+				}
+				key.Reset()
+				value.Reset()
+				inValue = false
+			}
+		default:
+			if inValue {
+				value.WriteByte(ch)
+			} else {
+				key.WriteByte(ch)
+			}
+		}
+	}
+
+	// Handle last pair
+	k := strings.TrimSpace(key.String())
+	v := strings.TrimSpace(value.String())
+	if k != "" {
+		result[k] = v
+	}
+
+	if inQuotes {
+		return nil, fmt.Errorf("unclosed quote in WASM_REQUEST_DATA")
+	}
+
+	return result, nil
+}
+
 const (
 	RateLimitServiceName       = "ratelimit-service"
 	RateLimitCheckServiceName  = "ratelimit-check-service"
@@ -229,6 +310,7 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 		Services:      serviceBuilder.Build(),
 		ActionSets:    actionSets,
 		Observability: observability,
+		RequestData:   defaultRequestData,
 	}
 }
 

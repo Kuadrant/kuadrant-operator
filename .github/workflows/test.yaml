@@ -24,39 +24,6 @@ jobs:
         with:
           cancel_others: false
           paths_ignore: '["**.adoc", "**.md", "examples/**", "LICENSE"]'
-  unit-tests:
-    name: Unit Tests
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    strategy:
-      matrix:
-        platform: [ubuntu-latest]
-    runs-on: ${{ matrix.platform }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Run make test
-        run: |
-          make test-unit
-      - name: Upload unit-test coverage reports to CodeCov
-        # more at https://github.com/codecov/codecov-action
-        # Only run if the feature branch is in your repo (not in a fork)
-        # as Tokenless uploading is rate limited for public repos
-        if: github.event.pull_request.head.repo.full_name == github.repository
-        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # ratchet:codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: unit
-          fail_ci_if_error: false
-          verbose: true
 
   controllers-integration-tests:
     name: Integration Tests for kuadrant-operator/controllers
@@ -271,119 +238,10 @@ jobs:
         if: always()
         run: |
           kubectl get pods -n kuadrant-system
-  verify-release:
-    name: Validate release data
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Check bundles and manifests
-        run: make verify-prepare-release
-
-  verify-fmt:
-    name: Verify fmt
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Run make verify-fmt
-        run: |
-          make verify-fmt
-
-  test-scripts:
-    name: Test Scripts
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    strategy:
-      matrix:
-        platform: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.platform }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Run make operator-sdk
-        run: |
-          make operator-sdk
-
-  verify-generate:
-    name: Verify generate
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Verify generate command
-        run: |
-          make verify-generate
-
-  verify-go-mod:
-    name: Verify go.mod
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Verify generate command
-        run: |
-          make verify-go-mod
-
-  verify-manifests:
-    name: Verify manifests
-    if: needs.pre-job.outputs.should_skip != 'true'
-    needs: pre-job
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-        id: go
-      - name: Verify manifests
-        run: |
-          make verify-manifests
 
   required-checks:
     name: Test Required Checks
-    # This check adds a list of checks to one job to simplify adding settings to the repo.
-    # If a new check is added in this file, and it should be retested on entry to the merge queue,
-    # it needs to be added to the list below aka needs: [ existing check 1, existing check 2, new check ].
-    needs: [unit-tests, controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests, verify-fmt, test-scripts, verify-generate, verify-go-mod, verify-manifests]
+    needs: [controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:

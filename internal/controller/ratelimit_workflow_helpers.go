@@ -304,7 +304,7 @@ func wasmActionsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIde
 	return []wasm.Action{requestAction, responseAction}
 }
 
-func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
+func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) ([]wasm.Action, error) {
 	return buildWasmActionsForAnyRateLimit(
 		effectivePolicy.Path,
 		effectivePolicy.Spec.Rules(),
@@ -320,15 +320,14 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, poli
 	)
 }
 
-func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.Action {
+func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) ([]wasm.Action, error) {
 	path := effectivePolicy.Path
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
-		// If the path is invalid, return empty actions
-		return []wasm.Action{}
+		return nil, fmt.Errorf("failed to parse topology path for token rate limit policy: %w", err)
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
@@ -371,7 +370,7 @@ func buildWasmActionsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPo
 		allActions = append(allActions, tokenActions...)
 	}
 
-	return allActions
+	return allActions, nil
 }
 
 // buildWasmActionsForAnyRateLimit is the generic implementation used by both rate limit policy types
@@ -382,13 +381,12 @@ func buildWasmActionsForAnyRateLimit(
 	policyPredicate func(machinery.Policy) bool,
 	identifierFunc func(k8stypes.NamespacedName, string) string,
 	actionFunc func(interface{}, string, string, string, kuadrantv1.WhenPredicates) wasm.Action,
-) []wasm.Action {
+) ([]wasm.Action, error) {
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
-		// If the path is invalid, return empty actions
-		return []wasm.Action{}
+		return nil, fmt.Errorf("failed to parse topology path for rate limit policy: %w", err)
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
@@ -426,5 +424,5 @@ func buildWasmActionsForAnyRateLimit(
 		sourcePolicyLocator := source.GetLocator()
 
 		return actionFunc(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates), true
-	})
+	}), nil
 }

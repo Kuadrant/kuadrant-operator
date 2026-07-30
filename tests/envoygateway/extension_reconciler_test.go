@@ -518,9 +518,9 @@ var _ = Describe("wasm controller", func() {
 				existingWASMConfig, err := wasm.ConfigFromJSON(existingExt.Spec.Wasm[0].Config)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 				// Single policy source for auth action
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -567,19 +567,19 @@ var _ = Describe("wasm controller", func() {
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routeAuthPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// Check EnvoyExtensionPolicy config now has BOTH policies in sources (merged)
-			// Note: AuthPolicy creates a single auth action that includes all merged policies
+			// Note: AuthPolicy creates a single auth typed action that includes all merged policies
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, extKey, existingExt)).To(Succeed())
 				existingWASMConfig, err := wasm.ConfigFromJSON(existingExt.Spec.Wasm[0].Config)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 
-				// Should still have 1 auth action (auth actions are not split per policy)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				// Should still have 1 auth typed action (auth actions are not split per policy)
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 
-				// The single auth action should list BOTH policy sources
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				// The single auth typed action should list BOTH policy sources
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(ConsistOf(
 					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
 					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
 				))
@@ -649,9 +649,9 @@ var _ = Describe("wasm controller", func() {
 				existingWASMConfig, err := wasm.ConfigFromJSON(existingExt.Spec.Wasm[0].Config)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 				// Single policy source for auth action
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -704,12 +704,12 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 
-				// Should have 1 auth action with only route policy (atomic replacement)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				// Should have 1 auth typed action with only route policy (atomic replacement)
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 
-				// The action should list ONLY the route policy source (atomic replaces gateway defaults)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				// The typed action should list ONLY the route policy source (atomic replaces gateway defaults)
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + routeAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -778,9 +778,9 @@ var _ = Describe("wasm controller", func() {
 				existingWASMConfig, err := wasm.ConfigFromJSON(existingExt.Spec.Wasm[0].Config)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -832,12 +832,12 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 
-				// Should have 1 auth action with only gateway policy (atomic override)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				// Should have 1 auth typed action with only gateway policy (atomic override)
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 
-				// The action should list ONLY the gateway policy source (atomic overrides route policy)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				// The typed action should list ONLY the gateway policy source (atomic overrides route policy)
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -906,9 +906,9 @@ var _ = Describe("wasm controller", func() {
 				existingWASMConfig, err := wasm.ConfigFromJSON(existingExt.Spec.Wasm[0].Config)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 				// Single policy source (gateway with overrides)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(Equal([]string{
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(Equal([]string{
 					"authpolicy.kuadrant.io:" + gwAuthPolicyKey.String(),
 				}))
 			}).WithContext(ctx).Should(Succeed())
@@ -961,12 +961,12 @@ var _ = Describe("wasm controller", func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(existingWASMConfig.ActionSets).ToNot(BeEmpty())
 
-				// Should have 1 merged auth action with both policies
-				g.Expect(existingWASMConfig.ActionSets[0].Actions).ToNot(BeEmpty())
+				// Should have 1 merged auth typed action with both policies
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions).ToNot(BeEmpty())
 
-				// The action should list BOTH policy sources (merge overrides merges both policies)
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].ServiceName).To(Equal(wasm.AuthServiceName))
-				g.Expect(existingWASMConfig.ActionSets[0].Actions[0].SourcePolicyLocators).To(ConsistOf(
+				// The typed action should list BOTH policy sources (merge overrides merges both policies)
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].Service).To(Equal(wasm.AuthServiceName))
+				g.Expect(existingWASMConfig.ActionSets[0].TypedActions[0].SourcePolicyLocators).To(ConsistOf(
 					"authpolicy.kuadrant.io:"+gwAuthPolicyKey.String(),
 					"authpolicy.kuadrant.io:"+routeAuthPolicyKey.String(),
 				))

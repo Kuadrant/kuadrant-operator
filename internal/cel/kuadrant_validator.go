@@ -120,6 +120,26 @@ func ValidateWasmAction(action wasm.Action, validator *Validator) error {
 	return nil
 }
 
+func ValidateTypedAction(action wasm.TypedAction, validator *Validator) error {
+	pol := policyKindFromWasmServiceName(action.Service)
+	if action.Predicate != "" {
+		if _, err := validator.Validate(pol, action.Predicate); err != nil {
+			return err
+		}
+	}
+	// OnReply predicates reference wasm-shim runtime variables (e.g. auth_response.denied_response)
+	// that are not available in the CEL validation environment, so skip them.
+	return nil
+}
+
+func NewTypedActionIssue(action wasm.TypedAction, pathID string, err error) *Issue {
+	return &Issue{
+		policyKind: policyKindFromWasmServiceName(action.Service),
+		pathID:     pathID,
+		err:        err,
+	}
+}
+
 func policyKindFromWasmServiceName(serviceName string) string {
 	switch serviceName {
 	case wasm.AuthServiceName:

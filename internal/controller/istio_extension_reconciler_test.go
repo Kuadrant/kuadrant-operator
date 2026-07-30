@@ -14,15 +14,15 @@ import (
 func TestMergeAndVerify(t *testing.T) {
 	tests := []struct {
 		name          string
-		actions       []wasm.Action
+		actions       []wasm.ActionSpec
 		expectedError string
 		expectedLen   int
 		description   string
-		validate      func(*testing.T, []wasm.Action)
+		validate      func(*testing.T, []wasm.ActionSpec)
 	}{
 		{
 			name: "mixed auth and rate limit actions - auth never merged",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.AuthServiceName,
 					Scope:       "global",
@@ -80,7 +80,7 @@ func TestMergeAndVerify(t *testing.T) {
 			},
 			expectedLen: 3,
 			description: "should keep auth actions separate even with same scope",
-			validate: func(t *testing.T, result []wasm.Action) {
+			validate: func(t *testing.T, result []wasm.ActionSpec) {
 				authCount := 0
 				rateLimitCount := 0
 				for _, action := range result {
@@ -97,7 +97,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "mixed auth and mergeable rate limit actions",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.AuthServiceName,
 					Scope:       "global",
@@ -155,10 +155,10 @@ func TestMergeAndVerify(t *testing.T) {
 			},
 			expectedLen: 2,
 			description: "should merge rate limit actions but keep auth action separate",
-			validate: func(t *testing.T, result []wasm.Action) {
+			validate: func(t *testing.T, result []wasm.ActionSpec) {
 				authCount := 0
 				rateLimitCount := 0
-				var mergedRateLimitAction *wasm.Action
+				var mergedRateLimitAction *wasm.ActionSpec
 
 				for i, action := range result {
 					switch action.ServiceName {
@@ -181,7 +181,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "multiple auth actions with different scopes - never merged",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.AuthServiceName,
 					Scope:       "global",
@@ -224,7 +224,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "complex mixed scenario with multiple service types",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
@@ -300,7 +300,7 @@ func TestMergeAndVerify(t *testing.T) {
 			},
 			expectedLen: 4,
 			description: "auth should not merge with rate limit actions, but rate limit actions should merge",
-			validate: func(t *testing.T, result []wasm.Action) {
+			validate: func(t *testing.T, result []wasm.ActionSpec) {
 				authCount := 0
 				rateLimitCount := 0
 
@@ -319,7 +319,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "rate limit actions with different scopes - no merge",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
@@ -362,7 +362,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "duplicate keys with different values in rate limit actions - error",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
@@ -405,7 +405,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "duplicate keys with same values in rate limit actions - success",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
@@ -448,7 +448,7 @@ func TestMergeAndVerify(t *testing.T) {
 		},
 		{
 			name: "subsequent RateLimitCheckService actions merge correctly",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.RateLimitCheckServiceName,
 					Scope:       "global",
@@ -488,14 +488,14 @@ func TestMergeAndVerify(t *testing.T) {
 			},
 			expectedLen: 1,
 			description: "should merge two subsequent RateLimitCheckServiceName actions",
-			validate: func(t *testing.T, result []wasm.Action) {
+			validate: func(t *testing.T, result []wasm.ActionSpec) {
 				assert.Equal(t, "ratelimit-check-service", result[0].ServiceName)
 				assert.Equal(t, 2, len(result[0].ConditionalData), "merged action should contain data from both original actions")
 			},
 		},
 		{
 			name: "RateLimitCheckService and RateLimitService do not merge",
-			actions: []wasm.Action{
+			actions: []wasm.ActionSpec{
 				{
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       "global",
@@ -540,7 +540,7 @@ func TestMergeAndVerify(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := mergeAndVerify(context.TODO(), tt.actions)
+			result, err := mergeAndVerifySpecs(context.TODO(), tt.actions)
 
 			if tt.expectedError != "" {
 				assert.ErrorContains(t, err, tt.expectedError, "description: %s", tt.description)
@@ -557,7 +557,7 @@ func TestMergeAndVerify(t *testing.T) {
 
 func TestMergeAndVerifyEdgeCases(t *testing.T) {
 	t.Run("empty conditional data", func(t *testing.T) {
-		actions := []wasm.Action{
+		actions := []wasm.ActionSpec{
 			{
 				ServiceName:     wasm.RateLimitServiceName,
 				Scope:           "global",
@@ -570,13 +570,13 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		result, err := mergeAndVerify(context.TODO(), actions)
+		result, err := mergeAndVerifySpecs(context.TODO(), actions)
 		assert.NilError(t, err)
 		assert.Equal(t, len(result), 1)
 	})
 
 	t.Run("empty data in conditional data", func(t *testing.T) {
-		actions := []wasm.Action{
+		actions := []wasm.ActionSpec{
 			{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "global",
@@ -588,13 +588,13 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		result, err := mergeAndVerify(context.TODO(), actions)
+		result, err := mergeAndVerifySpecs(context.TODO(), actions)
 		assert.NilError(t, err)
 		assert.Equal(t, len(result), 1)
 	})
 
 	t.Run("empty keys are handled", func(t *testing.T) {
-		actions := []wasm.Action{
+		actions := []wasm.ActionSpec{
 			{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "global",
@@ -633,13 +633,13 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		_, err := mergeAndVerify(context.TODO(), actions)
+		_, err := mergeAndVerifySpecs(context.TODO(), actions)
 		assert.ErrorContains(t, err, "duplicate key '' with different values")
 	})
 
 	t.Run("deterministic conditional data ordering after merge", func(t *testing.T) {
 		// Create two sets of actions in different orders
-		actionsOrder1 := []wasm.Action{
+		actionsOrder1 := []wasm.ActionSpec{
 			{
 				ServiceName: wasm.RateLimitCheckServiceName,
 				Scope:       "route-0",
@@ -666,7 +666,7 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		actionsOrder2 := []wasm.Action{
+		actionsOrder2 := []wasm.ActionSpec{
 			{
 				ServiceName: wasm.RateLimitCheckServiceName,
 				Scope:       "route-0",
@@ -693,11 +693,11 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 			},
 		}
 
-		result1, err := mergeAndVerify(context.TODO(), actionsOrder1)
+		result1, err := mergeAndVerifySpecs(context.TODO(), actionsOrder1)
 		assert.NilError(t, err)
 		assert.Equal(t, 1, len(result1))
 
-		result2, err := mergeAndVerify(context.TODO(), actionsOrder2)
+		result2, err := mergeAndVerifySpecs(context.TODO(), actionsOrder2)
 		assert.NilError(t, err)
 		assert.Equal(t, 1, len(result2))
 

@@ -3,6 +3,7 @@
 package wasm
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -23,12 +24,42 @@ import (
 )
 
 var (
+	testBasicConfig     *Config
+	testBasicConfigJSON string
+	testBasicConfigYAML string
+)
+
+func init() {
+	// Build realistic actions from ActionSpecs matching the original scenario:
+	// ActionSet 1: rate limit for other.example.com with conditional descriptor
+	// ActionSet 2: auth + merged rate limit for toystore
+	rlOther := ActionSpec{
+		ServiceName: RateLimitServiceName,
+		Scope:       "default/other",
+		ConditionalData: []ConditionalData{{
+			Predicates: []string{`source.address != "127.0.0.1"`},
+			Data:       []DataType{{Value: &Static{Static: StaticSpec{Key: "limit.global__f63bec56", Value: "1"}}}},
+		}},
+	}
+	auth := ActionSpec{
+		ServiceName: AuthServiceName,
+		Scope:       "e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138",
+	}
+	rlToystore := ActionSpec{
+		ServiceName: RateLimitServiceName,
+		Scope:       "default/toystore",
+		Sources:     []string{"RateLimitPolicy/default/toystore"},
+		ConditionalData: []ConditionalData{
+			{Data: []DataType{{Value: &Static{Static: StaticSpec{Key: "limit.specific__69ea4d2d", Value: "1"}}}}},
+			{
+				Predicates: []string{`source.address != "127.0.0.1"`},
+				Data:       []DataType{{Value: &Static{Static: StaticSpec{Key: "limit.global__f63bec56", Value: "1"}}}},
+			},
+		},
+	}
+
 	testBasicConfig = &Config{
 		DescriptorService: "kuadrant-operator-grpc",
-		RequestData: map[string]string{
-			"metrics.labels.user":  "auth.identity.user",
-			"metrics.labels.group": "auth.identity.group",
-		},
 		Services: map[string]Service{
 			"auth-service": {
 				Type:        "auth",
@@ -72,29 +103,7 @@ var (
 						"request.url_path.startsWith('/')",
 					},
 				},
-				Actions: []Action{
-					{
-						ServiceName: "ratelimit-service",
-						Scope:       "default/other",
-						ConditionalData: []ConditionalData{
-							{
-								Predicates: []string{
-									`source.address != "127.0.0.1"`,
-								},
-								Data: []DataType{
-									{
-										Value: &Static{
-											Static: StaticSpec{
-												Key:   "limit.global__f63bec56",
-												Value: "1",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				Actions: []Action{rlOther.Build()},
 			},
 			{
 				Name: "21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8",
@@ -105,133 +114,23 @@ var (
 						"request.url_path.startsWith('/')",
 					},
 				},
-				Actions: []Action{
-					{
-						ServiceName: "auth-service",
-						Scope:       "e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138",
-					},
-					{
-						ServiceName: "ratelimit-service",
-						Scope:       "default/toystore",
-						ConditionalData: []ConditionalData{
-							{
-								Data: []DataType{
-									{
-										Value: &Static{
-											Static: StaticSpec{
-												Key:   "limit.specific__69ea4d2d",
-												Value: "1",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					{
-						ServiceName: "ratelimit-service",
-						Scope:       "default/toystore",
-						ConditionalData: []ConditionalData{
-							{
-								Predicates: []string{
-									`source.address != "127.0.0.1"`,
-								},
-								Data: []DataType{
-									{
-										Value: &Static{
-											Static: StaticSpec{
-												Key:   "limit.global__f63bec56",
-												Value: "1",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				Actions: []Action{auth.Build(), rlToystore.Build()},
 			},
 		},
 	}
-	testBasicConfigJSON = `{"actionSets":[{"actions":[{"conditionalData":[{"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}],"predicates":["source.address != \"127.0.0.1\""]}],"scope":"default/other","service":"ratelimit-service"}],"name":"5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab","routeRuleConditions":{"hostnames":["other.example.com"],"predicates":["request.url_path.startsWith('/')"]}},{"actions":[{"scope":"e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138","service":"auth-service"},{"conditionalData":[{"data":[{"static":{"key":"limit.specific__69ea4d2d","value":"1"}}]}],"scope":"default/toystore","service":"ratelimit-service"},{"conditionalData":[{"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}],"predicates":["source.address != \"127.0.0.1\""]}],"scope":"default/toystore","service":"ratelimit-service"}],"name":"21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8","routeRuleConditions":{"hostnames":["*"],"predicates":["request.method == 'GET'","request.url_path.startsWith('/')"]}}],"descriptorService":"kuadrant-operator-grpc","requestData":{"metrics.labels.group":"auth.identity.group","metrics.labels.user":"auth.identity.user"},"services":{"auth-service":{"endpoint":"kuadrant-auth-service","failureMode":"deny","timeout":"200ms","type":"auth"},"ext-dynamic-service":{"endpoint":"ext-upstream-cluster","failureMode":"deny","grpcMethod":"ExampleMethod","grpcService":"example.v1.ExampleService","timeout":"100ms","type":"dynamic"},"ratelimit-check-service":{"endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms","type":"ratelimit-check"},"ratelimit-report-service":{"endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms","type":"ratelimit-report"},"ratelimit-service":{"endpoint":"kuadrant-ratelimit-service","failureMode":"allow","timeout":"100ms","type":"ratelimit"}}}`
-	testBasicConfigYAML = `
-descriptorService: kuadrant-operator-grpc
-requestData:
-  metrics.labels.user: auth.identity.user
-  metrics.labels.group: auth.identity.group
-services:
-  auth-service:
-    type: auth
-    endpoint: kuadrant-auth-service
-    failureMode: deny
-    timeout: 200ms
-  ratelimit-service:
-    type: ratelimit
-    endpoint: kuadrant-ratelimit-service
-    failureMode: allow
-    timeout: 100ms
-  ratelimit-check-service:
-    type: ratelimit-check
-    endpoint: kuadrant-ratelimit-service
-    failureMode: allow
-    timeout: 100ms
-  ratelimit-report-service:
-    type: ratelimit-report
-    endpoint: kuadrant-ratelimit-service
-    failureMode: allow
-    timeout: 100ms
-  ext-dynamic-service:
-    type: dynamic
-    endpoint: ext-upstream-cluster
-    failureMode: deny
-    timeout: 100ms
-    grpcService: example.v1.ExampleService
-    grpcMethod: ExampleMethod
-actionSets:
-  - name: 5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab
-    routeRuleConditions:
-      hostnames:
-        - other.example.com
-      predicates:
-        - request.url_path.startsWith('/')
-    actions:
-      - service: ratelimit-service
-        scope: default/other
-        conditionalData:
-          - predicates:
-              - source.address != "127.0.0.1"
-            data:
-              - static:
-                  key: limit.global__f63bec56
-                  value: "1"
-  - name: 21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8
-    routeRuleConditions:
-      hostnames:
-        - "*"
-      predicates:
-        - request.method == 'GET'
-        - request.url_path.startsWith('/')
-    actions:
-      - service: auth-service
-        scope: e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138
-      - service: ratelimit-service
-        scope: default/toystore
-        conditionalData:
-          - data:
-              - static:
-                  key: limit.specific__69ea4d2d
-                  value: "1"
-      - service: ratelimit-service
-        scope: default/toystore
-        conditionalData:
-          - predicates:
-              - source.address != "127.0.0.1"
-            data:
-              - static:
-                  key: limit.global__f63bec56
-                  value: "1"
-`
-)
+
+	jsonBytes, err := json.Marshal(testBasicConfig)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal testBasicConfig to JSON: %v", err))
+	}
+	testBasicConfigJSON = string(jsonBytes)
+
+	yamlBytes, err := yaml.Marshal(testBasicConfig)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal testBasicConfig to YAML: %v", err))
+	}
+	testBasicConfigYAML = string(yamlBytes)
+}
 
 func TestConfigFromJSON(t *testing.T) {
 	testCases := []struct {
@@ -1284,34 +1183,6 @@ func TestConfigEqualToWithObservability(t *testing.T) {
 			}(),
 			expected: false,
 		},
-		{
-			name: "configs with different RequestData",
-			config1: &Config{
-				RequestData: map[string]string{"key1": "value1"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			config2: &Config{
-				RequestData: map[string]string{"key1": "value2"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			expected: false,
-		},
-		{
-			name: "configs with RequestData - one missing key",
-			config1: &Config{
-				RequestData: map[string]string{"key1": "value1", "key2": "value2"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			config2: &Config{
-				RequestData: map[string]string{"key1": "value1"},
-				Services:    baseConfig.Services,
-				ActionSets:  baseConfig.ActionSets,
-			},
-			expected: false,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -1592,10 +1463,7 @@ func TestBuildConfigForActionSetWithObservability(t *testing.T) {
 				Hostnames: []string{"example.com"},
 			},
 			Actions: []Action{
-				{
-					ServiceName: "auth-service",
-					Scope:       "test-scope",
-				},
+				NewDenyAction("true", "DenyResponse{status: 403u}"),
 			},
 		},
 	}

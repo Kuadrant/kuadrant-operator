@@ -16,6 +16,7 @@ type ActionSpec struct {
 	ConditionalData []ConditionalData
 	Sources         []string
 	Bindings        []DataBinding
+	Execution       ExecutionMode
 }
 
 type DataBinding struct {
@@ -60,8 +61,7 @@ const (
 	rateLimitResponseVar = "ratelimit_response"
 	reportResponseVar    = "report_response"
 
-	AuthStorePath           = "auth"
-	RateLimitCompleteSignal = "kuadrant.internal.ratelimit.complete"
+	AuthStorePath = "auth"
 )
 
 // IsGuard returns true if this spec produces a guard action (runs during request phase).
@@ -248,6 +248,7 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 		ConditionalData: newCD,
 		Sources:         s.Sources,
 		Bindings:        newBindings,
+		Execution:       s.Execution,
 	}
 }
 
@@ -299,6 +300,7 @@ func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label strin
 
 	return NewGrpcAction(predicate, responseVar, s.ServiceName, request.ToCEL(), label).
 		WithGuard(isGuard).
+		WithExecution(s.Execution).
 		WithSources(s.Sources).
 		WithOnReply(onReply...)
 }
@@ -729,7 +731,6 @@ func buildRateLimitOnReply(name string) []Action {
 			fmt.Sprintf("%s.overall_code != 1 && %s.overall_code != 2", name, name),
 			fmt.Sprintf("Unknown rate limit response code from %s", name),
 		),
-		NewStoreAction("true", RateLimitCompleteSignal, "true"),
 	}
 }
 

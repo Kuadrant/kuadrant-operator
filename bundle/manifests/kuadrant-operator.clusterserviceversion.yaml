@@ -224,14 +224,14 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
-    containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-07-21T16:23:07Z"
+    containerImage: quay.io/kuadrant/kuadrant-operator:olmv1-upgrade-test
+    createdAt: "2026-07-28T13:39:24Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v0.0.0
+  name: kuadrant-operator.v0.0.1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -249,66 +249,24 @@ spec:
     - kind: APIProduct
       name: apiproducts.devportal.kuadrant.io
       version: v1alpha1
-    - description: AuthConfig defines authentication and authorization configurations
-        for protecting APIs
-      displayName: AuthConfig
-      kind: AuthConfig
-      name: authconfigs.authorino.kuadrant.io
-      version: v1beta3
-    - description: Authorino configures an instance of the Authorino authorization
-        service
-      displayName: Authorino
-      kind: Authorino
-      name: authorinos.operator.authorino.kuadrant.io
-      version: v1beta1
     - description: AuthPolicy enables authentication and authorization for service
         workloads in a Gateway API network
       displayName: AuthPolicy
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1
-    - kind: DNSHealthCheckProbe
-      name: dnshealthcheckprobes.kuadrant.io
-      version: v1alpha1
     - description: DNSPolicy configures how North-South based traffic should be balanced
         and reach the gateways
       displayName: DNSPolicy
       kind: DNSPolicy
       name: dnspolicies.kuadrant.io
       version: v1
-    - kind: DNSRecord
-      name: dnsrecords.kuadrant.io
-      version: v1alpha1
     - description: Kuadrant configures installations of Kuadrant Service Protection
         components
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - description: Limitador configures an instance of the Limitador rate limiting
-        service
-      displayName: Limitador
-      kind: Limitador
-      name: limitadors.limitador.kuadrant.io
-      version: v1alpha1
-    - kind: MCPGatewayExtension
-      name: mcpgatewayextensions.mcp.kuadrant.io
-      version: v1
-    - kind: MCPGatewayExtension
-      name: mcpgatewayextensions.mcp.kuadrant.io
-      version: v1alpha1
-    - kind: MCPServerRegistration
-      name: mcpserverregistrations.mcp.kuadrant.io
-      version: v1
-    - kind: MCPServerRegistration
-      name: mcpserverregistrations.mcp.kuadrant.io
-      version: v1alpha1
-    - kind: MCPVirtualServer
-      name: mcpvirtualservers.mcp.kuadrant.io
-      version: v1
-    - kind: MCPVirtualServer
-      name: mcpvirtualservers.mcp.kuadrant.io
-      version: v1alpha1
     - kind: OIDCPolicy
       name: oidcpolicies.extensions.kuadrant.io
       version: v1alpha1
@@ -467,6 +425,17 @@ spec:
           verbs:
           - get
           - list
+          - watch
+        - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
           - watch
         - apiGroups:
           - apps
@@ -788,6 +757,18 @@ spec:
           - watch
         - apiGroups:
           - rbac.authorization.k8s.io
+          resources:
+          - clusterroles
+          verbs:
+          - create
+          - escalate
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
           resourceNames:
           - authorino-manager-k8s-auth-role
           - authorino-manager-role
@@ -890,7 +871,7 @@ spec:
                   valueFrom:
                     fieldRef:
                       fieldPath: metadata.namespace
-                image: quay.io/kuadrant/kuadrant-operator:latest
+                image: quay.io/kuadrant/kuadrant-operator:olmv1-upgrade-test
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -1061,4 +1042,4 @@ spec:
     name: dns-operator
   - image: ghcr.io/kuadrant/mcp-controller:latest
     name: mcp-gateway
-  version: 0.0.0
+  version: 0.0.1

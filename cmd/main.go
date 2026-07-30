@@ -273,6 +273,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Deploy child operators (CRDs, ClusterRoles, Deployments) at startup
+	// before the controller manager starts watching for CRDs.
+	// CRDs are applied first and waited on so controllers can register watches.
+	chartsBasePath := env.GetString("CHARTS_PATH", "/charts")
+	operatorNs := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+	if err := controllers.DeployChildOperators(context.Background(), client, operatorNs, chartsBasePath, setupLog); err != nil {
+		setupLog.Error(err, "failed to deploy child operators")
+		os.Exit(1)
+	}
+
 	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, opts...)
 	if err != nil {
 		setupLog.Error(err, "unable to setup policy controller")

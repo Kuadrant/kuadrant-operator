@@ -2,15 +2,12 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 
@@ -75,7 +72,7 @@ func (r *HelmMCPGatewayReconciler) Reconcile(ctx context.Context, _ []controller
 			"tag":        mcpTag,
 		},
 	}
-	objects, err := renderer.Render("mcp-gateway", kuadrantObj.Namespace, values)
+	objects, err := renderer.Render("mcp-gateway", operatorNamespace, values)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to render mcp-gateway chart")
@@ -85,78 +82,22 @@ func (r *HelmMCPGatewayReconciler) Reconcile(ctx context.Context, _ []controller
 
 	logger.Info("rendered mcp-gateway chart", "resourceCount", len(objects))
 
+	// Log all rendered resource types for debugging
 	for _, obj := range objects {
-		if shouldSkipResource(obj.GetKind()) {
-			logger.Info("skipping cluster-scoped resource managed by installer",
-				"kind", obj.GetKind(), "name", obj.GetName())
-			continue
-		}
+		logger.V(1).Info("rendered resource", "kind", obj.GetKind(), "name", obj.GetName())
+	}
 
-		obj.SetOwnerReferences([]metav1.OwnerReference{
-			{
-				APIVersion: kuadrantObj.APIVersion,
-				Kind:       kuadrantObj.Kind,
-				Name:       kuadrantObj.Name,
-				UID:        kuadrantObj.UID,
-				Controller: ptr.To(true),
-			},
-		})
-
-		gvr := obj.GroupVersionKind().GroupVersion().WithResource(kindToResource(obj.GetKind()))
-
-		var resourceClient dynamic.ResourceInterface
-		if obj.GetKind() == "ClusterRoleBinding" {
-			resourceClient = r.Client.Resource(gvr)
-		} else {
-			resourceClient = r.Client.Resource(gvr).Namespace(kuadrantObj.Namespace)
-		}
-
-		logger.V(1).Info("applying resource via SSA",
-			"kind", obj.GetKind(),
-			"name", obj.GetName(),
-			"namespace", kuadrantObj.Namespace,
-			"gvr", gvr.String(),
-			"fieldManager", FieldManagerName,
-		)
-
-		force := obj.GetKind() == "ClusterRoleBinding"
-
-		_, err := resourceClient.Apply(
-			ctx,
-			obj.GetName(),
-			obj,
-			metav1.ApplyOptions{
-				FieldManager: FieldManagerName,
-				Force:        force,
-			},
-		)
-
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, fmt.Sprintf("failed to apply %s/%s", obj.GetKind(), obj.GetName()))
-
-			if apierrors.IsConflict(err) {
-				logger.Info("field ownership conflict detected - preserving user customization",
-					"kind", obj.GetKind(),
-					"name", obj.GetName(),
-				)
-			} else {
-				logger.Error(err, "failed to apply resource",
-					"kind", obj.GetKind(),
-					"name", obj.GetName(),
-				)
-			}
-			continue
-		}
-
-		logger.V(1).Info("applied resource",
-			"kind", obj.GetKind(),
-			"name", obj.GetName(),
-		)
+	// Child operators are deployed at startup by DeployChildOperators.
+	// This reconciler only needs to ensure the deployment is up to date
+	// when the Kuadrant CR changes (e.g. image updates).
+	if err := applyResources(ctx, r.Client, objects, operatorNamespace, logger); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to apply mcp-gateway resources")
+		return err
 	}
 
 	span.SetStatus(codes.Ok, "")
-	logger.Info("mcp-gateway helm deployment reconciled successfully")
+	logger.Info("mcp-gateway reconciled successfully")
 
 	return nil
 }

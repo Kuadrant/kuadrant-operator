@@ -762,14 +762,9 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		)
 	}
 
-	// Phase 1 POC: Deploy child operators via Helm, then old reconcilers will create wrapper CRs
-	// Helm reconcilers deploy authorino-operator, limitador-operator, dns-operator, mcp-gateway
-	mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-		traceReconcileFunc("workflow.helm_authorino_operator", NewHelmAuthorinoOperatorReconciler(b.client, "/charts/authorino-operator").Subscription().Reconcile),
-		traceReconcileFunc("workflow.helm_limitador_operator", NewHelmLimitadorOperatorReconciler(b.client, "/charts/limitador-operator").Subscription().Reconcile),
-		traceReconcileFunc("workflow.helm_dnsoperator", NewHelmDNSOperatorReconciler(b.client, "/charts/dns-operator").Subscription().Reconcile),
-		traceReconcileFunc("workflow.helm_mcpgateway", NewHelmMCPGatewayReconciler(b.client, "/charts/mcp-gateway").Subscription().Reconcile),
-	)
+	// Child operators (authorino-operator, limitador-operator, dns-operator, mcp-gateway)
+	// are deployed at startup by DeployChildOperators in cmd/main.go.
+	// No reconcilers needed — they run as standalone control plane in the operator namespace.
 
 	// Wrapper CR reconcilers - create Authorino/Limitador CRs (child operators reconcile these to workloads)
 	if b.isLimitadorOperatorInstalled {

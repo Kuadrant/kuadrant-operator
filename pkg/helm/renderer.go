@@ -45,7 +45,7 @@ func (r *Renderer) Render(releaseName, namespace string, values map[string]inter
 	client.ReleaseName = releaseName
 	client.Namespace = namespace
 	client.DisableHooks = true // Don't run hooks
-	client.SkipCRDs = true     // Don't include CRDs (OLM installs them)
+	client.SkipCRDs = false    // Include CRDs (operator manages them at runtime)
 
 	// Render the chart
 	rel, err := client.Run(chart, values)
@@ -54,7 +54,30 @@ func (r *Renderer) Render(releaseName, namespace string, values map[string]inter
 	}
 
 	// Parse rendered manifests into Unstructured objects
-	return parseManifests(rel)
+	objects, err := parseManifests(rel)
+	if err != nil {
+		return nil, err
+	}
+
+	// CRDs from the chart's crds/ directory are not included in rel.Manifest
+	// They must be extracted separately via chart.CRDObjects()
+	for _, crd := range chart.CRDObjects() {
+		decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(crd.File.Data), 4096)
+		for {
+			obj := &unstructured.Unstructured{}
+			if err := decoder.Decode(obj); err != nil {
+				if err.Error() == "EOF" {
+					break
+				}
+				return nil, fmt.Errorf("failed to decode CRD %s: %w", crd.Name, err)
+			}
+			if obj.GetKind() != "" {
+				objects = append(objects, obj)
+			}
+		}
+	}
+
+	return objects, nil
 }
 
 // parseManifests parses the rendered manifest string into Unstructured objects

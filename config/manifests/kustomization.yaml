@@ -4,7 +4,8 @@ resources:
 - bases/kuadrant-operator.clusterserviceversion.yaml
 - ../default
 - ../dependencies/developer-portal  # CRDs and ClusterRole deployed alongside (not owned)
-- ../child-operators   # Child operator CRDs and ClusterRoles WITHOUT namePrefix
+# Child operator CRDs, ClusterRoles, and Deployments are rendered at runtime
+# by the operator from embedded Helm charts (not included in the bundle)
 - ../samples
 - ../scorecard
 - ../../cmd/extensions/plan-policy/config/samples

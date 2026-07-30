@@ -7,17 +7,19 @@ import (
 	"k8s.io/utils/env"
 )
 
-// clusterScopedKindsSkipped lists resource kinds that should not be applied by
-// the operator at runtime. ClusterRoles are managed by the installation method
-// (Helm chart or OLM bundle), not by the operator. If a chart template renders
-// one, it indicates a sync issue that should be investigated.
-var clusterScopedKindsSkipped = map[string]bool{
-	"ClusterRole":              true,
-	"CustomResourceDefinition": true,
+// isCRD returns true if the resource is a CustomResourceDefinition
+func isCRD(kind string) bool {
+	return kind == "CustomResourceDefinition"
 }
 
-func shouldSkipResource(kind string) bool {
-	return clusterScopedKindsSkipped[kind]
+// isClusterScoped returns true if the resource kind is cluster-scoped
+func isClusterScoped(kind string) bool {
+	switch kind {
+	case "CustomResourceDefinition", "ClusterRole", "ClusterRoleBinding":
+		return true
+	default:
+		return false
+	}
 }
 
 // Component image env vars. These are read from the operator Deployment's
@@ -101,8 +103,9 @@ func kindToResource(kind string) string {
 		return "roles"
 	case "RoleBinding":
 		return "rolebindings"
+	case "CustomResourceDefinition":
+		return "customresourcedefinitions"
 	default:
-		// Simple pluralization
 		return kind + "s"
 	}
 }

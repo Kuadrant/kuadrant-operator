@@ -103,7 +103,6 @@ local-deploy: ## Deploy Kuadrant Operator from the current code
 	$(MAKE) kind-load-image IMG=$(IMAGE_TAG_BASE):dev
 
 	$(MAKE) install
-	$(MAKE) deploy-child-operator-dependencies
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 

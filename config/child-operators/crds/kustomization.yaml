@@ -1,5 +1,0 @@
-resources:
-- authorino-operator.yaml
-- limitador-operator.yaml
-- dns-operator.yaml
-- mcp-gateway.yaml

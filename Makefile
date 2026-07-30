@@ -368,10 +368,10 @@ CHILD_OPERATORS_DIR = $(PROJECT_PATH)/config/child-operators
 
 .PHONY: sync-child-operator-charts
 sync-child-operator-charts: ## Sync child operator Helm charts from upstream repos.
-	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/authorino-operator --ref $(AUTHORINO_OPERATOR_GITREF) --chart authorino-operator --output $(CHILD_OPERATORS_DIR)
-	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/limitador-operator --ref $(LIMITADOR_OPERATOR_GITREF) --chart limitador-operator --output $(CHILD_OPERATORS_DIR)
-	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/dns-operator --ref $(DNS_OPERATOR_GITREF) --chart dns-operator --output $(CHILD_OPERATORS_DIR)
-	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/mcp-gateway --ref $(MCP_GATEWAY_GITREF) --chart mcp-gateway --output $(CHILD_OPERATORS_DIR)
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/authorino-operator --ref $(AUTHORINO_OPERATOR_GITREF) --chart authorino-operator --output $(CHILD_OPERATORS_DIR)/charts
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/limitador-operator --ref $(LIMITADOR_OPERATOR_GITREF) --chart limitador-operator --output $(CHILD_OPERATORS_DIR)/charts
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/dns-operator --ref $(DNS_OPERATOR_GITREF) --chart dns-operator --output $(CHILD_OPERATORS_DIR)/charts
+	go run $(PROJECT_PATH)/hack/sync-child-charts/ --repo Kuadrant/mcp-gateway --ref $(MCP_GATEWAY_GITREF) --chart mcp-gateway --output $(CHILD_OPERATORS_DIR)/charts
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

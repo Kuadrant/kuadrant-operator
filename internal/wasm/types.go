@@ -127,6 +127,13 @@ const (
 	FailureModeAllow FailureModeType = "allow"
 )
 
+type ExecutionMode string
+
+const (
+	ExecutionSequential ExecutionMode = "sequential"
+	ExecutionParallel   ExecutionMode = "parallel"
+)
+
 type ActionSet struct {
 	Name string `json:"name"`
 
@@ -335,16 +342,18 @@ type Action interface {
 }
 
 type ActionBase struct {
-	Predicate            string   `json:"predicate"`
-	Terminal             bool     `json:"terminal"`
-	IsGuard              bool     `json:"isGuard"`
-	SourcePolicyLocators []string `json:"sources,omitempty"`
+	Predicate            string        `json:"predicate"`
+	Terminal             bool          `json:"terminal"`
+	IsGuard              bool          `json:"isGuard"`
+	Execution            ExecutionMode `json:"execution,omitempty"`
+	SourcePolicyLocators []string      `json:"sources,omitempty"`
 }
 
 func (b *ActionBase) equalBase(other *ActionBase) bool {
 	return b.Predicate == other.Predicate &&
 		b.Terminal == other.Terminal &&
 		b.IsGuard == other.IsGuard &&
+		b.Execution == other.Execution &&
 		slices.Equal(b.SourcePolicyLocators, other.SourcePolicyLocators)
 }
 
@@ -456,6 +465,7 @@ type actionWire struct {
 	Predicate      string            `json:"predicate"`
 	Terminal       bool              `json:"terminal"`
 	IsGuard        bool              `json:"isGuard"`
+	Execution      ExecutionMode     `json:"execution,omitempty"`
 	Var            string            `json:"var,omitempty"`
 	Service        string            `json:"service,omitempty"`
 	Label          string            `json:"label,omitempty"`
@@ -493,7 +503,7 @@ func (a *GrpcAction) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(actionWire{
 		Type: ActionKindGrpc, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
-		Var: a.Var, Service: a.Service, Label: a.Label, MessageBuilder: a.MessageBuilder,
+		Execution: a.Execution, Var: a.Var, Service: a.Service, Label: a.Label, MessageBuilder: a.MessageBuilder,
 		OnReply: onReply, Sources: a.SourcePolicyLocators,
 	})
 }
@@ -501,28 +511,28 @@ func (a *GrpcAction) MarshalJSON() ([]byte, error) {
 func (a *DenyAction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(actionWire{
 		Type: ActionKindDeny, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
-		DenyWith: a.DenyWith, Sources: a.SourcePolicyLocators,
+		Execution: a.Execution, DenyWith: a.DenyWith, Sources: a.SourcePolicyLocators,
 	})
 }
 
 func (a *HeadersAction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(actionWire{
 		Type: ActionKindHeaders, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
-		Target: a.Target, Headers: a.Headers, Sources: a.SourcePolicyLocators,
+		Execution: a.Execution, Target: a.Target, Headers: a.Headers, Sources: a.SourcePolicyLocators,
 	})
 }
 
 func (a *StoreAction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(actionWire{
 		Type: ActionKindStore, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
-		Path: a.Path, Value: a.Value, ExportToHost: a.ExportToHost, Sources: a.SourcePolicyLocators,
+		Execution: a.Execution, Path: a.Path, Value: a.Value, ExportToHost: a.ExportToHost, Sources: a.SourcePolicyLocators,
 	})
 }
 
 func (a *FailAction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(actionWire{
 		Type: ActionKindFail, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
-		LogMessage: a.LogMessage, Sources: a.SourcePolicyLocators,
+		Execution: a.Execution, LogMessage: a.LogMessage, Sources: a.SourcePolicyLocators,
 	})
 }
 
@@ -533,7 +543,7 @@ func UnmarshalAction(data []byte) (Action, error) {
 	}
 	base := ActionBase{
 		Predicate: w.Predicate, Terminal: w.Terminal, IsGuard: w.IsGuard,
-		SourcePolicyLocators: w.Sources,
+		Execution: w.Execution, SourcePolicyLocators: w.Sources,
 	}
 	switch w.Type {
 	case ActionKindGrpc:

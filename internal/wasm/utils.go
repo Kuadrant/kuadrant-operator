@@ -244,9 +244,10 @@ func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observ
 	}
 
 	return Config{
-		Services:      serviceBuilder.Build(),
-		ActionSets:    actionSets,
-		Observability: observability,
+		Services:          serviceBuilder.Build(),
+		ActionSets:        actionSets,
+		Observability:     observability,
+		DescriptorService: DescriptorServiceClusterName,
 	}
 }
 

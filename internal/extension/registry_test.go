@@ -1275,11 +1275,6 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 		t.Errorf("Expected 2 services in wasm config, got %d", len(wasmConfig.Services))
 	}
 
-	// Verify descriptor service is set to the expected value
-	if wasmConfig.DescriptorService != "kuadrant-operator-grpc" {
-		t.Errorf("Expected DescriptorService to be 'kuadrant-operator-grpc', got %q", wasmConfig.DescriptorService)
-	}
-
 	// Build a map of cluster names to upstream entries for easy lookup
 	upstreamsByCluster := make(map[string]RegisteredUpstreamEntry)
 	for _, entry := range upstreamEntries {

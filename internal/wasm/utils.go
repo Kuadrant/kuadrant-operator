@@ -35,6 +35,16 @@ const (
 	RateLimitReportServiceName = "ratelimit-report-service"
 	AuthServiceName            = "auth-service"
 	TracingServiceName         = "tracing-service"
+
+	DescriptorServiceClusterName = "kuadrant-operator-grpc"
+
+	AuthGrpcService              = "envoy.service.auth.v3.Authorization"
+	AuthGrpcMethod               = "Check"
+	RateLimitGrpcService         = "envoy.service.ratelimit.v3.RateLimitService"
+	RateLimitGrpcMethod          = "ShouldRateLimit"
+	KuadrantRateLimitGrpcService = "kuadrant.service.ratelimit.v1.RateLimitService"
+	RateLimitCheckGrpcMethod     = "CheckRateLimit"
+	RateLimitReportGrpcMethod    = "Report"
 )
 
 type LogLevel int
@@ -169,28 +179,36 @@ func NewServiceBuilder(logger *logr.Logger) *ServiceBuilder {
 	return &ServiceBuilder{
 		services: map[string]Service{
 			AuthServiceName: {
-				Type:        AuthServiceType,
+				Type:        DynamicServiceType,
 				Endpoint:    kuadrant.KuadrantAuthClusterName,
 				FailureMode: AuthServiceFailureMode(logger),
 				Timeout:     ptr.To(AuthServiceTimeout()),
+				GrpcService: ptr.To(AuthGrpcService),
+				GrpcMethod:  ptr.To(AuthGrpcMethod),
 			},
 			RateLimitServiceName: {
-				Type:        RateLimitServiceType,
+				Type:        DynamicServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: RatelimitServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitServiceTimeout()),
+				GrpcService: ptr.To(RateLimitGrpcService),
+				GrpcMethod:  ptr.To(RateLimitGrpcMethod),
 			},
 			RateLimitCheckServiceName: {
-				Type:        RateLimitCheckServiceType,
+				Type:        DynamicServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: RatelimitCheckServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitCheckServiceTimeout()),
+				GrpcService: ptr.To(KuadrantRateLimitGrpcService),
+				GrpcMethod:  ptr.To(RateLimitCheckGrpcMethod),
 			},
 			RateLimitReportServiceName: {
-				Type:        RateLimitReportServiceType,
+				Type:        DynamicServiceType,
 				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: RatelimitReportServiceFailureMode(logger),
 				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
+				GrpcService: ptr.To(KuadrantRateLimitGrpcService),
+				GrpcMethod:  ptr.To(RateLimitReportGrpcMethod),
 			},
 		},
 		logger: logger,

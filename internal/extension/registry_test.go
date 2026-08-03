@@ -1202,7 +1202,7 @@ func TestHashUpstreamServiceConfig(t *testing.T) {
 	timeout := "100ms"
 	svc := wasm.Service{
 		Endpoint:    "ext-my-service-8081",
-		Type:        wasm.AuthServiceType,
+		Type:        wasm.DynamicServiceType,
 		FailureMode: wasm.FailureModeDeny,
 		Timeout:     &timeout,
 	}

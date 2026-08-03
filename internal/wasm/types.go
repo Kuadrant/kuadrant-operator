@@ -111,16 +111,12 @@ func (s Service) EqualTo(other Service) bool {
 	return true
 }
 
-// +kubebuilder:validation:Enum:=ratelimit;auth;ratelimit-check;ratelimit-report;tracing;dynamic
+// +kubebuilder:validation:Enum:=tracing;dynamic
 type ServiceType string
 
 const (
-	RateLimitServiceType       ServiceType = "ratelimit"
-	RateLimitCheckServiceType  ServiceType = "ratelimit-check"
-	RateLimitReportServiceType ServiceType = "ratelimit-report"
-	AuthServiceType            ServiceType = "auth"
-	TracingServiceType         ServiceType = "tracing"
-	DynamicServiceType         ServiceType = "dynamic"
+	TracingServiceType ServiceType = "tracing"
+	DynamicServiceType ServiceType = "dynamic"
 )
 
 // +kubebuilder:validation:Enum:=deny;allow

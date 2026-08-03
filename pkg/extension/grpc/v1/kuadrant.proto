@@ -12,9 +12,9 @@ import "v1/google/rpc/status.proto";
 import "v1/policy.proto";
 import "v1/common.proto";
 
-// The greeting service definition.
 service ExtensionService {
-  // Sends a greeting
+  // Authenticate an extension and establish a session.
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse) {}
   rpc Ping (PingRequest) returns (PongResponse) {}
   // Subscribe to a set of Events
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
@@ -38,6 +38,19 @@ message PingRequest {
 // The response message containing the time the request was received.
 message PongResponse {
   google.protobuf.Timestamp in = 1;
+}
+
+message HandshakeRequest {
+  string name = 1;
+  string version = 2;
+  bytes  credential = 3;
+  string policy_kind = 4;
+}
+
+message HandshakeResponse {
+  bool   accepted = 1;
+  string session_token = 2;
+  string reason = 3;
 }
 
 // evaluate the expression and whether or not to subscribe

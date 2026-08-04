@@ -150,6 +150,8 @@ However, if the trace initiation point is outside of Envoy/Istio, the 'parent' t
 
 Despite this, Kuadrant configures tracing for the wasm-shim when using the centralized configuration, ensuring that trace data is collected even if parent-child relationships may be limited in some scenarios.
 
+**Egress-specific tracing:** The tracing infrastructure works identically on egress gateways. For egress-specific considerations including the expected span chain, trace header leaking prevention, and tracing without sidecars, see the [egress observability guide](../user-guides/egress/observability.md#distributed-tracing).
+
 ## Control Plane Tracing
 
 The Kuadrant operator itself (the control plane) exports traces to your OpenTelemetry collector, allowing you to observe the operator's reconciliation loops and internal operations. This is useful for debugging controller behavior, understanding operator performance, and tracking policy lifecycle events.

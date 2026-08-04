@@ -1,6 +1,6 @@
-# Egress Observability: Metrics and Access Logging
+# Monitoring and troubleshooting egress traffic
 
-This guide covers monitoring and troubleshooting outbound traffic through an Istio egress gateway using Prometheus metrics and Envoy access logs.
+The same metrics, access logs, and tracing infrastructure that works on ingress gateways also works on egress. This guide covers the label values, troubleshooting patterns, and security considerations specific to outbound traffic through an Istio egress gateway.
 
 ## Prerequisites
 
@@ -16,18 +16,16 @@ The examples in this guide use:
 | Gateway name | `kuadrant-egressgateway` |
 | External service | `httpbin.org` |
 
-## How Egress Observability Differs from Ingress
+### Common tasks
 
-Observing egress traffic has specific challenges that do not exist for ingress:
-
-| Aspect | Ingress | Egress |
-|--------|---------|--------|
-| Source identity | External client (IP, API key) | Internal workload (namespace and service account) |
-| Destination | Known back-end services | External services (DNS, TLS, availability) |
-| Metrics reporter | Both `source` and `destination` proxy | `source` only (no proxy on external services) |
-| Failure modes | App errors, auth failures | DNS failures, TLS errors, upstream timeouts |
-
-Understanding these differences is key to interpreting egress metrics and logs correctly.
+| Goal | Section |
+|------|---------|
+| Verify traffic is flowing to external services | [Querying egress metrics](#querying-egress-metrics) |
+| Identify error patterns by destination | [PromQL examples](#promql-examples) |
+| Diagnose a specific failing request | [Troubleshooting with access logs](#troubleshooting-with-access-logs) |
+| Measure gateway overhead vs. external service latency | [Troubleshooting with access logs](#troubleshooting-with-access-logs) |
+| Trace request flow through policies | [Egress span chain](#egress-span-chain) |
+| Prevent trace headers from reaching external services | [Preventing trace header leaking](#preventing-trace-header-leaking) |
 
 ## Egress Metrics
 
@@ -92,7 +90,7 @@ These queries work when Prometheus is scraping the egress gateway pod.
 sum(rate(istio_requests_total{source_workload="kuadrant-egressgateway-istio"}[5m])) by (destination_service)
 ```
 
-**Error rate for egress traffic:**
+**HTTP error rate for egress traffic (4xx and 5xx responses):**
 
 ```promql
 sum(rate(istio_requests_total{
@@ -102,6 +100,15 @@ sum(rate(istio_requests_total{
 /
 sum(rate(istio_requests_total{
     source_workload="kuadrant-egressgateway-istio"
+}[5m]))
+```
+
+This query counts HTTP-level errors only. Upstream connection failures (`UF`) and timeouts (`UT`) typically produce HTTP 503 or 504 responses and are included. Requests where no HTTP response was sent (for example, downstream disconnects) appear with `response_code="0"` and are not included. To count those:
+
+```promql
+sum(rate(istio_requests_total{
+    source_workload="kuadrant-egressgateway-istio",
+    response_code="0"
 }[5m]))
 ```
 
@@ -134,7 +141,7 @@ sum(rate(istio_requests_total{
 
 ### Identifying the Egress Gateway
 
-For Kubernetes queries (kubectl, log filtering), use the pod label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`. This label is not a Prometheus metric label.
+For Kubernetes queries (kubectl, log filtering), use the pod label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`.
 
 For PromQL queries, filter by `source_workload="kuadrant-egressgateway-istio"` to isolate egress traffic from ingress traffic on the same Prometheus instance. This is the Istio proxy workload name, which appears as a label on all `istio_*` metrics.
 
@@ -142,7 +149,7 @@ For PromQL queries, filter by `source_workload="kuadrant-egressgateway-istio"` t
 
 ### Enabling Access Logs
 
-Enable access logs on the egress gateway using the Istio Telemetry API. A Telemetry resource in the gateway namespace applies to all proxies in that namespace, including the egress gateway:
+Enable access logs on the egress gateway using the Istio Telemetry API. Use a `selector` to scope the configuration to the egress gateway pods, avoiding conflicts with other Telemetry resources in the namespace:
 
 ```yaml
 apiVersion: telemetry.istio.io/v1
@@ -151,6 +158,9 @@ metadata:
   name: egress-access-logs
   namespace: gateway-system
 spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: kuadrant-egressgateway
   accessLogging:
     - providers:
       - name: envoy
@@ -186,7 +196,7 @@ Each access log entry captures both connection legs of the egress path: the inco
 | Request ID | `%REQ(X-REQUEST-ID)%` | `4fe1434d-...` | Correlation across components |
 | Authority (Host) | `%REQ(:AUTHORITY)%` | `httpbin.org` | Destination hostname after rewrite |
 | Upstream host | `%UPSTREAM_HOST%` | `100.59.144.143:443` | Resolved external IP address |
-| Upstream cluster | `%UPSTREAM_CLUSTER%` | `outbound\|443\|\|httpbin.org` | Routing destination |
+| Upstream cluster | `%UPSTREAM_CLUSTER_RAW%` | `outbound\|443\|\|httpbin.org` | Routing destination (Istio 1.23+; use `%UPSTREAM_CLUSTER%` on older versions) |
 | Downstream remote address | `%DOWNSTREAM_REMOTE_ADDRESS%` | `10.244.0.18:43722` | Source workload pod IP and port |
 | Route name | `%ROUTE_NAME%` | `gateway-system.httpbin-external.0` | Which HTTPRoute matched |
 
@@ -234,7 +244,7 @@ outbound|443||httpbin.org::54.205.27.0:443::rq_success::0
 outbound|443||httpbin.org::54.205.27.0:443::health_flags::healthy
 ```
 
-This shows each resolved IP for the external service with its connection count (`cx_total`), connection failures (`cx_connect_fail`), request successes and errors (`rq_success`, `rq_error`), and health status. In this example, both IPs accepted connections (`cx_connect_fail::0`) but returned errors (`rq_error::1`), confirming the issue is the external service, not connectivity.
+This shows each resolved IP for the external service with its connection count (`cx_total`), connection failures (`cx_connect_fail`), request totals (`rq_total`), and health status. In this example, both IPs accepted connections (`cx_connect_fail::0`) but had no successful requests (`rq_success::0`). To determine whether the errors came from the external service or from proxy-level failures, check the access logs for the corresponding requests: `response_flags=-` with an HTTP error code indicates the external service returned the error, while flags like `UF` or `UT` indicate a proxy-level failure.
 
 **No route configured for a destination**
 
@@ -303,6 +313,9 @@ metadata:
   name: egress-access-logs
   namespace: gateway-system
 spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: kuadrant-egressgateway
   accessLogging:
     - providers:
       - name: envoy
@@ -345,10 +358,205 @@ A recommended JSON format for egress includes these egress-relevant fields:
   "request_id": "%REQ(X-REQUEST-ID)%",
   "authority": "%REQ(:AUTHORITY)%",
   "upstream_host": "%UPSTREAM_HOST%",
-  "upstream_cluster": "%UPSTREAM_CLUSTER%",
+  "upstream_cluster": "%UPSTREAM_CLUSTER_RAW%",
   "route_name": "%ROUTE_NAME%"
 }
 ```
+
+## Distributed Tracing
+
+Distributed tracing shows the complete request flow through the egress gateway, including policy evaluation by the wasm-shim, authentication checks in Authorino, and rate limit checks in Limitador. This section covers egress-specific tracing behavior. For general tracing setup, see the [tracing guide](../../observability/tracing.md).
+
+### Prerequisites
+
+In addition to the [general prerequisites](#prerequisites), tracing requires two layers of configuration that work together:
+
+1. **Istio proxy tracing** (Istio `Telemetry` CR + extension provider): tells Envoy proxies to generate gateway-level spans. Without this, no Envoy spans appear.
+2. **Kuadrant component tracing** (Kuadrant CR `spec.observability.tracing`): tells the wasm-shim, Authorino, and Limitador where to send their policy evaluation spans. Without this, no Kuadrant spans appear.
+
+Both are required for the full span chain. Example Kuadrant CR configuration:
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec:
+  observability:
+    dataPlane:
+      defaultLevels:
+        - debug: "true"
+      httpHeaderIdentifier: x-request-id
+    tracing:
+      defaultEndpoint: rpc://jaeger.observability.svc.cluster.local:4317
+      insecure: true # development only; use false with TLS in production
+```
+
+You also need at least one Kuadrant policy (AuthPolicy, RateLimitPolicy, or TokenRateLimitPolicy) attached to the egress gateway or its HTTPRoutes.
+
+### How Tracing Works on Egress
+
+The tracing infrastructure is gateway-agnostic. When the Kuadrant CR has a tracing endpoint configured and a policy is attached to the egress gateway, the operator automatically:
+
+1. Creates a tracing `EnvoyFilter` (`kuadrant-tracing-<gateway-name>`) that defines an upstream cluster pointing to the trace collector.
+2. Includes a `tracing-service` in the wasm-shim configuration, enabling the wasm-shim to export spans.
+
+No egress-specific configuration is needed. Verify that the tracing EnvoyFilter was created:
+
+```sh
+kubectl get envoyfilter -n gateway-system -l kuadrant.io/tracing=true
+```
+
+Expected output:
+
+```text
+NAME                                      AGE
+kuadrant-tracing-kuadrant-egressgateway   10s
+```
+
+### Egress Span Chain
+
+A request flowing through the egress gateway with both AuthPolicy and RateLimitPolicy produces the following span hierarchy. The wasm-shim creates a root span and child spans for each policy evaluation, propagating trace context to Authorino and Limitador via gRPC metadata:
+
+```text
+[kuadrant-filter] kuadrant_filter (~330ms)
+├─ [kuadrant-filter] grpc (action=ratelimit)
+│  ├─ [kuadrant-filter] grpc_request (ShouldRateLimit)
+│  │  └─ [limitador] should_rate_limit
+│  │     └─ [limitador] check_and_update
+│  └─ [kuadrant-filter] grpc_response
+├─ [kuadrant-filter] grpc (action=auth)
+│  ├─ [kuadrant-filter] grpc_request (Check)
+│  │  └─ [authorino] envoy.service.auth.v3.Authorization/Check
+│  │     └─ [authorino] Check
+│  └─ [kuadrant-filter] grpc_response
+└─ [kuadrant-filter] headers (HttpResponseHeaders)
+```
+
+To verify that spans are being generated, send a request through the egress gateway and query Jaeger:
+
+```sh
+EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n gateway-system \
+    -o jsonpath='{.status.addresses[0].value}')
+
+kubectl exec -n egress-test test-client -- \
+    curl -sS -o /dev/null -w '%{http_code}' \
+    "http://${EGRESS_IP}/get" -H "Host: httpbin.org" --max-time 10
+```
+
+Then port-forward to the Jaeger UI and search for traces:
+
+```sh
+kubectl port-forward -n observability svc/jaeger 16686:16686 &
+```
+
+Open `http://localhost:16686`, select service `kuadrant-filter`, and search. Each trace shows the span hierarchy above, with `kuadrant-filter`, `authorino`, and `limitador` as participating services.
+
+Key span attributes for troubleshooting:
+
+| Attribute | Span | Description |
+|-----------|------|-------------|
+| `request_id` | `kuadrant_filter` | Correlates with Envoy access logs and the Envoy gateway trace |
+| `action` | `grpc` | Which policy type was evaluated (`auth`, `ratelimit`) |
+| `sources` | `grpc` | Which policy resource triggered this action (for example, `ratelimitpolicy.kuadrant.io:gateway-system/my-policy`) |
+| `grpc_service` | `grpc_request` | The upstream service called (for example, `envoy.service.auth.v3.Authorization`) |
+| `grpc_method` | `grpc_request` | The gRPC method called (for example, `Check`, `ShouldRateLimit`) |
+
+### Two Trace Boundaries
+
+Envoy does not propagate trace context to wasm filters ([envoyproxy/envoy#22028](https://github.com/envoyproxy/envoy/issues/22028)). This means each request produces two independent traces:
+
+1. **Envoy gateway trace** — Istio proxy spans showing the overall request through the egress gateway:
+   ```text
+   [egress-gateway] httpbin.org:443/* (~330ms)
+   └─ [egress-gateway] router outbound|443||httpbin.org; egress
+   ```
+
+2. **Kuadrant filter trace** — policy evaluation spans across the kuadrant-filter (wasm-shim), Authorino, and Limitador (shown in the span chain above).
+
+These two traces share the same `x-request-id` header value. To correlate them in Jaeger:
+
+1. Find a `kuadrant-filter` trace and note the `request_id` attribute on the `kuadrant_filter` span.
+2. Search the `kuadrant-egressgateway-istio.gateway-system` service for traces with tag `guid:x-request-id=<that value>`.
+
+Verify that both traces exist for the same request:
+
+```sh
+kubectl exec -n egress-test test-client -- \
+    curl -sS -o /dev/null -w '%{http_code}' \
+    "http://${EGRESS_IP}/get" -H "Host: httpbin.org" \
+    -H "x-request-id: egress-trace-test" --max-time 10
+```
+
+In Jaeger, search `kuadrant-filter` for tag `request_id=egress-trace-test`, then search `kuadrant-egressgateway-istio.gateway-system` for tag `guid:x-request-id=egress-trace-test`. Both traces correspond to the same request.
+
+### Preventing Trace Header Leaking
+
+By default, Istio propagates `traceparent`, `tracestate`, and `baggage` headers to upstream services. On an egress gateway, this means trace headers reach external services, which is a security concern: the headers reveal internal infrastructure details (trace IDs, span IDs, internal state).
+
+To verify whether trace headers are reaching the external service, use an endpoint that echoes request headers (such as `httpbin.org/headers`):
+
+```sh
+kubectl exec -n egress-test test-client -- \
+    curl -sS "http://${EGRESS_IP}/headers" -H "Host: httpbin.org" --max-time 10
+```
+
+In the response, look for `traceparent`, `tracestate`, and `baggage` headers. If they appear, trace context is leaking to the external service.
+
+**Istio 1.30+ (recommended):** Use `disableContextPropagation` in a `Telemetry` resource scoped to the egress gateway:
+
+```yaml
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: egress-no-trace-propagation
+  namespace: gateway-system
+spec:
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: kuadrant-egressgateway
+  tracing:
+    - disableContextPropagation: true
+```
+
+The `selector` scopes this to the egress gateway pods only. Without it, the setting would apply to all proxies in the namespace, including any ingress gateways.
+
+This prevents `traceparent`, `tracestate`, and `X-B3-*` headers from reaching external services while preserving span reporting. The wasm-shim's internal trace propagation to Authorino and Limitador is unaffected because the wasm-shim injects trace context into internal gRPC calls, not into the outbound request to the external service.
+
+`disableContextPropagation` does not remove the W3C `baggage` header. To strip `baggage`, add a `RequestHeaderModifier` filter to egress HTTPRoutes:
+
+```yaml
+filters:
+  - type: RequestHeaderModifier
+    requestHeaderModifier:
+      remove:
+        - baggage
+```
+
+**Istio < 1.30:** The `disableContextPropagation` field is not available. Header removal via `RequestHeaderModifier` in HTTPRoute does not work for `traceparent` and `tracestate` because Istio re-injects these headers after the filter processes the request. Only `baggage` can be stripped this way. Consider upgrading to Istio 1.30+ for egress tracing security.
+
+### Tracing Without a Sidecar
+
+When the calling workload does not have an Istio sidecar (for example, reaching the egress gateway via its ClusterIP service), the first Envoy span starts at the egress gateway. No workload sidecar outbound span exists.
+
+Wasm-shim traces work identically regardless of sidecar presence. For trace continuity, workloads must propagate `x-request-id` headers in their requests so the wasm-shim can correlate traces.
+
+### Tracing Troubleshooting
+
+**No `kuadrant-filter` service in Jaeger**
+
+- Verify the Kuadrant CR has `spec.observability.dataPlane.defaultLevels` set to at least `debug: "true"`. The default level (`ERROR`) only exports spans for error cases.
+- Verify the tracing EnvoyFilter exists: `kubectl get envoyfilter -n gateway-system -l kuadrant.io/tracing=true`
+- Verify at least one policy is attached to the egress gateway or its HTTPRoutes.
+
+**Kuadrant filter and Envoy traces have different trace IDs**
+
+This is expected behavior due to the Envoy/wasm trace context limitation ([envoyproxy/envoy#22028](https://github.com/envoyproxy/envoy/issues/22028)). Use `x-request-id` to correlate across the two traces.
+
+**Limitador or Authorino spans appear in separate traces**
+
+If Limitador or Authorino spans are in their own traces (not linked to the kuadrant-filter trace), verify that the tracing endpoint is correctly configured. The wasm-shim propagates trace context via gRPC metadata, so Authorino and Limitador appear as child spans within the kuadrant-filter trace when configuration is correct.
 
 ## Ensuring Prometheus Scrapes the Egress Gateway
 
@@ -366,16 +574,17 @@ If Prometheus uses annotation-based discovery, verify that the pod has `promethe
 
 ## Next Steps
 
-- [Distributed tracing for egress](../../observability/tracing.md): trace requests end-to-end from workload through the egress gateway to the external service
 - [TelemetryPolicy](../../overviews/telemetrypolicy.md): add custom metric labels to egress traffic via CEL expressions
 - [TokenRateLimitPolicy](../../overviews/rate-limiting.md): cap AI inference costs by token consumption per workload
 
 ## References
 
 - [Egress Gateway Setup](egress-gateway.md)
+- [Kuadrant Tracing Guide](../../observability/tracing.md)
 - [Istio Standard Metrics](https://istio.io/latest/docs/reference/config/metrics/)
 - [Istio Telemetry API](https://istio.io/latest/docs/reference/config/telemetry/)
 - [Envoy Access Log Format](https://www.envoyproxy.io/docs/envoy/latest/configuration/observability/access_log/usage#format-strings)
 - [Kuadrant Observability Stack](../../observability/README.md)
 - [Kuadrant Metrics Reference](../../observability/metrics.md)
 - [Envoy Access Logs and Request Correlation](../../observability/envoy-access-logs.md)
+- [Envoy Wasm Trace Context Limitation](https://github.com/envoyproxy/envoy/issues/22028)

@@ -303,6 +303,9 @@ type mockExtensionServiceClient struct {
 	pipelineCommitFn       func(ctx context.Context, in *extpb.PipelineCommitRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
+func (m *mockExtensionServiceClient) Handshake(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+	return nil, nil
+}
 func (m *mockExtensionServiceClient) Ping(_ context.Context, _ *extpb.PingRequest, _ ...grpc.CallOption) (*extpb.PongResponse, error) {
 	return nil, nil
 }

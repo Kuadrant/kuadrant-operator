@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This guide outlines the steps to enable tracing in Istio and Kuadrant components (Authorino, Limitador, and wasm-shim), directing traces to a central collector for improved observability and troubleshooting. We'll also explore a typical troubleshooting flow using traces and logs.
+This guide outlines the steps to enable tracing in Istio and Kuadrant components (Authorino, Limitador, and Wasm-shim), directing traces to a central collector for improved observability and troubleshooting. We'll also explore a typical troubleshooting flow using traces and logs.
 
 ## Prerequisites
 
@@ -62,7 +62,7 @@ Ensure the collector is the same one that Istio is sending traces so that they c
 Configure tracing centrally in the Kuadrant CR. This configuration will be automatically propagated to:
 - **Authorino** (Auth service - authentication decisions)
 - **Limitador** (Rate limiting service - rate limit checks)
-- **Wasm-shim** (Envoy WebAssembly filter - gateway-level tracing)
+- **Wasm-shim** (Envoy WebAssembly filter - gateway-level tracing, exports traces as service `kuadrant-filter`)
 
 ```yaml
 apiVersion: kuadrant.io/v1beta1
@@ -482,7 +482,7 @@ Request Flow (29.4ms total):
 
 Data plane traces include rich context from multiple services:
 
-**Wasm-shim Spans** (service: `wasm-shim`):
+**Wasm-shim Spans** (service: `kuadrant-filter`):
 - `grpc`: Outer span wrapping a gRPC action, with `action` attribute (e.g., `auth`, `ratelimit`) and `sources` identifying the originating policy
 - `grpc_request` / `grpc_response`: Inner spans for gRPC call lifecycle, with `grpc_service` and `grpc_method` attributes identifying the upstream service
 - `headers`: Span for HTTP header modifications, with `target` attribute (`HttpRequestHeaders` or `HttpResponseHeaders`)
@@ -503,13 +503,13 @@ Data plane traces include rich context from multiple services:
 
 **Search by Request ID:**
 ```text
-Service: wasm-shim
+Service: kuadrant-filter
 Tags: request_id=adefc8cf-78af-9db7-97e5-5ae5e2b22c05
 ```
 
 **Filter by Operation:**
 ```text
-Service: wasm-shim
+Service: kuadrant-filter
 Operation: grpc
 Tags: action=auth
 Min Duration: 10ms
@@ -517,7 +517,7 @@ Min Duration: 10ms
 
 **Examine Specific Policy:**
 ```text
-Service: wasm-shim
+Service: kuadrant-filter
 Operation: grpc
 Tags: sources=authpolicy.kuadrant.io:kuadrant/my-auth-policy
 ```

@@ -82,10 +82,11 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	var err error
 
 	service := newExtensionService(BlockingDAG, logger)
+	interceptor := NewAuthInterceptor(service.sessionStore, logger.WithName("auth"))
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
-		if oopExtension, e := NewOOPExtension(name, location, service, logger, sync); e == nil {
+		if oopExtension, e := NewOOPExtension(name, location, service, interceptor, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {

@@ -390,6 +390,20 @@ dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
+COMPONENT_CHARTS_DIR = $(PROJECT_PATH)/component-charts
+
+.PHONY: sync-component-charts
+sync-component-charts: ## Sync component Helm charts from upstream repos.
+	@go run $(PROJECT_PATH)/hack/sync-components/ sync --config $(COMPONENT_CHARTS_DIR)/sync.yaml
+
+.PHONY: sync-component-chart
+sync-component-chart: export COMPONENT := $(COMPONENT)
+sync-component-chart: ## Sync a single component chart. Usage: make sync-component-chart COMPONENT=dns-operator
+ifndef COMPONENT
+	$(error COMPONENT is required. Usage: make sync-component-chart COMPONENT=dns-operator)
+endif
+	@go run $(PROJECT_PATH)/hack/sync-components/ sync --config $(COMPONENT_CHARTS_DIR)/sync.yaml --component "$${COMPONENT}"
+
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."

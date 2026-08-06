@@ -1202,7 +1202,7 @@ func TestHashUpstreamServiceConfig(t *testing.T) {
 	timeout := "100ms"
 	svc := wasm.Service{
 		Endpoint:    "ext-my-service-8081",
-		Type:        wasm.AuthServiceType,
+		Type:        wasm.DynamicServiceType,
 		FailureMode: wasm.FailureModeDeny,
 		Timeout:     &timeout,
 	}
@@ -1273,11 +1273,6 @@ func TestMutateWasmConfig_InjectsUpstreams(t *testing.T) {
 
 	if len(wasmConfig.Services) != 2 {
 		t.Errorf("Expected 2 services in wasm config, got %d", len(wasmConfig.Services))
-	}
-
-	// Verify descriptor service is set to the expected value
-	if wasmConfig.DescriptorService != "kuadrant-operator-grpc" {
-		t.Errorf("Expected DescriptorService to be 'kuadrant-operator-grpc', got %q", wasmConfig.DescriptorService)
 	}
 
 	// Build a map of cluster names to upstream entries for easy lookup

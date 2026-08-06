@@ -1099,11 +1099,6 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		methodServiceKeys[key.Policy][key.Name] = wasmServiceKey
 	}
 
-	// Set descriptor service cluster name if there are any dynamic services
-	if len(relevantUpstreamKeys) > 0 {
-		wasmConfig.DescriptorService = "kuadrant-operator-grpc"
-	}
-
 	// Translate pipeline actions into Action entries (deterministic order across policies).
 	// Only include pipeline policies whose stored target refs match this gateway's routes.
 	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...))

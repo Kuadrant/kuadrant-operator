@@ -9,7 +9,6 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
-	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -129,9 +128,9 @@ func (r *IstioTracingClusterReconciler) Reconcile(ctx context.Context, _ []contr
 
 		// Update
 		existingEnvoyFilter.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs:    desiredEnvoyFilter.Spec.TargetRefs,
-			ConfigPatches: desiredEnvoyFilter.Spec.ConfigPatches,
-			Priority:      desiredEnvoyFilter.Spec.Priority,
+			WorkloadSelector: desiredEnvoyFilter.Spec.WorkloadSelector,
+			ConfigPatches:    desiredEnvoyFilter.Spec.ConfigPatches,
+			Priority:         desiredEnvoyFilter.Spec.Priority,
 		}
 
 		existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)
@@ -187,11 +186,9 @@ func (r *IstioTracingClusterReconciler) buildDesiredEnvoyFilter(kuadrant *kuadra
 			},
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs: []*istiov1beta1.PolicyTargetReference{
-				{
-					Group: machinery.GatewayGroupKind.Group,
-					Kind:  machinery.GatewayGroupKind.Kind,
-					Name:  gateway.GetName(),
+			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{
+				Labels: map[string]string{
+					kuadrantistio.GatewayNameLabel: gateway.GetName(),
 				},
 			},
 		},

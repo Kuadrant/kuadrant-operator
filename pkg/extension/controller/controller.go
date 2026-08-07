@@ -63,6 +63,8 @@ type ExtensionController struct {
 	logger          logr.Logger
 	manager         ctrlruntime.Manager
 	extensionClient *extensionClient
+	extensionName   string
+	credential      []byte
 	eventCache      *EventTypeCache
 
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
@@ -70,6 +72,13 @@ type ExtensionController struct {
 
 // Start launches the controller manager and begins processing events.
 func (ec *ExtensionController) Start(ctx context.Context) error {
+	handshakeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := ec.extensionClient.handshake(handshakeCtx, ec.extensionName, ec.credential, ec.config.PolicyKind); err != nil {
+		return fmt.Errorf("extension handshake failed: %w", err)
+	}
+	ec.logger.Info("handshake accepted", "extension", ec.extensionName, "policyKind", ec.config.PolicyKind)
+
 	stopCh := make(chan struct{})
 	// todo(adam-cattermole): how big do we make the reconcile event channel?
 	//	 how many should we queue before we block?

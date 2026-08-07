@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 	"google.golang.org/protobuf/types/known/structpb"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
+	istiotypev1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -210,11 +211,9 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			// has the correct target ref
-			Expect(existingEnvoyFilter.Spec.TargetRefs).To(Not(BeEmpty()))
-			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
-			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
-			Expect(existingEnvoyFilter.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
+			// has the correct workload selector
+			Expect(existingEnvoyFilter.Spec.WorkloadSelector).ToNot(BeNil())
+			Expect(existingEnvoyFilter.Spec.WorkloadSelector.Labels).To(HaveKeyWithValue("gateway.networking.k8s.io/gateway-name", gateway.Name))
 			// has config patches
 			Expect(existingEnvoyFilter.Spec.ConfigPatches).To(Not(BeEmpty()))
 			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
@@ -358,6 +357,81 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
 				g.Expect(existingEnvoyFilter.Spec.ConfigPatches).ToNot(BeEmpty())
 				g.Expect(len(existingEnvoyFilter.Spec.ConfigPatches)).To(Equal(originalPatchCount))
+			}, "10s", "1s").Should(Succeed())
+		}, testTimeOut)
+
+		It("envoyfilter targetRefs should be cleared when workloadSelector is applied", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			err := testClient().Create(ctx, httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create ratelimitpolicy
+			rlp := &kuadrantv1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
+							"l1": {
+								Rates: []kuadrantv1.Rate{
+									{
+										Limit: 1, Window: kuadrantv1.Duration("3m"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = testClient().Create(ctx, rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingEnvoyFilter.Spec.TargetRefs).To(BeEmpty())
+
+			// Simulate a pre-existing EnvoyFilter that used targetRefs instead of workloadSelector
+			existingEnvoyFilter.Spec.TargetRefs = []*istiotypev1beta1.PolicyTargetReference{{
+				Group: "gateway.networking.k8s.io",
+				Kind:  "Gateway",
+				Name:  gateway.GetName(),
+			}}
+			existingEnvoyFilter.Spec.WorkloadSelector = nil
+			err = testClient().Update(ctx, existingEnvoyFilter)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Trigger reconcile by updating the RLP
+			Expect(testClient().Get(ctx, rlpKey, rlp)).To(Succeed())
+			original := rlp.DeepCopy()
+			if rlp.Annotations == nil {
+				rlp.Annotations = map[string]string{}
+			}
+			rlp.Annotations["trigger-reconcile"] = "true"
+			patch := client.MergeFrom(original)
+			Expect(testClient().Patch(ctx, rlp, patch)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)).To(Succeed())
+				g.Expect(existingEnvoyFilter.Spec.TargetRefs).To(BeEmpty())
+				g.Expect(existingEnvoyFilter.Spec.WorkloadSelector).ToNot(BeNil())
+				g.Expect(existingEnvoyFilter.Spec.WorkloadSelector.Labels).To(HaveKeyWithValue("gateway.networking.k8s.io/gateway-name", gateway.Name))
 			}, "10s", "1s").Should(Succeed())
 		}, testTimeOut)
 

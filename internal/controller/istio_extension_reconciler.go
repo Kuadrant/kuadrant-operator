@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
-	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -184,7 +183,8 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		// update
 		existingEnvoyFilter.Spec.ConfigPatches = desiredEnvoyFilter.Spec.ConfigPatches
 		existingEnvoyFilter.Spec.Priority = desiredEnvoyFilter.Spec.Priority
-		existingEnvoyFilter.Spec.TargetRefs = desiredEnvoyFilter.Spec.TargetRefs
+		existingEnvoyFilter.Spec.WorkloadSelector = desiredEnvoyFilter.Spec.WorkloadSelector
+		existingEnvoyFilter.Spec.TargetRefs = nil
 
 		existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)
 		if err != nil {
@@ -286,8 +286,8 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 		}
 
 		existing.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs:    desiredEnvoyFilter.Spec.TargetRefs,
-			ConfigPatches: desiredEnvoyFilter.Spec.ConfigPatches,
+			WorkloadSelector: desiredEnvoyFilter.Spec.WorkloadSelector,
+			ConfigPatches:    desiredEnvoyFilter.Spec.ConfigPatches,
 		}
 		unstructured, err := controller.Destruct(existing)
 		if err != nil {
@@ -351,11 +351,9 @@ func buildUpstreamEnvoyFilter(logger logr.Logger, gateway *machinery.Gateway, up
 			},
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs: []*istiov1beta1.PolicyTargetReference{
-				{
-					Group: machinery.GatewayGroupKind.Group,
-					Kind:  machinery.GatewayGroupKind.Kind,
-					Name:  gateway.GetName(),
+			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{
+				Labels: map[string]string{
+					kuadrantistio.GatewayNameLabel: gateway.GetName(),
 				},
 			},
 		},
@@ -695,11 +693,9 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 			},
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs: []*istiov1beta1.PolicyTargetReference{
-				{
-					Group: machinery.GatewayGroupKind.Group,
-					Kind:  machinery.GatewayGroupKind.Kind,
-					Name:  gateway.GetName(),
+			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{
+				Labels: map[string]string{
+					kuadrantistio.GatewayNameLabel: gateway.GetName(),
 				},
 			},
 			ConfigPatches: configPatches,

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -116,6 +117,20 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	}
 	socketPath := os.Args[1]
 
+	extensionName := os.Getenv("KUADRANT_EXTENSION_NAME")
+	if extensionName == "" {
+		return nil, errors.New("KUADRANT_EXTENSION_NAME environment variable is required")
+	}
+
+	credentialHex := os.Getenv("KUADRANT_EXTENSION_CREDENTIAL")
+	if credentialHex == "" {
+		return nil, errors.New("KUADRANT_EXTENSION_CREDENTIAL environment variable is required")
+	}
+	credential, err := hex.DecodeString(credentialHex)
+	if err != nil {
+		return nil, fmt.Errorf("KUADRANT_EXTENSION_CREDENTIAL is not valid hex: %w", err)
+	}
+
 	extClient, err := newExtensionClient(socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extension client: %w", err)
@@ -172,6 +187,8 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		manager:         mgr,
 		logger:          b.logger,
 		extensionClient: extClient,
+		extensionName:   extensionName,
+		credential:      credential,
 		eventCache:      eventCache,
 		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil

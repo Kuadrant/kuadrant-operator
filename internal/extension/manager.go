@@ -18,6 +18,7 @@ package extension
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -86,7 +87,12 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
-		if oopExtension, e := NewOOPExtension(name, location, service, interceptor, logger, sync); e == nil {
+		credential := make([]byte, 32)
+		if _, e := rand.Read(credential); e != nil {
+			return Manager{}, fmt.Errorf("failed to generate credential for extension %s: %w", name, e)
+		}
+		service.sessionStore.SetCredential(name, credential)
+		if oopExtension, e := NewOOPExtension(name, location, credential, service, interceptor, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {

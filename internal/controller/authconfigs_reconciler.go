@@ -20,21 +20,25 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	extensionmanager "github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
 const AuthConfigsReconcilerName = "AuthConfigsReconciler"
+const authConfigFinalizer = "kuadrant.io/authconfigs"
 
 type AuthConfigsReconciler struct {
-	client *dynamic.DynamicClient
+	client dynamic.Interface
+	*reconcilers.BaseReconciler
 }
 
 // AuthConfigsReconciler subscribes to events with potential to change Authorino AuthConfig custom resources
@@ -55,6 +59,48 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 
 func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler").WithValues("context", ctx)
+	kObj := GetKuadrantFromTopologyDuringDeletion(topology)
+	if kObj == nil {
+		logger.V(1).Info("kuadrant resource not found in the topology")
+		return nil
+	}
+
+	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, authConfigFinalizer) {
+		logger.Info("Kuadrant CR is being deleted, ensuring Auth Config deletion")
+		// get all auth configs
+		managedAuthConfigs := topology.Objects().Items(func(o machinery.Object) bool {
+			return o.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels())
+		})
+
+		for _, ac := range managedAuthConfigs {
+			if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(ac.GetNamespace()).Delete(ctx, ac.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				logger.Error(err, "failed to delete auth config", "namespace", ac.GetNamespace(), "name", ac.GetName())
+				return err
+			}
+		}
+
+		logger.Info("auth configs deleted, removing finalizer from Kuadrant CR")
+		kObjCopy := kObj.DeepCopy()
+		if err := r.RemoveFinalizer(ctx, kObjCopy, authConfigFinalizer); err != nil {
+			logger.Error(err, "failed to remove finalizer")
+			return err
+		}
+		return nil
+	}
+
+	// if deletion of kuadrant CR initiated, return
+	if kObj.GetDeletionTimestamp() != nil {
+		return nil
+	}
+
+	if !controllerutil.ContainsFinalizer(kObj, authConfigFinalizer) {
+		kObjCopy := kObj.DeepCopy()
+		if err := r.AddFinalizer(ctx, kObjCopy, authConfigFinalizer); err != nil {
+			logger.Error(err, "failed to add finalizer for Auth Config CR")
+			return err
+		}
+		logger.Info("added finalizer to Kuadrant CR")
+	}
 
 	authorino := GetAuthorinoFromTopology(topology, state)
 	if authorino == nil {

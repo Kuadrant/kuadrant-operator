@@ -24,6 +24,7 @@ import (
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/internal/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
+	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -96,7 +97,7 @@ func NewDataPlanePoliciesWorkflow(mgr controllerruntime.Manager, client *dynamic
 			},
 		}).Run),
 		Tasks: []controller.ReconcileFunc{
-			traceReconcileFunc("reconciler.auth_configs", (&AuthConfigsReconciler{client: client}).Subscription().Reconcile),
+			traceReconcileFunc("reconciler.auth_configs", (&AuthConfigsReconciler{client: client, BaseReconciler: reconcilers.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader())}).Subscription().Reconcile),
 			traceReconcileFunc("reconciler.limitador_limits", (&LimitadorLimitsReconciler{client: client}).Subscription().Reconcile),
 		},
 	}

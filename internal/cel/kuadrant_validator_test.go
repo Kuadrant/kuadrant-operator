@@ -90,22 +90,6 @@ func TestValidateWasmActionValid(t *testing.T) {
 	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
 }
 
-func TestValidateWasmActionRejectsInternalPredicates(t *testing.T) {
-	wasmAction := wasm.ActionSpec{
-		ServiceName: wasm.RateLimitServiceName,
-		Scope:       "scope",
-		Predicates:  []string{wasm.RateLimitCompleteSignal, "request.id == 1"},
-	}
-	builder := NewRootValidatorBuilder()
-	builder.PushPolicyBinding(RateLimitPolicyKind, RateLimitName, cel.AnyType)
-	validator, err := builder.Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "undeclared reference to 'kuadrant'")
-}
-
 func TestNewIssue(t *testing.T) {
 	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,

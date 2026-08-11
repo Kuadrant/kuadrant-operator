@@ -23,6 +23,16 @@ spec:
     #         protocol: TCP
     #         port: 8080
   egress:
+    - name: allow-otlp-traces
+      action: Allow
+      to:
+        - namespaces:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - portNumber:
+            protocol: TCP
+            port: 4317
     # TODO: Scope 0.0.0.0/0 to specific DNS provider API CIDRs (e.g. AWS, Azure, GCP)
     - name: allow-external-dns-providers
       action: Allow

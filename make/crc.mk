@@ -31,7 +31,7 @@ crc-setup: ## Deploy Kuadrant operator, dependencies, observability, and sample 
 
 .PHONY: crc-network-policies
 crc-network-policies: ## Apply network policices to lock down pod to pod connections
-	kubectl apply -k ./config/network-policy
+	kubectl apply -k ./config/network-policy-standard
 
 
 .PHONY: crc-env-setup
@@ -80,8 +80,6 @@ crc-deploy: ## Build, push, and deploy the operator on CRC
 	$(MAKE) crc-push IMG=$(CRC_IMG)
 	$(MAKE) deploy IMG=$(CRC_IMG)
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
-	kubectl apply -f config/install/configure/standard/kuadrant.yaml
-	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Ready kuadrant/kuadrant
 	@echo "[INFO] Enabling Kuadrant console plugin..."
 	@if oc get consoles.operator.openshift.io cluster -o jsonpath='{.spec.plugins}' 2>/dev/null | grep -q kuadrant-console-plugin; then \
 		echo "[INFO] Console plugin already enabled"; \
@@ -99,8 +97,6 @@ crc-deploy-observability: kustomize helm ## Deploy observability stack on CRC (G
 	@echo "[INFO] Enabling user workload monitoring..."
 	kubectl apply -f config/observability/crc/user-workload-monitoring.yaml
 	kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-	@echo "[INFO] Deploying ServiceMonitors for Kuadrant operators..."
-	kubectl apply -f config/observability/prometheus/monitors/operators.yaml
 	@echo "[INFO] Generating custom-resource-state ConfigMap for kube-state-metrics..."
 	$(KUSTOMIZE) build github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.7.0 | kubectl apply -f -
 	@echo "[INFO] Deploying kube-state-metrics for Kuadrant CRDs..."
@@ -135,15 +131,18 @@ crc-deploy-observability: kustomize helm ## Deploy observability stack on CRC (G
 	@echo "[INFO] Observability stack deployed successfully!"
 
 .PHONY: crc-deploy-sample
-crc-deploy-sample: ## Deploy toystore sample app with AuthPolicy and RateLimitPolicy
-	@echo "[INFO] Deploying toystore sample application..."
+crc-deploy-sample: ## Deploy Kuadrant CR and toystore sample app with AuthPolicy and RateLimitPolicy
 	kubectl create namespace $(TOYSTORE_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
+	@echo "[INFO] Deploying Kuadrant CR to $(TOYSTORE_NAMESPACE)..."
+	sed 's/namespace: kuadrant-system/namespace: $(TOYSTORE_NAMESPACE)/' config/install/configure/standard/kuadrant.yaml | kubectl apply -f -
+	kubectl -n $(TOYSTORE_NAMESPACE) wait --timeout=300s --for=condition=Ready kuadrant/kuadrant
+	@echo "[INFO] Deploying toystore sample application..."
 	kubectl apply -n $(TOYSTORE_NAMESPACE) -f examples/toystore/toystore.yaml
 	kubectl -n $(TOYSTORE_NAMESPACE) wait --timeout=120s --for=condition=Available deployment/toystore
 	@echo "[INFO] Deploying API key secrets..."
-	kubectl apply -n $(KUADRANT_NAMESPACE) -f examples/toystore/alice-api-key-secret.yaml
-	kubectl apply -n $(KUADRANT_NAMESPACE) -f examples/toystore/bob-api-key-secret.yaml
-	kubectl apply -n $(KUADRANT_NAMESPACE) -f examples/toystore/admin-key-secret.yaml
+	kubectl apply -n $(TOYSTORE_NAMESPACE) -f examples/toystore/alice-api-key-secret.yaml
+	kubectl apply -n $(TOYSTORE_NAMESPACE) -f examples/toystore/bob-api-key-secret.yaml
+	kubectl apply -n $(TOYSTORE_NAMESPACE) -f examples/toystore/admin-key-secret.yaml
 	@echo "[INFO] Deploying HTTPRoute (CRC)..."
 	kubectl apply -n $(TOYSTORE_NAMESPACE) -f examples/toystore/crc/httproute.yaml
 	@echo "[INFO] Deploying AuthPolicy..."
@@ -151,7 +150,7 @@ crc-deploy-sample: ## Deploy toystore sample app with AuthPolicy and RateLimitPo
 	@echo "[INFO] Deploying RateLimitPolicy..."
 	kubectl apply -n $(TOYSTORE_NAMESPACE) -f examples/toystore/ratelimitpolicy_httproute.yaml
 	@echo "[INFO] Creating OpenShift Route for toystore..."
-	kubectl apply -f examples/toystore/crc/route.yaml
+	kubectl apply -n gateway-system -f examples/toystore/crc/route.yaml
 	@echo ""
 	@echo "=== CRC Setup Complete ==="
 	@echo ""
@@ -174,15 +173,16 @@ crc-deploy-sample: ## Deploy toystore sample app with AuthPolicy and RateLimitPo
 	@echo ""
 
 .PHONY: crc-cleanup-sample
-crc-cleanup-sample: ## Remove toystore sample app from CRC
-	-kubectl delete -f examples/toystore/crc/route.yaml
+crc-cleanup-sample: ## Remove toystore sample app and Kuadrant CR from CRC
+	-kubectl delete -n gateway-system -f examples/toystore/crc/route.yaml
 	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/ratelimitpolicy_httproute.yaml
 	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/crc/authpolicy.yaml
 	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/crc/httproute.yaml
-	-kubectl delete -n $(KUADRANT_NAMESPACE) -f examples/toystore/admin-key-secret.yaml
-	-kubectl delete -n $(KUADRANT_NAMESPACE) -f examples/toystore/bob-api-key-secret.yaml
-	-kubectl delete -n $(KUADRANT_NAMESPACE) -f examples/toystore/alice-api-key-secret.yaml
+	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/admin-key-secret.yaml
+	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/bob-api-key-secret.yaml
+	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/alice-api-key-secret.yaml
 	-kubectl delete -n $(TOYSTORE_NAMESPACE) -f examples/toystore/toystore.yaml
+	-kubectl -n $(TOYSTORE_NAMESPACE) delete kuadrant/kuadrant
 	-kubectl delete namespace $(TOYSTORE_NAMESPACE)
 
 .PHONY: crc-cleanup-observability
@@ -195,7 +195,6 @@ crc-cleanup-observability: ## Remove observability components from CRC
 	-kubectl delete -f config/observability/crc/grafana-sa.yaml
 	-kubectl delete -f config/observability/openshift/grafana/subscription.yaml
 	-kubectl delete -f config/observability/openshift/kube-state-metrics.yaml
-	-kubectl delete -f config/observability/prometheus/monitors/operators.yaml
 
 .PHONY: crc-cleanup
 crc-cleanup: ## Remove Kuadrant operator and CRDs from CRC (does not stop the VM)

@@ -23,6 +23,16 @@ spec:
             port: 8080
   egress:
     # this may never be need
+    - name: allow-otlp-traces
+      action: Allow
+      to:
+        - namespaces:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - portNumber:
+            protocol: TCP
+            port: 4317
     - name: allow-dns
       action: Allow
       to:

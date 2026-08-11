@@ -48,6 +48,16 @@ spec:
             protocol: TCP
             port: 8083
   egress:
+    - name: allow-otlp-traces
+      action: Allow
+      to:
+        - namespaces:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - portNumber:
+            protocol: TCP
+            port: 4317
     - name: allow-external-oidc
       action: Allow
       to:

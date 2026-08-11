@@ -53,6 +53,13 @@ jaeger-port-forward: ## Port-forward to Jaeger Query UI (http://localhost:16686)
 deploy-tracing: kustomize ## Apply tracing configurations for Istio and Kuadrant components
 	@echo "Deploying tracing configurations via kustomize..."
 	$(KUSTOMIZE) build config/observability/tracing | kubectl apply -f -
+	@echo "[INFO] Patching Kuadrant CR with tracing configuration..."
+	kubectl patch kuadrant/kuadrant -n $(TOYSTORE_NAMESPACE) --type merge \
+		-p '{"spec":{"observability":{"enable":true,"tracing":{"defaultEndpoint":"rpc://jaeger.observability.svc.cluster.local:4317","insecure":true},"dataPlane":{"httpHeaderIdentifier":"x-request-id"}}}}'
+	@echo "[INFO] Patching operator deployments with OTEL env vars..."
+	kubectl patch deployment kuadrant-operator-controller-manager -n $(KUADRANT_NAMESPACE) --type strategic \
+		-p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","env":[{"name":"OTEL_EXPORTER_OTLP_ENDPOINT","value":"rpc://jaeger.observability.svc.cluster.local:4317"},{"name":"OTEL_EXPORTER_OTLP_INSECURE","value":"true"}]}]}}}}'
+	kubectl patch deployment limitador-operator-controller-manager -n $(KUADRANT_NAMESPACE) --type strategic \
+		-p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","env":[{"name":"OTEL_EXPORTER_OTLP_ENDPOINT","value":"rpc://jaeger.observability.svc.cluster.local:4317"},{"name":"OTEL_EXPORTER_OTLP_INSECURE","value":"true"}]}]}}}}'
 	@echo "✅ Tracing configurations applied"
-	@echo "   Note: Operator patches require manual kubectl patch (see config/observability/tracing/README.md)"
 	@echo "   Open Jaeger UI: make jaeger-port-forward"

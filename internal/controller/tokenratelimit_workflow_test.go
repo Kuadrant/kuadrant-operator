@@ -56,7 +56,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 		name               string
 		tokenLimit         *kuadrantv1alpha1.TokenLimit
 		limitIdentifier    string
-		scope              string
+		scope              ActionScope
 		topLevelPredicates kuadrantv1.WhenPredicates
 		expectedActions    []wasm.ActionSpec
 	}{
@@ -64,7 +64,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			name:            "token limit without conditions nor counters",
 			tokenLimit:      &kuadrantv1alpha1.TokenLimit{},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
-			scope:           "my-ns/my-route",
+			scope:           ActionScope("my-ns/my-route"),
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -134,7 +134,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
-			scope:           "my-ns/my-route",
+			scope:           ActionScope("my-ns/my-route"),
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -223,7 +223,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
-			scope:           "my-ns/my-route",
+			scope:           ActionScope("my-ns/my-route"),
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -309,7 +309,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 			},
 			limitIdentifier:    "tokenlimit.myTokenLimit__d681f6c3",
-			scope:              "my-ns/my-route",
+			scope:              ActionScope("my-ns/my-route"),
 			topLevelPredicates: kuadrantv1.WhenPredicates{{Predicate: `request.method == "POST"`}},
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action

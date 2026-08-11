@@ -17,26 +17,20 @@ limitations under the License.
 package extension
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 	"gotest.tools/assert"
-
-	"github.com/go-logr/logr"
 )
 
 func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 	oop := OOPExtension{
 		name:       "test",
 		executable: "/bin/sleep",
-		socket:     "1d",
-		service:    newExtensionService(nil, logr.Discard()),
 		logger:     logr.Discard(),
-		sync:       nil,
 	}
 
 	if oop.IsAlive() {
@@ -89,14 +83,9 @@ func TestOOPExtensionForwardsLog(t *testing.T) {
 		writer.Write([]byte(args))
 	}, funcr.Options{})
 
-	socketPath := fmt.Sprintf("/tmp/kuadrant-test-oop-%d.sock", os.Getpid())
-	defer os.Remove(socketPath)
-
 	oopErrorLog := OOPExtension{
 		name:       "testErrorLog",
 		executable: "/bin/ps",
-		socket:     socketPath,
-		service:    newExtensionService(nil, logger),
 		logger:     logger,
 		sync:       writer,
 	}

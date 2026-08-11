@@ -21,39 +21,28 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
 
-	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
-
 	"github.com/go-logr/logr"
-	"google.golang.org/grpc"
 )
-
-const defaultUnixSocket = ".grpc.sock"
 
 type OOPExtension struct {
 	name         string
 	executable   string
-	socket       string
+	port         int
 	credential   []byte
 	cmd          *exec.Cmd
-	server       *grpc.Server
-	service      extpb.ExtensionServiceServer
-	interceptor  *AuthInterceptor
 	logger       logr.Logger
 	sync         io.Writer
-	serverMu     sync.Mutex
 	monitorWg    sync.WaitGroup
 	completionWg sync.WaitGroup
 }
 
-func NewOOPExtension(name string, location string, credential []byte, service extpb.ExtensionServiceServer, interceptor *AuthInterceptor, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
+func NewOOPExtension(name string, location string, credential []byte, port int, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
 	var err error
 	var stat os.FileInfo
 
@@ -65,14 +54,12 @@ func NewOOPExtension(name string, location string, credential []byte, service ex
 	}
 
 	return OOPExtension{
-		name:        name,
-		socket:      fmt.Sprintf("/tmp/kuadrant/%s/%s", name, defaultUnixSocket),
-		credential:  credential,
-		executable:  executable,
-		service:     service,
-		interceptor: interceptor,
-		logger:      logger.WithName(name),
-		sync:        sync,
+		name:       name,
+		port:       port,
+		credential: credential,
+		executable: executable,
+		logger:     logger.WithName(name),
+		sync:       sync,
 	}, err
 }
 
@@ -83,14 +70,11 @@ func (p *OOPExtension) Name() string {
 func (p *OOPExtension) Start() error {
 	p.logger.Info("starting...")
 
-	if err := p.startServer(); err != nil {
-		return err
-	}
-
-	cmd := exec.Command(p.executable, p.socket) // #nosec G204
+	cmd := exec.Command(p.executable) // #nosec G204
 	cmd.Env = append(os.Environ(),
 		"KUADRANT_EXTENSION_NAME="+p.name,
 		"KUADRANT_EXTENSION_CREDENTIAL="+hex.EncodeToString(p.credential),
+		fmt.Sprintf("KUADRANT_EXTENSION_ADDRESS=localhost:%d", p.port),
 	)
 
 	stderr, err := cmd.StderrPipe()
@@ -106,9 +90,6 @@ func (p *OOPExtension) Start() error {
 	<-monitorReady
 
 	if err = cmd.Start(); err != nil {
-		if e := p.stopServer(); e != nil {
-			p.logger.Error(e, "failed starting process, then stopping gRPC server failed")
-		}
 		return err
 	}
 	p.logger.Info("started")
@@ -152,13 +133,6 @@ func (p *OOPExtension) Stop() error {
 		// let stderr monitoring finish
 		p.monitorWg.Wait()
 
-		if e := p.stopServer(); e != nil {
-			if err == nil {
-				err = e
-			} else {
-				p.logger.Error(e, "stopping gRPC server failed, while shutting down the process also failed")
-			}
-		}
 		p.logger.Info("stopped")
 		p.cmd = nil
 	} else {
@@ -166,74 +140,6 @@ func (p *OOPExtension) Stop() error {
 	}
 
 	return err
-}
-
-func (p *OOPExtension) startServer() error {
-	p.serverMu.Lock()
-	defer p.serverMu.Unlock()
-
-	if p.server == nil {
-		if err := os.MkdirAll(filepath.Dir(p.socket), 0755); err != nil {
-			return fmt.Errorf("failed to create socket directory: %w", err)
-		}
-
-		if err := p.cleanupSocket(); err != nil {
-			return fmt.Errorf("failed to cleanup existing socket: %w", err)
-		}
-
-		ln, err := net.Listen("unix", p.socket)
-		if err != nil {
-			return err
-		}
-
-		server := grpc.NewServer(
-			grpc.UnaryInterceptor(p.interceptor.UnaryInterceptor),
-			grpc.StreamInterceptor(p.interceptor.StreamInterceptor),
-		)
-		extpb.RegisterExtensionServiceServer(server, p.service)
-		p.server = server
-
-		go func() {
-			if err := server.Serve(ln); err != nil {
-				// FIXME: Make this fail synchronously somehow
-				p.logger.Error(err, "failed to start server")
-			}
-		}()
-	}
-	return nil
-}
-
-func (p *OOPExtension) stopServer() error {
-	p.serverMu.Lock()
-	server := p.server
-	p.server = nil
-	p.serverMu.Unlock()
-
-	if server != nil {
-		server.Stop()
-		if _, err := os.Stat(p.socket); err == nil {
-			return os.Remove(p.socket)
-		}
-	}
-	return nil
-}
-
-func (p *OOPExtension) cleanupSocket() error {
-	if _, err := os.Stat(p.socket); os.IsNotExist(err) {
-		// socket doesn't exist
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	conn, err := net.Dial("unix", p.socket)
-	if err != nil {
-		p.logger.Info("removing socket file", "socket", p.socket)
-		return os.Remove(p.socket)
-	}
-
-	conn.Close()
-	return fmt.Errorf("socket %s is already in use by another process", p.socket)
 }
 
 func (p *OOPExtension) monitorStderr(stderr io.ReadCloser, monitorReady chan struct{}) {

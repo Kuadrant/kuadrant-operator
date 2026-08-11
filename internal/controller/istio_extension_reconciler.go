@@ -493,7 +493,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		var specs []wasm.ActionSpec
-		hasPreAuthRateLimit := false
 
 		// auth
 		effectiveAuthPolicy, hasAuth := effectiveAuthPoliciesMap[pathID]
@@ -510,7 +509,9 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			} else {
 				// pre auth rate limiting
 				if hasAuth {
-					hasPreAuthRateLimit = true
+					for i := range rlSpecs {
+						rlSpecs[i].Execution = wasm.ExecutionSequential
+					}
 				}
 				specs = append(rlSpecs, specs...)
 			}
@@ -524,7 +525,9 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			} else {
 				// pre auth rate limiting
 				if hasAuth {
-					hasPreAuthRateLimit = true
+					for i := range trlSpecs {
+						trlSpecs[i].Execution = wasm.ExecutionSequential
+					}
 				}
 				specs = append(trlSpecs, specs...)
 			}
@@ -584,14 +587,6 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 				invalidCount++
 			} else {
 				validSpecs = append(validSpecs, spec)
-			}
-		}
-
-		if hasPreAuthRateLimit {
-			for i := range validSpecs {
-				if validSpecs[i].ServiceName == wasm.AuthServiceName {
-					validSpecs[i].Predicates = append(validSpecs[i].Predicates, wasm.RateLimitCompleteSignal)
-				}
 			}
 		}
 

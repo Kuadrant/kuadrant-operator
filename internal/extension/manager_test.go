@@ -47,6 +47,7 @@ func successReflectionFetcher(_ context.Context, _, serviceName, methodName stri
 func newTestExtensionService() *extensionService {
 	return &extensionService{
 		registeredData:    NewRegisteredDataStore(),
+		sessionStore:      NewSessionStore(logr.Discard()),
 		reflectionFetcher: successReflectionFetcher,
 		logger:            logr.Discard(),
 	}
@@ -80,6 +81,62 @@ func validRequest() *extpb.RegisterActionMethodRequest {
 		Url:     "grpc://svc:8081",
 		Service: "example.v1.ExampleService",
 		Method:  "ExampleMethod",
+	}
+}
+
+func TestHandshake_EmptyName(t *testing.T) {
+	svc := newTestExtensionService()
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for empty name")
+	}
+	if resp.Reason != "name is required" {
+		t.Fatalf("expected reason %q, got %q", "name is required", resp.Reason)
+	}
+}
+
+func TestHandshake_Success(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Name:       "test-ext",
+		Version:    "1.0.0",
+		Credential: cred,
+		PolicyKind: "TestPolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+	if resp.SessionToken == "" {
+		t.Fatal("expected non-empty session token")
+	}
+}
+
+func TestHandshake_AuthFailure_GenericReason(t *testing.T) {
+	svc := newTestExtensionService()
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Name:       "unknown-ext",
+		Credential: validCredential(),
+		PolicyKind: "TestPolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for unknown extension")
+	}
+	if resp.Reason != "handshake failed" {
+		t.Fatalf("expected generic reason %q, got %q", "handshake failed", resp.Reason)
 	}
 }
 

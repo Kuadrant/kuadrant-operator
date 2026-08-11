@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"time"
@@ -14,17 +15,37 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
+const sessionMetadataKey = "x-kuadrant-session"
+
+type sessionCredentials struct {
+	token string
+}
+
+func (c *sessionCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
+	if c.token == "" {
+		return nil, nil
+	}
+	return map[string]string{sessionMetadataKey: c.token}, nil
+}
+
+func (c *sessionCredentials) RequireTransportSecurity() bool {
+	return false
+}
+
 // extensionClient wraps the gRPC client connection to the core extension
 // service over a unix domain socket and exposes a subset of RPCs used by the
 // controller layer.
 type extensionClient struct {
-	conn   *grpc.ClientConn
-	client extpb.ExtensionServiceClient
+	conn    *grpc.ClientConn
+	client  extpb.ExtensionServiceClient
+	session *sessionCredentials
 }
 
 // newExtensionClient dials the unix domain socket at socketPath and returns a
 // ready extensionClient.
 func newExtensionClient(socketPath string) (*extensionClient, error) {
+	session := &sessionCredentials{}
+
 	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 	}
@@ -33,15 +54,33 @@ func newExtensionClient(socketPath string) (*extensionClient, error) {
 		"unix://"+socketPath,
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithPerRPCCredentials(session),
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &extensionClient{
-		conn:   conn,
-		client: extpb.NewExtensionServiceClient(conn),
+		conn:    conn,
+		client:  extpb.NewExtensionServiceClient(conn),
+		session: session,
 	}, nil
+}
+
+func (ec *extensionClient) handshake(ctx context.Context, name string, credential []byte, policyKind string) error {
+	resp, err := ec.client.Handshake(ctx, &extpb.HandshakeRequest{
+		Name:       name,
+		Credential: credential,
+		PolicyKind: policyKind,
+	})
+	if err != nil {
+		return fmt.Errorf("handshake RPC failed: %w", err)
+	}
+	if !resp.Accepted {
+		return fmt.Errorf("handshake rejected: %s", resp.Reason)
+	}
+	ec.session.token = resp.SessionToken
+	return nil
 }
 
 //lint:ignore U1000

@@ -5,6 +5,9 @@ on:
   release:
     types:
       - deleted
+permissions:
+  contents: read
+
 jobs:
   delete_chart_release:
     runs-on: ubuntu-latest

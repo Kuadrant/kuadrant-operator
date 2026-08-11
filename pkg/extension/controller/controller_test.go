@@ -297,12 +297,88 @@ func TestBuilderMissingSocketPath(t *testing.T) {
 	assert.ErrorContains(t, err, "missing socket path")
 }
 
+func TestHandshake_Success(t *testing.T) {
+	var capturedReq *extpb.HandshakeRequest
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			capturedReq = in
+			return &extpb.HandshakeResponse{
+				Accepted:     true,
+				SessionToken: "returned-token",
+			}, nil
+		},
+	}
+
+	session := &sessionCredentials{}
+	ec := &extensionClient{client: mock, session: session}
+
+	err := ec.handshake(context.Background(), "my-ext", []byte("credential-value"), "MyPolicy")
+	assert.NilError(t, err)
+	assert.Equal(t, session.token, "returned-token")
+	assert.Equal(t, capturedReq.Name, "my-ext")
+	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
+	assert.DeepEqual(t, capturedReq.Credential, []byte("credential-value"))
+}
+
+func TestHandshake_Rejected(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{
+				Accepted: false,
+				Reason:   "handshake failed",
+			}, nil
+		},
+	}
+
+	session := &sessionCredentials{}
+	ec := &extensionClient{client: mock, session: session}
+
+	err := ec.handshake(context.Background(), "my-ext", []byte("bad-cred"), "MyPolicy")
+	assert.ErrorContains(t, err, "handshake rejected")
+	assert.Equal(t, session.token, "")
+}
+
+func TestHandshake_RPCError(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return nil, fmt.Errorf("connection refused")
+		},
+	}
+
+	session := &sessionCredentials{}
+	ec := &extensionClient{client: mock, session: session}
+
+	err := ec.handshake(context.Background(), "my-ext", []byte("cred"), "MyPolicy")
+	assert.ErrorContains(t, err, "handshake RPC failed")
+	assert.Equal(t, session.token, "")
+}
+
+func TestSessionCredentials_GetRequestMetadata(t *testing.T) {
+	creds := &sessionCredentials{}
+
+	md, err := creds.GetRequestMetadata(context.Background())
+	assert.NilError(t, err)
+	assert.Assert(t, md == nil)
+
+	creds.token = "my-session-token"
+	md, err = creds.GetRequestMetadata(context.Background())
+	assert.NilError(t, err)
+	assert.Equal(t, md[sessionMetadataKey], "my-session-token")
+}
+
 // mockExtensionServiceClient implements extpb.ExtensionServiceClient for testing.
 type mockExtensionServiceClient struct {
+	handshakeFn            func(ctx context.Context, in *extpb.HandshakeRequest, opts ...grpc.CallOption) (*extpb.HandshakeResponse, error)
 	registerActionMethodFn func(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pipelineCommitFn       func(ctx context.Context, in *extpb.PipelineCommitRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
+func (m *mockExtensionServiceClient) Handshake(ctx context.Context, in *extpb.HandshakeRequest, opts ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+	if m.handshakeFn != nil {
+		return m.handshakeFn(ctx, in, opts...)
+	}
+	return &extpb.HandshakeResponse{Accepted: true, SessionToken: "test-token"}, nil
+}
 func (m *mockExtensionServiceClient) Ping(_ context.Context, _ *extpb.PingRequest, _ ...grpc.CallOption) (*extpb.PongResponse, error) {
 	return nil, nil
 }

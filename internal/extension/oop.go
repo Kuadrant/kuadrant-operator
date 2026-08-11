@@ -18,6 +18,7 @@ package extension
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -40,9 +41,11 @@ type OOPExtension struct {
 	name         string
 	executable   string
 	socket       string
+	credential   []byte
 	cmd          *exec.Cmd
 	server       *grpc.Server
 	service      extpb.ExtensionServiceServer
+	interceptor  *AuthInterceptor
 	logger       logr.Logger
 	sync         io.Writer
 	serverMu     sync.Mutex
@@ -50,7 +53,7 @@ type OOPExtension struct {
 	completionWg sync.WaitGroup
 }
 
-func NewOOPExtension(name string, location string, service extpb.ExtensionServiceServer, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
+func NewOOPExtension(name string, location string, credential []byte, service extpb.ExtensionServiceServer, interceptor *AuthInterceptor, logger logr.Logger, sync io.Writer) (OOPExtension, error) {
 	var err error
 	var stat os.FileInfo
 
@@ -62,12 +65,14 @@ func NewOOPExtension(name string, location string, service extpb.ExtensionServic
 	}
 
 	return OOPExtension{
-		name:       name,
-		socket:     fmt.Sprintf("/tmp/kuadrant/%s/%s", name, defaultUnixSocket),
-		executable: executable,
-		service:    service,
-		logger:     logger.WithName(name),
-		sync:       sync,
+		name:        name,
+		socket:      fmt.Sprintf("/tmp/kuadrant/%s/%s", name, defaultUnixSocket),
+		credential:  credential,
+		executable:  executable,
+		service:     service,
+		interceptor: interceptor,
+		logger:      logger.WithName(name),
+		sync:        sync,
 	}, err
 }
 
@@ -83,6 +88,10 @@ func (p *OOPExtension) Start() error {
 	}
 
 	cmd := exec.Command(p.executable, p.socket) // #nosec G204
+	cmd.Env = append(os.Environ(),
+		"KUADRANT_EXTENSION_NAME="+p.name,
+		"KUADRANT_EXTENSION_CREDENTIAL="+hex.EncodeToString(p.credential),
+	)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -177,7 +186,10 @@ func (p *OOPExtension) startServer() error {
 			return err
 		}
 
-		server := grpc.NewServer()
+		server := grpc.NewServer(
+			grpc.UnaryInterceptor(p.interceptor.UnaryInterceptor),
+			grpc.StreamInterceptor(p.interceptor.StreamInterceptor),
+		)
 		extpb.RegisterExtensionServiceServer(server, p.service)
 		p.server = server
 

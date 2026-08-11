@@ -62,6 +62,11 @@ func (a *GrpcAction) WithOnReply(onReply ...Action) *GrpcAction {
 	return a
 }
 
+func (a *GrpcAction) WithExecution(execution ExecutionMode) *GrpcAction {
+	a.Execution = execution
+	return a
+}
+
 // With* methods on DenyAction
 
 func (a *DenyAction) WithTerminal(terminal bool) *DenyAction {
@@ -79,6 +84,11 @@ func (a *DenyAction) WithSources(sources []string) *DenyAction {
 	return a
 }
 
+func (a *DenyAction) WithExecution(execution ExecutionMode) *DenyAction {
+	a.Execution = execution
+	return a
+}
+
 // With* methods on HeadersAction
 
 func (a *HeadersAction) WithTerminal(terminal bool) *HeadersAction {
@@ -93,6 +103,11 @@ func (a *HeadersAction) WithGuard(isGuard bool) *HeadersAction {
 
 func (a *HeadersAction) WithSources(sources []string) *HeadersAction {
 	a.SourcePolicyLocators = sources
+	return a
+}
+
+func (a *HeadersAction) WithExecution(execution ExecutionMode) *HeadersAction {
+	a.Execution = execution
 	return a
 }
 
@@ -118,6 +133,11 @@ func (a *StoreAction) WithExportToHost(exportToHost bool) *StoreAction {
 	return a
 }
 
+func (a *StoreAction) WithExecution(execution ExecutionMode) *StoreAction {
+	a.Execution = execution
+	return a
+}
+
 // With* methods on FailAction
 
 func (a *FailAction) WithTerminal(terminal bool) *FailAction {
@@ -132,5 +152,10 @@ func (a *FailAction) WithGuard(isGuard bool) *FailAction {
 
 func (a *FailAction) WithSources(sources []string) *FailAction {
 	a.SourcePolicyLocators = sources
+	return a
+}
+
+func (a *FailAction) WithExecution(execution ExecutionMode) *FailAction {
+	a.Execution = execution
 	return a
 }

@@ -79,6 +79,10 @@ spec:
     authorino: false
 ```
 
+### OpenShift TLS security profile
+
+Separately from mTLS enablement, on OpenShift clusters the operator automatically aligns TLS cipher suites and minimum TLS version with the cluster's TLS security profile on supported components (currently Authorino). See [OpenShift TLS Security Profile Propagation](../overviews/openshift-tls-profile.md) for details.
+
 ## Disabling mTLS
 
 To disable mTLS, either set kuadrant's custom resource `spec.mtls.enable` field to `false` or just remove optional `spec.mtls` field.

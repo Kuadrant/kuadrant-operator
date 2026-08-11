@@ -209,11 +209,20 @@ spec:
         patternMatching:
           patterns:
             - predicate: auth.identity.user.username.startsWith('system:serviceaccount:egress-test:')
+    response:
+      success:
+        filters:
+          "identity":
+            json:
+              properties:
+                username:
+                  selector: auth.identity.user.username
 EOF
 ```
 
 - `authentication.workload-sa` - validates the SA token via TokenReview. Unauthenticated requests are rejected (401).
 - `authorization.allowed-namespaces` - restricts access to workloads from the `egress-test` namespace. Workloads from other namespaces are rejected (403). Add additional patterns with `||` to allow more namespaces.
+- `response.success.filters.identity` - exposes the resolved identity (username) as dynamic metadata. This is required for policies that reference `auth.identity.*` expressions, such as per-workload rate limiting.
 
 Verify access control:
 

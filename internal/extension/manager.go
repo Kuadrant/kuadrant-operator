@@ -18,6 +18,7 @@ package extension
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -58,6 +59,7 @@ type ChangeNotifier func(reason string) error
 type Manager struct {
 	extensions       []Extension
 	service          extpb.ExtensionServiceServer
+	sessionStore     *SessionStore
 	dag              *nilGuardedPointer[StateAwareDAG]
 	logger           logr.Logger
 	sync             io.Writer
@@ -81,10 +83,16 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	var err error
 
 	service := newExtensionService(BlockingDAG, logger)
+	interceptor := NewAuthInterceptor(service.sessionStore, logger.WithName("auth"))
 	logger = logger.WithName("extension")
 
 	for _, name := range names {
-		if oopExtension, e := NewOOPExtension(name, location, service, logger, sync); e == nil {
+		credential := make([]byte, 32)
+		if _, e := rand.Read(credential); e != nil {
+			return Manager{}, fmt.Errorf("failed to generate credential for extension %s: %w", name, e)
+		}
+		service.sessionStore.SetCredential(name, credential)
+		if oopExtension, e := NewOOPExtension(name, location, credential, service, interceptor, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {
@@ -96,12 +104,13 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	}
 
 	return Manager{
-		extensions: extensions,
-		service:    service,
-		dag:        BlockingDAG,
-		logger:     logger,
-		sync:       sync,
-		client:     client,
+		extensions:   extensions,
+		service:      service,
+		sessionStore: service.sessionStore,
+		dag:          BlockingDAG,
+		logger:       logger,
+		sync:         sync,
+		client:       client,
 	}, err
 }
 
@@ -139,6 +148,7 @@ func (m *Manager) Stop() error {
 				err = fmt.Errorf("%w; %s: %w", err, extension.Name(), e)
 			}
 		}
+		m.sessionStore.RevokeByName(extension.Name())
 	}
 
 	return err
@@ -201,6 +211,10 @@ func (m *Manager) stopDescriptorServer() {
 	}
 
 	m.descriptorServer = nil
+}
+
+func (m *Manager) SessionStore() *SessionStore {
+	return m.sessionStore
 }
 
 func (m *Manager) SetChangeNotifier(notifier ChangeNotifier) {
@@ -316,6 +330,7 @@ type ReflectionFetcher func(ctx context.Context, url, serviceName, methodName st
 type extensionService struct {
 	dag               *nilGuardedPointer[StateAwareDAG]
 	registeredData    *RegisteredDataStore
+	sessionStore      *SessionStore
 	reflectionFetcher ReflectionFetcher
 	changeNotifier    ChangeNotifier
 	logger            logr.Logger
@@ -326,6 +341,30 @@ type extensionService struct {
 func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb.PongResponse, error) {
 	return &extpb.PongResponse{
 		In: timestamppb.New(time.Now()),
+	}, nil
+}
+
+func (s *extensionService) Handshake(_ context.Context, request *extpb.HandshakeRequest) (*extpb.HandshakeResponse, error) {
+	if request.Name == "" {
+		return &extpb.HandshakeResponse{
+			Accepted: false,
+			Reason:   "name is required",
+		}, nil
+	}
+
+	token, err := s.sessionStore.Authenticate(request.Name, request.Credential, request.PolicyKind)
+	if err != nil {
+		s.logger.Info("handshake rejected", "extension", request.Name, "policyKind", request.PolicyKind, "reason", err.Error())
+		return &extpb.HandshakeResponse{
+			Accepted: false,
+			Reason:   "handshake failed",
+		}, nil
+	}
+
+	s.logger.Info("handshake accepted", "extension", request.Name, "version", request.Version, "policyKind", request.PolicyKind)
+	return &extpb.HandshakeResponse{
+		Accepted:     true,
+		SessionToken: token,
 	}, nil
 }
 
@@ -374,11 +413,12 @@ func (s *extensionService) GetServiceDescriptors(_ context.Context, request *ext
 	}, nil
 }
 
-func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) extpb.ExtensionServiceServer {
+func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) *extensionService {
 	reflectionClient := NewReflectionClient()
 	service := &extensionService{
 		dag:               dag,
 		registeredData:    NewRegisteredDataStore(),
+		sessionStore:      NewSessionStore(logger.WithName("sessions")),
 		reflectionFetcher: reflectionClient.FetchServiceDescriptors,
 		logger:            logger.WithName("extensionService"),
 	}

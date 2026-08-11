@@ -37,6 +37,7 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -52,6 +53,8 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
+const defaultExtensionServicePort = 50052
+
 var ErrNoExtensionsFound = errors.New("no extensions found")
 
 type ChangeNotifier func(reason string) error
@@ -59,12 +62,15 @@ type ChangeNotifier func(reason string) error
 type Manager struct {
 	extensions       []Extension
 	service          extpb.ExtensionServiceServer
+	interceptor      *AuthInterceptor
 	sessionStore     *SessionStore
 	dag              *nilGuardedPointer[StateAwareDAG]
 	logger           logr.Logger
 	sync             io.Writer
 	client           dynamic.Interface
 	descriptorServer *grpc.Server
+	extensionServer  *grpc.Server
+	extensionPort    int
 }
 
 type Extension interface {
@@ -86,13 +92,23 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	interceptor := NewAuthInterceptor(service.sessionStore, logger.WithName("auth"))
 	logger = logger.WithName("extension")
 
+	extensionPort, portErr := env.GetInt("EXTENSIONS_SERVICE_PORT", defaultExtensionServicePort)
+	if portErr != nil {
+		logger.Error(portErr, "invalid EXTENSIONS_SERVICE_PORT, using default", "default", defaultExtensionServicePort)
+		extensionPort = defaultExtensionServicePort
+	}
+	if extensionPort < 1 || extensionPort > 65535 {
+		logger.Error(nil, "EXTENSIONS_SERVICE_PORT out of range 1..65535, using default", "value", extensionPort, "default", defaultExtensionServicePort)
+		extensionPort = defaultExtensionServicePort
+	}
+
 	for _, name := range names {
 		credential := make([]byte, 32)
 		if _, e := rand.Read(credential); e != nil {
 			return Manager{}, fmt.Errorf("failed to generate credential for extension %s: %w", name, e)
 		}
 		service.sessionStore.SetCredential(name, credential)
-		if oopExtension, e := NewOOPExtension(name, location, credential, service, interceptor, logger, sync); e == nil {
+		if oopExtension, e := NewOOPExtension(name, location, credential, extensionPort, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)
 		} else {
 			if err == nil {
@@ -104,13 +120,15 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	}
 
 	return Manager{
-		extensions:   extensions,
-		service:      service,
-		sessionStore: service.sessionStore,
-		dag:          BlockingDAG,
-		logger:       logger,
-		sync:         sync,
-		client:       client,
+		extensions:    extensions,
+		service:       service,
+		interceptor:   interceptor,
+		sessionStore:  service.sessionStore,
+		dag:           BlockingDAG,
+		logger:        logger,
+		sync:          sync,
+		client:        client,
+		extensionPort: extensionPort,
 	}, err
 }
 
@@ -120,6 +138,15 @@ func (m *Manager) Start() error {
 	if e := m.startDescriptorServer(); e != nil {
 		m.logger.Error(e, "failed to start descriptor server")
 		err = fmt.Errorf("descriptor server: %w", e)
+	}
+
+	if e := m.startExtensionServer(); e != nil {
+		m.logger.Error(e, "failed to start extension server")
+		if err == nil {
+			err = fmt.Errorf("extension server: %w", e)
+		} else {
+			err = fmt.Errorf("%w; extension server: %w", err, e)
+		}
 	}
 
 	for _, extension := range m.extensions {
@@ -150,6 +177,8 @@ func (m *Manager) Stop() error {
 		}
 		m.sessionStore.RevokeByName(extension.Name())
 	}
+
+	m.stopExtensionServer()
 
 	return err
 }
@@ -211,6 +240,61 @@ func (m *Manager) stopDescriptorServer() {
 	}
 
 	m.descriptorServer = nil
+}
+
+func (m *Manager) startExtensionServer() error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", m.extensionPort))
+	if err != nil {
+		return fmt.Errorf("failed to listen on port %d: %w", m.extensionPort, err)
+	}
+
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(m.interceptor.UnaryInterceptor),
+		grpc.StreamInterceptor(m.interceptor.StreamInterceptor),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    30 * time.Second,
+			Timeout: 10 * time.Second,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime: 10 * time.Second,
+		}),
+	)
+	extpb.RegisterExtensionServiceServer(server, m.service)
+	m.extensionServer = server
+
+	go func() {
+		m.logger.Info("starting extension service", "port", m.extensionPort)
+		if err := server.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			m.logger.Error(err, "extension server failed")
+		}
+	}()
+
+	return nil
+}
+
+func (m *Manager) stopExtensionServer() {
+	if m.extensionServer == nil {
+		return
+	}
+
+	m.logger.Info("stopping extension service")
+
+	done := make(chan struct{})
+	go func() {
+		m.extensionServer.GracefulStop()
+		close(done)
+	}()
+
+	timeout := 5 * time.Second
+	select {
+	case <-done:
+		m.logger.Info("extension service stopped gracefully")
+	case <-time.After(timeout):
+		m.logger.Info("extension service graceful stop timed out, forcing stop")
+		m.extensionServer.Stop()
+	}
+
+	m.extensionServer = nil
 }
 
 func (m *Manager) SessionStore() *SessionStore {

@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -74,7 +73,8 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 		if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
 			// Unauthenticated means the developer portal is not configured on this cluster.
 			// Treat as "not enforced" rather than an error to avoid a reconcile storm.
-			if s, ok := grpcstatus.FromError(err); ok && s.Code() == codes.Unauthenticated {
+			// Use string check because the gRPC error may be wrapped by the extension framework.
+			if strings.Contains(err.Error(), "code = Unauthenticated") {
 				r.Logger.Info("developer portal not configured, telemetry binding skipped", "binding", binding)
 				return calculateEnforcedStatus(pol, err), nil
 			}

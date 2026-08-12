@@ -192,7 +192,9 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter)
 			continue
 		}
-		patchBytes, err := json.Marshal(map[string]interface{}{"spec": existingEnvoyFilterUnstructured.Object["spec"]})
+		specMap, _ := existingEnvoyFilterUnstructured.Object["spec"].(map[string]interface{})
+		specMap["targetRefs"] = nil // explicitly null to remove targetRefs if present
+		patchBytes, err := json.Marshal(map[string]interface{}{"spec": specMap})
 		if err != nil {
 			logger.Error(err, "failed to marshal envoyfilter patch", "gateway", gatewayKey.String())
 			continue
@@ -300,7 +302,9 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 			logger.Error(err, "failed to destruct envoyfilter", "gateway", gatewayKey.String())
 			continue
 		}
-		patchBytes, err := json.Marshal(map[string]interface{}{"spec": unstructured.Object["spec"]})
+		upstreamSpecMap, _ := unstructured.Object["spec"].(map[string]interface{})
+		upstreamSpecMap["targetRefs"] = nil // explicitly null to remove targetRefs if present
+		patchBytes, err := json.Marshal(map[string]interface{}{"spec": upstreamSpecMap})
 		if err != nil {
 			logger.Error(err, "failed to marshal upstream envoyfilter patch", "gateway", gatewayKey.String())
 			continue

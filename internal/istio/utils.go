@@ -198,7 +198,7 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				// CLUSTER uses cluster match
 				aCluster := aConfigPatch.Match.GetCluster()
 				bCluster := bConfigPatch.Match.GetCluster()
-				if aCluster == nil || bCluster == nil {
+				if (aCluster == nil) != (bCluster == nil) {
 					return false
 				}
 				if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {

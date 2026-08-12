@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -191,8 +192,13 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter)
 			continue
 		}
-		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
+		patchBytes, err := json.Marshal(map[string]interface{}{"spec": existingEnvoyFilterUnstructured.Object["spec"]})
+		if err != nil {
+			logger.Error(err, "failed to marshal envoyfilter patch", "gateway", gatewayKey.String())
+			continue
+		}
+		if _, err = resource.Patch(ctx, existingEnvoyFilter.GetName(), k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
+			logger.Error(err, "failed to patch envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter.GetName())
 
 			// Record error for deferred retry
 			errorRegistry.Record(
@@ -294,8 +300,13 @@ func (r *IstioExtensionReconciler) reconcileUpstreamClusters(ctx context.Context
 			logger.Error(err, "failed to destruct envoyfilter", "gateway", gatewayKey.String())
 			continue
 		}
-		if _, err = resource.Update(ctx, unstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update upstream envoyfilter", "gateway", gatewayKey.String())
+		patchBytes, err := json.Marshal(map[string]interface{}{"spec": unstructured.Object["spec"]})
+		if err != nil {
+			logger.Error(err, "failed to marshal upstream envoyfilter patch", "gateway", gatewayKey.String())
+			continue
+		}
+		if _, err = resource.Patch(ctx, existing.GetName(), k8stypes.MergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
+			logger.Error(err, "failed to patch upstream envoyfilter", "gateway", gatewayKey.String())
 
 			errorRegistry.Record(
 				IstioExtensionReconcilerName,

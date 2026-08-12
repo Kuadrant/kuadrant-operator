@@ -97,11 +97,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		}
 
 		logger.Info("auth configs deleted, removing finalizer from Kuadrant CR")
-		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
-			return controllerutil.RemoveFinalizer(existing, authConfigFinalizer), nil
-		})
-
-		if err != nil {
+		if err := r.GetAndRemoveFinalizer(ctx, kObj, authConfigFinalizer); err != nil {
 			logger.Error(err, "failed to remove finalizer")
 			errorRegistry.Record(
 				AuthConfigsReconcilerName,

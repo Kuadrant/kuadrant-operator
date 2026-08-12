@@ -233,3 +233,23 @@ func (b *BaseReconciler) RemoveFinalizer(ctx context.Context, obj client.Object,
 	}
 	return nil
 }
+
+// GetAndRemoveFinalizer fetches a fresh copy of the object from the API server,
+// which sends the stale `desired` object in a dry-run before the mutateFn runs.
+func (b *BaseReconciler) GetAndRemoveFinalizer(ctx context.Context, obj client.Object, finalizer string) error {
+	key := client.ObjectKeyFromObject(obj)
+	fresh := obj.DeepCopyObject().(client.Object)
+	if err := b.Client().Get(ctx, key, fresh); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	if !controllerutil.ContainsFinalizer(fresh, finalizer) {
+		return nil
+	}
+
+	controllerutil.RemoveFinalizer(fresh, finalizer)
+	if err := b.UpdateResource(ctx, fresh); client.IgnoreNotFound(err) != nil {
+		return err
+	}
+	return nil
+}

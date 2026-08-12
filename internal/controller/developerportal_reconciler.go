@@ -97,10 +97,7 @@ func (r *DeveloperPortalReconciler) Reconcile(baseCtx context.Context, _ []contr
 
 		// Remove finalizer
 		logger.Info("developer portal Deployment deleted, removing finalizer from Kuadrant CR")
-		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
-			return controllerutil.RemoveFinalizer(existing, developerPortalFinalizer), nil
-		})
-		if err != nil {
+		if err := r.GetAndRemoveFinalizer(ctx, kObj, developerPortalFinalizer); err != nil {
 			logger.Error(err, "failed to remove finalizer")
 			errorRegistry.Record(
 				developerPortalControllerName,

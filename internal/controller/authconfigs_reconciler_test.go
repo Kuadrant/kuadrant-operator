@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"slices"
 )
 
 func buildKuadrantCR(shouldIncludeFinalizer bool, shouldIncludeTimestamp bool) *kuadrantv1beta1.Kuadrant {
@@ -58,7 +59,9 @@ func buildTopology(t *testing.T, kuadrantCR *kuadrantv1beta1.Kuadrant, objs ...c
 		opts = append(opts, machinery.WithObjects(&controller.RuntimeObject{Object: obj}))
 	}
 
-	if kuadrantCR != nil {
+	if kuadrantCR != nil && slices.ContainsFunc(objs, func(obj client.Object) bool {
+		return obj.GetObjectKind().GroupVersionKind().Kind == "Authorino"
+	}) {
 		store := controller.Store{"kuadrant": kuadrantCR}
 		opts = append(opts, machinery.WithLinks(
 			kuadrantv1beta1.LinkKuadrantToAuthorino(store),

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -70,6 +72,12 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
 	for binding, expression := range pol.Spec.Metrics.Default.Labels {
 		if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
+			// Unauthenticated means the developer portal is not configured on this cluster.
+			// Treat as "not enforced" rather than an error to avoid a reconcile storm.
+			if s, ok := grpcstatus.FromError(err); ok && s.Code() == codes.Unauthenticated {
+				r.Logger.Info("developer portal not configured, telemetry binding skipped", "binding", binding)
+				return calculateEnforcedStatus(pol, err), nil
+			}
 			r.Logger.Error(err, "failed to add data to request domain")
 			return calculateErrorStatus(pol, err), err
 		}

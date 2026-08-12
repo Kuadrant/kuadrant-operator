@@ -27,6 +27,12 @@ consoleplugin_image="quay.io/kuadrant/console-plugin:$consoleplugin_version"
 V=$consoleplugin_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
+# Set desired dns-operator image
+dns_operator_version=$(mod_version $(yq '.dependencies.dns-operator' $env/release.yaml))
+dns_operator_image="quay.io/kuadrant/dns-operator:$dns_operator_version"
+V=$dns_operator_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
 # Set desired operator image
 cd $env/config/manager
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))
@@ -43,4 +49,3 @@ V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.ver
 V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.appVersion = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.dependencies.authorino-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.dependencies.limitador-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.dns-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml

@@ -19,10 +19,6 @@ on:
         description: Limitador Operator bundle image url
         default: quay.io/kuadrant/limitador-operator-bundle:latest
         type: string
-      dnsOperatorBundleImg:
-        description: DNS Operator bundle image url
-        default: quay.io/kuadrant/dns-operator-bundle:latest
-        type: string
       relatedImageWasmShim:
         description: Related image WASM Shim
         default: quay.io/kuadrant/wasm-shim:latest
@@ -76,10 +72,6 @@ on:
       limitadorBundleImg:
         description: Limitador Operator bundle image url
         default: quay.io/kuadrant/limitador-operator-bundle:latest
-        type: string
-      dnsOperatorBundleImg:
-        description: DNS Operator bundle image url
-        default: quay.io/kuadrant/dns-operator-bundle:latest
         type: string
       relatedImageWasmShim:
         description: Related image WASM Shim
@@ -192,7 +184,6 @@ jobs:
             VERSION=${{ inputs.kuadrantOperatorVersion }} \
             AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
             LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
-            DNS_OPERATOR_BUNDLE_IMG=${{ inputs.dnsOperatorBundleImg }} \
             RELATED_IMAGE_WASMSHIM=${{ inputs.relatedImageWasmShim }} \
             RELATED_IMAGE_DEVELOPERPORTAL=${{ inputs.relatedImageDeveloperPortalController }} \
             RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=${{ inputs.relatedImageConsolePluginLatest}} \
@@ -249,7 +240,6 @@ jobs:
             BUNDLE_IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
             LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
-            DNS_OPERATOR_BUNDLE_IMG=${{ inputs.dnsOperatorBundleImg }} \
             CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3

@@ -172,22 +172,15 @@ LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LI
 
 ## dns
 DNS_OPERATOR_VERSION ?= latest
+dns_operator_version_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 
-kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 ifeq (latest,$(DNS_OPERATOR_VERSION))
-DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
-DNS_OPERATOR_BUNDLE_IMG_TAG = latest
-DNS_OPERATOR_GITREF = main
-else ifeq (true,$(kuadrantdns_bundle_is_semantic))
-DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
-DNS_OPERATOR_BUNDLE_IMG_TAG = v$(DNS_OPERATOR_BUNDLE_VERSION)
-DNS_OPERATOR_GITREF = v$(DNS_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:latest
+else ifeq (true,$(dns_operator_version_is_semantic))
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:v$(DNS_OPERATOR_VERSION)
 else
-DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
-DNS_OPERATOR_BUNDLE_IMG_TAG = $(DNS_OPERATOR_BUNDLE_VERSION)
-DNS_OPERATOR_GITREF = $(DNS_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(DNS_OPERATOR_VERSION)
 endif
-DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
@@ -383,12 +376,10 @@ extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRo
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
 dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
 	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
 COMPONENT_CHARTS_DIR = $(PROJECT_PATH)/component-charts
@@ -533,8 +524,7 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
 	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
-		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
+		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
@@ -552,8 +542,6 @@ bundle-post-generate: yq
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_VERSION)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_VERSION)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_VERSION)
 ifeq ($(USE_IMAGE_DIGESTS),true)
 	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
 	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml

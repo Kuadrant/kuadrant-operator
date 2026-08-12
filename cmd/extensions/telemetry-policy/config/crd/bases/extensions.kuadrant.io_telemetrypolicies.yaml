@@ -18,8 +18,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
-          through the use of dynamically evaluated CEL expressions.
+          TelemetryPolicy enables custom metric labelling and log field enrichment for
+          Kuadrant data plane resources through the use of dynamically evaluated CEL expressions.
         properties:
           apiVersion:
             description: |-
@@ -40,6 +40,28 @@ spec:
             type: object
           spec:
             properties:
+              logging:
+                description: Logging holds the telemetry logging configuration
+                properties:
+                  default:
+                    description: Default logging configuration that applies to all
+                      requests
+                    properties:
+                      fields:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Fields to add to auth decision log records, where keys are field names and values are
+                          CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
+                          Only fields whose CEL expressions resolve successfully will be included.
+                        minProperties: 1
+                        type: object
+                    required:
+                    - fields
+                    type: object
+                required:
+                - default
+                type: object
               metrics:
                 description: Metrics holds the telemetry metrics configuration
                 properties:
@@ -108,7 +130,6 @@ spec:
                 - message: Invalid targetRef.kind. The only supported value is 'Gateway'
                   rule: self.kind == 'Gateway'
             required:
-            - metrics
             - targetRef
             type: object
           status:

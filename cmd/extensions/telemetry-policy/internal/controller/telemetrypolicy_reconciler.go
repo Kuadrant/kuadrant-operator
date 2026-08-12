@@ -75,6 +75,13 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 		}
 	}
 
+	for binding, expression := range pol.Spec.Logging.Default.Fields {
+		if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantLoggingBinding(binding), expression); err != nil {
+			r.Logger.Error(err, "failed to add data to request domain")
+			return calculateErrorStatus(pol, err), err
+		}
+	}
+
 	return calculateEnforcedStatus(pol, nil),
 		nil
 }

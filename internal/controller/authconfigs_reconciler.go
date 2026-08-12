@@ -77,6 +77,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			return o.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels())
 		})
 
+		hasError := false
 		for _, ac := range managedAuthConfigs {
 			if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(ac.GetNamespace()).Delete(ctx, ac.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to delete auth config", "namespace", ac.GetNamespace(), "name", ac.GetName())
@@ -87,13 +88,19 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 					kuadrantauthorino.AuthConfigGroupKind,
 					err,
 				)
+				hasError = true
 			}
+		}
+
+		if hasError {
+			return nil
 		}
 
 		logger.Info("auth configs deleted, removing finalizer from Kuadrant CR")
 		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
 			return controllerutil.RemoveFinalizer(existing, authConfigFinalizer), nil
 		})
+
 		if err != nil {
 			logger.Error(err, "failed to remove finalizer")
 			errorRegistry.Record(
@@ -112,6 +119,13 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		return nil
 	}
 
+	authorino := GetAuthorinoFromTopology(topology, state)
+	if authorino == nil {
+		logger.V(1).Info("authorino resource not found in the topology")
+		return nil
+	}
+	authConfigsNamespace := authorino.GetNamespace()
+
 	if !controllerutil.ContainsFinalizer(kObj, authConfigFinalizer) {
 		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
 			return controllerutil.AddFinalizer(existing, authConfigFinalizer), nil
@@ -129,13 +143,6 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		}
 		logger.Info("added finalizer to Kuadrant CR")
 	}
-
-	authorino := GetAuthorinoFromTopology(topology, state)
-	if authorino == nil {
-		logger.V(1).Info("authorino resource not found in the topology")
-		return nil
-	}
-	authConfigsNamespace := authorino.GetNamespace()
 
 	effectivePolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {

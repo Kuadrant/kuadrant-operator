@@ -58,6 +58,13 @@ func buildTopology(t *testing.T, kuadrantCR *kuadrantv1beta1.Kuadrant, objs ...c
 		opts = append(opts, machinery.WithObjects(&controller.RuntimeObject{Object: obj}))
 	}
 
+	if kuadrantCR != nil {
+		store := controller.Store{"kuadrant": kuadrantCR}
+		opts = append(opts, machinery.WithLinks(
+			kuadrantv1beta1.LinkKuadrantToAuthorino(store),
+		))
+	}
+
 	topology, err := machinery.NewTopology(opts...)
 	if err != nil {
 		t.Fatalf("failed to build topology %v", err)
@@ -92,6 +99,17 @@ func TestAuthConfigsReconciler(t *testing.T) {
 			Name:      "authconfig2",
 			Namespace: "kuadrant-system",
 			Labels:    AuthObjectLabels(),
+		},
+	}
+
+	authorino := &authorinooperatorv1beta1.Authorino{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Authorino",
+			APIVersion: authorinooperatorv1beta1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "authorino",
+			Namespace: "kuadrant-system",
 		},
 	}
 
@@ -149,8 +167,8 @@ func TestAuthConfigsReconciler(t *testing.T) {
 
 	t.Run("reconcile adds finalizer when Kuadrant CR is active", func(subT *testing.T) {
 		kuadrantCR := buildKuadrantCR(false, false)
-		fakeDynClient := dfake.NewSimpleDynamicClient(scheme, authConfig1, authConfig2)
-		fakeCtrlClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(kuadrantCR).Build()
+		fakeDynClient := dfake.NewSimpleDynamicClient(scheme, authConfig1, authConfig2, authorino)
+		fakeCtrlClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(kuadrantCR, authorino).Build()
 
 		reconciler := &AuthConfigsReconciler{
 			client:         fakeDynClient,
@@ -165,7 +183,7 @@ func TestAuthConfigsReconciler(t *testing.T) {
 			"finalizer should not be present before reconciliation")
 
 		// build topology with all components
-		topology := buildTopology(subT, kuadrantCR, authConfig1, authConfig2)
+		topology := buildTopology(subT, kuadrantCR, authConfig1, authConfig2, authorino)
 
 		// call reconcile, so the finalizer is added
 		state := &sync.Map{}
@@ -182,26 +200,17 @@ func TestAuthConfigsReconciler(t *testing.T) {
 		assert.Assert(subT, controllerutil.ContainsFinalizer(postReconcile, authConfigFinalizer),
 			"finalizer should have been added to Kuadrant CR")
 
-		// AuthConfigs should still exist
+		// AuthConfigs and authorino should still exist
 		_, err = fakeDynClient.Resource(kuadrantauthorino.AuthConfigsResource).Namespace("kuadrant-system").Get(context.TODO(), "authconfig1", metav1.GetOptions{})
 		assert.NilError(subT, err, "authconfig1 should not have been deleted")
 		_, err = fakeDynClient.Resource(kuadrantauthorino.AuthConfigsResource).Namespace("kuadrant-system").Get(context.TODO(), "authconfig2", metav1.GetOptions{})
 		assert.NilError(subT, err, "authconfig2 should not have been deleted")
+		_, err = fakeDynClient.Resource(kuadrantv1beta1.AuthorinosResource).Namespace("kuadrant-system").Get(context.TODO(), "authorino", metav1.GetOptions{})
+		assert.NilError(subT, err, "authorino should exist before reconciliation")
 	})
 
 	t.Run("reconcile deletes AuthConfigs when Kuadrant CR is being deleted and Authorino exists", func(subT *testing.T) {
 		kuadrantCR := buildKuadrantCR(true, true)
-		authorino := &authorinooperatorv1beta1.Authorino{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Authorino",
-				APIVersion: authorinooperatorv1beta1.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "authorino",
-				Namespace: "kuadrant-system",
-			},
-		}
-
 		fakeDynClient := dfake.NewSimpleDynamicClient(scheme, authConfig1, authConfig2, authorino)
 		fakeCtrlClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(kuadrantCR, authorino).Build()
 

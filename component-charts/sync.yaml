@@ -1,0 +1,36 @@
+# component-charts/sync.yaml
+# Declares which component Helm charts to sync from upstream repos.
+# Each kuadrant-operator branch maintains its own copy with appropriate refs.
+#
+# Fields:
+#   repo:            GitHub org/repo (e.g. Kuadrant/dns-operator)
+#   chart-path:      Path to Helm chart within the upstream repo
+#   tracked-branch:  Upstream branch this kuadrant-operator branch follows (for dispatch matching)
+#   ref:             Pinned commit SHA (managed by the sync tool, do not edit manually)
+#   auto-merge:      (Optional) If true, sync PRs auto-merge when all branch protection requirements are met (CI, approvals, etc.)
+
+components:
+  dns-operator:
+    repo: Kuadrant/dns-operator
+    chart-path: charts/dns-operator
+    tracked-branch: main
+    ref: c6cb081c14a94591e7f5d4082eecbdb7188e19b4
+    auto-merge: false
+#  authorino-operator:
+#    repo: Kuadrant/authorino-operator
+#    chart-path: charts/authorino-operator
+#    tracked-branch: main
+#    ref: main
+#    auto-merge: false
+#  limitador-operator:
+#    repo: Kuadrant/limitador-operator
+#    chart-path: charts/limitador-operator
+#    tracked-branch: main
+#    ref: main
+#    auto-merge: false
+#  mcp-gateway:
+#    repo: Kuadrant/mcp-gateway
+#    chart-path: charts/mcp-gateway
+#    tracked-branch: main
+#    ref: main
+#    auto-merge: false

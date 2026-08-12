@@ -128,8 +128,12 @@ func TestAuthConfigsReconciler(t *testing.T) {
 
 		// build topology and call reconcile, so AuthConfigs get deleted
 		topology := buildTopology(subT, kuadrantCR, authConfig1, authConfig2)
-		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, &sync.Map{})
+		state := &sync.Map{}
+		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, state)
 		assert.NilError(subT, err)
+
+		errorRegistry := GetOrCreateErrorRegistry(state)
+		assert.Assert(subT, !errorRegistry.HasErrors(), "expected no errors in registry")
 
 		// verify AuthConfigs were deleted
 		_, err = fakeDynClient.Resource(kuadrantauthorino.AuthConfigsResource).Namespace("kuadrant-system").Get(context.TODO(), "authconfig1", metav1.GetOptions{})
@@ -164,8 +168,12 @@ func TestAuthConfigsReconciler(t *testing.T) {
 		topology := buildTopology(subT, kuadrantCR, authConfig1, authConfig2)
 
 		// call reconcile, so the finalizer is added
-		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, &sync.Map{})
+		state := &sync.Map{}
+		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, state)
 		assert.NilError(subT, err)
+
+		errorRegistry := GetOrCreateErrorRegistry(state)
+		assert.Assert(subT, !errorRegistry.HasErrors(), "expected no errors in registry")
 
 		// verify finalizer was added
 		postReconcile := &kuadrantv1beta1.Kuadrant{}
@@ -219,8 +227,12 @@ func TestAuthConfigsReconciler(t *testing.T) {
 
 		// build topology and call reconcile so we delete AuthConfigs
 		topology := buildTopology(subT, kuadrantCR, authConfig1, authConfig2, authorino)
-		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, &sync.Map{})
+		state := &sync.Map{}
+		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, state)
 		assert.NilError(subT, err)
+
+		errorRegistry := GetOrCreateErrorRegistry(state)
+		assert.Assert(subT, !errorRegistry.HasErrors(), "expected no errors in registry")
 
 		// verify that it was deleted
 		_, err = fakeDynClient.Resource(kuadrantauthorino.AuthConfigsResource).Namespace("kuadrant-system").Get(context.TODO(), "authconfig1", metav1.GetOptions{})
@@ -251,9 +263,12 @@ func TestAuthConfigsReconciler(t *testing.T) {
 
 		// build topology, now without KuadrantCR, so we can test the case
 		topology := buildTopology(subT, nil, authConfig1, authConfig2)
-		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, &sync.Map{})
+		state := &sync.Map{}
+		err = reconciler.Reconcile(context.TODO(), nil, topology, nil, state)
 		assert.NilError(subT, err)
 
+		errorRegistry := GetOrCreateErrorRegistry(state)
+		assert.Assert(subT, !errorRegistry.HasErrors(), "expected no errors in registry")
 		// AuthConfigs should still exist
 		_, err = fakeDynClient.Resource(kuadrantauthorino.AuthConfigsResource).Namespace("kuadrant-system").Get(context.TODO(), "authconfig1", metav1.GetOptions{})
 		assert.NilError(subT, err, "authconfig1 should not have been deleted")

@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
@@ -61,17 +62,21 @@ func (r *DeveloperPortalReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *DeveloperPortalReconciler) Reconcile(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *DeveloperPortalReconciler) Reconcile(baseCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(baseCtx).WithName("DeveloperPortalReconciler")
 	ctx := logr.NewContext(baseCtx, logger)
 	logger.Info("developer portal reconciler", "status", "started")
 	defer logger.Info("developer portal reconciler", "status", "completed")
+
+	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	kObj := GetKuadrantFromTopologyDuringDeletion(topology)
 	if kObj == nil {
 		logger.V(1).Info("kuadrant resource not found, skipping")
 		return nil
 	}
+
+	kuadrantResource := k8stypes.NamespacedName{Name: kObj.GetName(), Namespace: kObj.GetNamespace()}
 
 	// Handle deletion: clean up developer portal deployment and remove finalizer
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, developerPortalFinalizer) {
@@ -80,15 +85,30 @@ func (r *DeveloperPortalReconciler) Reconcile(baseCtx context.Context, _ []contr
 		// Delete developer portal deployment
 		deployment := r.buildDeployment(kuadrantOperatorNamespace, true)
 		if err := r.reconcileDeployment(ctx, deployment, logger); err != nil {
-			return err
+			errorRegistry.Record(
+				developerPortalControllerName,
+				OperationDelete,
+				k8stypes.NamespacedName{Name: deployment.GetName(), Namespace: deployment.GetNamespace()},
+				kuadrantv1beta1.DeploymentGroupKind,
+				err,
+			)
+			return nil
 		}
 
 		// Remove finalizer
 		logger.Info("developer portal Deployment deleted, removing finalizer from Kuadrant CR")
-		kObjCopy := kObj.DeepCopy()
-		if err := r.RemoveFinalizer(ctx, kObjCopy, developerPortalFinalizer); err != nil {
+		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
+			return controllerutil.RemoveFinalizer(existing, developerPortalFinalizer), nil
+		})
+		if err != nil {
 			logger.Error(err, "failed to remove finalizer")
-			return err
+			errorRegistry.Record(
+				developerPortalControllerName,
+				OperationUpdate,
+				kuadrantResource,
+				kuadrantv1beta1.KuadrantGroupKind,
+				err,
+			)
 		}
 
 		return nil
@@ -99,10 +119,19 @@ func (r *DeveloperPortalReconciler) Reconcile(baseCtx context.Context, _ []contr
 	}
 
 	if !controllerutil.ContainsFinalizer(kObj, developerPortalFinalizer) {
-		kObjCopy := kObj.DeepCopy()
-		if err := r.AddFinalizer(ctx, kObjCopy, developerPortalFinalizer); err != nil {
+		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
+			return controllerutil.AddFinalizer(existing, developerPortalFinalizer), nil
+		})
+		if err != nil {
 			logger.Error(err, "failed to add finalizer")
-			return err
+			errorRegistry.Record(
+				developerPortalControllerName,
+				OperationUpdate,
+				kuadrantResource,
+				kuadrantv1beta1.KuadrantGroupKind,
+				err,
+			)
+			return nil
 		}
 		logger.Info("added finalizer to Kuadrant CR")
 	}

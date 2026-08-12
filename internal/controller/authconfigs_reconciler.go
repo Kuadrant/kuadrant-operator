@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -59,11 +60,15 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 
 func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler").WithValues("context", ctx)
+	errorRegistry := GetOrCreateErrorRegistry(state)
+
 	kObj := GetKuadrantFromTopologyDuringDeletion(topology)
 	if kObj == nil {
 		logger.V(1).Info("kuadrant resource not found in the topology")
 		return nil
 	}
+
+	kuadrantResource := k8stypes.NamespacedName{Name: kObj.GetName(), Namespace: kObj.GetNamespace()}
 
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, authConfigFinalizer) {
 		logger.Info("Kuadrant CR is being deleted, ensuring Auth Config deletion")
@@ -75,15 +80,29 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		for _, ac := range managedAuthConfigs {
 			if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(ac.GetNamespace()).Delete(ctx, ac.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to delete auth config", "namespace", ac.GetNamespace(), "name", ac.GetName())
-				return err
+				errorRegistry.Record(
+					AuthConfigsReconcilerName,
+					OperationDelete,
+					k8stypes.NamespacedName{Name: ac.GetName(), Namespace: ac.GetNamespace()},
+					kuadrantauthorino.AuthConfigGroupKind,
+					err,
+				)
 			}
 		}
 
 		logger.Info("auth configs deleted, removing finalizer from Kuadrant CR")
-		kObjCopy := kObj.DeepCopy()
-		if err := r.RemoveFinalizer(ctx, kObjCopy, authConfigFinalizer); err != nil {
+		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
+			return controllerutil.RemoveFinalizer(existing, authConfigFinalizer), nil
+		})
+		if err != nil {
 			logger.Error(err, "failed to remove finalizer")
-			return err
+			errorRegistry.Record(
+				AuthConfigsReconcilerName,
+				OperationUpdate,
+				kuadrantResource,
+				kuadrantv1beta1.KuadrantGroupKind,
+				err,
+			)
 		}
 		return nil
 	}
@@ -94,10 +113,19 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	}
 
 	if !controllerutil.ContainsFinalizer(kObj, authConfigFinalizer) {
-		kObjCopy := kObj.DeepCopy()
-		if err := r.AddFinalizer(ctx, kObjCopy, authConfigFinalizer); err != nil {
+		_, err := r.ReconcileResource(ctx, &kuadrantv1beta1.Kuadrant{}, kObj.DeepCopy(), func(existing, _ client.Object) (bool, error) {
+			return controllerutil.AddFinalizer(existing, authConfigFinalizer), nil
+		})
+		if err != nil {
 			logger.Error(err, "failed to add finalizer for Auth Config CR")
-			return err
+			errorRegistry.Record(
+				AuthConfigsReconcilerName,
+				OperationUpdate,
+				kuadrantResource,
+				kuadrantv1beta1.KuadrantGroupKind,
+				err,
+			)
+			return nil
 		}
 		logger.Info("added finalizer to Kuadrant CR")
 	}
@@ -118,8 +146,6 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 	logger.V(1).Info("reconciling authconfig objects", "effectivePolicies", len(effectivePoliciesMap))
 	defer logger.V(1).Info("finished reconciling authconfig objects")
-
-	errorRegistry := GetOrCreateErrorRegistry(state)
 
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
 	modifiedAuthConfigs := []string{}

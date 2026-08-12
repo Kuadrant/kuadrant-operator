@@ -47,11 +47,11 @@ type TelemetryPolicySpec struct {
 
 	// Metrics holds the telemetry metrics configuration
 	// +optional
-	Metrics MetricsSpec `json:"metrics,omitempty"`
+	Metrics *MetricsSpec `json:"metrics,omitempty"`
 
 	// Logging holds the telemetry logging configuration
 	// +optional
-	Logging LoggingSpec `json:"logging,omitempty"`
+	Logging *LoggingSpec `json:"logging,omitempty"`
 }
 
 func (p *TelemetryPolicy) GetName() string {
@@ -94,6 +94,7 @@ type LoggingConfig struct {
 	// CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
 	// Only fields whose CEL expressions resolve successfully will be included.
 	// +kubebuilder:validation:MinProperties=1
+	// +kubebuilder:validation:XValidation:rule="self.all(k, !k.contains('.'))",message="field names must not contain periods"
 	Fields map[string]string `json:"fields"`
 }
 

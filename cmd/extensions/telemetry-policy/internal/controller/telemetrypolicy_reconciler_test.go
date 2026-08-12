@@ -70,10 +70,10 @@ func newTestPolicy(metrics map[string]string, loggingFields map[string]string) *
 		},
 	}
 	if metrics != nil {
-		pol.Spec.Metrics = v1alpha1.MetricsSpec{Default: v1alpha1.MetricsConfig{Labels: metrics}}
+		pol.Spec.Metrics = &v1alpha1.MetricsSpec{Default: v1alpha1.MetricsConfig{Labels: metrics}}
 	}
 	if loggingFields != nil {
-		pol.Spec.Logging = v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{Fields: loggingFields}}
+		pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{Fields: loggingFields}}
 	}
 	return pol
 }

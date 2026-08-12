@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 
@@ -246,13 +245,6 @@ func mockReconcile(_ context.Context, _ reconcile.Request, _ exttypes.KuadrantCt
 	return reconcile.Result{}, nil
 }
 
-func setupFakeArgs(t *testing.T, socketPath string) func() {
-	t.Helper()
-	originalArgs := os.Args
-	os.Args = []string{"my-extension", socketPath}
-	return func() { os.Args = originalArgs }
-}
-
 func TestBuilderMissingName(t *testing.T) {
 	builder := &Builder{}
 	_, err := builder.Build()
@@ -282,10 +274,8 @@ func TestBuilderMissingForType(t *testing.T) {
 	assert.ErrorContains(t, err, "for type must be set")
 }
 
-func TestBuilderMissingSocketPath(t *testing.T) {
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-	os.Args = []string{"my-extension"} // no socket path
+func TestBuilderMissingAddress(t *testing.T) {
+	t.Setenv("KUADRANT_EXTENSION_ADDRESS", "")
 
 	builder, _ := NewBuilder("test-controller")
 	_, err := builder.
@@ -294,7 +284,7 @@ func TestBuilderMissingSocketPath(t *testing.T) {
 		For(&corev1.Pod{}).
 		Build()
 
-	assert.ErrorContains(t, err, "missing socket path")
+	assert.ErrorContains(t, err, "KUADRANT_EXTENSION_ADDRESS")
 }
 
 func TestHandshake_Success(t *testing.T) {

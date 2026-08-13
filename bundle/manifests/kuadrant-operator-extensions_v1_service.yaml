@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: kuadrant
+    control-plane: controller-manager
+  name: kuadrant-operator-extensions
+spec:
+  ports:
+  - name: extensions
+    port: 50052
+    protocol: TCP
+    targetPort: extensions
+  selector:
+    app: kuadrant
+    control-plane: controller-manager
+status:
+  loadBalancer: {}

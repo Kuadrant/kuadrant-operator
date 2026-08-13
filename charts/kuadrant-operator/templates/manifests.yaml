@@ -14656,6 +14656,25 @@ metadata:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
     control-plane: controller-manager
+  name: kuadrant-operator-extensions
+  namespace: '{{ .Release.Namespace }}'
+spec:
+  ports:
+  - name: extensions
+    port: 50052
+    protocol: TCP
+    targetPort: extensions
+  selector:
+    app: kuadrant
+    control-plane: controller-manager
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kuadrant
+    app.kubernetes.io/managed-by: helm
+    control-plane: controller-manager
   name: kuadrant-operator-grpc
   namespace: '{{ .Release.Namespace }}'
 spec:
@@ -14737,6 +14756,8 @@ spec:
           value: /extensions
         - name: EXTENSIONS_DESCRIPTOR_SERVICE_PORT
           value: "50051"
+        - name: EXTENSIONS_SERVICE_PORT
+          value: "50052"
         - name: RELATED_IMAGE_WASMSHIM
           value: quay.io/kuadrant/wasm-shim:latest
         - name: RELATED_IMAGE_DEVELOPERPORTAL
@@ -14763,6 +14784,9 @@ spec:
         - containerPort: 50051
           name: grpc
           protocol: TCP
+        - containerPort: 50052
+          name: extensions
+          protocol: TCP
         - containerPort: 8082
           name: wasm
           protocol: TCP
@@ -14785,13 +14809,7 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: true
-        volumeMounts:
-        - mountPath: /tmp/kuadrant
-          name: extensions-socket-volume
       securityContext:
         runAsNonRoot: true
       serviceAccountName: kuadrant-operator-controller-manager
       terminationGracePeriodSeconds: 10
-      volumes:
-      - emptyDir: {}
-        name: extensions-socket-volume

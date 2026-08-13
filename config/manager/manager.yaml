@@ -24,9 +24,6 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-      volumes:
-        - name: extensions-socket-volume
-          emptyDir: {}
       containers:
         - command:
             - /manager
@@ -35,6 +32,8 @@ spec:
               value: "/extensions"
             - name: EXTENSIONS_DESCRIPTOR_SERVICE_PORT
               value: "50051"
+            - name: EXTENSIONS_SERVICE_PORT
+              value: "50052"
             - name: RELATED_IMAGE_WASMSHIM
               value: "quay.io/kuadrant/wasm-shim:latest"
             - name: RELATED_IMAGE_DEVELOPERPORTAL
@@ -61,6 +60,9 @@ spec:
             - name: grpc
               containerPort: 50051
               protocol: TCP
+            - name: extensions
+              containerPort: 50052
+              protocol: TCP
             - name: wasm
               containerPort: 8082
               protocol: TCP
@@ -83,8 +85,5 @@ spec:
             requests:
               cpu: 200m
               memory: 200Mi
-          volumeMounts:
-            - mountPath: /tmp/kuadrant
-              name: extensions-socket-volume
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10

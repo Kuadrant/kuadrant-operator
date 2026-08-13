@@ -17,26 +17,20 @@ limitations under the License.
 package extension
 
 import (
-	"fmt"
-	"os"
+	"io"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/go-logr/logr/funcr"
-	"gotest.tools/assert"
-
 	"github.com/go-logr/logr"
+	"gotest.tools/assert"
 )
 
 func TestOOPExtensionManagesExternalProcess(t *testing.T) {
 	oop := OOPExtension{
 		name:       "test",
-		executable: "/bin/sleep",
-		socket:     "1d",
-		service:    newExtensionService(nil, logr.Discard()),
+		executable: "/bin/cat",
 		logger:     logr.Discard(),
-		sync:       nil,
 	}
 
 	if oop.IsAlive() {
@@ -82,42 +76,31 @@ func (w *writerMock) getMessages() []string {
 	return result
 }
 
-func TestOOPExtensionForwardsLog(t *testing.T) {
+func TestOOPExtensionForwardsStderr(t *testing.T) {
 	writer := newWriterMock()
 
-	logger := funcr.New(func(_, args string) {
-		writer.Write([]byte(args))
-	}, funcr.Options{})
-
-	socketPath := fmt.Sprintf("/tmp/kuadrant-test-oop-%d.sock", os.Getpid())
-	defer os.Remove(socketPath)
-
-	oopErrorLog := OOPExtension{
-		name:       "testErrorLog",
-		executable: "/bin/ps",
-		socket:     socketPath,
-		service:    newExtensionService(nil, logger),
-		logger:     logger,
-		sync:       writer,
+	oop := OOPExtension{
+		name:   "test",
+		logger: logr.Discard(),
+		sync:   writer,
 	}
 
-	if err := oopErrorLog.Start(); err != nil {
-		t.Fatalf("Should have started: %v", err)
-	}
+	pr, pw := io.Pipe()
+	ready := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		oop.monitorStderr(pr, ready)
+		close(done)
+	}()
+	<-ready
 
-	oopErrorLog.WaitForCompletion()
+	_, err := pw.Write([]byte("something went wrong\n"))
+	assert.NilError(t, err)
+	pw.Close()
 
-	_ = oopErrorLog.Stop()
+	<-done
 
 	messages := writer.getMessages()
 	logAsString := strings.Join(messages, "\n")
-
-	hasStderrOutput := strings.Contains(strings.ToLower(logAsString), "usage:") ||
-		strings.Contains(strings.ToLower(logAsString), "illegal option")
-
-	hasErrorMessage := strings.Contains(logAsString, "Extension") &&
-		strings.Contains(logAsString, "finished with an error")
-
-	assert.Assert(t, hasErrorMessage, "Expected process error completion message")
-	assert.Assert(t, hasStderrOutput, "Expected ps stderr output to be captured")
+	assert.Assert(t, strings.Contains(logAsString, "something went wrong"), "Expected stderr output to be forwarded")
 }

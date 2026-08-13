@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-07-28T12:56:43Z"
+    createdAt: "2026-08-12T13:03:49Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -758,6 +758,8 @@ spec:
                   value: /extensions
                 - name: EXTENSIONS_DESCRIPTOR_SERVICE_PORT
                   value: "50051"
+                - name: EXTENSIONS_SERVICE_PORT
+                  value: "50052"
                 - name: RELATED_IMAGE_WASMSHIM
                   value: quay.io/kuadrant/wasm-shim:latest
                 - name: RELATED_IMAGE_DEVELOPERPORTAL
@@ -784,6 +786,9 @@ spec:
                 - containerPort: 50051
                   name: grpc
                   protocol: TCP
+                - containerPort: 50052
+                  name: extensions
+                  protocol: TCP
                 - containerPort: 8082
                   name: wasm
                   protocol: TCP
@@ -806,16 +811,10 @@ spec:
                     drop:
                     - ALL
                   readOnlyRootFilesystem: true
-                volumeMounts:
-                - mountPath: /tmp/kuadrant
-                  name: extensions-socket-volume
               securityContext:
                 runAsNonRoot: true
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
-              volumes:
-              - emptyDir: {}
-                name: extensions-socket-volume
       permissions:
       - rules:
         - apiGroups:

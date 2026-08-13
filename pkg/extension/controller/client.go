@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"time"
 
 	"google.golang.org/grpc"
@@ -32,27 +31,21 @@ func (c *sessionCredentials) RequireTransportSecurity() bool {
 	return false
 }
 
-// extensionClient wraps the gRPC client connection to the core extension
-// service over a unix domain socket and exposes a subset of RPCs used by the
-// controller layer.
+// extensionClient wraps the gRPC client connection to the operator's extension
+// service and exposes a subset of RPCs used by the controller layer.
 type extensionClient struct {
 	conn    *grpc.ClientConn
 	client  extpb.ExtensionServiceClient
 	session *sessionCredentials
 }
 
-// newExtensionClient dials the unix domain socket at socketPath and returns a
-// ready extensionClient.
-func newExtensionClient(socketPath string) (*extensionClient, error) {
+// newExtensionClient dials the operator's extension service at the given TCP
+// address and returns a ready extensionClient.
+func newExtensionClient(address string) (*extensionClient, error) {
 	session := &sessionCredentials{}
 
-	dialer := func(ctx context.Context, _ string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
-	}
-
 	conn, err := grpc.NewClient(
-		"unix://"+socketPath,
-		grpc.WithContextDialer(dialer),
+		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithPerRPCCredentials(session),
 	)

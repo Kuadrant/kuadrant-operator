@@ -111,11 +111,10 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, fmt.Errorf("for type must be set")
 	}
 
-	// todo(adam-cattermole): we could rework this to be either unix socket path or host etc and configure appropriately
-	if len(os.Args) < 2 {
-		return nil, errors.New("missing socket path argument")
+	address := os.Getenv("KUADRANT_EXTENSION_ADDRESS")
+	if address == "" {
+		return nil, errors.New("KUADRANT_EXTENSION_ADDRESS environment variable is required")
 	}
-	socketPath := os.Args[1]
 
 	extensionName := os.Getenv("KUADRANT_EXTENSION_NAME")
 	if extensionName == "" {
@@ -131,7 +130,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, fmt.Errorf("KUADRANT_EXTENSION_CREDENTIAL is not valid hex: %w", err)
 	}
 
-	extClient, err := newExtensionClient(socketPath)
+	extClient, err := newExtensionClient(address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extension client: %w", err)
 	}

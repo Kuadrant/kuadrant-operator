@@ -31,6 +31,7 @@ type HTTPRouteMatchConfig struct {
 	CreationTimestamp metav1.Time
 	Namespace         string
 	Name              string
+	Identifier        string
 	Config            any
 }
 
@@ -110,7 +111,14 @@ func (c SortableHTTPRouteMatchConfigs) Less(i, j int) bool {
 	}
 
 	// Lexicographically by "{namespace}/{name}"
-	return fmt.Sprintf("%s/%s", c[i].Namespace, c[i].Name) < fmt.Sprintf("%s/%s", c[j].Namespace, c[j].Name)
+	iName := fmt.Sprintf("%s/%s", c[i].Namespace, c[i].Name)
+	jName := fmt.Sprintf("%s/%s", c[j].Namespace, c[j].Name)
+	if iName != jName {
+		return iName < jName
+	}
+
+	// Entries can otherwise be fully equal, the tie breaker is the Identifier
+	return c[i].Identifier < c[j].Identifier
 }
 
 func pathMatchCount(pathMatch *gatewayapiv1.HTTPPathMatch) int {

@@ -339,7 +339,10 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 					CreationTimestamp: parsed.HTTPRoute.GetCreationTimestamp(),
 					Namespace:         parsed.HTTPRoute.GetNamespace(),
 					Name:              parsed.HTTPRoute.GetName(),
-					Config:            actionSet,
+					// Identifier is the action set name, derived from the full topology path
+					// (including the listener), making it a unique tie-breaker in Less()
+					Identifier: actionSet.Name,
+					Config:     actionSet,
 				}
 			})
 		})
@@ -427,7 +430,10 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 					CreationTimestamp: parsed.GRPCRoute.GetCreationTimestamp(),
 					Namespace:         parsed.GRPCRoute.GetNamespace(),
 					Name:              parsed.GRPCRoute.GetName(),
-					Config:            actionSet,
+					// Identifier is the action set name, derived from the full topology path
+					// (including the listener), making it a unique tie-breaker in Less()
+					Identifier: actionSet.Name,
+					Config:     actionSet,
 				}
 			})
 		})

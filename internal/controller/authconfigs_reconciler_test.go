@@ -4,15 +4,69 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
 )
 
+func buildKuadrantCR() *kuadrantv1beta1.Kuadrant {
+	return &kuadrantv1beta1.Kuadrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       kuadrantv1beta1.KuadrantGroupKind.Kind,
+			APIVersion: kuadrantv1beta1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kuadrant",
+			Namespace: "kuadrant-system",
+			UID:       "test-uid-123",
+		},
+	}
+}
+
+func TestAuthConfigOwnerReferences(t *testing.T) {
+	t.Run("returns nil when Kuadrant CR is nil", func(t *testing.T) {
+		if refs := authConfigOwnerReferences(nil); refs != nil {
+			t.Errorf("expected nil owner references, got %v", refs)
+		}
+	})
+
+	t.Run("builds a controller owner reference to the Kuadrant CR", func(t *testing.T) {
+		kuadrantCR := buildKuadrantCR()
+		refs := authConfigOwnerReferences(kuadrantCR)
+
+		if len(refs) != 1 {
+			t.Fatalf("expected exactly one owner reference, got %d", len(refs))
+		}
+		ref := refs[0]
+		if ref.APIVersion != kuadrantv1beta1.GroupVersion.String() {
+			t.Errorf("unexpected APIVersion: got %q", ref.APIVersion)
+		}
+		if ref.Kind != kuadrantv1beta1.KuadrantGroupKind.Kind {
+			t.Errorf("unexpected Kind: got %q", ref.Kind)
+		}
+		if ref.Name != kuadrantCR.GetName() {
+			t.Errorf("unexpected Name: got %q", ref.Name)
+		}
+		if ref.UID != kuadrantCR.GetUID() {
+			t.Errorf("unexpected UID: got %q", ref.UID)
+		}
+		if ref.BlockOwnerDeletion == nil || !*ref.BlockOwnerDeletion {
+			t.Errorf("expected BlockOwnerDeletion to be true")
+		}
+		if ref.Controller == nil || !*ref.Controller {
+			t.Errorf("expected Controller to be true")
+		}
+	})
+}
+
 func TestEqualAuthConfigs(t *testing.T) {
+	ownerRefs := authConfigOwnerReferences(buildKuadrantCR())
+
 	baseAuthConfig := &authorinov1beta3.AuthConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -123,6 +177,40 @@ func TestEqualAuthConfigs(t *testing.T) {
 			desired: baseAuthConfig.DeepCopy(),
 			want:    false,
 		},
+		{
+			name:     "desired owner reference missing from existing",
+			existing: baseAuthConfig.DeepCopy(),
+			desired: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			want: false,
+		},
+		{
+			name: "matching owner references",
+			existing: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			desired: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			want: true,
+		},
+		{
+			name: "no desired owner reference does not force inequality",
+			existing: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			desired: baseAuthConfig.DeepCopy(),
+			want:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -136,6 +224,8 @@ func TestEqualAuthConfigs(t *testing.T) {
 }
 
 func TestApplyAuthConfigUpdate(t *testing.T) {
+	ownerRefs := authConfigOwnerReferences(buildKuadrantCR())
+
 	tests := []struct {
 		name     string
 		existing *authorinov1beta3.AuthConfig
@@ -259,6 +349,72 @@ func TestApplyAuthConfigUpdate(t *testing.T) {
 			},
 		},
 		{
+			name: "sets owner reference from desired",
+			existing: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			desired: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+					OwnerReferences: ownerRefs,
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
+				if !reflect.DeepEqual(updated.GetOwnerReferences(), ownerRefs) {
+					t.Errorf("owner reference not applied: got %v", updated.GetOwnerReferences())
+				}
+			},
+		},
+		{
+			name: "does not strip owner reference when desired has none",
+			existing: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "default",
+					OwnerReferences: ownerRefs,
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			desired: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
+				if !reflect.DeepEqual(updated.GetOwnerReferences(), ownerRefs) {
+					t.Errorf("owner reference should be preserved: got %v", updated.GetOwnerReferences())
+				}
+			},
+		},
+		{
 			name: "ensures reconciliation converges",
 			existing: &authorinov1beta3.AuthConfig{
 				ObjectMeta: metav1.ObjectMeta{
@@ -285,6 +441,7 @@ func TestApplyAuthConfigUpdate(t *testing.T) {
 					Annotations: map[string]string{
 						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/new-route#rule-2",
 					},
+					OwnerReferences: ownerRefs,
 				},
 				Spec: authorinov1beta3.AuthConfigSpec{
 					Hosts: []string{"test.example.com"},

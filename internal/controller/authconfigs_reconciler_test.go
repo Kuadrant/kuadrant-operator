@@ -4,6 +4,7 @@ package controllers
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 
@@ -22,7 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"slices"
 )
 
 func buildKuadrantCR(shouldIncludeFinalizer bool, shouldIncludeTimestamp bool) *kuadrantv1beta1.Kuadrant {

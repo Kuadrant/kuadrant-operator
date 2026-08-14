@@ -15,11 +15,21 @@ import (
 
 const (
 	RelatedImageConsolePluginLatestEnvVar = "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST"
+	RelatedImageConsolePluginSDK1EnvVar   = "RELATED_IMAGE_CONSOLE_PLUGIN_SDK1"
 	RelatedImageConsolePluginPF5EnvVar    = "RELATED_IMAGE_CONSOLE_PLUGIN_PF5"
-
-	// pf6VersionConstraint defines the minimum OpenShift version that requires PatternFly 6
-	pf6VersionConstraint = ">= 4.20.0-0"
 )
+
+type consolePluginImageRule struct {
+	When     string
+	ImageRef string
+}
+
+// Evaluated top-down; first satisfied constraint wins. "*" is the fallback.
+var consolePluginImageRules = []consolePluginImageRule{
+	{When: ">= 4.22.0-0", ImageRef: RelatedImageConsolePluginLatestEnvVar},
+	{When: ">= 4.20.0-0", ImageRef: RelatedImageConsolePluginSDK1EnvVar},
+	{When: "*", ImageRef: RelatedImageConsolePluginPF5EnvVar},
+}
 
 var (
 	ConsolePluginGVK = schema.GroupVersionKind{
@@ -46,9 +56,7 @@ func IsClusterVersionInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 // GetConsolePluginImageForVersion returns the appropriate console plugin image based on OpenShift version.
-// For OpenShift versions >= 4.20, it returns the latest (PatternFly 6) compatible image from RELATED_IMAGE_CONSOLE_PLUGIN_LATEST.
-// For earlier versions, it returns the PF5 image from RELATED_IMAGE_CONSOLE_PLUGIN_PF5.
-// This ensures proper mirroring in disconnected environments by using RELATED_IMAGE environment variables.
+// Rules are evaluated top-down; the first satisfied semver constraint wins.
 func GetConsolePluginImageForVersion(clusterVersion *configv1.ClusterVersion) (string, error) {
 	openshiftVersion := clusterVersion.Status.Desired.Version
 
@@ -61,22 +69,23 @@ func GetConsolePluginImageForVersion(clusterVersion *configv1.ClusterVersion) (s
 		return "", fmt.Errorf("failed to parse OpenShift version %q: %w", openshiftVersion, err)
 	}
 
-	constraint, err := semver.NewConstraint(pf6VersionConstraint)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse version constraint %q: %w", pf6VersionConstraint, err)
+	for _, rule := range consolePluginImageRules {
+		if rule.When != "*" {
+			constraint, err := semver.NewConstraint(rule.When)
+			if err != nil {
+				return "", fmt.Errorf("failed to parse version constraint %q: %w", rule.When, err)
+			}
+			if !constraint.Check(version) {
+				continue
+			}
+		}
+
+		image := os.Getenv(rule.ImageRef)
+		if image == "" {
+			return "", fmt.Errorf("environment variable %s is not set", rule.ImageRef)
+		}
+		return image, nil
 	}
 
-	var envVarName string
-	if constraint.Check(version) {
-		envVarName = RelatedImageConsolePluginLatestEnvVar
-	} else {
-		envVarName = RelatedImageConsolePluginPF5EnvVar
-	}
-
-	image := os.Getenv(envVarName)
-	if image == "" {
-		return "", fmt.Errorf("environment variable %s is not set", envVarName)
-	}
-
-	return image, nil
+	return "", fmt.Errorf("no console plugin image rule matched OpenShift version %q", openshiftVersion)
 }

@@ -226,6 +226,7 @@ else
 RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(CONSOLEPLUGIN_VERSION)
 endif
 
+RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 ?= quay.io/kuadrant/console-plugin:v0.6.0
 RELATED_IMAGE_CONSOLE_PLUGIN_PF5 ?= quay.io/kuadrant/console-plugin:v0.1.5-2
 
 ## gatewayapi-provider
@@ -515,6 +516,9 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	# Set desired console-plugin image
 	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired console-plugin SDK1 image (OCP 4.20-4.21)
+	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_SDK1").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired console-plugin PF5 image
 	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_PF5").value) = strenv(V)' -i config/manager/manager.yaml

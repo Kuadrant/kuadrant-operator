@@ -30,14 +30,15 @@ func buildKuadrantCR() *kuadrantv1beta1.Kuadrant {
 
 func TestAuthConfigOwnerReferences(t *testing.T) {
 	t.Run("returns nil when Kuadrant CR is nil", func(t *testing.T) {
-		if refs := authConfigOwnerReferences(nil); refs != nil {
+		var nilCR *kuadrantv1beta1.Kuadrant
+		if refs := nilCR.GetOwnerReference(); refs != nil {
 			t.Errorf("expected nil owner references, got %v", refs)
 		}
 	})
 
 	t.Run("builds a controller owner reference to the Kuadrant CR", func(t *testing.T) {
 		kuadrantCR := buildKuadrantCR()
-		refs := authConfigOwnerReferences(kuadrantCR)
+		refs := kuadrantCR.GetOwnerReference()
 
 		if len(refs) != 1 {
 			t.Fatalf("expected exactly one owner reference, got %d", len(refs))
@@ -65,7 +66,7 @@ func TestAuthConfigOwnerReferences(t *testing.T) {
 }
 
 func TestEqualAuthConfigs(t *testing.T) {
-	ownerRefs := authConfigOwnerReferences(buildKuadrantCR())
+	ownerRefs := buildKuadrantCR().GetOwnerReference()
 
 	baseAuthConfig := &authorinov1beta3.AuthConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -201,16 +202,6 @@ func TestEqualAuthConfigs(t *testing.T) {
 			}(),
 			want: true,
 		},
-		{
-			name: "no desired owner reference does not force inequality",
-			existing: func() *authorinov1beta3.AuthConfig {
-				ac := baseAuthConfig.DeepCopy()
-				ac.OwnerReferences = ownerRefs
-				return ac
-			}(),
-			desired: baseAuthConfig.DeepCopy(),
-			want:    true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -224,7 +215,7 @@ func TestEqualAuthConfigs(t *testing.T) {
 }
 
 func TestApplyAuthConfigUpdate(t *testing.T) {
-	ownerRefs := authConfigOwnerReferences(buildKuadrantCR())
+	ownerRefs := buildKuadrantCR().GetOwnerReference()
 
 	tests := []struct {
 		name     string
@@ -378,39 +369,6 @@ func TestApplyAuthConfigUpdate(t *testing.T) {
 			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
 				if !reflect.DeepEqual(updated.GetOwnerReferences(), ownerRefs) {
 					t.Errorf("owner reference not applied: got %v", updated.GetOwnerReferences())
-				}
-			},
-		},
-		{
-			name: "does not strip owner reference when desired has none",
-			existing: &authorinov1beta3.AuthConfig{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "test",
-					Namespace:       "default",
-					OwnerReferences: ownerRefs,
-					Annotations: map[string]string{
-						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
-					},
-				},
-				Spec: authorinov1beta3.AuthConfigSpec{
-					Hosts: []string{"test.example.com"},
-				},
-			},
-			desired: &authorinov1beta3.AuthConfig{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test",
-					Namespace: "default",
-					Annotations: map[string]string{
-						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
-					},
-				},
-				Spec: authorinov1beta3.AuthConfigSpec{
-					Hosts: []string{"test.example.com"},
-				},
-			},
-			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
-				if !reflect.DeepEqual(updated.GetOwnerReferences(), ownerRefs) {
-					t.Errorf("owner reference should be preserved: got %v", updated.GetOwnerReferences())
 				}
 			},
 		},

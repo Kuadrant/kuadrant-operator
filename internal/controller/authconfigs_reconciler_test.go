@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/internal/authorino"
@@ -65,8 +67,20 @@ func TestAuthConfigOwnerReferences(t *testing.T) {
 	})
 }
 
+func buildUnrelatedOwnerReference() metav1.OwnerReference {
+	return metav1.OwnerReference{
+		APIVersion:         "example.com/v1",
+		Kind:               "ThirdParty",
+		Name:               "third-party",
+		UID:                "third-party-uid-999",
+		BlockOwnerDeletion: ptr.To(true),
+		Controller:         ptr.To(false),
+	}
+}
+
 func TestEqualAuthConfigs(t *testing.T) {
 	ownerRefs := buildKuadrantCR().GetOwnerReference()
+	unrelatedRef := buildUnrelatedOwnerReference()
 
 	baseAuthConfig := &authorinov1beta3.AuthConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -201,6 +215,50 @@ func TestEqualAuthConfigs(t *testing.T) {
 				return ac
 			}(),
 			want: true,
+		},
+		{
+			name: "unrelated owner reference on existing is ignored",
+			existing: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = append([]metav1.OwnerReference{unrelatedRef}, ownerRefs...)
+				return ac
+			}(),
+			desired: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			want: true,
+		},
+		{
+			name: "owner references match regardless of order",
+			existing: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = append(ownerRefs, unrelatedRef)
+				return ac
+			}(),
+			desired: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			want: true,
+		},
+		{
+			name: "stale kuadrant owner reference differs",
+			existing: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				staleRef := ownerRefs[0]
+				staleRef.UID = "stale-kuadrant-uid"
+				ac.OwnerReferences = []metav1.OwnerReference{staleRef}
+				return ac
+			}(),
+			desired: func() *authorinov1beta3.AuthConfig {
+				ac := baseAuthConfig.DeepCopy()
+				ac.OwnerReferences = ownerRefs
+				return ac
+			}(),
+			want: false,
 		},
 	}
 
@@ -369,6 +427,101 @@ func TestApplyAuthConfigUpdate(t *testing.T) {
 			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
 				if !reflect.DeepEqual(updated.GetOwnerReferences(), ownerRefs) {
 					t.Errorf("owner reference not applied: got %v", updated.GetOwnerReferences())
+				}
+			},
+		},
+		{
+			name: "preserves unrelated owner reference while adding kuadrant reference",
+			existing: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "test",
+					Namespace:       "default",
+					OwnerReferences: []metav1.OwnerReference{buildUnrelatedOwnerReference()},
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			desired: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+					OwnerReferences: ownerRefs,
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
+				refs := updated.GetOwnerReferences()
+				if !lo.ContainsBy(refs, func(r metav1.OwnerReference) bool {
+					return reflect.DeepEqual(r, buildUnrelatedOwnerReference())
+				}) {
+					t.Errorf("unrelated owner reference should be preserved: got %v", refs)
+				}
+				if !lo.ContainsBy(refs, func(r metav1.OwnerReference) bool {
+					return reflect.DeepEqual(r, ownerRefs[0])
+				}) {
+					t.Errorf("kuadrant owner reference should be added: got %v", refs)
+				}
+			},
+		},
+		{
+			name: "replaces stale kuadrant owner reference and keeps unrelated one",
+			existing: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					OwnerReferences: []metav1.OwnerReference{
+						buildUnrelatedOwnerReference(),
+						func() metav1.OwnerReference {
+							stale := ownerRefs[0]
+							stale.UID = "stale-kuadrant-uid"
+							return stale
+						}(),
+					},
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			desired: &authorinov1beta3.AuthConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "default",
+					Annotations: map[string]string{
+						kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: "default/route#rule-1",
+					},
+					OwnerReferences: ownerRefs,
+				},
+				Spec: authorinov1beta3.AuthConfigSpec{
+					Hosts: []string{"test.example.com"},
+				},
+			},
+			validate: func(t *testing.T, updated *authorinov1beta3.AuthConfig, desired *authorinov1beta3.AuthConfig) {
+				refs := updated.GetOwnerReferences()
+				kuadrantRefs := lo.Filter(refs, func(r metav1.OwnerReference, _ int) bool {
+					return r.Kind == kuadrantv1beta1.KuadrantGroupKind.Kind
+				})
+				if len(kuadrantRefs) != 1 {
+					t.Fatalf("expected exactly one kuadrant owner reference, got %d: %v", len(kuadrantRefs), refs)
+				}
+				if kuadrantRefs[0].UID != ownerRefs[0].UID {
+					t.Errorf("expected current kuadrant UID %q, got %q", ownerRefs[0].UID, kuadrantRefs[0].UID)
+				}
+				if !lo.ContainsBy(refs, func(r metav1.OwnerReference) bool {
+					return reflect.DeepEqual(r, buildUnrelatedOwnerReference())
+				}) {
+					t.Errorf("unrelated owner reference should be preserved: got %v", refs)
 				}
 			},
 		},

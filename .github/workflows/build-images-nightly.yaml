@@ -32,6 +32,36 @@ jobs:
           DIGEST=$(crane digest quay.io/kuadrant/dns-operator:latest)
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
           echo "DNS operator latest digest: ${DIGEST}"
+  mcp-gateway-latest-digest:
+    name: Get the digest sha of the latest mcp-gateway controller docker image
+    runs-on: ubuntu-latest
+    outputs:
+      mcp_gateway_digest: ${{ steps.mcp-gateway-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: mcp-gateway-get-digest
+        name: Get digest of latest mcp-gateway controller image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest ghcr.io/kuadrant/mcp-controller:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "MCP gateway controller latest digest: ${DIGEST}"
+  mcp-gateway-broker-latest-digest:
+    name: Get the digest sha of the latest mcp-gateway broker docker image
+    runs-on: ubuntu-latest
+    outputs:
+      mcp_gateway_broker_digest: ${{ steps.mcp-gateway-broker-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: mcp-gateway-broker-get-digest
+        name: Get digest of latest mcp-gateway broker image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest ghcr.io/kuadrant/mcp-gateway:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "MCP gateway broker latest digest: ${DIGEST}"
   wasmshim-latest-digest:
     name: Get the digest sha of the latest wasmshim docker image
     runs-on: ubuntu-latest
@@ -96,6 +126,8 @@ jobs:
     needs:
       - release-date
       - dns-operator-latest-digest
+      - mcp-gateway-latest-digest
+      - mcp-gateway-broker-latest-digest
       - wasmshim-latest-digest
       - devportal-controlller-latest-digest
       - console-plugin-latest-digest
@@ -109,6 +141,8 @@ jobs:
       authorinoBundleImg: quay.io/kuadrant/authorino-operator-bundle:${{ needs.release-date.outputs.release_date }}
       limitadorBundleImg: quay.io/kuadrant/limitador-operator-bundle:${{ needs.release-date.outputs.release_date }}
       relatedImageDnsOperator: quay.io/kuadrant/dns-operator@${{ needs.dns-operator-latest-digest.outputs.dns_operator_digest }}
+      relatedImageMcpGateway: ghcr.io/kuadrant/mcp-controller@${{ needs.mcp-gateway-latest-digest.outputs.mcp_gateway_digest }}
+      relatedImageMcpGatewayBroker: ghcr.io/kuadrant/mcp-gateway@${{ needs.mcp-gateway-broker-latest-digest.outputs.mcp_gateway_broker_digest }}
       relatedImageWasmShim: quay.io/kuadrant/wasm-shim@${{ needs.wasmshim-latest-digest.outputs.wasmshim_digest }}
       relatedImageDeveloperPortalController: quay.io/kuadrant/developer-portal-controller@${{ needs.devportal-controlller-latest-digest.outputs.devportal_controller_digest }}
       relatedImageConsolePluginLatest: quay.io/kuadrant/console-plugin@${{ needs.console-plugin-latest-digest.outputs.console_plugin_digest }}

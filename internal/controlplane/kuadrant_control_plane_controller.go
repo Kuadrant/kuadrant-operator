@@ -28,15 +28,15 @@ const requeueInterval = 5 * time.Minute
 
 // Component deployer RBAC — CRD management
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=create;list;watch
-//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=dnsrecords.kuadrant.io;dnshealthcheckprobes.kuadrant.io,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=dnsrecords.kuadrant.io;dnshealthcheckprobes.kuadrant.io;mcpgatewayextensions.mcp.kuadrant.io;mcpserverregistrations.mcp.kuadrant.io;mcpvirtualservers.mcp.kuadrant.io,verbs=get;list;watch;update;patch
 
 // Component deployer RBAC — ClusterRole management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role,verbs=get;update;patch;bind;escalate
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller,verbs=get;update;patch;bind;escalate
 
 // Component deployer RBAC — ClusterRoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dns-operator-manager-rolebinding;dns-operator-remote-cluster-rolebinding,verbs=delete;get;update;patch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dns-operator-manager-rolebinding;dns-operator-remote-cluster-rolebinding;mcp-gateway-controller,verbs=delete;get;update;patch
 
 // Component deployer RBAC — namespace-scoped Role and RoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=create;delete;get;list;watch;update;patch
@@ -91,6 +91,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	})
 
 	if err := r.updateStatus(ctx, cp, deployErr); err != nil {
+		if apierrors.IsConflict(err) {
+			r.logger.V(1).Info("status update conflict, requeuing", "error", err)
+			return ctrl.Result{RequeueAfter: time.Second}, nil
+		}
 		return ctrl.Result{}, err
 	}
 

@@ -182,6 +182,21 @@ else
 RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(DNS_OPERATOR_VERSION)
 endif
 
+## mcp-gateway
+MCP_GATEWAY_VERSION ?= latest
+mcp_gateway_version_is_semantic := $(call is_semantic_version,$(MCP_GATEWAY_VERSION))
+
+ifeq (latest,$(MCP_GATEWAY_VERSION))
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:latest
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:latest
+else ifeq (true,$(mcp_gateway_version_is_semantic))
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:v$(MCP_GATEWAY_VERSION)
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:v$(MCP_GATEWAY_VERSION)
+else
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:$(MCP_GATEWAY_VERSION)
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:$(MCP_GATEWAY_VERSION)
+endif
+
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
@@ -441,6 +456,8 @@ run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
 run: export CHARTS_PATH := $(PROJECT_PATH)/component-charts
 run: export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
+run: export RELATED_IMAGE_MCP_GATEWAY := $(RELATED_IMAGE_MCP_GATEWAY)
+run: export RELATED_IMAGE_MCP_GATEWAY_BROKER := $(RELATED_IMAGE_MCP_GATEWAY_BROKER)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.
@@ -500,6 +517,12 @@ set-related-images: yq ## Set RELATED_IMAGE_* env vars in config/manager/manager
 	# Set desired dns-operator image
 	V="$(RELATED_IMAGE_DNS_OPERATOR)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired mcp-gateway controller image
+	V="$(RELATED_IMAGE_MCP_GATEWAY)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired mcp-gateway broker image
+	V="$(RELATED_IMAGE_MCP_GATEWAY_BROKER)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY_BROKER").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml

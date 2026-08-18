@@ -37,6 +37,7 @@ AUTHORINO_OPERATOR_VERSION=$(yq '.dependencies.authorino-operator' $env/release.
 CONSOLEPLUGIN_VERSION=$(yq '.dependencies.console-plugin' $env/release.yaml)
 DEVELOPERPORTAL_VERSION=$(yq '.dependencies.developer-portal-controller' $env/release.yaml)
 DNS_OPERATOR_VERSION=$(yq '.dependencies.dns-operator' $env/release.yaml)
+MCP_GATEWAY_VERSION=$(yq '.dependencies.mcp-gateway' $env/release.yaml)
 LIMITADOR_OPERATOR_VERSION=$(yq '.dependencies.limitador-operator' $env/release.yaml)
 WASM_SHIM_VERSION=$(yq '.dependencies.wasm-shim' $env/release.yaml)
 KUADRANT_OPERATOR_VERSION="$(yq '.kuadrant-operator.version' $env/release.yaml)"

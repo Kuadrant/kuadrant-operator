@@ -28,9 +28,9 @@ components:
 #    tracked-branch: main
 #    ref: main
 #    auto-merge: false
-#  mcp-gateway:
-#    repo: Kuadrant/mcp-gateway
-#    chart-path: charts/mcp-gateway
-#    tracked-branch: main
-#    ref: main
-#    auto-merge: false
+  mcp-gateway:
+    repo: Kuadrant/mcp-gateway
+    chart-path: charts/mcp-gateway
+    tracked-branch: main
+    ref: 9552329dcf51846db61befe32d08c7b38d26c9af
+    auto-merge: false

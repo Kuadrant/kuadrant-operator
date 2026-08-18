@@ -67,6 +67,7 @@ WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/extensions /extensions
 COPY --from=wasm-shim /plugin.wasm /wasm/plugin.wasm
+COPY component-charts/ /charts/
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY

@@ -12,6 +12,9 @@ resources:
   # Extensions namespace-scoped role
   - extension_auth_role.yaml
   - extension_auth_role_binding.yaml
+  # OLM migration cleanup — remove after 2-3 releases
+  - olm_migration_role.yaml
+  - olm_migration_role_binding.yaml
   # DevPortal ClusterRoles for API management
   - api_admin_clusterrole.yaml
   - api_owner_clusterrole.yaml

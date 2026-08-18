@@ -448,6 +448,8 @@ run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
 run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
+run: export CHARTS_PATH := $(PROJECT_PATH)/component-charts
+run: export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.

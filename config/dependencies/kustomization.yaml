@@ -3,14 +3,14 @@ namespace: kuadrant-system
 resources:
   - authorino
   - limitador
-  - dns
+  # dns-operator is now deployed at runtime by the kuadrant-operator via Helm chart rendering.
+  # See internal/controlplane/ and RFC 0019.
   - developer-portal
   - openshift
 
 patchesStrategicMerge:
   - authorino/delete-ns.yaml
   - limitador/delete-ns.yaml
-  - dns/delete-ns.yaml
 
 # replacements:
 # - source:

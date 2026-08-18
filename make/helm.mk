@@ -16,6 +16,12 @@ helm-build: yq kustomize manifests ## Build the helm chart from kustomize manife
 	# Set desired dns-operator image
 	V="$(RELATED_IMAGE_DNS_OPERATOR)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired mcp-gateway controller image
+	V="$(RELATED_IMAGE_MCP_GATEWAY)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired mcp-gateway broker image
+	V="$(RELATED_IMAGE_MCP_GATEWAY_BROKER)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY_BROKER").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Build the helm chart templates from kustomize manifests

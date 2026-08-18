@@ -44,13 +44,16 @@ func TestComponentStatus_CRDsFromRegistry(t *testing.T) {
 	d := &Deployer{components: allComponents()}
 	crdNames := d.CRDNames()
 
-	if len(crdNames) != 2 {
-		t.Fatalf("expected 2 CRD names, got %d", len(crdNames))
+	if len(crdNames) != 5 {
+		t.Fatalf("expected 5 CRD names, got %d", len(crdNames))
 	}
 
 	want := map[string]bool{
-		"dnsrecords.kuadrant.io":           false,
-		"dnshealthcheckprobes.kuadrant.io": false,
+		"dnsrecords.kuadrant.io":                 false,
+		"dnshealthcheckprobes.kuadrant.io":       false,
+		"mcpgatewayextensions.mcp.kuadrant.io":   false,
+		"mcpserverregistrations.mcp.kuadrant.io": false,
+		"mcpvirtualservers.mcp.kuadrant.io":      false,
 	}
 	for _, name := range crdNames {
 		if _, ok := want[name]; !ok {

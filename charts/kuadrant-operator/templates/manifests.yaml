@@ -14531,6 +14531,9 @@ rules:
   resourceNames:
   - dnshealthcheckprobes.kuadrant.io
   - dnsrecords.kuadrant.io
+  - mcpgatewayextensions.mcp.kuadrant.io
+  - mcpserverregistrations.mcp.kuadrant.io
+  - mcpvirtualservers.mcp.kuadrant.io
   resources:
   - customresourcedefinitions
   verbs:
@@ -14839,6 +14842,7 @@ rules:
   resourceNames:
   - dns-operator-manager-rolebinding
   - dns-operator-remote-cluster-rolebinding
+  - mcp-gateway-controller
   resources:
   - clusterrolebindings
   verbs:
@@ -14860,6 +14864,7 @@ rules:
   resourceNames:
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role
+  - mcp-gateway-controller
   resources:
   - clusterroles
   verbs:
@@ -15117,6 +15122,10 @@ spec:
           value: quay.io/kuadrant/console-plugin:v0.1.5-2
         - name: RELATED_IMAGE_DNS_OPERATOR
           value: quay.io/kuadrant/dns-operator:latest
+        - name: RELATED_IMAGE_MCP_GATEWAY
+          value: ghcr.io/kuadrant/mcp-controller:latest
+        - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
+          value: ghcr.io/kuadrant/mcp-gateway:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

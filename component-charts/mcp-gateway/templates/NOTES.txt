@@ -1,0 +1,38 @@
+1. Check the status of your deployment:
+  kubectl get pods -n {{ .Release.Namespace }} -l "app.kubernetes.io/instance={{ .Release.Name }}"
+
+2. Verify MCPGatewayExtension is ready:
+  kubectl get mcpgatewayextension -n {{ .Release.Namespace }}
+
+3. Once the MCPGatewayExtension is ready, verify the broker-router deployment:
+  kubectl get deployment mcp-gateway -n {{ .Release.Namespace }}
+
+4. Verify EnvoyFilter was created (in the Gateway namespace):
+  kubectl get envoyfilter -n {{ .Values.mcpGatewayExtension.gatewayRef.namespace }} -l app.kubernetes.io/managed-by=mcp-gateway-controller
+
+5. Connect MCP servers by creating MCPServerRegistration resources:
+  kubectl apply -f - <<EOF
+  apiVersion: mcp.kuadrant.io/v1
+  kind: MCPServerRegistration
+  metadata:
+    name: my-mcp-server
+    namespace: {{ .Release.Namespace }}
+  spec:
+    prefix: "myserver_"
+    targetRef:
+      group: "gateway.networking.k8s.io"
+      kind: "HTTPRoute"
+      name: "my-server-route"
+  EOF
+
+6. Access your MCP Gateway at: http://{{ .Values.gateway.publicHost }}:{{ .Values.gateway.port }}/mcp
+   (Adjust hostname/port based on your Gateway configuration)
+
+7. View logs for troubleshooting:
+  # Broker/Router logs
+  kubectl logs -n {{ .Release.Namespace }} deployment/mcp-gateway
+
+  # Controller logs
+  kubectl logs -n {{ .Release.Namespace }} deployment/{{ include "mcp-gateway.fullname" . }}-controller
+
+For more information, visit: https://github.com/Kuadrant/mcp-gateway

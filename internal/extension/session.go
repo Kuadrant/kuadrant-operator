@@ -32,6 +32,7 @@ type SessionStore struct {
 	// Warmup gate
 	builtinNames   map[string]struct{}
 	warmupComplete bool
+	secretNames    map[string]struct{}
 }
 
 func NewSessionStore(logger logr.Logger) *SessionStore {
@@ -43,6 +44,7 @@ func NewSessionStore(logger logr.Logger) *SessionStore {
 		logger:         logger,
 		builtinNames:   make(map[string]struct{}),
 		warmupComplete: true,
+		secretNames:    make(map[string]struct{}),
 	}
 }
 
@@ -92,7 +94,10 @@ func (s *SessionStore) allBuiltinsRegisteredLocked() bool {
 func (s *SessionStore) SetCredential(name string, credential []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.setCredentialLocked(name, credential)
+}
 
+func (s *SessionStore) setCredentialLocked(name string, credential []byte) {
 	stored := make([]byte, len(credential))
 	copy(stored, credential)
 
@@ -104,6 +109,28 @@ func (s *SessionStore) SetCredential(name string, credential []byte) {
 	}
 
 	s.credentials[name] = stored
+}
+
+func (s *SessionStore) SyncSecretCredentials(credentials map[string][]byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for name, credential := range credentials {
+		if _, isBuiltin := s.builtinNames[name]; isBuiltin {
+			continue
+		}
+		s.setCredentialLocked(name, credential)
+		s.secretNames[name] = struct{}{}
+	}
+
+	for name := range s.secretNames {
+		if _, present := credentials[name]; present {
+			continue
+		}
+		delete(s.credentials, name)
+		s.revokeByNameLocked(name)
+		delete(s.secretNames, name)
+	}
 }
 
 func (s *SessionStore) RemoveCredential(name string) bool {

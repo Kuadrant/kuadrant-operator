@@ -341,6 +341,109 @@ func extensionName(i int) string {
 	return "ext-" + string(rune('a'+i))
 }
 
+func TestSessionStore_SyncSecretCredentials_AddsCredential(t *testing.T) {
+	store := newTestSessionStore()
+	cred := validCredential()
+
+	store.SyncSecretCredentials(map[string][]byte{"standalone": cred})
+
+	token, err := store.Authenticate("standalone", cred, "StandalonePolicy")
+	if err != nil {
+		t.Fatalf("expected authentication to succeed after sync, got: %v", err)
+	}
+	if token == "" {
+		t.Fatal("expected non-empty session token")
+	}
+}
+
+func TestSessionStore_SyncSecretCredentials_ChangedCredentialRevokesSession(t *testing.T) {
+	store := newTestSessionStore()
+	cred := validCredential()
+	store.SyncSecretCredentials(map[string][]byte{"standalone": cred})
+
+	token, err := store.Authenticate("standalone", cred, "StandalonePolicy")
+	if err != nil {
+		t.Fatalf("expected authentication to succeed, got: %v", err)
+	}
+
+	newCred := []byte("abcdefghijklmnopqrstuvwxyz012345")
+	store.SyncSecretCredentials(map[string][]byte{"standalone": newCred})
+
+	if _, ok := store.ValidateSession(token); ok {
+		t.Fatal("expected old session to be revoked after credential change")
+	}
+
+	if _, err := store.Authenticate("standalone", newCred, "StandalonePolicy"); err != nil {
+		t.Fatalf("expected re-authentication with new credential to succeed, got: %v", err)
+	}
+}
+
+func TestSessionStore_SyncSecretCredentials_UnchangedCredentialPreservesSession(t *testing.T) {
+	store := newTestSessionStore()
+	cred := validCredential()
+	store.SyncSecretCredentials(map[string][]byte{"standalone": cred})
+
+	token, err := store.Authenticate("standalone", cred, "StandalonePolicy")
+	if err != nil {
+		t.Fatalf("expected authentication to succeed, got: %v", err)
+	}
+
+	sameCred := make([]byte, len(cred))
+	copy(sameCred, cred)
+	store.SyncSecretCredentials(map[string][]byte{"standalone": sameCred})
+
+	if _, ok := store.ValidateSession(token); !ok {
+		t.Fatal("expected session to remain valid when synced credential is unchanged")
+	}
+}
+
+func TestSessionStore_SyncSecretCredentials_RemovedKeyRevokesSession(t *testing.T) {
+	store := newTestSessionStore()
+	cred := validCredential()
+	store.SyncSecretCredentials(map[string][]byte{"standalone": cred})
+
+	token, err := store.Authenticate("standalone", cred, "StandalonePolicy")
+	if err != nil {
+		t.Fatalf("expected authentication to succeed, got: %v", err)
+	}
+
+	store.SyncSecretCredentials(map[string][]byte{})
+
+	if _, ok := store.ValidateSession(token); ok {
+		t.Fatal("expected session to be revoked after credential removed from secret")
+	}
+
+	if _, err := store.Authenticate("standalone", cred, "StandalonePolicy"); !errors.Is(err, ErrUnknownExtension) {
+		t.Fatalf("expected ErrUnknownExtension after credential pruned, got: %v", err)
+	}
+}
+
+func TestSessionStore_SyncSecretCredentials_DoesNotOverwriteBuiltin(t *testing.T) {
+	store := newTestSessionStore()
+	builtinCred := validCredential()
+	store.SetCredential("builtin", builtinCred)
+	store.BeginWarmup([]string{"builtin"}, time.Minute)
+
+	store.SyncSecretCredentials(map[string][]byte{"builtin": []byte("abcdefghijklmnopqrstuvwxyz012345")})
+
+	if _, err := store.Authenticate("builtin", builtinCred, "BuiltinPolicy"); err != nil {
+		t.Fatalf("expected built-in credential to be preserved, got: %v", err)
+	}
+}
+
+func TestSessionStore_SyncSecretCredentials_DoesNotPruneBuiltin(t *testing.T) {
+	store := newTestSessionStore()
+	builtinCred := validCredential()
+	store.SetCredential("builtin", builtinCred)
+	store.BeginWarmup([]string{"builtin"}, time.Minute)
+
+	store.SyncSecretCredentials(map[string][]byte{"standalone": []byte("abcdefghijklmnopqrstuvwxyz012345")})
+
+	if _, err := store.Authenticate("builtin", builtinCred, "BuiltinPolicy"); err != nil {
+		t.Fatalf("expected built-in credential to survive sync, got: %v", err)
+	}
+}
+
 func TestSessionStore_Warmup_OpenByDefault(t *testing.T) {
 	store := newTestSessionStore()
 

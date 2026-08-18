@@ -6,9 +6,14 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 )
+
+func gateOpen(store *SessionStore) bool {
+	return store.handshakeAdmitted("standalone")
+}
 
 func newTestSessionStore() *SessionStore {
 	return NewSessionStore(logr.Discard())
@@ -334,4 +339,89 @@ func TestSessionStore_ConcurrentAccess(t *testing.T) {
 
 func extensionName(i int) string {
 	return "ext-" + string(rune('a'+i))
+}
+
+func TestSessionStore_Warmup_OpenByDefault(t *testing.T) {
+	store := newTestSessionStore()
+
+	if !gateOpen(store) {
+		t.Fatal("expected warmup gate to be open before BeginWarmup is called")
+	}
+}
+
+func TestSessionStore_Warmup_NoBuiltinsOpensImmediately(t *testing.T) {
+	store := newTestSessionStore()
+
+	store.BeginWarmup(nil, time.Minute)
+
+	if !gateOpen(store) {
+		t.Fatal("expected warmup gate to be open when there are no built-ins to wait for")
+	}
+}
+
+func TestSessionStore_Warmup_HeldUntilBuiltinRegisters(t *testing.T) {
+	store := newTestSessionStore()
+	cred := validCredential()
+	store.SetCredential("builtin", cred)
+
+	store.BeginWarmup([]string{"builtin"}, time.Minute)
+
+	if gateOpen(store) {
+		t.Fatal("expected warmup gate to be closed while built-in is unregistered")
+	}
+	if !store.handshakeAdmitted("builtin") {
+		t.Fatal("expected built-in to be admitted during warmup")
+	}
+
+	if _, err := store.Authenticate("builtin", cred, "BuiltinPolicy"); err != nil {
+		t.Fatalf("expected built-in authentication to succeed, got: %v", err)
+	}
+
+	if !gateOpen(store) {
+		t.Fatal("expected warmup gate to open once all built-ins registered")
+	}
+}
+
+func TestSessionStore_Warmup_HeldUntilAllBuiltinsRegister(t *testing.T) {
+	store := newTestSessionStore()
+	credA := validCredential()
+	credB := []byte("abcdefghijklmnopqrstuvwxyz012345")
+	store.SetCredential("builtin-a", credA)
+	store.SetCredential("builtin-b", credB)
+
+	store.BeginWarmup([]string{"builtin-a", "builtin-b"}, time.Minute)
+
+	if _, err := store.Authenticate("builtin-a", credA, "PolicyA"); err != nil {
+		t.Fatalf("expected built-in-a authentication to succeed, got: %v", err)
+	}
+	if gateOpen(store) {
+		t.Fatal("expected warmup gate to remain closed until every built-in registers")
+	}
+
+	if _, err := store.Authenticate("builtin-b", credB, "PolicyB"); err != nil {
+		t.Fatalf("expected built-in-b authentication to succeed, got: %v", err)
+	}
+	if !gateOpen(store) {
+		t.Fatal("expected warmup gate to open once every built-in registered")
+	}
+}
+
+func TestSessionStore_Warmup_TimeoutOpensGate(t *testing.T) {
+	store := newTestSessionStore()
+	store.SetCredential("builtin", validCredential())
+
+	store.BeginWarmup([]string{"builtin"}, 10*time.Millisecond)
+
+	if gateOpen(store) {
+		t.Fatal("expected warmup gate to be closed immediately after BeginWarmup")
+	}
+
+	deadline := time.After(time.Second)
+	for !gateOpen(store) {
+		select {
+		case <-deadline:
+			t.Fatal("expected warmup gate to open after timeout elapsed")
+		case <-time.After(time.Millisecond):
+		}
+	}
 }

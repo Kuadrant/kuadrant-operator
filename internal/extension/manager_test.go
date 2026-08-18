@@ -5,8 +5,10 @@ package extension
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
@@ -137,6 +139,61 @@ func TestHandshake_AuthFailure_GenericReason(t *testing.T) {
 	}
 	if resp.Reason != "handshake failed" {
 		t.Fatalf("expected generic reason %q, got %q", "handshake failed", resp.Reason)
+	}
+}
+
+func TestHandshake_WarmupGate_RejectsStandaloneDuringWarmup(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("builtin", cred)
+	svc.sessionStore.SetCredential("standalone", cred)
+	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Name:       "standalone",
+		Credential: cred,
+		PolicyKind: "StandalonePolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected standalone handshake to be rejected while warmup is in progress")
+	}
+	if resp.Reason != "warmup in progress" {
+		t.Fatalf("expected reason %q, got %q", "warmup in progress", resp.Reason)
+	}
+}
+
+func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("builtin", cred)
+	svc.sessionStore.SetCredential("standalone", cred)
+	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
+
+	builtinResp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Name:       "builtin",
+		Credential: cred,
+		PolicyKind: "BuiltinPolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error for built-in handshake, got: %v", err)
+	}
+	if !builtinResp.Accepted {
+		t.Fatalf("expected built-in handshake to be accepted during warmup, got reason: %s", builtinResp.Reason)
+	}
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Name:       "standalone",
+		Credential: cred,
+		PolicyKind: "StandalonePolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected standalone handshake to be accepted after warmup completed, got reason: %s", resp.Reason)
 	}
 }
 
@@ -1383,5 +1440,38 @@ func TestPipelineCommit_ChangeNotifierError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to trigger reconciliation") {
 		t.Errorf("Expected error about failed reconciliation, got: %v", err)
+	}
+}
+
+func TestWarmupTimeout(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    string
+		expected time.Duration
+	}{
+		{"seconds", "5s", 5 * time.Second},
+		{"minutes", "1m", time.Minute},
+		{"hours", "1h", time.Hour},
+		{"unset uses default", "", defaultWarmupTimeout},
+		{"zero uses default", "0s", defaultWarmupTimeout},
+		{"negative uses default", "-5s", defaultWarmupTimeout},
+		{"unparsable uses default", "notaduration", defaultWarmupTimeout},
+		{"bare number uses default", "30", defaultWarmupTimeout},
+		{"overflowing value uses default", "9999999999999h", defaultWarmupTimeout},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.value == "" {
+				t.Setenv("EXTENSIONS_WARMUP_TIMEOUT", "")
+				os.Unsetenv("EXTENSIONS_WARMUP_TIMEOUT")
+			} else {
+				t.Setenv("EXTENSIONS_WARMUP_TIMEOUT", tc.value)
+			}
+
+			if got := warmupTimeout(logr.Discard()); got != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, got)
+			}
+		})
 	}
 }

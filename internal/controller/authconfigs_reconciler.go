@@ -18,6 +18,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
@@ -392,12 +393,58 @@ func equalAuthConfigs(existing, desired *authorinov1beta3.AuthConfig) bool {
 		return false
 	}
 
-	// check for match of ownerReferences
-	if !reflect.DeepEqual(existing.GetOwnerReferences(), desired.GetOwnerReferences()) {
+	// owner references: only our own (Kuadrant-managed) references need to
+	// match. References added by third parties are ignored, and ordering is
+	// irrelevant.
+	if !equalKuadrantOwnerReferences(existing.GetOwnerReferences(), desired.GetOwnerReferences()) {
 		return false
 	}
 
 	return reflect.DeepEqual(existing.Spec, desired.Spec)
+}
+
+func isKuadrantOwnerReference(ref metav1.OwnerReference) bool {
+	gv, err := schema.ParseGroupVersion(ref.APIVersion)
+	if err != nil {
+		return false
+	}
+	return gv.Group == kuadrantv1beta1.KuadrantGroupKind.Group && ref.Kind == kuadrantv1beta1.KuadrantGroupKind.Kind
+}
+
+// kuadrantOwnerReferences returns only the Kuadrant-managed owner references.
+func kuadrantOwnerReferences(refs []metav1.OwnerReference) []metav1.OwnerReference {
+	return lo.Filter(refs, func(ref metav1.OwnerReference, _ int) bool {
+		return isKuadrantOwnerReference(ref)
+	})
+}
+
+// equalKuadrantOwnerReferences reports whether the Kuadrant-managed owner
+// references match between existing and desired, ignoring any third-party
+// references and ordering.
+func equalKuadrantOwnerReferences(existing, desired []metav1.OwnerReference) bool {
+	existingOurs := kuadrantOwnerReferences(existing)
+	desiredOurs := kuadrantOwnerReferences(desired)
+	if len(existingOurs) != len(desiredOurs) {
+		return false
+	}
+	return lo.EveryBy(desiredOurs, func(d metav1.OwnerReference) bool {
+		return lo.ContainsBy(existingOurs, func(e metav1.OwnerReference) bool {
+			return reflect.DeepEqual(e, d)
+		})
+	})
+}
+
+// upsertKuadrantOwnerReference returns the existing owner references with the
+// Kuadrant-managed reference replaced by the desired one. Third-party references
+// are preserved, and stale Kuadrant references
+func upsertKuadrantOwnerReference(existing, desired []metav1.OwnerReference) []metav1.OwnerReference {
+	preserved := lo.Filter(existing, func(ref metav1.OwnerReference, _ int) bool {
+		return !isKuadrantOwnerReference(ref)
+	})
+	if ref, found := lo.Find(desired, isKuadrantOwnerReference); found {
+		preserved = append(preserved, ref)
+	}
+	return preserved
 }
 
 // authConfigAnnotationKeyForRouteType returns the appropriate annotation key for the given route type.
@@ -415,13 +462,11 @@ func authConfigAnnotationKeyForRouteType(routeType kuadrantpolicymachinery.Route
 	}
 }
 
-// applyAuthConfigUpdate applies the desired state to an existing AuthConfig.
-// It updates the spec, labels, and route-rule annotations while preserving other annotations.
 func applyAuthConfigUpdate(ctx context.Context, existing, desired *authorinov1beta3.AuthConfig) {
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
 
-	existing.SetOwnerReferences(desired.GetOwnerReferences())
+	existing.SetOwnerReferences(upsertKuadrantOwnerReference(existing.GetOwnerReferences(), desired.GetOwnerReferences()))
 
 	// Update route-rule back-ref annotations
 	if existing.Annotations == nil {

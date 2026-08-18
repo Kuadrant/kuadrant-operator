@@ -60,6 +60,8 @@ var (
 	kuadrantManagedLabelKey = "kuadrant.io/managed"
 
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+
+	SecretsResource = corev1.SchemeGroupVersion.WithResource("secrets")
 )
 
 // gateway-api permissions
@@ -696,12 +698,22 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 	}
 	extManager.SetChangeNotifier(extManager.TriggerReconciliation)
 
+	secretName := env.GetString("EXTENSION_AUTH_SECRET", "kuadrant-extension-auth")
+
 	opts = append(opts, controller.WithRunnable(
 		"extension manager",
 		func(*controller.Controller) controller.Runnable {
 			return &extManager
 		},
-	))
+	), controller.WithRunnable(
+		"extension auth secret watcher",
+		controller.Watch(
+			&corev1.Secret{},
+			SecretsResource,
+			operatorNamespace,
+			controller.FilterResourcesByField[*corev1.Secret](fmt.Sprintf("metadata.name=%s", secretName)),
+		),
+	), controller.WithObjectKinds(SecretGroupKind))
 	return opts
 }
 

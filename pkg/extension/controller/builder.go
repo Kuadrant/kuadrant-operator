@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -121,14 +120,11 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, errors.New("KUADRANT_EXTENSION_NAME environment variable is required")
 	}
 
-	credentialHex := os.Getenv("KUADRANT_EXTENSION_CREDENTIAL")
-	if credentialHex == "" {
+	credentialValue := os.Getenv("KUADRANT_EXTENSION_CREDENTIAL")
+	if credentialValue == "" {
 		return nil, errors.New("KUADRANT_EXTENSION_CREDENTIAL environment variable is required")
 	}
-	credential, err := hex.DecodeString(credentialHex)
-	if err != nil {
-		return nil, fmt.Errorf("KUADRANT_EXTENSION_CREDENTIAL is not valid hex: %w", err)
-	}
+	credential := []byte(credentialValue)
 
 	extClient, err := newExtensionClient(address)
 	if err != nil {

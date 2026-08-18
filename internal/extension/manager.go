@@ -19,6 +19,7 @@ package extension
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -103,10 +104,12 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	}
 
 	for _, name := range names {
-		credential := make([]byte, 32)
-		if _, e := rand.Read(credential); e != nil {
+		raw := make([]byte, 32)
+		if _, e := rand.Read(raw); e != nil {
 			return Manager{}, fmt.Errorf("failed to generate credential for extension %s: %w", name, e)
 		}
+
+		credential := []byte(hex.EncodeToString(raw))
 		service.sessionStore.SetCredential(name, credential)
 		if oopExtension, e := NewOOPExtension(name, location, credential, extensionPort, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)

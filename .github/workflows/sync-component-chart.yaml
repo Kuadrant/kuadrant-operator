@@ -109,6 +109,8 @@ jobs:
           DISPATCH_COMPONENT: ${{ github.event.client_payload.component }}
           DISPATCH_ACTOR: ${{ github.event.client_payload.actor }}
           DISPATCH_COMMIT_URL: ${{ github.event.client_payload.commit-url }}
+          DISPATCH_PR_URL: ${{ github.event.client_payload.pr-url }}
+          DISPATCH_PR_APPROVER: ${{ github.event.client_payload.pr-approver }}
           INPUT_COMPONENT: ${{ inputs.component }}
           WORKFLOW_ACTOR: ${{ github.actor }}
         run: |
@@ -116,10 +118,14 @@ jobs:
             echo "component=$DISPATCH_COMPONENT" >> "$GITHUB_OUTPUT"
             echo "actor=$DISPATCH_ACTOR" >> "$GITHUB_OUTPUT"
             echo "commit-url=$DISPATCH_COMMIT_URL" >> "$GITHUB_OUTPUT"
+            echo "pr-url=$DISPATCH_PR_URL" >> "$GITHUB_OUTPUT"
+            echo "pr-approver=$DISPATCH_PR_APPROVER" >> "$GITHUB_OUTPUT"
           else
             echo "component=$INPUT_COMPONENT" >> "$GITHUB_OUTPUT"
             echo "actor=$WORKFLOW_ACTOR" >> "$GITHUB_OUTPUT"
             echo "commit-url=" >> "$GITHUB_OUTPUT"
+            echo "pr-url=" >> "$GITHUB_OUTPUT"
+            echo "pr-approver=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout target branch
@@ -158,6 +164,8 @@ jobs:
         with:
           token: ${{ secrets.KUADRANT_DEV_PAT }}
           commit-message: "chore(deps): update ${{ steps.params.outputs.component }} chart on ${{ matrix.target.branch }} to ${{ steps.sync.outputs.new-ref-short }}"
+          committer: kuadrant-dev <kuadrant-dev@redhat.com>
+          author: kuadrant-dev <kuadrant-dev@redhat.com>
           signoff: true
           sign-commits: true
           base: ${{ matrix.target.branch }}
@@ -171,7 +179,7 @@ jobs:
             **Target branch:** `${{ matrix.target.branch }}`
             **Previous ref:** `${{ steps.sync.outputs.old-ref }}`
             **New ref:** `${{ steps.sync.outputs.new-ref }}`
-            **Triggered by:** @${{ steps.params.outputs.actor }}${{ steps.params.outputs.commit-url && format(' ([commit]({0}))', steps.params.outputs.commit-url) || '' }}
+            **Triggered by:** @${{ steps.params.outputs.actor }}${{ steps.params.outputs.pr-approver && format(' (approved by @{0})', steps.params.outputs.pr-approver) || '' }}${{ steps.params.outputs.pr-url && format(' via {0}', steps.params.outputs.pr-url) || '' }}${{ steps.params.outputs.commit-url && format(' ({0})', steps.params.outputs.commit-url) || '' }}
 
             [Upstream changes](https://github.com/${{ steps.sync.outputs.repo }}/compare/${{ steps.sync.outputs.old-ref }}...${{ steps.sync.outputs.new-ref }})
 

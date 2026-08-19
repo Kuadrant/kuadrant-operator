@@ -64,7 +64,7 @@ func TestSortableHTTPRouteMatchConfigsDeterministicTieBreak(t *testing.T) {
 				Value: ptr.To("/v1/chat/completions"),
 			},
 			Headers: []gatewayapiv1.HTTPHeaderMatch{
-				{Name: "x-a", Type: &headerType, Value: "1"},
+				{Name: "x-b", Type: &headerType, Value: "1"},
 			},
 		},
 	}
@@ -79,7 +79,7 @@ func TestSortableHTTPRouteMatchConfigsDeterministicTieBreak(t *testing.T) {
 				Value: ptr.To("/v1/chat/completions"),
 			},
 			Headers: []gatewayapiv1.HTTPHeaderMatch{
-				{Name: "x-b", Type: &headerType, Value: "1"},
+				{Name: "x-a", Type: &headerType, Value: "1"},
 			},
 		},
 	}
@@ -87,6 +87,6 @@ func TestSortableHTTPRouteMatchConfigsDeterministicTieBreak(t *testing.T) {
 	configs := SortableHTTPRouteMatchConfigs{b, a}
 	sort.Sort(configs)
 
-	assert.Equal(t, configs[0].Name, "a")
-	assert.Equal(t, configs[1].Name, "b")
+	assert.Equal(t, configs[0].Name, "b")
+	assert.Equal(t, configs[1].Name, "a")
 }

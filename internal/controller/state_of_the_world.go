@@ -28,12 +28,14 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -499,6 +501,17 @@ func (b *BootOptionsBuilder) getOpenShiftServerConfigOptions() ([]controller.Con
 	if !b.isOpenShiftServerConfigInstalled {
 		b.logger.Info("openshift apiserver CRD is not installed, skipping TLS profile watch")
 		return opts, nil
+	}
+
+	// Some downstream installs do not grant list/watch on config.openshift.io/APIServer.
+	// If we cannot list APIServer, skip registering this watcher so the manager still starts.
+	apiserverList := &configv1.APIServerList{}
+	if err := b.manager.GetAPIReader().List(context.Background(), apiserverList, &ctrlclient.ListOptions{Limit: 1}); err != nil {
+		if k8serrors.IsForbidden(err) {
+			b.logger.Info("insufficient RBAC to list APIServer, skipping TLS profile watch", "error", err.Error())
+			return opts, nil
+		}
+		return nil, err
 	}
 
 	opts = append(opts,

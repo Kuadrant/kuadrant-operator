@@ -99,14 +99,14 @@ func TestImageSplitValue_Apply(t *testing.T) {
 			wantSet:  true,
 		},
 		{
-			name: "splits digest reference",
+			name: "digest reference kept whole in repository",
 			mapping: &ImageSplitValue{
 				ImageValue: ImageValue{EnvVar: "TEST_IMG", ValueKey: "imageController"},
 			},
 			envValue: "ghcr.io/kuadrant/mcp-controller@sha256:abc123",
 			wantKey:  "imageController",
-			wantRepo: "ghcr.io/kuadrant/mcp-controller",
-			wantTag:  "@sha256:abc123",
+			wantRepo: "ghcr.io/kuadrant/mcp-controller@sha256:abc123",
+			wantTag:  "",
 			wantSet:  true,
 		},
 		{
@@ -182,6 +182,10 @@ func TestImageSplitValue_Apply(t *testing.T) {
 				if m[tagField] != tt.wantTag {
 					t.Errorf("%s = %v, want %v", tagField, m[tagField], tt.wantTag)
 				}
+			} else {
+				if _, ok := m[tagField]; ok {
+					t.Errorf("expected %s not to be set, got %v", tagField, m[tagField])
+				}
 			}
 		})
 	}
@@ -207,6 +211,7 @@ func TestNestedValueKey(t *testing.T) {
 		name     string
 		mapping  ChartValueOverride
 		envValue string
+		setup    func(values map[string]any) // optional: pre-populate values before Apply
 		validate func(t *testing.T, values map[string]any)
 	}{
 		{
@@ -261,15 +266,30 @@ func TestNestedValueKey(t *testing.T) {
 			name:     "merges with existing nested map",
 			mapping:  &ImageValue{EnvVar: "TEST_IMG", ValueKey: "controller.image"},
 			envValue: "quay.io/test:v1",
-			validate: func(t *testing.T, values map[string]any) {
-				// Pre-populate existing nested value
+			setup: func(values map[string]any) {
 				values["controller"] = map[string]any{"replicas": 3}
-				// Re-apply
-				(&ImageValue{EnvVar: "TEST_IMG", ValueKey: "controller.image"}).Apply(values)
-
+			},
+			validate: func(t *testing.T, values map[string]any) {
 				ctrl := values["controller"].(map[string]any)
 				if ctrl["replicas"] != 3 {
 					t.Error("existing value should be preserved")
+				}
+				if ctrl["image"] != "quay.io/test:v1" {
+					t.Errorf("controller.image = %v, want quay.io/test:v1", ctrl["image"])
+				}
+			},
+		},
+		{
+			name:     "replaces scalar intermediate with nested map",
+			mapping:  &ImageValue{EnvVar: "TEST_IMG", ValueKey: "controller.image"},
+			envValue: "quay.io/test:v1",
+			setup: func(values map[string]any) {
+				values["controller"] = "scalar-value"
+			},
+			validate: func(t *testing.T, values map[string]any) {
+				ctrl, ok := values["controller"].(map[string]any)
+				if !ok {
+					t.Fatal("expected controller to be replaced with a map")
 				}
 				if ctrl["image"] != "quay.io/test:v1" {
 					t.Errorf("controller.image = %v, want quay.io/test:v1", ctrl["image"])
@@ -292,6 +312,9 @@ func TestNestedValueKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("TEST_IMG", tt.envValue)
 			values := make(map[string]any)
+			if tt.setup != nil {
+				tt.setup(values)
+			}
 			tt.mapping.Apply(values)
 			tt.validate(t, values)
 		})

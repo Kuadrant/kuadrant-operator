@@ -4,8 +4,6 @@ package controlplane
 
 import (
 	"testing"
-
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
 
 func TestEnabledComponents_ReturnsAllComponents(t *testing.T) {
@@ -67,22 +65,76 @@ func TestComponentStatus_CRDsFromRegistry(t *testing.T) {
 	}
 }
 
-func TestComponentStatusImages(t *testing.T) {
-	cs := kuadrantv1beta1.ComponentStatus{
-		Name:  "dns-operator",
-		Ready: true,
-		Images: []kuadrantv1beta1.ImageStatus{
-			{Name: "controller", Image: "quay.io/kuadrant/dns-operator:v1.0.0"},
+func TestGetImageStatuses(t *testing.T) {
+	r := &Reconciler{}
+
+	tests := []struct {
+		name      string
+		component Component
+		envVars   map[string]string
+		wantCount int
+		wantName  string
+		wantImage string
+	}{
+		{
+			name: "returns image from ImageEnvVar",
+			component: Component{
+				Name:        "dns-operator",
+				ImageEnvVar: "TEST_RELATED_IMAGE",
+			},
+			envVars:   map[string]string{"TEST_RELATED_IMAGE": "quay.io/kuadrant/dns-operator:v1.0.0"},
+			wantCount: 1,
+			wantName:  "controller",
+			wantImage: "quay.io/kuadrant/dns-operator:v1.0.0",
+		},
+		{
+			name: "empty env var returns no images",
+			component: Component{
+				Name:        "dns-operator",
+				ImageEnvVar: "TEST_RELATED_IMAGE",
+			},
+			envVars:   map[string]string{"TEST_RELATED_IMAGE": ""},
+			wantCount: 0,
+		},
+		{
+			name: "no ImageEnvVar returns no images",
+			component: Component{
+				Name: "dns-operator",
+			},
+			wantCount: 0,
+		},
+		{
+			name: "includes images from ChartValueOverrides implementing ImageReporter",
+			component: Component{
+				Name: "test",
+				ChartValueOverrides: []ChartValueOverride{
+					&ImageValue{EnvVar: "TEST_OVERRIDE_IMG", ValueKey: "image", Description: "sidecar"},
+				},
+			},
+			envVars:   map[string]string{"TEST_OVERRIDE_IMG": "ghcr.io/test/sidecar:v2"},
+			wantCount: 1,
+			wantName:  "sidecar",
+			wantImage: "ghcr.io/test/sidecar:v2",
 		},
 	}
 
-	if len(cs.Images) != 1 {
-		t.Fatalf("expected 1 image, got %d", len(cs.Images))
-	}
-	if cs.Images[0].Name != "controller" {
-		t.Errorf("Images[0].Name = %q, want %q", cs.Images[0].Name, "controller")
-	}
-	if cs.Images[0].Image != "quay.io/kuadrant/dns-operator:v1.0.0" {
-		t.Errorf("Images[0].Image = %q, want %q", cs.Images[0].Image, "quay.io/kuadrant/dns-operator:v1.0.0")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for k, v := range tt.envVars {
+				t.Setenv(k, v)
+			}
+			images := r.getImageStatuses(tt.component)
+			if len(images) != tt.wantCount {
+				t.Fatalf("expected %d images, got %d", tt.wantCount, len(images))
+			}
+			if tt.wantCount > 0 {
+				if images[0].Name != tt.wantName {
+					t.Errorf("Images[0].Name = %q, want %q", images[0].Name, tt.wantName)
+				}
+				if images[0].Image != tt.wantImage {
+					t.Errorf("Images[0].Image = %q, want %q", images[0].Image, tt.wantImage)
+				}
+			}
+		})
 	}
 }

@@ -84,6 +84,8 @@ func setNestedValue(values map[string]any, key string, val any) {
 		}
 		nested, ok := existing.(map[string]any)
 		if !ok {
+			// Existing value is not a map; replace it with a new map to
+			// allow deeper keys to be set.
 			nested = make(map[string]any)
 			target[part] = nested
 		}
@@ -93,8 +95,11 @@ func setNestedValue(values map[string]any, key string, val any) {
 }
 
 func parseImageRef(ref string) (repository, tag string) {
-	if atIdx := strings.Index(ref, "@"); atIdx != -1 {
-		return ref[:atIdx], ref[atIdx:]
+	// Digest references (e.g., repo@sha256:abc) are kept whole in repository
+	// with an empty tag, so the tag field is not set and the chart template
+	// uses the repository value as-is.
+	if strings.Contains(ref, "@") {
+		return ref, ""
 	}
 	if colonIdx := strings.LastIndex(ref, ":"); colonIdx != -1 {
 		afterColon := ref[colonIdx+1:]

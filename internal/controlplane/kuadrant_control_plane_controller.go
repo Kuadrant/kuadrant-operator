@@ -257,6 +257,10 @@ func (r *Reconciler) isDeploymentReady(ctx context.Context, component Component)
 		Namespace: r.deployer.Namespace(),
 		Name:      component.DeploymentName,
 	}, deploy); err != nil {
+		if !apierrors.IsNotFound(err) {
+			r.logger.V(1).Info("unexpected error checking deployment readiness",
+				"component", component.Name, "error", err)
+		}
 		return false
 	}
 	return deploy.Status.ReadyReplicas > 0

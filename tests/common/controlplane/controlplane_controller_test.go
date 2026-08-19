@@ -11,9 +11,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+)
+
+const (
+	operatorNamespace     = "kuadrant-system"
+	dnsOperatorDeployment = "dns-operator-controller-manager"
 )
 
 // Serial: KuadrantControlPlane is a cluster-scoped singleton. Destructive tests
@@ -62,8 +68,8 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 			Eventually(func(g Gomega) {
 				deploy := &appsv1.Deployment{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: "kuadrant-system",
-					Name:      "dns-operator-controller-manager",
+					Namespace: operatorNamespace,
+					Name:      dnsOperatorDeployment,
 				}, deploy)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -88,8 +94,14 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
 				g.Expect(cp.Status.Components).ToNot(BeEmpty())
-				dnsComponent := cp.Status.Components[0]
-				g.Expect(dnsComponent.Name).To(Equal("dns-operator"))
+				var dnsComponent *kuadrantv1beta1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "dns-operator" {
+						dnsComponent = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(dnsComponent).ToNot(BeNil(), "dns-operator component not found in status")
 				g.Expect(dnsComponent.Ready).To(BeTrue())
 				g.Expect(dnsComponent.CRDs).To(HaveLen(2))
 				for _, crd := range dnsComponent.CRDs {
@@ -132,26 +144,31 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 	Context("self-healing on deletion", func() {
 		It("re-creates KuadrantControlPlane CR when deleted", func(ctx SpecContext) {
+			cpKey := client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}
+
 			cp := &kuadrantv1beta1.KuadrantControlPlane{}
-			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+			Expect(testClient().Get(ctx, cpKey, cp)).To(Succeed())
+			originalUID := cp.GetUID()
 
 			Expect(testClient().Delete(ctx, cp)).To(Succeed())
 
 			Eventually(func(g Gomega) {
 				recreated := &kuadrantv1beta1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, recreated)).To(Succeed())
+				g.Expect(testClient().Get(ctx, cpKey, recreated)).To(Succeed())
+				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new CR, not the old one")
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
 		It("child Deployments survive KuadrantControlPlane deletion", func(ctx SpecContext) {
-			// Ensure dns-operator is running first
+			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
+
+			// Ensure dns-operator is running and capture its UID
+			var originalUID types.UID
 			Eventually(func(g Gomega) {
 				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: "kuadrant-system",
-					Name:      "dns-operator-controller-manager",
-				}, deploy)).To(Succeed())
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
 				g.Expect(deploy.Status.ReadyReplicas).To(BeNumerically(">", 0))
+				originalUID = deploy.GetUID()
 			}).WithContext(ctx).Should(Succeed())
 
 			// Delete the CR
@@ -159,44 +176,41 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 			Expect(testClient().Delete(ctx, cp)).To(Succeed())
 
-			// Deployment should still exist (no cascade delete)
+			// Deployment should still exist with the same UID (preserved, not recreated)
 			Consistently(func(g Gomega) {
 				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: "kuadrant-system",
-					Name:      "dns-operator-controller-manager",
-				}, deploy)).To(Succeed())
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+				g.Expect(deploy.GetUID()).To(Equal(originalUID))
 			}, 5*time.Second, 1*time.Second).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
 	Context("drift reconciliation", func() {
 		It("recreates dns-operator Deployment when deleted", func(ctx SpecContext) {
-			// Ensure it exists first
+			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
+
+			// Ensure it exists first and capture UID
+			var originalUID types.UID
 			Eventually(func(g Gomega) {
 				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: "kuadrant-system",
-					Name:      "dns-operator-controller-manager",
-				}, deploy)).To(Succeed())
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+				originalUID = deploy.GetUID()
 			}).WithContext(ctx).Should(Succeed())
 
 			// Delete the Deployment
 			deploy := &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "kuadrant-system",
-					Name:      "dns-operator-controller-manager",
+					Namespace: operatorNamespace,
+					Name:      dnsOperatorDeployment,
 				},
 			}
 			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
 
-			// Should be recreated by the controller (watch triggers immediate reconcile)
+			// Should be recreated with a new UID
 			Eventually(func(g Gomega) {
 				recreated := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: "kuadrant-system",
-					Name:      "dns-operator-controller-manager",
-				}, recreated)).To(Succeed())
+				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
+				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})

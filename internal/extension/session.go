@@ -111,16 +111,35 @@ func (s *SessionStore) setCredentialLocked(name string, credential []byte) {
 	s.credentials[name] = stored
 }
 
-func (s *SessionStore) SyncSecretCredentials(credentials map[string][]byte) {
+type CredentialSyncResult struct {
+	Added   int
+	Rotated int
+	Removed int
+}
+
+func (r CredentialSyncResult) Changed() bool {
+	return r.Added > 0 || r.Rotated > 0 || r.Removed > 0
+}
+
+func (s *SessionStore) SyncSecretCredentials(credentials map[string][]byte) CredentialSyncResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var result CredentialSyncResult
 	for name, credential := range credentials {
 		if _, isBuiltin := s.builtinNames[name]; isBuiltin {
 			continue
 		}
+		existing, existed := s.credentials[name]
+		unchanged := existed && subtle.ConstantTimeCompare(existing, credential) == 1
 		s.setCredentialLocked(name, credential)
 		s.secretNames[name] = struct{}{}
+		switch {
+		case !existed:
+			result.Added++
+		case !unchanged:
+			result.Rotated++
+		}
 	}
 
 	for name := range s.secretNames {
@@ -130,7 +149,10 @@ func (s *SessionStore) SyncSecretCredentials(credentials map[string][]byte) {
 		delete(s.credentials, name)
 		s.revokeByNameLocked(name)
 		delete(s.secretNames, name)
+		result.Removed++
 	}
+
+	return result
 }
 
 func (s *SessionStore) RemoveCredential(name string) bool {

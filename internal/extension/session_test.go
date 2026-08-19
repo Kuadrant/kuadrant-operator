@@ -444,6 +444,34 @@ func TestSessionStore_SyncSecretCredentials_DoesNotPruneBuiltin(t *testing.T) {
 	}
 }
 
+func TestSessionStore_SyncSecretCredentials_ReportsChanges(t *testing.T) {
+	store := newTestSessionStore()
+	store.SetCredential("builtin", validCredential())
+	store.BeginWarmup([]string{"builtin"}, time.Minute)
+
+	first := validCredential()
+	if result := store.SyncSecretCredentials(map[string][]byte{"a": first, "b": validCredential()}); result != (CredentialSyncResult{Added: 2}) {
+		t.Fatalf("expected two additions, got: %+v", result)
+	}
+
+	rotated := []byte("abcdefghijklmnopqrstuvwxyz012345")
+	if result := store.SyncSecretCredentials(map[string][]byte{"a": rotated, "b": validCredential()}); result != (CredentialSyncResult{Rotated: 1}) {
+		t.Fatalf("expected one rotation, got: %+v", result)
+	}
+
+	if result := store.SyncSecretCredentials(map[string][]byte{"a": rotated}); result != (CredentialSyncResult{Removed: 1}) {
+		t.Fatalf("expected one removal, got: %+v", result)
+	}
+
+	if result := store.SyncSecretCredentials(map[string][]byte{"a": rotated}); result.Changed() {
+		t.Fatalf("expected no changes on identical sync, got: %+v", result)
+	}
+
+	if result := store.SyncSecretCredentials(map[string][]byte{"a": rotated, "builtin": rotated}); result.Changed() {
+		t.Fatalf("expected built-in to be ignored and no changes reported, got: %+v", result)
+	}
+}
+
 func TestSessionStore_Warmup_OpenByDefault(t *testing.T) {
 	store := newTestSessionStore()
 

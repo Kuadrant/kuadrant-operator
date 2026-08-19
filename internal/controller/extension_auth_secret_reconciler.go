@@ -47,7 +47,12 @@ func (r *ExtensionAuthSecretReconciler) Reconcile(eventCtx context.Context, _ []
 		credentials = secret.Data
 	}
 
-	logger.V(1).Info("syncing extension auth secret credentials", "count", len(credentials))
-	r.store.SyncSecretCredentials(credentials)
+	result := r.store.SyncSecretCredentials(credentials)
+	if result.Changed() {
+		logger.Info("extension auth secret credentials changed",
+			"added", result.Added, "rotated", result.Rotated, "removed", result.Removed, "total", len(credentials))
+	} else {
+		logger.V(1).Info("extension auth secret credentials unchanged", "count", len(credentials))
+	}
 	return nil
 }

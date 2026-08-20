@@ -19,6 +19,7 @@ package extension
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -54,8 +55,14 @@ import (
 )
 
 const defaultExtensionServicePort = 50052
+const defaultWarmupTimeout = 30 * time.Second
+const defaultAuthSecretName = "kuadrant-extension-auth" //nolint:gosec
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
+
+func AuthSecretName() string {
+	return env.GetString("EXTENSION_AUTH_SECRET", defaultAuthSecretName)
+}
 
 type ChangeNotifier func(reason string) error
 
@@ -103,10 +110,12 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	}
 
 	for _, name := range names {
-		credential := make([]byte, 32)
-		if _, e := rand.Read(credential); e != nil {
+		raw := make([]byte, 32)
+		if _, e := rand.Read(raw); e != nil {
 			return Manager{}, fmt.Errorf("failed to generate credential for extension %s: %w", name, e)
 		}
+
+		credential := []byte(hex.EncodeToString(raw))
 		service.sessionStore.SetCredential(name, credential)
 		if oopExtension, e := NewOOPExtension(name, location, credential, extensionPort, logger, sync); e == nil {
 			extensions = append(extensions, &oopExtension)
@@ -139,6 +148,8 @@ func (m *Manager) Start() error {
 		m.logger.Error(e, "failed to start descriptor server")
 		err = fmt.Errorf("descriptor server: %w", e)
 	}
+
+	m.beginWarmup()
 
 	if e := m.startExtensionServer(); e != nil {
 		m.logger.Error(e, "failed to start extension server")
@@ -240,6 +251,28 @@ func (m *Manager) stopDescriptorServer() {
 	}
 
 	m.descriptorServer = nil
+}
+
+func (m *Manager) beginWarmup() {
+	builtinNames := make([]string, 0, len(m.extensions))
+	for _, extension := range m.extensions {
+		builtinNames = append(builtinNames, extension.Name())
+	}
+
+	m.sessionStore.BeginWarmup(builtinNames, warmupTimeout(m.logger))
+}
+
+func warmupTimeout(logger logr.Logger) time.Duration {
+	value := env.GetString("EXTENSIONS_WARMUP_TIMEOUT", "")
+	if value == "" {
+		return defaultWarmupTimeout
+	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout <= 0 {
+		logger.Error(err, "invalid EXTENSIONS_WARMUP_TIMEOUT, using default", "value", value, "default", defaultWarmupTimeout)
+		return defaultWarmupTimeout
+	}
+	return timeout
 }
 
 func (m *Manager) startExtensionServer() error {
@@ -433,6 +466,15 @@ func (s *extensionService) Handshake(_ context.Context, request *extpb.Handshake
 		return &extpb.HandshakeResponse{
 			Accepted: false,
 			Reason:   "name is required",
+		}, nil
+	}
+
+	// Built-in extensions claim their policy kinds first
+	if !s.sessionStore.handshakeAdmitted(request.Name) {
+		s.logger.Info("handshake rejected during warmup", "extension", request.Name, "policyKind", request.PolicyKind)
+		return &extpb.HandshakeResponse{
+			Accepted: false,
+			Reason:   "warmup in progress",
 		}, nil
 	}
 

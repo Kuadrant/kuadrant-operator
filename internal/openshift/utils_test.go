@@ -14,6 +14,7 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 		name              string
 		version           string
 		latestEnvVar      string
+		sdk1EnvVar        string
 		pf5EnvVar         string
 		expectedImage     string
 		expectedErrSubstr string
@@ -22,6 +23,7 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 			name:          "OpenShift 4.16 uses PF5 env var",
 			version:       "4.16.0",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedImage: "quay.io/kuadrant/console-plugin:v0.1.5",
 		},
@@ -29,20 +31,31 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 			name:          "OpenShift 4.19 uses PF5 env var",
 			version:       "4.19.0",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedImage: "quay.io/kuadrant/console-plugin:v0.1.5",
 		},
 		{
-			name:          "OpenShift 4.20 uses LATEST env var",
+			name:          "OpenShift 4.20 uses SDK1 env var",
 			version:       "4.20.0",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:latest",
+			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
 		},
 		{
-			name:          "OpenShift 4.21 uses LATEST env var",
+			name:          "OpenShift 4.21 uses SDK1 env var",
 			version:       "4.21.0",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
+		},
+		{
+			name:          "OpenShift 4.22 uses LATEST env var",
+			version:       "4.22.0",
+			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedImage: "quay.io/kuadrant/console-plugin:latest",
 		},
@@ -50,27 +63,39 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 			name:          "OpenShift 5.0 uses LATEST env var",
 			version:       "5.0.0",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedImage: "quay.io/kuadrant/console-plugin:latest",
 		},
 		{
-			name:          "OpenShift 4.20.0-rc.1 pre-release uses LATEST env var",
+			name:          "OpenShift 4.20.0-rc.1 pre-release uses SDK1 env var",
 			version:       "4.20.0-rc.1",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
+		},
+		{
+			name:          "OpenShift 4.22.0-rc.1 pre-release uses LATEST env var",
+			version:       "4.22.0-rc.1",
+			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedImage: "quay.io/kuadrant/console-plugin:latest",
 		},
 		{
-			name:          "OpenShift 4.20.0-alpha.1 pre-release uses LATEST env var",
+			name:          "OpenShift 4.20.0-alpha.1 pre-release uses SDK1 env var",
 			version:       "4.20.0-alpha.1",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:latest",
+			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
 		},
 		{
 			name:          "OpenShift 4.19.0-rc.1 pre-release uses PF5 env var",
 			version:       "4.19.0-rc.1",
 			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedImage: "quay.io/kuadrant/console-plugin:v0.1.5",
 		},
@@ -78,6 +103,7 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 			name:              "Empty version returns error",
 			version:           "",
 			latestEnvVar:      "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:        "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:         "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedErrSubstr: "OpenShift version is empty",
 		},
@@ -85,6 +111,7 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 			name:              "Invalid version returns error",
 			version:           "invalid",
 			latestEnvVar:      "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:        "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:         "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedErrSubstr: "failed to parse OpenShift version",
 		},
@@ -92,13 +119,23 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 			name:              "Missing PF5 env var for old version returns error",
 			version:           "4.18.0",
 			latestEnvVar:      "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:        "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:         "",
 			expectedErrSubstr: "environment variable RELATED_IMAGE_CONSOLE_PLUGIN_PF5 is not set",
 		},
 		{
-			name:              "Missing LATEST env var for new version returns error",
+			name:              "Missing SDK1 env var for 4.20-4.21 returns error",
 			version:           "4.20.0",
+			latestEnvVar:      "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:        "",
+			pf5EnvVar:         "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedErrSubstr: "environment variable RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 is not set",
+		},
+		{
+			name:              "Missing LATEST env var for new version returns error",
+			version:           "4.22.0",
 			latestEnvVar:      "",
+			sdk1EnvVar:        "quay.io/kuadrant/console-plugin:v0.6.0",
 			pf5EnvVar:         "quay.io/kuadrant/console-plugin:v0.1.5",
 			expectedErrSubstr: "environment variable RELATED_IMAGE_CONSOLE_PLUGIN_LATEST is not set",
 		},
@@ -106,13 +143,9 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set environment variables
-			if tt.latestEnvVar != "" {
-				t.Setenv(RelatedImageConsolePluginLatestEnvVar, tt.latestEnvVar)
-			}
-			if tt.pf5EnvVar != "" {
-				t.Setenv(RelatedImageConsolePluginPF5EnvVar, tt.pf5EnvVar)
-			}
+			t.Setenv(RelatedImageConsolePluginLatestEnvVar, tt.latestEnvVar)
+			t.Setenv(RelatedImageConsolePluginSDK1EnvVar, tt.sdk1EnvVar)
+			t.Setenv(RelatedImageConsolePluginPF5EnvVar, tt.pf5EnvVar)
 
 			clusterVersion := &configv1.ClusterVersion{
 				ObjectMeta: metav1.ObjectMeta{

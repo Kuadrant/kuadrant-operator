@@ -32,11 +32,15 @@ on:
         default: quay.io/kuadrant/developer-portal-controller:latest
         type: string
       relatedImageConsolePluginLatest:
-        description: Related image ConsolePlugin latest (PatternFly 6)
+        description: Related image ConsolePlugin latest (SDK 4.22, pluginAPI >= 4.22.0-0)
         default: quay.io/kuadrant/console-plugin:latest
         type: string
+      relatedImageConsolePluginSDK1:
+        description: Related image ConsolePlugin v0.6.0 (SDK 1.x, pluginAPI "*", for OCP 4.20-4.21)
+        default: quay.io/kuadrant/console-plugin:v0.6.0
+        type: string
       relatedImageConsolePluginPF5:
-        description: Related image ConsolePlugin v0.1.5 (PatternFly 5)
+        description: Related image ConsolePlugin v0.1.5 (PatternFly 5, for OCP < 4.20)
         default: quay.io/kuadrant/console-plugin:v0.1.5-2
         type: string
       consolePluginImageURL:
@@ -86,11 +90,15 @@ on:
         default: quay.io/kuadrant/developer-portal-controller:latest
         type: string
       relatedImageConsolePluginLatest:
-        description: Related image ConsolePlugin latest (PatternFly 6)
+        description: Related image ConsolePlugin latest (SDK 4.22, pluginAPI >= 4.22.0-0)
         default: quay.io/kuadrant/console-plugin:latest
         type: string
+      relatedImageConsolePluginSDK1:
+        description: Related image ConsolePlugin v0.6.0 (SDK 1.x, pluginAPI "*", for OCP 4.20-4.21)
+        default: quay.io/kuadrant/console-plugin:v0.6.0
+        type: string
       relatedImageConsolePluginPF5:
-        description: Related image ConsolePlugin v0.1.5 (PatternFly 5)
+        description: Related image ConsolePlugin v0.1.5 (PatternFly 5, for OCP < 4.20)
         default: quay.io/kuadrant/console-plugin:v0.1.5-2
         type: string
       consolePluginImageURL:
@@ -176,6 +184,8 @@ jobs:
         id: go
       - name: Run make bundle
         id: make-bundle
+        env:
+          RELATED_IMAGE_CONSOLE_PLUGIN_SDK1: ${{ inputs.relatedImageConsolePluginSDK1 }}
         run: |
           make bundle \
             IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ inputs.kuadrantOperatorTag }} \
@@ -186,6 +196,7 @@ jobs:
             RELATED_IMAGE_WASMSHIM=${{ inputs.relatedImageWasmShim }} \
             RELATED_IMAGE_DEVELOPERPORTAL=${{ inputs.relatedImageDeveloperPortalController }} \
             RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=${{ inputs.relatedImageConsolePluginLatest}} \
+            RELATED_IMAGE_CONSOLE_PLUGIN_SDK1="${RELATED_IMAGE_CONSOLE_PLUGIN_SDK1}" \
             RELATED_IMAGE_CONSOLE_PLUGIN_PF5=${{ inputs.relatedImageConsolePluginPF5}} \
             DEFAULT_CHANNEL=${{ inputs.defaultChannel }} \
             CHANNELS=${{ inputs.channels }}

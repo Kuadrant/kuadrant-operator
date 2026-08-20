@@ -31,7 +31,7 @@ import (
 
 var (
 	TestNamespace         = "test-namespace"
-	ConsolePluginImageURL = "quay.io/kuadrant/console-plugin:latest"
+	ConsolePluginImageURL = "quay.io/kuadrant/console-plugin:v0.6.0"
 )
 
 func buildTopologyWithClusterVersion(t *testing.T) *machinery.Topology {
@@ -77,7 +77,8 @@ func buildTopologyWithClusterVersion(t *testing.T) *machinery.Topology {
 // Since this reconciler only runs on Openshift,
 // this unit test will add some coverage
 func TestConsolePluginReconciler(t *testing.T) {
-	t.Setenv(openshift.RelatedImageConsolePluginLatestEnvVar, ConsolePluginImageURL)
+	t.Setenv(openshift.RelatedImageConsolePluginLatestEnvVar, "quay.io/kuadrant/console-plugin:latest")
+	t.Setenv(openshift.RelatedImageConsolePluginSDK1EnvVar, ConsolePluginImageURL)
 	t.Setenv(openshift.RelatedImageConsolePluginPF5EnvVar, "quay.io/kuadrant/console-plugin:v0.1.5")
 
 	scheme := runtime.NewScheme()

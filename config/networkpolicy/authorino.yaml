@@ -1,0 +1,57 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kuadrant-authorino
+  namespace: kuadrant-system
+spec:
+  podSelector:
+    matchLabels:
+      authorino-resource: authorino
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # gRPC ext-auth from Envoy
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gateway-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        - protocol: TCP
+          port: 50051
+    # HTTP ext-auth from Envoy
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gateway-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        - protocol: TCP
+          port: 5001
+    # OIDC discovery endpoint
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8083
+  egress:
+    # External OIDC provider communication
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - protocol: UDP
+          port: 5353

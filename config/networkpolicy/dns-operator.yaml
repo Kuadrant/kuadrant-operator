@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kuadrant-dns-operator
+  namespace: kuadrant-system
+spec:
+  podSelector:
+    matchLabels:
+      control-plane: dns-operator-controller-manager
+  policyTypes:
+    - Egress
+  egress:
+    # TODO: Scope 0.0.0.0/0 to specific DNS provider API CIDRs (e.g. AWS, Azure, GCP)
+    # External DNS provider APIs
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # TODO: Scope 0.0.0.0/0 to known remote cluster API server IPs
+    # Remote cluster API servers (multi-cluster)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 6443
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - protocol: UDP
+          port: 5353

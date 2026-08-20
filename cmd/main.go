@@ -43,6 +43,7 @@ import (
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -97,6 +98,7 @@ func init() {
 	utilruntime.Must(consolev1.AddToScheme(scheme))
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 	utilruntime.Must(istiosecurity.AddToScheme(scheme))
+	utilruntime.Must(networkingv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	sync = zapcore.Lock(zapcore.AddSync(os.Stdout))

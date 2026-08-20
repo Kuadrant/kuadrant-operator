@@ -28,6 +28,7 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -154,6 +155,13 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
 			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=limitador"),
 		)),
+		controller.WithRunnable("networkPolicy watcher", controller.Watch(
+			&networkingv1.NetworkPolicy{},
+			kuadrantv1beta1.NetworkPolicyResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*networkingv1.NetworkPolicy]{}),
+			controller.FilterResourcesByLabel[*networkingv1.NetworkPolicy]("app.kubernetes.io/managed-by=kuadrant-operator"),
+		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
@@ -165,6 +173,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
 			kuadrantv1beta1.DeploymentGroupKind,
+			kuadrantv1beta1.NetworkPolicyGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
@@ -578,6 +587,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToLimitador,
 			kuadrantv1beta1.LinkLimitadorToDeployment,
+			kuadrantv1beta1.LinkLimitadorToNetworkPolicy,
 		),
 	)
 
@@ -620,6 +630,7 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
+			kuadrantv1beta1.LinkAuthorinoToNetworkPolicy,
 			authorino.LinkHTTPRouteRuleToAuthConfig,
 			authorino.LinkGRPCRouteRuleToAuthConfig,
 		),
@@ -782,6 +793,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
 			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
 			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
+			traceReconcileFunc("workflow.networkpolicy", NewNetworkPolicyReconciler(b.client).Subscription().Reconcile),
 		},
 		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}

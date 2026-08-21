@@ -56,6 +56,8 @@ func TestDomainAndFieldName(t *testing.T) {
 		{"auth.identity.user", "auth.identity", "user"},
 		{"simple", "", "simple"},
 		{"a.b.c.d", "a.b.c", "d"},
+		{"logging.fields.client_identity", "logging.fields", "client_identity"},
+		{"metrics.labels.model", "metrics.labels", "model"},
 	}
 	for _, tc := range tests {
 		domain, field := DomainAndFieldName(tc.input)
@@ -1034,5 +1036,82 @@ func TestAttachBindings_NoBindings(t *testing.T) {
 		if len(spec.Bindings) != 0 {
 			t.Errorf("specs[%d]: expected 0 bindings, got %d", i, len(spec.Bindings))
 		}
+	}
+}
+
+func TestBuildMetadataContext_LoggingFieldsDomain(t *testing.T) {
+	bindings := []DataBinding{
+		{Domain: "logging.fields", Field: "client_identity", Expression: "auth.identity.sub"},
+		{Domain: "logging.fields", Field: "request_path", Expression: "request.path"},
+	}
+
+	metadata := buildMetadataContext(bindings)
+
+	if len(metadata.FilterMetadata) != 1 {
+		t.Fatalf("expected 1 filter_metadata entry, got %d", len(metadata.FilterMetadata))
+	}
+
+	entry := metadata.FilterMetadata[0]
+	if entry.Domain != "io.kuadrant.logging.fields" {
+		t.Errorf("domain = %q, want %q", entry.Domain, "io.kuadrant.logging.fields")
+	}
+	if len(entry.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(entry.Fields))
+	}
+
+	fieldMap := make(map[string]string, len(entry.Fields))
+	for _, f := range entry.Fields {
+		fieldMap[f.Key] = f.Expression
+	}
+
+	if v, ok := fieldMap["client_identity"]; !ok || v != "auth.identity.sub" {
+		t.Errorf("client_identity field = %q (present=%v), want %q", v, ok, "auth.identity.sub")
+	}
+	if v, ok := fieldMap["request_path"]; !ok || v != "request.path" {
+		t.Errorf("request_path field = %q (present=%v), want %q", v, ok, "request.path")
+	}
+}
+
+func TestBuildMetadataContext_MixedMetricsAndLogging(t *testing.T) {
+	bindings := []DataBinding{
+		{Domain: "metrics.labels", Field: "model", Expression: "responseBodyJSON('/model')"},
+		{Domain: "logging.fields", Field: "client_identity", Expression: "auth.identity.sub"},
+		{Domain: "metrics.labels", Field: "user", Expression: "auth.identity.userid"},
+		{Domain: "logging.fields", Field: "model", Expression: "request.host"},
+	}
+
+	metadata := buildMetadataContext(bindings)
+
+	if len(metadata.FilterMetadata) != 2 {
+		t.Fatalf("expected 2 filter_metadata entries, got %d", len(metadata.FilterMetadata))
+	}
+
+	domainEntries := make(map[string][]MetadataFieldCEL, len(metadata.FilterMetadata))
+	for _, e := range metadata.FilterMetadata {
+		domainEntries[e.Domain] = e.Fields
+	}
+
+	loggingFields, ok := domainEntries["io.kuadrant.logging.fields"]
+	if !ok {
+		t.Fatal("missing io.kuadrant.logging.fields entry")
+	}
+	if len(loggingFields) != 2 {
+		t.Errorf("io.kuadrant.logging.fields: expected 2 fields, got %d", len(loggingFields))
+	}
+
+	metricsFields, ok := domainEntries["io.kuadrant.metrics.labels"]
+	if !ok {
+		t.Fatal("missing io.kuadrant.metrics.labels entry")
+	}
+	if len(metricsFields) != 2 {
+		t.Errorf("io.kuadrant.metrics.labels: expected 2 fields, got %d", len(metricsFields))
+	}
+
+	// Entries should be sorted by domain
+	if metadata.FilterMetadata[0].Domain != "io.kuadrant.logging.fields" {
+		t.Errorf("entries[0].Domain = %q, want io.kuadrant.logging.fields (alphabetical sort)", metadata.FilterMetadata[0].Domain)
+	}
+	if metadata.FilterMetadata[1].Domain != "io.kuadrant.metrics.labels" {
+		t.Errorf("entries[1].Domain = %q, want io.kuadrant.metrics.labels (alphabetical sort)", metadata.FilterMetadata[1].Domain)
 	}
 }

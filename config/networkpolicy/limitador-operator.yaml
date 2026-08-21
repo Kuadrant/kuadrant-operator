@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kuadrant-limitador-operator
+  namespace: kuadrant-system
+spec:
+  podSelector:
+    matchLabels:
+      app: limitador-operator
+      control-plane: controller-manager
+  policyTypes:
+    - Egress
+  egress:
+    # OTLP trace export
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4317
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - protocol: UDP
+          port: 5353

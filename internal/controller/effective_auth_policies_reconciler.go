@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantmetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 )
 
 type EffectiveAuthPolicy struct {
@@ -34,6 +36,9 @@ func (r *EffectiveAuthPolicyReconciler) Subscription() controller.Subscription {
 }
 
 func (r *EffectiveAuthPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	startTime := time.Now()
+	defer kuadrantmetrics.ObserveEffectivePolicyDuration("auth", startTime)
+
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveAuthPolicyReconciler").WithValues("context", ctx)
 	logger.V(1).Info("generate effective auth policy", "status", "started")
 	defer logger.V(1).Info("generate effective auth policy", "status", "completed")

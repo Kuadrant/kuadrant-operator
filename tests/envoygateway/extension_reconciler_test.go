@@ -221,7 +221,7 @@ var _ = Describe("wasm controller", func() {
 						Actions: []wasm.Action{
 							wasm.ActionSpec{
 								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
+								Scope:       string(controllers.LimitsNamespaceFromRoute(gwRoute).ToActionScope()),
 								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + gwPolicyKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{
@@ -413,7 +413,7 @@ var _ = Describe("wasm controller", func() {
 						Actions: []wasm.Action{
 							wasm.ActionSpec{
 								ServiceName: wasm.RateLimitServiceName,
-								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
+								Scope:       string(controllers.LimitsNamespaceFromRoute(gwRoute).ToActionScope()),
 								Sources:     []string{"ratelimitpolicy.kuadrant.io:" + routePolicyKey.String()},
 								ConditionalData: []wasm.ConditionalData{
 									{

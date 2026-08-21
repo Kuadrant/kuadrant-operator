@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"sync"
 
+	"github.com/go-logr/logr"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -27,6 +29,12 @@ const (
 	AuthorinoNetworkPolicy      = "kuadrant-authorino"
 	LimitadorNetworkPolicy      = "kuadrant-limitador"
 )
+
+// writeChecks used to decide if a resouce should be write to a cluster via create or update
+type writeChecks = struct {
+	Create bool
+	Update bool
+}
 
 type NetworkPolicyReconciler struct {
 	Client *dynamic.DynamicClient
@@ -122,30 +130,14 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 		desiredAuthorinoNetworkPolicy.SetOwnerReferences(existingOwnerRefs)
 	}
 
-	desiredAuthorinoNetworkPolicyUnstructured, err := controller.Destruct(desiredAuthorinoNetworkPolicy)
+	err := r.writePolicyToCluster(ctx, logger, span, desiredAuthorinoNetworkPolicy, writeChecks{
+		Create: existingAuthorinoNetworkPolicy == nil,
+		Update: update,
+	})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to destruct Authorino NetworkPolicy")
-		logger.Error(err, "failed to destruct Authorino NetworkPolicy object", "desiredAuthorinoNetworPolicy", desiredAuthorinoNetworkPolicy)
-		return nil
+		logger.Error(err, "failed to write authorino network policy to cluster")
 	}
-	if existingAuthorinoNetworkPolicy == nil {
-		logger.Info("creating network policy")
-		span.AddEvent("creating network policy")
-		if _, err = r.Client.Resource(v1beta1.NetworkPolicyResource).Namespace(desiredAuthorinoNetworkPolicy.GetNamespace()).Create(ctx, desiredAuthorinoNetworkPolicyUnstructured, metav1.CreateOptions{}); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to create Authorino NetworkPolicy")
-			logger.Error(err, "failed to create Authorino NetworkPolicy object", "desiredAuthorinoNetworPolicy", desiredAuthorinoNetworkPolicyUnstructured.Object)
-		}
-	} else if update {
-		logger.Info("updating network policy")
-		if _, err = r.Client.Resource(v1beta1.NetworkPolicyResource).Namespace(desiredAuthorinoNetworkPolicy.GetNamespace()).Update(ctx, desiredAuthorinoNetworkPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to update Authorino NetworkPolicy")
-			logger.Error(err, "failed to update Authorino NetworkPolicy object", "desiredAuthorinoNetworPolicy", desiredAuthorinoNetworkPolicyUnstructured.Object)
-		}
 
-	}
 	// -------------------------------------------------------------------------------------------------------------
 
 	// -------------------------------------------------------------------------------------------------------------
@@ -190,33 +182,49 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 		desiredLimitadorNetworkPolicy.SetOwnerReferences(existingOwnerRefs)
 	}
 
-	desiredLimitadorNetworkPolicyUnstructured, err := controller.Destruct(desiredLimitadorNetworkPolicy)
+	err = r.writePolicyToCluster(ctx, logger, span, desiredLimitadorNetworkPolicy, writeChecks{
+		Create: existingLimitadorNetworkPolicy == nil,
+		Update: update,
+	})
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to destruct Limitador NetworkPolicy")
-		logger.Error(err, "failed to destruct Limitador NetworkPolicy object", "desiredLimitadorNetworPolicy", desiredLimitadorNetworkPolicy)
-		return nil
-	}
-	if existingLimitadorNetworkPolicy == nil {
-		logger.Info("creating network policy")
-		span.AddEvent("creating network policy")
-		if _, err = r.Client.Resource(v1beta1.NetworkPolicyResource).Namespace(desiredLimitadorNetworkPolicy.GetNamespace()).Create(ctx, desiredLimitadorNetworkPolicyUnstructured, metav1.CreateOptions{}); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to create Limitador NetworkPolicy")
-			logger.Error(err, "failed to create Limitador NetworkPolicy object", "desiredLimitadorNetworPolicy", desiredLimitadorNetworkPolicyUnstructured.Object)
-		}
-	} else if update {
-		logger.Info("updating network policy")
-		if _, err = r.Client.Resource(v1beta1.NetworkPolicyResource).Namespace(desiredLimitadorNetworkPolicy.GetNamespace()).Update(ctx, desiredLimitadorNetworkPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to update Limitador NetworkPolicy")
-			logger.Error(err, "failed to update Limitador NetworkPolicy object", "desiredLimitadorNetworPolicy", desiredLimitadorNetworkPolicyUnstructured.Object)
-		}
-
+		logger.Error(err, "failed to write limitador network policy to cluster")
 	}
 	// -------------------------------------------------------------------------------------------------------------
 
 	span.SetStatus(codes.Ok, "")
+	return nil
+}
+
+func (r *NetworkPolicyReconciler) writePolicyToCluster(ctx context.Context, logger logr.Logger, span trace.Span, networkPolicy *networkingv1.NetworkPolicy, check writeChecks) error {
+
+	if networkPolicy == nil {
+		return fmt.Errorf("networkPolicy is nil")
+	}
+
+	desiredNetworkPolicyUnstructured, err := controller.Destruct(networkPolicy)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to destruct NetworkPolicy")
+		logger.Error(err, "failed to destruct NetworkPolicy object", "networkPolicy", networkPolicy)
+		return err
+	}
+	if check.Create {
+		logger.Info("creating network policy")
+		if _, err = r.Client.Resource(v1beta1.NetworkPolicyResource).Namespace(networkPolicy.GetNamespace()).Create(ctx, desiredNetworkPolicyUnstructured, metav1.CreateOptions{}); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to create NetworkPolicy")
+			logger.Error(err, "failed to create NetworkPolicy object", "networkPolicy", desiredNetworkPolicyUnstructured.Object)
+			return err
+		}
+	} else if check.Update {
+		if _, err = r.Client.Resource(v1beta1.NetworkPolicyResource).Namespace(networkPolicy.GetNamespace()).Update(ctx, desiredNetworkPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to update NetworkPolicy")
+			logger.Error(err, "failed to update NetworkPolicy object", "networkPolicy", desiredNetworkPolicyUnstructured.Object)
+			return err
+		}
+
+	}
 	return nil
 }
 
@@ -252,15 +260,21 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 		}
 	}
 
+	// These default port values are hardcode into the authServerCmd in the authorino repo
+	// https://github.com/Kuadrant/authorino/blob/58fecc6cdec38376fa7dba5638f1f7ecb6964cd0/main.go#L178-L218
 	gRPCport := 50051
 	HTTPport := 5051
+	OIDCdiscoveryPort := 8083
 
 	if aObj != nil {
 		if aObj.Spec.Listener.Ports.GRPC != nil {
 			gRPCport = int(*aObj.Spec.Listener.Ports.GRPC)
 		}
 		if aObj.Spec.Listener.Ports.HTTP != nil {
-			gRPCport = int(*aObj.Spec.Listener.Ports.HTTP)
+			HTTPport = int(*aObj.Spec.Listener.Ports.HTTP)
+		}
+		if aObj.Spec.OIDCServer.Port != nil {
+			OIDCdiscoveryPort = int(*aObj.Spec.OIDCServer.Port)
 		}
 	}
 
@@ -280,7 +294,7 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 				// HTTP ext-auth from gateway
 				ingressRule(fromNamespaces, HTTPport),
 				// OIDC discovery endpoint
-				ingressRule([]networkingv1.NetworkPolicyPeer{}, 8083), // FIX: The port needs to be take from somewhere
+				ingressRule([]networkingv1.NetworkPolicyPeer{}, OIDCdiscoveryPort),
 			},
 		},
 	}
@@ -385,6 +399,8 @@ func generateLimitadorNetworkPolicy(kObj *v1beta1.Kuadrant, lObj *limitadorv1alp
 		}
 	}
 
+	// These default port values are hardcode into the impl Configuration in the limitador repo
+	// https://github.com/Kuadrant/limitador/blob/f73e5f4b3d9af3756d4d772b35d2798693b961f9/limitador-server/src/config.rs#L101-L103
 	gRPCport := 8081
 	HTTPport := 8080
 

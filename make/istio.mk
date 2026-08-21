@@ -40,6 +40,7 @@ sail-install: helm
 		--wait \
 		--timeout=300s \
 		https://github.com/istio-ecosystem/sail-operator/releases/download/$(SAIL_VERSION)/sail-operator-$(SAIL_VERSION).tgz
+	kubectl wait --for=condition=Established crd/istios.sailoperator.io --timeout=300s
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
 
 .PHONY: sail-uninstall

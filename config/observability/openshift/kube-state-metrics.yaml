@@ -251,10 +251,13 @@ spec:
             memory: 190Mi
         securityContext:
           allowPrivilegeEscalation: false
+          runAsNonRoot: true
           capabilities:
             drop:
               - ALL
           readOnlyRootFilesystem: true
+          seccompProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 8081
           name: https-main

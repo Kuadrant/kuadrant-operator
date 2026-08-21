@@ -1,0 +1,19 @@
+apiVersion: policy.networking.k8s.io/v1alpha1
+kind: BaselineAdminNetworkPolicy
+metadata:
+  name: default
+spec:
+  subject:
+    namespaces:
+      matchLabels:
+        kubernetes.io/metadata.name: kuadrant-system
+  ingress:
+    - name: deny-all-ingress
+      action: Deny
+      from:
+        - namespaces: {}
+  egress:
+    - name: deny-all-egress
+      action: Deny
+      to:
+        - namespaces: {}

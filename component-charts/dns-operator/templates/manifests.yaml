@@ -628,11 +628,6 @@ spec:
                 required:
                 - name
                 type: object
-              queuedAt:
-                description: QueuedAt is a time when DNS record was received for the
-                  reconciliation
-                format: date-time
-                type: string
               remoteRecordStatuses:
                 additionalProperties:
                   x-kubernetes-preserve-unknown-fields: true
@@ -642,10 +637,6 @@ spec:
                   A CRD can't reference a type within itself so the `apiextensionsv1.JSON` type is used.
                   Use GetRemoteRecordStatuses to get the converted type.
                 type: object
-              validFor:
-                description: ValidFor indicates duration since the last reconciliation
-                  we consider data in the record to be valid
-                type: string
               writeCounter:
                 description: |-
                   WriteCounter represent a number of consecutive write attempts on the same generation of the record.

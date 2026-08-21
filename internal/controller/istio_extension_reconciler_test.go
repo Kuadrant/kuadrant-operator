@@ -735,6 +735,9 @@ func TestWasmConfigDeterministicSortOrder(t *testing.T) {
 	routeNamespace := "default"
 	creationTimestamp := metav1.Now()
 
+	// Both entries model the same route rule and match reached via two different
+	// listeners, so they share RuleIndex and MatchIndex and tie on every other Less()
+	// field. Only Identifier (unique per listener) breaks the tie deterministically.
 	newMatchConfig := func(actionSetName string) kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return kuadrantgatewayapi.HTTPRouteMatchConfig{
 			Hostname: hostname,
@@ -747,6 +750,8 @@ func TestWasmConfigDeterministicSortOrder(t *testing.T) {
 			CreationTimestamp: creationTimestamp,
 			Namespace:         routeNamespace,
 			Name:              routeName,
+			RuleIndex:         0,
+			MatchIndex:        0,
 			Identifier:        actionSetName,
 			Config: wasm.ActionSet{
 				Name: actionSetName,

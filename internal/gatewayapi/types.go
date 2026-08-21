@@ -31,6 +31,8 @@ type HTTPRouteMatchConfig struct {
 	CreationTimestamp metav1.Time
 	Namespace         string
 	Name              string
+	RuleIndex         int
+	MatchIndex        int
 	Identifier        string
 	Config            any
 }
@@ -115,6 +117,14 @@ func (c SortableHTTPRouteMatchConfigs) Less(i, j int) bool {
 	jName := fmt.Sprintf("%s/%s", c[j].Namespace, c[j].Name)
 	if iName != jName {
 		return iName < jName
+	}
+
+	// Gateway API precedence within a route: earlier rule wins, then earlier match
+	if c[i].RuleIndex != c[j].RuleIndex {
+		return c[i].RuleIndex < c[j].RuleIndex
+	}
+	if c[i].MatchIndex != c[j].MatchIndex {
+		return c[i].MatchIndex < c[j].MatchIndex
 	}
 
 	// Entries can otherwise be fully equal, the tie breaker is the Identifier

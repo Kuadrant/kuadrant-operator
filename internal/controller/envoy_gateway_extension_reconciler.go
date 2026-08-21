@@ -431,8 +431,8 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	tokenRateLimitPaths := lo.Entries(lo.MapValues(effectiveTokenRateLimitPoliciesMap, func(p EffectiveTokenRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))
 	allPaths = append(allPaths, tokenRateLimitPaths...)
 
-	// unique paths by key
-	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
+	// unique paths by key with deterministic ordering
+	paths := uniqueSortedPaths(allPaths)
 
 	wasmActionSets := kuadrantgatewayapi.GroupedHTTPRouteMatchConfigs{}
 	celValidationIssues := celvalidator.NewIssueCollection()

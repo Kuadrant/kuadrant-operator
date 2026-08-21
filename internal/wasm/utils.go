@@ -339,9 +339,10 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 					CreationTimestamp: parsed.HTTPRoute.GetCreationTimestamp(),
 					Namespace:         parsed.HTTPRoute.GetNamespace(),
 					Name:              parsed.HTTPRoute.GetName(),
-					// Identifier is the action set name, derived from the full topology path
-					// (including the listener), making it a unique tie-breaker in Less()
-					Identifier: actionSet.Name,
+					// Identifier is the unique tie-breaker in Less(). The pathID distinguishes
+					// entries that are otherwise equal (e.g. the same route attached to two
+					// listeners), while the match index preserves the order of matches within a rule.
+					Identifier: fmt.Sprintf("%s|%05d", pathID, j),
 					Config:     actionSet,
 				}
 			})
@@ -430,9 +431,10 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 					CreationTimestamp: parsed.GRPCRoute.GetCreationTimestamp(),
 					Namespace:         parsed.GRPCRoute.GetNamespace(),
 					Name:              parsed.GRPCRoute.GetName(),
-					// Identifier is the action set name, derived from the full topology path
-					// (including the listener), making it a unique tie-breaker in Less()
-					Identifier: actionSet.Name,
+					// Identifier is the unique tie-breaker in Less(). The pathID distinguishes
+					// entries that are otherwise equal (e.g. the same route attached to two
+					// listeners), while the match index preserves the order of matches within a rule.
+					Identifier: fmt.Sprintf("%s|%05d", pathID, j),
 					Config:     actionSet,
 				}
 			})

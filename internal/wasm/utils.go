@@ -266,6 +266,7 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 
 	switch parsed.RouteType {
 	case kuadrantpolicymachinery.RouteTypeHTTP:
+		ruleIndex := httpRuleListIndex(parsed.HTTPRoute, parsed.HTTPRouteRule.Name)
 		configs = lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(parsed.Listener.Listener, parsed.HTTPRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 			// If Matches is empty or nil, use a default catch-all match (matches all requests with PathPrefix "/")
 			matches := parsed.HTTPRouteRule.Matches
@@ -326,12 +327,19 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 					CreationTimestamp: parsed.HTTPRoute.GetCreationTimestamp(),
 					Namespace:         parsed.HTTPRoute.GetNamespace(),
 					Name:              parsed.HTTPRoute.GetName(),
-					Config:            actionSet,
+					RuleIndex:         ruleIndex,
+					MatchIndex:        j,
+					// Identifier is the final tie-breaker in Less() for entries that are
+					// otherwise equal, e.g. the same route attached to two listeners. The
+					// pathID includes the listener, so it distinguishes those entries.
+					Identifier: pathID,
+					Config:     actionSet,
 				}
 			})
 		})
 
 	case kuadrantpolicymachinery.RouteTypeGRPC:
+		ruleIndex := grpcRuleListIndex(parsed.GRPCRoute, parsed.GRPCRouteRule.Name)
 		hostnames := kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(parsed.Listener.Listener, &gatewayapiv1.HTTPRoute{
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: parsed.GRPCRoute.Spec.Hostnames,
@@ -417,7 +425,13 @@ func BuildActionSetsForPath(ctx context.Context, pathID string, path []machinery
 					CreationTimestamp: parsed.GRPCRoute.GetCreationTimestamp(),
 					Namespace:         parsed.GRPCRoute.GetNamespace(),
 					Name:              parsed.GRPCRoute.GetName(),
-					Config:            actionSet,
+					RuleIndex:         ruleIndex,
+					MatchIndex:        j,
+					// Identifier is the final tie-breaker in Less() for entries that are
+					// otherwise equal, e.g. the same route attached to two listeners. The
+					// pathID includes the listener, so it distinguishes those entries.
+					Identifier: pathID,
+					Config:     actionSet,
 				}
 			})
 		})
@@ -432,6 +446,26 @@ func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname strin
 	source := fmt.Sprintf("%s|%d|%s", pathID, httpRouteMatchIndex+1, hostname)
 	hash := sha256.Sum256([]byte(source))
 	return hex.EncodeToString(hash[:])
+}
+
+// httpRuleListIndex returns the position of the named rule within the route's rules,
+// used to honour Gateway API rule-list precedence. Returns len(rules) if not found so
+// the entry sorts last deterministically.
+func httpRuleListIndex(route *machinery.HTTPRoute, name gatewayapiv1.SectionName) int {
+	rules := machinery.HTTPRouteRulesFromHTTPRouteFunc(route, 0)
+	if _, i, found := lo.FindIndexOf(rules, func(r *machinery.HTTPRouteRule) bool { return r.Name == name }); found {
+		return i
+	}
+	return len(rules)
+}
+
+// grpcRuleListIndex mirrors httpRuleListIndex for GRPCRoute rules.
+func grpcRuleListIndex(route *machinery.GRPCRoute, name gatewayapiv1.SectionName) int {
+	rules := machinery.GRPCRouteRulesFromGRPCRouteRule(route, 0)
+	if _, i, found := lo.FindIndexOf(rules, func(r *machinery.GRPCRouteRule) bool { return r.Name == name }); found {
+		return i
+	}
+	return len(rules)
 }
 
 // BuildSkeletonActionSetsForRoute creates ActionSets with proper RouteRuleConditions

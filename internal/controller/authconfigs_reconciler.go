@@ -18,6 +18,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
@@ -63,6 +64,12 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	}
 	authConfigsNamespace := authorino.GetNamespace()
 
+	kuadrantCR := GetKuadrantFromTopology(topology, state)
+	if kuadrantCR == nil {
+		logger.V(1).Info("kuadrant resource not found in the topology")
+		return nil
+	}
+
 	effectivePolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
 		logger.Error(ErrMissingStateEffectiveAuthPolicies, "failed to reconcile authconfig objects")
@@ -78,8 +85,10 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
 	modifiedAuthConfigs := []string{}
 
+	kuadrantCROwnerReference := kuadrantCR.GetOwnerReference()
+
 	for pathID, effectivePolicy := range effectivePoliciesMap {
-		authConfigName, modified := r.reconcileAuthConfigForPath(ctx, pathID, effectivePolicy, authConfigsNamespace, topology, errorRegistry)
+		authConfigName, modified := r.reconcileAuthConfigForPath(ctx, pathID, effectivePolicy, authConfigsNamespace, kuadrantCROwnerReference, topology, errorRegistry)
 		if authConfigName == "" {
 			continue
 		}
@@ -124,7 +133,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 // reconcileAuthConfigForPath reconciles the AuthConfig for a single effective policy path.
 // It returns the authConfigName (empty if the path is invalid) and whether the object was modified.
-func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, pathID string, effectivePolicy EffectiveAuthPolicy, authConfigsNamespace string, topology *machinery.Topology, errorRegistry *ErrorRegistry) (string, bool) {
+func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, pathID string, effectivePolicy EffectiveAuthPolicy, authConfigsNamespace string, kuadrantCROwnerReference []metav1.OwnerReference, topology *machinery.Topology, errorRegistry *ErrorRegistry) (string, bool) {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthConfigsReconciler")
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(effectivePolicy.Path)
@@ -151,7 +160,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 	defer span.End()
 
 	authConfigName := AuthConfigNameForPath(pathID)
-	desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace, annotationKey, routeRuleLocator)
+	desiredAuthConfig := r.buildDesiredAuthConfig(spanCtx, effectivePolicy, authConfigName, authConfigsNamespace, kuadrantCROwnerReference, annotationKey, routeRuleLocator)
 
 	span.SetAttributes(
 		attribute.String("namespace", desiredAuthConfig.GetNamespace()),
@@ -248,7 +257,7 @@ func (r *AuthConfigsReconciler) reconcileAuthConfigForPath(ctx context.Context, 
 	return authConfigName, true
 }
 
-func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effectivePolicy EffectiveAuthPolicy, name, namespace string, annotationKey, routeRuleLocator string) *authorinov1beta3.AuthConfig {
+func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effectivePolicy EffectiveAuthPolicy, name, namespace string, kuadrantCROwnerReference []metav1.OwnerReference, annotationKey, routeRuleLocator string) *authorinov1beta3.AuthConfig {
 	authConfig := &authorinov1beta3.AuthConfig{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthConfig",
@@ -260,7 +269,8 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(ctx context.Context, effe
 			Annotations: map[string]string{
 				annotationKey: routeRuleLocator,
 			},
-			Labels: AuthObjectLabels(),
+			Labels:          AuthObjectLabels(),
+			OwnerReferences: kuadrantCROwnerReference,
 		},
 		Spec: authorinov1beta3.AuthConfigSpec{
 			Hosts: []string{name},
@@ -383,8 +393,58 @@ func equalAuthConfigs(existing, desired *authorinov1beta3.AuthConfig) bool {
 		return false
 	}
 
-	// spec
+	// owner references: only our own (Kuadrant-managed) references need to
+	// match. References added by third parties are ignored, and ordering is
+	// irrelevant.
+	if !equalKuadrantOwnerReferences(existing.GetOwnerReferences(), desired.GetOwnerReferences()) {
+		return false
+	}
+
 	return reflect.DeepEqual(existing.Spec, desired.Spec)
+}
+
+func isKuadrantOwnerReference(ref metav1.OwnerReference) bool {
+	gv, err := schema.ParseGroupVersion(ref.APIVersion)
+	if err != nil {
+		return false
+	}
+	return gv.Group == kuadrantv1beta1.KuadrantGroupKind.Group && ref.Kind == kuadrantv1beta1.KuadrantGroupKind.Kind
+}
+
+// kuadrantOwnerReferences returns only the Kuadrant-managed owner references.
+func kuadrantOwnerReferences(refs []metav1.OwnerReference) []metav1.OwnerReference {
+	return lo.Filter(refs, func(ref metav1.OwnerReference, _ int) bool {
+		return isKuadrantOwnerReference(ref)
+	})
+}
+
+// equalKuadrantOwnerReferences reports whether the Kuadrant-managed owner
+// references match between existing and desired, ignoring any third-party
+// references and ordering.
+func equalKuadrantOwnerReferences(existing, desired []metav1.OwnerReference) bool {
+	existingOurs := kuadrantOwnerReferences(existing)
+	desiredOurs := kuadrantOwnerReferences(desired)
+	if len(existingOurs) != len(desiredOurs) {
+		return false
+	}
+	return lo.EveryBy(desiredOurs, func(d metav1.OwnerReference) bool {
+		return lo.ContainsBy(existingOurs, func(e metav1.OwnerReference) bool {
+			return reflect.DeepEqual(e, d)
+		})
+	})
+}
+
+// upsertKuadrantOwnerReference returns the existing owner references with the
+// Kuadrant-managed reference replaced by the desired one. Third-party references
+// are preserved, and stale Kuadrant references
+func upsertKuadrantOwnerReference(existing, desired []metav1.OwnerReference) []metav1.OwnerReference {
+	preserved := lo.Filter(existing, func(ref metav1.OwnerReference, _ int) bool {
+		return !isKuadrantOwnerReference(ref)
+	})
+	if ref, found := lo.Find(desired, isKuadrantOwnerReference); found {
+		preserved = append(preserved, ref)
+	}
+	return preserved
 }
 
 // authConfigAnnotationKeyForRouteType returns the appropriate annotation key for the given route type.
@@ -402,11 +462,11 @@ func authConfigAnnotationKeyForRouteType(routeType kuadrantpolicymachinery.Route
 	}
 }
 
-// applyAuthConfigUpdate applies the desired state to an existing AuthConfig.
-// It updates the spec, labels, and route-rule annotations while preserving other annotations.
 func applyAuthConfigUpdate(ctx context.Context, existing, desired *authorinov1beta3.AuthConfig) {
 	existing.Spec = desired.Spec
 	existing.Labels = desired.Labels
+
+	existing.SetOwnerReferences(upsertKuadrantOwnerReference(existing.GetOwnerReferences(), desired.GetOwnerReferences()))
 
 	// Update route-rule back-ref annotations
 	if existing.Annotations == nil {

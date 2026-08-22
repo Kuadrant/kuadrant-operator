@@ -92,9 +92,6 @@ jobs:
       kuadrantOperatorTag: ${{ needs.release-date.outputs.release_date }}
       authorinoBundleImg: quay.io/kuadrant/authorino-operator-bundle:${{ needs.release-date.outputs.release_date }}
       limitadorBundleImg: quay.io/kuadrant/limitador-operator-bundle:${{ needs.release-date.outputs.release_date }}
-      # dns-operator does not build nightly images
-      # The only reference in the bundle is the dns-operator image, and it is already pinned to git sha tag
-      dnsOperatorBundleImg: quay.io/kuadrant/dns-operator-bundle:latest
       relatedImageWasmShim: quay.io/kuadrant/wasm-shim@${{ needs.wasmshim-latest-digest.outputs.wasmshim_digest }}
       relatedImageDeveloperPortalController: quay.io/kuadrant/developer-portal-controller@${{ needs.devportal-controlller-latest-digest.outputs.devportal_controller_digest }}
       relatedImageConsolePluginLatest: quay.io/kuadrant/console-plugin@${{ needs.console-plugin-latest-digest.outputs.console_plugin_digest }}

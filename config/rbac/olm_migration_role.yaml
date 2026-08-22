@@ -1,0 +1,19 @@
+# OLM migration cleanup — remove this file after 2-3 releases.
+# Grants namespace-scoped access to Subscriptions and CSVs for one-off
+# cleanup of orphaned child operator OLM resources during upgrade from
+# the pre-consolidation multi-operator installation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: olm-migration-cleanup
+  namespace: system
+rules:
+  - apiGroups:
+      - operators.coreos.com
+    resources:
+      - subscriptions
+      - clusterserviceversions
+    verbs:
+      - get
+      - list
+      - delete

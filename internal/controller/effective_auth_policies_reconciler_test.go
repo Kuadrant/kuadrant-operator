@@ -152,7 +152,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 			Status: kuadrantv1.AuthPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+						Type:   string(gatewayapiv1.PolicyConditionAccepted),
 						Status: metav1.ConditionTrue,
 					},
 				},
@@ -166,7 +166,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 
 	gatewayPolicy := policyFactory(func(p *kuadrantv1.AuthPolicy) {
 		p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 				Group: gatewayapiv1alpha2.Group(machinery.GatewayGroupKind.Group),
 				Kind:  gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind),
 				Name:  gatewayName,
@@ -193,7 +193,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 	})
 	routePolicy := policyFactory(func(p *kuadrantv1.AuthPolicy) {
 		p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 				Group: gatewayapiv1alpha2.Group(machinery.HTTPRouteGroupKind.Group),
 				Kind:  gatewayapiv1alpha2.Kind(machinery.HTTPRouteGroupKind.Kind),
 				Name:  routeName,
@@ -223,7 +223,7 @@ func TestCalculateEffectiveAuthPolicies(t *testing.T) {
 	})
 	routeRulePolicy := policyFactory(func(p *kuadrantv1.AuthPolicy) {
 		p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 				Group: gatewayapiv1alpha2.Group(machinery.HTTPRouteGroupKind.Group),
 				Kind:  gatewayapiv1alpha2.Kind(machinery.HTTPRouteGroupKind.Kind),
 				Name:  routeName,

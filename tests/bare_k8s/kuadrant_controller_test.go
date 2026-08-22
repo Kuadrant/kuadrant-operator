@@ -147,7 +147,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(policy), policy)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("MissingDependency"))
@@ -167,7 +167,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(policy), policy)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("MissingDependency"))
@@ -212,7 +212,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(policy), policy)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("MissingDependency"))
@@ -258,7 +258,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(policy), policy)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("MissingDependency"))

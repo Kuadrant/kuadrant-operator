@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -57,7 +57,7 @@ func TestGetEnforcementStatus(t *testing.T) {
 						{
 							Type:   string(kuadrant.PolicyConditionEnforced),
 							Status: metav1.ConditionFalse,
-							Reason: string(gatewayapiv1alpha2.PolicyReasonInvalid),
+							Reason: string(gatewayapiv1.PolicyReasonInvalid),
 						},
 					},
 				},
@@ -85,9 +85,9 @@ func TestGetEnforcementStatus(t *testing.T) {
 				Status: kuadrantv1.AuthPolicyStatus{
 					Conditions: []metav1.Condition{
 						{
-							Type:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+							Type:   string(gatewayapiv1.PolicyConditionAccepted),
 							Status: metav1.ConditionTrue,
-							Reason: string(gatewayapiv1alpha2.PolicyReasonAccepted),
+							Reason: string(gatewayapiv1.PolicyReasonAccepted),
 						},
 					},
 				},

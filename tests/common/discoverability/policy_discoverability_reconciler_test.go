@@ -774,7 +774,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 			if err != nil {
 				return false
 			}
-			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 		}
 
 		isDNSPolicyEnforced := func(ctx context.Context, policyKey client.ObjectKey) bool {
@@ -956,7 +956,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 			if err != nil {
 				return false
 			}
-			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 		}
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a TLSPolicy is accepted

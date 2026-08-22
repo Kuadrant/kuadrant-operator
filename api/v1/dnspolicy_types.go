@@ -181,7 +181,7 @@ var _ machinery.Policy = &DNSPolicy{}
 func (p *DNSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
 		machinery.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(p.Spec.TargetRef),
 			PolicyNamespace: p.Namespace,
 		},
 	}
@@ -207,7 +207,7 @@ func (p *DNSPolicy) Validate() error {
 
 // Deprecated: Use GetTargetRefs instead
 func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
-	return p.Spec.TargetRef.LocalPolicyTargetReference
+	return gatewayapiv1alpha2.LocalPolicyTargetReference(p.Spec.TargetRef.LocalPolicyTargetReference)
 }
 
 func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
@@ -286,7 +286,7 @@ func (p *DNSPolicy) WithExcludeAddresses(excluded []string) *DNSPolicy {
 
 func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 	return p.WithTargetRef(gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+		LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 			Group: gatewayapiv1.GroupName,
 			Kind:  "Gateway",
 			Name:  gatewayapiv1.ObjectName(gwName),

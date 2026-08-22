@@ -47,7 +47,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
@@ -72,7 +72,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
 							Group: func() *gatewayapiv1.Group { g := gatewayapiv1.Group(""); return &g }(),
@@ -96,7 +96,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode:            ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{},
 				},
@@ -115,7 +115,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModePassthrough),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
@@ -140,7 +140,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
@@ -160,7 +160,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
@@ -179,7 +179,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
@@ -204,7 +204,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{
@@ -230,7 +230,7 @@ func Test_validateGatewayListenerBlock(t *testing.T) {
 				Hostname: ptr.To(gatewayapiv1.Hostname("example.com")),
 				Port:     gatewayapiv1.PortNumber(443),
 				Protocol: gatewayapiv1.HTTPSProtocolType,
-				TLS: &gatewayapiv1.GatewayTLSConfig{
+				TLS: &gatewayapiv1.ListenerTLSConfig{
 					Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 					CertificateRefs: []gatewayapiv1.SecretObjectReference{
 						{

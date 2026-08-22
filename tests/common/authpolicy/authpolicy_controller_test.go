@@ -598,7 +598,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				if acceptedCond == nil {
 					return false
 				}
@@ -622,7 +622,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(ctx, policy, string(gatewayapiv1.PolicyReasonTargetNotFound),
 				fmt.Sprintf("AuthPolicy target %s was not found", TestHTTPRouteName))).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
@@ -637,12 +637,12 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				if acceptedCond == nil {
 					return false
 				}
 
-				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
+				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1.PolicyReasonAccepted)
 
 				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
 				if enforcedCond == nil {

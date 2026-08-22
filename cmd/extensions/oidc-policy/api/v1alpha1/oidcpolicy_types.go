@@ -27,6 +27,7 @@ import (
 	"github.com/kuadrant/limitador-operator/pkg/helpers"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -146,15 +147,9 @@ type OIDCPolicy struct {
 	Status OIDCPolicyStatus `json:"status,omitempty"`
 }
 
-func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-				Group: p.Spec.TargetRef.Group,
-				Kind:  p.Spec.TargetRef.Kind,
-				Name:  p.Spec.TargetRef.Name,
-			},
-		},
+func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(p.Spec.TargetRef),
 	}
 }
 

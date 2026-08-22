@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	extctrl "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
@@ -57,9 +58,9 @@ func (p *TelemetryPolicy) GetNamespace() string {
 	return p.Namespace
 }
 
-func (p *TelemetryPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		p.Spec.TargetRef,
+func (p *TelemetryPolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(p.Spec.TargetRef),
 	}
 }
 

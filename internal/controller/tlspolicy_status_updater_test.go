@@ -53,7 +53,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 					},
 				},
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Name:  gwName,
 						Kind:  "Gateway",
 						Group: gatewayapiv1alpha2.GroupName,
@@ -203,7 +203,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 					{
 						Name:     listenerName,
 						Hostname: ptr.To[gatewayapiv1.Hostname]("localhost"),
-						TLS: &gatewayapiv1.GatewayTLSConfig{
+						TLS: &gatewayapiv1.ListenerTLSConfig{
 							CertificateRefs: []gatewayapiv1.SecretObjectReference{{
 								Group:     ptr.To[gatewayapiv1.Group]("core"),
 								Kind:      ptr.To[gatewayapiv1.Kind]("Secret"),

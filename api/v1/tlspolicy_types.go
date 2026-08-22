@@ -152,7 +152,7 @@ var _ machinery.Policy = &TLSPolicy{}
 func (p *TLSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
 		machinery.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(p.Spec.TargetRef),
 			PolicyNamespace: p.Namespace,
 		},
 	}
@@ -179,7 +179,7 @@ func (p *TLSPolicy) Kind() string {
 
 // Deprecated: Use GetTargetRefs instead
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
-	return p.Spec.TargetRef.LocalPolicyTargetReference
+	return gatewayapiv1alpha2.LocalPolicyTargetReference(p.Spec.TargetRef.LocalPolicyTargetReference)
 }
 
 func (p *TLSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
@@ -217,7 +217,7 @@ func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 
 func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+		LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 			Group: gatewayapiv1.GroupName,
 			Kind:  "Gateway",
 			Name:  gatewayapiv1.ObjectName(gwName),
@@ -228,7 +228,7 @@ func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 
 func (p *TLSPolicy) WithTargetGatewaySection(gwName string, sectionName string) *TLSPolicy {
 	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+		LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 			Group: gatewayapiv1.GroupName,
 			Kind:  "Gateway",
 			Name:  gatewayapiv1.ObjectName(gwName),

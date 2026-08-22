@@ -83,9 +83,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonTargetNotFound)),
 						"Message": Equal("TLSPolicy target test-gateway was not found"),
 					})),
 				)
@@ -103,9 +103,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonTargetNotFound)),
 						"Message": Equal("TLSPolicy target test-gateway was not found"),
 					})),
 				)
@@ -127,9 +127,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
 					})),
 				)
@@ -164,9 +164,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonInvalid)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonInvalid)),
 						"Message": Equal("TLSPolicy target is invalid: unable to find issuer"),
 					})),
 				)
@@ -196,7 +196,7 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
 						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),

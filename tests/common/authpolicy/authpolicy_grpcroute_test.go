@@ -296,7 +296,7 @@ var _ = Describe("AuthPolicy controller (GRPCRoute)", func() {
 				if err != nil {
 					return false
 				}
-				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				if acceptedCond == nil {
 					return false
 				}
@@ -319,7 +319,7 @@ var _ = Describe("AuthPolicy controller (GRPCRoute)", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(ctx, policy, string(gatewayapiv1.PolicyReasonTargetNotFound),
 				fmt.Sprintf("AuthPolicy target %s was not found", TestGRPCRouteName))).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
@@ -353,7 +353,7 @@ var _ = Describe("AuthPolicy controller (GRPCRoute)", func() {
 					if err != nil {
 						return false
 					}
-					acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+					acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 					if acceptedCond == nil {
 						return false
 					}

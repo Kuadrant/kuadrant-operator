@@ -634,7 +634,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 			PolicyTargetReferences: envoygatewayv1alpha1.PolicyTargetReferences{
 				TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
 							Group: gatewayapiv1alpha2.Group(machinery.GatewayGroupKind.Group),
 							Kind:  gatewayapiv1alpha2.Kind(machinery.GatewayGroupKind.Kind),
 							Name:  gatewayapiv1alpha2.ObjectName(gateway.GetName()),
@@ -686,7 +686,13 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 }
 
 func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy) bool {
-	if !kuadrantgatewayapi.EqualLocalPolicyTargetReferencesWithSectionName(a.Spec.TargetRefs, b.Spec.TargetRefs) {
+	aTargetRefs := lo.Map(a.Spec.TargetRefs, func(ref gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) v1.LocalPolicyTargetReferenceWithSectionName {
+		return v1.LocalPolicyTargetReferenceWithSectionName(ref)
+	})
+	bTargetRefs := lo.Map(b.Spec.TargetRefs, func(ref gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) v1.LocalPolicyTargetReferenceWithSectionName {
+		return v1.LocalPolicyTargetReferenceWithSectionName(ref)
+	})
+	if !kuadrantgatewayapi.EqualLocalPolicyTargetReferencesWithSectionName(aTargetRefs, bTargetRefs) {
 		return false
 	}
 

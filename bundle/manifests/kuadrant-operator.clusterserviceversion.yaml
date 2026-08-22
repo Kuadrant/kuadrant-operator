@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-08-20T14:23:47Z"
+    createdAt: "2026-08-22T13:52:57Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -263,7 +263,7 @@ spec:
       version: v1
     - kind: KuadrantControlPlane
       name: kuadrantcontrolplanes.kuadrant.io
-      version: v1beta1
+      version: v1alpha1
     - description: Kuadrant configures installations of Kuadrant Service Protection
         components
       displayName: Kuadrant
@@ -415,18 +415,19 @@ spec:
         - apiGroups:
           - ""
           resources:
-          - events
-          verbs:
-          - create
-          - patch
-        - apiGroups:
-          - ""
-          resources:
           - namespaces
           verbs:
           - get
           - list
           - watch
+        - apiGroups:
+          - ""
+          - events.k8s.io
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
         - apiGroups:
           - apiextensions.k8s.io
           resources:
@@ -745,12 +746,12 @@ spec:
           - watch
         - apiGroups:
           - rbac.authorization.k8s.io
+          resourceNames:
+          - dns-operator-manager-rolebinding
+          - dns-operator-remote-cluster-rolebinding
           resources:
           - clusterrolebindings
-          - rolebindings
-          - roles
           verbs:
-          - create
           - delete
           - get
           - list
@@ -760,6 +761,7 @@ spec:
         - apiGroups:
           - rbac.authorization.k8s.io
           resources:
+          - clusterrolebindings
           - clusterroles
           verbs:
           - create
@@ -773,6 +775,19 @@ spec:
           verbs:
           - bind
           - escalate
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - delete
           - get
           - list
           - patch

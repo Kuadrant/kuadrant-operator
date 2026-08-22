@@ -50,13 +50,14 @@ type Component struct {
 }
 
 type Deployer struct {
-	client        dynamic.Interface
-	discovery     discovery.DiscoveryInterface
-	applier       *ResourceApplier
-	namespace     string
-	components    []Component
-	chartVersions map[string]string
-	logger        logr.Logger
+	client         dynamic.Interface
+	discovery      discovery.DiscoveryInterface
+	applier        *ResourceApplier
+	namespace      string
+	components     []Component
+	chartVersions  map[string]string
+	deployedImages map[string][]DeployedImage
+	logger         logr.Logger
 }
 
 func NewDeployer(restConfig *rest.Config, namespace string, logger logr.Logger) (*Deployer, error) {
@@ -71,13 +72,14 @@ func NewDeployer(restConfig *rest.Config, namespace string, logger logr.Logger) 
 
 	l := logger.WithName("deployer")
 	return &Deployer{
-		client:        client,
-		discovery:     disc,
-		applier:       NewResourceApplier(client, disc, namespace, l),
-		namespace:     namespace,
-		components:    allComponents(),
-		chartVersions: make(map[string]string),
-		logger:        l,
+		client:         client,
+		discovery:      disc,
+		applier:        NewResourceApplier(client, disc, namespace, l),
+		namespace:      namespace,
+		components:     allComponents(),
+		chartVersions:  make(map[string]string),
+		deployedImages: make(map[string][]DeployedImage),
+		logger:         l,
 	}, nil
 }
 
@@ -154,6 +156,15 @@ func (d *Deployer) ChartVersion(componentName string) string {
 	return d.chartVersions[componentName]
 }
 
+type DeployedImage struct {
+	Container string
+	Image     string
+}
+
+func (d *Deployer) DeployedImages(componentName string) []DeployedImage {
+	return d.deployedImages[componentName]
+}
+
 func (d *Deployer) ApplyCRDsForComponents(ctx context.Context, components []Component) error {
 	applier := d.applier
 
@@ -206,6 +217,8 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component) err
 			return fmt.Errorf("patching image for %s: %w", component.Name, err)
 		}
 	}
+
+	d.deployedImages[component.Name] = extractDeploymentImages(rendered.Resources)
 
 	if err := applier.ApplyResources(ctx, rendered.Resources); err != nil {
 		return fmt.Errorf("applying resources for %s: %w", component.Name, err)

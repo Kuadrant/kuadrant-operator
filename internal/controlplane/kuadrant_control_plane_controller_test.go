@@ -66,71 +66,57 @@ func TestComponentStatus_CRDsFromRegistry(t *testing.T) {
 }
 
 func TestGetImageStatuses(t *testing.T) {
-	r := &Reconciler{}
-
 	tests := []struct {
-		name      string
-		component Component
-		envVars   map[string]string
-		wantCount int
-		wantName  string
-		wantImage string
+		name           string
+		componentName  string
+		deployedImages map[string][]DeployedImage
+		wantCount      int
+		wantName       string
+		wantImage      string
 	}{
 		{
-			name: "returns image from ImageEnvVar",
-			component: Component{
-				Name:        "dns-operator",
-				ImageEnvVar: "TEST_RELATED_IMAGE",
+			name:          "returns images from deployed containers",
+			componentName: "dns-operator",
+			deployedImages: map[string][]DeployedImage{
+				"dns-operator": {{Container: "manager", Image: "quay.io/kuadrant/dns-operator:v1.0.0"}},
 			},
-			envVars:   map[string]string{"TEST_RELATED_IMAGE": "quay.io/kuadrant/dns-operator:v1.0.0"},
 			wantCount: 1,
-			wantName:  "controller",
+			wantName:  "manager",
 			wantImage: "quay.io/kuadrant/dns-operator:v1.0.0",
 		},
 		{
-			name: "empty env var returns no images",
-			component: Component{
-				Name:        "dns-operator",
-				ImageEnvVar: "TEST_RELATED_IMAGE",
-			},
-			envVars:   map[string]string{"TEST_RELATED_IMAGE": ""},
-			wantCount: 0,
+			name:           "no deployed images returns empty",
+			componentName:  "dns-operator",
+			deployedImages: map[string][]DeployedImage{},
+			wantCount:      0,
 		},
 		{
-			name: "no ImageEnvVar returns no images",
-			component: Component{
-				Name: "dns-operator",
-			},
-			wantCount: 0,
-		},
-		{
-			name: "includes images from ChartValueOverrides implementing ImageReporter",
-			component: Component{
-				Name: "test",
-				ChartValueOverrides: []ChartValueOverride{
-					&ImageValue{EnvVar: "TEST_OVERRIDE_IMG", ValueKey: "image", Description: "sidecar"},
+			name:          "multiple containers reported",
+			componentName: "mcp-gateway",
+			deployedImages: map[string][]DeployedImage{
+				"mcp-gateway": {
+					{Container: "controller", Image: "ghcr.io/kuadrant/mcp-controller:v0.8.0"},
+					{Container: "broker", Image: "ghcr.io/kuadrant/mcp-gateway:v0.8.0"},
 				},
 			},
-			envVars:   map[string]string{"TEST_OVERRIDE_IMG": "ghcr.io/test/sidecar:v2"},
-			wantCount: 1,
-			wantName:  "sidecar",
-			wantImage: "ghcr.io/test/sidecar:v2",
+			wantCount: 2,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			for k, v := range tt.envVars {
-				t.Setenv(k, v)
-			}
-			images := r.getImageStatuses(tt.component)
+			d := &Deployer{deployedImages: tt.deployedImages}
+			r := &Reconciler{deployer: d}
+			images := r.getImageStatuses(Component{Name: tt.componentName})
 			if len(images) != tt.wantCount {
 				t.Fatalf("expected %d images, got %d", tt.wantCount, len(images))
 			}
-			if tt.wantCount > 0 {
+			if tt.wantName != "" {
 				if images[0].Name != tt.wantName {
 					t.Errorf("Images[0].Name = %q, want %q", images[0].Name, tt.wantName)
 				}
+			}
+			if tt.wantImage != "" {
 				if images[0].Image != tt.wantImage {
 					t.Errorf("Images[0].Image = %q, want %q", images[0].Image, tt.wantImage)
 				}

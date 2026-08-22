@@ -8,13 +8,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
 const (
@@ -32,11 +33,11 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 	AfterEach(func(ctx SpecContext) {
 		// Ensure the default CR is restored if a test deleted it.
-		cp := &kuadrantv1beta1.KuadrantControlPlane{}
-		err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)
+		cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+		err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)
 		if apierrors.IsNotFound(err) {
-			cp = &kuadrantv1beta1.KuadrantControlPlane{
-				ObjectMeta: metav1.ObjectMeta{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName},
+			cp = &kuadrantv1alpha1.KuadrantControlPlane{
+				ObjectMeta: metav1.ObjectMeta{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName},
 			}
 			_ = testClient().Create(ctx, cp)
 		}
@@ -44,16 +45,36 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 	Context("auto-creation on startup", func() {
 		It("creates a default KuadrantControlPlane CR", func(ctx SpecContext) {
-			cp := &kuadrantv1beta1.KuadrantControlPlane{}
-			err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(cp.Name).To(Equal(kuadrantv1beta1.KuadrantControlPlaneDefaultName))
+			Expect(cp.Name).To(Equal(kuadrantv1alpha1.KuadrantControlPlaneDefaultName))
 		}, testTimeOut)
+
+		// Events are stored by the API server — requires a real cluster (UseExistingCluster: true).
+		It("emits an OLM migration event on the KuadrantControlPlane", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				events := &corev1.EventList{}
+				g.Expect(testClient().List(ctx, events, client.InNamespace("default"))).To(Succeed())
+
+				var found bool
+				for _, e := range events.Items {
+					if e.InvolvedObject.Name != kuadrantv1alpha1.KuadrantControlPlaneDefaultName {
+						continue
+					}
+					if e.Reason == "OLMMigrationComplete" || e.Reason == "OLMMigrationIncomplete" {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(), "expected OLM migration event on KuadrantControlPlane")
+			}).WithContext(ctx).Should(Succeed())
+		}, SpecTimeout(10*time.Second))
 	})
 
 	Context("singleton enforcement", func() {
 		It("rejects creation of KuadrantControlPlane with non-default name", func(ctx SpecContext) {
-			cp := &kuadrantv1beta1.KuadrantControlPlane{
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{
 				ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
 			}
 			err := testClient().Create(ctx, cp)
@@ -78,23 +99,23 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 	Context("status reporting", func() {
 		It("reports Ready=True when dns-operator is available", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
-				cp := &kuadrantv1beta1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
-				cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1beta1.ControlPlaneConditionReady)
+				cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1alpha1.ControlPlaneConditionReady)
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
-				g.Expect(cond.Reason).To(Equal(kuadrantv1beta1.ControlPlaneReasonComponentsHealthy))
+				g.Expect(cond.Reason).To(Equal(kuadrantv1alpha1.ControlPlaneReasonComponentsHealthy))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
 		It("reports component status with CRD establishment", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
-				cp := &kuadrantv1beta1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
 				g.Expect(cp.Status.Components).ToNot(BeEmpty())
-				var dnsComponent *kuadrantv1beta1.ComponentStatus
+				var dnsComponent *kuadrantv1alpha1.ComponentStatus
 				for i := range cp.Status.Components {
 					if cp.Status.Components[i].Name == "dns-operator" {
 						dnsComponent = &cp.Status.Components[i]
@@ -112,8 +133,8 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 		It("reports chart version for each component", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
-				cp := &kuadrantv1beta1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
 				for _, cs := range cp.Status.Components {
 					g.Expect(cs.ChartVersion).ToNot(BeEmpty(), "component %s should have a chart version", cs.Name)
@@ -123,10 +144,10 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 		It("reports dns-operator image status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
-				cp := &kuadrantv1beta1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
-				var dns *kuadrantv1beta1.ComponentStatus
+				var dns *kuadrantv1alpha1.ComponentStatus
 				for i := range cp.Status.Components {
 					if cp.Status.Components[i].Name == "dns-operator" {
 						dns = &cp.Status.Components[i]
@@ -134,8 +155,8 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 					}
 				}
 				g.Expect(dns).ToNot(BeNil(), "dns-operator component not found in status")
-				g.Expect(dns.Images).To(HaveLen(1))
-				g.Expect(dns.Images[0].Name).To(Equal("controller"))
+				g.Expect(dns.Images).ToNot(BeEmpty())
+				g.Expect(dns.Images[0].Name).To(Equal("manager"))
 				g.Expect(dns.Images[0].Image).ToNot(BeEmpty())
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -144,16 +165,16 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 	Context("self-healing on deletion", func() {
 		It("re-creates KuadrantControlPlane CR when deleted", func(ctx SpecContext) {
-			cpKey := client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}
+			cpKey := client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}
 
-			cp := &kuadrantv1beta1.KuadrantControlPlane{}
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
 			Expect(testClient().Get(ctx, cpKey, cp)).To(Succeed())
 			originalUID := cp.GetUID()
 
 			Expect(testClient().Delete(ctx, cp)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				recreated := &kuadrantv1beta1.KuadrantControlPlane{}
+				recreated := &kuadrantv1alpha1.KuadrantControlPlane{}
 				g.Expect(testClient().Get(ctx, cpKey, recreated)).To(Succeed())
 				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new CR, not the old one")
 			}).WithContext(ctx).Should(Succeed())
@@ -172,8 +193,8 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Delete the CR
-			cp := &kuadrantv1beta1.KuadrantControlPlane{}
-			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 			Expect(testClient().Delete(ctx, cp)).To(Succeed())
 
 			// Deployment should still exist with the same UID (preserved, not recreated)

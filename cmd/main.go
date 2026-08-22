@@ -298,7 +298,7 @@ func main() {
 
 	// Register KuadrantControlPlane controller (standard controller-runtime).
 	// Manages child operator deployment and drift reconciliation.
-	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), componentDeployer, setupLog)
+	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), componentDeployer, mgr.GetEventRecorder("kuadrant-control-plane"), setupLog)
 	if err := cpReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to setup KuadrantControlPlane controller")
 		os.Exit(1)
@@ -307,7 +307,9 @@ func main() {
 	// One-time startup tasks run as a leader-elected Runnable so they only
 	// execute on the active leader, not every replica.
 	if err := mgr.Add(controlplane.NewBootstrapRunnable(
-		restConfig, scheme, componentDeployer, operatorNamespace, setupLog,
+		restConfig, scheme, componentDeployer,
+		mgr.GetEventRecorder("kuadrant-control-plane"),
+		operatorNamespace, setupLog,
 	)); err != nil {
 		setupLog.Error(err, "unable to register bootstrap runnable")
 		os.Exit(1)

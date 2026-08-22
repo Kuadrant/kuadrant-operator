@@ -79,11 +79,11 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).ToNot(HaveOccurred())
 
 	// Register KuadrantControlPlane controller
-	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), deployer, logger)
+	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), deployer, mgr.GetEventRecorder("kuadrant-control-plane"), logger)
 	Expect(cpReconciler.SetupWithManager(mgr)).To(Succeed())
 
 	// Register bootstrap runnable (creates default KuadrantControlPlane CR + OLM cleanup)
-	Expect(mgr.Add(controlplane.NewBootstrapRunnable(cfg, s, deployer, "kuadrant-system", logger))).To(Succeed())
+	Expect(mgr.Add(controlplane.NewBootstrapRunnable(cfg, s, deployer, mgr.GetEventRecorder("kuadrant-control-plane"), "kuadrant-system", logger))).To(Succeed())
 
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())
@@ -102,10 +102,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	waitClient, err := client.New(cfg, client.Options{Scheme: s})
 	Expect(err).ToNot(HaveOccurred())
 	Eventually(func(g Gomega) {
-		cp := &kuadrantv1beta1.KuadrantControlPlane{}
-		g.Expect(waitClient.Get(ctx, client.ObjectKey{Name: kuadrantv1beta1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+		cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+		g.Expect(waitClient.Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 		g.Expect(cp.Status.ObservedGeneration).To(BeNumerically(">", 0))
-		cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1beta1.ControlPlaneConditionReady)
+		cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1alpha1.ControlPlaneConditionReady)
 		g.Expect(cond).ToNot(BeNil())
 	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
 }

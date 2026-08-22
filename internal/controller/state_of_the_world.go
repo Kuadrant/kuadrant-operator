@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -85,6 +86,7 @@ var (
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger, opts ...controller.ControllerOption) (*KuadrantController, error) {
@@ -209,16 +211,18 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 // on if external dependent CRDs are installed at boot time
 func NewBootOptionsBuilder(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *BootOptionsBuilder {
 	return &BootOptionsBuilder{
-		manager: manager,
-		client:  client,
-		logger:  logger,
+		manager:  manager,
+		client:   client,
+		logger:   logger,
+		recorder: manager.GetEventRecorder("kuadrant-dependency-detection"),
 	}
 }
 
 type BootOptionsBuilder struct {
-	logger  logr.Logger
-	manager ctrlruntime.Manager
-	client  *dynamic.DynamicClient
+	logger   logr.Logger
+	manager  ctrlruntime.Manager
+	client   *dynamic.DynamicClient
+	recorder events.EventRecorder
 
 	// Internal configurations
 	isGatewayAPIInstalled            bool
@@ -239,6 +243,21 @@ type BootOptionsBuilder struct {
 	// Error tracking for non-blocking errors
 	errorTracker   *PersistentErrorTracker
 	retryScheduler RetryScheduler
+}
+
+// emitDependencyNotFoundEvent records a warning event against the singleton
+// KuadrantControlPlane, surfacing at-boot dependency detection failures that
+// otherwise only appear in operator logs.
+func (b *BootOptionsBuilder) emitDependencyNotFoundEvent(reason, message string) {
+	if b.recorder == nil {
+		return
+	}
+	ref := &corev1.ObjectReference{
+		APIVersion: kuadrantv1alpha1.GroupVersion.String(),
+		Kind:       "KuadrantControlPlane",
+		Name:       kuadrantv1alpha1.KuadrantControlPlaneDefaultName,
+	}
+	b.recorder.Eventf(ref, ref, corev1.EventTypeWarning, reason, "DependencyDetection", message)
 }
 
 func (b *BootOptionsBuilder) getOptions() ([]controller.ControllerOption, error) {
@@ -450,6 +469,7 @@ func (b *BootOptionsBuilder) getCertManagerOptions() ([]controller.ControllerOpt
 	if !b.isCertManagerInstalled {
 		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers")
 		operatormetrics.SetControllerRegistered("tls_policies", false)
+		b.emitDependencyNotFoundEvent("CertManagerNotFound", "cert-manager is not installed; TLSPolicy will not be reconciled")
 		return opts, nil
 	}
 
@@ -532,6 +552,7 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() ([]controller.ControllerOpt
 	if !b.isDNSOperatorInstalled {
 		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers")
 		operatormetrics.SetControllerRegistered("dns_policies", false)
+		b.emitDependencyNotFoundEvent("DNSOperatorNotFound", "dns-operator is not installed; DNSPolicy will not be reconciled")
 		return opts, nil
 	}
 
@@ -566,6 +587,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 	if !b.isLimitadorOperatorInstalled {
 		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers")
 		operatormetrics.SetControllerRegistered("rate_limit_policies", false)
+		b.emitDependencyNotFoundEvent("LimitadorOperatorNotFound", "limitador-operator is not installed; RateLimitPolicy will not be reconciled")
 		return nil, err
 	}
 
@@ -602,6 +624,7 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 	if !b.isAuthorinoOperatorInstalled {
 		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers")
 		operatormetrics.SetControllerRegistered("auth_policies", false)
+		b.emitDependencyNotFoundEvent("AuthorinoOperatorNotFound", "authorino-operator is not installed; AuthPolicy will not be reconciled")
 		return opts, nil
 	}
 

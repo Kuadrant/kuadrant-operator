@@ -182,6 +182,32 @@ func CRDNames(crds []*unstructured.Unstructured) []string {
 // This is a stopgap for charts that don't support values-based image overrides.
 // When upstream charts add image configurability, prefer passing the image via
 // Component.ChartValues instead of post-render patching.
+func extractDeploymentImages(objects []*unstructured.Unstructured) []DeployedImage {
+	var images []DeployedImage
+	for _, obj := range objects {
+		if obj.GetKind() != "Deployment" {
+			continue
+		}
+		containers, found, err := unstructured.NestedSlice(obj.Object,
+			"spec", "template", "spec", "containers")
+		if err != nil || !found {
+			continue
+		}
+		for _, c := range containers {
+			container, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name, _ := container["name"].(string)
+			image, _ := container["image"].(string)
+			if image != "" {
+				images = append(images, DeployedImage{Container: name, Image: image})
+			}
+		}
+	}
+	return images
+}
+
 func PatchDeploymentImage(objects []*unstructured.Unstructured, image string) error {
 	if image == "" {
 		return nil

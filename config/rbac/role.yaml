@@ -22,18 +22,19 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
   - namespaces
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -352,12 +353,12 @@ rules:
   - watch
 - apiGroups:
   - rbac.authorization.k8s.io
+  resourceNames:
+  - dns-operator-manager-rolebinding
+  - dns-operator-remote-cluster-rolebinding
   resources:
   - clusterrolebindings
-  - rolebindings
-  - roles
   verbs:
-  - create
   - delete
   - get
   - list
@@ -367,6 +368,7 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
+  - clusterrolebindings
   - clusterroles
   verbs:
   - create
@@ -380,6 +382,19 @@ rules:
   verbs:
   - bind
   - escalate
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
   - get
   - list
   - patch

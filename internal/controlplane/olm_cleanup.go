@@ -45,9 +45,26 @@ type OLMCleaner struct {
 	cleaned         bool
 }
 
-// RunOLMCleanup is a one-time startup function called from main.go.
+type OLMCleanupResult struct {
+	Skipped    bool
+	Summary    string
+	Error      string
+	Components []ComponentCleanupResult
+}
+
+// ComponentCleanupResult reports the orphaned OLM resources removed for a
+// single component's package. There is at most one Subscription and one CSV
+// per component in the pre-consolidation install layout this cleanup targets.
+type ComponentCleanupResult struct {
+	Package          string
+	SubscriptionName string
+	CSVName          string
+	MetadataCount    int
+}
+
+// RunOLMCleanup is a one-time startup function called from bootstrap.
 // It is NOT called during reconciliation.
-func RunOLMCleanup(ctx context.Context, deployer *Deployer, namespace string, logger logr.Logger) {
+func RunOLMCleanup(ctx context.Context, deployer *Deployer, namespace string, logger logr.Logger) OLMCleanupResult {
 	cleaner := NewOLMCleaner(
 		deployer.DynamicClient(),
 		deployer.DiscoveryClient(),
@@ -56,9 +73,7 @@ func RunOLMCleanup(ctx context.Context, deployer *Deployer, namespace string, lo
 		deployer.OLMPackageNames(),
 		logger,
 	)
-	if err := cleaner.Cleanup(ctx); err != nil {
-		logger.Error(err, "OLM cleanup failed (non-fatal)")
-	}
+	return cleaner.Cleanup(ctx)
 }
 
 func NewOLMCleaner(client dynamic.Interface, disc discovery.DiscoveryInterface, namespace string, deploymentNames, packageNames []string, logger logr.Logger) *OLMCleaner {
@@ -72,29 +87,74 @@ func NewOLMCleaner(client dynamic.Interface, disc discovery.DiscoveryInterface, 
 	}
 }
 
-func (c *OLMCleaner) Cleanup(ctx context.Context) error {
+func (c *OLMCleaner) Cleanup(ctx context.Context) OLMCleanupResult {
 	if c.cleaned {
-		return nil
+		return OLMCleanupResult{Skipped: true}
 	}
 
 	if !c.isOLMInstalled() {
 		c.logger.V(1).Info("OLM not detected, skipping cleanup")
 		c.cleaned = true
-		return nil
+		return OLMCleanupResult{Summary: "OLM not detected, no migration needed"}
 	}
 
-	c.removeOrphanedOLMMetadata(ctx)
+	metadataCountByCSV, err := c.removeOrphanedOLMMetadata(ctx)
+	if err != nil {
+		c.logger.Error(err, "failed to strip OLM metadata, skipping Subscription/CSV deletion to avoid ownership cascade")
+		return OLMCleanupResult{Error: fmt.Sprintf("failed to strip OLM metadata: %v", err)}
+	}
 
-	if err := c.deleteOrphanedSubscriptions(ctx); err != nil {
+	var errs []string
+
+	subsByPackage, err := c.deleteOrphanedSubscriptions(ctx)
+	if err != nil {
 		c.logger.Error(err, "failed to delete orphaned Subscriptions (non-fatal)")
+		errs = append(errs, fmt.Sprintf("Subscriptions: %v", err))
 	}
 
-	if err := c.deleteOrphanedCSVs(ctx); err != nil {
+	csvsByPackage, err := c.deleteOrphanedCSVs(ctx)
+	if err != nil {
 		c.logger.Error(err, "failed to delete orphaned CSVs (non-fatal)")
+		errs = append(errs, fmt.Sprintf("CSVs: %v", err))
 	}
 
 	c.cleaned = true
-	return nil
+
+	metadataCount := 0
+	for _, count := range metadataCountByCSV {
+		metadataCount += count
+	}
+
+	if len(errs) > 0 {
+		return OLMCleanupResult{Error: fmt.Sprintf("partial cleanup: %s", strings.Join(errs, "; "))}
+	}
+	return OLMCleanupResult{
+		Summary: fmt.Sprintf("stripped OLM metadata from %d resources, deleted %d Subscriptions and %d CSVs",
+			metadataCount, len(subsByPackage), len(csvsByPackage)),
+		Components: c.buildComponentResults(subsByPackage, csvsByPackage, metadataCountByCSV),
+	}
+}
+
+// buildComponentResults joins per-package Subscription/CSV deletions with the
+// per-CSV metadata strip count, one entry per package that had something
+// actually removed.
+func (c *OLMCleaner) buildComponentResults(subsByPackage, csvsByPackage map[string]string, metadataCountByCSV map[string]int) []ComponentCleanupResult {
+	var results []ComponentCleanupResult
+	for _, pkg := range c.packageNames {
+		subName := subsByPackage[pkg]
+		csvName := csvsByPackage[pkg]
+		metadataCount := metadataCountByCSV[csvName]
+		if subName == "" && csvName == "" && metadataCount == 0 {
+			continue
+		}
+		results = append(results, ComponentCleanupResult{
+			Package:          pkg,
+			SubscriptionName: subName,
+			CSVName:          csvName,
+			MetadataCount:    metadataCount,
+		})
+	}
+	return results
 }
 
 func (c *OLMCleaner) isOLMInstalled() bool {
@@ -115,10 +175,17 @@ func (c *OLMCleaner) isOLMInstalled() bool {
 // operator CSVs using the olm.owner label and strips OLM ownerReferences
 // and labels from them. This works for any resource type OLM manages —
 // no hardcoded resource list needed.
-func (c *OLMCleaner) removeOrphanedOLMMetadata(ctx context.Context) {
+func (c *OLMCleaner) removeOrphanedOLMMetadata(ctx context.Context) (map[string]int, error) {
+	var errs []error
+	countByCSV := make(map[string]int)
 	for _, csvName := range c.findOrphanedCSVNames(ctx) {
-		c.cleanResourcesOwnedByCSV(ctx, csvName)
+		count, err := c.cleanResourcesOwnedByCSV(ctx, csvName)
+		countByCSV[csvName] = count
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
+	return countByCSV, errors.Join(errs...)
 }
 
 func (c *OLMCleaner) findOrphanedCSVNames(ctx context.Context) []string {
@@ -153,17 +220,18 @@ var olmManagedResourceTypes = []struct {
 	{schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}, false},
 }
 
-func (c *OLMCleaner) cleanResourcesOwnedByCSV(ctx context.Context, csvName string) {
+func (c *OLMCleaner) cleanResourcesOwnedByCSV(ctx context.Context, csvName string) (int, error) {
 	// OLM uses different labels on different resource types:
 	// - Most resources: olm.owner=<csv-name>
 	// - CRDs and some others: operators.coreos.com/<package>.<namespace>=
-	pkg := strings.SplitN(csvName, ".", 2)[0]
+	pkg := packageFromCSVName(csvName)
 	labelSelectors := []string{
 		fmt.Sprintf("olm.owner=%s", csvName),
 		fmt.Sprintf("operators.coreos.com/%s.%s=", pkg, c.namespace),
 	}
 
 	cleaned := make(map[string]bool)
+	var errs []error
 
 	for _, rt := range olmManagedResourceTypes {
 		for _, labelSelector := range labelSelectors {
@@ -180,6 +248,8 @@ func (c *OLMCleaner) cleanResourcesOwnedByCSV(ctx context.Context, csvName strin
 				})
 			}
 			if err != nil {
+				c.logger.V(1).Info("failed to list resources for OLM cleanup",
+					"resource", rt.gvr.Resource, "labelSelector", labelSelector, "error", err)
 				continue
 			}
 
@@ -187,6 +257,12 @@ func (c *OLMCleaner) cleanResourcesOwnedByCSV(ctx context.Context, csvName strin
 				obj := &list.Items[i]
 				key := fmt.Sprintf("%s/%s/%s", rt.gvr.Resource, obj.GetNamespace(), obj.GetName())
 				if cleaned[key] {
+					continue
+				}
+
+				if _, ok := obj.GetLabels()["olm.owner.kind"]; ok {
+					c.logger.V(1).Info("skipping OLM-generated resource",
+						"resource", rt.gvr.Resource, "name", obj.GetName())
 					continue
 				}
 
@@ -210,15 +286,24 @@ func (c *OLMCleaner) cleanResourcesOwnedByCSV(ctx context.Context, csvName strin
 					_, err = c.client.Resource(rt.gvr).Update(ctx, obj, metav1.UpdateOptions{})
 				}
 				if err != nil {
-					c.logger.Error(err, "failed to update resource (non-fatal)",
+					if apierrors.IsForbidden(err) {
+						c.logger.Info("skipping resource: insufficient permissions to strip OLM metadata",
+							"resource", rt.gvr.Resource,
+							"name", obj.GetName(),
+						)
+						continue
+					}
+					c.logger.Error(err, "failed to strip OLM metadata from resource",
 						"resource", rt.gvr.Resource,
 						"name", obj.GetName(),
 					)
+					errs = append(errs, fmt.Errorf("updating %s/%s: %w", rt.gvr.Resource, obj.GetName(), err))
 				}
 				cleaned[key] = true
 			}
 		}
 	}
+	return len(cleaned), errors.Join(errs...)
 }
 
 func (c *OLMCleaner) stripCSVOwnerRefs(obj *unstructured.Unstructured) bool {
@@ -277,13 +362,18 @@ func (c *OLMCleaner) stripOLMLabels(obj *unstructured.Unstructured) bool {
 	return modified
 }
 
-func (c *OLMCleaner) deleteOrphanedSubscriptions(ctx context.Context) error {
+// deleteOrphanedSubscriptions returns the deleted Subscription name keyed by
+// package. If more than one Subscription exists for the same package, the
+// last one deleted wins the map entry — the migration this targets expects
+// at most one Subscription per component.
+func (c *OLMCleaner) deleteOrphanedSubscriptions(ctx context.Context) (map[string]string, error) {
 	subs, err := c.client.Resource(subscriptionGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return fmt.Errorf("listing subscriptions: %w", err)
+		return nil, fmt.Errorf("listing subscriptions: %w", err)
 	}
 
 	var errs []error
+	deleted := make(map[string]string)
 	for i := range subs.Items {
 		sub := &subs.Items[i]
 		pkg, found, err := unstructured.NestedString(sub.Object, "spec", "name")
@@ -298,31 +388,40 @@ func (c *OLMCleaner) deleteOrphanedSubscriptions(ctx context.Context) error {
 			if !apierrors.IsNotFound(err) {
 				errs = append(errs, fmt.Errorf("deleting Subscription %s: %w", sub.GetName(), err))
 			}
+		} else {
+			deleted[pkg] = sub.GetName()
 		}
 	}
-	return errors.Join(errs...)
+	return deleted, errors.Join(errs...)
 }
 
-func (c *OLMCleaner) deleteOrphanedCSVs(ctx context.Context) error {
+// deleteOrphanedCSVs returns the deleted CSV name keyed by package. If more
+// than one CSV exists for the same package, the last one deleted wins the
+// map entry — the migration this targets expects at most one CSV per component.
+func (c *OLMCleaner) deleteOrphanedCSVs(ctx context.Context) (map[string]string, error) {
 	csvs, err := c.client.Resource(csvGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return fmt.Errorf("listing CSVs: %w", err)
+		return nil, fmt.Errorf("listing CSVs: %w", err)
 	}
 
 	var errs []error
+	deleted := make(map[string]string)
 	for i := range csvs.Items {
 		csv := &csvs.Items[i]
-		if !c.isOrphanedCSV(csv.GetName()) {
+		name := csv.GetName()
+		if !c.isOrphanedCSV(name) {
 			continue
 		}
-		c.logger.Info("deleting orphaned OLM CSV", "name", csv.GetName())
-		if err := c.client.Resource(csvGVR).Namespace(c.namespace).Delete(ctx, csv.GetName(), metav1.DeleteOptions{}); err != nil {
+		c.logger.Info("deleting orphaned OLM CSV", "name", name)
+		if err := c.client.Resource(csvGVR).Namespace(c.namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 			if !apierrors.IsNotFound(err) {
-				errs = append(errs, fmt.Errorf("deleting CSV %s: %w", csv.GetName(), err))
+				errs = append(errs, fmt.Errorf("deleting CSV %s: %w", name, err))
 			}
+		} else {
+			deleted[packageFromCSVName(name)] = name
 		}
 	}
-	return errors.Join(errs...)
+	return deleted, errors.Join(errs...)
 }
 
 func (c *OLMCleaner) isOrphanedCSV(name string) bool {
@@ -332,4 +431,10 @@ func (c *OLMCleaner) isOrphanedCSV(name string) bool {
 		}
 	}
 	return false
+}
+
+// packageFromCSVName extracts the OLM package name from a CSV name of the
+// form "<package>.<version>" (e.g. "dns-operator.v0.8.0" -> "dns-operator").
+func packageFromCSVName(name string) string {
+	return strings.SplitN(name, ".", 2)[0]
 }

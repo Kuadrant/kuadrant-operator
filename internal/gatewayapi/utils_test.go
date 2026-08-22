@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestIsHTTPRouteAccepted(t *testing.T) {
@@ -215,7 +214,7 @@ var isPolicyAcceptedTestCases = []isPolicyAcceptedTestCase{
 			Status: FakePolicyStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+						Type:   string(gatewayapiv1.PolicyConditionAccepted),
 						Status: metav1.ConditionTrue,
 					},
 				},
@@ -229,7 +228,7 @@ var isPolicyAcceptedTestCases = []isPolicyAcceptedTestCase{
 			Status: FakePolicyStatus{
 				Conditions: []metav1.Condition{
 					{
-						Type:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+						Type:   string(gatewayapiv1.PolicyConditionAccepted),
 						Status: metav1.ConditionFalse,
 					},
 				},

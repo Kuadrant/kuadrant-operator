@@ -6,6 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -65,9 +66,9 @@ type ExamplePolicySpec struct {
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
-func (e *ExamplePolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		e.Spec.TargetRef,
+func (e *ExamplePolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(e.Spec.TargetRef),
 	}
 }
 

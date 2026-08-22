@@ -8,18 +8,18 @@ import (
 	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const (
-	PolicyConditionEnforced gatewayapiv1alpha2.PolicyConditionType = "Enforced"
+	PolicyConditionEnforced gatewayapiv1.PolicyConditionType = "Enforced"
 
-	PolicyReasonEnforced             gatewayapiv1alpha2.PolicyConditionReason = "Enforced"
-	PolicyReasonOverridden           gatewayapiv1alpha2.PolicyConditionReason = "Overridden"
-	PolicyReasonUnknown              gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
-	PolicyReasonMissingDependency    gatewayapiv1alpha2.PolicyConditionReason = "MissingDependency"
-	PolicyReasonMissingResource      gatewayapiv1alpha2.PolicyConditionReason = "MissingResource"
-	PolicyReasonInvalidCelExpression gatewayapiv1alpha2.PolicyConditionReason = "InvalidCelExpression"
+	PolicyReasonEnforced             gatewayapiv1.PolicyConditionReason = "Enforced"
+	PolicyReasonOverridden           gatewayapiv1.PolicyConditionReason = "Overridden"
+	PolicyReasonUnknown              gatewayapiv1.PolicyConditionReason = "Unknown"
+	PolicyReasonMissingDependency    gatewayapiv1.PolicyConditionReason = "MissingDependency"
+	PolicyReasonMissingResource      gatewayapiv1.PolicyConditionReason = "MissingResource"
+	PolicyReasonInvalidCelExpression gatewayapiv1.PolicyConditionReason = "InvalidCelExpression"
 )
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.
@@ -35,9 +35,9 @@ func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {
 func AcceptedCondition(p Policy, err error) *metav1.Condition {
 	// Accepted
 	cond := &metav1.Condition{
-		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+		Type:    string(gatewayapiv1.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Reason:  string(gatewayapiv1.PolicyReasonAccepted),
 		Message: fmt.Sprintf("%s has been accepted", p.Kind()),
 	}
 	if err == nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
@@ -73,13 +74,13 @@ func (p *RateLimitPolicy) GetLocator() string {
 
 // Deprecated: Use GetTargetRefs instead
 func (p *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
-	return p.Spec.TargetRef.LocalPolicyTargetReference
+	return gatewayapiv1alpha2.LocalPolicyTargetReference(p.Spec.TargetRef.LocalPolicyTargetReference)
 }
 
 func (p *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
 		machinery.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			LocalPolicyTargetReferenceWithSectionName: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(p.Spec.TargetRef),
 			PolicyNamespace: p.Namespace,
 		},
 	}

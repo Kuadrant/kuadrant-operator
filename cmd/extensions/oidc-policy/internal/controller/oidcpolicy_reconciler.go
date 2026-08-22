@@ -509,7 +509,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 		},
 		Spec: kuadrantv1.AuthPolicySpec{
 			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: callbackRoute,
+				LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference(callbackRoute),
 			},
 			Overrides: &kuadrantv1.MergeableAuthPolicySpec{
 				Strategy: "merge",

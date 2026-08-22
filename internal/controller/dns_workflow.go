@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -29,8 +28,8 @@ const (
 	StateDNSPolicyAcceptedKey = "DNSPolicyValid"
 	StateDNSPolicyErrorsKey   = "DNSPolicyErrors"
 
-	PolicyConditionSubResourcesHealthy gatewayapiv1alpha2.PolicyConditionType   = "SubResourcesHealthy"
-	PolicyReasonSubResourcesHealthy    gatewayapiv1alpha2.PolicyConditionReason = "SubResourcesHealthy"
+	PolicyConditionSubResourcesHealthy gwapiv1.PolicyConditionType   = "SubResourcesHealthy"
+	PolicyReasonSubResourcesHealthy    gwapiv1.PolicyConditionReason = "SubResourcesHealthy"
 )
 
 var (
@@ -114,7 +113,7 @@ func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error)
 	if !ok {
 		return
 	}
-	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gwapiv1.PolicyConditionAccepted)); condition != nil {
 		accepted = condition.Status == metav1.ConditionTrue
 		if !accepted {
 			err = errors.New(condition.Message)

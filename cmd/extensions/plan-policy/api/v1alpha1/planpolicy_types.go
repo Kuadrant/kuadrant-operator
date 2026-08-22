@@ -25,6 +25,7 @@ import (
 	"github.com/kuadrant/limitador-operator/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -56,9 +57,9 @@ func (p *PlanPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		p.Spec.TargetRef,
+func (p *PlanPolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		gatewayapiv1.LocalPolicyTargetReferenceWithSectionName(p.Spec.TargetRef),
 	}
 }
 

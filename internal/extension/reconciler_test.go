@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	machinerycontroller "github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -35,13 +34,13 @@ func TestStateAwareDAG(t *testing.T) {
 		grpcRoutes := lo.Map(resources.GRPCRoutes, func(grpcRoute *gwapiv1.GRPCRoute, _ int) *machinery.GRPCRoute {
 			return &machinery.GRPCRoute{GRPCRoute: grpcRoute}
 		})
-		tcpRoutes := lo.Map(resources.TCPRoutes, func(tcpRoute *gwapiv1alpha2.TCPRoute, _ int) *machinery.TCPRoute {
+		tcpRoutes := lo.Map(resources.TCPRoutes, func(tcpRoute *gwapiv1.TCPRoute, _ int) *machinery.TCPRoute {
 			return &machinery.TCPRoute{TCPRoute: tcpRoute}
 		})
-		tlsRoutes := lo.Map(resources.TLSRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *machinery.TLSRoute {
+		tlsRoutes := lo.Map(resources.TLSRoutes, func(tlsRoute *gwapiv1.TLSRoute, _ int) *machinery.TLSRoute {
 			return &machinery.TLSRoute{TLSRoute: tlsRoute}
 		})
-		udpRoutes := lo.Map(resources.UDPRoutes, func(updRoute *gwapiv1alpha2.UDPRoute, _ int) *machinery.UDPRoute {
+		udpRoutes := lo.Map(resources.UDPRoutes, func(updRoute *gwapiv1.UDPRoute, _ int) *machinery.UDPRoute {
 			return &machinery.UDPRoute{UDPRoute: updRoute}
 		})
 		services := lo.Map(resources.Services, func(service *core.Service, _ int) *machinery.Service { return &machinery.Service{Service: service} })
@@ -135,13 +134,13 @@ func TestStateAwareDAG(t *testing.T) {
 		grpcRoutes := lo.Map(resources.GRPCRoutes, func(grpcRoute *gwapiv1.GRPCRoute, _ int) *machinery.GRPCRoute {
 			return &machinery.GRPCRoute{GRPCRoute: grpcRoute}
 		})
-		tcpRoutes := lo.Map(resources.TCPRoutes, func(tcpRoute *gwapiv1alpha2.TCPRoute, _ int) *machinery.TCPRoute {
+		tcpRoutes := lo.Map(resources.TCPRoutes, func(tcpRoute *gwapiv1.TCPRoute, _ int) *machinery.TCPRoute {
 			return &machinery.TCPRoute{TCPRoute: tcpRoute}
 		})
-		tlsRoutes := lo.Map(resources.TLSRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *machinery.TLSRoute {
+		tlsRoutes := lo.Map(resources.TLSRoutes, func(tlsRoute *gwapiv1.TLSRoute, _ int) *machinery.TLSRoute {
 			return &machinery.TLSRoute{TLSRoute: tlsRoute}
 		})
-		udpRoutes := lo.Map(resources.UDPRoutes, func(updRoute *gwapiv1alpha2.UDPRoute, _ int) *machinery.UDPRoute {
+		udpRoutes := lo.Map(resources.UDPRoutes, func(updRoute *gwapiv1.UDPRoute, _ int) *machinery.UDPRoute {
 			return &machinery.UDPRoute{UDPRoute: updRoute}
 		})
 		services := lo.Map(resources.Services, func(service *core.Service, _ int) *machinery.Service { return &machinery.Service{Service: service} })
@@ -149,8 +148,8 @@ func TestStateAwareDAG(t *testing.T) {
 		policies := []*TestPolicy{
 			buildPolicy(func(policy *TestPolicy) {
 				policy.Name = "my-policy-1"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "gateway-1",
@@ -159,8 +158,8 @@ func TestStateAwareDAG(t *testing.T) {
 			}),
 			buildPolicy(func(policy *TestPolicy) {
 				policy.Name = "my-policy-2"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "http-route-1",
@@ -292,8 +291,8 @@ func TestStateAwareDAG(t *testing.T) {
 		policies := []*TestPolicy{
 			buildPolicy(func(policy *TestPolicy) {
 				policy.Name = "gateway-policy"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "gateway-1",
@@ -302,8 +301,8 @@ func TestStateAwareDAG(t *testing.T) {
 			}),
 			buildPolicy(func(policy *TestPolicy) {
 				policy.Name = "httproute-policy"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "http-route-1",
@@ -705,8 +704,8 @@ func TestConversionFunctions(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: TestPolicySpec{
-				TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "test-gateway",
@@ -741,8 +740,8 @@ func TestConversionFunctions(t *testing.T) {
 				Namespace: "test-namespace",
 			},
 			Spec: TestPolicySpec{
-				TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "test-gateway",
@@ -959,17 +958,17 @@ func BuildBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.Backend
 	}
 }
 
-func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPRoute {
-	r := &gwapiv1alpha2.TCPRoute{
+func BuildTCPRoute(f ...func(route *gwapiv1.TCPRoute)) *gwapiv1.TCPRoute {
+	r := &gwapiv1.TCPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwapiv1alpha2.GroupVersion.String(),
+			APIVersion: gwapiv1.GroupVersion.String(),
 			Kind:       "TCPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-tcp-route",
 			Namespace: "my-namespace",
 		},
-		Spec: gwapiv1alpha2.TCPRouteSpec{
+		Spec: gwapiv1.TCPRouteSpec{
 			CommonRouteSpec: gwapiv1.CommonRouteSpec{
 				ParentRefs: []gwapiv1.ParentReference{
 					{
@@ -977,7 +976,7 @@ func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPR
 					},
 				},
 			},
-			Rules: []gwapiv1alpha2.TCPRouteRule{
+			Rules: []gwapiv1.TCPRouteRule{
 				{
 					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 				},
@@ -991,17 +990,17 @@ func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPR
 	return r
 }
 
-func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSRoute {
-	r := &gwapiv1alpha2.TLSRoute{
+func BuildTLSRoute(f ...func(route *gwapiv1.TLSRoute)) *gwapiv1.TLSRoute {
+	r := &gwapiv1.TLSRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwapiv1alpha2.GroupVersion.String(),
+			APIVersion: gwapiv1.GroupVersion.String(),
 			Kind:       "TLSRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-tls-route",
 			Namespace: "my-namespace",
 		},
-		Spec: gwapiv1alpha2.TLSRouteSpec{
+		Spec: gwapiv1.TLSRouteSpec{
 			CommonRouteSpec: gwapiv1.CommonRouteSpec{
 				ParentRefs: []gwapiv1.ParentReference{
 					{
@@ -1009,7 +1008,7 @@ func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSR
 					},
 				},
 			},
-			Rules: []gwapiv1alpha2.TLSRouteRule{
+			Rules: []gwapiv1.TLSRouteRule{
 				{
 					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 				},
@@ -1023,17 +1022,17 @@ func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSR
 	return r
 }
 
-func BuildUDPRoute(f ...func(route *gwapiv1alpha2.UDPRoute)) *gwapiv1alpha2.UDPRoute {
-	r := &gwapiv1alpha2.UDPRoute{
+func BuildUDPRoute(f ...func(route *gwapiv1.UDPRoute)) *gwapiv1.UDPRoute {
+	r := &gwapiv1.UDPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwapiv1alpha2.GroupVersion.String(),
+			APIVersion: gwapiv1.GroupVersion.String(),
 			Kind:       "UDPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-udp-route",
 			Namespace: "my-namespace",
 		},
-		Spec: gwapiv1alpha2.UDPRouteSpec{
+		Spec: gwapiv1.UDPRouteSpec{
 			CommonRouteSpec: gwapiv1.CommonRouteSpec{
 				ParentRefs: []gwapiv1.ParentReference{
 					{
@@ -1041,7 +1040,7 @@ func BuildUDPRoute(f ...func(route *gwapiv1alpha2.UDPRoute)) *gwapiv1alpha2.UDPR
 					},
 				},
 			},
-			Rules: []gwapiv1alpha2.UDPRouteRule{
+			Rules: []gwapiv1.UDPRouteRule{
 				{
 					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 				},
@@ -1060,9 +1059,9 @@ type GatewayAPIResources struct {
 	Gateways       []*gwapiv1.Gateway
 	HTTPRoutes     []*gwapiv1.HTTPRoute
 	GRPCRoutes     []*gwapiv1.GRPCRoute
-	TCPRoutes      []*gwapiv1alpha2.TCPRoute
-	TLSRoutes      []*gwapiv1alpha2.TLSRoute
-	UDPRoutes      []*gwapiv1alpha2.UDPRoute
+	TCPRoutes      []*gwapiv1.TCPRoute
+	TLSRoutes      []*gwapiv1.TLSRoute
+	UDPRoutes      []*gwapiv1.UDPRoute
 	Services       []*core.Service
 }
 
@@ -1244,11 +1243,11 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				})
 			}),
 		},
-		TCPRoutes: []*gwapiv1alpha2.TCPRoute{
-			BuildTCPRoute(func(r *gwapiv1alpha2.TCPRoute) {
+		TCPRoutes: []*gwapiv1.TCPRoute{
+			BuildTCPRoute(func(r *gwapiv1.TCPRoute) {
 				r.Name = "tcp-route-1"
 				r.Spec.ParentRefs[0].Name = "gateway-4"
-				r.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+				r.Spec.Rules = []gwapiv1.TCPRouteRule{
 					{ // rule-1
 						BackendRefs: []gwapiv1.BackendRef{
 							BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
@@ -1268,12 +1267,12 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				}
 			}),
 		},
-		TLSRoutes: []*gwapiv1alpha2.TLSRoute{
-			BuildTLSRoute(func(r *gwapiv1alpha2.TLSRoute) {
+		TLSRoutes: []*gwapiv1.TLSRoute{
+			BuildTLSRoute(func(r *gwapiv1.TLSRoute) {
 				r.Name = "tls-route-1"
 				r.Spec.ParentRefs[0].Name = "gateway-3"
 				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
-				r.Spec.Rules = []gwapiv1alpha2.TLSRouteRule{
+				r.Spec.Rules = []gwapiv1.TLSRouteRule{
 					{ // rule-1
 						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 							backendRef.Name = "service-5"
@@ -1287,11 +1286,11 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				}
 			}),
 		},
-		UDPRoutes: []*gwapiv1alpha2.UDPRoute{
-			BuildUDPRoute(func(r *gwapiv1alpha2.UDPRoute) {
+		UDPRoutes: []*gwapiv1.UDPRoute{
+			BuildUDPRoute(func(r *gwapiv1.UDPRoute) {
 				r.Name = "udp-route-1"
 				r.Spec.ParentRefs[0].Name = "gateway-3"
-				r.Spec.Rules = []gwapiv1alpha2.UDPRouteRule{
+				r.Spec.Rules = []gwapiv1.UDPRouteRule{
 					{ // rule-1
 						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 							backendRef.Name = "service-3"
@@ -1326,7 +1325,7 @@ func (p *TestPolicy) DeepCopyObject() runtime.Object {
 }
 
 type TestPolicySpec struct {
-	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gwapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
 var _ machinery.Policy = &TestPolicy{}
@@ -1366,8 +1365,8 @@ func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
 			Namespace: "my-namespace",
 		},
 		Spec: TestPolicySpec{
-			TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+			TargetRef: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 					Group: gwapiv1.Group(core.SchemeGroupVersion.Group),
 					Kind:  "Service",
 					Name:  "my-service",

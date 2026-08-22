@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
@@ -43,7 +43,7 @@ type mockPolicy struct {
 func (m *mockPolicy) GetName() string                  { return m.name }
 func (m *mockPolicy) GetNamespace() string             { return m.namespace }
 func (m *mockPolicy) GetObjectKind() schema.ObjectKind { return &mockObjectKind{} }
-func (m *mockPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+func (m *mockPolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
 	return nil
 }
 

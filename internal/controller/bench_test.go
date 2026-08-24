@@ -403,6 +403,9 @@ func BenchmarkBuildLimitadorLimits(b *testing.B) {
 			}
 		}
 	}
+	if len(effectivePolicies) == 0 {
+		b.Fatal("no effective rate limit policies built from topology")
+	}
 	state.Store(StateEffectiveRateLimitPolicies, effectivePolicies)
 
 	r := &LimitadorLimitsReconciler{client: nil}

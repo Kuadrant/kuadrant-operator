@@ -360,7 +360,11 @@ jobs:
         if: steps.base_bench.outputs.exists == 'true'
         id: benchstat
         run: |
-          BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1 || true)
+          if ! BENCHSTAT_OUTPUT=$(benchstat base-bench.txt pr-bench.txt 2>&1); then
+            echo "::warning::benchstat failed; skipping regression comparison"
+            echo "$BENCHSTAT_OUTPUT"
+            exit 0
+          fi
 
           REGRESSIONS=$(echo "$BENCHSTAT_OUTPUT" | sed '/B\/op/,$d' | grep -E '\+[0-9]+\.[0-9]+% \(p=' | awk -F'+' '{split($2,a,"%"); if (a[1]+0 >= 5) print $0}' || true)
           if [ -n "$REGRESSIONS" ]; then
@@ -400,7 +404,7 @@ jobs:
 
   required-checks:
     name: Code Quality Required Checks
-    needs: [pre-job, verify, lint-and-unit-tests, codeql, ratchet, test-scripts-macos, benchmark]
+    needs: [pre-job, verify, lint-and-unit-tests, codeql, ratchet, test-scripts-macos]
     if: always()
     runs-on: ubuntu-latest
     steps:

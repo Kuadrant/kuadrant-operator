@@ -172,22 +172,15 @@ LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LI
 
 ## dns
 DNS_OPERATOR_VERSION ?= latest
+dns_operator_version_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 
-kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 ifeq (latest,$(DNS_OPERATOR_VERSION))
-DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
-DNS_OPERATOR_BUNDLE_IMG_TAG = latest
-DNS_OPERATOR_GITREF = main
-else ifeq (true,$(kuadrantdns_bundle_is_semantic))
-DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
-DNS_OPERATOR_BUNDLE_IMG_TAG = v$(DNS_OPERATOR_BUNDLE_VERSION)
-DNS_OPERATOR_GITREF = v$(DNS_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:latest
+else ifeq (true,$(dns_operator_version_is_semantic))
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:v$(DNS_OPERATOR_VERSION)
 else
-DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
-DNS_OPERATOR_BUNDLE_IMG_TAG = $(DNS_OPERATOR_BUNDLE_VERSION)
-DNS_OPERATOR_GITREF = $(DNS_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(DNS_OPERATOR_VERSION)
 endif
-DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
@@ -383,12 +376,10 @@ extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRo
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
 dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
 	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
 COMPONENT_CHARTS_DIR = $(PROJECT_PATH)/component-charts
@@ -448,6 +439,8 @@ run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
 run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
+run: export CHARTS_PATH := $(PROJECT_PATH)/component-charts
+run: export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.
@@ -502,11 +495,11 @@ mv $(1) $(1)-$(3) ;\
 ln -sf $(shell basename $(1))-$(3) $(1)
 endef
 
-.PHONY: bundle
-bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
-	@echo "Cleaning bundle manifests..."
-	rm -rf bundle/manifests
-	$(OPERATOR_SDK) generate kustomize manifests -q
+.PHONY: set-related-images
+set-related-images: yq ## Set RELATED_IMAGE_* env vars in config/manager/manager.yaml
+	# Set desired dns-operator image
+	V="$(RELATED_IMAGE_DNS_OPERATOR)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
@@ -522,6 +515,12 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	# Set desired console-plugin PF5 image
 	V="$(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_PF5").value) = strenv(V)' -i config/manager/manager.yaml
+
+.PHONY: bundle
+bundle: opm manifests dependencies-manifests kustomize operator-sdk set-related-images ## Generate bundle manifests and metadata, then validate generated files.
+	@echo "Cleaning bundle manifests..."
+	rm -rf bundle/manifests
+	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV
@@ -530,9 +529,7 @@ bundle: opm yq manifests dependencies-manifests kustomize operator-sdk ## Genera
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
-	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
-		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
+	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
@@ -550,8 +547,6 @@ bundle-post-generate: yq
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_VERSION)
 	PATH=$(PROJECT_PATH)/bin:$$PATH; \
 			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_VERSION)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_VERSION)
 ifeq ($(USE_IMAGE_DIGESTS),true)
 	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
 	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml

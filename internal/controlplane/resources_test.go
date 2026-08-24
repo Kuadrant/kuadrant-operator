@@ -260,6 +260,80 @@ func TestApplyResources_OwnerReference(t *testing.T) {
 	}
 }
 
+func TestPatchContainerEnvVars(t *testing.T) {
+	tests := []struct {
+		name    string
+		objects []*unstructured.Unstructured
+		envVars map[string]string
+		want    map[string]string
+	}{
+		{
+			name: "overrides existing env var",
+			objects: []*unstructured.Unstructured{
+				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
+			},
+			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+		},
+		{
+			name: "appends env var not already present",
+			objects: []*unstructured.Unstructured{
+				deploymentWithEnv("my-deploy", map[string]string{}),
+			},
+			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+		},
+		{
+			name: "empty value leaves chart default in place",
+			objects: []*unstructured.Unstructured{
+				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
+			},
+			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": ""},
+			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"},
+		},
+		{
+			name: "only patches Deployments",
+			objects: []*unstructured.Unstructured{
+				newUnstructured("Service", "my-svc"),
+				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
+			},
+			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := PatchContainerEnvVars(tt.objects, tt.envVars); err != nil {
+				t.Fatalf("PatchContainerEnvVars() error = %v", err)
+			}
+
+			for _, obj := range tt.objects {
+				if obj.GetKind() != "Deployment" {
+					continue
+				}
+				containers, _, _ := unstructured.NestedSlice(obj.Object,
+					"spec", "template", "spec", "containers")
+				if len(containers) == 0 {
+					t.Fatal("no containers found")
+				}
+				container := containers[0].(map[string]interface{})
+				env, _, _ := unstructured.NestedSlice(container, "env")
+				got := map[string]string{}
+				for _, e := range env {
+					entry := e.(map[string]interface{})
+					got[entry["name"].(string)] = entry["value"].(string)
+				}
+				for name, wantValue := range tt.want {
+					if got[name] != wantValue {
+						t.Errorf("env[%q] = %q, want %q", name, got[name], wantValue)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestIsCRDEstablished(t *testing.T) {
 	tests := []struct {
 		name string
@@ -312,6 +386,34 @@ func deploymentWithImage(name, image string) *unstructured.Unstructured {
 							map[string]interface{}{
 								"name":  "manager",
 								"image": image,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func deploymentWithEnv(name string, env map[string]string) *unstructured.Unstructured {
+	envList := make([]interface{}, 0, len(env))
+	for k, v := range env {
+		envList = append(envList, map[string]interface{}{"name": k, "value": v})
+	}
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name": name,
+			},
+			"spec": map[string]interface{}{
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name": "manager",
+								"env":  envList,
 							},
 						},
 					},

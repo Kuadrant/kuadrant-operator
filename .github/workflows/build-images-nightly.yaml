@@ -17,6 +17,36 @@ jobs:
     steps:
       - id: release_date
         run: echo "release_date=nightly-$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+  authorino-operator-latest-digest:
+    name: Get the digest sha of the latest authorino-operator docker image
+    runs-on: ubuntu-latest
+    outputs:
+      authorino_operator_digest: ${{ steps.authorino-operator-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: authorino-operator-get-digest
+        name: Get digest of latest authorino-operator image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/authorino-operator:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Authorino operator latest digest: ${DIGEST}"
+  limitador-operator-latest-digest:
+    name: Get the digest sha of the latest limitador-operator docker image
+    runs-on: ubuntu-latest
+    outputs:
+      limitador_operator_digest: ${{ steps.limitador-operator-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: limitador-operator-get-digest
+        name: Get digest of latest limitador-operator image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/limitador-operator:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Limitador operator latest digest: ${DIGEST}"
   dns-operator-latest-digest:
     name: Get the digest sha of the latest dns-operator docker image
     runs-on: ubuntu-latest
@@ -122,6 +152,8 @@ jobs:
   workflow-build:
     needs:
       - release-date
+      - authorino-operator-latest-digest
+      - limitador-operator-latest-digest
       - dns-operator-latest-digest
       - mcp-gateway-latest-digest
       - wasmshim-latest-digest
@@ -134,8 +166,8 @@ jobs:
     with:
       kuadrantOperatorVersion: 0.0.0
       kuadrantOperatorTag: ${{ needs.release-date.outputs.release_date }}
-      authorinoBundleImg: quay.io/kuadrant/authorino-operator-bundle:${{ needs.release-date.outputs.release_date }}
-      limitadorBundleImg: quay.io/kuadrant/limitador-operator-bundle:${{ needs.release-date.outputs.release_date }}
+      relatedImageAuthorinoOperator: quay.io/kuadrant/authorino-operator@${{ needs.authorino-operator-latest-digest.outputs.authorino_operator_digest }}
+      relatedImageLimitadorOperator: quay.io/kuadrant/limitador-operator@${{ needs.limitador-operator-latest-digest.outputs.limitador_operator_digest }}
       relatedImageDnsOperator: quay.io/kuadrant/dns-operator@${{ needs.dns-operator-latest-digest.outputs.dns_operator_digest }}
       relatedImageMcpGateway: ghcr.io/kuadrant/mcp-controller@${{ needs.mcp-gateway-latest-digest.outputs.mcp_gateway_digest }}
       relatedImageMcpGatewayBroker: ghcr.io/kuadrant/mcp-gateway@${{ needs.mcp-gateway-latest-digest.outputs.mcp_gateway_broker_digest }}

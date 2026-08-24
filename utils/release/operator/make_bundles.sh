@@ -27,6 +27,14 @@ echo "make bundle"
 root=$(pwd)
 cd $env
 
+# Set desired authorino-operator image
+authorino_operator_version=$(mod_version $AUTHORINO_OPERATOR_VERSION)
+authorino_operator_image="quay.io/kuadrant/authorino-operator:$authorino_operator_version"
+
+# Set desired limitador-operator image
+limitador_operator_version=$(mod_version $LIMITADOR_OPERATOR_VERSION)
+limitador_operator_image="quay.io/kuadrant/limitador-operator:$limitador_operator_version"
+
 # Set desired dns-operator image
 dns_operator_version=$(mod_version $DNS_OPERATOR_VERSION)
 dns_operator_image="quay.io/kuadrant/dns-operator:$dns_operator_version"
@@ -56,25 +64,18 @@ if [[ "$OLM_DEFAULT_CHANNEL" == "null" ]]; then
   default_channel_opt=""
 fi
 
-# Set up bundle dependency images (dns-operator no longer has an OLM bundle)
-limitador_version=$(mod_version $LIMITADOR_OPERATOR_VERSION)
-limitador_image=quay.io/kuadrant/limitador-operator-bundle:$limitador_version
-
-authorino_version=$(mod_version $AUTHORINO_OPERATOR_VERSION)
-authorino_image=quay.io/kuadrant/authorino-operator-bundle:$authorino_version
-
 make bundle \
   BUNDLE_VERSION=$KUADRANT_OPERATOR_VERSION \
   BUNDLE_METADATA_OPTS="--channels $OLM_CHANNELS $default_channel_opt" \
   IMG=$operator_image \
+  RELATED_IMAGE_AUTHORINO_OPERATOR=$authorino_operator_image \
+  RELATED_IMAGE_LIMITADOR_OPERATOR=$limitador_operator_image \
   RELATED_IMAGE_DNS_OPERATOR=$dns_operator_image \
   RELATED_IMAGE_MCP_GATEWAY=$mcp_gateway_image \
   RELATED_IMAGE_MCP_GATEWAY_BROKER=$mcp_gateway_broker_image \
   RELATED_IMAGE_WASMSHIM=$wasm_shim_image \
   RELATED_IMAGE_DEVELOPERPORTAL=$developerportal_image \
   RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=$consoleplugin_image \
-  LIMITADOR_OPERATOR_BUNDLE_IMG=$limitador_image \
-  AUTHORINO_OPERATOR_BUNDLE_IMG=$authorino_image \
   AUTHORINO_OPERATOR_VERSION=$(mod_version_for_make $AUTHORINO_OPERATOR_VERSION) \
   LIMITADOR_OPERATOR_VERSION=$(mod_version_for_make $LIMITADOR_OPERATOR_VERSION) \
   DNS_OPERATOR_VERSION=$(mod_version_for_make $DNS_OPERATOR_VERSION) \

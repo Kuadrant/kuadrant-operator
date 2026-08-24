@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/machinery"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -242,4 +244,37 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBuildWasmActionSpecsForRateLimitInvalidPath verifies that the rate limit
+// helpers propagate ParseTopologyPath errors instead of silently dropping
+// them (see issue #1890).
+func TestBuildWasmActionSpecsForRateLimitInvalidPath(t *testing.T) {
+	t.Run("buildWasmActionSpecsForRateLimit returns error for invalid path", func(t *testing.T) {
+		policy := EffectiveRateLimitPolicy{
+			Path: []machinery.Targetable{}, // invalid: empty path
+			Spec: kuadrantv1.RateLimitPolicy{},
+		}
+		specs, err := buildWasmActionSpecsForRateLimit(policy, func(machinery.Policy) bool { return true })
+		if err == nil {
+			t.Fatalf("expected error for invalid topology path, got nil; specs=%v", specs)
+		}
+		if specs != nil {
+			t.Errorf("expected nil specs on error, got %v", specs)
+		}
+	})
+
+	t.Run("buildWasmActionSpecsForTokenRateLimit returns error for invalid path", func(t *testing.T) {
+		policy := EffectiveTokenRateLimitPolicy{
+			Path: []machinery.Targetable{}, // invalid: empty path
+			Spec: kuadrantv1alpha1.TokenRateLimitPolicy{},
+		}
+		specs, err := buildWasmActionSpecsForTokenRateLimit(policy, func(machinery.Policy) bool { return true })
+		if err == nil {
+			t.Fatalf("expected error for invalid topology path, got nil; specs=%v", specs)
+		}
+		if specs != nil {
+			t.Errorf("expected nil specs on error, got %v", specs)
+		}
+	})
 }

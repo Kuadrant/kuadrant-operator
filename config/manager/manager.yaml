@@ -44,6 +44,8 @@ spec:
               value: "quay.io/kuadrant/console-plugin:v0.6.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
               value: "quay.io/kuadrant/console-plugin:v0.1.5-2"
+            - name: RELATED_IMAGE_DNS_OPERATOR
+              value: "quay.io/kuadrant/dns-operator:latest"
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:

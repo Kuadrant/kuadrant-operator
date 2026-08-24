@@ -22,17 +22,39 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
   - events
   verbs:
   - create
   - patch
 - apiGroups:
-  - ""
+  - apiextensions.k8s.io
   resources:
-  - namespaces
+  - customresourcedefinitions
+  verbs:
+  - create
+  - list
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resourceNames:
+  - dnshealthcheckprobes.kuadrant.io
+  - dnsrecords.kuadrant.io
+  resources:
+  - customresourcedefinitions
   verbs:
   - get
   - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - apps
@@ -227,6 +249,7 @@ rules:
   - kuadrant.io
   resources:
   - authpolicies
+  - kuadrantcontrolplanes
   verbs:
   - create
   - get
@@ -250,6 +273,7 @@ rules:
   resources:
   - authpolicies/status
   - dnspolicies/status
+  - kuadrantcontrolplanes/status
   - kuadrants/status
   - ratelimitpolicies/status
   - tlspolicies/status
@@ -331,6 +355,55 @@ rules:
   - operator.authorino.kuadrant.io
   resources:
   - authorinos
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - dns-operator-manager-rolebinding
+  - dns-operator-remote-cluster-rolebinding
+  resources:
+  - clusterrolebindings
+  verbs:
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - create
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resourceNames:
+  - dns-operator-manager-role
+  - dns-operator-remote-cluster-role
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  - escalate
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
   verbs:
   - create
   - delete

@@ -5,11 +5,13 @@
 // the consolidated release, this code is dead.
 //
 // Each component gets its own explicit migrateXxx function. There are only
-// ever four components to migrate, each with real, not merely cosmetic,
-// differences in what needs protecting and in what order (e.g. authorino
-// and limitador need their Services and RBAC protected too, not just their
-// Deployment, since Envoy calls those Services synchronously on the live
-// request path — unlike dns-operator, which has no such dependency).
+// ever four components to migrate, and in practice each one's CSV-owned
+// resources reduce to the same shape: a Deployment and its CRDs, plus for
+// dns-operator a chart-templated ConfigMap. The live-traffic Services that
+// Envoy actually calls for auth/rate-limiting are created later by
+// authorino-operator/limitador-operator reconciling their own CRs, not by
+// OLM from the CSV, so they never carry a CSV ownerReference and are never
+// at cascade-delete risk from this cleanup.
 
 package controlplane
 
@@ -25,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/util/retry"
 )
 
 var (
@@ -119,6 +122,8 @@ func (c *OLMCleaner) Cleanup(ctx context.Context) OLMCleanupResult {
 	migrations := []func(context.Context) (ComponentCleanupResult, error){
 		c.migrateDNSOperator,
 		c.migrateMCPGateway,
+		c.migrateAuthorinoOperator,
+		c.migrateLimitadorOperator,
 	}
 
 	var results []ComponentCleanupResult
@@ -229,6 +234,108 @@ func (c *OLMCleaner) migrateDNSOperator(ctx context.Context) (ComponentCleanupRe
 	return result, nil
 }
 
+// migrateAuthorinoOperator strips OLM ownership from authorino-operator's
+// resources so they survive its Subscription/CSV deletion, then deletes the
+// Subscription and CSV. In order:
+//
+//  1. Strip OLM ownerReferences and labels from the Deployment
+//     "authorino-operator" in this namespace, so it isn't garbage-collected
+//     when the CSV is deleted.
+//  2. Strip OLM ownerReferences and labels from the cluster-scoped CRDs
+//     "authconfigs.authorino.kuadrant.io" and
+//     "authorinos.operator.authorino.kuadrant.io" — deleting a CRD also
+//     deletes every custom resource of that type cluster-wide, including
+//     any live Authorino instance.
+//  3. If any step above fails, stop and return the error without touching
+//     the Subscription/CSV — deleting them first would cascade-delete the
+//     resources the previous steps were protecting.
+//  4. Delete the "authorino-operator" Subscription in this namespace, if
+//     one exists. Matched by its spec.name field, since Subscription object
+//     names are catalog-generated, not predictable.
+//  5. Delete the authorino-operator ClusterServiceVersion in this
+//     namespace, if one exists (matched by the "authorino-operator." CSV
+//     name prefix convention).
+func (c *OLMCleaner) migrateAuthorinoOperator(ctx context.Context) (ComponentCleanupResult, error) {
+	const pkg = "authorino-operator"
+	result := ComponentCleanupResult{Package: pkg, Namespace: c.namespace}
+
+	// 1. Deployments
+	if err := c.stripResource(ctx, deploymentGVR, c.namespace, "authorino-operator"); err != nil {
+		return result, fmt.Errorf("stripping authorino-operator: %w", err)
+	}
+	// 2. CRDs
+	for _, crd := range []string{"authconfigs.authorino.kuadrant.io", "authorinos.operator.authorino.kuadrant.io"} {
+		if err := c.stripResource(ctx, crdGVR, "", crd); err != nil {
+			return result, fmt.Errorf("stripping CRD %s: %w", crd, err)
+		}
+	}
+
+	// 3. Subscription
+	subName, err := c.deleteSubscriptionForPackage(ctx, c.namespace, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting Subscription: %w", err)
+	}
+	result.SubscriptionName = subName
+
+	// 4. CSV
+	csvName, err := c.deleteCSVForPackage(ctx, c.namespace, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting CSV: %w", err)
+	}
+	result.CSVName = csvName
+
+	return result, nil
+}
+
+// migrateLimitadorOperator strips OLM ownership from limitador-operator's
+// resources so they survive its Subscription/CSV deletion, then deletes the
+// Subscription and CSV. In order:
+//
+//  1. Strip OLM ownerReferences and labels from the Deployment
+//     "limitador-operator-controller-manager" in this namespace, so it
+//     isn't garbage-collected when the CSV is deleted.
+//  2. Strip OLM ownerReferences and labels from the cluster-scoped CRD
+//     "limitadors.limitador.kuadrant.io" — deleting it also deletes every
+//     Limitador custom resource cluster-wide, including any live instance.
+//  3. If any step above fails, stop and return the error without touching
+//     the Subscription/CSV — deleting them first would cascade-delete the
+//     resources the previous steps were protecting.
+//  4. Delete the "limitador-operator" Subscription in this namespace, if
+//     one exists. Matched by its spec.name field, since Subscription object
+//     names are catalog-generated, not predictable.
+//  5. Delete the limitador-operator ClusterServiceVersion in this
+//     namespace, if one exists (matched by the "limitador-operator." CSV
+//     name prefix convention).
+func (c *OLMCleaner) migrateLimitadorOperator(ctx context.Context) (ComponentCleanupResult, error) {
+	const pkg = "limitador-operator"
+	result := ComponentCleanupResult{Package: pkg, Namespace: c.namespace}
+
+	// 1. Deployments
+	if err := c.stripResource(ctx, deploymentGVR, c.namespace, "limitador-operator-controller-manager"); err != nil {
+		return result, fmt.Errorf("stripping limitador-operator-controller-manager: %w", err)
+	}
+	// 2. CRDs
+	if err := c.stripResource(ctx, crdGVR, "", "limitadors.limitador.kuadrant.io"); err != nil {
+		return result, fmt.Errorf("stripping CRD limitadors.limitador.kuadrant.io: %w", err)
+	}
+
+	// 3. Subscription
+	subName, err := c.deleteSubscriptionForPackage(ctx, c.namespace, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting Subscription: %w", err)
+	}
+	result.SubscriptionName = subName
+
+	// 4. CSV
+	csvName, err := c.deleteCSVForPackage(ctx, c.namespace, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting CSV: %w", err)
+	}
+	result.CSVName = csvName
+
+	return result, nil
+}
+
 // mcpGatewayNamespace is where mcp-gateway's pre-consolidation OLM install
 // lives: unlike dns-operator (and authorino/limitador-operator, once
 // migrated), it was installed into its own dedicated namespace ("mcp-system",
@@ -323,21 +430,25 @@ func (c *OLMCleaner) stripResource(ctx context.Context, gvr schema.GroupVersionR
 		res = nsResource.Namespace(namespace)
 	}
 
-	obj, err := res.Get(ctx, name, metav1.GetOptions{})
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		obj, err := res.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		modified := c.stripCSVOwnerRefs(obj)
+		modified = c.stripOLMLabels(obj) || modified
+		if !modified {
+			return nil
+		}
+
+		_, err = res.Update(ctx, obj, metav1.UpdateOptions{})
+		return err
+	})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("getting %s/%s: %w", gvr.Resource, name, err)
-	}
-
-	modified := c.stripCSVOwnerRefs(obj)
-	modified = c.stripOLMLabels(obj) || modified
-	if !modified {
-		return nil
-	}
-
-	if _, err := res.Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
 		return fmt.Errorf("updating %s/%s: %w", gvr.Resource, name, err)
 	}
 

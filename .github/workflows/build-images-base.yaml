@@ -11,13 +11,13 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
-      authorinoBundleImg:
-        description: Authorino Operator bundle image url
-        default: quay.io/kuadrant/authorino-operator-bundle:latest
+      relatedImageAuthorinoOperator:
+        description: Related image Authorino Operator
+        default: quay.io/kuadrant/authorino-operator:latest
         type: string
-      limitadorBundleImg:
-        description: Limitador Operator bundle image url
-        default: quay.io/kuadrant/limitador-operator-bundle:latest
+      relatedImageLimitadorOperator:
+        description: Related image Limitador Operator
+        default: quay.io/kuadrant/limitador-operator:latest
         type: string
       relatedImageDnsOperator:
         description: Related image DNS Operator
@@ -77,13 +77,13 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
-      authorinoBundleImg:
-        description: Authorino Operator bundle image url
-        default: quay.io/kuadrant/authorino-operator-bundle:latest
+      relatedImageAuthorinoOperator:
+        description: Related image Authorino Operator
+        default: quay.io/kuadrant/authorino-operator:latest
         type: string
-      limitadorBundleImg:
-        description: Limitador Operator bundle image url
-        default: quay.io/kuadrant/limitador-operator-bundle:latest
+      relatedImageLimitadorOperator:
+        description: Related image Limitador Operator
+        default: quay.io/kuadrant/limitador-operator:latest
         type: string
       relatedImageDnsOperator:
         description: Related image DNS Operator
@@ -206,8 +206,8 @@ jobs:
           make bundle \
             IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ inputs.kuadrantOperatorTag }} \
             VERSION=${{ inputs.kuadrantOperatorVersion }} \
-            AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
-            LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
+            RELATED_IMAGE_AUTHORINO_OPERATOR=${{ inputs.relatedImageAuthorinoOperator }} \
+            RELATED_IMAGE_LIMITADOR_OPERATOR=${{ inputs.relatedImageLimitadorOperator }} \
             RELATED_IMAGE_DNS_OPERATOR=${{ inputs.relatedImageDnsOperator }} \
             RELATED_IMAGE_MCP_GATEWAY=${{ inputs.relatedImageMcpGateway }} \
             RELATED_IMAGE_MCP_GATEWAY_BROKER=${{ inputs.relatedImageMcpGatewayBroker }} \
@@ -265,8 +265,6 @@ jobs:
         run: |
           make catalog \
             BUNDLE_IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ inputs.kuadrantOperatorTag }} \
-            AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
-            LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
             CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3

@@ -50,6 +50,14 @@ spec:
               value: "ghcr.io/kuadrant/mcp-controller:latest"
             - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
               value: "ghcr.io/kuadrant/mcp-gateway:latest"
+            - name: RELATED_IMAGE_AUTHORINO_OPERATOR
+              value: "quay.io/kuadrant/authorino-operator:latest"
+            - name: RELATED_IMAGE_LIMITADOR_OPERATOR
+              value: "quay.io/kuadrant/limitador-operator:latest"
+            - name: RELATED_IMAGE_AUTHORINO
+              value: "quay.io/kuadrant/authorino:latest"
+            - name: RELATED_IMAGE_LIMITADOR
+              value: "quay.io/kuadrant/limitador:latest"
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:

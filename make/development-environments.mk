@@ -36,7 +36,9 @@ uninstall-olm:
 deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(MAKE) namespace
 	$(KUSTOMIZE) build config/dependencies | kubectl apply --server-side -f -
-	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
+	@if kubectl -n "$(KUADRANT_NAMESPACE)" get deployments -o name 2>/dev/null | grep -q .; then \
+		kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all; \
+	fi
 	@echo "Configuring dns-operator env for local development (inmemory provider)"
 	@kubectl -n "$(KUADRANT_NAMESPACE)" apply --server-side --field-manager=dev-setup -f config/dev/dns-operator-configmap.yaml
 

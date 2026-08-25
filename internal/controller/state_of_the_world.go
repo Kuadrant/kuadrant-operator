@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -685,7 +686,13 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 
 	extensionsDir := env.GetString("EXTENSIONS_DIR", "/extensions")
 
-	extManager, err := extension.NewManager(extensionsDir, b.logger.WithName("extensions"), log.Sync, b.client)
+	kubeClient, err := kubernetes.NewForConfig(b.manager.GetConfig())
+	if err != nil {
+		b.logger.Error(err, "failed to create kubernetes client for extensions")
+		return opts
+	}
+
+	extManager, err := extension.NewManager(extensionsDir, b.logger.WithName("extensions"), log.Sync, b.client, kubeClient)
 	if err != nil {
 		if errors.Is(err, extension.ErrNoExtensionsFound) {
 			b.logger.Info("No extensions found, skipping extension manager", "directory", extensionsDir)

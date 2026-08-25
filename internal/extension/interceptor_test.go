@@ -17,9 +17,7 @@ import (
 
 func authenticatedSessionStore() (*SessionStore, string) {
 	store := NewSessionStore(logr.Discard())
-	cred := validCredential()
-	store.SetCredential("test-extension", cred)
-	token, _ := store.Authenticate("test-extension", cred, "TestPolicy")
+	token, _ := store.CreateSession("test-extension", "TestPolicy")
 	return store, token
 }
 
@@ -100,7 +98,7 @@ func TestAuthInterceptor_AcceptValidToken(t *testing.T) {
 
 	var capturedName string
 	handler := func(ctx context.Context, req any) (any, error) {
-		name, ok := NameFromContext(ctx)
+		name, ok := IdentityFromContext(ctx)
 		if !ok {
 			t.Fatal("expected extension name in context")
 		}
@@ -163,7 +161,7 @@ func TestAuthInterceptor_StreamAcceptValidToken(t *testing.T) {
 
 	var capturedName string
 	handler := func(srv any, stream grpc.ServerStream) error {
-		name, ok := NameFromContext(stream.Context())
+		name, ok := IdentityFromContext(stream.Context())
 		if !ok {
 			t.Fatal("expected extension name in stream context")
 		}

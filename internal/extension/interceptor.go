@@ -16,11 +16,11 @@ const SessionMetadataKey = "x-kuadrant-session"
 
 type contextKey struct{}
 
-var extensionNameKey = contextKey{}
+var identityKey = contextKey{}
 
-func NameFromContext(ctx context.Context) (string, bool) {
-	name, ok := ctx.Value(extensionNameKey).(string)
-	return name, ok
+func IdentityFromContext(ctx context.Context) (string, bool) {
+	identity, ok := ctx.Value(identityKey).(string)
+	return identity, ok
 }
 
 type AuthInterceptor struct {
@@ -45,12 +45,12 @@ func (a *AuthInterceptor) UnaryInterceptor(
 		return handler(ctx, req)
 	}
 
-	name, err := a.authenticate(ctx)
+	identity, err := a.authenticate(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = context.WithValue(ctx, extensionNameKey, name)
+	ctx = context.WithValue(ctx, identityKey, identity)
 	return handler(ctx, req)
 }
 
@@ -60,14 +60,14 @@ func (a *AuthInterceptor) StreamInterceptor(
 	_ *grpc.StreamServerInfo,
 	handler grpc.StreamHandler,
 ) error {
-	name, err := a.authenticate(ss.Context())
+	identity, err := a.authenticate(ss.Context())
 	if err != nil {
 		return err
 	}
 
 	wrapped := &authenticatedServerStream{
 		ServerStream: ss,
-		ctx:          context.WithValue(ss.Context(), extensionNameKey, name),
+		ctx:          context.WithValue(ss.Context(), identityKey, identity),
 	}
 	return handler(srv, wrapped)
 }
@@ -83,12 +83,12 @@ func (a *AuthInterceptor) authenticate(ctx context.Context) (string, error) {
 		return "", status.Error(codes.Unauthenticated, "missing session token")
 	}
 
-	name, valid := a.sessionStore.ValidateSession(tokens[0])
+	identity, valid := a.sessionStore.ValidateSession(tokens[0])
 	if !valid {
 		return "", status.Error(codes.Unauthenticated, "invalid session token")
 	}
 
-	return name, nil
+	return identity, nil
 }
 
 type authenticatedServerStream struct {

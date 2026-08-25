@@ -15,6 +15,11 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
@@ -50,9 +55,59 @@ func newTestExtensionService() *extensionService {
 	return &extensionService{
 		registeredData:    NewRegisteredDataStore(),
 		sessionStore:      NewSessionStore(logr.Discard()),
+		authenticator:     newTokenAuthenticator(fake.NewSimpleClientset(), logr.Discard()),
 		reflectionFetcher: successReflectionFetcher,
 		logger:            logr.Discard(),
 	}
+}
+
+// fakeAuthClient returns a clientset whose TokenReview authenticates as the
+// given identity/audiences and whose SubjectAccessReview allows registration
+// only of the given policy kind.
+func fakeAuthClient(identity string, audiences []string, allowedKind string) *fake.Clientset {
+	client := fake.NewSimpleClientset()
+	client.PrependReactor("create", "tokenreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authenticationv1.TokenReview)
+		review.Status = authenticationv1.TokenReviewStatus{
+			Authenticated: true,
+			User:          authenticationv1.UserInfo{Username: identity},
+			Audiences:     audiences,
+		}
+		return true, review, nil
+	})
+	client.PrependReactor("create", "subjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SubjectAccessReview)
+		review.Status.Allowed = review.Spec.ResourceAttributes.Name == allowedKind
+		return true, review, nil
+	})
+	return client
+}
+
+// fakeGroupAuthClient returns a clientset whose TokenReview authenticates as
+// the given identity carrying the given groups, and whose SubjectAccessReview
+// allows registration only when the request carries the given group
+func fakeGroupAuthClient(identity string, audiences, groups []string, allowedGroup string) *fake.Clientset {
+	client := fake.NewSimpleClientset()
+	client.PrependReactor("create", "tokenreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authenticationv1.TokenReview)
+		review.Status = authenticationv1.TokenReviewStatus{
+			Authenticated: true,
+			User:          authenticationv1.UserInfo{Username: identity, Groups: groups},
+			Audiences:     audiences,
+		}
+		return true, review, nil
+	})
+	client.PrependReactor("create", "subjectaccessreviews", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		review := action.(clienttesting.CreateAction).GetObject().(*authorizationv1.SubjectAccessReview)
+		for _, group := range review.Spec.Groups {
+			if group == allowedGroup {
+				review.Status.Allowed = true
+				break
+			}
+		}
+		return true, review, nil
+	})
+	return client
 }
 
 func testPolicy(kind, namespace, name string, targetRefs ...*extpb.TargetRef) *extpb.Policy {
@@ -86,7 +141,7 @@ func validRequest() *extpb.RegisterActionMethodRequest {
 	}
 }
 
-func TestHandshake_EmptyName(t *testing.T) {
+func TestHandshake_MissingPolicyKind(t *testing.T) {
 	svc := newTestExtensionService()
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{})
@@ -94,22 +149,21 @@ func TestHandshake_EmptyName(t *testing.T) {
 		t.Fatalf("expected no gRPC error, got: %v", err)
 	}
 	if resp.Accepted {
-		t.Fatal("expected handshake to be rejected for empty name")
+		t.Fatal("expected handshake to be rejected for missing policy_kind")
 	}
-	if resp.Reason != "name is required" {
-		t.Fatalf("expected reason %q, got %q", "name is required", resp.Reason)
+	if resp.Reason != "policy_kind is required" {
+		t.Fatalf("expected reason %q, got %q", "policy_kind is required", resp.Reason)
 	}
 }
 
-func TestHandshake_Success(t *testing.T) {
+func TestHandshake_Builtin_Success(t *testing.T) {
 	svc := newTestExtensionService()
 	cred := validCredential()
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Name:       "test-ext",
 		Version:    "1.0.0",
-		Credential: cred,
+		Token:      cred,
 		PolicyKind: "TestPolicy",
 	})
 	if err != nil {
@@ -123,19 +177,113 @@ func TestHandshake_Success(t *testing.T) {
 	}
 }
 
-func TestHandshake_AuthFailure_GenericReason(t *testing.T) {
+func TestHandshake_Standalone_Success(t *testing.T) {
+	svc := newTestExtensionService()
+	svc.authenticator = newTokenAuthenticator(
+		fakeAuthClient("system:serviceaccount:ns:standalone", []string{extensionTokenAudience}, "StandalonePolicy"),
+		logr.Discard(),
+	)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      []byte("standalone-service-account-token"),
+		PolicyKind: "StandalonePolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected standalone handshake to be accepted, got reason: %s", resp.Reason)
+	}
+	if resp.SessionToken == "" {
+		t.Fatal("expected non-empty session token")
+	}
+}
+
+func TestHandshake_Standalone_Unauthorized(t *testing.T) {
+	svc := newTestExtensionService()
+	svc.authenticator = newTokenAuthenticator(
+		fakeAuthClient("system:serviceaccount:ns:standalone", []string{extensionTokenAudience}, "OtherPolicy"),
+		logr.Discard(),
+	)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      []byte("standalone-service-account-token"),
+		PolicyKind: "StandalonePolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected standalone handshake to be rejected when not authorized")
+	}
+	if resp.Reason != "handshake failed" {
+		t.Fatalf("expected generic reason %q, got %q", "handshake failed", resp.Reason)
+	}
+}
+
+func TestHandshake_Standalone_AuthorizedByGroup(t *testing.T) {
+	svc := newTestExtensionService()
+	svc.authenticator = newTokenAuthenticator(
+		fakeGroupAuthClient(
+			"system:serviceaccount:ns:standalone",
+			[]string{extensionTokenAudience},
+			[]string{"system:authenticated", "kuadrant:extensions"},
+			"kuadrant:extensions",
+		),
+		logr.Discard(),
+	)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      []byte("standalone-service-account-token"),
+		PolicyKind: "StandalonePolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected standalone handshake to be accepted via group membership, got reason: %s", resp.Reason)
+	}
+	if resp.SessionToken == "" {
+		t.Fatal("expected non-empty session token")
+	}
+}
+
+func TestHandshake_Standalone_RejectedWhenGroupMissing(t *testing.T) {
+	svc := newTestExtensionService()
+	svc.authenticator = newTokenAuthenticator(
+		fakeGroupAuthClient(
+			"system:serviceaccount:ns:standalone",
+			[]string{extensionTokenAudience},
+			[]string{"system:authenticated"},
+			"kuadrant:extensions",
+		),
+		logr.Discard(),
+	)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      []byte("standalone-service-account-token"),
+		PolicyKind: "StandalonePolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected standalone handshake to be rejected when the authorizing group is absent")
+	}
+}
+
+func TestHandshake_UnauthenticatedToken_GenericReason(t *testing.T) {
 	svc := newTestExtensionService()
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Name:       "unknown-ext",
-		Credential: validCredential(),
+		Token:      []byte("bogus-token"),
 		PolicyKind: "TestPolicy",
 	})
 	if err != nil {
 		t.Fatalf("expected no gRPC error, got: %v", err)
 	}
 	if resp.Accepted {
-		t.Fatal("expected handshake to be rejected for unknown extension")
+		t.Fatal("expected handshake to be rejected for an unauthenticated token")
 	}
 	if resp.Reason != "handshake failed" {
 		t.Fatalf("expected generic reason %q, got %q", "handshake failed", resp.Reason)
@@ -144,14 +292,15 @@ func TestHandshake_AuthFailure_GenericReason(t *testing.T) {
 
 func TestHandshake_WarmupGate_RejectsStandaloneDuringWarmup(t *testing.T) {
 	svc := newTestExtensionService()
-	cred := validCredential()
-	svc.sessionStore.SetCredential("builtin", cred)
-	svc.sessionStore.SetCredential("standalone", cred)
+	svc.authenticator = newTokenAuthenticator(
+		fakeAuthClient("system:serviceaccount:ns:standalone", []string{extensionTokenAudience}, "StandalonePolicy"),
+		logr.Discard(),
+	)
+	svc.sessionStore.SetCredential("builtin", validCredential())
 	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Name:       "standalone",
-		Credential: cred,
+		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
 	if err != nil {
@@ -167,14 +316,16 @@ func TestHandshake_WarmupGate_RejectsStandaloneDuringWarmup(t *testing.T) {
 
 func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T) {
 	svc := newTestExtensionService()
-	cred := validCredential()
-	svc.sessionStore.SetCredential("builtin", cred)
-	svc.sessionStore.SetCredential("standalone", cred)
+	svc.authenticator = newTokenAuthenticator(
+		fakeAuthClient("system:serviceaccount:ns:standalone", []string{extensionTokenAudience}, "StandalonePolicy"),
+		logr.Discard(),
+	)
+	builtinCred := validCredential()
+	svc.sessionStore.SetCredential("builtin", builtinCred)
 	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	builtinResp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Name:       "builtin",
-		Credential: cred,
+		Token:      builtinCred,
 		PolicyKind: "BuiltinPolicy",
 	})
 	if err != nil {
@@ -185,8 +336,7 @@ func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T
 	}
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Name:       "standalone",
-		Credential: cred,
+		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
 	if err != nil {

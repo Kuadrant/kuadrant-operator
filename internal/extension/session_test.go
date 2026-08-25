@@ -12,7 +12,7 @@ import (
 )
 
 func gateOpen(store *SessionStore) bool {
-	return store.handshakeAdmitted("standalone")
+	return store.isWarmupComplete()
 }
 
 func newTestSessionStore() *SessionStore {
@@ -23,182 +23,130 @@ func validCredential() []byte {
 	return []byte("0123456789abcdef0123456789abcdef")
 }
 
-func TestSessionStore_SetCredential(t *testing.T) {
+func TestSessionStore_MatchBuiltin(t *testing.T) {
 	store := newTestSessionStore()
 	cred := validCredential()
 	store.SetCredential("test-extension", cred)
 
-	token, err := store.Authenticate("test-extension", cred, "TestPolicy")
-	if err != nil {
-		t.Fatalf("expected authentication to succeed after SetCredential, got: %v", err)
+	name, ok := store.matchBuiltin(cred)
+	if !ok {
+		t.Fatal("expected credential to match a built-in")
 	}
-	if token == "" {
-		t.Fatal("expected non-empty session token")
+	if name != "test-extension" {
+		t.Fatalf("expected built-in name %q, got %q", "test-extension", name)
 	}
 }
 
-func TestSessionStore_Authenticate(t *testing.T) {
+func TestSessionStore_MatchBuiltin_Unknown(t *testing.T) {
 	store := newTestSessionStore()
-	cred := validCredential()
-	store.SetCredential("test-extension", cred)
+	store.SetCredential("test-extension", validCredential())
 
-	token, err := store.Authenticate("test-extension", cred, "TestPolicy")
-	if err != nil {
-		t.Fatalf("expected successful authentication, got: %v", err)
+	if _, ok := store.matchBuiltin([]byte("some-other-token")); ok {
+		t.Fatal("expected no match for an unknown token")
 	}
-	if token == "" {
-		t.Fatal("expected non-empty session token")
+}
+
+func TestSessionStore_CreateSession(t *testing.T) {
+	store := newTestSessionStore()
+
+	token, err := store.CreateSession("test-extension", "TestPolicy")
+	if err != nil {
+		t.Fatalf("expected successful session creation, got: %v", err)
 	}
 	if len(token) != 64 {
 		t.Fatalf("expected 64-char hex token, got %d chars", len(token))
 	}
 
-	name, ok := store.ValidateSession(token)
+	identity, ok := store.ValidateSession(token)
 	if !ok {
-		t.Fatal("expected session to be valid after authentication")
+		t.Fatal("expected session to be valid after creation")
 	}
-	if name != "test-extension" {
-		t.Fatalf("expected extension name %q, got %q", "test-extension", name)
-	}
-}
-
-func TestSessionStore_Authenticate_UnknownExtension(t *testing.T) {
-	store := newTestSessionStore()
-
-	_, err := store.Authenticate("unknown", validCredential(), "TestPolicy")
-	if !errors.Is(err, ErrUnknownExtension) {
-		t.Fatalf("expected ErrUnknownExtension, got: %v", err)
+	if identity != "test-extension" {
+		t.Fatalf("expected identity %q, got %q", "test-extension", identity)
 	}
 }
 
-func TestSessionStore_Authenticate_InvalidCredential(t *testing.T) {
+func TestSessionStore_CreateSession_PolicyKindRequired(t *testing.T) {
 	store := newTestSessionStore()
-	store.SetCredential("test-extension", validCredential())
 
-	_, err := store.Authenticate("test-extension", []byte("wrong-credential-that-is-long-enough-32"), "TestPolicy")
-	if !errors.Is(err, ErrInvalidCredential) {
-		t.Fatalf("expected ErrInvalidCredential, got: %v", err)
-	}
-}
-
-func TestSessionStore_Authenticate_AlreadyConnected(t *testing.T) {
-	store := newTestSessionStore()
-	cred := validCredential()
-	store.SetCredential("test-extension", cred)
-
-	_, err := store.Authenticate("test-extension", cred, "TestPolicy")
-	if err != nil {
-		t.Fatalf("expected first authentication to succeed, got: %v", err)
-	}
-
-	_, err = store.Authenticate("test-extension", cred, "TestPolicy")
-	if !errors.Is(err, ErrAlreadyConnected) {
-		t.Fatalf("expected ErrAlreadyConnected, got: %v", err)
-	}
-}
-
-func TestSessionStore_Authenticate_CredentialTooShort(t *testing.T) {
-	store := newTestSessionStore()
-	store.SetCredential("test-extension", validCredential())
-
-	_, err := store.Authenticate("test-extension", []byte("short"), "TestPolicy")
-	if !errors.Is(err, ErrInvalidCredential) {
-		t.Fatalf("expected ErrInvalidCredential for short credential, got: %v", err)
-	}
-}
-
-func TestSessionStore_Authenticate_PolicyKindRequired(t *testing.T) {
-	store := newTestSessionStore()
-	cred := validCredential()
-	store.SetCredential("test-extension", cred)
-
-	_, err := store.Authenticate("test-extension", cred, "")
+	_, err := store.CreateSession("test-extension", "")
 	if !errors.Is(err, ErrPolicyKindRequired) {
 		t.Fatalf("expected ErrPolicyKindRequired, got: %v", err)
 	}
 }
 
-func TestSessionStore_Authenticate_PolicyKindTaken(t *testing.T) {
+func TestSessionStore_CreateSession_AlreadyConnected(t *testing.T) {
 	store := newTestSessionStore()
-	cred1 := validCredential()
-	cred2 := []byte("abcdefghijklmnopqrstuvwxyz012345")
-	store.SetCredential("extension-a", cred1)
-	store.SetCredential("extension-b", cred2)
 
-	_, err := store.Authenticate("extension-a", cred1, "SharedPolicy")
-	if err != nil {
-		t.Fatalf("expected first authentication to succeed, got: %v", err)
+	if _, err := store.CreateSession("test-extension", "TestPolicy"); err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
 	}
 
-	_, err = store.Authenticate("extension-b", cred2, "SharedPolicy")
-	if err == nil {
-		t.Fatal("expected error when policy kind is already taken")
+	_, err := store.CreateSession("test-extension", "AnotherPolicy")
+	if !errors.Is(err, ErrAlreadyConnected) {
+		t.Fatalf("expected ErrAlreadyConnected, got: %v", err)
 	}
+}
+
+func TestSessionStore_CreateSession_PolicyKindTaken(t *testing.T) {
+	store := newTestSessionStore()
+
+	if _, err := store.CreateSession("extension-a", "SharedPolicy"); err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
+	}
+
+	_, err := store.CreateSession("extension-b", "SharedPolicy")
 	if !errors.Is(err, ErrPolicyKindTaken) {
 		t.Fatalf("expected ErrPolicyKindTaken, got: %v", err)
 	}
 }
 
-func TestSessionStore_Authenticate_PolicyKindReleasedOnRevoke(t *testing.T) {
+func TestSessionStore_CreateSession_PolicyKindReleasedOnRevoke(t *testing.T) {
 	store := newTestSessionStore()
-	cred1 := validCredential()
-	cred2 := []byte("abcdefghijklmnopqrstuvwxyz012345")
-	store.SetCredential("extension-a", cred1)
-	store.SetCredential("extension-b", cred2)
 
-	_, err := store.Authenticate("extension-a", cred1, "SharedPolicy")
-	if err != nil {
-		t.Fatalf("expected first authentication to succeed, got: %v", err)
+	if _, err := store.CreateSession("extension-a", "SharedPolicy"); err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
 	}
 
 	store.RevokeByName("extension-a")
 
-	_, err = store.Authenticate("extension-b", cred2, "SharedPolicy")
-	if err != nil {
-		t.Fatalf("expected authentication to succeed after revocation, got: %v", err)
+	if _, err := store.CreateSession("extension-b", "SharedPolicy"); err != nil {
+		t.Fatalf("expected session creation to succeed after revocation, got: %v", err)
 	}
 }
 
 func TestSessionStore_ValidateSession(t *testing.T) {
 	store := newTestSessionStore()
 
-	_, ok := store.ValidateSession("nonexistent-token")
-	if ok {
+	if _, ok := store.ValidateSession("nonexistent-token"); ok {
 		t.Fatal("expected invalid session for nonexistent token")
 	}
 
-	cred := validCredential()
-	store.SetCredential("test-extension", cred)
-	token, _ := store.Authenticate("test-extension", cred, "TestPolicy")
+	token, _ := store.CreateSession("test-extension", "TestPolicy")
 
-	name, ok := store.ValidateSession(token)
+	identity, ok := store.ValidateSession(token)
 	if !ok {
 		t.Fatal("expected valid session")
 	}
-	if name != "test-extension" {
-		t.Fatalf("expected %q, got %q", "test-extension", name)
+	if identity != "test-extension" {
+		t.Fatalf("expected %q, got %q", "test-extension", identity)
 	}
 }
 
 func TestSessionStore_RevokeByName(t *testing.T) {
 	store := newTestSessionStore()
-	cred := validCredential()
-	store.SetCredential("test-extension", cred)
 
-	token, _ := store.Authenticate("test-extension", cred, "TestPolicy")
+	token, _ := store.CreateSession("test-extension", "TestPolicy")
 
-	revoked := store.RevokeByName("test-extension")
-	if !revoked {
+	if !store.RevokeByName("test-extension") {
 		t.Fatal("expected revocation to return true")
 	}
 
-	_, ok := store.ValidateSession(token)
-	if ok {
+	if _, ok := store.ValidateSession(token); ok {
 		t.Fatal("expected session to be invalid after revocation")
 	}
 
-	revoked = store.RevokeByName("test-extension")
-	if revoked {
+	if store.RevokeByName("test-extension") {
 		t.Fatal("expected second revocation to return false")
 	}
 }
@@ -208,25 +156,20 @@ func TestSessionStore_SetCredential_ChangedCredentialRevokesSession(t *testing.T
 	cred := validCredential()
 	store.SetCredential("test-extension", cred)
 
-	token, err := store.Authenticate("test-extension", cred, "TestPolicy")
+	token, err := store.CreateSession("test-extension", "TestPolicy")
 	if err != nil {
-		t.Fatalf("expected authentication to succeed, got: %v", err)
+		t.Fatalf("expected session creation to succeed, got: %v", err)
 	}
 
 	newCred := []byte("abcdefghijklmnopqrstuvwxyz012345")
 	store.SetCredential("test-extension", newCred)
 
-	_, ok := store.ValidateSession(token)
-	if ok {
+	if _, ok := store.ValidateSession(token); ok {
 		t.Fatal("expected old session to be revoked after credential change")
 	}
 
-	token2, err := store.Authenticate("test-extension", newCred, "TestPolicy")
-	if err != nil {
-		t.Fatalf("expected re-authentication with new credential to succeed, got: %v", err)
-	}
-	if token2 == "" {
-		t.Fatal("expected non-empty session token")
+	if _, ok := store.matchBuiltin(newCred); !ok {
+		t.Fatal("expected new credential to match after change")
 	}
 }
 
@@ -235,35 +178,27 @@ func TestSessionStore_SetCredential_SameCredentialPreservesSession(t *testing.T)
 	cred := validCredential()
 	store.SetCredential("test-extension", cred)
 
-	token, err := store.Authenticate("test-extension", cred, "TestPolicy")
+	token, err := store.CreateSession("test-extension", "TestPolicy")
 	if err != nil {
-		t.Fatalf("expected authentication to succeed, got: %v", err)
+		t.Fatalf("expected session creation to succeed, got: %v", err)
 	}
 
 	sameCred := make([]byte, len(cred))
 	copy(sameCred, cred)
 	store.SetCredential("test-extension", sameCred)
 
-	name, ok := store.ValidateSession(token)
+	identity, ok := store.ValidateSession(token)
 	if !ok {
 		t.Fatal("expected session to remain valid when credential is unchanged")
 	}
-	if name != "test-extension" {
-		t.Fatalf("expected %q, got %q", "test-extension", name)
+	if identity != "test-extension" {
+		t.Fatalf("expected %q, got %q", "test-extension", identity)
 	}
 }
 
 func TestSessionStore_ConcurrentAccess(t *testing.T) {
 	store := newTestSessionStore()
 	concurrency := 10
-
-	for i := range concurrency {
-		cred := make([]byte, 32)
-		for j := range cred {
-			cred[j] = byte(i)
-		}
-		store.SetCredential(extensionName(i), cred)
-	}
 
 	var wg sync.WaitGroup
 	tokens := make([]string, concurrency)
@@ -272,13 +207,9 @@ func TestSessionStore_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			cred := make([]byte, 32)
-			for j := range cred {
-				cred[j] = byte(idx)
-			}
-			token, err := store.Authenticate(extensionName(idx), cred, "Policy"+extensionName(idx))
+			token, err := store.CreateSession(extensionName(idx), "Policy"+extensionName(idx))
 			if err != nil {
-				t.Errorf("concurrent authenticate failed for %d: %v", idx, err)
+				t.Errorf("concurrent session creation failed for %d: %v", idx, err)
 				return
 			}
 			tokens[idx] = token
@@ -287,13 +218,13 @@ func TestSessionStore_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	for i := range concurrency {
-		name, ok := store.ValidateSession(tokens[i])
+		identity, ok := store.ValidateSession(tokens[i])
 		if !ok {
 			t.Errorf("expected valid session for extension %d", i)
 			continue
 		}
-		if name != extensionName(i) {
-			t.Errorf("expected %q, got %q", extensionName(i), name)
+		if identity != extensionName(i) {
+			t.Errorf("expected %q, got %q", extensionName(i), identity)
 		}
 	}
 
@@ -307,8 +238,7 @@ func TestSessionStore_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	for i := range concurrency {
-		_, ok := store.ValidateSession(tokens[i])
-		if ok {
+		if _, ok := store.ValidateSession(tokens[i]); ok {
 			t.Errorf("expected invalid session for extension %d after revocation", i)
 		}
 	}
@@ -338,20 +268,16 @@ func TestSessionStore_Warmup_NoBuiltinsOpensImmediately(t *testing.T) {
 
 func TestSessionStore_Warmup_HeldUntilBuiltinRegisters(t *testing.T) {
 	store := newTestSessionStore()
-	cred := validCredential()
-	store.SetCredential("builtin", cred)
+	store.SetCredential("builtin", validCredential())
 
 	store.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	if gateOpen(store) {
 		t.Fatal("expected warmup gate to be closed while built-in is unregistered")
 	}
-	if !store.handshakeAdmitted("builtin") {
-		t.Fatal("expected built-in to be admitted during warmup")
-	}
 
-	if _, err := store.Authenticate("builtin", cred, "BuiltinPolicy"); err != nil {
-		t.Fatalf("expected built-in authentication to succeed, got: %v", err)
+	if _, err := store.CreateSession("builtin", "BuiltinPolicy"); err != nil {
+		t.Fatalf("expected built-in session creation to succeed, got: %v", err)
 	}
 
 	if !gateOpen(store) {
@@ -361,22 +287,20 @@ func TestSessionStore_Warmup_HeldUntilBuiltinRegisters(t *testing.T) {
 
 func TestSessionStore_Warmup_HeldUntilAllBuiltinsRegister(t *testing.T) {
 	store := newTestSessionStore()
-	credA := validCredential()
-	credB := []byte("abcdefghijklmnopqrstuvwxyz012345")
-	store.SetCredential("builtin-a", credA)
-	store.SetCredential("builtin-b", credB)
+	store.SetCredential("builtin-a", validCredential())
+	store.SetCredential("builtin-b", []byte("abcdefghijklmnopqrstuvwxyz012345"))
 
 	store.BeginWarmup([]string{"builtin-a", "builtin-b"}, time.Minute)
 
-	if _, err := store.Authenticate("builtin-a", credA, "PolicyA"); err != nil {
-		t.Fatalf("expected built-in-a authentication to succeed, got: %v", err)
+	if _, err := store.CreateSession("builtin-a", "PolicyA"); err != nil {
+		t.Fatalf("expected built-in-a session creation to succeed, got: %v", err)
 	}
 	if gateOpen(store) {
 		t.Fatal("expected warmup gate to remain closed until every built-in registers")
 	}
 
-	if _, err := store.Authenticate("builtin-b", credB, "PolicyB"); err != nil {
-		t.Fatalf("expected built-in-b authentication to succeed, got: %v", err)
+	if _, err := store.CreateSession("builtin-b", "PolicyB"); err != nil {
+		t.Fatalf("expected built-in-b session creation to succeed, got: %v", err)
 	}
 	if !gateOpen(store) {
 		t.Fatal("expected warmup gate to open once every built-in registered")

@@ -236,7 +236,7 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRule := wasmActionSpecFromLimit(tc.limit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
+			computedRule := wasmActionSpecFromLimit(tc.limit, tc.limitIdentifier, ActionScope(tc.scope), "test/policy/locator", tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedAction, computedRule); diff != "" {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}

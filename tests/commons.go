@@ -103,9 +103,10 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 
 func DeleteNamespace(ctx context.Context, cl client.Client, namespace string) {
 	desiredTestNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+	_ = cl.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationBackground))
+
 	Eventually(func(g Gomega) {
-		err := cl.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		g.Expect(err).ToNot(BeNil())
+		err := cl.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{})
 		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 	}).WithContext(ctx).Should(Succeed())
 }

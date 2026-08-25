@@ -30,7 +30,7 @@ var (
 
 // Builder constructs an ExtensionController with a fluent API similar to
 // controller-runtime's builder, adding extension specific concerns (gRPC
-// client, event cache, unix socket path).
+// client, event cache, handshake credential).
 type Builder struct {
 	name       string
 	scheme     *runtime.Scheme
@@ -115,17 +115,6 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		return nil, errors.New("KUADRANT_EXTENSION_ADDRESS environment variable is required")
 	}
 
-	extensionName := os.Getenv("KUADRANT_EXTENSION_NAME")
-	if extensionName == "" {
-		return nil, errors.New("KUADRANT_EXTENSION_NAME environment variable is required")
-	}
-
-	credentialValue := os.Getenv("KUADRANT_EXTENSION_CREDENTIAL")
-	if credentialValue == "" {
-		return nil, errors.New("KUADRANT_EXTENSION_CREDENTIAL environment variable is required")
-	}
-	credential := []byte(credentialValue)
-
 	extClient, err := newExtensionClient(address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extension client: %w", err)
@@ -182,8 +171,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		manager:         mgr,
 		logger:          b.logger,
 		extensionClient: extClient,
-		extensionName:   extensionName,
-		credential:      credential,
+		tokenSource:     resolveTokenSource(),
 		eventCache:      eventCache,
 		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil

@@ -450,14 +450,26 @@ $(WASM_BIN): ## Fetch and extract the wasm-shim binary from the OCI image.
 	$(CONTAINER_ENGINE) pull $(RELATED_IMAGE_WASMSHIM)
 	$(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout $$($(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar tf - | grep -E '^[a-f0-9]+\.tar$$' | while IFS= read -r layer; do $(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout "$$layer" | tar tf - 2>/dev/null | grep -q plugin.wasm && echo "$$layer"; done | head -1) | tar xf - -C $(WASM_BIN_DIR)
 
+# Shared env vars needed by any target that runs the controller against
+# component charts (local `run` and integration tests). One place to add a
+# new component's RELATED_IMAGE_* var instead of updating every target.
+define LOCAL_RUN_ENV
+$(1): export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
+$(1): export CHARTS_PATH := $(PROJECT_PATH)/component-charts
+$(1): export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
+$(1): export RELATED_IMAGE_MCP_GATEWAY := $(RELATED_IMAGE_MCP_GATEWAY)
+$(1): export RELATED_IMAGE_MCP_GATEWAY_BROKER := $(RELATED_IMAGE_MCP_GATEWAY_BROKER)
+$(1): export RELATED_IMAGE_WASMSHIM := $(RELATED_IMAGE_WASMSHIM)
+$(1): export RELATED_IMAGE_DEVELOPERPORTAL := $(RELATED_IMAGE_DEVELOPERPORTAL)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_LATEST := $(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 := $(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_PF5 := $(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)
+endef
+$(foreach t,run test-bare-k8s-integration test-gatewayapi-env-integration test-istio-env-integration test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
+
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
-run: export CHARTS_PATH := $(PROJECT_PATH)/component-charts
-run: export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
-run: export RELATED_IMAGE_MCP_GATEWAY := $(RELATED_IMAGE_MCP_GATEWAY)
-run: export RELATED_IMAGE_MCP_GATEWAY_BROKER := $(RELATED_IMAGE_MCP_GATEWAY_BROKER)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.

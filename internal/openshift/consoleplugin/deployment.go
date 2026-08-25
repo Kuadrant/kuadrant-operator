@@ -36,12 +36,6 @@ func DeploymentVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 			MountPath: "/var/serving-cert",
 		},
-		{
-			Name:      "nginx-conf",
-			ReadOnly:  true,
-			MountPath: "/etc/nginx/nginx.conf",
-			SubPath:   "nginx.conf",
-		},
 	}
 }
 
@@ -52,17 +46,6 @@ func DeploymentVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  "plugin-serving-cert",
-					DefaultMode: ptr.To(int32(420)),
-				},
-			},
-		},
-		{
-			Name: "nginx-conf",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: NginxConfigMapName(),
-					},
 					DefaultMode: ptr.To(int32(420)),
 				},
 			},
@@ -102,6 +85,7 @@ func Deployment(ns, image, topologyName string) *appsv1.Deployment {
 							Image: image,
 							Ports: []corev1.ContainerPort{
 								{
+									Name:          "https",
 									ContainerPort: 9443,
 									Protocol:      corev1.ProtocolTCP,
 								},
@@ -111,6 +95,8 @@ func Deployment(ns, image, topologyName string) *appsv1.Deployment {
 							Env: []corev1.EnvVar{
 								{Name: "TOPOLOGY_CONFIGMAP_NAME", Value: topologyName},
 								{Name: "TOPOLOGY_CONFIGMAP_NAMESPACE", Value: ns},
+								{Name: "TLS_CERTIFICATE_FILE", Value: "/var/serving-cert/tls.crt"},
+								{Name: "TLS_KEY_FILE", Value: "/var/serving-cert/tls.key"},
 							},
 						},
 					},

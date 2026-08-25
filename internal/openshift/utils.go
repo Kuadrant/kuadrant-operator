@@ -17,6 +17,9 @@ const (
 	RelatedImageConsolePluginLatestEnvVar = "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST"
 	RelatedImageConsolePluginSDK1EnvVar   = "RELATED_IMAGE_CONSOLE_PLUGIN_SDK1"
 	RelatedImageConsolePluginPF5EnvVar    = "RELATED_IMAGE_CONSOLE_PLUGIN_PF5"
+	// ConsolePluginImageOverrideEnvVar allows development clusters without a
+	// ClusterVersion API (for example OINC) to opt in to the Console plugin.
+	ConsolePluginImageOverrideEnvVar = "CONSOLE_PLUGIN_IMAGE_OVERRIDE"
 )
 
 type consolePluginImageRule struct {

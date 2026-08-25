@@ -27,17 +27,19 @@ import (
 type ConsolePluginReconciler struct {
 	*reconcilers.BaseReconciler
 
-	namespace string
+	namespace     string
+	imageOverride string
 }
 
-func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string) *ConsolePluginReconciler {
+func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace, imageOverride string) *ConsolePluginReconciler {
 	return &ConsolePluginReconciler{
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			mgr.GetAPIReader(),
 		),
-		namespace: namespace,
+		namespace:     namespace,
+		imageOverride: imageOverride,
 	}
 }
 
@@ -79,10 +81,11 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	})
 
 	clusterVersionExists := len(clusterVersions) > 0
+	consolePluginSupported := clusterVersionExists || r.imageOverride != ""
 
 	// Service
 	service := consoleplugin.Service(r.namespace)
-	if !topologyExists || !clusterVersionExists {
+	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(service)
 	}
 	_, err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
@@ -93,7 +96,9 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	// Deployment
 	var consolePluginImageURL string
-	if topologyExists && clusterVersionExists {
+	if topologyExists && r.imageOverride != "" {
+		consolePluginImageURL = r.imageOverride
+	} else if topologyExists && clusterVersionExists {
 		clusterVersion := clusterVersions[0].(*controller.RuntimeObject).Object.(*configv1.ClusterVersion)
 
 		consolePluginImageURL, err = openshift.GetConsolePluginImageForVersion(clusterVersion)
@@ -104,9 +109,13 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	}
 
 	deployment := consoleplugin.Deployment(r.namespace, consolePluginImageURL, TopologyConfigMapName)
-	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0, 1)
+	if r.imageOverride != "" {
+		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
+	}
+	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0, 2)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
-	if !topologyExists || !clusterVersionExists {
+	deploymentMutators = append(deploymentMutators, consoleplugin.DeploymentConfigMutator)
+	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(deployment)
 	}
 	_, err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
@@ -115,23 +124,22 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 		return err
 	}
 
-	// Nginx ConfigMap
-	nginxConfigMap := consoleplugin.NginxConfigMap(r.namespace)
-	if !topologyExists || !clusterVersionExists {
-		utils.TagObjectToDelete(nginxConfigMap)
-	}
-	_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
+	// Remove the nginx configuration left behind by older Console plugin
+	// deployments. The combined asset server/backend no longer mounts it.
+	legacyNginxConfigMap := consoleplugin.LegacyNginxConfigMap(r.namespace)
+	utils.TagObjectToDelete(legacyNginxConfigMap)
+	_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, legacyNginxConfigMap, reconcilers.CreateOnlyMutator)
 	if err != nil {
-		logger.Error(err, "reconciling nginx configmap")
+		logger.Error(err, "deleting legacy nginx configmap")
 		return err
 	}
 
 	// ConsolePlugin
 	consolePlugin := consoleplugin.ConsolePlugin(r.namespace)
-	if !topologyExists || !clusterVersionExists {
+	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(consolePlugin)
 	}
-	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.ServiceMutator)
+	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.SpecMutator)
 	_, err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, consolePluginMutator)
 	if err != nil {
 		logger.Error(err, "reconciling consoleplugin")

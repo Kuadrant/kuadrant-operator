@@ -381,6 +381,14 @@ The current TRLP implementation uses a two-phase protocol: the gateway checks li
 
 Token extraction works with any back end returning an OpenAI-compatible response body with `usage.total_tokens`. This includes OpenAI, vLLM, kServe, Ollama, Azure OpenAI, and the Gemini OpenAI-compat endpoint. Anthropic and Gemini native formats are not yet supported. See [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864) for tracking.
 
+### Missing Token Usage in Responses
+
+If the external API does not include `usage.total_tokens` in the response body, or if the field cannot be parsed, the token report phase fails silently and no tokens are counted. Because both the check and report services default to `failureMode: allow`, the request succeeds but the counter is never incremented. This means TRLP effectively becomes a no-op: no rate limiting is applied.
+
+To reject requests when token extraction fails, set the `RATELIMIT_REPORT_SERVICE_FAILURE_MODE` environment variable to `deny` on the operator deployment. This causes the gateway to block any response where usage cannot be extracted. This is a blunt control that affects all TokenRateLimitPolicies in the cluster.
+
+Verify that your AI provider returns `usage.total_tokens` in every response before relying on TRLP for enforcement. For streaming, verify that `stream_options.include_usage` is set to `true` in requests.
+
 ### Istio Only
 
 Egress gateway support targets Istio as the Gateway API provider. Envoy Gateway is not supported for egress at this time.

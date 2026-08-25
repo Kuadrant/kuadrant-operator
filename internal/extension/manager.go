@@ -56,13 +56,8 @@ import (
 
 const defaultExtensionServicePort = 50052
 const defaultWarmupTimeout = 30 * time.Second
-const defaultAuthSecretName = "kuadrant-extension-auth" //nolint:gosec
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
-
-func AuthSecretName() string {
-	return env.GetString("EXTENSION_AUTH_SECRET", defaultAuthSecretName)
-}
 
 type ChangeNotifier func(reason string) error
 

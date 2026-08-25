@@ -60,9 +60,6 @@ var (
 	kuadrantManagedLabelKey = "kuadrant.io/managed"
 
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
-	SecretGroupKind    = schema.GroupKind{Group: corev1.GroupName, Kind: "Secret"}
-
-	SecretsResource = corev1.SchemeGroupVersion.WithResource("secrets")
 )
 
 // gateway-api permissions
@@ -233,8 +230,6 @@ type BootOptionsBuilder struct {
 	isPrometheusOperatorInstalled    bool
 	isOpenShiftServerConfigInstalled bool
 	isUsingExtensions                bool
-
-	extensionManager *extension.Manager
 
 	// Error tracking for non-blocking errors
 	errorTracker   *PersistentErrorTracker
@@ -700,22 +695,13 @@ func (b *BootOptionsBuilder) getExtensionsOptions() []controller.ControllerOptio
 		return opts
 	}
 	extManager.SetChangeNotifier(extManager.TriggerReconciliation)
-	b.extensionManager = &extManager
 
 	opts = append(opts, controller.WithRunnable(
 		"extension manager",
 		func(*controller.Controller) controller.Runnable {
-			return b.extensionManager
+			return &extManager
 		},
-	), controller.WithRunnable(
-		"extension auth secret watcher",
-		controller.Watch(
-			&corev1.Secret{},
-			SecretsResource,
-			operatorNamespace,
-			controller.FilterResourcesByField[*corev1.Secret](fmt.Sprintf("metadata.name=%s", extension.AuthSecretName())),
-		),
-	), controller.WithObjectKinds(SecretGroupKind))
+	))
 	return opts
 }
 
@@ -815,12 +801,6 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	if b.isAuthorinoOperatorInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
 			traceReconcileFunc("workflow.authorino", NewAuthorinoReconciler(b.client, b.isOpenShiftServerConfigInstalled).Subscription().Reconcile))
-	}
-
-	if b.extensionManager != nil {
-		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.extension_auth_secret",
-				NewExtensionAuthSecretReconciler(b.extensionManager.SessionStore(), operatorNamespace, extension.AuthSecretName()).Reconcile))
 	}
 
 	// Wrap the entire main workflow with tracing

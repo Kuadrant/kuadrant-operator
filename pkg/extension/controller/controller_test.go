@@ -302,12 +302,11 @@ func TestHandshake_Success(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), "my-ext", []byte("credential-value"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token-value"), "MyPolicy")
 	assert.NilError(t, err)
 	assert.Equal(t, session.token, "returned-token")
-	assert.Equal(t, capturedReq.Name, "my-ext")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
-	assert.DeepEqual(t, capturedReq.Credential, []byte("credential-value"))
+	assert.DeepEqual(t, capturedReq.Token, []byte("token-value"))
 }
 
 func TestHandshake_Rejected(t *testing.T) {
@@ -323,7 +322,7 @@ func TestHandshake_Rejected(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), "my-ext", []byte("bad-cred"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("bad-token"), "MyPolicy")
 	assert.ErrorContains(t, err, "handshake rejected")
 	assert.Equal(t, session.token, "")
 }
@@ -338,7 +337,7 @@ func TestHandshake_RPCError(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), "my-ext", []byte("cred"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy")
 	assert.ErrorContains(t, err, "handshake RPC failed")
 	assert.Equal(t, session.token, "")
 }

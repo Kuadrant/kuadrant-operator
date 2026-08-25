@@ -60,10 +60,9 @@ func newExtensionClient(address string) (*extensionClient, error) {
 	}, nil
 }
 
-func (ec *extensionClient) handshake(ctx context.Context, name string, credential []byte, policyKind string) error {
+func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKind string) error {
 	resp, err := ec.client.Handshake(ctx, &extpb.HandshakeRequest{
-		Name:       name,
-		Credential: credential,
+		Token:      token,
 		PolicyKind: policyKind,
 	})
 	if err != nil {

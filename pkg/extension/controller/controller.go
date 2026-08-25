@@ -74,7 +74,7 @@ type ExtensionController struct {
 func (ec *ExtensionController) Start(ctx context.Context) error {
 	handshakeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := ec.extensionClient.handshake(handshakeCtx, ec.extensionName, ec.credential, ec.config.PolicyKind); err != nil {
+	if err := ec.extensionClient.handshake(handshakeCtx, ec.credential, ec.config.PolicyKind); err != nil {
 		return fmt.Errorf("extension handshake failed: %w", err)
 	}
 	ec.logger.Info("handshake accepted", "extension", ec.extensionName, "policyKind", ec.config.PolicyKind)

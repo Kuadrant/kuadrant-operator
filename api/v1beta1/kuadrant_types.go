@@ -78,6 +78,23 @@ func (k *Kuadrant) IsDeveloperPortalEnabled() bool {
 	return k.Spec.Components.DeveloperPortal.Enabled
 }
 
+// GetOwnerReference returns the owner reference pointing to this Kuadrant CR,
+func (k *Kuadrant) BuildOwnerReference() []metav1.OwnerReference {
+	if k == nil {
+		return nil
+	}
+	return []metav1.OwnerReference{
+		{
+			APIVersion:         GroupVersion.String(),
+			Kind:               KuadrantGroupKind.Kind,
+			Name:               k.GetName(),
+			UID:                k.GetUID(),
+			BlockOwnerDeletion: ptr.To(true),
+			Controller:         ptr.To(true),
+		},
+	}
+}
+
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	Observability Observability `json:"observability,omitempty"`

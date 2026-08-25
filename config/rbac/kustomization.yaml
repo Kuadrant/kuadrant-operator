@@ -9,9 +9,6 @@ resources:
   - role_binding.yaml
   - leader_election_role.yaml
   - leader_election_role_binding.yaml
-  # Extensions namespace-scoped role
-  - extension_auth_role.yaml
-  - extension_auth_role_binding.yaml
   # DevPortal ClusterRoles for API management
   - api_admin_clusterrole.yaml
   - api_owner_clusterrole.yaml

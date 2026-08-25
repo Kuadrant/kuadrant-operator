@@ -79,7 +79,7 @@ func (k *Kuadrant) IsDeveloperPortalEnabled() bool {
 }
 
 // GetOwnerReference returns the owner reference pointing to this Kuadrant CR,
-func (k *Kuadrant) GetOwnerReference() []metav1.OwnerReference {
+func (k *Kuadrant) BuildOwnerReference() []metav1.OwnerReference {
 	if k == nil {
 		return nil
 	}

@@ -33,14 +33,14 @@ func buildKuadrantCR() *kuadrantv1beta1.Kuadrant {
 func TestAuthConfigOwnerReferences(t *testing.T) {
 	t.Run("returns nil when Kuadrant CR is nil", func(t *testing.T) {
 		var nilCR *kuadrantv1beta1.Kuadrant
-		if refs := nilCR.GetOwnerReference(); refs != nil {
+		if refs := nilCR.BuildOwnerReference(); refs != nil {
 			t.Errorf("expected nil owner references, got %v", refs)
 		}
 	})
 
 	t.Run("builds a controller owner reference to the Kuadrant CR", func(t *testing.T) {
 		kuadrantCR := buildKuadrantCR()
-		refs := kuadrantCR.GetOwnerReference()
+		refs := kuadrantCR.BuildOwnerReference()
 
 		if len(refs) != 1 {
 			t.Fatalf("expected exactly one owner reference, got %d", len(refs))
@@ -79,7 +79,7 @@ func buildUnrelatedOwnerReference() metav1.OwnerReference {
 }
 
 func TestEqualAuthConfigs(t *testing.T) {
-	ownerRefs := buildKuadrantCR().GetOwnerReference()
+	ownerRefs := buildKuadrantCR().BuildOwnerReference()
 	unrelatedRef := buildUnrelatedOwnerReference()
 
 	baseAuthConfig := &authorinov1beta3.AuthConfig{
@@ -273,7 +273,7 @@ func TestEqualAuthConfigs(t *testing.T) {
 }
 
 func TestApplyAuthConfigUpdate(t *testing.T) {
-	ownerRefs := buildKuadrantCR().GetOwnerReference()
+	ownerRefs := buildKuadrantCR().BuildOwnerReference()
 
 	tests := []struct {
 		name     string

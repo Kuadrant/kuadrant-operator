@@ -85,7 +85,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
 	modifiedAuthConfigs := []string{}
 
-	kuadrantCROwnerReference := kuadrantCR.GetOwnerReference()
+	kuadrantCROwnerReference := kuadrantCR.BuildOwnerReference()
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
 		authConfigName, modified := r.reconcileAuthConfigForPath(ctx, pathID, effectivePolicy, authConfigsNamespace, kuadrantCROwnerReference, topology, errorRegistry)

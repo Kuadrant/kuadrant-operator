@@ -83,7 +83,7 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(cpReconciler.SetupWithManager(mgr)).To(Succeed())
 
 	// Register bootstrap runnable (creates default KuadrantControlPlane CR + OLM cleanup)
-	Expect(mgr.Add(controlplane.NewBootstrapRunnable(cfg, s, deployer, mgr.GetEventRecorder("kuadrant-control-plane"), "kuadrant-system", logger))).To(Succeed())
+	Expect(mgr.Add(controlplane.NewBootstrapRunnable(cfg, s, mgr.GetEventRecorder("kuadrant-control-plane"), "kuadrant-system", logger))).To(Succeed())
 
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())

@@ -4,104 +4,42 @@
 package controlplane
 
 import (
+	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery/fake"
+	"k8s.io/client-go/dynamic"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
-func TestIsOrphanedCSV(t *testing.T) {
-	cleaner := &OLMCleaner{
-		packageNames: []string{"dns-operator"},
-	}
-
+func TestIsCSVForPkg(t *testing.T) {
 	tests := []struct {
 		name    string
 		csvName string
+		pkg     string
 		want    bool
 	}{
-		{name: "dns-operator CSV with version", csvName: "dns-operator.v0.8.0", want: true},
-		{name: "dns-operator CSV exact match", csvName: "dns-operator", want: true},
-		{name: "kuadrant-operator CSV", csvName: "kuadrant-operator.v1.0.0", want: false},
-		{name: "authorino-operator CSV", csvName: "authorino-operator.v0.15.0", want: false},
-		{name: "empty string", csvName: "", want: false},
-		{name: "partial match not at prefix", csvName: "my-dns-operator.v1.0", want: false},
+		{name: "CSV with version", csvName: "dns-operator.v0.8.0", pkg: "dns-operator", want: true},
+		{name: "CSV exact match", csvName: "dns-operator", pkg: "dns-operator", want: true},
+		{name: "different package", csvName: "kuadrant-operator.v1.0.0", pkg: "dns-operator", want: false},
+		{name: "empty CSV name", csvName: "", pkg: "dns-operator", want: false},
+		{name: "partial match not at prefix", csvName: "my-dns-operator.v1.0", pkg: "dns-operator", want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := cleaner.isOrphanedCSV(tt.csvName); got != tt.want {
-				t.Errorf("isOrphanedCSV(%q) = %v, want %v", tt.csvName, got, tt.want)
+			if got := isCSVForPackage(tt.csvName, tt.pkg); got != tt.want {
+				t.Errorf("isCSVForPackage(%q, %q) = %v, want %v", tt.csvName, tt.pkg, got, tt.want)
 			}
 		})
 	}
-}
-
-func TestIsOrphanedCSV_MultiplePackages(t *testing.T) {
-	cleaner := &OLMCleaner{
-		packageNames: []string{"dns-operator", "mcp-gateway"},
-	}
-
-	tests := []struct {
-		name    string
-		csvName string
-		want    bool
-	}{
-		{name: "dns-operator", csvName: "dns-operator.v0.8.0", want: true},
-		{name: "mcp-gateway", csvName: "mcp-gateway.v1.0.0", want: true},
-		{name: "authorino-operator", csvName: "authorino-operator.v0.15.0", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := cleaner.isOrphanedCSV(tt.csvName); got != tt.want {
-				t.Errorf("isOrphanedCSV(%q) = %v, want %v", tt.csvName, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestEmptyOLMPackageName_Skipped(t *testing.T) {
-	d := &Deployer{
-		components: []Component{
-			{Name: "dns-operator", OLMPackageName: "dns-operator", DeploymentName: "dns-operator-controller-manager"},
-			{Name: "new-component", OLMPackageName: "", DeploymentName: "new-component-controller"},
-		},
-	}
-
-	t.Run("OLMPackageNames excludes empty entries", func(t *testing.T) {
-		names := d.OLMPackageNames()
-		if len(names) != 1 {
-			t.Fatalf("expected 1 OLM package name, got %d: %v", len(names), names)
-		}
-		if names[0] != "dns-operator" {
-			t.Errorf("OLMPackageNames()[0] = %q, want %q", names[0], "dns-operator")
-		}
-	})
-
-	t.Run("DeploymentNames excludes empty entries", func(t *testing.T) {
-		d2 := &Deployer{
-			components: []Component{
-				{Name: "a", DeploymentName: "a-deploy"},
-				{Name: "b", DeploymentName: ""},
-			},
-		}
-		names := d2.DeploymentNames()
-		if len(names) != 1 {
-			t.Fatalf("expected 1 deployment name, got %d: %v", len(names), names)
-		}
-	})
-
-	t.Run("isOrphanedCSV ignores component with empty OLM package", func(t *testing.T) {
-		cleaner := &OLMCleaner{packageNames: d.OLMPackageNames()}
-		if cleaner.isOrphanedCSV("new-component.v1.0") {
-			t.Error("should not match component with empty OLMPackageName")
-		}
-		if !cleaner.isOrphanedCSV("dns-operator.v0.8.0") {
-			t.Error("should match dns-operator")
-		}
-	})
 }
 
 func TestStripOLMLabels(t *testing.T) {
@@ -296,66 +234,246 @@ func TestStripCSVOwnerRefs(t *testing.T) {
 	}
 }
 
-func TestIsOrphanedCSV_ViaOwnerLabel(t *testing.T) {
-	cleaner := &OLMCleaner{
-		packageNames: []string{"dns-operator"},
-		namespace:    "kuadrant-system",
-	}
-
-	tests := []struct {
-		name      string
-		ownerName string
-		want      bool
-	}{
-		{
-			name:      "matches olm.owner for orphaned CSV",
-			ownerName: "dns-operator.v0.0.0",
-			want:      true,
-		},
-		{
-			name:      "does not match olm.owner for non-orphaned CSV",
-			ownerName: "kuadrant-operator.v1.0.0",
-			want:      false,
-		},
-		{
-			name:      "empty owner name",
-			ownerName: "",
-			want:      false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cleaner.isOrphanedCSV(tt.ownerName)
-			if got != tt.want {
-				t.Errorf("isOrphanedCSV(%q) = %v, want %v", tt.ownerName, got, tt.want)
-			}
-		})
+func TestNewOLMCleaner(t *testing.T) {
+	cleaner := NewOLMCleaner(nil, nil, "kuadrant-system", logr.Discard())
+	if cleaner.namespace != "kuadrant-system" {
+		t.Errorf("namespace = %q, want %q", cleaner.namespace, "kuadrant-system")
 	}
 }
 
-func TestDeployerRegistryDrives_OLMCleanup(t *testing.T) {
-	components := allComponents()
+// TestMigrateDNSOperator_EndToEnd exercises the full sequence documented on
+// migrateDNSOperator against a fake cluster carrying a realistic
+// pre-consolidation OLM install: an owned Deployment, owned CRDs, a
+// catalog-named Subscription, and a versioned CSV.
+func TestMigrateDNSOperator_EndToEnd(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
 
-	t.Run("deployment names derived from registry", func(t *testing.T) {
-		d := &Deployer{components: components}
-		names := d.DeploymentNames()
-		if len(names) == 0 {
-			t.Fatal("expected deployment names from registry")
+	olmLabels := map[string]string{
+		"control-plane":  "dns-operator-controller-manager",
+		"olm.owner":      "dns-operator.v0.8.0",
+		"olm.owner.kind": "ClusterServiceVersion",
+	}
+	olmOwnerRefs := []interface{}{
+		map[string]interface{}{
+			"apiVersion": "operators.coreos.com/v1alpha1",
+			"kind":       "ClusterServiceVersion",
+			"name":       "dns-operator.v0.8.0",
+		},
+	}
+
+	deployment := newTestDeployment(olmLabels, olmOwnerRefs)
+
+	newOwnedObj := func(gvr schema.GroupVersionResource, kind, name, namespace string) *unstructured.Unstructured {
+		obj := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": gvr.GroupVersion().String(),
+				"kind":       kind,
+				"metadata": map[string]interface{}{
+					"name": name,
+				},
+			},
 		}
-		if names[0] != "dns-operator-controller-manager" {
-			t.Errorf("DeploymentNames()[0] = %q, want %q", names[0], "dns-operator-controller-manager")
+		if namespace != "" {
+			obj.SetNamespace(namespace)
+		}
+		obj.SetLabels(olmLabels)
+		_ = unstructured.SetNestedSlice(obj.Object, olmOwnerRefs, "metadata", "ownerReferences")
+		return obj
+	}
+
+	dnsrecordsCRD := newOwnedObj(crdGVR, "CustomResourceDefinition", "dnsrecords.kuadrant.io", "")
+	probesCRD := newOwnedObj(crdGVR, "CustomResourceDefinition", "dnshealthcheckprobes.kuadrant.io", "")
+
+	// User-added data must survive the strip untouched -- only OLM ownership
+	// metadata should be removed, never the ConfigMap's own content.
+	controllerEnv := newOwnedObj(configMapGVR, "ConfigMap", "dns-operator-controller-env", "kuadrant-system")
+	_ = unstructured.SetNestedField(controllerEnv.Object, "info", "data", "LOG_LEVEL")
+
+	subscription := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "operators.coreos.com/v1alpha1",
+			"kind":       "Subscription",
+			"metadata": map[string]interface{}{
+				"name":      "dns-operator-preview-kuadrant-operator-catalog-kuadrant-system",
+				"namespace": "kuadrant-system",
+			},
+			"spec": map[string]interface{}{
+				"name": "dns-operator",
+			},
+		},
+	}
+
+	csv := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "operators.coreos.com/v1alpha1",
+			"kind":       "ClusterServiceVersion",
+			"metadata": map[string]interface{}{
+				"name":      "dns-operator.v0.8.0",
+				"namespace": "kuadrant-system",
+			},
+		},
+	}
+
+	gvrToListKind := map[schema.GroupVersionResource]string{
+		deploymentGVR:   "DeploymentList",
+		crdGVR:          "CustomResourceDefinitionList",
+		configMapGVR:    "ConfigMapList",
+		subscriptionGVR: "SubscriptionList",
+		csvGVR:          "ClusterServiceVersionList",
+	}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind,
+		deployment, dnsrecordsCRD, probesCRD, controllerEnv, subscription, csv)
+
+	cleaner := &OLMCleaner{client: client, namespace: "kuadrant-system", logger: logr.Discard()}
+
+	result, err := cleaner.migrateDNSOperator(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Package != "dns-operator" {
+		t.Errorf("Package = %q, want %q", result.Package, "dns-operator")
+	}
+	if result.SubscriptionName != subscription.GetName() {
+		t.Errorf("SubscriptionName = %q, want %q", result.SubscriptionName, subscription.GetName())
+	}
+	if result.CSVName != "dns-operator.v0.8.0" {
+		t.Errorf("CSVName = %q, want %q", result.CSVName, "dns-operator.v0.8.0")
+	}
+
+	// Deployment, CRDs, and the controller-env ConfigMap must survive with
+	// OLM metadata stripped.
+	for _, tc := range []struct {
+		gvr       schema.GroupVersionResource
+		namespace string
+		name      string
+	}{
+		{deploymentGVR, "kuadrant-system", "dns-operator-controller-manager"},
+		{crdGVR, "", "dnsrecords.kuadrant.io"},
+		{crdGVR, "", "dnshealthcheckprobes.kuadrant.io"},
+		{configMapGVR, "kuadrant-system", "dns-operator-controller-env"},
+	} {
+		res := client.Resource(tc.gvr)
+		var r dynamic.ResourceInterface = res
+		if tc.namespace != "" {
+			r = res.Namespace(tc.namespace)
+		}
+		obj, err := r.Get(context.Background(), tc.name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("expected %s/%s to survive, got error: %v", tc.gvr.Resource, tc.name, err)
+		}
+		if _, ok := obj.GetLabels()["olm.owner.kind"]; ok {
+			t.Errorf("%s/%s: OLM labels should have been stripped", tc.gvr.Resource, tc.name)
+		}
+		if refs, _, _ := unstructured.NestedSlice(obj.Object, "metadata", "ownerReferences"); len(refs) != 0 {
+			t.Errorf("%s/%s: CSV ownerReference should have been stripped", tc.gvr.Resource, tc.name)
+		}
+	}
+
+	envObj, err := client.Resource(configMapGVR).Namespace("kuadrant-system").Get(context.Background(), "dns-operator-controller-env", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error re-fetching controller-env ConfigMap: %v", err)
+	}
+	if logLevel, _, _ := unstructured.NestedString(envObj.Object, "data", "LOG_LEVEL"); logLevel != "info" {
+		t.Errorf("user-added data.LOG_LEVEL = %q, want %q (must survive the strip untouched)", logLevel, "info")
+	}
+
+	// Subscription and CSV must be gone.
+	if _, err := client.Resource(subscriptionGVR).Namespace("kuadrant-system").Get(context.Background(), subscription.GetName(), metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("expected Subscription to be deleted, got err: %v", err)
+	}
+	if _, err := client.Resource(csvGVR).Namespace("kuadrant-system").Get(context.Background(), "dns-operator.v0.8.0", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("expected CSV to be deleted, got err: %v", err)
+	}
+}
+
+func newTestDeployment(labels map[string]string, ownerRefs []interface{}) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "dns-operator-controller-manager",
+				"namespace": "kuadrant-system",
+			},
+		},
+	}
+	obj.SetLabels(labels)
+	if ownerRefs != nil {
+		_ = unstructured.SetNestedSlice(obj.Object, ownerRefs, "metadata", "ownerReferences")
+	}
+	return obj
+}
+
+func TestStripResource(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+	depGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+
+	t.Run("strips metadata from the real target Deployment despite olm.owner.kind", func(t *testing.T) {
+		// Mirrors the actual label set OLM stamps on the operator's own
+		// Deployment (see TestStripOLMLabels's fixture): olm.owner.kind is
+		// present on every CSV-owned resource, not just OLM's own internal
+		// auxiliary objects, so stripResource must not skip resources
+		// carrying it -- it would otherwise always skip the one resource
+		// this cleanup exists to protect from cascade-delete.
+		obj := newTestDeployment(map[string]string{
+			"control-plane":  "dns-operator-controller-manager",
+			"olm.owner":      "dns-operator.v0.0.0",
+			"olm.owner.kind": "ClusterServiceVersion",
+		}, []interface{}{
+			map[string]interface{}{
+				"apiVersion": "operators.coreos.com/v1alpha1",
+				"kind":       "ClusterServiceVersion",
+				"name":       "dns-operator.v0.0.0",
+			},
+		})
+
+		client := dynamicfake.NewSimpleDynamicClient(scheme, obj)
+		cleaner := &OLMCleaner{client: client, logger: logr.Discard()}
+
+		if err := cleaner.stripResource(context.Background(), depGVR, "kuadrant-system", "dns-operator-controller-manager"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		got, err := client.Resource(depGVR).Namespace("kuadrant-system").Get(context.Background(), "dns-operator-controller-manager", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("unexpected error re-fetching: %v", err)
+		}
+		if _, ok := got.GetLabels()["olm.owner.kind"]; ok {
+			t.Error("olm.owner.kind label should have been stripped")
+		}
+		if refs, _, _ := unstructured.NestedSlice(got.Object, "metadata", "ownerReferences"); len(refs) != 0 {
+			t.Error("CSV ownerReference should have been stripped")
 		}
 	})
 
-	t.Run("OLM package names derived from registry", func(t *testing.T) {
-		d := &Deployer{components: components}
-		names := d.OLMPackageNames()
-		if len(names) == 0 {
-			t.Fatal("expected OLM package names from registry")
+	t.Run("no-op when the resource does not exist", func(t *testing.T) {
+		client := dynamicfake.NewSimpleDynamicClient(scheme)
+		cleaner := &OLMCleaner{client: client, logger: logr.Discard()}
+
+		if err := cleaner.stripResource(context.Background(), depGVR, "kuadrant-system", "missing"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-		if names[0] != "dns-operator" {
-			t.Errorf("OLMPackageNames()[0] = %q, want %q", names[0], "dns-operator")
+	})
+
+	t.Run("no-op when the resource carries no OLM metadata", func(t *testing.T) {
+		wantLabels := map[string]string{"control-plane": "dns-operator-controller-manager"}
+		obj := newTestDeployment(wantLabels, nil)
+		client := dynamicfake.NewSimpleDynamicClient(scheme, obj)
+		cleaner := &OLMCleaner{client: client, logger: logr.Discard()}
+
+		if err := cleaner.stripResource(context.Background(), depGVR, "kuadrant-system", "dns-operator-controller-manager"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		got, err := client.Resource(depGVR).Namespace("kuadrant-system").Get(context.Background(), "dns-operator-controller-manager", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("unexpected error re-fetching: %v", err)
+		}
+		if len(got.GetLabels()) != len(wantLabels) || got.GetLabels()["control-plane"] != wantLabels["control-plane"] {
+			t.Errorf("labels = %v, want unchanged %v", got.GetLabels(), wantLabels)
 		}
 	})
 }

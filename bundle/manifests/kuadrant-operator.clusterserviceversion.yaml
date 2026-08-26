@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-08-27T13:55:04Z"
+    createdAt: "2026-08-27T13:56:33Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -766,10 +766,8 @@ spec:
           verbs:
           - delete
           - get
-          - list
           - patch
           - update
-          - watch
         - apiGroups:
           - rbac.authorization.k8s.io
           resources:
@@ -788,10 +786,8 @@ spec:
           - bind
           - escalate
           - get
-          - list
           - patch
           - update
-          - watch
         - apiGroups:
           - rbac.authorization.k8s.io
           resources:
@@ -1016,7 +1012,7 @@ spec:
   - email: didier@redhat.com
     name: Didier Di Cesare
   maturity: alpha
-  minKubeVersion: 1.19.0
+  minKubeVersion: 1.25.0
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator

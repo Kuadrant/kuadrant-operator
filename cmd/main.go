@@ -307,7 +307,7 @@ func main() {
 	// One-time startup tasks run as a leader-elected Runnable so they only
 	// execute on the active leader, not every replica.
 	if err := mgr.Add(controlplane.NewBootstrapRunnable(
-		restConfig, scheme, componentDeployer,
+		restConfig, scheme,
 		mgr.GetEventRecorder("kuadrant-control-plane"),
 		operatorNamespace, setupLog,
 	)); err != nil {

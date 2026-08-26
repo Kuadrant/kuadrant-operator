@@ -17,8 +17,8 @@ import (
 var chartsBasePath = env.GetString("CHARTS_PATH", "/charts")
 
 // Component describes a child operator deployed by the kuadrant-operator.
-// The allComponents() registry is the single source of truth — OLM cleanup,
-// deployment readiness, and CRD bootstrap all derive from these entries.
+// The allComponents() registry is the single source of truth — deployment
+// readiness and CRD bootstrap derive from these entries.
 type Component struct {
 	// Name identifies the component (e.g., "dns-operator"). Used in logging and status.
 	Name string
@@ -28,10 +28,6 @@ type Component struct {
 	// CRDNames lists the CRD names managed by this component. Used for
 	// watch predicates and status reporting without needing to render the chart.
 	CRDNames []string
-	// OLMPackageName is the OLM package name used to identify orphaned
-	// Subscriptions and CSVs during migration cleanup. Empty if the component
-	// was never an OLM package (e.g., a new component added post-consolidation).
-	OLMPackageName string
 	// ImageEnvVar is the environment variable name for the RELATED_IMAGE override
 	// (e.g., "RELATED_IMAGE_DNS_OPERATOR"). If empty, the chart default image is used.
 	// Applies via post-render patching of containers[0].image on DeploymentName.
@@ -51,7 +47,6 @@ type Component struct {
 
 type Deployer struct {
 	client         dynamic.Interface
-	discovery      discovery.DiscoveryInterface
 	applier        *ResourceApplier
 	namespace      string
 	components     []Component
@@ -73,7 +68,6 @@ func NewDeployer(restConfig *rest.Config, namespace string, logger logr.Logger) 
 	l := logger.WithName("deployer")
 	return &Deployer{
 		client:         client,
-		discovery:      disc,
 		applier:        NewResourceApplier(client, disc, namespace, l),
 		namespace:      namespace,
 		components:     allComponents(),
@@ -91,7 +85,6 @@ func allComponents() []Component {
 			ImageEnvVar:    "RELATED_IMAGE_DNS_OPERATOR",
 			DeploymentName: "dns-operator-controller-manager",
 			CRDNames:       []string{"dnsrecords.kuadrant.io", "dnshealthcheckprobes.kuadrant.io"},
-			OLMPackageName: "dns-operator",
 		},
 	}
 }
@@ -110,16 +103,6 @@ func (d *Deployer) CRDNames() []string {
 	var names []string
 	for _, c := range d.components {
 		names = append(names, c.CRDNames...)
-	}
-	return names
-}
-
-func (d *Deployer) OLMPackageNames() []string {
-	names := make([]string, 0, len(d.components))
-	for _, c := range d.components {
-		if c.OLMPackageName != "" {
-			names = append(names, c.OLMPackageName)
-		}
 	}
 	return names
 }
@@ -146,10 +129,6 @@ func (d *Deployer) Namespace() string {
 
 func (d *Deployer) DynamicClient() dynamic.Interface {
 	return d.client
-}
-
-func (d *Deployer) DiscoveryClient() discovery.DiscoveryInterface {
-	return d.discovery
 }
 
 func (d *Deployer) ChartVersion(componentName string) string {

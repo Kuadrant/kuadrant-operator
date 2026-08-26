@@ -26,6 +26,7 @@ func TestImageValue_Apply(t *testing.T) {
 		{
 			name:    "empty env var sets nothing",
 			mapping: &ImageValue{EnvVar: "TEST_IMG", ValueKey: "image"},
+			wantKey: "image",
 			wantSet: false,
 		},
 	}
@@ -138,6 +139,7 @@ func TestImageSplitValue_Apply(t *testing.T) {
 			mapping: &ImageSplitValue{
 				ImageValue: ImageValue{EnvVar: "TEST_IMG", ValueKey: "imageController"},
 			},
+			wantKey: "imageController",
 			wantSet: false,
 		},
 	}

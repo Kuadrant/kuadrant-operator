@@ -7,6 +7,8 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,17 +22,15 @@ import (
 type BootstrapRunnable struct {
 	restConfig *rest.Config
 	scheme     *runtime.Scheme
-	deployer   *Deployer
 	recorder   events.EventRecorder
 	namespace  string
 	logger     logr.Logger
 }
 
-func NewBootstrapRunnable(restConfig *rest.Config, scheme *runtime.Scheme, deployer *Deployer, recorder events.EventRecorder, namespace string, logger logr.Logger) *BootstrapRunnable {
+func NewBootstrapRunnable(restConfig *rest.Config, scheme *runtime.Scheme, recorder events.EventRecorder, namespace string, logger logr.Logger) *BootstrapRunnable {
 	return &BootstrapRunnable{
 		restConfig: restConfig,
 		scheme:     scheme,
-		deployer:   deployer,
 		recorder:   recorder,
 		namespace:  namespace,
 		logger:     logger.WithName("bootstrap"),
@@ -47,7 +47,17 @@ func (r *BootstrapRunnable) Start(ctx context.Context) error {
 		return fmt.Errorf("ensuring default KuadrantControlPlane: %w", err)
 	}
 
-	result := RunOLMCleanup(ctx, r.deployer, r.namespace, r.logger)
+	dynamicClient, err := dynamic.NewForConfig(r.restConfig)
+	if err != nil {
+		return fmt.Errorf("creating dynamic client: %w", err)
+	}
+
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(r.restConfig)
+	if err != nil {
+		return fmt.Errorf("creating discovery client: %w", err)
+	}
+
+	result := RunOLMCleanup(ctx, dynamicClient, discoveryClient, r.namespace, r.logger)
 	if r.recorder != nil {
 		r.emitCleanupEvent(ctx, directClient, result)
 	}
@@ -78,7 +88,9 @@ func (r *BootstrapRunnable) emitCleanupEvent(ctx context.Context, c client.Clien
 
 // componentCleanupMessage describes the orphaned OLM resources removed for a
 // single component, e.g. "removed Subscription dns-operator and CSV
-// dns-operator.v0.8.0 (stripped OLM metadata from 3 resources)".
+// dns-operator.v0.8.0 in namespace kuadrant-system". Per-resource strip
+// detail is left to logs. The namespace is included explicitly since not
+// every component is guaranteed to be cleaned up from the same namespace.
 func componentCleanupMessage(comp ComponentCleanupResult) string {
 	var parts []string
 	if comp.SubscriptionName != "" {
@@ -98,8 +110,8 @@ func componentCleanupMessage(comp ComponentCleanupResult) string {
 		msg = "removed " + parts[0] + " and " + parts[1]
 	}
 
-	if comp.MetadataCount > 0 {
-		msg += fmt.Sprintf(" (stripped OLM metadata from %d resources)", comp.MetadataCount)
+	if comp.Namespace != "" {
+		msg += fmt.Sprintf(" in namespace %s", comp.Namespace)
 	}
 	return msg
 }

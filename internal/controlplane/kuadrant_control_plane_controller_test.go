@@ -5,7 +5,6 @@ package controlplane
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -41,31 +40,6 @@ func TestComponentByName(t *testing.T) {
 				t.Errorf("ComponentByName(%q) found = %v, want %v", tt.lookup, found, tt.wantFound)
 			}
 		})
-	}
-}
-
-func TestComponentStatus_CRDsFromRegistry(t *testing.T) {
-	d := &Deployer{components: allComponents()}
-	crdNames := d.CRDNames()
-
-	if len(crdNames) != 2 {
-		t.Fatalf("expected 2 CRD names, got %d", len(crdNames))
-	}
-
-	want := map[string]bool{
-		"dnsrecords.kuadrant.io":           false,
-		"dnshealthcheckprobes.kuadrant.io": false,
-	}
-	for _, name := range crdNames {
-		if _, ok := want[name]; !ok {
-			t.Errorf("unexpected CRD name %q", name)
-		}
-		want[name] = true
-	}
-	for name, found := range want {
-		if !found {
-			t.Errorf("missing expected CRD name %q", name)
-		}
 	}
 }
 
@@ -186,26 +160,24 @@ func TestReconcile_MultipleComponentFailures(t *testing.T) {
 				deployErrors: tt.deployErrors,
 			}
 
-			// Simulate the reconcile loop's error collection behavior
-			var deployErrors []error
-			for _, component := range deployer.EnabledComponents() {
-				if err := deployer.DeployComponent(context.Background(), component); err != nil {
-					deployErrors = append(deployErrors, fmt.Errorf("%s: %w", component.Name, err))
-				}
+			gotErrCount := 0
+			err := deployComponents(context.Background(), deployer.EnabledComponents(), deployer.DeployComponent, func(Component, error) {
+				gotErrCount++
+			})
+
+			if gotErrCount != tt.wantErrCount {
+				t.Errorf("expected %d errors, got %d", tt.wantErrCount, gotErrCount)
 			}
 
-			if len(deployErrors) != tt.wantErrCount {
-				t.Errorf("expected %d errors, got %d", tt.wantErrCount, len(deployErrors))
-			}
-
-			if len(deployErrors) > 0 {
-				joined := errors.Join(deployErrors...)
-				errStr := joined.Error()
+			if err != nil {
+				errStr := err.Error()
 				for _, want := range tt.wantErrContns {
 					if !strings.Contains(errStr, want) {
 						t.Errorf("joined error %q does not contain %q", errStr, want)
 					}
 				}
+			} else if tt.wantErrCount != 0 {
+				t.Errorf("expected a joined error, got nil")
 			}
 		})
 	}

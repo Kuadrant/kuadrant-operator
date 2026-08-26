@@ -373,10 +373,8 @@ rules:
   verbs:
   - delete
   - get
-  - list
   - patch
   - update
-  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -395,10 +393,8 @@ rules:
   - bind
   - escalate
   - get
-  - list
   - patch
   - update
-  - watch
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:

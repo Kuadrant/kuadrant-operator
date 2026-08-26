@@ -32,11 +32,11 @@ const requeueInterval = 5 * time.Minute
 
 // Component deployer RBAC — ClusterRole management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role,verbs=get;list;watch;update;patch;bind;escalate
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role,verbs=get;update;patch;bind;escalate
 
 // Component deployer RBAC — ClusterRoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dns-operator-manager-rolebinding;dns-operator-remote-cluster-rolebinding,verbs=delete;get;list;watch;update;patch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dns-operator-manager-rolebinding;dns-operator-remote-cluster-rolebinding,verbs=delete;get;update;patch
 
 // Component deployer RBAC — namespace-scoped Role and RoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=create;delete;get;list;watch;update;patch
@@ -83,21 +83,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	var deployErrors []error
-	for _, component := range r.deployer.EnabledComponents() {
-		if err := r.deployer.DeployComponent(ctx, component); err != nil {
-			r.logger.Error(err, "failed to deploy component", "component", component.Name)
-			if r.recorder != nil {
-				r.recorder.Eventf(cp, componentReference(component.Name), corev1.EventTypeWarning, "ComponentDeployFailed", "ComponentDeploy", "failed to deploy component %s: %s", component.Name, err)
-			}
-			deployErrors = append(deployErrors, fmt.Errorf("%s: %w", component.Name, err))
+	deployErr := deployComponents(ctx, r.deployer.EnabledComponents(), r.deployer.DeployComponent, func(component Component, err error) {
+		r.logger.Error(err, "failed to deploy component", "component", component.Name)
+		if r.recorder != nil {
+			r.recorder.Eventf(cp, componentReference(component.Name), corev1.EventTypeWarning, "ComponentDeployFailed", "ComponentDeploy", "failed to deploy component %s: %s", component.Name, err)
 		}
-	}
-
-	var deployErr error
-	if len(deployErrors) > 0 {
-		deployErr = errors.Join(deployErrors...)
-	}
+	})
 
 	if err := r.updateStatus(ctx, cp, deployErr); err != nil {
 		return ctrl.Result{}, err
@@ -108,6 +99,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
+}
+
+// deployComponents deploys each component independently, collecting a
+// joined error for any that fail rather than stopping at the first failure
+// (so one broken component doesn't block the rest from installing/updating).
+// onError, if non-nil, is called for each failing component before its error
+// is added to the joined result — used by Reconcile to log and emit events.
+func deployComponents(ctx context.Context, components []Component, deploy func(context.Context, Component) error, onError func(Component, error)) error {
+	var errs []error
+	for _, component := range components {
+		if err := deploy(ctx, component); err != nil {
+			if onError != nil {
+				onError(component, err)
+			}
+			errs = append(errs, fmt.Errorf("%s: %w", component.Name, err))
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -198,8 +210,6 @@ func (r *Reconciler) updateStatus(ctx context.Context, cp *kuadrantv1alpha1.Kuad
 	cp.Status.ObservedGeneration = cp.Generation
 	cp.Status.Components = r.buildComponentStatuses(ctx)
 
-	r.emitComponentVersionEvents(cp, previousComponents, cp.Status.Components)
-
 	allReady := true
 	for _, cs := range cp.Status.Components {
 		if !cs.Ready {
@@ -228,7 +238,12 @@ func (r *Reconciler) updateStatus(ctx context.Context, cp *kuadrantv1alpha1.Kuad
 
 	meta.SetStatusCondition(&cp.Status.Conditions, readyCondition)
 
-	return r.Status().Update(ctx, cp)
+	if err := r.Status().Update(ctx, cp); err != nil {
+		return err
+	}
+
+	r.emitComponentVersionEvents(cp, previousComponents, cp.Status.Components)
+	return nil
 }
 
 // emitComponentVersionEvents compares the chart versions recorded in status

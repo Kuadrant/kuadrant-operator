@@ -1,15 +1,21 @@
 // OLM migration cleanup — remove this entire file after 2-3 releases.
-// It handles one-off cleanup of orphaned dns-operator Subscription/CSV
+// It handles one-off cleanup of orphaned child-operator Subscription/CSV
 // resources left behind when upgrading from the pre-consolidation
 // multi-operator OLM installation. Once all users have upgraded past
 // the consolidated release, this code is dead.
+//
+// Each component gets its own explicit migrateXxx function. There are only
+// ever four components to migrate, each with real, not merely cosmetic,
+// differences in what needs protecting and in what order (e.g. authorino
+// and limitador need their Services and RBAC protected too, not just their
+// Deployment, since Envoy calls those Services synchronously on the live
+// request path — unlike dns-operator, which has no such dependency).
+
 package controlplane
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -33,16 +39,37 @@ var (
 		Version:  "v1alpha1",
 		Resource: "clusterserviceversions",
 	}
+
+	deploymentGVR = schema.GroupVersionResource{
+		Group:    "apps",
+		Version:  "v1",
+		Resource: "deployments",
+	}
+
+	crdGVR = schema.GroupVersionResource{
+		Group:    "apiextensions.k8s.io",
+		Version:  "v1",
+		Resource: "customresourcedefinitions",
+	}
+
+	configMapGVR = schema.GroupVersionResource{
+		Group:    "",
+		Version:  "v1",
+		Resource: "configmaps",
+	}
 )
 
+// OLMCleaner holds the shared low-level primitives (get/strip/update a
+// resource, delete a Subscription/CSV for a given package) used by each
+// component's explicit migration function. Which specific resources belong
+// to which component is hardcoded directly in that component's function
+// — see the package doc comment above.
 type OLMCleaner struct {
-	client          dynamic.Interface
-	discovery       discovery.DiscoveryInterface
-	namespace       string
-	deploymentNames []string
-	packageNames    []string
-	logger          logr.Logger
-	cleaned         bool
+	client    dynamic.Interface
+	discovery discovery.DiscoveryInterface
+	namespace string
+	logger    logr.Logger
+	cleaned   bool
 }
 
 type OLMCleanupResult struct {
@@ -52,38 +79,28 @@ type OLMCleanupResult struct {
 	Components []ComponentCleanupResult
 }
 
-// ComponentCleanupResult reports the orphaned OLM resources removed for a
-// single component's package. There is at most one Subscription and one CSV
+// ComponentCleanupResult reports the OLM resources removed for a single
+// component's package. There is at most one Subscription and one CSV
 // per component in the pre-consolidation install layout this cleanup targets.
 type ComponentCleanupResult struct {
 	Package          string
+	Namespace        string
 	SubscriptionName string
 	CSVName          string
-	MetadataCount    int
 }
 
 // RunOLMCleanup is a one-time startup function called from bootstrap.
 // It is NOT called during reconciliation.
-func RunOLMCleanup(ctx context.Context, deployer *Deployer, namespace string, logger logr.Logger) OLMCleanupResult {
-	cleaner := NewOLMCleaner(
-		deployer.DynamicClient(),
-		deployer.DiscoveryClient(),
-		namespace,
-		deployer.DeploymentNames(),
-		deployer.OLMPackageNames(),
-		logger,
-	)
-	return cleaner.Cleanup(ctx)
+func RunOLMCleanup(ctx context.Context, client dynamic.Interface, disc discovery.DiscoveryInterface, namespace string, logger logr.Logger) OLMCleanupResult {
+	return NewOLMCleaner(client, disc, namespace, logger).Cleanup(ctx)
 }
 
-func NewOLMCleaner(client dynamic.Interface, disc discovery.DiscoveryInterface, namespace string, deploymentNames, packageNames []string, logger logr.Logger) *OLMCleaner {
+func NewOLMCleaner(client dynamic.Interface, disc discovery.DiscoveryInterface, namespace string, logger logr.Logger) *OLMCleaner {
 	return &OLMCleaner{
-		client:          client,
-		discovery:       disc,
-		namespace:       namespace,
-		deploymentNames: deploymentNames,
-		packageNames:    packageNames,
-		logger:          logger.WithName("olm-cleanup"),
+		client:    client,
+		discovery: disc,
+		namespace: namespace,
+		logger:    logger.WithName("olm-cleanup"),
 	}
 }
 
@@ -93,68 +110,41 @@ func (c *OLMCleaner) Cleanup(ctx context.Context) OLMCleanupResult {
 	}
 
 	if !c.isOLMInstalled() {
-		c.logger.V(1).Info("OLM not detected, skipping cleanup")
+		c.logger.V(1).Info("OLM not detected, skipping migration")
 		c.cleaned = true
 		return OLMCleanupResult{Summary: "OLM not detected, no migration needed"}
 	}
 
-	metadataCountByCSV, err := c.removeOrphanedOLMMetadata(ctx)
-	if err != nil {
-		c.logger.Error(err, "failed to strip OLM metadata, skipping Subscription/CSV deletion to avoid ownership cascade")
-		return OLMCleanupResult{Error: fmt.Sprintf("failed to strip OLM metadata: %v", err)}
+	// Add component migrate functions here once it's consolidated.
+	migrations := []func(context.Context) (ComponentCleanupResult, error){
+		c.migrateDNSOperator,
 	}
 
+	var results []ComponentCleanupResult
 	var errs []string
-
-	subsByPackage, err := c.deleteOrphanedSubscriptions(ctx)
-	if err != nil {
-		c.logger.Error(err, "failed to delete orphaned Subscriptions (non-fatal)")
-		errs = append(errs, fmt.Sprintf("Subscriptions: %v", err))
-	}
-
-	csvsByPackage, err := c.deleteOrphanedCSVs(ctx)
-	if err != nil {
-		c.logger.Error(err, "failed to delete orphaned CSVs (non-fatal)")
-		errs = append(errs, fmt.Sprintf("CSVs: %v", err))
+	cleanedCount := 0
+	for _, migrate := range migrations {
+		result, err := migrate(ctx)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", result.Package, err))
+			continue
+		}
+		if result.SubscriptionName == "" && result.CSVName == "" {
+			continue
+		}
+		results = append(results, result)
+		cleanedCount++
 	}
 
 	c.cleaned = true
-
-	metadataCount := 0
-	for _, count := range metadataCountByCSV {
-		metadataCount += count
-	}
 
 	if len(errs) > 0 {
 		return OLMCleanupResult{Error: fmt.Sprintf("partial cleanup: %s", strings.Join(errs, "; "))}
 	}
 	return OLMCleanupResult{
-		Summary: fmt.Sprintf("stripped OLM metadata from %d resources, deleted %d Subscriptions and %d CSVs",
-			metadataCount, len(subsByPackage), len(csvsByPackage)),
-		Components: c.buildComponentResults(subsByPackage, csvsByPackage, metadataCountByCSV),
+		Summary:    fmt.Sprintf("migrated %d component(s) off OLM", cleanedCount),
+		Components: results,
 	}
-}
-
-// buildComponentResults joins per-package Subscription/CSV deletions with the
-// per-CSV metadata strip count, one entry per package that had something
-// actually removed.
-func (c *OLMCleaner) buildComponentResults(subsByPackage, csvsByPackage map[string]string, metadataCountByCSV map[string]int) []ComponentCleanupResult {
-	var results []ComponentCleanupResult
-	for _, pkg := range c.packageNames {
-		subName := subsByPackage[pkg]
-		csvName := csvsByPackage[pkg]
-		metadataCount := metadataCountByCSV[csvName]
-		if subName == "" && csvName == "" && metadataCount == 0 {
-			continue
-		}
-		results = append(results, ComponentCleanupResult{
-			Package:          pkg,
-			SubscriptionName: subName,
-			CSVName:          csvName,
-			MetadataCount:    metadataCount,
-		})
-	}
-	return results
 }
 
 func (c *OLMCleaner) isOLMInstalled() bool {
@@ -171,140 +161,107 @@ func (c *OLMCleaner) isOLMInstalled() bool {
 	return false
 }
 
-// removeOrphanedOLMMetadata finds all resources owned by orphaned child
-// operator CSVs using the olm.owner label and strips OLM ownerReferences
-// and labels from them. This works for any resource type OLM manages —
-// no hardcoded resource list needed.
-func (c *OLMCleaner) removeOrphanedOLMMetadata(ctx context.Context) (map[string]int, error) {
-	var errs []error
-	countByCSV := make(map[string]int)
-	for _, csvName := range c.findOrphanedCSVNames(ctx) {
-		count, err := c.cleanResourcesOwnedByCSV(ctx, csvName)
-		countByCSV[csvName] = count
-		if err != nil {
-			errs = append(errs, err)
+// migrateDNSOperator strips OLM ownership from dns-operator's resources so
+// they survive its Subscription/CSV deletion, then deletes the  Subscription
+// and CSV. In order:
+//
+//  1. Strip OLM ownerReferences and labels from the Deployment
+//     "dns-operator-controller-manager" in this namespace, so it isn't
+//     garbage-collected when the CSV is deleted.
+//  2. Strip OLM ownerReferences and labels from the cluster-scoped CRDs
+//     "dnsrecords.kuadrant.io" and "dnshealthcheckprobes.kuadrant.io" —
+//     deleting a CRD also deletes every custom resource of that type
+//     cluster-wide.
+//  3. Strip OLM ownerReferences and labels from the ConfigMap
+//     "dns-operator-controller-env" in this namespace. The chart renders
+//     it empty as a user-editable extension point for extra env vars; if
+//     it's cascade-deleted and recreated, any user customization is lost.
+//  4. If any strip above fails, stop and return the error without touching
+//     the Subscription/CSV — deleting them first would cascade-delete the
+//     resources the previous steps were protecting.
+//  5. Delete the "dns-operator" Subscription in this namespace, if
+//     one exists. Matched by its spec.name field, since Subscription
+//     object names are catalog-generated, not predictable.
+//  6. Delete the dns-operator ClusterServiceVersion in this
+//     namespace, if one exists (matched by the "dns-operator." CSV name
+//     prefix convention).
+//
+// Everything else OLM created for dns-operator (ServiceAccount, RBAC, the
+// metrics Service) is left alone: it's safe to let OLM garbage-collect,
+// since the deployer recreates it from the embedded chart on its own
+// reconcile. RBAC deletion/re-creation may cause a momentary permission gap
+// for the dns-operator pod, but that's not a concern here since it isn't a
+// live-traffic dependency.
+func (c *OLMCleaner) migrateDNSOperator(ctx context.Context) (ComponentCleanupResult, error) {
+	const pkg = "dns-operator"
+	result := ComponentCleanupResult{Package: pkg, Namespace: c.namespace}
+
+	// 1. Deployments
+	if err := c.stripResource(ctx, deploymentGVR, c.namespace, "dns-operator-controller-manager"); err != nil {
+		return result, fmt.Errorf("stripping dns-operator-controller-manager: %w", err)
+	}
+	// 2. CRDs
+	for _, crd := range []string{"dnsrecords.kuadrant.io", "dnshealthcheckprobes.kuadrant.io"} {
+		if err := c.stripResource(ctx, crdGVR, "", crd); err != nil {
+			return result, fmt.Errorf("stripping CRD %s: %w", crd, err)
 		}
 	}
-	return countByCSV, errors.Join(errs...)
+	// 3. ConfigMaps
+	if err := c.stripResource(ctx, configMapGVR, c.namespace, "dns-operator-controller-env"); err != nil {
+		return result, fmt.Errorf("stripping dns-operator-controller-env: %w", err)
+	}
+
+	// 4. Subscription
+	subName, err := c.deleteSubscriptionForPackage(ctx, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting Subscription: %w", err)
+	}
+	result.SubscriptionName = subName
+
+	// 5. CSV
+	csvName, err := c.deleteCSVForPackage(ctx, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting CSV: %w", err)
+	}
+	result.CSVName = csvName
+
+	return result, nil
 }
 
-func (c *OLMCleaner) findOrphanedCSVNames(ctx context.Context) []string {
-	csvs, err := c.client.Resource(csvGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
+// stripResource removes OLM ownerReferences/labels from a single named
+// resource, if present. namespace == "" for cluster-scoped resources.
+// Returns nil if the resource doesn't exist or carries no OLM metadata to
+// strip. Any other error (including Forbidden) is returned as a failure:
+// these are resources a migrateXxx function specifically declared it needs
+// to update, so being unable to is a real misconfiguration, not something
+// to tolerate silently.
+func (c *OLMCleaner) stripResource(ctx context.Context, gvr schema.GroupVersionResource, namespace, name string) error {
+	nsResource := c.client.Resource(gvr)
+	var res dynamic.ResourceInterface = nsResource
+	if namespace != "" {
+		res = nsResource.Namespace(namespace)
+	}
+
+	obj, err := res.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("getting %s/%s: %w", gvr.Resource, name, err)
+	}
+
+	modified := c.stripCSVOwnerRefs(obj)
+	modified = c.stripOLMLabels(obj) || modified
+	if !modified {
 		return nil
 	}
-	var names []string
-	for i := range csvs.Items {
-		name := csvs.Items[i].GetName()
-		if c.isOrphanedCSV(name) {
-			names = append(names, name)
-		}
-	}
-	return names
-}
 
-// olmManagedResourceTypes lists the resource types OLM labels when managing
-// child operator resources. Restricting to these avoids full API discovery.
-var olmManagedResourceTypes = []struct {
-	gvr        schema.GroupVersionResource
-	namespaced bool
-}{
-	{schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, true},
-	{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}, true},
-	{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}, true},
-	{schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}, true},
-	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}, true},
-	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}, true},
-	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}, false},
-	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}, false},
-	{schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}, false},
-}
-
-func (c *OLMCleaner) cleanResourcesOwnedByCSV(ctx context.Context, csvName string) (int, error) {
-	// OLM uses different labels on different resource types:
-	// - Most resources: olm.owner=<csv-name>
-	// - CRDs and some others: operators.coreos.com/<package>.<namespace>=
-	pkg := packageFromCSVName(csvName)
-	labelSelectors := []string{
-		fmt.Sprintf("olm.owner=%s", csvName),
-		fmt.Sprintf("operators.coreos.com/%s.%s=", pkg, c.namespace),
+	if _, err := res.Update(ctx, obj, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("updating %s/%s: %w", gvr.Resource, name, err)
 	}
 
-	cleaned := make(map[string]bool)
-	var errs []error
-
-	for _, rt := range olmManagedResourceTypes {
-		for _, labelSelector := range labelSelectors {
-			var list *unstructured.UnstructuredList
-			var err error
-
-			if rt.namespaced {
-				list, err = c.client.Resource(rt.gvr).Namespace(c.namespace).List(ctx, metav1.ListOptions{
-					LabelSelector: labelSelector,
-				})
-			} else {
-				list, err = c.client.Resource(rt.gvr).List(ctx, metav1.ListOptions{
-					LabelSelector: labelSelector,
-				})
-			}
-			if err != nil {
-				c.logger.V(1).Info("failed to list resources for OLM cleanup",
-					"resource", rt.gvr.Resource, "labelSelector", labelSelector, "error", err)
-				continue
-			}
-
-			for i := range list.Items {
-				obj := &list.Items[i]
-				key := fmt.Sprintf("%s/%s/%s", rt.gvr.Resource, obj.GetNamespace(), obj.GetName())
-				if cleaned[key] {
-					continue
-				}
-
-				if _, ok := obj.GetLabels()["olm.owner.kind"]; ok {
-					c.logger.V(1).Info("skipping OLM-generated resource",
-						"resource", rt.gvr.Resource, "name", obj.GetName())
-					continue
-				}
-
-				modified := c.stripCSVOwnerRefs(obj)
-				modified = c.stripOLMLabels(obj) || modified
-
-				if !modified {
-					continue
-				}
-
-				c.logger.Info("cleaned OLM metadata",
-					"resource", rt.gvr.Resource,
-					"name", obj.GetName(),
-					"namespace", obj.GetNamespace(),
-					"csv", csvName,
-				)
-
-				if rt.namespaced {
-					_, err = c.client.Resource(rt.gvr).Namespace(obj.GetNamespace()).Update(ctx, obj, metav1.UpdateOptions{})
-				} else {
-					_, err = c.client.Resource(rt.gvr).Update(ctx, obj, metav1.UpdateOptions{})
-				}
-				if err != nil {
-					if apierrors.IsForbidden(err) {
-						c.logger.Info("skipping resource: insufficient permissions to strip OLM metadata",
-							"resource", rt.gvr.Resource,
-							"name", obj.GetName(),
-						)
-						continue
-					}
-					c.logger.Error(err, "failed to strip OLM metadata from resource",
-						"resource", rt.gvr.Resource,
-						"name", obj.GetName(),
-					)
-					errs = append(errs, fmt.Errorf("updating %s/%s: %w", rt.gvr.Resource, obj.GetName(), err))
-					continue
-				}
-				cleaned[key] = true
-			}
-		}
-	}
-	return len(cleaned), errors.Join(errs...)
+	c.logger.Info("cleaned OLM metadata", "resource", gvr.Resource, "name", name)
+	return nil
 }
 
 func (c *OLMCleaner) stripCSVOwnerRefs(obj *unstructured.Unstructured) bool {
@@ -363,79 +320,63 @@ func (c *OLMCleaner) stripOLMLabels(obj *unstructured.Unstructured) bool {
 	return modified
 }
 
-// deleteOrphanedSubscriptions returns the deleted Subscription name keyed by
-// package. If more than one Subscription exists for the same package, the
-// last one deleted wins the map entry — the migration this targets expects
-// at most one Subscription per component.
-func (c *OLMCleaner) deleteOrphanedSubscriptions(ctx context.Context) (map[string]string, error) {
+// deleteSubscriptionForPackage deletes the Subscription for the given OLM
+// package in this namespace, if one exists. Returns the deleted
+// Subscription's name, or "" if none was found. The object's own name is
+// catalog-generated, so it's found by matching its spec.name field instead.
+func (c *OLMCleaner) deleteSubscriptionForPackage(ctx context.Context, pkg string) (string, error) {
 	subs, err := c.client.Resource(subscriptionGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("listing subscriptions: %w", err)
+		return "", fmt.Errorf("listing subscriptions: %w", err)
 	}
 
-	var errs []error
-	deleted := make(map[string]string)
 	for i := range subs.Items {
 		sub := &subs.Items[i]
-		pkg, found, err := unstructured.NestedString(sub.Object, "spec", "name")
-		if err != nil || !found {
+		name, found, err := unstructured.NestedString(sub.Object, "spec", "name")
+		if err != nil || !found || name != pkg {
 			continue
 		}
-		if !slices.Contains(c.packageNames, pkg) {
-			continue
-		}
-		c.logger.Info("deleting orphaned OLM Subscription", "name", sub.GetName(), "package", pkg)
+		c.logger.Info("deleting OLM Subscription", "name", sub.GetName(), "package", pkg)
 		if err := c.client.Resource(subscriptionGVR).Namespace(c.namespace).Delete(ctx, sub.GetName(), metav1.DeleteOptions{}); err != nil {
-			if !apierrors.IsNotFound(err) {
-				errs = append(errs, fmt.Errorf("deleting Subscription %s: %w", sub.GetName(), err))
+			if apierrors.IsNotFound(err) {
+				continue
 			}
-		} else {
-			deleted[pkg] = sub.GetName()
+			return "", fmt.Errorf("deleting Subscription %s: %w", sub.GetName(), err)
 		}
+		return sub.GetName(), nil
 	}
-	return deleted, errors.Join(errs...)
+	return "", nil
 }
 
-// deleteOrphanedCSVs returns the deleted CSV name keyed by package. If more
-// than one CSV exists for the same package, the last one deleted wins the
-// map entry — the migration this targets expects at most one CSV per component.
-func (c *OLMCleaner) deleteOrphanedCSVs(ctx context.Context) (map[string]string, error) {
+// deleteCSVForPackage deletes the ClusterServiceVersion for the given OLM
+// package in this namespace, if one exists. Returns the deleted CSV's name,
+// or "" if none was found.
+func (c *OLMCleaner) deleteCSVForPackage(ctx context.Context, pkg string) (string, error) {
 	csvs, err := c.client.Resource(csvGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("listing CSVs: %w", err)
+		return "", fmt.Errorf("listing CSVs: %w", err)
 	}
 
-	var errs []error
-	deleted := make(map[string]string)
 	for i := range csvs.Items {
-		csv := &csvs.Items[i]
-		name := csv.GetName()
-		if !c.isOrphanedCSV(name) {
+		name := csvs.Items[i].GetName()
+		if !isCSVForPackage(name, pkg) {
 			continue
 		}
-		c.logger.Info("deleting orphaned OLM CSV", "name", name)
+		c.logger.Info("deleting OLM CSV", "name", name)
 		if err := c.client.Resource(csvGVR).Namespace(c.namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-			if !apierrors.IsNotFound(err) {
-				errs = append(errs, fmt.Errorf("deleting CSV %s: %w", name, err))
+			if apierrors.IsNotFound(err) {
+				continue
 			}
-		} else {
-			deleted[packageFromCSVName(name)] = name
+			return "", fmt.Errorf("deleting CSV %s: %w", name, err)
 		}
+		return name, nil
 	}
-	return deleted, errors.Join(errs...)
+	return "", nil
 }
 
-func (c *OLMCleaner) isOrphanedCSV(name string) bool {
-	for _, p := range c.packageNames {
-		if strings.HasPrefix(name, p+".") || name == p {
-			return true
-		}
-	}
-	return false
-}
-
-// packageFromCSVName extracts the OLM package name from a CSV name of the
-// form "<package>.<version>" (e.g. "dns-operator.v0.8.0" -> "dns-operator").
-func packageFromCSVName(name string) string {
-	return strings.SplitN(name, ".", 2)[0]
+// isCSVForPackage reports whether csvName is the CSV for pkg, per OLM's
+// "<package>.<version>" CSV naming convention (e.g. "dns-operator.v0.8.0"
+// belongs to package "dns-operator").
+func isCSVForPackage(csvName, pkg string) bool {
+	return csvName == pkg || strings.HasPrefix(csvName, pkg+".")
 }

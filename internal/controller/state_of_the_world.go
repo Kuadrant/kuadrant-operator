@@ -165,6 +165,34 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
 			controller.FilterResourcesByField[*appsv1.Deployment]("metadata.name=authorino"),
 		)),
+		controller.WithRunnable("kuadrant-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=kuadrant"),
+		)),
+		controller.WithRunnable("dns-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByLabel[*appsv1.Deployment]("control-plane=dns-operator-controller-manager"),
+		)),
+		controller.WithRunnable("authorino-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByField[*appsv1.Deployment]("metadata.name=authorino-operator"),
+		)),
+		controller.WithRunnable("limitador-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByField[*appsv1.Deployment]("metadata.name=limitador-operator-controller-manager"),
+		)),
 		controller.WithRunnable("networkPolicy watcher", controller.Watch(
 			&networkingv1.NetworkPolicy{},
 			kuadrantv1beta1.NetworkPolicyResource,
@@ -187,6 +215,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
+			kuadrantv1beta1.LinkDeploymentToNetworkPolicy,
+			kuadrantv1beta1.LinkSubDeploymentsToKuadrantDeployment,
 		),
 	}
 
@@ -832,6 +862,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
 			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
 			traceReconcileFunc("workflow.networkpolicy", NewNetworkPolicyReconciler(b.client).Subscription().Reconcile),
+			traceReconcileFunc("workflow.networkpolicyB", NewOperatorNetworkPolicyReconciler(b.client).Subscription().Reconcile),
 		},
 		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}

@@ -4,10 +4,18 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"testing"
 
+	"github.com/go-logr/logr"
+	"github.com/samber/lo"
 	"gotest.tools/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -718,4 +726,87 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 		assert.Equal(t, "auth.identity.alice", result1[0].ConditionalData[0].Predicates[0])
 		assert.Equal(t, "auth.identity.bob", result1[0].ConditionalData[1].Predicates[0])
 	})
+}
+
+func TestWasmConfigDeterministicSortOrder(t *testing.T) {
+	hostname := "example.com"
+	pathPrefix := "/"
+	routeName := "my-route"
+	routeNamespace := "default"
+	creationTimestamp := metav1.Now()
+
+	// Both entries model the same route rule and match reached via two different
+	// listeners, so they share RuleIndex and MatchIndex and tie on every other Less()
+	// field. Only Identifier (unique per listener) breaks the tie deterministically.
+	newMatchConfig := func(actionSetName string) kuadrantgatewayapi.HTTPRouteMatchConfig {
+		return kuadrantgatewayapi.HTTPRouteMatchConfig{
+			Hostname: hostname,
+			HTTPRouteMatch: gatewayapiv1.HTTPRouteMatch{
+				Path: &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: ptr.To(pathPrefix),
+				},
+			},
+			CreationTimestamp: creationTimestamp,
+			Namespace:         routeNamespace,
+			Name:              routeName,
+			RuleIndex:         0,
+			MatchIndex:        0,
+			Identifier:        actionSetName,
+			Config: wasm.ActionSet{
+				Name: actionSetName,
+				RouteRuleConditions: wasm.RouteRuleConditions{
+					Hostnames:  []string{hostname},
+					Predicates: []string{"request.url_path.startsWith('/')"},
+				},
+			},
+		}
+	}
+
+	configFromHTTPListener := newMatchConfig("aaaa1111")
+	configFromHTTPSListener := newMatchConfig("bbbb2222")
+
+	logger := logr.Discard()
+	serviceBuilder := wasm.NewServiceBuilder(&logger)
+
+	buildConfigJSON := func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs) string {
+		actionSets := lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
+			return c.Config.(wasm.ActionSet)
+		})
+		config := wasm.BuildConfigForActionSet(actionSets, &logger, nil, serviceBuilder)
+		configBytes, err := json.Marshal(config)
+		if err != nil {
+			t.Fatalf("failed to marshal config: %v", err)
+		}
+		return string(configBytes)
+	}
+
+	sourceMap := map[string]kuadrantgatewayapi.HTTPRouteMatchConfig{
+		"path-via-http-listener":  configFromHTTPListener,
+		"path-via-https-listener": configFromHTTPSListener,
+	}
+
+	observed := map[string]int{}
+	iterations := 100
+
+	for range iterations {
+		freshMap := make(map[string]kuadrantgatewayapi.HTTPRouteMatchConfig, len(sourceMap))
+		maps.Copy(freshMap, sourceMap)
+		entries := lo.Entries(freshMap)
+
+		group := kuadrantgatewayapi.GroupedHTTPRouteMatchConfigs{}
+		for _, e := range entries {
+			group.Add("gateway-locator", e.Value)
+		}
+		sorted := group.Sorted()
+		configJSON := buildConfigJSON(sorted["gateway-locator"])
+		observed[configJSON]++
+	}
+
+	if len(observed) != 1 {
+		t.Errorf("wasm config is non-deterministic: got %d distinct JSON outputs in %d iterations", len(observed), iterations)
+		for configJSON, count := range observed {
+			t.Logf("  seen %d times: ...%s...", count, configJSON[:80])
+		}
+	}
 }

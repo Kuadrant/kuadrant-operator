@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/policy-machinery/machinery"
 
 	"gotest.tools/assert"
 	"k8s.io/utils/ptr"
@@ -1836,4 +1837,34 @@ func TestConvertGRPCRouteMatchToHTTP(t *testing.T) {
 			assert.Equal(t, tt.expectedHeaders, len(httpRouteMatch.Headers), "headers count mismatch")
 		})
 	}
+}
+
+func TestHTTPRuleListIndex(t *testing.T) {
+	rules := make([]gatewayapiv1.HTTPRouteRule, 11)
+	// A user-set rule name at position 2; all others fall back to the generated "rule-{i+1}".
+	rules[2].Name = ptr.To(gatewayapiv1.SectionName("custom-rule"))
+	route := &machinery.HTTPRoute{
+		HTTPRoute: &gatewayapiv1.HTTPRoute{
+			Spec: gatewayapiv1.HTTPRouteSpec{Rules: rules},
+		},
+	}
+
+	testCases := []struct {
+		name     gatewayapiv1.SectionName
+		expected int
+	}{
+		{"rule-1", 0},
+		{"rule-2", 1},
+		{"custom-rule", 2}, // resolves to its list position, not the generated "rule-3"
+		{"rule-4", 3},
+		{"rule-10", 9},
+		{"rule-11", 10},
+		{"nonexistent", 11}, // not found returns len(rules) so the entry sorts last
+	}
+	for _, tc := range testCases {
+		assert.Equal(t, tc.expected, httpRuleListIndex(route, tc.name), "rule %q", tc.name)
+	}
+
+	// The reason for using the numeric index rather than the name: rule-2 must precede rule-10.
+	assert.Assert(t, httpRuleListIndex(route, "rule-2") < httpRuleListIndex(route, "rule-10"))
 }

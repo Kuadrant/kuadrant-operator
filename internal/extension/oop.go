@@ -71,7 +71,6 @@ func (p *OOPExtension) Start() error {
 
 	cmd := exec.Command(p.executable) // #nosec G204
 	cmd.Env = append(os.Environ(),
-		"KUADRANT_EXTENSION_NAME="+p.name,
 		"KUADRANT_EXTENSION_CREDENTIAL="+string(p.credential),
 		fmt.Sprintf("KUADRANT_EXTENSION_ADDRESS=localhost:%d", p.port),
 	)

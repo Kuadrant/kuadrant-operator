@@ -41,10 +41,9 @@ message PongResponse {
 }
 
 message HandshakeRequest {
-  string name = 1;
-  string version = 2;
-  bytes  credential = 3;
-  string policy_kind = 4;
+  string version = 1;
+  bytes  token = 2;
+  string policy_kind = 3;
 }
 
 message HandshakeResponse {

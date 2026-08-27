@@ -12,11 +12,7 @@ import (
 	"github.com/go-logr/logr"
 )
 
-const minCredentialLength = 32
-
 var (
-	ErrUnknownExtension   = errors.New("unknown extension")
-	ErrInvalidCredential  = errors.New("invalid credential")
 	ErrAlreadyConnected   = errors.New("extension already connected")
 	ErrPolicyKindRequired = errors.New("policy_kind is required")
 	ErrPolicyKindTaken    = errors.New("policy kind already registered by another extension")
@@ -24,27 +20,25 @@ var (
 
 type SessionStore struct {
 	mu          sync.RWMutex
-	credentials map[string][]byte
-	sessions    map[string]string
-	extensions  map[string]string
-	policyKinds map[string]string // policy kind -> extension name
+	credentials map[string][]byte // built-in name -> ephemeral credential
+	sessions    map[string]string // session token -> identity
+	connections map[string]string // identity -> session token
+	policyKinds map[string]string // policy kind -> identity
 	logger      logr.Logger
-	// Warmup gate
+
 	builtinNames   map[string]struct{}
 	warmupComplete bool
-	secretNames    map[string]struct{}
 }
 
 func NewSessionStore(logger logr.Logger) *SessionStore {
 	return &SessionStore{
 		credentials:    make(map[string][]byte),
 		sessions:       make(map[string]string),
-		extensions:     make(map[string]string),
+		connections:    make(map[string]string),
 		policyKinds:    make(map[string]string),
 		logger:         logger,
 		builtinNames:   make(map[string]struct{}),
 		warmupComplete: true,
-		secretNames:    make(map[string]struct{}),
 	}
 }
 
@@ -72,19 +66,15 @@ func (s *SessionStore) BeginWarmup(builtinNames []string, timeout time.Duration)
 	})
 }
 
-// handshakeAdmitted reports whether extension may handshake now
-func (s *SessionStore) handshakeAdmitted(name string) bool {
+func (s *SessionStore) isWarmupComplete() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if _, ok := s.builtinNames[name]; ok {
-		return true
-	}
 	return s.warmupComplete
 }
 
 func (s *SessionStore) allBuiltinsRegisteredLocked() bool {
 	for name := range s.builtinNames {
-		if _, ok := s.extensions[name]; !ok {
+		if _, ok := s.connections[name]; !ok {
 			return false
 		}
 	}
@@ -105,82 +95,36 @@ func (s *SessionStore) setCredentialLocked(name string, credential []byte) {
 		if subtle.ConstantTimeCompare(existing, stored) == 1 {
 			return
 		}
-		s.revokeByNameLocked(name)
+		s.revokeIdentityLocked(name)
 	}
 
 	s.credentials[name] = stored
 }
 
-type CredentialSyncResult struct {
-	Added   int
-	Rotated int
-	Removed int
-}
+func (s *SessionStore) matchBuiltin(token []byte) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-func (r CredentialSyncResult) Changed() bool {
-	return r.Added > 0 || r.Rotated > 0 || r.Removed > 0
-}
-
-func (s *SessionStore) SyncSecretCredentials(credentials map[string][]byte) CredentialSyncResult {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var result CredentialSyncResult
-	for name, credential := range credentials {
-		if _, isBuiltin := s.builtinNames[name]; isBuiltin {
-			continue
-		}
-		existing, existed := s.credentials[name]
-		unchanged := existed && subtle.ConstantTimeCompare(existing, credential) == 1
-		s.setCredentialLocked(name, credential)
-		s.secretNames[name] = struct{}{}
-		switch {
-		case !existed:
-			result.Added++
-		case !unchanged:
-			result.Rotated++
+	name := ""
+	found := false
+	for candidate, credential := range s.credentials {
+		if subtle.ConstantTimeCompare(token, credential) == 1 {
+			name = candidate
+			found = true
 		}
 	}
-
-	for name := range s.secretNames {
-		if _, present := credentials[name]; present {
-			continue
-		}
-		delete(s.credentials, name)
-		s.revokeByNameLocked(name)
-		delete(s.secretNames, name)
-		result.Removed++
-	}
-
-	return result
+	return name, found
 }
 
-func (s *SessionStore) RemoveCredential(name string) bool {
+func (s *SessionStore) CreateSession(identity, policyKind string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	delete(s.credentials, name)
-	return s.revokeByNameLocked(name)
-}
-
-func (s *SessionStore) Authenticate(name string, credential []byte, policyKind string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	expected, ok := s.credentials[name]
-	if !ok {
-		return "", ErrUnknownExtension
-	}
-
-	if subtle.ConstantTimeCompare(credential, expected) != 1 || len(credential) < minCredentialLength {
-		return "", ErrInvalidCredential
-	}
 
 	if policyKind == "" {
 		return "", ErrPolicyKindRequired
 	}
 
-	if _, connected := s.extensions[name]; connected {
+	if _, connected := s.connections[identity]; connected {
 		return "", ErrAlreadyConnected
 	}
 
@@ -193,9 +137,9 @@ func (s *SessionStore) Authenticate(name string, credential []byte, policyKind s
 		return "", fmt.Errorf("failed to generate session token: %w", err)
 	}
 
-	s.sessions[token] = name
-	s.extensions[name] = token
-	s.policyKinds[policyKind] = name
+	s.sessions[token] = identity
+	s.connections[identity] = token
+	s.policyKinds[policyKind] = identity
 
 	if !s.warmupComplete && s.allBuiltinsRegisteredLocked() {
 		s.warmupComplete = true
@@ -208,26 +152,26 @@ func (s *SessionStore) ValidateSession(token string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	name, ok := s.sessions[token]
-	return name, ok
+	identity, ok := s.sessions[token]
+	return identity, ok
 }
 
-func (s *SessionStore) RevokeByName(name string) bool {
+func (s *SessionStore) RevokeByName(identity string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.revokeByNameLocked(name)
+	return s.revokeIdentityLocked(identity)
 }
 
-func (s *SessionStore) revokeByNameLocked(name string) bool {
-	token, ok := s.extensions[name]
+func (s *SessionStore) revokeIdentityLocked(identity string) bool {
+	token, ok := s.connections[identity]
 	if !ok {
 		return false
 	}
 	delete(s.sessions, token)
-	delete(s.extensions, name)
+	delete(s.connections, identity)
 	for kind, owner := range s.policyKinds {
-		if owner == name {
+		if owner == identity {
 			delete(s.policyKinds, kind)
 			break
 		}

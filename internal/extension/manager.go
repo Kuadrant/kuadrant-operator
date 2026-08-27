@@ -46,6 +46,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/env"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -56,13 +57,8 @@ import (
 
 const defaultExtensionServicePort = 50052
 const defaultWarmupTimeout = 30 * time.Second
-const defaultAuthSecretName = "kuadrant-extension-auth" //nolint:gosec
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
-
-func AuthSecretName() string {
-	return env.GetString("EXTENSION_AUTH_SECRET", defaultAuthSecretName)
-}
 
 type ChangeNotifier func(reason string) error
 
@@ -86,7 +82,7 @@ type Extension interface {
 	Name() string
 }
 
-func NewManager(location string, logger logr.Logger, sync io.Writer, client dynamic.Interface) (Manager, error) {
+func NewManager(location string, logger logr.Logger, sync io.Writer, client dynamic.Interface, kubeClient kubernetes.Interface) (Manager, error) {
 	names := discoverExtensions(logger, location)
 	if len(names) == 0 {
 		return Manager{}, ErrNoExtensionsFound
@@ -95,7 +91,7 @@ func NewManager(location string, logger logr.Logger, sync io.Writer, client dyna
 	var extensions []Extension
 	var err error
 
-	service := newExtensionService(BlockingDAG, logger)
+	service := newExtensionService(BlockingDAG, kubeClient, logger)
 	interceptor := NewAuthInterceptor(service.sessionStore, logger.WithName("auth"))
 	logger = logger.WithName("extension")
 
@@ -448,6 +444,7 @@ type extensionService struct {
 	dag               *nilGuardedPointer[StateAwareDAG]
 	registeredData    *RegisteredDataStore
 	sessionStore      *SessionStore
+	authenticator     *tokenAuthenticator
 	reflectionFetcher ReflectionFetcher
 	changeNotifier    ChangeNotifier
 	logger            logr.Logger
@@ -461,37 +458,71 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
-func (s *extensionService) Handshake(_ context.Context, request *extpb.HandshakeRequest) (*extpb.HandshakeResponse, error) {
-	if request.Name == "" {
+func (s *extensionService) Handshake(ctx context.Context, request *extpb.HandshakeRequest) (*extpb.HandshakeResponse, error) {
+	if request.PolicyKind == "" {
 		return &extpb.HandshakeResponse{
 			Accepted: false,
-			Reason:   "name is required",
+			Reason:   "policy_kind is required",
 		}, nil
 	}
 
-	// Built-in extensions claim their policy kinds first
-	if !s.sessionStore.handshakeAdmitted(request.Name) {
-		s.logger.Info("handshake rejected during warmup", "extension", request.Name, "policyKind", request.PolicyKind)
-		return &extpb.HandshakeResponse{
-			Accepted: false,
-			Reason:   "warmup in progress",
-		}, nil
+	identity, isBuiltin := s.sessionStore.matchBuiltin(request.Token)
+	if !isBuiltin {
+		// Built-in extensions claim their policy kinds before standalone
+		// extensions are admitted.
+		if !s.sessionStore.isWarmupComplete() {
+			s.logger.Info("handshake rejected during warmup", "policyKind", request.PolicyKind)
+			return &extpb.HandshakeResponse{
+				Accepted: false,
+				Reason:   "warmup in progress",
+			}, nil
+		}
+
+		var err error
+		identity, err = s.authenticateStandalone(ctx, request.Token, request.PolicyKind)
+		if err != nil {
+			s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
+			return &extpb.HandshakeResponse{
+				Accepted: false,
+				Reason:   "handshake failed",
+			}, nil
+		}
 	}
 
-	token, err := s.sessionStore.Authenticate(request.Name, request.Credential, request.PolicyKind)
+	token, err := s.sessionStore.CreateSession(identity, request.PolicyKind)
 	if err != nil {
-		s.logger.Info("handshake rejected", "extension", request.Name, "policyKind", request.PolicyKind, "reason", err.Error())
+		s.logger.Info("handshake rejected", "identity", identity, "policyKind", request.PolicyKind, "reason", err.Error())
 		return &extpb.HandshakeResponse{
 			Accepted: false,
 			Reason:   "handshake failed",
 		}, nil
 	}
 
-	s.logger.Info("handshake accepted", "extension", request.Name, "version", request.Version, "policyKind", request.PolicyKind)
+	s.logger.Info("handshake accepted", "identity", identity, "version", request.Version, "policyKind", request.PolicyKind)
 	return &extpb.HandshakeResponse{
 		Accepted:     true,
 		SessionToken: token,
 	}, nil
+}
+
+// authenticateStandalone validates a standalone extension's token via
+// TokenReview and confirms it may register the given policy kind via
+// SubjectAccessReview, returning the authenticated Kubernetes identity.
+func (s *extensionService) authenticateStandalone(ctx context.Context, token []byte, policyKind string) (string, error) {
+	user, err := s.authenticator.reviewToken(ctx, token)
+	if err != nil {
+		return "", err
+	}
+
+	allowed, err := s.authenticator.authorize(ctx, user, policyKind)
+	if err != nil {
+		return "", err
+	}
+	if !allowed {
+		return "", fmt.Errorf("identity %q not authorized to register policy kind %q", user.Username, policyKind)
+	}
+
+	return user.Username, nil
 }
 
 func (s *extensionService) GetServiceDescriptors(_ context.Context, request *extpb.GetServiceDescriptorsRequest) (*extpb.GetServiceDescriptorsResponse, error) {
@@ -539,12 +570,13 @@ func (s *extensionService) GetServiceDescriptors(_ context.Context, request *ext
 	}, nil
 }
 
-func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], logger logr.Logger) *extensionService {
+func newExtensionService(dag *nilGuardedPointer[StateAwareDAG], kubeClient kubernetes.Interface, logger logr.Logger) *extensionService {
 	reflectionClient := NewReflectionClient()
 	service := &extensionService{
 		dag:               dag,
 		registeredData:    NewRegisteredDataStore(),
 		sessionStore:      NewSessionStore(logger.WithName("sessions")),
+		authenticator:     newTokenAuthenticator(kubeClient, logger.WithName("authenticator")),
 		reflectionFetcher: reflectionClient.FetchServiceDescriptors,
 		logger:            logger.WithName("extensionService"),
 	}

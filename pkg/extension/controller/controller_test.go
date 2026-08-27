@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/go-logr/logr"
 	celtypes "github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc"
@@ -302,12 +303,11 @@ func TestHandshake_Success(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), "my-ext", []byte("credential-value"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token-value"), "MyPolicy")
 	assert.NilError(t, err)
 	assert.Equal(t, session.token, "returned-token")
-	assert.Equal(t, capturedReq.Name, "my-ext")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
-	assert.DeepEqual(t, capturedReq.Credential, []byte("credential-value"))
+	assert.DeepEqual(t, capturedReq.Token, []byte("token-value"))
 }
 
 func TestHandshake_Rejected(t *testing.T) {
@@ -323,7 +323,7 @@ func TestHandshake_Rejected(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), "my-ext", []byte("bad-cred"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("bad-token"), "MyPolicy")
 	assert.ErrorContains(t, err, "handshake rejected")
 	assert.Equal(t, session.token, "")
 }
@@ -338,9 +338,49 @@ func TestHandshake_RPCError(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), "my-ext", []byte("cred"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy")
 	assert.ErrorContains(t, err, "handshake RPC failed")
 	assert.Equal(t, session.token, "")
+}
+
+func TestStart_TokenSourceError(t *testing.T) {
+	ec := &ExtensionController{
+		config:      ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:      logr.Discard(),
+		tokenSource: func() ([]byte, error) { return nil, errors.New("token file missing") },
+	}
+
+	err := ec.Start(context.Background())
+	assert.ErrorContains(t, err, "failed to obtain handshake credential")
+	assert.ErrorContains(t, err, "token file missing")
+}
+
+func TestStart_HandshakesWithSourcedToken(t *testing.T) {
+	var capturedReq *extpb.HandshakeRequest
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			capturedReq = in
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session"}, nil
+		},
+	}
+	session := &sessionCredentials{}
+	ec := &ExtensionController{
+		config:          ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:          logr.Discard(),
+		extensionClient: &extensionClient{client: mock, session: session},
+		tokenSource:     staticTokenSource([]byte("sourced-token")),
+	}
+
+	// A nil manager and an already-cancelled context let Start complete the
+	// handshake and then return immediately from its keep-alive wait.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := ec.Start(ctx)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, capturedReq.Token, []byte("sourced-token"))
+	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
+	assert.Equal(t, session.token, "session")
 }
 
 func TestSessionCredentials_GetRequestMetadata(t *testing.T) {

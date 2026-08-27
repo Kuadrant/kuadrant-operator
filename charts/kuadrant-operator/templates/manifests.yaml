@@ -13869,24 +13869,6 @@ metadata:
   labels:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
-  name: kuadrant-operator-extension-auth-role
-  namespace: '{{ .Release.Namespace }}'
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  labels:
-    app: kuadrant
-    app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-leader-election-role
   namespace: '{{ .Release.Namespace }}'
 rules:
@@ -14308,6 +14290,12 @@ rules:
   - update
   - watch
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
   - authorino.kuadrant.io
   resources:
   - authconfigs
@@ -14319,6 +14307,12 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
 - apiGroups:
   - cert-manager.io
   resources:
@@ -14616,23 +14610,6 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: developer-portal-controller-manager
-  namespace: '{{ .Release.Namespace }}'
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  labels:
-    app: kuadrant
-    app.kubernetes.io/managed-by: helm
-  name: kuadrant-operator-extension-auth-rolebinding
-  namespace: '{{ .Release.Namespace }}'
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: kuadrant-operator-extension-auth-role
-subjects:
-- kind: ServiceAccount
-  name: kuadrant-operator-controller-manager
   namespace: '{{ .Release.Namespace }}'
 ---
 apiVersion: rbac.authorization.k8s.io/v1

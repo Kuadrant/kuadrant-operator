@@ -222,10 +222,9 @@ func (x *PongResponse) GetIn() *timestamp.Timestamp {
 
 type HandshakeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Credential    []byte                 `protobuf:"bytes,3,opt,name=credential,proto3" json:"credential,omitempty"`
-	PolicyKind    string                 `protobuf:"bytes,4,opt,name=policy_kind,json=policyKind,proto3" json:"policy_kind,omitempty"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Token         []byte                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	PolicyKind    string                 `protobuf:"bytes,3,opt,name=policy_kind,json=policyKind,proto3" json:"policy_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -260,13 +259,6 @@ func (*HandshakeRequest) Descriptor() ([]byte, []int) {
 	return file_v1_kuadrant_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *HandshakeRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
 func (x *HandshakeRequest) GetVersion() string {
 	if x != nil {
 		return x.Version
@@ -274,9 +266,9 @@ func (x *HandshakeRequest) GetVersion() string {
 	return ""
 }
 
-func (x *HandshakeRequest) GetCredential() []byte {
+func (x *HandshakeRequest) GetToken() []byte {
 	if x != nil {
-		return x.Credential
+		return x.Token
 	}
 	return nil
 }
@@ -1020,14 +1012,11 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\vPingRequest\x12,\n" +
 	"\x03out\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x03out\":\n" +
 	"\fPongResponse\x12*\n" +
-	"\x02in\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02in\"\x81\x01\n" +
-	"\x10HandshakeRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1e\n" +
-	"\n" +
-	"credential\x18\x03 \x01(\fR\n" +
-	"credential\x12\x1f\n" +
-	"\vpolicy_kind\x18\x04 \x01(\tR\n" +
+	"\x02in\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02in\"c\n" +
+	"\x10HandshakeRequest\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\fR\x05token\x12\x1f\n" +
+	"\vpolicy_kind\x18\x03 \x01(\tR\n" +
 	"policyKind\"l\n" +
 	"\x11HandshakeResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +

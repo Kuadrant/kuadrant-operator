@@ -433,14 +433,11 @@ spec:
       counters:
         - expression: auth.identity.username
       reservation:
-        amount: |
-          has(requestBodyJSON('/max_tokens'))
-            ? uint(requestBodyJSON('/max_tokens'))
-            : 100
+        amount: "uint(5000)"
         ttl: "duration('30s')"
 ```
 
-- `reservation.amount`: CEL expression for estimated tokens to hold. Defaults to the request's `max_tokens` field, falling back to a constant.
+- `reservation.amount`: CEL expression for estimated tokens to hold. Defaults to `uint(5000)` when omitted.
 - `reservation.ttl`: how long to hold the reservation before auto-releasing. Defaults to the route's backend request timeout.
 
 Policies that omit the `reservation` block automatically get safe defaults. No changes are required to existing TRLP resources.

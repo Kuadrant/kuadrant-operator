@@ -71,20 +71,27 @@ kubectl get pod test-client -n "$EGRESS_TEST_NS" > /dev/null 2>&1 || {
 }
 
 # ── Ensure Kuadrant CR exists ────────────────────────────────────────
-KUADRANT_NS=$(kubectl get kuadrant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
-if [ -z "$KUADRANT_NS" ]; then
-    info "Kuadrant CR not found. Creating in $KUADRANT_SYSTEM_NS..."
-    kubectl apply -f - <<EOF
+if kubectl get kuadrant -A --request-timeout=5s > /dev/null 2>&1; then
+    KUADRANT_NS=$(kubectl get kuadrant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null)
+    if [ -n "$KUADRANT_NS" ]; then
+        info "Kuadrant CR found in $KUADRANT_NS. Waiting for readiness..."
+        KUADRANT_NAME=$(kubectl get kuadrant -n "$KUADRANT_NS" -o jsonpath='{.items[0].metadata.name}')
+        kubectl wait --timeout=5m -n "$KUADRANT_NS" kuadrant/"$KUADRANT_NAME" --for=condition=Ready
+    else
+        info "Kuadrant CR not found. Creating in $KUADRANT_SYSTEM_NS..."
+        kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
   name: kuadrant
   namespace: $KUADRANT_SYSTEM_NS
 EOF
-    info "Waiting for Kuadrant to be ready..."
-    kubectl wait --timeout=5m -n "$KUADRANT_SYSTEM_NS" kuadrant/kuadrant --for=condition=Ready
+        info "Waiting for Kuadrant to be ready..."
+        kubectl wait --timeout=5m -n "$KUADRANT_SYSTEM_NS" kuadrant/kuadrant --for=condition=Ready
+    fi
 else
-    info "Kuadrant CR found in $KUADRANT_NS."
+    error "Cannot query Kuadrant CRDs. Is Kuadrant operator installed?"
+    exit 1
 fi
 
 # ── Deploy mock AI API ───────────────────────────────────────────────
@@ -176,8 +183,9 @@ kubectl wait --timeout=2m -n "$EGRESS_TEST_NS" pod/team-gold --for=condition=Rea
 info "Verifying AI mock connectivity through egress gateway..."
 
 info "Waiting for gateway address..."
-for attempt in $(seq 1 30); do
-    EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n "$EGRESS_NS" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+EGRESS_IP=""
+for _ in $(seq 1 30); do
+    EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n "$EGRESS_NS" --request-timeout=5s -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || true)
     [ -n "$EGRESS_IP" ] && break
     sleep 2
 done

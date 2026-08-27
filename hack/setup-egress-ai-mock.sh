@@ -26,6 +26,7 @@ set -euo pipefail
 EGRESS_NS="gateway-system"
 AI_MOCK_NS="ai-mock"
 EGRESS_TEST_NS="egress-test"
+KUADRANT_SYSTEM_NS="kuadrant-system"
 AI_MOCK_HOST="api.ai-mock.local"
 BASE_URL="https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main"
 
@@ -68,6 +69,23 @@ kubectl get pod test-client -n "$EGRESS_TEST_NS" > /dev/null 2>&1 || {
     error "test-client pod not found in $EGRESS_TEST_NS. Run setup-egress.sh first."
     exit 1
 }
+
+# ── Ensure Kuadrant CR exists ────────────────────────────────────────
+KUADRANT_NS=$(kubectl get kuadrant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null)
+if [ -z "$KUADRANT_NS" ]; then
+    info "Kuadrant CR not found. Creating in $KUADRANT_SYSTEM_NS..."
+    kubectl apply -f - <<EOF
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: $KUADRANT_SYSTEM_NS
+EOF
+    info "Waiting for Kuadrant to be ready..."
+    kubectl wait --timeout=5m -n "$KUADRANT_SYSTEM_NS" kuadrant/kuadrant --for=condition=Ready
+else
+    info "Kuadrant CR found in $KUADRANT_NS."
+fi
 
 # ── Deploy mock AI API ───────────────────────────────────────────────
 info "Deploying mock AI API (llm-d-inference-sim)..."

@@ -13,8 +13,10 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/go-logr/logr"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/samber/lo"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestMergeAndVerify(t *testing.T) {

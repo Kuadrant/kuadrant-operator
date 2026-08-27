@@ -68,10 +68,21 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
-	for binding, expression := range pol.Spec.Metrics.Default.Labels {
-		if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
-			r.Logger.Error(err, "failed to add data to request domain")
-			return calculateErrorStatus(pol, err), err
+	if pol.Spec.Metrics != nil {
+		for binding, expression := range pol.Spec.Metrics.Default.Labels {
+			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
+				r.Logger.Error(err, "failed to add data to request domain")
+				return calculateErrorStatus(pol, err), err
+			}
+		}
+	}
+
+	if pol.Spec.Logging != nil {
+		for binding, expression := range pol.Spec.Logging.Default.Fields {
+			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantLoggingBinding(binding), expression); err != nil {
+				r.Logger.Error(err, "failed to add data to request domain")
+				return calculateErrorStatus(pol, err), err
+			}
 		}
 	}
 

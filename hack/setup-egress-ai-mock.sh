@@ -71,7 +71,7 @@ kubectl get pod test-client -n "$EGRESS_TEST_NS" > /dev/null 2>&1 || {
 }
 
 # ── Ensure Kuadrant CR exists ────────────────────────────────────────
-KUADRANT_NS=$(kubectl get kuadrant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null)
+KUADRANT_NS=$(kubectl get kuadrant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
 if [ -z "$KUADRANT_NS" ]; then
     info "Kuadrant CR not found. Creating in $KUADRANT_SYSTEM_NS..."
     kubectl apply -f - <<EOF

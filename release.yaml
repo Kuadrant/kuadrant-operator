@@ -10,4 +10,4 @@ dependencies:
   developer-portal-controller: "0.2.1"
   dns-operator: "0.17.1"
   limitador-operator: "0.18.3"
-  wasm-shim: "0.14.1"
+  wasm-shim: "0.14.2"

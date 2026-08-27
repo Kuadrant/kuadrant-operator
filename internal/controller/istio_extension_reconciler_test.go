@@ -4,11 +4,17 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"testing"
 
 	"gotest.tools/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
+	"github.com/samber/lo"
 )
 
 func TestMergeAndVerify(t *testing.T) {

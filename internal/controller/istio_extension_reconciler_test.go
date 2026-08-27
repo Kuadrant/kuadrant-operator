@@ -4,13 +4,9 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
-	"maps"
 	"testing"
 
 	"gotest.tools/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
@@ -723,4 +719,3 @@ func TestMergeAndVerifyEdgeCases(t *testing.T) {
 		assert.Equal(t, "auth.identity.bob", result1[0].ConditionalData[1].Predicates[0])
 	})
 }
-

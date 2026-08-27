@@ -118,7 +118,7 @@ The response includes `usage.total_tokens`. The simulator returns approximately 
 
 ```sh
 # Send requests until rate limited (limit is 100 tokens/min, ~10 tokens/request)
-for i in $(seq 1 15); do
+for i in $(seq 1 20); do
   CODE=$(kubectl exec test-client -n egress-test -- \
       curl -s -o /dev/null -w "%{http_code}" \
            -H "Host: api.ai-mock.local" \
@@ -132,6 +132,7 @@ for i in $(seq 1 15); do
                  "usage": true
                }')
   echo "Request $i: HTTP $CODE"
+  [ "$CODE" = "429" ] && break
 done
 ```
 
@@ -215,27 +216,31 @@ Each ServiceAccount now gets an independent 100 tokens/minute budget.
 
 ### Verify per-workload limits
 
-Send requests from each workload and observe independent limits:
+Exhaust the test-client budget and confirm that team-gold is unaffected:
 
 ```sh
-# test-client (default SA) — gets its own 100 token budget
-kubectl exec test-client -n egress-test -- sh -c '
-curl -s -o /dev/null -w "%{http_code}" \
-    -H "Host: api.ai-mock.local" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
-    -X POST http://'"${EGRESS_IP}"'/v1/chat/completions \
-    -d "{
-          \"model\": \"meta-llama/Llama-3.1-8B-Instruct\",
-          \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}],
-          \"max_tokens\": 100,
-          \"stream\": false,
-          \"usage\": true
-        }"
-'
+# Exhaust test-client (default SA) budget
+for i in $(seq 1 20); do
+  CODE=$(kubectl exec test-client -n egress-test -- sh -c '
+  curl -s -o /dev/null -w "%{http_code}" \
+      -H "Host: api.ai-mock.local" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+      -X POST http://'"${EGRESS_IP}"'/v1/chat/completions \
+      -d "{
+            \"model\": \"meta-llama/Llama-3.1-8B-Instruct\",
+            \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}],
+            \"max_tokens\": 100,
+            \"stream\": false,
+            \"usage\": true
+          }"
+  ')
+  echo "test-client request $i: HTTP $CODE"
+  [ "$CODE" = "429" ] && break
+done
 
-# team-gold (team-gold SA) — gets its own separate 100 token budget
-kubectl exec team-gold -n egress-test -- sh -c '
+# team-gold (team-gold SA) — independent budget, still allowed
+CODE=$(kubectl exec team-gold -n egress-test -- sh -c '
 curl -s -o /dev/null -w "%{http_code}" \
     -H "Host: api.ai-mock.local" \
     -H "Content-Type: application/json" \
@@ -248,7 +253,8 @@ curl -s -o /dev/null -w "%{http_code}" \
           \"stream\": false,
           \"usage\": true
         }"
-'
+')
+echo "team-gold: HTTP $CODE"
 ```
 
 Rate limiting one workload does not affect the other. Each SA token counter is tracked independently.
@@ -283,7 +289,7 @@ spec:
         - limit: 100
           window: 1m
       when:
-        - predicate: auth.identity.username.startsWith('system:serviceaccount:egress-test:default')
+        - predicate: auth.identity.username == 'system:serviceaccount:egress-test:default'
       counters:
         - expression: auth.identity.username
     gold-tier:
@@ -291,7 +297,7 @@ spec:
         - limit: 500
           window: 1m
       when:
-        - predicate: auth.identity.username.startsWith('system:serviceaccount:egress-test:team-gold')
+        - predicate: auth.identity.username == 'system:serviceaccount:egress-test:team-gold'
       counters:
         - expression: auth.identity.username
 EOF
@@ -304,7 +310,7 @@ EOF
 
 ```sh
 # Exhaust the default tier (100 tokens, ~10 tokens/request)
-for i in $(seq 1 15); do
+for i in $(seq 1 20); do
   CODE=$(kubectl exec test-client -n egress-test -- sh -c '
   curl -s -o /dev/null -w "%{http_code}" \
       -H "Host: api.ai-mock.local" \
@@ -320,6 +326,7 @@ for i in $(seq 1 15); do
           }"
   ')
   echo "default-tier request $i: HTTP $CODE"
+  [ "$CODE" = "429" ] && break
 done
 
 # Gold tier (500 tokens) still has budget
@@ -363,7 +370,7 @@ curl -s \
 '
 ```
 
-The final SSE event contains the usage data. Token counting and rate limiting work the same as non-streaming requests.
+The final SSE event contains the usage data. Because the counter is updated only after the full response completes, a streaming response delivers all its chunks before the token count is recorded. The updated limit applies to subsequent requests, not the stream already in progress.
 
 If `stream_options.include_usage` is omitted when `stream: true`, token usage cannot be extracted. Depending on the wasm-shim failure mode, the request may be allowed without counting or rejected.
 
@@ -464,7 +471,7 @@ Remove all resources created by this guide:
 
 ```sh
 # Remove policies
-kubectl delete tokenratelimitpolicy --all -n gateway-system
+kubectl delete tokenratelimitpolicy -n gateway-system ai-token-limit ai-per-workload ai-per-tier --ignore-not-found
 kubectl delete authpolicy workload-identity -n gateway-system --ignore-not-found
 
 # Remove AI mock resources

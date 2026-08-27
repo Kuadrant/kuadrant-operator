@@ -44,8 +44,8 @@ error() { echo "[ERROR] $*" >&2; }
 # ── Cleanup ──────────────────────────────────────────────────────────
 if [ "${1:-}" = "cleanup" ]; then
     info "Cleaning up AI mock egress resources..."
-    kubectl delete tokenratelimitpolicy -n "$EGRESS_NS" --all --ignore-not-found
-    kubectl delete authpolicy -n "$EGRESS_NS" --all --ignore-not-found
+    kubectl delete tokenratelimitpolicy -n "$EGRESS_NS" ai-token-limit ai-per-workload ai-per-tier --ignore-not-found
+    kubectl delete authpolicy -n "$EGRESS_NS" workload-identity --ignore-not-found
     kubectl delete httproute ai-mock-external -n "$EGRESS_NS" --ignore-not-found
     kubectl delete serviceentry ai-mock-external -n "$EGRESS_NS" --ignore-not-found
     kubectl delete pod team-gold -n "$EGRESS_TEST_NS" --ignore-not-found
@@ -156,9 +156,17 @@ kubectl wait --timeout=2m -n "$EGRESS_TEST_NS" pod/team-gold --for=condition=Rea
 
 # ── Verify connectivity ──────────────────────────────────────────────
 info "Verifying AI mock connectivity through egress gateway..."
-EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n "$EGRESS_NS" -o jsonpath='{.status.addresses[0].value}')
 
-sleep 5
+info "Waiting for gateway address..."
+for attempt in $(seq 1 30); do
+    EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n "$EGRESS_NS" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+    [ -n "$EGRESS_IP" ] && break
+    sleep 2
+done
+if [ -z "$EGRESS_IP" ]; then
+    error "Gateway address not available after 60s. Check: kubectl get gtw kuadrant-egressgateway -n $EGRESS_NS -o yaml"
+    exit 1
+fi
 
 RESULT=$(kubectl exec test-client -n "$EGRESS_TEST_NS" -- curl -s --max-time 10 -o /dev/null -w "%{http_code}" \
     -H "Host: $AI_MOCK_HOST" "http://$EGRESS_IP/v1/models" 2>/dev/null || echo "000")

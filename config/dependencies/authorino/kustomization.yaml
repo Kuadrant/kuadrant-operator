@@ -1,2 +1,2 @@
 resources:
-- github.com/Kuadrant/authorino-operator/config/deploy?ref=v0.25.2
+- github.com/Kuadrant/authorino-operator/config/deploy?ref=v0.25.3

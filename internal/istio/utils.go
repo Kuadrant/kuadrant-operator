@@ -3,6 +3,7 @@ package istio
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -11,7 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
-	istioapiv1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1 "istio.io/client-go/pkg/apis/security/v1"
@@ -24,23 +24,16 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
+const GatewayNameLabel = "gateway.networking.k8s.io/gateway-name"
+
 var (
 	EnvoyFiltersResource       = istioclientgonetworkingv1alpha3.SchemeGroupVersion.WithResource("envoyfilters")
 	WasmPluginsResource        = istioclientgoextensionv1alpha1.SchemeGroupVersion.WithResource("wasmplugins")
 	PeerAuthenticationResource = istiosecurityv1.SchemeGroupVersion.WithResource("peerauthentications")
 
 	EnvoyFilterGroupKind        = schema.GroupKind{Group: istioclientgonetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
-	WasmPluginGroupKind         = schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"}
 	PeerAuthenticationGroupKind = schema.GroupKind{Group: istiosecurityv1.GroupName, Kind: "PeerAuthentication"}
 )
-
-func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
-	return len(a) == len(b) && lo.EveryBy(a, func(aTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
-		return lo.SomeBy(b, func(bTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
-			return aTargetRef.Group == bTargetRef.Group && aTargetRef.Kind == bTargetRef.Kind && aTargetRef.Name == bTargetRef.Name && aTargetRef.Namespace == bTargetRef.Namespace
-		})
-	})
-}
 
 // BuildEnvoyFilterClusterPatch returns an envoy config patch that adds a cluster to the gateway.
 func BuildEnvoyFilterClusterPatch(host string, port int, mtls bool, clusterPatchBuilder func(string, int, bool) map[string]any) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
@@ -163,7 +156,7 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 }
 
 func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
-	if a.Spec.Priority != b.Spec.Priority || !EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
+	if a.Spec.Priority != b.Spec.Priority || !maps.Equal(a.Spec.WorkloadSelector.GetLabels(), b.Spec.WorkloadSelector.GetLabels()) {
 		return false
 	}
 
@@ -294,21 +287,6 @@ func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 	return true, nil
 }
 
-func LinkGatewayToWasmPlugin(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
-		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
-	})
-
-	return machinery.LinkFunc{
-		From: machinery.GatewayGroupKind,
-		To:   WasmPluginGroupKind,
-		Func: func(child machinery.Object) []machinery.Object {
-			wasmPlugin := child.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
-			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(wasmPlugin.Spec.TargetRefs, wasmPlugin.GetNamespace()))
-		},
-	}
-}
-
 func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
 		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
@@ -319,39 +297,28 @@ func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {
 		To:   EnvoyFilterGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			envoyFilter := child.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
-			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(envoyFilter.Spec.TargetRefs, envoyFilter.GetNamespace()))
+			gatewayName := envoyFilter.Spec.WorkloadSelector.GetLabels()[GatewayNameLabel]
+			if gatewayName == "" {
+				// todo(remove): fallback migration of targetRefs to workloadSelector
+				for _, ref := range envoyFilter.Spec.TargetRefs {
+					group := ref.GetGroup()
+					if group == "" {
+						group = machinery.GatewayGroupKind.Group
+					}
+					kind := ref.GetKind()
+					if kind == "" {
+						kind = machinery.GatewayGroupKind.Kind
+					}
+					if group == machinery.GatewayGroupKind.Group && kind == machinery.GatewayGroupKind.Kind {
+						gatewayName = ref.GetName()
+						break
+					}
+				}
+			}
+			return lo.Filter(gateways, func(obj machinery.Object, _ int) bool {
+				return obj.GetName() == gatewayName && obj.GetNamespace() == envoyFilter.GetNamespace()
+			})
 		},
-	}
-}
-
-func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTargetReference, defaultNamespace string) func(machinery.Object, int) bool {
-	return func(obj machinery.Object, _ int) bool {
-		groupKind := obj.GroupVersionKind().GroupKind()
-		return lo.SomeBy(targetRefs, func(targetRef *istioapiv1beta1.PolicyTargetReference) bool {
-			if targetRef == nil {
-				return false
-			}
-			group := targetRef.GetGroup()
-			if group == "" {
-				group = machinery.GatewayGroupKind.Group
-			}
-			kind := targetRef.GetKind()
-			if kind == "" {
-				kind = machinery.GatewayGroupKind.Kind
-			}
-			name := targetRef.GetName()
-			if name == "" {
-				return false
-			}
-			namespace := targetRef.GetNamespace()
-			if namespace == "" {
-				namespace = defaultNamespace
-			}
-			return group == groupKind.Group &&
-				kind == groupKind.Kind &&
-				name == obj.GetName() &&
-				namespace == obj.GetNamespace()
-		})
 	}
 }
 

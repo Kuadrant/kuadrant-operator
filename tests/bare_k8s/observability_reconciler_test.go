@@ -19,7 +19,7 @@ import (
 var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 	var (
 		testNamespace    string
-		testTimeOut      = SpecTimeout(30 * time.Second)
+		testTimeOut      = NodeTimeout(30 * time.Second)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 
@@ -27,7 +27,7 @@ var _ = Describe("Observabiltity monitors for kuadrant components", func() {
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-	})
+	}, testTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)

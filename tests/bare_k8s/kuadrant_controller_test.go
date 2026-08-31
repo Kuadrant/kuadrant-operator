@@ -31,13 +31,13 @@ import (
 var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 	var (
 		testNamespace    string
-		testTimeOut      = SpecTimeout(30 * time.Second)
+		testTimeOut      = NodeTimeout(30 * time.Second)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-	})
+	}, testTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -58,7 +58,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				},
 			}
 			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
-		})
+		}, testTimeOut)
 
 		It("Status is populated with missing Gateway API", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
@@ -282,7 +282,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				},
 			}
 			Expect(testClient().Create(ctx, kuadrantCR)).To(Succeed())
-		})
+		}, testTimeOut)
 
 		It("Propagated to limitador and authorino", func(ctx SpecContext) {
 			assertTracingIsNotConfigured := func(g Gomega) {
@@ -454,7 +454,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 	Context("TLS profile configuration", func() {
 		var kuadrantCR *kuadrantv1beta1.Kuadrant
 
-		tlsTestTimeOut := SpecTimeout(60 * time.Second)
+		tlsTestTimeOut := NodeTimeout(60 * time.Second)
 
 		BeforeEach(func(ctx SpecContext) {
 			kuadrantCR = &kuadrantv1beta1.Kuadrant{
@@ -468,7 +468,7 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 				},
 			}
 			Expect(testClient().Create(ctx, kuadrantCR)).To(Succeed())
-		})
+		}, testTimeOut)
 
 		enableTLS := func(ctx context.Context) {
 			authorino := &authorinoopapi.Authorino{}

@@ -18,6 +18,7 @@ package extension
 
 import (
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -26,10 +27,23 @@ import (
 	"gotest.tools/assert"
 )
 
+const oopTestHelperEnv = "KUADRANT_OOP_TEST_HELPER"
+
+// When oopTestHelperEnv is set, re-executions of this binary block until killed
+// rather than running the suite, providing a long-lived managed process.
+func TestMain(m *testing.M) {
+	if os.Getenv(oopTestHelperEnv) != "" {
+		select {}
+	}
+	os.Exit(m.Run())
+}
+
 func TestOOPExtensionManagesExternalProcess(t *testing.T) {
+	t.Setenv(oopTestHelperEnv, "1")
+
 	oop := OOPExtension{
 		name:       "test",
-		executable: "/bin/cat",
+		executable: os.Args[0],
 		logger:     logr.Discard(),
 	}
 

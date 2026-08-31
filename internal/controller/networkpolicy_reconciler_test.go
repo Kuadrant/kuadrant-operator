@@ -371,7 +371,7 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 		},
 	}
 
-	t.Run("nil authorino - default ports", func(t *testing.T) {
+	t.Run("nil authorino no gateways - only OIDC rule", func(t *testing.T) {
 		topology, err := machinery.NewTopology()
 		assert.NilError(t, err)
 
@@ -380,17 +380,93 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 		assert.Equal(t, result.Name, AuthorinoNetworkPolicy)
 		assert.Equal(t, result.Namespace, "kuadrant-system")
 		assert.DeepEqual(t, result.Spec.PodSelector.MatchLabels, map[string]string{"kuadrant.io/managed": "true"})
-		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 1), "should have only OIDC ingress rule when no gateways")
 
-		// Verify gRPC port (default 50051)
-		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(50051)))
-		// Verify HTTP port (default 5051)
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(5051)))
 		// Verify OIDC port (default 8083)
-		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(8083)))
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8083)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "OIDC should not have peers")
 	})
 
-	t.Run("authorino with custom ports", func(t *testing.T) {
+	t.Run("nil authorino with gateways - default ports", func(t *testing.T) {
+		gateway := &gatewayapiv1.Gateway{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Gateway",
+				APIVersion: "gateway.networking.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw1",
+				Namespace: "gateway-ns",
+			},
+		}
+		topology, err := machinery.NewTopology(
+			machinery.WithTargetables(&machinery.Gateway{Gateway: gateway}),
+		)
+		assert.NilError(t, err)
+
+		result := generateAuthorinoNetworkPolicy(kuadrant, nil, topology)
+
+		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules when gateways exist")
+
+		// Verify OIDC port (default 8083) - first rule, no peers
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8083)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "OIDC should not have peers")
+		// Verify gRPC port (default 50051)
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(50051)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "gRPC should have gateway peer")
+		// Verify HTTP port (default 5001)
+		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(5001)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 1), "HTTP should have gateway peer")
+	})
+
+	t.Run("authorino with custom ports and gateways", func(t *testing.T) {
+		authorino := &authorinooperatorv1beta1.Authorino{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Authorino",
+				APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "authorino",
+				Namespace: "kuadrant-system",
+			},
+			Spec: authorinooperatorv1beta1.AuthorinoSpec{
+				Listener: authorinooperatorv1beta1.Listener{
+					Ports: authorinooperatorv1beta1.Ports{
+						GRPC: new(int32(9000)),
+						HTTP: new(int32(9001)),
+					},
+				},
+				OIDCServer: authorinooperatorv1beta1.OIDCServer{
+					Port: new(int32(9002)),
+				},
+			},
+		}
+		gateway := &gatewayapiv1.Gateway{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Gateway",
+				APIVersion: "gateway.networking.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw1",
+				Namespace: "gateway-ns",
+			},
+		}
+		topology, err := machinery.NewTopology(
+			machinery.WithTargetables(&machinery.Gateway{Gateway: gateway}),
+		)
+		assert.NilError(t, err)
+
+		result := generateAuthorinoNetworkPolicy(kuadrant, authorino, topology)
+
+		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules with gateways")
+		// Verify custom OIDC port (first rule)
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9002)))
+		// Verify custom gRPC port
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9000)))
+		// Verify custom HTTP port
+		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(9001)))
+	})
+
+	t.Run("authorino with custom ports no gateways - only OIDC", func(t *testing.T) {
 		authorino := &authorinooperatorv1beta1.Authorino{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Authorino",
@@ -417,12 +493,8 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		result := generateAuthorinoNetworkPolicy(kuadrant, authorino, topology)
 
-		// Verify custom gRPC port
-		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9000)))
-		// Verify custom HTTP port
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9001)))
-		// Verify custom OIDC port
-		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(9002)))
+		assert.Assert(t, is.Len(result.Spec.Ingress, 1), "should have only OIDC rule without gateways")
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9002)))
 	})
 
 	t.Run("gateway in topology - peers in gRPC and HTTP but not OIDC", func(t *testing.T) {
@@ -443,18 +515,20 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		result := generateAuthorinoNetworkPolicy(kuadrant, nil, topology)
 
-		// gRPC rule should have gateway peer
-		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 1), "gRPC should have gateway peer")
-		assert.DeepEqual(t, result.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels,
-			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
+		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules")
 
-		// HTTP rule should have gateway peer
-		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "HTTP should have gateway peer")
+		// OIDC rule (index 0) should NOT have gateway peer (empty From)
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "OIDC should not have gateway peer")
+
+		// gRPC rule (index 1) should have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "gRPC should have gateway peer")
 		assert.DeepEqual(t, result.Spec.Ingress[1].From[0].NamespaceSelector.MatchLabels,
 			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
 
-		// OIDC rule should NOT have gateway peer (empty From)
-		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 0), "OIDC should not have gateway peer")
+		// HTTP rule (index 2) should have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 1), "HTTP should have gateway peer")
+		assert.DeepEqual(t, result.Spec.Ingress[2].From[0].NamespaceSelector.MatchLabels,
+			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
 	})
 
 	t.Run("common labels are set", func(t *testing.T) {
@@ -482,7 +556,7 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 		},
 	}
 
-	t.Run("nil limitador - default ports", func(t *testing.T) {
+	t.Run("nil limitador no gateways - empty ingress", func(t *testing.T) {
 		topology, err := machinery.NewTopology()
 		assert.NilError(t, err)
 
@@ -490,16 +564,36 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 
 		assert.Equal(t, result.Name, LimitadorNetworkPolicy)
 		assert.Equal(t, result.Namespace, "kuadrant-system")
-		assert.DeepEqual(t, result.Spec.PodSelector.MatchLabels, map[string]string{"kuadrant.io/managed": "true"})
-		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have 2 ingress rules")
+		assert.Assert(t, result.Spec.PodSelector.MatchLabels == nil, "should have nil labels when no deployment linked")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 0), "should have no ingress rules without gateways")
+	})
 
+	t.Run("nil limitador with gateways - default ports", func(t *testing.T) {
+		gateway := &gatewayapiv1.Gateway{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Gateway",
+				APIVersion: "gateway.networking.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw1",
+				Namespace: "gateway-ns",
+			},
+		}
+		topology, err := machinery.NewTopology(
+			machinery.WithTargetables(&machinery.Gateway{Gateway: gateway}),
+		)
+		assert.NilError(t, err)
+
+		result := generateLimitadorNetworkPolicy(kuadrant, nil, topology)
+
+		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have 2 ingress rules with gateways")
 		// Verify gRPC port (default 8081)
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8081)))
 		// Verify HTTP port (default 8080)
 		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8080)))
 	})
 
-	t.Run("limitador with custom ports", func(t *testing.T) {
+	t.Run("limitador with custom ports and gateways", func(t *testing.T) {
 		limitador := &limitadorv1alpha1.Limitador{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Limitador",
@@ -516,11 +610,24 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 				},
 			},
 		}
-		topology, err := machinery.NewTopology()
+		gateway := &gatewayapiv1.Gateway{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Gateway",
+				APIVersion: "gateway.networking.k8s.io/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw1",
+				Namespace: "gateway-ns",
+			},
+		}
+		topology, err := machinery.NewTopology(
+			machinery.WithTargetables(&machinery.Gateway{Gateway: gateway}),
+		)
 		assert.NilError(t, err)
 
 		result := generateLimitadorNetworkPolicy(kuadrant, limitador, topology)
 
+		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have 2 ingress rules with gateways")
 		// Verify custom gRPC port
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(7001)))
 		// Verify custom HTTP port
@@ -659,6 +766,97 @@ func TestLinkedDeploymentLabels(t *testing.T) {
 			"version": "v1",
 		}
 		assert.Assert(t, maps.Equal(result, expectedLabels), "should return pod template labels")
+	})
+}
+
+func TestHasLinkedDeployment(t *testing.T) {
+	t.Run("nil resource", func(t *testing.T) {
+		topology, err := machinery.NewTopology()
+		assert.NilError(t, err)
+
+		exist, err := hasLinkedDeployment(nil, topology)
+		assert.Assert(t, !exist, "should return false for nil resource")
+		assert.ErrorContains(t, err, "nil resource")
+	})
+
+	t.Run("typed nil Object", func(t *testing.T) {
+		topology, err := machinery.NewTopology()
+		assert.NilError(t, err)
+
+		var nilAuthorino *authorinooperatorv1beta1.Authorino
+		resource := &controller.RuntimeObject{Object: nilAuthorino}
+
+		exist, err := hasLinkedDeployment(resource, topology)
+		assert.Assert(t, !exist, "should return false for typed nil Object")
+		assert.ErrorContains(t, err, "nil Object")
+	})
+
+	t.Run("no deployment children", func(t *testing.T) {
+		authorino := &authorinooperatorv1beta1.Authorino{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Authorino",
+				APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "authorino",
+				Namespace: "kuadrant-system",
+				UID:       "authorino-uid",
+			},
+		}
+		authorinoRuntimeObj := &controller.RuntimeObject{Object: authorino}
+
+		topology, err := machinery.NewTopology(
+			machinery.WithObjects(authorinoRuntimeObj),
+		)
+		assert.NilError(t, err)
+
+		exist, err := hasLinkedDeployment(authorinoRuntimeObj, topology)
+		assert.Assert(t, !exist, "should return false when no deployment children")
+		assert.NilError(t, err, "should not return error when no deployment children")
+	})
+
+	t.Run("one deployment child", func(t *testing.T) {
+		authorino := &authorinooperatorv1beta1.Authorino{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Authorino",
+				APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "authorino",
+				Namespace: "kuadrant-system",
+				UID:       "authorino-uid",
+			},
+		}
+		deployment := &appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Deployment",
+				APIVersion: "apps/v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "authorino",
+				Namespace: "kuadrant-system",
+				UID:       "deployment-uid",
+			},
+		}
+
+		authorinoRuntimeObj := &controller.RuntimeObject{Object: authorino}
+		deploymentRuntimeObj := &controller.RuntimeObject{Object: deployment}
+
+		store := make(controller.Store)
+		store[string(authorinoRuntimeObj.GetUID())] = authorinoRuntimeObj
+		store[string(deploymentRuntimeObj.GetUID())] = deploymentRuntimeObj
+
+		linkFunc := kuadrantv1beta1.LinkAuthorinoToDeployment(store)
+
+		topology, err := machinery.NewTopology(
+			machinery.WithObjects(authorinoRuntimeObj, deploymentRuntimeObj),
+			machinery.WithLinks(linkFunc),
+		)
+		assert.NilError(t, err)
+
+		exist, err := hasLinkedDeployment(authorinoRuntimeObj, topology)
+		assert.Assert(t, exist, "should return true for one deployment child")
+		assert.NilError(t, err)
 	})
 }
 

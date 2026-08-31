@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -86,23 +85,29 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 	var errs []error
 	// -------------------------------------------------------------------------------------------------------------
 	span.AddEvent("setting authorino network policy")
-	update := false
 
 	authorinoObj := GetAuthorinoFromTopology(topology, state)
-
-	minAuthorinoNetworkPolicy := generateAuthorinoNetworkPolicy(kObj, authorinoObj, topology)
-
-	var existingAuthorinoNetworkPolicy *networkingv1.NetworkPolicy
-	for _, policy := range policies {
-		if policy.GetName() == AuthorinoNetworkPolicy {
-			existingAuthorinoNetworkPolicy = policy
-			break
-		}
+	exist, err := hasLinkedDeployment(&controller.RuntimeObject{Object: authorinoObj}, topology)
+	// err will be raised if the authorinoObj is nil, it is safe to assume from this poing if there is no error the authorinoObj is not nil
+	if err != nil {
+		// don't process network policies for deployments that don't exist
+		logger.V(1).Info("no found deployment", "err", err)
+		errs = append(errs, err)
 	}
 
-	desiredAuthorinoNetworkPolicy, update := mergeNetworkPolicy(*minAuthorinoNetworkPolicy, existingAuthorinoNetworkPolicy)
+	if exist {
+		minAuthorinoNetworkPolicy := generateAuthorinoNetworkPolicy(kObj, authorinoObj, topology)
 
-	if authorinoObj != nil {
+		var existingAuthorinoNetworkPolicy *networkingv1.NetworkPolicy
+		for _, policy := range policies {
+			if policy.GetName() == AuthorinoNetworkPolicy {
+				existingAuthorinoNetworkPolicy = policy
+				break
+			}
+		}
+
+		desiredAuthorinoNetworkPolicy, update := mergeNetworkPolicy(*minAuthorinoNetworkPolicy, existingAuthorinoNetworkPolicy)
+
 		ownerRef := metav1.OwnerReference{
 			APIVersion:         authorinoObj.GroupVersionKind().GroupVersion().String(),
 			Kind:               authorinoObj.Kind,
@@ -124,15 +129,15 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 		}
 
 		desiredAuthorinoNetworkPolicy.SetOwnerReferences(existingOwnerRefs)
-	}
 
-	err := r.writePolicyToCluster(ctx, logger, span, desiredAuthorinoNetworkPolicy, writeChecks{
-		Create: existingAuthorinoNetworkPolicy == nil,
-		Update: update,
-	})
-	if err != nil {
-		logger.Error(err, "failed to write authorino network policy to cluster")
-		errs = append(errs, err)
+		err := r.writePolicyToCluster(ctx, logger, span, desiredAuthorinoNetworkPolicy, writeChecks{
+			Create: existingAuthorinoNetworkPolicy == nil,
+			Update: update,
+		})
+		if err != nil {
+			logger.Error(err, "failed to write authorino network policy to cluster")
+			errs = append(errs, err)
+		}
 	}
 
 	// -------------------------------------------------------------------------------------------------------------
@@ -140,19 +145,27 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 	span.AddEvent("setting limitador network policy")
 
 	lObj := GetLimitadorFromTopology(topology, state)
-	minLimitadorNetworkPolicy := generateLimitadorNetworkPolicy(kObj, lObj, topology)
-
-	var existingLimitadorNetworkPolicy *networkingv1.NetworkPolicy
-	for _, policy := range policies {
-		if policy.GetName() == LimitadorNetworkPolicy {
-			existingLimitadorNetworkPolicy = policy
-			break
-		}
+	exist, err = hasLinkedDeployment(&controller.RuntimeObject{Object: lObj}, topology)
+	// err will be raised if the lObj is nil, it is safe to assume from this poing if there is no error the lObj is not nil
+	if err != nil {
+		// don't process network policies for deployments that don't exist
+		logger.V(1).Info("no found deployment", "err", err)
+		errs = append(errs, err)
 	}
 
-	desiredLimitadorNetworkPolicy, update := mergeNetworkPolicy(*minLimitadorNetworkPolicy, existingLimitadorNetworkPolicy)
+	if exist {
+		minLimitadorNetworkPolicy := generateLimitadorNetworkPolicy(kObj, lObj, topology)
 
-	if lObj != nil {
+		var existingLimitadorNetworkPolicy *networkingv1.NetworkPolicy
+		for _, policy := range policies {
+			if policy.GetName() == LimitadorNetworkPolicy {
+				existingLimitadorNetworkPolicy = policy
+				break
+			}
+		}
+
+		desiredLimitadorNetworkPolicy, update := mergeNetworkPolicy(*minLimitadorNetworkPolicy, existingLimitadorNetworkPolicy)
+
 		ownerRef := metav1.OwnerReference{
 			APIVersion:         lObj.GroupVersionKind().GroupVersion().String(),
 			Kind:               lObj.Kind,
@@ -174,24 +187,28 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 		}
 
 		desiredLimitadorNetworkPolicy.SetOwnerReferences(existingOwnerRefs)
-	}
 
-	err = r.writePolicyToCluster(ctx, logger, span, desiredLimitadorNetworkPolicy, writeChecks{
-		Create: existingLimitadorNetworkPolicy == nil,
-		Update: update,
-	})
-	if err != nil {
-		logger.Error(err, "failed to write limitador network policy to cluster")
-		errs = append(errs, err)
+		err = r.writePolicyToCluster(ctx, logger, span, desiredLimitadorNetworkPolicy, writeChecks{
+			Create: existingLimitadorNetworkPolicy == nil,
+			Update: update,
+		})
+		if err != nil {
+			logger.Error(err, "failed to write limitador network policy to cluster")
+			errs = append(errs, err)
+		}
 	}
 	// -------------------------------------------------------------------------------------------------------------
 
 	if len(errs) > 0 {
 		span.SetStatus(codes.Error, "reconciliation completed with errors")
+		for _, err := range errs {
+			logger.Error(err, "reconciliation error")
+		}
 	} else {
 		span.SetStatus(codes.Ok, "")
 	}
-	return errors.Join(errs...)
+	// Don't return errors as it can cancel the context of workflows running in parallel.
+	return nil
 }
 
 func (r *NetworkPolicyReconciler) writePolicyToCluster(ctx context.Context, logger logr.Logger, span trace.Span, networkPolicy *networkingv1.NetworkPolicy, check writeChecks) error {
@@ -278,7 +295,7 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 	// These default port values are hardcode into the authServerCmd in the authorino repo
 	// https://github.com/Kuadrant/authorino/blob/58fecc6cdec38376fa7dba5638f1f7ecb6964cd0/main.go#L178-L218
 	gRPCport := 50051
-	HTTPport := 5051
+	HTTPport := 5001
 	OIDCdiscoveryPort := 8083
 
 	if aObj != nil {
@@ -293,6 +310,18 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 		}
 	}
 
+	ingress := []networkingv1.NetworkPolicyIngressRule{
+		// OIDC discovery endpoint
+		ingressRule([]networkingv1.NetworkPolicyPeer{}, OIDCdiscoveryPort),
+	}
+
+	if len(fromNamespaces) > 0 {
+		// gRPC ext-auth from Envoy
+		ingress = append(ingress, ingressRule(fromNamespaces, gRPCport))
+		// HTTP ext-auth from gateway
+		ingress = append(ingress, ingressRule(fromNamespaces, HTTPport))
+	}
+
 	return &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AuthorinoNetworkPolicy,
@@ -304,14 +333,7 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 				MatchLabels: labels,
 			},
 			PolicyTypes: []networkingv1.PolicyType{"Ingress"},
-			Ingress: []networkingv1.NetworkPolicyIngressRule{
-				// gRPC ext-auth from Envoy
-				ingressRule(fromNamespaces, gRPCport),
-				// HTTP ext-auth from gateway
-				ingressRule(fromNamespaces, HTTPport),
-				// OIDC discovery endpoint
-				ingressRule([]networkingv1.NetworkPolicyPeer{}, OIDCdiscoveryPort),
-			},
+			Ingress:     ingress,
 		},
 	}
 }
@@ -365,10 +387,6 @@ func generateLimitadorNetworkPolicy(kObj *v1beta1.Kuadrant, lObj *limitadorv1alp
 
 	labels := linkedDeploymentLabels(&controller.RuntimeObject{Object: lObj}, topology)
 
-	if labels == nil {
-		labels = map[string]string{"kuadrant.io/managed": "true"}
-	}
-
 	// These default port values are hardcode into the impl Configuration in the limitador repo
 	// https://github.com/Kuadrant/limitador/blob/f73e5f4b3d9af3756d4d772b35d2798693b961f9/limitador-server/src/config.rs#L101-L103
 	gRPCport := 8081
@@ -377,6 +395,15 @@ func generateLimitadorNetworkPolicy(kObj *v1beta1.Kuadrant, lObj *limitadorv1alp
 	if lObj != nil {
 		gRPCport = int(lObj.GRPCPort())
 		HTTPport = int(lObj.HTTPPort())
+	}
+
+	ingress := []networkingv1.NetworkPolicyIngressRule{}
+
+	if len(fromNamespaces) > 0 {
+		// gRPC ext-auth from Envoy
+		ingress = append(ingress, ingressRule(fromNamespaces, gRPCport))
+		// HTTP ext-auth from gateway
+		ingress = append(ingress, ingressRule(fromNamespaces, HTTPport))
 	}
 
 	return &networkingv1.NetworkPolicy{
@@ -390,12 +417,7 @@ func generateLimitadorNetworkPolicy(kObj *v1beta1.Kuadrant, lObj *limitadorv1alp
 				MatchLabels: labels,
 			},
 			PolicyTypes: []networkingv1.PolicyType{"Ingress"},
-			Ingress: []networkingv1.NetworkPolicyIngressRule{
-				// gRPC rate limit checks
-				ingressRule(fromNamespaces, gRPCport),
-				// HTTP rate limit checks
-				ingressRule(fromNamespaces, HTTPport),
-			},
+			Ingress:     ingress,
 		},
 	}
 }
@@ -429,4 +451,33 @@ func linkedDeploymentLabels(resource *controller.RuntimeObject, topology *machin
 	}
 
 	return nil
+}
+
+func hasLinkedDeployment(resource *controller.RuntimeObject, topology *machinery.Topology) (bool, error) {
+	if resource == nil {
+		return false, fmt.Errorf("nil resource: *contronller.RuntimeObject provided")
+	}
+
+	// Check for typed nil - when Object interface contains a nil pointer
+	v := reflect.ValueOf(resource.Object)
+	if !v.IsValid() || (v.Kind() == reflect.Pointer && v.IsNil()) {
+		return false, fmt.Errorf("provided resoucre has nil Object")
+	}
+
+	deployments := lo.FilterMap(topology.All().Children(resource), func(child machinery.Object, _ int) (machinery.Object, bool) {
+		if child.GroupVersionKind().GroupKind() != v1beta1.DeploymentGroupKind {
+			return nil, false
+		}
+		return child, true
+	})
+
+	if len(deployments) == 1 {
+		return true, nil
+	}
+
+	if len(deployments) > 1 {
+		return false, fmt.Errorf("more than one attached deployment found")
+	}
+
+	return false, nil
 }

@@ -9,6 +9,8 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
@@ -48,6 +50,10 @@ func newExtensionClient(address string) (*extensionClient, error) {
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithPerRPCCredentials(session),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:    30 * time.Second,
+			Timeout: 10 * time.Second,
+		}),
 	)
 	if err != nil {
 		return nil, err
@@ -75,11 +81,15 @@ func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKi
 	return nil
 }
 
-//lint:ignore U1000
 func (ec *extensionClient) ping(ctx context.Context) (*extpb.PongResponse, error) {
 	return ec.client.Ping(ctx, &extpb.PingRequest{
 		Out: timestamppb.New(time.Now()),
 	})
+}
+
+func (ec *extensionClient) releaseSession(ctx context.Context) error {
+	_, err := ec.client.ReleaseSession(ctx, &emptypb.Empty{})
+	return err
 }
 
 // subscribe opens a streaming RPC for the given policy kind. Responses are
@@ -105,7 +115,9 @@ func (ec *extensionClient) subscribe(ctx context.Context, policyKind string, cal
 	return nil
 }
 
-//lint:ignore U1000
 func (ec *extensionClient) close() error {
+	if ec.conn == nil {
+		return nil
+	}
 	return ec.conn.Close()
 }

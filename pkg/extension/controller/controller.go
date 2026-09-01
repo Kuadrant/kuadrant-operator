@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"time"
 
@@ -35,6 +36,9 @@ const (
 	// cleanup (e.g. mutator/subscription deregistration) can occur prior to
 	// object deletion.
 	ExtensionFinalizer = "kuadrant.io/extensions"
+
+	defaultHeartbeatInterval = 15 * time.Second
+	releaseSessionTimeout    = 5 * time.Second
 )
 
 // ExtensionConfig captures the immutable configuration for a controller
@@ -60,11 +64,12 @@ type ExtensionConfig struct {
 type ExtensionController struct {
 	config ExtensionConfig
 
-	logger          logr.Logger
-	manager         ctrlruntime.Manager
-	extensionClient *extensionClient
-	tokenSource     tokenSource
-	eventCache      *EventTypeCache
+	logger            logr.Logger
+	manager           ctrlruntime.Manager
+	extensionClient   *extensionClient
+	tokenSource       tokenSource
+	heartbeatInterval time.Duration
+	eventCache        *EventTypeCache
 
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
@@ -81,6 +86,9 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 		return fmt.Errorf("extension handshake failed: %w", err)
 	}
 	ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind)
+
+	defer ec.shutdown()
+	go ec.heartbeat(ctx)
 
 	stopCh := make(chan struct{})
 	// todo(adam-cattermole): how big do we make the reconcile event channel?
@@ -123,6 +131,19 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 	return nil
 }
 
+func resolveHeartbeatInterval(logger logr.Logger) time.Duration {
+	value := os.Getenv("KUADRANT_EXTENSION_HEARTBEAT_INTERVAL")
+	if value == "" {
+		return defaultHeartbeatInterval
+	}
+	interval, err := time.ParseDuration(value)
+	if err != nil || interval <= 0 {
+		logger.Info("invalid KUADRANT_EXTENSION_HEARTBEAT_INTERVAL, using default", "value", value, "default", defaultHeartbeatInterval)
+		return defaultHeartbeatInterval
+	}
+	return interval
+}
+
 // Subscribe opens a long‑lived gRPC stream for events related to the policy
 // kind and enqueues reconcile requests for received events.
 func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
@@ -143,6 +164,41 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 	})
 	if err != nil {
 		ec.logger.Error(err, "grpc subscribe failed")
+	}
+}
+
+func (ec *ExtensionController) heartbeat(ctx context.Context) {
+	interval := ec.heartbeatInterval
+	if interval <= 0 {
+		interval = defaultHeartbeatInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(ctx, interval)
+			_, err := ec.extensionClient.ping(pingCtx)
+			cancel()
+			if err != nil {
+				ec.logger.Error(err, "heartbeat ping failed")
+			}
+		}
+	}
+}
+
+// shutdown releases the session and closes the connection. The parent context
+// is already cancelled at this point, so a fresh timeout context is used.
+func (ec *ExtensionController) shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), releaseSessionTimeout)
+	defer cancel()
+	if err := ec.extensionClient.releaseSession(ctx); err != nil {
+		ec.logger.Error(err, "failed to release session on shutdown")
+	}
+	if err := ec.extensionClient.close(); err != nil {
+		ec.logger.Error(err, "failed to close extension client")
 	}
 }
 

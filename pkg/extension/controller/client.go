@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -18,19 +19,35 @@ import (
 
 const sessionMetadataKey = "x-kuadrant-session"
 
+// sessionCredentials carries the session token as per-RPC metadata. The token
+// is read on every RPC and rewritten across re-handshakes, so access is guarded.
 type sessionCredentials struct {
+	mu    sync.RWMutex
 	token string
 }
 
 func (c *sessionCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
-	if c.token == "" {
+	token := c.getToken()
+	if token == "" {
 		return nil, nil
 	}
-	return map[string]string{sessionMetadataKey: c.token}, nil
+	return map[string]string{sessionMetadataKey: token}, nil
 }
 
 func (c *sessionCredentials) RequireTransportSecurity() bool {
 	return false
+}
+
+func (c *sessionCredentials) setToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = token
+}
+
+func (c *sessionCredentials) getToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.token
 }
 
 // extensionClient wraps the gRPC client connection to the operator's extension
@@ -77,7 +94,7 @@ func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKi
 	if !resp.Accepted {
 		return fmt.Errorf("handshake rejected: %s", resp.Reason)
 	}
-	ec.session.token = resp.SessionToken
+	ec.session.setToken(resp.SessionToken)
 	return nil
 }
 

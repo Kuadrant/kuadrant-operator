@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"time"
@@ -37,9 +38,22 @@ const (
 	// object deletion.
 	ExtensionFinalizer = "kuadrant.io/extensions"
 
+	handshakeTimeout         = 10 * time.Second
 	defaultHeartbeatInterval = 15 * time.Second
 	releaseSessionTimeout    = 5 * time.Second
+	initialReconnectBackoff  = 1 * time.Second
+	maxReconnectBackoff      = 30 * time.Second
 )
+
+func defaultReconnectBackoff() wait.Backoff {
+	return wait.Backoff{
+		Duration: initialReconnectBackoff,
+		Factor:   2.0,
+		Jitter:   0.2,
+		Cap:      maxReconnectBackoff,
+		Steps:    math.MaxInt32,
+	}
+}
 
 // ExtensionConfig captures the immutable configuration for a controller
 // instance constructed by the Builder. It determines:
@@ -69,66 +83,149 @@ type ExtensionController struct {
 	extensionClient   *extensionClient
 	tokenSource       tokenSource
 	heartbeatInterval time.Duration
+	reconnectBackoff  wait.Backoff
 	eventCache        *EventTypeCache
 
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
-// Start launches the controller manager and begins processing events.
+// Start runs the controller manager and a background session supervisor. The
+// manager (and its health probes) must come up regardless of session state, so
+// a successful handshake is deliberately not a precondition for starting it.
 func (ec *ExtensionController) Start(ctx context.Context) error {
-	handshakeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// todo(adam-cattermole): how big do we make the reconcile event channel?
+	//	 how many should we queue before we block?
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent, 50)
+
+	channelSource := ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{})
+	watchSources := append(ec.config.WatchSources, channelSource)
+
+	// test path: supervise runs blocking in the foreground
+	if ec.manager == nil {
+		ec.superviseSession(ctx, reconcileChan)
+		return nil
+	}
+
+	ctrl, err := ctrlruntimectrl.New(ec.config.Name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
+	if err != nil {
+		return fmt.Errorf("error creating controller: %w", err)
+	}
+	for _, source := range watchSources {
+		if err := ctrl.Watch(source); err != nil {
+			return fmt.Errorf("error watching resource: %w", err)
+		}
+	}
+
+	sessionCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	token, err := ec.tokenSource()
+	supervisorDone := make(chan struct{})
+	go func() {
+		defer close(supervisorDone)
+		ec.superviseSession(sessionCtx, reconcileChan)
+	}()
+
+	err = ec.manager.Start(ctx)
+	cancel()
+	<-supervisorDone
+	if err != nil {
+		return fmt.Errorf("error starting manager: %w", err)
+	}
+	return nil
+}
+
+func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+	defer ec.shutdown()
+	for {
+		if err := ec.handshakeWithBackoff(ctx); err != nil {
+			return
+		}
+		ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind)
+		if ctx.Err() != nil {
+			return
+		}
+
+		streamCtx, cancel := context.WithCancel(ctx)
+		go ec.heartbeat(streamCtx, cancel)
+		ec.streamSession(streamCtx, reconcileChan)
+		cancel()
+
+		if ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+func (ec *ExtensionController) handshakeWithBackoff(ctx context.Context) error {
+	backoff := ec.newReconnectBackoff()
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		err := ec.attemptHandshake(ctx)
+		if err == nil {
+			return nil
+		}
+		ec.logger.Error(err, "handshake attempt failed, retrying")
+		if !waitBackoff(ctx, &backoff) {
+			return ctx.Err()
+		}
+	}
+}
+
+func waitBackoff(ctx context.Context, backoff *wait.Backoff) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(backoff.Step()):
+		return true
+	}
+}
+
+func (ec *ExtensionController) attemptHandshake(ctx context.Context) error {
+	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+	defer cancel()
+	token, err := ec.tokenSource(handshakeCtx)
 	if err != nil {
 		return fmt.Errorf("failed to obtain handshake credential: %w", err)
 	}
 	if err := ec.extensionClient.handshake(handshakeCtx, token, ec.config.PolicyKind); err != nil {
 		return fmt.Errorf("extension handshake failed: %w", err)
 	}
-	ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind)
-
-	defer ec.shutdown()
-	go ec.heartbeat(ctx)
-
-	stopCh := make(chan struct{})
-	// todo(adam-cattermole): how big do we make the reconcile event channel?
-	//	 how many should we queue before we block?
-	reconcileChan := make(chan ctrlruntimeevent.GenericEvent, 50)
-
-	// Add the channel source to our watch sources
-	channelSource := ctrlruntimesrc.Channel(reconcileChan, &ctrlruntimehandler.EnqueueRequestForObject{})
-	watchSources := append(ec.config.WatchSources, channelSource)
-
-	if ec.manager != nil {
-		ctrl, err := ctrlruntimectrl.New(ec.config.Name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
-		if err != nil {
-			return fmt.Errorf("error creating controller: %w", err)
-		}
-
-		for _, source := range watchSources {
-			err := ctrl.Watch(source)
-			if err != nil {
-				return fmt.Errorf("error watching resource: %w", err)
-			}
-		}
-
-		go ec.Subscribe(ctx, reconcileChan)
-		err = ec.manager.Start(ctx)
-		if err != nil {
-			return fmt.Errorf("error starting manager: %w", err)
-		}
-		return nil
-	}
-
-	// keep the thread alive
-	ec.logger.Info("waiting until stop signal is received")
-	wait.Until(func() {
-		<-ctx.Done()
-		close(stopCh)
-	}, time.Second, stopCh)
-	ec.logger.Info("stop signal received. finishing controller...")
-
 	return nil
+}
+
+// streamSession rides out transient Unavailable errors on the same session, and
+// returns on Unauthenticated (session gone) or ctx cancellation.
+func (ec *ExtensionController) streamSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+	backoff := ec.newReconnectBackoff()
+	for {
+		err := ec.subscribeEvents(ctx, reconcileChan)
+		if ctx.Err() != nil {
+			return
+		}
+		if isSessionLost(err) {
+			ec.extensionClient.session.setToken("")
+			return
+		}
+		if err != nil {
+			ec.logger.Error(err, "subscribe stream ended, retrying on same session")
+		}
+		if !waitBackoff(ctx, &backoff) {
+			return
+		}
+	}
+}
+
+func (ec *ExtensionController) newReconnectBackoff() wait.Backoff {
+	if ec.reconnectBackoff.Duration <= 0 {
+		return defaultReconnectBackoff()
+	}
+	return ec.reconnectBackoff
+}
+
+func isSessionLost(err error) bool {
+	st, ok := status.FromError(err)
+	return ok && st.Code() == codes.Unauthenticated
 }
 
 func resolveHeartbeatInterval(logger logr.Logger) time.Duration {
@@ -144,10 +241,10 @@ func resolveHeartbeatInterval(logger logr.Logger) time.Duration {
 	return interval
 }
 
-// Subscribe opens a long‑lived gRPC stream for events related to the policy
+// subscribeEvents opens a long‑lived gRPC stream for events related to the policy
 // kind and enqueues reconcile requests for received events.
-func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
-	err := ec.extensionClient.subscribe(ctx, ec.config.PolicyKind, func(response *extpb.SubscribeResponse) {
+func (ec *ExtensionController) subscribeEvents(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) error {
+	return ec.extensionClient.subscribe(ctx, ec.config.PolicyKind, func(response *extpb.SubscribeResponse) {
 		ec.logger.Info("received response", "response", response)
 		// todo(adam-cattermole): how might we inform of an error from subscribe responses?
 		if response.Error != nil && response.Error.Code != 0 {
@@ -159,15 +256,15 @@ func (ec *ExtensionController) Subscribe(ctx context.Context, reconcileChan chan
 			trigger.SetName(response.Event.Metadata.Name)
 			trigger.SetNamespace(response.Event.Metadata.Namespace)
 			trigger.SetKind(response.Event.Metadata.Kind)
-			reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}
+			select {
+			case reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}:
+			case <-ctx.Done():
+			}
 		}
 	})
-	if err != nil {
-		ec.logger.Error(err, "grpc subscribe failed")
-	}
 }
 
-func (ec *ExtensionController) heartbeat(ctx context.Context) {
+func (ec *ExtensionController) heartbeat(ctx context.Context, cancel context.CancelFunc) {
 	interval := ec.heartbeatInterval
 	if interval <= 0 {
 		interval = defaultHeartbeatInterval
@@ -179,11 +276,15 @@ func (ec *ExtensionController) heartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pingCtx, cancel := context.WithTimeout(ctx, interval)
+			pingCtx, pingCancel := context.WithTimeout(ctx, interval)
 			_, err := ec.extensionClient.ping(pingCtx)
-			cancel()
+			pingCancel()
 			if err != nil {
 				ec.logger.Error(err, "heartbeat ping failed")
+				if isSessionLost(err) {
+					cancel()
+					return
+				}
 			}
 		}
 	}

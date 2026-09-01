@@ -173,6 +173,7 @@ func (b *Builder) Build() (*ExtensionController, error) {
 		extensionClient:   extClient,
 		tokenSource:       resolveTokenSource(),
 		heartbeatInterval: resolveHeartbeatInterval(b.logger),
+		reconnectBackoff:  defaultReconnectBackoff(),
 		eventCache:        eventCache,
 		BaseReconciler:    basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil

@@ -607,8 +607,16 @@ func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grp
 	}
 
 	channel := BlockingDAG.newUpdateChannel()
+	defer BlockingDAG.removeUpdateChannel(channel)
+
 	for {
-		dag := <-channel
+		var dag StateAwareDAG
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case dag = <-channel:
+		}
+
 		opts := []cel.EnvOption{
 			kuadrant.CelExt(&dag),
 		}

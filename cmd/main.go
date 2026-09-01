@@ -62,6 +62,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/internal/controlplane"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
@@ -263,7 +264,22 @@ func main() {
 		},
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
+	restConfig := ctrl.GetConfigOrDie()
+	ctx := ctrl.SetupSignalHandler()
+
+	// Pre-manager: bootstrap child operator CRDs so PolicyMachineryController
+	// finds them when it checks for CRD availability at boot.
+	componentDeployer, err := controlplane.NewDeployer(restConfig, operatorNamespace, setupLog)
+	if err != nil {
+		setupLog.Error(err, "unable to create component deployer")
+		os.Exit(1)
+	}
+	if err := componentDeployer.ApplyCRDsForComponents(ctx, componentDeployer.EnabledComponents()); err != nil {
+		setupLog.Error(err, "failed to bootstrap child operator CRDs")
+		os.Exit(1)
+	}
+
+	mgr, err := ctrl.NewManager(restConfig, options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -280,18 +296,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "unable to create client")
+	// Register KuadrantControlPlane controller (standard controller-runtime).
+	// Manages child operator deployment and drift reconciliation.
+	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), componentDeployer, mgr.GetEventRecorder("kuadrant-control-plane"), setupLog)
+	if err := cpReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to setup KuadrantControlPlane controller")
 		os.Exit(1)
 	}
 
-	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, client, log.Log, opts...)
+	// One-time startup tasks run as a leader-elected Runnable so they only
+	// execute on the active leader, not every replica.
+	if err := mgr.Add(controlplane.NewBootstrapRunnable(
+		restConfig, scheme,
+		mgr.GetEventRecorder("kuadrant-control-plane"),
+		operatorNamespace, setupLog,
+	)); err != nil {
+		setupLog.Error(err, "unable to register bootstrap runnable")
+		os.Exit(1)
+	}
+
+	dynamicClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create dynamic client")
+		os.Exit(1)
+	}
+
+	stateOfTheWorld, err := controllers.NewPolicyMachineryController(mgr, dynamicClient, log.Log, opts...)
 	if err != nil {
 		setupLog.Error(err, "unable to setup policy controller")
 		os.Exit(1)
 	}
-	if err = stateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err = stateOfTheWorld.Start(ctx); err != nil {
 		setupLog.Error(err, "unable to start stateOfTheWorld controller")
 		os.Exit(1)
 	}

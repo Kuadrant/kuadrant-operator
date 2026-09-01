@@ -1,0 +1,14 @@
+# OLM migration cleanup — remove this file after 2-3 releases.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: olm-migration-cleanup
+  namespace: system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: olm-migration-cleanup
+subjects:
+  - kind: ServiceAccount
+    name: controller-manager
+    namespace: system

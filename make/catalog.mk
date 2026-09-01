@@ -35,7 +35,6 @@ $(CATALOG_FILE): opm yq
 	@echo BUNDLE_IMG                     = $(BUNDLE_IMG)
 	@echo LIMITADOR_OPERATOR_BUNDLE_IMG  = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
 	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
-	@echo DNS_OPERATOR_BUNDLE_IMG        = $(DNS_OPERATOR_BUNDLE_IMG)
 	@echo CHANNEL                        = $(CHANNEL)
 	@echo CATALOG_FILE                   = $@
 	@echo "************************************************************"
@@ -44,7 +43,7 @@ $(CATALOG_FILE): opm yq
 	@echo
 	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) \
 			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-			$(DNS_OPERATOR_BUNDLE_IMG) $(CHANNEL) $@
+			$(CHANNEL) $@
 
 .PHONY: catalog
 catalog: opm ## Generate catalog content and validate.
@@ -54,7 +53,6 @@ catalog: opm ## Generate catalog content and validate.
 	$(MAKE) $(CATALOG_DOCKERFILE)
 	$(MAKE) $(CATALOG_FILE) LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
 		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG) \
 		BUNDLE_IMG=$(BUNDLE_IMG) CHANNEL=$(CHANNEL)
 	cd $(PROJECT_PATH)/catalog && $(OPM) validate kuadrant-operator-catalog
 

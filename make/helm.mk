@@ -6,13 +6,7 @@ CHART_NAME ?= kuadrant-operator
 CHART_DIRECTORY ?= charts/$(CHART_NAME)
 
 .PHONY: helm-build
-helm-build: yq kustomize manifests ## Build the helm chart from kustomize manifests
-	# Set desired Wasm-shim image
-	V="$(RELATED_IMAGE_WASMSHIM)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
-	# Set desired developer-portal-controller image
-	V="$(RELATED_IMAGE_DEVELOPERPORTAL)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DEVELOPERPORTAL").value) = strenv(V)' -i config/manager/manager.yaml
+helm-build: kustomize manifests set-related-images ## Build the helm chart from kustomize manifests
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Build the helm chart templates from kustomize manifests
@@ -22,7 +16,6 @@ helm-build: yq kustomize manifests ## Build the helm chart from kustomize manife
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.appVersion = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 	V="$(AUTHORINO_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 	V="$(LIMITADOR_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
-	V="$(DNS_OPERATOR_BUNDLE_VERSION)" $(YQ) -i e '(.dependencies[] | select(.name == "dns-operator").version) = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 
 .PHONY: helm-install
 helm-install: helm ## Install the helm chart

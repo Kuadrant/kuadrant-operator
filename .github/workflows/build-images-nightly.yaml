@@ -17,6 +17,21 @@ jobs:
     steps:
       - id: release_date
         run: echo "release_date=nightly-$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+  dns-operator-latest-digest:
+    name: Get the digest sha of the latest dns-operator docker image
+    runs-on: ubuntu-latest
+    outputs:
+      dns_operator_digest: ${{ steps.dns-operator-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: dns-operator-get-digest
+        name: Get digest of latest dns-operator image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/dns-operator:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "DNS operator latest digest: ${DIGEST}"
   wasmshim-latest-digest:
     name: Get the digest sha of the latest wasmshim docker image
     runs-on: ubuntu-latest
@@ -80,6 +95,7 @@ jobs:
   workflow-build:
     needs:
       - release-date
+      - dns-operator-latest-digest
       - wasmshim-latest-digest
       - devportal-controlller-latest-digest
       - console-plugin-latest-digest
@@ -92,9 +108,7 @@ jobs:
       kuadrantOperatorTag: ${{ needs.release-date.outputs.release_date }}
       authorinoBundleImg: quay.io/kuadrant/authorino-operator-bundle:${{ needs.release-date.outputs.release_date }}
       limitadorBundleImg: quay.io/kuadrant/limitador-operator-bundle:${{ needs.release-date.outputs.release_date }}
-      # dns-operator does not build nightly images
-      # The only reference in the bundle is the dns-operator image, and it is already pinned to git sha tag
-      dnsOperatorBundleImg: quay.io/kuadrant/dns-operator-bundle:latest
+      relatedImageDnsOperator: quay.io/kuadrant/dns-operator@${{ needs.dns-operator-latest-digest.outputs.dns_operator_digest }}
       relatedImageWasmShim: quay.io/kuadrant/wasm-shim@${{ needs.wasmshim-latest-digest.outputs.wasmshim_digest }}
       relatedImageDeveloperPortalController: quay.io/kuadrant/developer-portal-controller@${{ needs.devportal-controlller-latest-digest.outputs.devportal_controller_digest }}
       relatedImageConsolePluginLatest: quay.io/kuadrant/console-plugin@${{ needs.console-plugin-latest-digest.outputs.console_plugin_digest }}

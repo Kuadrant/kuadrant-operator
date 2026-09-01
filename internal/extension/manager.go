@@ -458,6 +458,17 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
+func (s *extensionService) ReleaseSession(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
+	identity, ok := IdentityFromContext(ctx)
+	if !ok {
+		return nil, grpcstatus.Error(codes.Unauthenticated, "no session identity")
+	}
+	if s.sessionStore.RevokeByName(identity) {
+		s.logger.Info("session released", "identity", identity)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func (s *extensionService) Handshake(ctx context.Context, request *extpb.HandshakeRequest) (*extpb.HandshakeResponse, error) {
 	if request.PolicyKind == "" {
 		return &extpb.HandshakeResponse{

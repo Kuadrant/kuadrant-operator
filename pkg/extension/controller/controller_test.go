@@ -412,6 +412,9 @@ func (m *mockExtensionServiceClient) Handshake(ctx context.Context, in *extpb.Ha
 func (m *mockExtensionServiceClient) Ping(_ context.Context, _ *extpb.PingRequest, _ ...grpc.CallOption) (*extpb.PongResponse, error) {
 	return nil, nil
 }
+func (m *mockExtensionServiceClient) ReleaseSession(_ context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+	return nil, nil
+}
 func (m *mockExtensionServiceClient) Subscribe(_ context.Context, _ *extpb.SubscribeRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error) {
 	return nil, nil
 }

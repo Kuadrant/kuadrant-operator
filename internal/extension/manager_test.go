@@ -1625,3 +1625,83 @@ func TestWarmupTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionTTL(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    string
+		expected time.Duration
+	}{
+		{"seconds", "30s", 30 * time.Second},
+		{"minutes", "2m", 2 * time.Minute},
+		{"unset uses default", "", defaultSessionTTL},
+		{"zero uses default", "0s", defaultSessionTTL},
+		{"negative uses default", "-5s", defaultSessionTTL},
+		{"unparsable uses default", "notaduration", defaultSessionTTL},
+		{"bare number uses default", "45", defaultSessionTTL},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.value == "" {
+				t.Setenv("EXTENSIONS_SESSION_TTL", "")
+				os.Unsetenv("EXTENSIONS_SESSION_TTL")
+			} else {
+				t.Setenv("EXTENSIONS_SESSION_TTL", tc.value)
+			}
+
+			if got := sessionTTL(logr.Discard()); got != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestReaperInterval(t *testing.T) {
+	testCases := []struct {
+		name     string
+		ttl      time.Duration
+		expected time.Duration
+	}{
+		{"default ttl", 45 * time.Second, 15 * time.Second},
+		{"short ttl floored", 2 * time.Second, minReaperInterval},
+		{"exactly at floor", 3 * time.Second, 1 * time.Second},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reaperInterval(tc.ttl); got != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestManager_Reaper_RevokesStaleSessions(t *testing.T) {
+	t.Setenv("EXTENSIONS_SESSION_TTL", "1s")
+
+	store := newTestSessionStore()
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	store.now = clock.now
+
+	token, err := store.CreateSession("stale-extension", "StalePolicy")
+	if err != nil {
+		t.Fatalf("expected session creation to succeed, got: %v", err)
+	}
+	clock.advance(2 * time.Second)
+
+	m := &Manager{sessionStore: store, logger: logr.Discard()}
+	m.startReaper()
+	defer m.stopReaper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, ok := store.ValidateSession(token); !ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("expected reaper to revoke the stale session")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

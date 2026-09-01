@@ -57,6 +57,7 @@ import (
 
 const defaultExtensionServicePort = 50052
 const defaultWarmupTimeout = 30 * time.Second
+const minReaperInterval = 1 * time.Second
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
 
@@ -74,6 +75,7 @@ type Manager struct {
 	descriptorServer *grpc.Server
 	extensionServer  *grpc.Server
 	extensionPort    int
+	reaperStop       chan struct{}
 }
 
 type Extension interface {
@@ -146,6 +148,7 @@ func (m *Manager) Start() error {
 	}
 
 	m.beginWarmup()
+	m.startReaper()
 
 	if e := m.startExtensionServer(); e != nil {
 		m.logger.Error(e, "failed to start extension server")
@@ -171,6 +174,8 @@ func (m *Manager) Start() error {
 
 func (m *Manager) Stop() error {
 	var err error
+
+	m.stopReaper()
 
 	m.stopDescriptorServer()
 
@@ -269,6 +274,62 @@ func warmupTimeout(logger logr.Logger) time.Duration {
 		return defaultWarmupTimeout
 	}
 	return timeout
+}
+
+func (m *Manager) startReaper() {
+	ttl := sessionTTL(m.logger)
+	m.sessionStore.SetSessionTTL(ttl)
+	interval := reaperInterval(ttl)
+
+	m.reaperStop = make(chan struct{})
+	stop := m.reaperStop
+	ticker := time.NewTicker(interval)
+
+	m.logger.Info("starting session reaper", "ttl", ttl, "interval", interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if revoked := m.sessionStore.ReapStale(); len(revoked) > 0 {
+					m.logger.Info("reaped stale extension sessions", "identities", revoked)
+				}
+			}
+		}
+	}()
+}
+
+func (m *Manager) stopReaper() {
+	if m.reaperStop == nil {
+		return
+	}
+	close(m.reaperStop)
+	m.reaperStop = nil
+}
+
+func sessionTTL(logger logr.Logger) time.Duration {
+	value := env.GetString("EXTENSIONS_SESSION_TTL", "")
+	if value == "" {
+		return defaultSessionTTL
+	}
+	ttl, err := time.ParseDuration(value)
+	if err != nil || ttl <= 0 {
+		logger.Error(err, "invalid EXTENSIONS_SESSION_TTL, using default", "value", value, "default", defaultSessionTTL)
+		return defaultSessionTTL
+	}
+	return ttl
+}
+
+// reaperInterval sweeps at TTL/3 so at least two heartbeats are missed before a
+// session becomes reapable.
+func reaperInterval(ttl time.Duration) time.Duration {
+	interval := ttl / 3
+	if interval < minReaperInterval {
+		return minReaperInterval
+	}
+	return interval
 }
 
 func (m *Manager) startExtensionServer() error {

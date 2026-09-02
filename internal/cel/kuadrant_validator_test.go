@@ -90,6 +90,86 @@ func TestValidateWasmActionValid(t *testing.T) {
 	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
 }
 
+func TestValidateTokenRateLimitGuardRejectsResponseBodyPredicate(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitCheckServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: []string{`responseBodyJSON("/object") != "error"`},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "responseBodyJSON is not available in TokenRateLimitPolicy when predicates")
+}
+
+func TestValidateTokenRateLimitGuardAllowsRequestBodyPredicate(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitCheckServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: []string{`requestBodyJSON("/model") == "gpt-4"`},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
+func TestValidateTokenRateLimitReportAllowsResponseBodyPredicate(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReportServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: []string{`responseBodyJSON("/object") != "error"`},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
+func TestValidateTokenRateLimitGuardDoesNotMatchFunctionNameInStringLiteral(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitCheckServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Predicates: []string{`"responseBodyJSON('/object')" == "responseBodyJSON('/object')"`},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
 func TestNewIssue(t *testing.T) {
 	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,

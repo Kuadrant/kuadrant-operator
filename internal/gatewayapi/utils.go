@@ -209,19 +209,34 @@ func IsGatewayAPIInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 func IsCertManagerInstalled(restMapper meta.RESTMapper, logger logr.Logger) (bool, error) {
-	if ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.CertificateKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
-		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.CertificateKind, "version", certmanv1.SchemeGroupVersion.Version)
+	ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.CertificateKind, certmanv1.SchemeGroupVersion.Version)
+	if err != nil {
+		logger.Error(err, "failed to check if CertManager CRD is installed", "group", certmanager.GroupName, "kind", certmanv1.CertificateKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
-
-	if ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.IssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
-		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.IssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
-		return false, err
+	if !ok {
+		logger.V(1).Info("CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.CertificateKind, "version", certmanv1.SchemeGroupVersion.Version)
+		return false, nil
 	}
 
-	if ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.ClusterIssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
-		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.ClusterIssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
+	ok, err = utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.IssuerKind, certmanv1.SchemeGroupVersion.Version)
+	if err != nil {
+		logger.Error(err, "failed to check if CertManager CRD is installed", "group", certmanager.GroupName, "kind", certmanv1.IssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
+	}
+	if !ok {
+		logger.V(1).Info("CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.IssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
+		return false, nil
+	}
+
+	ok, err = utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.ClusterIssuerKind, certmanv1.SchemeGroupVersion.Version)
+	if err != nil {
+		logger.Error(err, "failed to check if CertManager CRD is installed", "group", certmanager.GroupName, "kind", certmanv1.ClusterIssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
+		return false, err
+	}
+	if !ok {
+		logger.V(1).Info("CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.ClusterIssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
+		return false, nil
 	}
 
 	return true, nil

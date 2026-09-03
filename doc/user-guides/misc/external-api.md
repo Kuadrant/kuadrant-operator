@@ -1,58 +1,93 @@
-# Using Gateway API and Kuadrant with APIs outside of the cluster
+# Using Gateway API and Kuadrant with an external API
 
+```mermaid
+graph LR
+    Client([Public Traffic<br/>my.api.com])
 
-### Overview
+    subgraph cluster ["Kubernetes Cluster"]
+        GW[Gateway<br/>HTTPS :443]
+        HR[HTTPRoute<br/>host rewrite]
+        TLS[TLSPolicy]
+        DNS[DNSPolicy]
+        AUTH[AuthPolicy]
+        RLP[RateLimitPolicy]
+        SE[ServiceEntry<br/>registers hostname]
+        DR[DestinationRule<br/>TLS origination]
+    end
 
-In some cases, the application and API endpoints are exposed in a host external to the cluster where you are a running Gateway API and Kuadrant but you do not want it accessible directly via the public internet. If you want to have external traffic come into a Gateway API defined Gateway and protected by Kuadrant policies first being proxied to the existing legacy endpoints, this guide will give you some example of how to achieve this.
+    Backend([Backend API<br/>my.api.local])
 
-
-### What we will do
-- Have an API in a private location become accessible via a public hostname
-- Setup a gateway and HTTPRoute to expose this private API via our new Gateway on a (public) domain.
-- proxy valid requests through to our back-end API service
-- Add auth and rate limiting and TLS to our public Gateway to protect it
-
-
-
-### Pre Requisites
-
-- Kuadrant and Gateway API installed (with Istio as the gateway provider)
-- Existing API on separate cluster accessible via HTTP from the Gateway cluster
-
-
-What we want to achieve:
-
-```
-                                ------------------- DMZ -----------------|
-                                                                         |
-                               |-------------------------------- internal network -----------------------------------| 
-                    load balancer                                        |                                            |           
-                        | - |  |      |----------k8s cluster-----------| |   |----- Legacy API Location --------|     |
-                        |   |  |      |  Gateway  Kuadrant             | |   |                                  |     |       
-                        |   |  |      |   -----    -----               | |   |                                  |     |                     
----public traffic--my.api.com-------->|   |    |<--|   |               | |   |  HTTP (my.api.local)   Backend   |     |
-                        |   |  |      |   |    |   -----               | |   |      -----             -----     |     | 
-                        |   |  |      |   ----- -----------proxy---(my.api.local)-->|   | ----------> |   |     |     | 
-                        |   |  |      |                                | |   |      -----             -----     |     | 
-                        | - |  |      |--------------------------------| |   |----------------------------------|     | 
-                               |                                         |                                            |   
-                               |-----------------------------------------|--------------------------------------------| 
-                                                                         |
-                                ------------------- DMZ -----------------|       
+    Client -->|"HTTPS"| GW
+    TLS -.-> GW
+    DNS -.-> GW
+    AUTH -.-> HR
+    RLP -.-> HR
+    GW --> HR
+    SE -.->|"provides backend<br/>hostname"| HR
+    DR -.->|"configures TLS<br/>for hostname"| Backend
+    HR -->|"proxy"| Backend
 ```
 
+## Requirements
 
-Note for all of the resources defined here there is a copy of them under the [examples folder](https://github.com/Kuadrant/kuadrant-operator/examples/external-api-istio.yaml)
+This guide uses Istio as the gateway provider. The pattern relies on three Istio-specific capabilities that the gateway provider must support:
 
-1) Deploy a Gateway into the K8s cluster that will act as the main Ingress Gateway
+1. **ServiceEntry** — registers an external hostname in the service mesh so it becomes routable
+2. **DestinationRule** — configures TLS origination to the external backend
+3. **`Hostname` backendRef** (`group: networking.istio.io`) — allows an HTTPRoute to reference the ServiceEntry as a backend
 
-Define your external API hostname and Internal API hostname
+If you are using a different gateway provider, check whether it supports these or equivalent mechanisms. For a list of supported providers, see the [Getting Started](https://docs.kuadrant.io/latest/getting-started/) guide.
 
+The `openshift-default` GatewayClass installs a lightweight Istio via the Ingress Operator, but restricts the API surface to standard Gateway API resources — vendor-specific Istio resources are not supported. See [Configuring Gateway API](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/ingress_and_load_balancing/configuring-gateway-api) for details on what is available, and [Integrate OpenShift Gateway API with OpenShift Service Mesh](https://developers.redhat.com/articles/2025/12/09/integrate-openshift-gateway-api-openshift-service-mesh) for adding full Service Mesh support.
+
+| Requirement | Notes |
+|------------|-------|
+| Kuadrant with **Istio** gateway provider | ServiceEntry, DestinationRule, and `kind: Hostname` backendRef require Istio |
+| Network connectivity to the backend | The cluster must reach the backend API over the network |
+| cert-manager *(optional)* | For [TLSPolicy](../tls/gateway-tls.md) automated certificate provisioning |
+| DNS provider credentials *(optional)* | For [DNSPolicy](../dns/gateway-dns.md) automated DNS record management |
+
+## Step 1: Register the backend API
+
+Istio needs a **ServiceEntry** to register the backend hostname and a **DestinationRule** to configure TLS origination. These are the same resources described in the [Egress Gateway Setup](../egress/egress-gateway.md#egress-gateway-resources) guide — if you already have them for this backend, skip to [Step 2](#step-2-deploy-the-gateway-and-httproute).
+
+```bash
+export EXTERNAL_HOST=my.api.com        # public hostname
+export INTERNAL_HOST=my.api.local      # backend hostname (reachable from cluster)
 ```
-export EXTERNAL_HOST=my.api.com
-export INTERNAL_HOST=my.api.local
 
+```bash
+kubectl apply -n gateway-system -f - <<EOF
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: backend-api
+spec:
+  hosts:
+    - ${INTERNAL_HOST}
+  location: MESH_EXTERNAL
+  resolution: DNS
+  ports:
+    - number: 443
+      name: https
+      protocol: HTTPS
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: backend-api
+spec:
+  host: ${INTERNAL_HOST}
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: ${INTERNAL_HOST}
+EOF
 ```
+
+## Step 2: Deploy the Gateway and HTTPRoute
+
+The Gateway accepts public traffic on the external hostname. The HTTPRoute bridges it to the backend, rewriting the `Host` header so the backend receives the correct hostname. The `Hostname` backend kind is provided by the ServiceEntry from Step 1.
 
 ```bash
 kubectl apply -n gateway-system -f - <<EOF
@@ -75,73 +110,9 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: ingress-tls  #you can use TLSPolicy to provide this certificate or provide it manually
+          - name: ingress-tls
             kind: Secret
-EOF            
-```
-
-2) Optional: Use TLSPolicy to configure TLS certificates for your listeners
-
-[TLSPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/tls/gateway-tls/)
-
-3) Optional: Use DNSPolicy to bring external traffic to the external hostname
-
-[DNSPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/dns/gateway-dns/#create-a-dns-provider-secret)
-
-4) Ensure the Gateway has the status of `Programmed` set to `True` meaning it is ready. 
-
-```bash
-kubectl get gateway ingress -n gateway-system -o=jsonpath='{.status.conditions[?(@.type=="Programmed")].status}'
-```
-
-5) Let Istio know about the external hostname and the rules it should use when sending traffic to that destination.
-
-Create a [`ServiceEntry`](https://istio.io/latest/docs/reference/config/networking/service-entry/)
-
-```bash
-kubectl apply -n gateway-system -f - <<EOF
-apiVersion: networking.istio.io/v1beta1
-kind: ServiceEntry
-metadata:
-  name: internal-api
-spec:
-  hosts:
-    - ${INTERNAL_HOST} # your internal http endpoint
-  location: MESH_EXTERNAL
-  resolution: DNS
-  ports:
-    - number: 80
-      name: http
-      protocol: HTTP
-    - number: 443
-      name: https
-      protocol: TLS
-EOF
-```
-
-
-Create a [`DestionationRule`](https://istio.io/latest/docs/reference/config/networking/destination-rule/) to configure how to handle traffic to this endpoint.
-
-```bash
-kubectl apply -n gateway-system -f - <<EOF
-apiVersion: networking.istio.io/v1
-kind: DestinationRule
-metadata:
-  name: internal-api
-spec:
-  host: ${INTERNAL_HOST}
-  trafficPolicy:
-    tls:
-      mode: SIMPLE
-      sni: ${INTERNAL_HOST}
-EOF
-```
-
-
-6) Create a `HTTPRoute` that will route traffic for the Gateway and re-write the host
-
-```bash
-kubectl apply -n gateway-system -f - <<EOF
+---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -164,13 +135,35 @@ spec:
 EOF
 ```
 
-We should now be able to send requests to our external host and have the Gateway proxy requests and responses to and from the internal host.
+Wait for the Gateway to become ready:
 
-7) (optional) Add Auth and RateLimiting to protect your public endpoint
+```bash
+kubectl get gateway ingress -n gateway-system -o=jsonpath='{.status.conditions[?(@.type=="Programmed")].status}'
+# True
+```
 
-As we are using Gateway API to define the Gateway and HTTPRoutes, we can now also apply RateLimiting and Auth to protect our public endpoints
+## Step 3: Apply Kuadrant Policies
 
-[AuthPolicy Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/auth/auth-for-app-devs-and-platform-engineers/)
+With the Gateway and HTTPRoute in place, Kuadrant policies attach using the standard `targetRef` — the same as any other Gateway API workload. Apply whichever policies you need:
 
-[RateLimiting Guide](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/ratelimting/multi-rlp-multi-listener/)
+| Policy | Targets | Guide |
+|--------|---------|-------|
+| [TLSPolicy](../tls/gateway-tls.md) | Gateway | Provisions the `ingress-tls` certificate referenced in the listener |
+| [DNSPolicy](../dns/gateway-dns.md) | Gateway | Creates DNS records pointing `${EXTERNAL_HOST}` to the Gateway address |
+| [AuthPolicy](../auth/auth-for-app-devs-and-platform-engineers.md) | HTTPRoute | Authentication and authorization on the public endpoint |
+| [RateLimitPolicy](../ratelimiting/simple-rl-for-app-developers.md) | HTTPRoute | Rate limiting on the public endpoint |
 
+## Verification
+
+```bash
+GATEWAY_IP=$(kubectl get gateway ingress -n gateway-system -o jsonpath='{.status.addresses[0].value}')
+curl -v --resolve ${EXTERNAL_HOST}:443:${GATEWAY_IP} https://${EXTERNAL_HOST}/some-endpoint
+```
+
+## Egress Gateway
+
+If the backend also needs egress-level controls (workload identity, credential injection, per-workload rate limiting), see the [Egress Gateway](../egress/egress-gateway.md) guides.
+
+## Example
+
+A complete example is available at [`examples/external-api-istio.yaml`](../../../examples/external-api-istio.yaml).

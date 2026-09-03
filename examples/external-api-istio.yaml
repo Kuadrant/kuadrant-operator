@@ -1,42 +1,54 @@
-## Note before using this example you will need cert-manager and a clusterissuer setup
-apiVersion: networking.istio.io/v1beta1
+## Prerequisites:
+## - Kuadrant and Gateway API installed with Istio as the gateway provider
+## - cert-manager with a ClusterIssuer configured (for TLSPolicy)
+## - DNS provider credentials secret (for DNSPolicy)
+##
+## Usage:
+##   export EXTERNAL_HOST=my.api.com
+##   export INTERNAL_HOST=my.api.local
+##   envsubst < examples/external-api-istio.yaml | kubectl apply -n gateway-system -f -
+##
+## See: doc/user-guides/misc/external-api.md
+
+# Step 1: Register the backend API in Istio
+apiVersion: networking.istio.io/v1
 kind: ServiceEntry
 metadata:
-  name: external-api
+  name: backend-api
 spec:
   hosts:
-    - kuadrant.io
+    - ${INTERNAL_HOST}
   location: MESH_EXTERNAL
   resolution: DNS
   ports:
-    - number: 80
-      name: http
-      protocol: HTTP
     - number: 443
       name: https
-      protocol: TLS
+      protocol: HTTPS
 ---
 apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
-  name: external-api
+  name: backend-api
 spec:
-  host: 'kuadrant.io'
+  host: ${INTERNAL_HOST}
   trafficPolicy:
     tls:
       mode: SIMPLE
-      sni: kuadrant.io
+      sni: ${INTERNAL_HOST}
 ---
+# Step 2: Deploy the ingress Gateway
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: public-api
+  name: ingress
+  labels:
+    istio: ingress
 spec:
   gatewayClassName: istio
   listeners:
-    - name: public-tls
+    - name: ingress-tls
       port: 443
-      hostname: 'public.cb.hcpapps.net'
+      hostname: ${EXTERNAL_HOST}
       protocol: HTTPS
       allowedRoutes:
         namespaces:
@@ -44,51 +56,53 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: public
+          - name: ingress-tls
             kind: Secret
 ---
+# Step 3: Kuadrant policies
+apiVersion: kuadrant.io/v1
+kind: TLSPolicy
+metadata:
+  name: ingress-tls
+spec:
+  targetRef:
+    name: ingress
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: my-cluster-issuer
+---
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: ingress-dns
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ingress
+  providerRefs:
+    - name: dns-provider-credentials
+---
+# Step 4: HTTPRoute bridging public hostname to backend
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: public-api
+  name: external-host
 spec:
   parentRefs:
-    - name: public-api
+    - name: ingress
   hostnames:
-    - 'public.cb.hcpapps.net'
+    - ${EXTERNAL_HOST}
   rules:
     - backendRefs:
-        - name: kuadrant.io
+        - name: ${INTERNAL_HOST}
           kind: Hostname
           group: networking.istio.io
           port: 443
       filters:
         - type: URLRewrite
           urlRewrite:
-            hostname: kuadrant.io
----
-apiVersion: kuadrant.io/v1
-kind: TLSPolicy
-metadata:
-  name: tls
-spec:
-  targetRef:
-    name: public-api
-    group: gateway.networking.k8s.io
-    kind: Gateway
-  issuerRef:
-    group: cert-manager.io
-    kind: ClusterIssuer
-    name: lets-encrypt-aws
----
-apiVersion: kuadrant.io/v1
-kind: DNSPolicy
-metadata:
-  name: dns
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: public-api
-  providerRefs:
-    - name: aws-provider-credentials
+            hostname: ${INTERNAL_HOST}

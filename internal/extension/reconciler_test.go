@@ -472,7 +472,7 @@ func TestNilGuardedPointer(t *testing.T) {
 		}
 	})
 
-	t.Run("set sends updates", func(t *testing.T) {
+	t.Run("set sends latest update, coalescing without blocking", func(t *testing.T) {
 		ptr := newNilGuardedPointer[string]()
 		channel := ptr.newUpdateChannel()
 
@@ -490,17 +490,63 @@ func TestNilGuardedPointer(t *testing.T) {
 			t.Errorf("Expected loaded value to be %s, got %s", value, *loaded)
 		}
 
+		ptr.set("updated once")
+		ptr.set("updated twice")
+
+		select {
+		case got := <-channel:
+			if got != "updated twice" {
+				t.Errorf("Expected coalesced update `updated twice`, got `%s`", got)
+			}
+		case <-time.After(time.Second):
+			t.Error("Timed out waiting for coalesced update")
+		}
+
+		select {
+		case extra := <-channel:
+			t.Errorf("Expected no further updates, got `%s`", extra)
+		default:
+		}
+	})
+
+	t.Run("gone subscriber does not block set", func(t *testing.T) {
+		ptr := newNilGuardedPointer[int]()
+		ptr.newUpdateChannel() // never read from
+
+		ptr.set(0) // first set primes the pointer; updates only fan out afterwards
+
+		done := make(chan struct{})
 		go func() {
-			ptr.set("updated once")
-			ptr.set("updated twice")
+			for i := 1; i <= 100; i++ {
+				ptr.set(i)
+			}
+			close(done)
 		}()
 
-		one, two := <-channel, <-channel
-		if one != "updated once" {
-			t.Errorf("Expected update to be `updated once`, got `%s`", one)
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("set blocked on a subscriber that never reads")
 		}
-		if two != "updated twice" {
-			t.Errorf("Expected update to be `updated twice`, got `%s`", two)
+	})
+
+	t.Run("removeUpdateChannel stops further updates", func(t *testing.T) {
+		ptr := newNilGuardedPointer[string]()
+		channel := ptr.newUpdateChannel()
+
+		ptr.set("init") // primes the pointer; not delivered
+		ptr.set("first")
+		ptr.removeUpdateChannel(channel)
+		ptr.set("second")
+
+		if got := <-channel; got != "first" {
+			t.Errorf("Expected the pre-removal update `first`, got `%s`", got)
+		}
+
+		select {
+		case extra := <-channel:
+			t.Errorf("Expected no updates after removal, got `%s`", extra)
+		default:
 		}
 	})
 

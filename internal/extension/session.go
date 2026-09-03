@@ -18,13 +18,23 @@ var (
 	ErrPolicyKindTaken    = errors.New("policy kind already registered by another extension")
 )
 
+const defaultSessionTTL = 45 * time.Second
+
+type session struct {
+	identity   string
+	token      string
+	policyKind string
+	lastSeen   time.Time
+}
+
 type SessionStore struct {
 	mu          sync.RWMutex
-	credentials map[string][]byte // built-in name -> ephemeral credential
-	sessions    map[string]string // session token -> identity
-	connections map[string]string // identity -> session token
-	policyKinds map[string]string // policy kind -> identity
+	credentials map[string][]byte   // built-in name -> ephemeral credential
+	sessions    map[string]*session // session token -> session
 	logger      logr.Logger
+
+	sessionTTL time.Duration
+	now        func() time.Time
 
 	builtinNames   map[string]struct{}
 	warmupComplete bool
@@ -33,13 +43,22 @@ type SessionStore struct {
 func NewSessionStore(logger logr.Logger) *SessionStore {
 	return &SessionStore{
 		credentials:    make(map[string][]byte),
-		sessions:       make(map[string]string),
-		connections:    make(map[string]string),
-		policyKinds:    make(map[string]string),
+		sessions:       make(map[string]*session),
 		logger:         logger,
+		sessionTTL:     defaultSessionTTL,
+		now:            time.Now,
 		builtinNames:   make(map[string]struct{}),
 		warmupComplete: true,
 	}
+}
+
+func (s *SessionStore) SetSessionTTL(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessionTTL = ttl
 }
 
 func (s *SessionStore) BeginWarmup(builtinNames []string, timeout time.Duration) {
@@ -74,7 +93,7 @@ func (s *SessionStore) isWarmupComplete() bool {
 
 func (s *SessionStore) allBuiltinsRegisteredLocked() bool {
 	for name := range s.builtinNames {
-		if _, ok := s.connections[name]; !ok {
+		if s.sessionByIdentityLocked(name) == nil {
 			return false
 		}
 	}
@@ -124,12 +143,20 @@ func (s *SessionStore) CreateSession(identity, policyKind string) (string, error
 		return "", ErrPolicyKindRequired
 	}
 
-	if _, connected := s.connections[identity]; connected {
-		return "", ErrAlreadyConnected
+	// A live session is never hijacked; a stale one is revoked here so a returning
+	// or replacement extension can take over without waiting for the reaper.
+	if existing := s.sessionByIdentityLocked(identity); existing != nil {
+		if !s.isStaleLocked(existing) {
+			return "", ErrAlreadyConnected
+		}
+		delete(s.sessions, existing.token)
 	}
 
-	if owner, taken := s.policyKinds[policyKind]; taken {
-		return "", fmt.Errorf("%w: %q is owned by %q", ErrPolicyKindTaken, policyKind, owner)
+	if owner := s.sessionByPolicyKindLocked(policyKind); owner != nil {
+		if !s.isStaleLocked(owner) {
+			return "", fmt.Errorf("%w: %q is owned by %q", ErrPolicyKindTaken, policyKind, owner.identity)
+		}
+		delete(s.sessions, owner.token)
 	}
 
 	token, err := generateSessionToken()
@@ -137,9 +164,12 @@ func (s *SessionStore) CreateSession(identity, policyKind string) (string, error
 		return "", fmt.Errorf("failed to generate session token: %w", err)
 	}
 
-	s.sessions[token] = identity
-	s.connections[identity] = token
-	s.policyKinds[policyKind] = identity
+	s.sessions[token] = &session{
+		identity:   identity,
+		token:      token,
+		policyKind: policyKind,
+		lastSeen:   s.now(),
+	}
 
 	if !s.warmupComplete && s.allBuiltinsRegisteredLocked() {
 		s.warmupComplete = true
@@ -148,12 +178,58 @@ func (s *SessionStore) CreateSession(identity, policyKind string) (string, error
 	return token, nil
 }
 
+func (s *SessionStore) Touch(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if sess, ok := s.sessions[token]; ok {
+		sess.lastSeen = s.now()
+	}
+}
+
+func (s *SessionStore) ReapStale() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var revoked []string
+	for token, sess := range s.sessions {
+		if s.isStaleLocked(sess) {
+			delete(s.sessions, token)
+			revoked = append(revoked, sess.identity)
+		}
+	}
+	return revoked
+}
+
+func (s *SessionStore) isStaleLocked(sess *session) bool {
+	return s.now().Sub(sess.lastSeen) > s.sessionTTL
+}
+
+func (s *SessionStore) sessionByIdentityLocked(identity string) *session {
+	for _, sess := range s.sessions {
+		if sess.identity == identity {
+			return sess
+		}
+	}
+	return nil
+}
+
+func (s *SessionStore) sessionByPolicyKindLocked(policyKind string) *session {
+	for _, sess := range s.sessions {
+		if sess.policyKind == policyKind {
+			return sess
+		}
+	}
+	return nil
+}
+
 func (s *SessionStore) ValidateSession(token string) (string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	identity, ok := s.sessions[token]
-	return identity, ok
+	if sess, ok := s.sessions[token]; ok {
+		return sess.identity, true
+	}
+	return "", false
 }
 
 func (s *SessionStore) RevokeByName(identity string) bool {
@@ -164,18 +240,11 @@ func (s *SessionStore) RevokeByName(identity string) bool {
 }
 
 func (s *SessionStore) revokeIdentityLocked(identity string) bool {
-	token, ok := s.connections[identity]
-	if !ok {
+	sess := s.sessionByIdentityLocked(identity)
+	if sess == nil {
 		return false
 	}
-	delete(s.sessions, token)
-	delete(s.connections, identity)
-	for kind, owner := range s.policyKinds {
-		if owner == identity {
-			delete(s.policyKinds, kind)
-			break
-		}
-	}
+	delete(s.sessions, sess.token)
 	return true
 }
 

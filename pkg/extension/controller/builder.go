@@ -167,12 +167,14 @@ func (b *Builder) Build() (*ExtensionController, error) {
 	}
 
 	return &ExtensionController{
-		config:          config,
-		manager:         mgr,
-		logger:          b.logger,
-		extensionClient: extClient,
-		tokenSource:     resolveTokenSource(),
-		eventCache:      eventCache,
-		BaseReconciler:  basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
+		config:            config,
+		manager:           mgr,
+		logger:            b.logger,
+		extensionClient:   extClient,
+		tokenSource:       resolveTokenSource(),
+		heartbeatInterval: resolveHeartbeatInterval(b.logger),
+		reconnectBackoff:  defaultReconnectBackoff(),
+		eventCache:        eventCache,
+		BaseReconciler:    basereconciler.NewBaseReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader()),
 	}, nil
 }

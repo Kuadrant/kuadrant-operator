@@ -144,6 +144,21 @@ spec:
                         type: boolean
                     type: object
                 type: object
+              tokenRateLimiting:
+                description: TokenRateLimiting configures token-based rate limiting
+                  settings for the cluster
+                properties:
+                  mode:
+                    default: Reservation
+                    description: |-
+                      Mode defines the token rate limiting mode across the cluster.
+                      In Reservation mode (default), an estimated token amount is reserved on request arrival and committed upon response.
+                      In CheckReport mode, requests are checked without holding capacity (hits_addend=0) and reported upon response.
+                    enum:
+                    - Reservation
+                    - CheckReport
+                    type: string
+                type: object
             type: object
           status:
             description: KuadrantStatus defines the observed state of Kuadrant

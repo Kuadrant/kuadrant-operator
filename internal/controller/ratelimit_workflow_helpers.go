@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -225,7 +226,29 @@ func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
-func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.ActionSpec {
+const (
+	DefaultReservationAmount = "uint(5000)"
+	DefaultReservationTTL    = "duration('60s')"
+)
+
+func resolveReservationAmount(reservation *kuadrantv1alpha1.Reservation) string {
+	if reservation != nil && reservation.Amount != nil && *reservation.Amount != "" {
+		return *reservation.Amount
+	}
+	return DefaultReservationAmount
+}
+
+func resolveReservationTTL(reservation *kuadrantv1alpha1.Reservation, backendTimeout *gatewayapiv1.Duration) string {
+	if reservation != nil && reservation.TTL != nil && *reservation.TTL != "" {
+		return *reservation.TTL
+	}
+	if backendTimeout != nil && *backendTimeout != "" {
+		return fmt.Sprintf("duration('%s')", string(*backendTimeout))
+	}
+	return DefaultReservationTTL
+}
+
+func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates, mode kuadrantv1beta1.TokenRateLimitingMode, backendTimeout *gatewayapiv1.Duration) []wasm.ActionSpec {
 	predicates := make([]string, 0, len(topLevelPredicates)+1)
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
@@ -258,25 +281,88 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 		})
 	}
 
-	// Create separate data slices for request and response phases
-	// We need independent copies because each phase has different hits_addend values
+	if mode == kuadrantv1beta1.TokenRateLimitingModeCheckReport {
+		// CheckReport mode - check limit without consuming tokens
+		requestPhaseData := make([]wasm.DataType, 0, len(commonData)+1)
+		requestPhaseData = append(requestPhaseData, commonData...)
+		requestPhaseData = append(requestPhaseData, wasm.DataType{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   "ratelimit.hits_addend",
+					Value: "0",
+				},
+			},
+		})
 
-	// Request phase - check limit without consuming tokens
-	requestPhaseData := make([]wasm.DataType, 0, len(commonData)+1)
+		requestSpec := wasm.ActionSpec{
+			ServiceName: wasm.RateLimitCheckServiceName,
+			Scope:       string(scope),
+			Sources:     []string{sourcePolicyLocator},
+			ConditionalData: []wasm.ConditionalData{
+				{
+					Predicates: predicates,
+					Data:       requestPhaseData,
+				},
+			},
+		}
+
+		// Response phase - increment counter with actual token usage
+		responsePhaseData := make([]wasm.DataType, 0, len(commonData)+1)
+		responsePhaseData = append(responsePhaseData, commonData...)
+		responsePhaseData = append(responsePhaseData, wasm.DataType{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   "ratelimit.hits_addend",
+					Value: "responseBodyJSON(\"/usage/total_tokens\")",
+				},
+			},
+		})
+
+		responseSpec := wasm.ActionSpec{
+			ServiceName: wasm.RateLimitReportServiceName,
+			Scope:       string(scope),
+			Sources:     []string{sourcePolicyLocator},
+			ConditionalData: []wasm.ConditionalData{
+				{
+					Predicates: predicates,
+					Data:       responsePhaseData,
+				},
+			},
+		}
+
+		return []wasm.ActionSpec{requestSpec, responseSpec}
+	}
+
+	// Reservation mode (default)
+	// Request phase - reserve estimated token volume with TTL
+	amountVal := resolveReservationAmount(tokenLimit.Reservation)
+	ttlVal := resolveReservationTTL(tokenLimit.Reservation, backendTimeout)
+
+	requestPhaseData := make([]wasm.DataType, 0, len(commonData)+2)
 	requestPhaseData = append(requestPhaseData, commonData...)
-	requestPhaseData = append(requestPhaseData, wasm.DataType{
-		Value: &wasm.Expression{
-			ExpressionItem: wasm.ExpressionItem{
-				Key:   "ratelimit.hits_addend",
-				Value: "0",
+	requestPhaseData = append(requestPhaseData,
+		wasm.DataType{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   "ratelimit.amount",
+					Value: amountVal,
+				},
 			},
 		},
-	})
+		wasm.DataType{
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{
+					Key:   "ratelimit.ttl",
+					Value: ttlVal,
+				},
+			},
+		},
+	)
 
 	requestSpec := wasm.ActionSpec{
-		ServiceName: wasm.RateLimitCheckServiceName,
+		ServiceName: wasm.RateLimitReserveServiceName,
 		Scope:       string(scope),
-		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
+		Sources:     []string{sourcePolicyLocator},
 		ConditionalData: []wasm.ConditionalData{
 			{
 				Predicates: predicates,
@@ -285,7 +371,7 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 		},
 	}
 
-	// Response phase - increment counter with actual token usage
+	// Response phase - commit reservation with actual token usage
 	responsePhaseData := make([]wasm.DataType, 0, len(commonData)+1)
 	responsePhaseData = append(responsePhaseData, commonData...)
 	responsePhaseData = append(responsePhaseData, wasm.DataType{
@@ -298,9 +384,9 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 	})
 
 	responseSpec := wasm.ActionSpec{
-		ServiceName: wasm.RateLimitReportServiceName,
+		ServiceName: wasm.RateLimitCommitServiceName,
 		Scope:       string(scope),
-		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
+		Sources:     []string{sourcePolicyLocator},
 		ConditionalData: []wasm.ConditionalData{
 			{
 				Predicates: predicates,
@@ -328,7 +414,7 @@ func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, 
 	)
 }
 
-func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.ActionSpec {
+func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool, mode kuadrantv1beta1.TokenRateLimitingMode) []wasm.ActionSpec {
 	path := effectivePolicy.Path
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
@@ -374,8 +460,13 @@ func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLim
 		scope := limitsNamespace.ToActionScope()
 		sourcePolicyLocator := source.GetLocator()
 
+		var backendTimeout *gatewayapiv1.Duration
+		if parsed.HTTPRouteRule != nil && parsed.HTTPRouteRule.HTTPRouteRule != nil && parsed.HTTPRouteRule.HTTPRouteRule.Timeouts != nil {
+			backendTimeout = parsed.HTTPRouteRule.HTTPRouteRule.Timeouts.BackendRequest
+		}
+
 		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
-		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates)
+		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates, mode, backendTimeout)
 		allSpecs = append(allSpecs, tokenSpecs...)
 	}
 

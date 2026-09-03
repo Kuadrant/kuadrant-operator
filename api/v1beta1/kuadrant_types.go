@@ -78,6 +78,13 @@ func (k *Kuadrant) IsDeveloperPortalEnabled() bool {
 	return k.Spec.Components.DeveloperPortal.Enabled
 }
 
+func (k *Kuadrant) GetTokenRateLimitingMode() TokenRateLimitingMode {
+	if k == nil || k.Spec.TokenRateLimiting == nil || k.Spec.TokenRateLimiting.Mode == nil || *k.Spec.TokenRateLimiting.Mode == "" {
+		return TokenRateLimitingModeReservation
+	}
+	return *k.Spec.TokenRateLimiting.Mode
+}
+
 // GetOwnerReference returns the owner reference pointing to this Kuadrant CR,
 func (k *Kuadrant) BuildOwnerReference() []metav1.OwnerReference {
 	if k == nil {
@@ -106,7 +113,29 @@ type KuadrantSpec struct {
 	// +optional
 	// Components configures optional Kuadrant components
 	Components *Components `json:"components,omitempty"`
+	// +optional
+	// TokenRateLimiting configures token-based rate limiting settings for the cluster
+	TokenRateLimiting *TokenRateLimiting `json:"tokenRateLimiting,omitempty"`
 }
+
+// TokenRateLimiting configures token-based rate limiting settings for the cluster
+type TokenRateLimiting struct {
+	// Mode defines the token rate limiting mode across the cluster.
+	// In Reservation mode (default), an estimated token amount is reserved on request arrival and committed upon response.
+	// In CheckReport mode, requests are checked without holding capacity (hits_addend=0) and reported upon response.
+	// +kubebuilder:validation:Enum=Reservation;CheckReport
+	// +kubebuilder:default=Reservation
+	// +optional
+	Mode *TokenRateLimitingMode `json:"mode,omitempty"`
+}
+
+// TokenRateLimitingMode represents the mode for token rate limiting
+type TokenRateLimitingMode string
+
+const (
+	TokenRateLimitingModeReservation TokenRateLimitingMode = "Reservation"
+	TokenRateLimitingModeCheckReport TokenRateLimitingMode = "CheckReport"
+)
 
 // Observability configures telemetry and monitoring settings for Kuadrant components.
 // When enabled, it configures logging, tracing, and other observability features for both

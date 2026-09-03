@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
+	kuadrantmetrics "github.com/kuadrant/kuadrant-operator/internal/metrics"
 )
 
 const (
@@ -41,6 +43,9 @@ func NewTopologyReconciler(client dynamic.Interface, namespace string) *Topology
 }
 
 func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+	startTime := time.Now()
+	defer kuadrantmetrics.ObserveTopologyRebuildDuration(startTime)
+
 	logger := controller.LoggerFromContext(ctx).WithName("topology file").WithValues("context", ctx)
 	span := trace.SpanFromContext(ctx)
 
@@ -60,6 +65,15 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 		span.SetStatus(codes.Error, "topology exceeds ConfigMap size limit")
 		span.AddEvent("topology data replaced with placeholder")
 		topologyData = oversizedPlaceholder
+	}
+
+	kuadrantmetrics.ResetTopologyObjects()
+	objectsByKind := make(map[string]int)
+	for _, obj := range topology.All().Items() {
+		objectsByKind[obj.GroupVersionKind().Kind]++
+	}
+	for kind, count := range objectsByKind {
+		kuadrantmetrics.SetTopologyObjects(kind, count)
 	}
 
 	cm := &corev1.ConfigMap{

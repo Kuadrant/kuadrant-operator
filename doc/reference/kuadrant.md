@@ -14,6 +14,7 @@
 | `observability`    | [Observability](#observability)     | No | Kuadrant observability configuration. |
 | `mtls`  | [mTLS](#mtls) |      No      | Two way authentication between kuadrant components. |
 | `components`  | [Components](#components) |      No      | **Deprecated:** ignored. Kept only for backwards compatibility. |
+| `tokenRateLimiting`  | [TokenRateLimiting](#tokenratelimiting) | No | Optional token rate limiting configuration (mode: `Reservation` or `CheckReport`). |
 
 #### mTLS
 
@@ -107,6 +108,19 @@ Configures distributed tracing integration for request flows. It enables tracing
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
 | `enabled`    | Boolean     |  No | **Deprecated:** ignored. The developer portal is always enabled; setting this to `true` or `false` has no effect. |
+
+#### TokenRateLimiting
+
+Configures token rate limiting behavior for all TokenRateLimitPolicy resources across the cluster.
+
+| **Field** | **Type** | **Required** | **Description** |
+|-----------|----------|:------------:|-----------------|
+| `mode` | String | No | Token rate limiting mode. Options: `Reservation` (default) or `CheckReport`. |
+
+##### Modes
+
+- **Reservation Mode (`Reservation`, default)**: On request arrival, the policy reserves estimated token capacity with a TTL using Limitador's `Reserve` method. When the backend responds, the policy commits the reservation with actual token usage (`responseBodyJSON("/usage/total_tokens")`) using Limitador's `Commit` method, immediately releasing any unused capacity. This prevents concurrent in-flight requests from racing past limits before usage is reported.
+- **CheckReport Mode (`CheckReport`)**: On request arrival, the policy checks limits without holding capacity (`hits_addend: 0`), and reports actual usage upon response. Useful for low-concurrency environments or when capacity reservation is not required.
 
 ### KuadrantStatus
 

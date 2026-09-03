@@ -222,8 +222,25 @@ type TokenLimit struct {
 	// +optional
 	Counters []kuadrantv1.Counter `json:"counters,omitempty"`
 
+	// Reservation defines token reservation configuration for this limit
+	// +optional
+	Reservation *Reservation `json:"reservation,omitempty"`
+
 	// Source stores the locator of the policy where the limit is originally defined (internal use)
 	Source string `json:"-"`
+}
+
+// Reservation defines token reservation configuration for a limit
+type Reservation struct {
+	// Amount is a CEL expression defining the estimated tokens to reserve on request arrival.
+	// Defaults to uint(5000) if omitted. Setting to "0" disables reservations for this limit.
+	// +optional
+	Amount *string `json:"amount,omitempty"`
+
+	// TTL is a CEL expression defining how long to hold the reservation before automatically releasing it.
+	// Defaults to the route's backendRequest timeout if configured, or duration('60s').
+	// +optional
+	TTL *string `json:"ttl,omitempty"`
 }
 
 func (l TokenLimit) CountersAsStringList() []string {

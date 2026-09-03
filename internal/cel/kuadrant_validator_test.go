@@ -90,6 +90,88 @@ func TestValidateWasmActionValid(t *testing.T) {
 	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
 }
 
+func TestValidateWasmActionTokenRateLimitReservationValid(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName:       wasm.RateLimitReserveServiceName,
+		Scope:             "scope",
+		Predicates:        []string{"request.id == 1"},
+		ReservationAmount: "uint(5000)",
+		ReservationTTL:    "duration('60s')",
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
+func TestValidateWasmActionTokenRateLimitReservationInvalidAmount(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName:       wasm.RateLimitReserveServiceName,
+		Scope:             "scope",
+		ReservationAmount: "uint(invalid)",
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "undeclared reference to 'invalid'")
+}
+
+func TestValidateWasmActionTokenRateLimitReservationInvalidTTL(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName:    wasm.RateLimitReserveServiceName,
+		Scope:          "scope",
+		ReservationTTL: "duration(1, 2, 3)",
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "found no matching overload for 'duration'")
+}
+
+func TestValidateWasmActionTokenRateLimitReservationMismatchedAmountType(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName:       wasm.RateLimitReserveServiceName,
+		Scope:             "scope",
+		ReservationAmount: `"100"`,
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "reservation amount expression must evaluate to uint or int, got string")
+}
+
+func TestValidateWasmActionTokenRateLimitReservationMismatchedTTLType(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName:    wasm.RateLimitReserveServiceName,
+		Scope:          "scope",
+		ReservationTTL: `"30s"`,
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "reservation ttl expression must evaluate to duration, got string")
+}
+
 func TestNewIssue(t *testing.T) {
 	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,

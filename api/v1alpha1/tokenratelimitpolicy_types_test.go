@@ -21,6 +21,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -317,4 +318,171 @@ func TestTokenLimit_CountersAsStringList(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTokenRateLimitPolicy_Merge_Reservation(t *testing.T) {
+	t.Run("defaults merge strategy inherits reservation from gateway", func(t *testing.T) {
+		gatewayPolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "gateway-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				Defaults: &MergeableTokenRateLimitPolicySpec{
+					Strategy: kuadrantv1.PolicyRuleMergeStrategy,
+					TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+						Limits: map[string]TokenLimit{
+							"limit-a": {
+								Reservation: &Reservation{
+									Amount: ptr.To("1000"),
+									TTL:    ptr.To("duration('30s')"),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		routePolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "route-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+					Limits: map[string]TokenLimit{
+						"limit-b": {
+							Reservation: &Reservation{
+								Amount: ptr.To("500"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// When routePolicy merges gatewayPolicy defaults:
+		merged := routePolicy.Merge(gatewayPolicy).(*TokenRateLimitPolicy)
+		proper := merged.Spec.Proper()
+		if len(proper.Limits) != 2 {
+			t.Fatalf("expected 2 limits, got %d", len(proper.Limits))
+		}
+
+		// limit-a inherited from gateway policy defaults
+		limitA, ok := proper.Limits["limit-a"]
+		if !ok || limitA.Reservation == nil || *limitA.Reservation.Amount != "1000" {
+			t.Errorf("expected limit-a to have reservation amount 1000, got %+v", limitA.Reservation)
+		}
+		if limitA.Reservation.TTL == nil || *limitA.Reservation.TTL != "duration('30s')" {
+			t.Errorf("expected limit-a to have reservation TTL duration('30s'), got %+v", limitA.Reservation)
+		}
+
+		// limit-b from route policy
+		limitB, ok := proper.Limits["limit-b"]
+		if !ok || limitB.Reservation == nil || *limitB.Reservation.Amount != "500" {
+			t.Errorf("expected limit-b to have reservation amount 500, got %+v", limitB.Reservation)
+		}
+	})
+
+	t.Run("route policy overrides reservation defaults from gateway", func(t *testing.T) {
+		gatewayPolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "gateway-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				Defaults: &MergeableTokenRateLimitPolicySpec{
+					Strategy: kuadrantv1.PolicyRuleMergeStrategy,
+					TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+						Limits: map[string]TokenLimit{
+							"limit-a": {
+								Reservation: &Reservation{
+									Amount: ptr.To("1000"),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		routePolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "route-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+					Limits: map[string]TokenLimit{
+						"limit-a": {
+							Reservation: &Reservation{
+								Amount: ptr.To("2000"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		merged := routePolicy.Merge(gatewayPolicy).(*TokenRateLimitPolicy)
+		proper := merged.Spec.Proper()
+		limitA, ok := proper.Limits["limit-a"]
+		if !ok || limitA.Reservation == nil || *limitA.Reservation.Amount != "2000" {
+			t.Errorf("expected limit-a to be overridden with amount 2000, got %+v", limitA.Reservation)
+		}
+	})
+
+	t.Run("gateway overrides take precedence over route policy reservation", func(t *testing.T) {
+		gatewayPolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "gateway-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				Overrides: &MergeableTokenRateLimitPolicySpec{
+					Strategy: kuadrantv1.PolicyRuleMergeStrategy,
+					TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+						Limits: map[string]TokenLimit{
+							"limit-a": {
+								Reservation: &Reservation{
+									Amount: ptr.To("5000"),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		routePolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "route-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+					Limits: map[string]TokenLimit{
+						"limit-a": {
+							Reservation: &Reservation{
+								Amount: ptr.To("1000"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		merged := routePolicy.Merge(gatewayPolicy).(*TokenRateLimitPolicy)
+		proper := merged.Spec.Proper()
+		limitA, ok := proper.Limits["limit-a"]
+		if !ok || limitA.Reservation == nil || *limitA.Reservation.Amount != "5000" {
+			t.Errorf("expected limit-a to be overridden by gateway with amount 5000, got %+v", limitA.Reservation)
+		}
+	})
+
+	t.Run("per-limit bypass reservation amount 0 is preserved", func(t *testing.T) {
+		routePolicy := &TokenRateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "route-policy", Namespace: "default"},
+			Spec: TokenRateLimitPolicySpec{
+				TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+					Limits: map[string]TokenLimit{
+						"bypass-limit": {
+							Reservation: &Reservation{
+								Amount: ptr.To("0"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		proper := routePolicy.Spec.Proper()
+		limit := proper.Limits["bypass-limit"]
+		if limit.Reservation == nil || *limit.Reservation.Amount != "0" {
+			t.Fatalf("expected reservation amount 0, got %+v", limit.Reservation)
+		}
+	})
 }

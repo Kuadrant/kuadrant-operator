@@ -35,6 +35,7 @@ This guide uses Istio as the gateway provider. The pattern relies on three Istio
 1. **ServiceEntry** — registers an external hostname in the service mesh so it becomes routable
 2. **DestinationRule** — configures TLS origination to the external backend
 3. **`Hostname` backendRef** (`group: networking.istio.io`) — allows an HTTPRoute to reference the ServiceEntry as a backend
+4. **`HTTPRouteHostRewrite`** — the [URLRewrite hostname filter](https://gateway-api.sigs.k8s.io/guides/user-guides/http-redirect-rewrite/) is an Extended Gateway API feature; the gateway provider must support it
 
 If you are using a different gateway provider, check whether it supports these or equivalent mechanisms. For a list of supported providers, see the [Getting Started](https://docs.kuadrant.io/latest/getting-started/) guide.
 

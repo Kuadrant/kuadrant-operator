@@ -72,7 +72,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: my-cluster-issuer
+    name: my-cluster-issuer    # replace with your ClusterIssuer name
 ---
 apiVersion: kuadrant.io/v1
 kind: DNSPolicy
@@ -84,7 +84,7 @@ spec:
     kind: Gateway
     name: ingress
   providerRefs:
-    - name: dns-provider-credentials
+    - name: dns-provider-credentials    # replace with your DNS provider Secret name (must be in the same namespace)
 ---
 # Step 4: HTTPRoute bridging public hostname to backend
 apiVersion: gateway.networking.k8s.io/v1

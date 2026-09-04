@@ -104,7 +104,7 @@ endif
 IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 
 # Directories containing unit & integration test packages
-UNIT_DIRS := ./pkg/... ./api/... ./internal/...
+UNIT_DIRS := ./pkg/... ./api/... ./internal/... ./hack/sync-components...
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

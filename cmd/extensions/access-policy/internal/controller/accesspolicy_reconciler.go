@@ -135,23 +135,108 @@ func (r *AccessPolicyReconciler) Reconcile(ctx context.Context, request reconcil
 					}
 					authExprs = append(authExprs, authExpr)
 				} else if string(rule.Authorization.Type) == "Inline" {
+					// MCP matching
 					if rule.Authorization.MCP.MCPBaseProtocolMethodsOption == v1alpha1.MCPBaseProtocolMethodsOptionMatch {
 						authExprs = append(authExprs, "request.headers['x-mcp-method'] in ['initialize', 'tools/list', 'completion', 'logging', 'notifications', 'ping'] || request.method in ['GET', 'DELETE']")
 					}
-					var methodExprs []string
+					var mcpMethodExprs []string
 					if len(rule.Authorization.MCP.Methods) > 0 {
 						for _, m := range rule.Authorization.MCP.Methods {
 							if len(m.Params) > 0 {
 								for _, param := range m.Params {
-									methodExprs = append(methodExprs, fmt.Sprintf("(request.headers['x-mcp-method'] == '%s' && request.headers['x-mcp-toolname'] == '%s')", m.Name, param))
+									mcpMethodExprs = append(mcpMethodExprs, fmt.Sprintf("(request.headers['x-mcp-method'] == '%s' && request.headers['x-mcp-toolname'] == '%s')", m.Name, param))
 								}
 							} else {
-								methodExprs = append(methodExprs, fmt.Sprintf("request.headers['x-mcp-method'] == '%s'", m.Name))
+								mcpMethodExprs = append(mcpMethodExprs, fmt.Sprintf("request.headers['x-mcp-method'] == '%s'", m.Name))
 							}
 						}
 					}
-					if len(methodExprs) > 0 {
-						authExprs = append(authExprs, "("+strings.Join(methodExprs, " || ")+")")
+					if len(mcpMethodExprs) > 0 {
+						authExprs = append(authExprs, "("+strings.Join(mcpMethodExprs, " || ")+")")
+					}
+
+					// HTTP Methods
+					if len(rule.Authorization.Methods) > 0 {
+						var methods []string
+						for _, m := range rule.Authorization.Methods {
+							methods = append(methods, fmt.Sprintf("'%s'", m))
+						}
+						authExprs = append(authExprs, fmt.Sprintf("request.method in [%s]", strings.Join(methods, ", ")))
+					}
+
+					// HTTP Paths
+					if len(rule.Authorization.Paths) > 0 {
+						var pathExprs []string
+						for _, pMatch := range rule.Authorization.Paths {
+							val := ""
+							if pMatch.Value != nil {
+								val = *pMatch.Value
+							}
+							matchType := v1alpha1.PathMatchPathPrefix
+							if pMatch.Type != nil {
+								matchType = *pMatch.Type
+							}
+							switch matchType {
+							case v1alpha1.PathMatchExact:
+								pathExprs = append(pathExprs, fmt.Sprintf("request.path == '%s'", val))
+							case v1alpha1.PathMatchRegularExpression:
+								pathExprs = append(pathExprs, fmt.Sprintf("request.path.matches('%s')", val))
+							case v1alpha1.PathMatchPathPrefix:
+								fallthrough
+							default:
+								pathExprs = append(pathExprs, fmt.Sprintf("request.path.startsWith('%s')", val))
+							}
+						}
+						if len(pathExprs) > 0 {
+							authExprs = append(authExprs, "("+strings.Join(pathExprs, " || ")+")")
+						}
+					}
+
+					// HTTP Headers (AND semantics across header matchers)
+					if len(rule.Authorization.Headers) > 0 {
+						for _, hMatch := range rule.Authorization.Headers {
+							hName := strings.ToLower(string(hMatch.Name))
+							matchType := v1alpha1.HeaderMatchExact
+							if hMatch.Type != nil {
+								matchType = *hMatch.Type
+							}
+							switch matchType {
+							case v1alpha1.HeaderMatchRegularExpression:
+								authExprs = append(authExprs, fmt.Sprintf("(has(request.headers) && '%s' in request.headers && request.headers['%s'].matches('%s'))", hName, hName, hMatch.Value))
+							case v1alpha1.HeaderMatchExact:
+								fallthrough
+							default:
+								authExprs = append(authExprs, fmt.Sprintf("(has(request.headers) && '%s' in request.headers && request.headers['%s'] == '%s')", hName, hName, hMatch.Value))
+							}
+						}
+					}
+
+					// HTTP Hosts
+					if len(rule.Authorization.Hosts) > 0 {
+						var hostExprs []string
+						for _, h := range rule.Authorization.Hosts {
+							hostStr := string(h)
+							if strings.HasPrefix(hostStr, "*.") {
+								domain := strings.TrimPrefix(hostStr, "*.")
+								hostExprs = append(hostExprs, fmt.Sprintf("request.host.endsWith('.%s')", domain))
+							} else {
+								hostExprs = append(hostExprs, fmt.Sprintf("(request.host == '%s' || ('host' in request.headers && request.headers['host'] == '%s'))", hostStr, hostStr))
+							}
+						}
+						if len(hostExprs) > 0 {
+							authExprs = append(authExprs, "("+strings.Join(hostExprs, " || ")+")")
+						}
+					}
+
+					// Ports
+					if len(rule.Authorization.Ports) > 0 {
+						var portExprs []string
+						for _, p := range rule.Authorization.Ports {
+							portExprs = append(portExprs, fmt.Sprintf("request.port == %d", p))
+						}
+						if len(portExprs) > 0 {
+							authExprs = append(authExprs, "("+strings.Join(portExprs, " || ")+")")
+						}
 					}
 				}
 			}

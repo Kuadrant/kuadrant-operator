@@ -28,6 +28,7 @@ import (
 //
 // Implementations SHOULD return a regular HTTP formatted response if the policy is enforced against non-MCP traffic.
 // Implementations MAY return a JSON-RPC formatted response if the policy is enforced against MCP traffic.
+// +kubebuilder:validation:XValidation:rule="self.action == 'ExternalAuth' ? has(self.externalAuth) : true",message="externalAuth must be specified when action is set to 'ExternalAuth'"
 type AccessPolicySpec struct {
 	// TargetRefs specifies the targets of the AccessPolicy.
 	// An AccessPolicy must target at least one resource.
@@ -54,6 +55,9 @@ type AccessPolicySpec struct {
 	Action AccessPolicyActionType `json:"action"`
 
 	// ExternalAuth specifies an external auth filter to be used for authorization.
+	// Core support is limited to 1 ExternalAuth callout per target.
+	// +optional
+	ExternalAuth *HTTPExternalAuthFilter `json:"externalAuth,omitempty"`
 
 	// Rules defines a list of rules to be applied to the target.
 	// The interpretation of these rules depends on the Action:
@@ -65,6 +69,13 @@ type AccessPolicySpec struct {
 	// +listType=atomic
 	// +kubebuilder:validation:XValidation:rule="self.all(r, self.filter(x, x.name == r.name).size() == 1)",message="AccessRule names must be unique"
 	Rules []AccessRule `json:"rules,omitempty"`
+}
+
+// HTTPExternalAuthFilter specifies the external auth filter configuration.
+type HTTPExternalAuthFilter struct {
+	// BackendRef references the backend service that performs external authorization.
+	// +required
+	BackendRef gwapiv1.LocalObjectReference `json:"backendRef"`
 }
 
 // AccessPolicyActionType identifies a type of action for access policy.

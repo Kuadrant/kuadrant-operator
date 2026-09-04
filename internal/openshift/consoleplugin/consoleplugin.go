@@ -30,6 +30,20 @@ func ConsolePlugin(ns string) *consolev1.ConsolePlugin {
 					BasePath:  "/",
 				},
 			},
+			Proxy: []consolev1.ConsolePluginProxy{
+				{
+					Alias:         "backend",
+					Authorization: consolev1.UserToken,
+					Endpoint: consolev1.ConsolePluginProxyEndpoint{
+						Type: consolev1.ProxyTypeService,
+						Service: &consolev1.ConsolePluginProxyServiceConfig{
+							Name:      ServiceName(),
+							Namespace: ns,
+							Port:      9443,
+						},
+					},
+				},
+			},
 		},
 	}
 }

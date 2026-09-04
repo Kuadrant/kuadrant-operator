@@ -106,7 +106,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := NewConsolePluginReconciler(manager, TestNamespace)
+	reconciler := NewConsolePluginReconciler(manager, TestNamespace, "")
 	assert.Assert(t, reconciler != nil)
 
 	t.Run("Subscription", func(subT *testing.T) {
@@ -163,6 +163,9 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.DeepEqual(subT, deployment.Spec.Strategy, consoleplugin.DeploymentStrategy())
 		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Containers, 1))
 		assert.Assert(subT, deployment.Spec.Template.Spec.Containers[0].Image == ConsolePluginImageURL)
+		assert.Equal(subT, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy, corev1.PullAlways)
+		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 1))
+		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Volumes, 1))
 	})
 
 	t.Run("Delete deployment", func(subT *testing.T) {
@@ -172,27 +175,6 @@ func TestConsolePluginReconciler(t *testing.T) {
 		deployment := &appsv1.Deployment{}
 		deploymentKey := client.ObjectKey{Name: consoleplugin.DeploymentName(), Namespace: TestNamespace}
 		err = manager.GetClient().Get(context.TODO(), deploymentKey, deployment)
-		assert.Assert(subT, apierrors.IsNotFound(err))
-	})
-
-	t.Run("Create nginx configmap", func(subT *testing.T) {
-		topology := buildTopologyWithClusterVersion(subT)
-		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
-		configMap := &corev1.ConfigMap{}
-		cmKey := client.ObjectKey{Name: consoleplugin.NginxConfigMapName(), Namespace: TestNamespace}
-		assert.NilError(subT, manager.GetClient().Get(context.TODO(), cmKey, configMap))
-		assert.DeepEqual(subT, configMap.GetLabels(), consoleplugin.CommonLabels())
-		_, ok := configMap.Data["nginx.conf"]
-		assert.Assert(subT, ok)
-	})
-
-	t.Run("Delete nginx configmap", func(subT *testing.T) {
-		topology, err := machinery.NewTopology()
-		assert.Assert(subT, err == nil)
-		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
-		configMap := &corev1.ConfigMap{}
-		cmKey := client.ObjectKey{Name: consoleplugin.NginxConfigMapName(), Namespace: TestNamespace}
-		err = manager.GetClient().Get(context.TODO(), cmKey, configMap)
 		assert.Assert(subT, apierrors.IsNotFound(err))
 	})
 
@@ -206,6 +188,11 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.Assert(subT, consolePlugin.Spec.Backend.Service != nil)
 		assert.Assert(subT, consolePlugin.Spec.Backend.Service.Name == consoleplugin.ServiceName())
 		assert.Assert(subT, consolePlugin.Spec.Backend.Service.Namespace == TestNamespace)
+		assert.Assert(subT, is.Len(consolePlugin.Spec.Proxy, 1))
+		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Alias == "backend")
+		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Authorization == consolev1.UserToken)
+		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Endpoint.Service != nil)
+		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Endpoint.Service.Name == consoleplugin.ServiceName())
 	})
 
 	t.Run("Delete consoleplugin", func(subT *testing.T) {
@@ -217,4 +204,48 @@ func TestConsolePluginReconciler(t *testing.T) {
 		err = manager.GetClient().Get(context.TODO(), consolePluginKey, consolePlugin)
 		assert.Assert(subT, apierrors.IsNotFound(err))
 	})
+}
+
+func TestConsolePluginReconcilerWithDevelopmentImageOverride(t *testing.T) {
+	const imageOverride = "localhost/kuadrant/console-plugin:dev"
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = consolev1.AddToScheme(scheme)
+	_ = configv1.AddToScheme(scheme)
+
+	legacyConfigMap := consoleplugin.LegacyNginxConfigMap(TestNamespace)
+	legacyConfigMap.Data = map[string]string{"nginx.conf": "legacy"}
+	manager := controllersfake.
+		NewManagerBuilder().
+		WithClient(fake.NewClientBuilder().WithScheme(scheme).WithObjects(legacyConfigMap).Build()).
+		WithScheme(scheme).
+		Build()
+	reconciler := NewConsolePluginReconciler(manager, TestNamespace, imageOverride)
+
+	topologyConfigMap := &controller.RuntimeObject{
+		Object: &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: ConfigMapGroupKind.Kind, APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      TopologyConfigMapName,
+				Namespace: TestNamespace,
+				Labels:    map[string]string{kuadrant.TopologyLabel: "true"},
+			},
+		},
+	}
+	topology, err := machinery.NewTopology(machinery.WithObjects(topologyConfigMap))
+	assert.NilError(t, err)
+	assert.NilError(t, reconciler.Run(context.TODO(), nil, topology, nil, nil))
+
+	deployment := &appsv1.Deployment{}
+	deploymentKey := client.ObjectKey{Name: consoleplugin.DeploymentName(), Namespace: TestNamespace}
+	assert.NilError(t, manager.GetClient().Get(context.TODO(), deploymentKey, deployment))
+	assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Image, imageOverride)
+	assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy, corev1.PullIfNotPresent)
+
+	consolePlugin := &consolev1.ConsolePlugin{}
+	assert.NilError(t, manager.GetClient().Get(context.TODO(), client.ObjectKey{Name: consoleplugin.Name()}, consolePlugin))
+	err = manager.GetClient().Get(context.TODO(), client.ObjectKeyFromObject(legacyConfigMap), &corev1.ConfigMap{})
+	assert.Assert(t, apierrors.IsNotFound(err))
 }

@@ -1,6 +1,8 @@
 package v1beta1
 
 import (
+	"slices"
+
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -168,6 +170,42 @@ func LinkLimitadorToNetworkPolicy(objs controller.Store) machinery.LinkFunc {
 		Func: func(networkPolicy machinery.Object) []machinery.Object {
 			return lo.Filter(limitadors, func(limitador machinery.Object, _ int) bool {
 				return limitador.GetNamespace() == networkPolicy.GetNamespace() && networkPolicy.GetName() == "kuadrant-limitador"
+			})
+		},
+	}
+}
+
+func LinkDeploymentToNetworkPolicy(objs controller.Store) machinery.LinkFunc {
+	deployments := utils.Map(objs.FilterByGroupKind(DeploymentGroupKind), ControllerObjectToMachineryObject)
+
+	return machinery.LinkFunc{
+		From: DeploymentGroupKind,
+		To:   NetworkPolicyGroupKind,
+		Func: func(networkPolicy machinery.Object) []machinery.Object {
+			return lo.Filter(deployments, func(deployment machinery.Object, _ int) bool {
+				return deployment.GetNamespace() == networkPolicy.GetNamespace() && deployment.GetName() == networkPolicy.GetName()
+			})
+		},
+	}
+}
+
+func LinkSubDeploymentsToKuadrantDeployment(objs controller.Store) machinery.LinkFunc {
+	deployments := utils.Map(objs.FilterByGroupKind(DeploymentGroupKind), ControllerObjectToMachineryObject)
+	allowedDeployments := []string{
+		"authorino-operator",
+		"dns-operator-controller-manager",
+		"limitador-operator-controller-manager",
+	}
+
+	return machinery.LinkFunc{
+		From: DeploymentGroupKind,
+		To:   DeploymentGroupKind,
+		Func: func(deployment machinery.Object) []machinery.Object {
+			return lo.Filter(deployments, func(existingDeployment machinery.Object, _ int) bool {
+				if existingDeployment.GetName() != "kuadrant-operator-controller-manager" {
+					return false
+				}
+				return existingDeployment.GetNamespace() == deployment.GetNamespace() && slices.Contains(allowedDeployments, deployment.GetName())
 			})
 		},
 	}

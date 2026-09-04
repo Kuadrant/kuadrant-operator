@@ -48,6 +48,14 @@
 | `rates`   | [][Rate](#rate)              | No           | List of rate limit details including limit and window. If not specified, no rate limits are applied for this limit definition |
 | `when`    | [][WhenPredicate](#whenpredicate)    | No           | List of predicates for this limit. Used in combination with top-level predicates                                     |
 | `counters`| [][Counter](#counter)        | No           | CEL expressions that define counter keys for rate limiting. If not specified, rate limiting will be applied globally without user-specific tracking |
+| `reservation` | [Reservation](#reservation) | No       | Token reservation configuration for this limit when running in Reservation mode. If omitted, default estimation (`uint(5000)`) and route backendRequest timeout (or `duration('60s')`) are used |
+
+### Reservation
+
+| **Field**  | **Type** | **Required** | **Description**                                                                                                                                                                                |
+|------------|----------|--------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `amount`   | String   | No           | CEL expression defining the estimated tokens to reserve on request arrival. Defaults to `uint(5000)` if omitted. Setting to `"0"` disables reservations for this limit.                      |
+| `ttl`      | String   | No           | CEL expression defining how long to hold the reservation before automatically releasing it. Defaults to the route's `timeouts.backendRequest` if configured, or `duration('60s')`.           |
 
 ### Rate
 
@@ -97,6 +105,13 @@ TokenRateLimitPolicy automatically tracks token consumption from AI/LLM response
 - **Request Phase**: The policy evaluates predicates and descriptors during the request
 - **Response Phase**: The policy extracts actual token usage from the response body
 - **Rate Limiting**: Limitador receives the actual token count as `hits_addend` for precise accounting
+
+### Token Rate Limiting Modes
+
+The cluster operator configures the cluster-wide mode via `spec.tokenRateLimiting.mode` in the `Kuadrant` custom resource:
+
+- **Reservation Mode (`Reservation`, default)**: On request arrival, the policy reserves estimated token capacity with a TTL using Limitador's `Reserve` method. When the backend responds, the policy commits the reservation with actual token usage (`responseBodyJSON("/usage/total_tokens")`) using Limitador's `Commit` method, immediately releasing any unused capacity. This prevents concurrent in-flight requests from racing past limits before usage is reported.
+- **CheckReport Mode (`CheckReport`)**: On request arrival, the policy checks limits without holding capacity (`hits_addend: 0`), and reports actual usage upon response. Useful for low-concurrency environments or when capacity reservation is not required.
 
 ### Supported Response Format
 

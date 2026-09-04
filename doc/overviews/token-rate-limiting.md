@@ -38,6 +38,19 @@ Each limit definition includes:
 - A set of rate limits (`spec.limits.<limit-name>.rates[]`)
 - (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
 - (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
+- (Optional) Token reservation settings (`spec.limits.<limit-name>.reservation.amount` and `spec.limits.<limit-name>.reservation.ttl`)
+
+### Token Rate Limit Reservations (RFC 0021)
+
+By default, Kuadrant operates in **Reservation Mode**, which solves the in-flight request race condition where concurrent requests arrive before actual usage has been reported by the AI/LLM model:
+
+1. **Request Phase (Reserve)**: When an incoming request arrives, the gateway reserves an estimated volume of tokens with a TTL against Limitador's capacity (`ratelimit.amount` and `ratelimit.ttl`).
+   - If not configured, `amount` defaults to `uint(5000)`.
+   - `ttl` defaults to the route rule's `timeouts.backendRequest` if specified, or `duration('60s')`.
+   - Setting `amount: "0"` disables holding capacity for that specific limit while maintaining the reservation lifecycle.
+2. **Response Phase (Commit)**: When the backend model responds, the gateway commits the reservation using the actual token count (`responseBodyJSON("/usage/total_tokens")`), immediately releasing any over-reserved capacity back to the pool.
+
+For environments where capacity reservation is not desired, the cluster operator can configure `spec.tokenRateLimiting.mode: CheckReport` on the `Kuadrant` custom resource. In **CheckReport Mode**, limits are checked without holding capacity (`hits_addend: 0`) and actual usage is reported upon response.
 
 The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
 

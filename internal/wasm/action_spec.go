@@ -66,7 +66,7 @@ const (
 
 // IsGuard returns true if this spec produces a guard action (runs during request phase).
 func (s ActionSpec) IsGuard() bool {
-	return s.ServiceName != RateLimitReportServiceName
+	return s.ServiceName != RateLimitReportServiceName && s.ServiceName != RateLimitCommitServiceName
 }
 
 // ProducedStorePaths returns the store paths that this spec's onReply chain will produce.
@@ -84,9 +84,9 @@ func (s ActionSpec) Build() Action {
 	switch s.ServiceName {
 	case AuthServiceName:
 		return s.buildAuth()
-	case RateLimitServiceName, RateLimitCheckServiceName:
+	case RateLimitServiceName, RateLimitCheckServiceName, RateLimitReserveServiceName:
 		return s.buildRateLimit(rateLimitResponseVar, true, "ratelimit")
-	case RateLimitReportServiceName:
+	case RateLimitReportServiceName, RateLimitCommitServiceName:
 		return s.buildRateLimit(reportResponseVar, false, "ratelimit_report")
 	default:
 		return NewFailAction("true", fmt.Sprintf("unknown service: %s", s.ServiceName)).

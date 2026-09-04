@@ -1036,3 +1036,51 @@ func TestAttachBindings_NoBindings(t *testing.T) {
 		}
 	}
 }
+
+func TestActionSpec_IsGuard(t *testing.T) {
+	tests := []struct {
+		serviceName string
+		expected    bool
+	}{
+		{AuthServiceName, true},
+		{RateLimitServiceName, true},
+		{RateLimitCheckServiceName, true},
+		{RateLimitReserveServiceName, true},
+		{RateLimitReportServiceName, false},
+		{RateLimitCommitServiceName, false},
+	}
+	for _, tc := range tests {
+		spec := ActionSpec{ServiceName: tc.serviceName}
+		if got := spec.IsGuard(); got != tc.expected {
+			t.Errorf("ActionSpec{ServiceName: %q}.IsGuard() = %v, want %v", tc.serviceName, got, tc.expected)
+		}
+	}
+}
+
+func TestActionSpec_Build_ReserveAndCommit(t *testing.T) {
+	reserveSpec := ActionSpec{
+		ServiceName: RateLimitReserveServiceName,
+		Scope:       "my-scope",
+	}
+	reserveAction := reserveSpec.Build()
+	grpcReserve, ok := reserveAction.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction for reserve, got %T", reserveAction)
+	}
+	if grpcReserve.Service != RateLimitReserveServiceName {
+		t.Errorf("expected service %q, got %q", RateLimitReserveServiceName, grpcReserve.Service)
+	}
+
+	commitSpec := ActionSpec{
+		ServiceName: RateLimitCommitServiceName,
+		Scope:       "my-scope",
+	}
+	commitAction := commitSpec.Build()
+	grpcCommit, ok := commitAction.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction for commit, got %T", commitAction)
+	}
+	if grpcCommit.Service != RateLimitCommitServiceName {
+		t.Errorf("expected service %q, got %q", RateLimitCommitServiceName, grpcCommit.Service)
+	}
+}

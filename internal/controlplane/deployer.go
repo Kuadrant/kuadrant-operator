@@ -86,6 +86,20 @@ func allComponents() []Component {
 			DeploymentName: "dns-operator-controller-manager",
 			CRDNames:       []string{"dnsrecords.kuadrant.io", "dnshealthcheckprobes.kuadrant.io"},
 		},
+		{
+			Name:           "mcp-gateway",
+			ChartPath:      chartsBasePath + "/mcp-gateway",
+			DeploymentName: "mcp-gateway-controller",
+			CRDNames:       []string{"mcpgatewayextensions.mcp.kuadrant.io", "mcpserverregistrations.mcp.kuadrant.io", "mcpvirtualservers.mcp.kuadrant.io"},
+			ChartValues: map[string]any{
+				"mcpGatewayExtension": map[string]any{"create": false},
+				"gateway":             map[string]any{"create": false},
+			},
+			ChartValueOverrides: []ChartValueOverride{
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_MCP_GATEWAY", ValueKey: "imageController", Description: "controller"}},
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_MCP_GATEWAY_BROKER", ValueKey: "image", Description: "broker"}},
+			},
+		},
 	}
 }
 

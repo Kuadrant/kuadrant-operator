@@ -31,6 +31,11 @@ cd $env
 dns_operator_version=$(mod_version $DNS_OPERATOR_VERSION)
 dns_operator_image="quay.io/kuadrant/dns-operator:$dns_operator_version"
 
+# Set desired mcp-gateway images
+mcp_gateway_version=$(mod_version $MCP_GATEWAY_VERSION)
+mcp_gateway_image="ghcr.io/kuadrant/mcp-controller:$mcp_gateway_version"
+mcp_gateway_broker_image="ghcr.io/kuadrant/mcp-gateway:$mcp_gateway_version"
+
 # Set desired Wasm-shim image
 wasm_shim=$(mod_version $WASM_SHIM_VERSION)
 wasm_shim_image="quay.io/kuadrant/wasm-shim:$wasm_shim"
@@ -63,6 +68,8 @@ make bundle \
   BUNDLE_METADATA_OPTS="--channels $OLM_CHANNELS $default_channel_opt" \
   IMG=$operator_image \
   RELATED_IMAGE_DNS_OPERATOR=$dns_operator_image \
+  RELATED_IMAGE_MCP_GATEWAY=$mcp_gateway_image \
+  RELATED_IMAGE_MCP_GATEWAY_BROKER=$mcp_gateway_broker_image \
   RELATED_IMAGE_WASMSHIM=$wasm_shim_image \
   RELATED_IMAGE_DEVELOPERPORTAL=$developerportal_image \
   RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=$consoleplugin_image \
@@ -71,6 +78,7 @@ make bundle \
   AUTHORINO_OPERATOR_VERSION=$(mod_version_for_make $AUTHORINO_OPERATOR_VERSION) \
   LIMITADOR_OPERATOR_VERSION=$(mod_version_for_make $LIMITADOR_OPERATOR_VERSION) \
   DNS_OPERATOR_VERSION=$(mod_version_for_make $DNS_OPERATOR_VERSION) \
+  MCP_GATEWAY_VERSION=$(mod_version_for_make $MCP_GATEWAY_VERSION) \
   DEVELOPERPORTAL_VERSION=$(mod_version_for_make $DEVELOPERPORTAL_VERSION)
 
 operator-sdk bundle validate $env/bundle

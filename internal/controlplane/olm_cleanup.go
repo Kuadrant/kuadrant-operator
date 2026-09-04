@@ -118,6 +118,7 @@ func (c *OLMCleaner) Cleanup(ctx context.Context) OLMCleanupResult {
 	// Add component migrate functions here once it's consolidated.
 	migrations := []func(context.Context) (ComponentCleanupResult, error){
 		c.migrateDNSOperator,
+		c.migrateMCPGateway,
 	}
 
 	var results []ComponentCleanupResult
@@ -212,14 +213,94 @@ func (c *OLMCleaner) migrateDNSOperator(ctx context.Context) (ComponentCleanupRe
 	}
 
 	// 4. Subscription
-	subName, err := c.deleteSubscriptionForPackage(ctx, pkg)
+	subName, err := c.deleteSubscriptionForPackage(ctx, c.namespace, pkg)
 	if err != nil {
 		return result, fmt.Errorf("deleting Subscription: %w", err)
 	}
 	result.SubscriptionName = subName
 
 	// 5. CSV
-	csvName, err := c.deleteCSVForPackage(ctx, pkg)
+	csvName, err := c.deleteCSVForPackage(ctx, c.namespace, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting CSV: %w", err)
+	}
+	result.CSVName = csvName
+
+	return result, nil
+}
+
+// mcpGatewayNamespace is where mcp-gateway's pre-consolidation OLM install
+// lives: unlike dns-operator (and authorino/limitador-operator, once
+// migrated), it was installed into its own dedicated namespace ("mcp-system",
+// per upstream's config/deploy/olm/kustomization.yaml) rather than alongside
+// kuadrant-operator, so its Subscription, CSV, and Deployment are not in
+// c.namespace.
+const mcpGatewayNamespace = "mcp-system"
+
+// migrateMCPGateway deletes mcp-gateway's orphaned OLM Subscription and CSV.
+// Unlike dns-operator, its Deployment ("mcp-gateway-controller", in
+// mcpGatewayNamespace, a separate namespace from the rest of the operator)
+// does not need protecting from the CSV deletion's cascade: the consolidated
+// kuadrant-operator deploys its own replacement from the embedded chart into
+// its own namespace, and nothing else in the cluster has that old Deployment
+// as an owner -- the mcp-gateway operator sets ownerReferences on everything
+// it manages (broker/router Deployment, Service, ServiceAccount, HTTPRoute,
+// signing-key Secrets) to the MCPGatewayExtension CR it's reconciling, never
+// to its own controller Deployment. So letting the old Deployment go away
+// with its CSV is safe and correct, not just tolerated.
+//
+// In order:
+//
+//  1. Strip OLM ownerReferences and labels from the cluster-scoped CRDs
+//     "mcpgatewayextensions.mcp.kuadrant.io",
+//     "mcpserverregistrations.mcp.kuadrant.io", and
+//     "mcpvirtualservers.mcp.kuadrant.io". OLM likely doesn't actually
+//     delete CRDs on CSV removal (they're commonly left behind
+//     deliberately, since other CSVs/consumers may still need them), but
+//     this strip is cheap insurance against the alternative: deleting a
+//     CRD deletes every custom resource of that type cluster-wide,
+//     including the live MCPGatewayExtension instance in
+//     mcpGatewayNamespace, which would be real data loss.
+//  2. If the strip above fails, stop and return the error without touching
+//     the Subscription/CSV — deleting them first would cascade-delete the
+//     CRDs step 1 was protecting.
+//  3. Delete the "mcp-gateway" Subscription in mcpGatewayNamespace, if one
+//     exists. Matched by its spec.name field, since Subscription object
+//     names are catalog-generated, not predictable.
+//  4. Delete the mcp-gateway ClusterServiceVersion in mcpGatewayNamespace,
+//     if one exists (matched by the "mcp-gateway." CSV name prefix
+//     convention). Deleting it is what allows the old Deployment (and
+//     ServiceAccount, RBAC, everything else OLM created for mcp-gateway in
+//     mcpGatewayNamespace) to be garbage-collected.
+//
+// NOTE: steps 3-4 currently require Subscription/CSV RBAC in
+// mcpGatewayNamespace, which config/rbac/olm_migration_role.yaml does not
+// yet grant (it's namespace-scoped to the operator's own install namespace).
+// Until that's resolved, those steps fail with Forbidden here — reported as
+// a per-component error by Cleanup() without blocking other components'
+// migrations. Step 1 (the one that actually prevents data loss) does not
+// depend on that RBAC and works today.
+func (c *OLMCleaner) migrateMCPGateway(ctx context.Context) (ComponentCleanupResult, error) {
+	const pkg = "mcp-gateway"
+	result := ComponentCleanupResult{Package: pkg, Namespace: mcpGatewayNamespace}
+
+	for _, crd := range []string{
+		"mcpgatewayextensions.mcp.kuadrant.io",
+		"mcpserverregistrations.mcp.kuadrant.io",
+		"mcpvirtualservers.mcp.kuadrant.io",
+	} {
+		if err := c.stripResource(ctx, crdGVR, "", crd); err != nil {
+			return result, fmt.Errorf("stripping CRD %s: %w", crd, err)
+		}
+	}
+
+	subName, err := c.deleteSubscriptionForPackage(ctx, mcpGatewayNamespace, pkg)
+	if err != nil {
+		return result, fmt.Errorf("deleting Subscription: %w", err)
+	}
+	result.SubscriptionName = subName
+
+	csvName, err := c.deleteCSVForPackage(ctx, mcpGatewayNamespace, pkg)
 	if err != nil {
 		return result, fmt.Errorf("deleting CSV: %w", err)
 	}
@@ -321,11 +402,11 @@ func (c *OLMCleaner) stripOLMLabels(obj *unstructured.Unstructured) bool {
 }
 
 // deleteSubscriptionForPackage deletes the Subscription for the given OLM
-// package in this namespace, if one exists. Returns the deleted
-// Subscription's name, or "" if none was found. The object's own name is
-// catalog-generated, so it's found by matching its spec.name field instead.
-func (c *OLMCleaner) deleteSubscriptionForPackage(ctx context.Context, pkg string) (string, error) {
-	subs, err := c.client.Resource(subscriptionGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
+// package in namespace, if one exists. Returns the deleted Subscription's
+// name, or "" if none was found. The object's own name is catalog-generated,
+// so it's found by matching its spec.name field instead.
+func (c *OLMCleaner) deleteSubscriptionForPackage(ctx context.Context, namespace, pkg string) (string, error) {
+	subs, err := c.client.Resource(subscriptionGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return "", fmt.Errorf("listing subscriptions: %w", err)
 	}
@@ -337,7 +418,7 @@ func (c *OLMCleaner) deleteSubscriptionForPackage(ctx context.Context, pkg strin
 			continue
 		}
 		c.logger.Info("deleting OLM Subscription", "name", sub.GetName(), "package", pkg)
-		if err := c.client.Resource(subscriptionGVR).Namespace(c.namespace).Delete(ctx, sub.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := c.client.Resource(subscriptionGVR).Namespace(namespace).Delete(ctx, sub.GetName(), metav1.DeleteOptions{}); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
@@ -349,10 +430,10 @@ func (c *OLMCleaner) deleteSubscriptionForPackage(ctx context.Context, pkg strin
 }
 
 // deleteCSVForPackage deletes the ClusterServiceVersion for the given OLM
-// package in this namespace, if one exists. Returns the deleted CSV's name,
-// or "" if none was found.
-func (c *OLMCleaner) deleteCSVForPackage(ctx context.Context, pkg string) (string, error) {
-	csvs, err := c.client.Resource(csvGVR).Namespace(c.namespace).List(ctx, metav1.ListOptions{})
+// package in namespace, if one exists. Returns the deleted CSV's name, or ""
+// if none was found.
+func (c *OLMCleaner) deleteCSVForPackage(ctx context.Context, namespace, pkg string) (string, error) {
+	csvs, err := c.client.Resource(csvGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return "", fmt.Errorf("listing CSVs: %w", err)
 	}
@@ -363,7 +444,7 @@ func (c *OLMCleaner) deleteCSVForPackage(ctx context.Context, pkg string) (strin
 			continue
 		}
 		c.logger.Info("deleting OLM CSV", "name", name)
-		if err := c.client.Resource(csvGVR).Namespace(c.namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		if err := c.client.Resource(csvGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}

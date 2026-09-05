@@ -20,7 +20,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	transformer "github.com/kuadrant/kuadrant-operator/internal/cel"
@@ -43,7 +43,7 @@ var (
 // +kubebuilder:printcolumn:name="TargetSection",type="string",JSONPath=".spec.targetRef.sectionName",description="Name of the section within the object to which the policy applies ",priority=2
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
-// TokenRateLimitPolicy enables token-based rate limiting for service workloads in a Gateway API network
+// TokenRateLimitPolicy enables token rate limiting for LLM/AI workloads
 type TokenRateLimitPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -67,7 +67,7 @@ func (p *TokenRateLimitPolicy) GetLocator() string {
 }
 
 // Deprecated: Use GetTargetRefs instead
-func (p *TokenRateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+func (p *TokenRateLimitPolicy) GetTargetRef() gatewayapiv1.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
@@ -157,7 +157,7 @@ type TokenRateLimitPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Rules to apply as defaults. Can be overridden by more specific policy rules lower in the hierarchy and by less specific policy overrides.
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).

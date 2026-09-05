@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestConditionMarshal(t *testing.T) {
@@ -137,9 +136,9 @@ func TestAcceptedCondition(t *testing.T) {
 				policy: &FakePolicy{},
 			},
 			want: &metav1.Condition{
-				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Type:    string(gatewayapiv1.PolicyConditionAccepted),
 				Status:  metav1.ConditionTrue,
-				Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+				Reason:  string(gatewayapiv1.PolicyReasonAccepted),
 				Message: "FakePolicy has been accepted",
 			},
 		},
@@ -147,16 +146,16 @@ func TestAcceptedCondition(t *testing.T) {
 			name: "target not found reason",
 			args: args{
 				policy: &FakePolicy{},
-				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.LocalPolicyTargetReference{
+				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
 				}, apiErrors.NewNotFound(schema.GroupResource{}, "my-target-ref")),
 			},
 			want: &metav1.Condition{
-				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Type:    string(gatewayapiv1.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+				Reason:  string(gatewayapiv1.PolicyReasonTargetNotFound),
 				Message: "FakePolicy target my-target-ref was not found",
 			},
 		},
@@ -164,16 +163,16 @@ func TestAcceptedCondition(t *testing.T) {
 			name: "target not found reason with err",
 			args: args{
 				policy: &FakePolicy{},
-				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.LocalPolicyTargetReference{
+				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
 				}, errors.New("deletion err")),
 			},
 			want: &metav1.Condition{
-				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Type:    string(gatewayapiv1.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+				Reason:  string(gatewayapiv1.PolicyReasonTargetNotFound),
 				Message: "FakePolicy target my-target-ref was not found: deletion err",
 			},
 		},
@@ -184,9 +183,9 @@ func TestAcceptedCondition(t *testing.T) {
 				err:    NewErrInvalid("FakePolicy", errors.New("invalid err")),
 			},
 			want: &metav1.Condition{
-				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Type:    string(gatewayapiv1.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),
+				Reason:  string(gatewayapiv1.PolicyReasonInvalid),
 				Message: "FakePolicy target is invalid: invalid err",
 			},
 		},
@@ -197,9 +196,9 @@ func TestAcceptedCondition(t *testing.T) {
 				err:    NewErrConflict("FakePolicy", "testNs/policy1", errors.New("conflict err")),
 			},
 			want: &metav1.Condition{
-				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Type:    string(gatewayapiv1.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
-				Reason:  string(gatewayapiv1alpha2.PolicyReasonConflicted),
+				Reason:  string(gatewayapiv1.PolicyReasonConflicted),
 				Message: "FakePolicy is conflicted by testNs/policy1: conflict err",
 			},
 		},
@@ -210,7 +209,7 @@ func TestAcceptedCondition(t *testing.T) {
 				err:    errors.New("reconcile err"),
 			},
 			want: &metav1.Condition{
-				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Type:    string(gatewayapiv1.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
 				Reason:  string(PolicyReasonUnknown),
 				Message: "FakePolicy has encountered some issues: reconcile err",

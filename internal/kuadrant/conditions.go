@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -35,9 +36,9 @@ func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {
 func AcceptedCondition(p Policy, err error) *metav1.Condition {
 	// Accepted
 	cond := &metav1.Condition{
-		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+		Type:    string(gatewayapiv1.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Reason:  string(gatewayapiv1.PolicyReasonAccepted),
 		Message: fmt.Sprintf("%s has been accepted", p.Kind()),
 	}
 	if err == nil {

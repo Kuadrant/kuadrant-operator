@@ -8,6 +8,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -20,7 +21,7 @@ var _ PolicyError = ErrTargetNotFound{}
 
 type ErrTargetNotFound struct {
 	Kind      string
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference
+	TargetRef gatewayapiv1.LocalPolicyTargetReference
 	Err       error
 }
 
@@ -33,10 +34,10 @@ func (e ErrTargetNotFound) Error() string {
 }
 
 func (e ErrTargetNotFound) Reason() gatewayapiv1alpha2.PolicyConditionReason {
-	return gatewayapiv1alpha2.PolicyReasonTargetNotFound
+	return gatewayapiv1alpha2.PolicyConditionReason(gatewayapiv1.PolicyReasonTargetNotFound)
 }
 
-func NewErrTargetNotFound(kind string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference, err error) ErrTargetNotFound {
+func NewErrTargetNotFound(kind string, targetRef gatewayapiv1.LocalPolicyTargetReference, err error) ErrTargetNotFound {
 	return ErrTargetNotFound{
 		Kind:      kind,
 		TargetRef: targetRef,
@@ -61,7 +62,7 @@ func (e ErrPolicyTargetNotFound) Error() string {
 }
 
 func (e ErrPolicyTargetNotFound) Reason() gatewayapiv1alpha2.PolicyConditionReason {
-	return gatewayapiv1alpha2.PolicyReasonTargetNotFound
+	return gatewayapiv1alpha2.PolicyConditionReason(gatewayapiv1.PolicyReasonTargetNotFound)
 }
 
 func NewErrPolicyTargetNotFound(kind string, targetRef machinery.PolicyTargetReference, err error) ErrPolicyTargetNotFound {
@@ -84,7 +85,7 @@ func (e ErrInvalid) Error() string {
 }
 
 func (e ErrInvalid) Reason() gatewayapiv1alpha2.PolicyConditionReason {
-	return gatewayapiv1alpha2.PolicyReasonInvalid
+	return gatewayapiv1alpha2.PolicyConditionReason(gatewayapiv1.PolicyReasonInvalid)
 }
 
 func NewErrInvalid(kind string, err error) ErrInvalid {
@@ -107,7 +108,7 @@ func (e ErrConflict) Error() string {
 }
 
 func (e ErrConflict) Reason() gatewayapiv1alpha2.PolicyConditionReason {
-	return gatewayapiv1alpha2.PolicyReasonConflicted
+	return gatewayapiv1alpha2.PolicyConditionReason(gatewayapiv1.PolicyReasonConflicted)
 }
 
 func NewErrConflict(kind string, nameNamespace string, err error) ErrConflict {
@@ -206,7 +207,7 @@ func NewErrOutOfSync(kind string, components []string) ErrOutOfSync {
 
 // IsTargetNotFound returns true if the specified error was created by NewErrTargetNotFound.
 func IsTargetNotFound(err error) bool {
-	return reasonForError(err) == gatewayapiv1alpha2.PolicyReasonTargetNotFound
+	return reasonForError(err) == gatewayapiv1alpha2.PolicyConditionReason(gatewayapiv1.PolicyReasonTargetNotFound)
 }
 
 func reasonForError(err error) gatewayapiv1alpha2.PolicyConditionReason {

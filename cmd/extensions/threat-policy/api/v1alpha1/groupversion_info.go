@@ -26,6 +26,7 @@ import (
 var (
 	GroupVersion = schema.GroupVersion{Group: "extensions.kuadrant.io", Version: "v1alpha1"}
 
+	//nolint:staticcheck
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
 
 	AddToScheme = SchemeBuilder.AddToScheme

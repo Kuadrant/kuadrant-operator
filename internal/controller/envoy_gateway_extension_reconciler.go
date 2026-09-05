@@ -634,10 +634,10 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 			PolicyTargetReferences: envoygatewayv1alpha1.PolicyTargetReferences{
 				TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-							Group: gatewayapiv1alpha2.Group(machinery.GatewayGroupKind.Group),
-							Kind:  gatewayapiv1alpha2.Kind(machinery.GatewayGroupKind.Kind),
-							Name:  gatewayapiv1alpha2.ObjectName(gateway.GetName()),
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+							Group: v1.Group(machinery.GatewayGroupKind.Group),
+							Kind:  v1.Kind(machinery.GatewayGroupKind.Kind),
+							Name:  v1.ObjectName(gateway.GetName()),
 						},
 					},
 				},

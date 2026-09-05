@@ -271,7 +271,7 @@ func toListeners(listeners []v1.Listener) []*extpb.Listener {
 		if l.Protocol != "" {
 			listener.Protocol = string(l.Protocol)
 		}
-		listener.Port = int32(l.Port)
+		listener.Port = l.Port
 		ls[i] = &listener
 	}
 	return ls

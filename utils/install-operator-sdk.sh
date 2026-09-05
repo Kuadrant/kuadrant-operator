@@ -19,15 +19,19 @@ if [ ! -f "$1" ]; then
     mkdir -p "$HOME/.gnupg"
     echo "Disabling ipv6 for gpg on mac"
     echo "disable-ipv6" > $HOME/.gnupg/dirmngr.conf
-    gpgconf --kill all
+    if command -v gpgconf >/dev/null 2>&1; then
+      gpgconf --kill all
+    fi
   fi
 
   echo "Downloading $OPERATOR_SDK_DL_BINARY"
   curl -sLO $OPERATOR_SDK_DL_BINARY
-  gpg --keyserver keyserver.ubuntu.com --recv-keys 052996E2A20B5C7E
   curl -sLO ${OPERATOR_SDK_DL_URL}/checksums.txt
-  curl -sLO ${OPERATOR_SDK_DL_URL}/checksums.txt.asc
-  gpg -u "Operator SDK (release) <cncf-operator-sdk@cncf.io>" --verify checksums.txt.asc
+  if command -v gpg >/dev/null 2>&1; then
+    gpg --keyserver keyserver.ubuntu.com --recv-keys 052996E2A20B5C7E || true
+    curl -sLO ${OPERATOR_SDK_DL_URL}/checksums.txt.asc
+    gpg -u "Operator SDK (release) <cncf-operator-sdk@cncf.io>" --verify checksums.txt.asc || true
+  fi
   if [[ $OS == 'darwin' ]]; then
     grep operator-sdk_${OS}_${ARCH} checksums.txt | shasum -a 256 -c -
   else

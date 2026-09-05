@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
@@ -143,7 +142,7 @@ func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1.TLSPo
 	store, ok := s.Load(TLSPolicyAcceptedKey)
 	if !ok {
 		logger.V(1).Info("TLSPolicyAcceptedKey not found, policies will be checked for validity by current status")
-		return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)), nil
+		return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gwapiv1.PolicyReasonAccepted)), nil
 	}
 
 	isPolicyValidErrorMap := store.(map[string]error)

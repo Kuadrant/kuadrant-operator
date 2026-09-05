@@ -13573,8 +13573,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: TokenRateLimitPolicy enables token-based rate limiting for service
-          workloads in a Gateway API network
+        description: TokenRateLimitPolicy enables token rate limiting for LLM/AI workloads
         properties:
           apiVersion:
             description: |-

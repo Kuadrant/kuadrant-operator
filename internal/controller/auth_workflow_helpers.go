@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -136,7 +136,7 @@ func authPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error
 	if !ok {
 		return
 	}
-	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted)); condition != nil {
 		accepted = condition.Status == metav1.ConditionTrue
 		if !accepted {
 			err = errors.New(condition.Message)

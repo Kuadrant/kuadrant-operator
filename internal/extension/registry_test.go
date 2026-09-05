@@ -15,7 +15,6 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
@@ -944,8 +943,8 @@ func (m *mockAuthConfigMutator) Mutate(authConfig *authorinov1beta3.AuthConfig, 
 
 func createMockGatewayTargetRef() machinery.PolicyTargetReference {
 	return machinery.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+		LocalPolicyTargetReferenceWithSectionName: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 				Group: "gateway.networking.k8s.io",
 				Kind:  "Gateway",
 				Name:  "test-gateway",
@@ -957,8 +956,8 @@ func createMockGatewayTargetRef() machinery.PolicyTargetReference {
 
 func createMockHTTPRouteTargetRef() machinery.PolicyTargetReference {
 	return machinery.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+		LocalPolicyTargetReferenceWithSectionName: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 				Group: "gateway.networking.k8s.io",
 				Kind:  "HTTPRoute",
 				Name:  "test-route",
@@ -970,8 +969,8 @@ func createMockHTTPRouteTargetRef() machinery.PolicyTargetReference {
 
 func createMockGRPCRouteTargetRef() machinery.PolicyTargetReference {
 	return machinery.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+		LocalPolicyTargetReferenceWithSectionName: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 				Group: "gateway.networking.k8s.io",
 				Kind:  "GRPCRoute",
 				Name:  "test-grpc-route",

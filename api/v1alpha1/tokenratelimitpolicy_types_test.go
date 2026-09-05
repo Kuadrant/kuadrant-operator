@@ -21,7 +21,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
@@ -29,8 +29,8 @@ import (
 func TestTokenRateLimitPolicy_GetTargetRef(t *testing.T) {
 	policy := &TokenRateLimitPolicy{
 		Spec: TokenRateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 					Group: "gateway.networking.k8s.io",
 					Kind:  "Gateway",
 					Name:  "test-gateway",
@@ -58,8 +58,8 @@ func TestTokenRateLimitPolicy_GetTargetRefs(t *testing.T) {
 			Namespace: "test-namespace",
 		},
 		Spec: TokenRateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 					Group: "gateway.networking.k8s.io",
 					Kind:  "HTTPRoute",
 					Name:  "test-route",

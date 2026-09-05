@@ -55,7 +55,9 @@ type kuadrantLib struct {
 // CompileOptions implements cel.Library. It wires the function overloads and
 // constant version symbol plus custom type adapter/provider into the CEL env.
 func (l kuadrantLib) CompileOptions() []cel.EnvOption {
-	opts := []cel.EnvOption{}
+	opts := []cel.EnvOption{
+		cel.OptionalTypes(),
+	}
 
 	constVersion := "0"
 

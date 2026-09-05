@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
@@ -46,7 +46,7 @@ type Policy interface {
 	GetName() string
 	GetNamespace() string
 	GetObjectKind() schema.ObjectKind
-	GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName
+	GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName
 }
 
 // ActionMethodConfig holds the configuration for an external gRPC service that an

@@ -2,7 +2,7 @@ package v1
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // PolicyAdapter wraps the protobuf Policy to implement types.Policy interface
@@ -38,22 +38,22 @@ func (p *PolicyAdapter) GetObjectKind() schema.ObjectKind {
 	}
 }
 
-func (p *PolicyAdapter) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+func (p *PolicyAdapter) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
 	if p.Policy == nil {
 		return nil
 	}
 
-	refs := make([]gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, len(p.TargetRefs))
+	refs := make([]gatewayapiv1.LocalPolicyTargetReferenceWithSectionName, len(p.TargetRefs))
 	for i, ref := range p.TargetRefs {
-		refs[i] = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-				Group: gatewayapiv1alpha2.Group(ref.Group),
-				Kind:  gatewayapiv1alpha2.Kind(ref.Kind),
-				Name:  gatewayapiv1alpha2.ObjectName(ref.Name),
+		refs[i] = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
+				Group: gatewayapiv1.Group(ref.Group),
+				Kind:  gatewayapiv1.Kind(ref.Kind),
+				Name:  gatewayapiv1.ObjectName(ref.Name),
 			},
 		}
 		if ref.SectionName != "" {
-			refs[i].SectionName = (*gatewayapiv1alpha2.SectionName)(&ref.SectionName)
+			refs[i].SectionName = (*gatewayapiv1.SectionName)(&ref.SectionName)
 		}
 	}
 	return refs

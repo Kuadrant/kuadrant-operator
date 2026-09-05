@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -52,11 +51,11 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 						Kind: certmanv1.IssuerKind,
 					},
 				},
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Name:  gwName,
 						Kind:  "Gateway",
-						Group: gatewayapiv1alpha2.GroupName,
+						Group: gatewayapiv1.GroupName,
 					},
 				},
 			},
@@ -203,7 +202,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 					{
 						Name:     listenerName,
 						Hostname: ptr.To[gatewayapiv1.Hostname]("localhost"),
-						TLS: &gatewayapiv1.GatewayTLSConfig{
+						TLS: &gatewayapiv1.ListenerTLSConfig{
 							CertificateRefs: []gatewayapiv1.SecretObjectReference{{
 								Group:     ptr.To[gatewayapiv1.Group]("core"),
 								Kind:      ptr.To[gatewayapiv1.Kind]("Secret"),

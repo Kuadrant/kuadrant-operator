@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -140,7 +140,7 @@ func tokenRateLimitPolicyAcceptedStatusFunc(state *sync.Map) func(policy *kuadra
 }
 
 func tokenRateLimitPolicyAcceptedStatus(policy *kuadrantv1alpha1.TokenRateLimitPolicy) (accepted bool, err error) {
-	if condition := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+	if condition := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted)); condition != nil {
 		accepted = condition.Status == metav1.ConditionTrue
 		if !accepted {
 			err = errors.New(condition.Message)

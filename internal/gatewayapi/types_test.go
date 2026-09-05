@@ -9,7 +9,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
@@ -21,8 +21,8 @@ type TestPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
-	Status    FakePolicyStatus                              `json:"status"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReference `json:"targetRef"`
+	Status    FakePolicyStatus                        `json:"status"`
 }
 
 func (p *TestPolicy) Kind() string {
@@ -33,7 +33,7 @@ func (p *TestPolicy) List(ctx context.Context, c client.Client, namespace string
 	return nil
 }
 
-func (p *TestPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+func (p *TestPolicy) GetTargetRef() gatewayapiv1.LocalPolicyTargetReference {
 	return p.TargetRef
 }
 

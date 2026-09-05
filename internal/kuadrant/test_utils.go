@@ -7,7 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 )
@@ -19,10 +19,10 @@ const (
 type FakePolicy struct {
 	client.Object
 	Hosts     []string
-	targetRef gatewayapiv1alpha2.LocalPolicyTargetReference
+	targetRef gatewayapiv1.LocalPolicyTargetReference
 }
 
-func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+func (p *FakePolicy) GetTargetRef() gatewayapiv1.LocalPolicyTargetReference {
 	return p.targetRef
 }
 

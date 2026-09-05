@@ -20,7 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -84,7 +84,7 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(p, err))
 
 		// Do not set enforced condition if Accepted condition is false
-		if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
+		if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1.PolicyConditionAccepted)) {
 			meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		} else {
 			enforcedCond := t.enforcedCondition(ctx, p, topology)

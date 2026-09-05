@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -54,8 +53,8 @@ var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),

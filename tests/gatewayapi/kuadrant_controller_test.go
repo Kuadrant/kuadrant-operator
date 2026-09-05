@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -69,8 +68,8 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Kind:  "Gateway",
 							Group: gatewayapiv1.GroupName,
 							Name:  "test",
@@ -97,7 +96,7 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(policy), policy)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("MissingDependency"))
@@ -114,8 +113,8 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Kind:  "Gateway",
 							Group: gatewayapiv1.GroupName,
 							Name:  "test",
@@ -143,7 +142,7 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(policy), policy)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("MissingDependency"))

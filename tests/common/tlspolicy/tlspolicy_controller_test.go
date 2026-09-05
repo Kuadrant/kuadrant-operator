@@ -19,7 +19,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
@@ -83,9 +82,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonTargetNotFound)),
 						"Message": Equal("TLSPolicy target test-gateway was not found"),
 					})),
 				)
@@ -103,9 +102,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonTargetNotFound)),
 						"Message": Equal("TLSPolicy target test-gateway was not found"),
 					})),
 				)
@@ -127,9 +126,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
 					})),
 				)
@@ -164,9 +163,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonInvalid)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonInvalid)),
 						"Message": Equal("TLSPolicy target is invalid: unable to find issuer"),
 					})),
 				)
@@ -196,9 +195,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
 					})),
 				)
@@ -241,9 +240,9 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(tlsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
 					})),
 				)
@@ -283,7 +282,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			certNS := gatewayapiv1.Namespace(testNamespace)
 			patch := client.MergeFrom(gateway.DeepCopy())
 			gateway.Spec.Listeners[0].Protocol = gatewayapiv1.HTTPSProtocolType
-			gateway.Spec.Listeners[0].TLS = &gatewayapiv1.GatewayTLSConfig{
+			gateway.Spec.Listeners[0].TLS = &gatewayapiv1.ListenerTLSConfig{
 				Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 				CertificateRefs: []gatewayapiv1.SecretObjectReference{
 					{
@@ -1020,10 +1019,10 @@ var _ = Describe("TLSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, p2)).To(Succeed())
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p2), p2)).To(Succeed())
-				cond := meta.FindStatusCondition(p2.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(p2.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(cond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonConflicted)))
+				g.Expect(cond.Reason).To(Equal(string(gatewayapiv1.PolicyReasonConflicted)))
 				g.Expect(cond.Message).To(Equal(fmt.Sprintf("TLSPolicy is conflicted by %s: conflicting policy", client.ObjectKeyFromObject(p1).String())))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)

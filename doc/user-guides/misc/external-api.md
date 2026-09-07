@@ -2,26 +2,18 @@
 
 ```mermaid
 graph LR
-    Client([Public Traffic<br/>my.api.com])
+    Client([Traffic<br/>my.api.com])
 
     subgraph cluster ["Kubernetes Cluster"]
-        GW[Gateway<br/>HTTPS :443]
+        GW[Gateway<br/>HTTP :80]
         HR[HTTPRoute<br/>host rewrite]
-        TLS[TLSPolicy]
-        DNS[DNSPolicy]
-        AUTH[AuthPolicy]
-        RLP[RateLimitPolicy]
         SE[ServiceEntry<br/>registers hostname]
         DR[DestinationRule<br/>TLS origination]
     end
 
     Backend([Backend API<br/>my.api.local])
 
-    Client -->|"HTTPS"| GW
-    TLS -.-> GW
-    DNS -.-> GW
-    AUTH -.-> HR
-    RLP -.-> HR
+    Client -->|"HTTP"| GW
     GW --> HR
     SE -.->|"provides backend<br/>hostname"| HR
     DR -.->|"configures TLS<br/>for hostname"| Backend
@@ -45,12 +37,10 @@ The `openshift-default` GatewayClass installs a lightweight Istio via the Ingres
 |------------|-------|
 | Kuadrant with **Istio** gateway provider | ServiceEntry, DestinationRule, and `kind: Hostname` backendRef require Istio |
 | Network connectivity to the backend | The cluster must reach the backend API over the network |
-| cert-manager *(optional)* | For [TLSPolicy](../tls/gateway-tls.md) automated certificate provisioning |
-| DNS provider credentials *(optional)* | For [DNSPolicy](../dns/gateway-dns.md) automated DNS record management |
 
 ## Step 1: Register the backend API
 
-Istio needs a **ServiceEntry** to register the backend hostname and a **DestinationRule** to configure TLS origination. These are the same resources described in the [Egress Gateway Setup](../egress/egress-gateway.md#egress-gateway-resources) guide — if you already have them for this backend, skip to [Step 2](#step-2-deploy-the-gateway-and-httproute).
+Istio needs a [ServiceEntry](https://istio.io/latest/docs/reference/config/networking/service-entry/) to register the backend hostname and a [DestinationRule](https://istio.io/latest/docs/reference/config/networking/destination-rule/) to configure TLS origination.
 
 ```bash
 export EXTERNAL_HOST=my.api.com        # public hostname
@@ -88,7 +78,7 @@ EOF
 
 ## Step 2: Deploy the Gateway and HTTPRoute
 
-The Gateway accepts public traffic on the external hostname. The HTTPRoute bridges it to the backend, rewriting the `Host` header so the backend receives the correct hostname. The `Hostname` backend kind is provided by the ServiceEntry from Step 1.
+The Gateway accepts traffic on the external hostname. The HTTPRoute bridges it to the backend, rewriting the `Host` header so the backend receives the correct hostname. The `Hostname` backend kind is provided by the ServiceEntry from Step 1.
 
 ```bash
 kubectl apply -n gateway-system -f - <<EOF
@@ -101,18 +91,13 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-    - name: ingress-tls
-      port: 443
+    - name: ingress-http
+      port: 80
       hostname: '${EXTERNAL_HOST}'
-      protocol: HTTPS
+      protocol: HTTP
       allowedRoutes:
         namespaces:
           from: All
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - name: ingress-tls
-            kind: Secret
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -143,23 +128,23 @@ kubectl get gateway ingress -n gateway-system -o=jsonpath='{.status.conditions[?
 # True
 ```
 
-## Step 3: Apply Kuadrant Policies
-
-With the Gateway and HTTPRoute in place, Kuadrant policies attach using the standard `targetRef` — the same as any other Gateway API workload. Apply whichever policies you need:
-
-| Policy | Targets | Guide |
-|--------|---------|-------|
-| [TLSPolicy](../tls/gateway-tls.md) | Gateway | Provisions the `ingress-tls` certificate referenced in the listener |
-| [DNSPolicy](../dns/gateway-dns.md) | Gateway | Creates DNS records pointing `${EXTERNAL_HOST}` to the Gateway address |
-| [AuthPolicy](../auth/auth-for-app-devs-and-platform-engineers.md) | HTTPRoute | Authentication and authorization on the public endpoint |
-| [RateLimitPolicy](../ratelimiting/simple-rl-for-app-developers.md) | HTTPRoute | Rate limiting on the public endpoint |
-
 ## Verification
 
 ```bash
 GATEWAY_IP=$(kubectl get gateway ingress -n gateway-system -o jsonpath='{.status.addresses[0].value}')
-curl -v --resolve ${EXTERNAL_HOST}:443:${GATEWAY_IP} https://${EXTERNAL_HOST}/some-endpoint
+curl -v --resolve ${EXTERNAL_HOST}:80:${GATEWAY_IP} "http://${EXTERNAL_HOST}/"
 ```
+
+## Step 3 (optional): Apply Kuadrant Policies
+
+With the Gateway and HTTPRoute in place, Kuadrant policies attach using the standard `targetRef`. Apply whichever policies you need:
+
+| Policy | Targets | Guide |
+|--------|---------|-------|
+| [TLSPolicy](../tls/gateway-tls.md) | Gateway | Adds an HTTPS listener with automated certificate provisioning. Requires cert-manager. |
+| [DNSPolicy](../dns/gateway-dns.md) | Gateway | Creates DNS records pointing `${EXTERNAL_HOST}` to the Gateway address, making it routable from outside the cluster. Requires a DNS provider. |
+| [AuthPolicy](../auth/auth-for-app-devs-and-platform-engineers.md) | HTTPRoute | Authentication and authorization on the public endpoint |
+| [RateLimitPolicy](../ratelimiting/simple-rl-for-app-developers.md) | HTTPRoute | Rate limiting on the public endpoint |
 
 ## Egress Gateway
 

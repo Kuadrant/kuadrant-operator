@@ -46,6 +46,10 @@ spec:
               value: "quay.io/kuadrant/console-plugin:v0.1.5-2"
             - name: RELATED_IMAGE_DNS_OPERATOR
               value: "quay.io/kuadrant/dns-operator:latest"
+            - name: RELATED_IMAGE_MCP_GATEWAY
+              value: "ghcr.io/kuadrant/mcp-controller:latest"
+            - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
+              value: "ghcr.io/kuadrant/mcp-gateway:latest"
             - name: OPERATOR_NAMESPACE
               valueFrom:
                 fieldRef:

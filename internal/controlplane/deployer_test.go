@@ -26,6 +26,12 @@ func TestDefaultComponents(t *testing.T) {
 			wantChart:  chartsBasePath + "/dns-operator",
 			wantEnvVar: "RELATED_IMAGE_DNS_OPERATOR",
 		},
+		{
+			name:                    "mcp-gateway is registered",
+			wantName:                "mcp-gateway",
+			wantChart:               chartsBasePath + "/mcp-gateway",
+			wantChartValueOverrides: 2,
+		},
 	}
 
 	if len(components) != len(tests) {

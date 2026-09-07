@@ -48,6 +48,9 @@ rules:
   resourceNames:
   - dnshealthcheckprobes.kuadrant.io
   - dnsrecords.kuadrant.io
+  - mcpgatewayextensions.mcp.kuadrant.io
+  - mcpserverregistrations.mcp.kuadrant.io
+  - mcpvirtualservers.mcp.kuadrant.io
   resources:
   - customresourcedefinitions
   verbs:
@@ -380,6 +383,7 @@ rules:
   resourceNames:
   - dns-operator-manager-rolebinding
   - dns-operator-remote-cluster-rolebinding
+  - mcp-gateway-controller
   resources:
   - clusterrolebindings
   verbs:
@@ -399,6 +403,7 @@ rules:
   resourceNames:
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role
+  - mcp-gateway-controller
   resources:
   - clusterroles
   verbs:

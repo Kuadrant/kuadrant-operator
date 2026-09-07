@@ -161,6 +161,30 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
+		It("reports mcp-gateway image status", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				var mcp *kuadrantv1alpha1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "mcp-gateway" {
+						mcp = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(mcp).ToNot(BeNil(), "mcp-gateway component not found in status")
+				g.Expect(mcp.Images).ToNot(BeEmpty())
+
+				imageNames := map[string]bool{}
+				for _, img := range mcp.Images {
+					g.Expect(img.Image).ToNot(BeEmpty())
+					imageNames[img.Name] = true
+				}
+				g.Expect(imageNames).To(HaveKey("mcp-controller"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
 	})
 
 	Context("self-healing on deletion", func() {

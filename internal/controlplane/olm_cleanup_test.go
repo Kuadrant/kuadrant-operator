@@ -264,30 +264,12 @@ func TestMigrateDNSOperator_EndToEnd(t *testing.T) {
 
 	deployment := newTestDeployment(olmLabels, olmOwnerRefs)
 
-	newOwnedObj := func(gvr schema.GroupVersionResource, kind, name, namespace string) *unstructured.Unstructured {
-		obj := &unstructured.Unstructured{
-			Object: map[string]interface{}{
-				"apiVersion": gvr.GroupVersion().String(),
-				"kind":       kind,
-				"metadata": map[string]interface{}{
-					"name": name,
-				},
-			},
-		}
-		if namespace != "" {
-			obj.SetNamespace(namespace)
-		}
-		obj.SetLabels(olmLabels)
-		_ = unstructured.SetNestedSlice(obj.Object, olmOwnerRefs, "metadata", "ownerReferences")
-		return obj
-	}
-
-	dnsrecordsCRD := newOwnedObj(crdGVR, "CustomResourceDefinition", "dnsrecords.kuadrant.io", "")
-	probesCRD := newOwnedObj(crdGVR, "CustomResourceDefinition", "dnshealthcheckprobes.kuadrant.io", "")
+	dnsrecordsCRD := newOwnedObj(crdGVR, "CustomResourceDefinition", "dnsrecords.kuadrant.io", "", olmLabels, olmOwnerRefs)
+	probesCRD := newOwnedObj(crdGVR, "CustomResourceDefinition", "dnshealthcheckprobes.kuadrant.io", "", olmLabels, olmOwnerRefs)
 
 	// User-added data must survive the strip untouched -- only OLM ownership
 	// metadata should be removed, never the ConfigMap's own content.
-	controllerEnv := newOwnedObj(configMapGVR, "ConfigMap", "dns-operator-controller-env", "kuadrant-system")
+	controllerEnv := newOwnedObj(configMapGVR, "ConfigMap", "dns-operator-controller-env", "kuadrant-system", olmLabels, olmOwnerRefs)
 	_ = unstructured.SetNestedField(controllerEnv.Object, "info", "data", "LOG_LEVEL")
 
 	subscription := &unstructured.Unstructured{
@@ -384,6 +366,146 @@ func TestMigrateDNSOperator_EndToEnd(t *testing.T) {
 		t.Errorf("expected Subscription to be deleted, got err: %v", err)
 	}
 	if _, err := client.Resource(csvGVR).Namespace("kuadrant-system").Get(context.Background(), "dns-operator.v0.8.0", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("expected CSV to be deleted, got err: %v", err)
+	}
+}
+
+// newOwnedObj builds a minimal unstructured object carrying the given
+// labels and ownerReferences, as a stand-in for a resource OLM stamped
+// during a pre-consolidation install.
+func newOwnedObj(gvr schema.GroupVersionResource, kind, name, namespace string, labels map[string]string, ownerRefs []interface{}) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": gvr.GroupVersion().String(),
+			"kind":       kind,
+			"metadata": map[string]interface{}{
+				"name": name,
+			},
+		},
+	}
+	if namespace != "" {
+		obj.SetNamespace(namespace)
+	}
+	obj.SetLabels(labels)
+	_ = unstructured.SetNestedSlice(obj.Object, ownerRefs, "metadata", "ownerReferences")
+	return obj
+}
+
+// TestMigrateMCPGateway_EndToEnd exercises the full sequence documented on
+// migrateMCPGateway: unlike dns-operator, its Deployment is deliberately
+// left untouched (nothing owns it that needs protecting, and the
+// consolidated operator replaces it from its own namespace), while its
+// Subscription/CSV lookups target mcpGatewayNamespace rather than the
+// operator's own namespace ("kuadrant-system") -- mcp-gateway's
+// pre-consolidation install lives in its own dedicated namespace.
+func TestMigrateMCPGateway_EndToEnd(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+
+	olmLabels := map[string]string{
+		"control-plane":  "mcp-gateway-controller",
+		"olm.owner":      "mcp-gateway.v0.8.0",
+		"olm.owner.kind": "ClusterServiceVersion",
+	}
+	olmOwnerRefs := []interface{}{
+		map[string]interface{}{
+			"apiVersion": "operators.coreos.com/v1alpha1",
+			"kind":       "ClusterServiceVersion",
+			"name":       "mcp-gateway.v0.8.0",
+		},
+	}
+
+	deployment := newOwnedObj(deploymentGVR, "Deployment", "mcp-gateway-controller", mcpGatewayNamespace, olmLabels, olmOwnerRefs)
+
+	crdNames := []string{
+		"mcpgatewayextensions.mcp.kuadrant.io",
+		"mcpserverregistrations.mcp.kuadrant.io",
+		"mcpvirtualservers.mcp.kuadrant.io",
+	}
+	objs := []runtime.Object{deployment}
+	for _, crd := range crdNames {
+		objs = append(objs, newOwnedObj(crdGVR, "CustomResourceDefinition", crd, "", olmLabels, olmOwnerRefs))
+	}
+
+	subscription := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "operators.coreos.com/v1alpha1",
+			"kind":       "Subscription",
+			"metadata": map[string]interface{}{
+				"name":      "mcp-gateway-preview-kuadrant-operator-catalog-mcp-gateway",
+				"namespace": mcpGatewayNamespace,
+			},
+			"spec": map[string]interface{}{
+				"name": "mcp-gateway",
+			},
+		},
+	}
+	csv := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "operators.coreos.com/v1alpha1",
+			"kind":       "ClusterServiceVersion",
+			"metadata": map[string]interface{}{
+				"name":      "mcp-gateway.v0.8.0",
+				"namespace": mcpGatewayNamespace,
+			},
+		},
+	}
+	objs = append(objs, subscription, csv)
+
+	gvrToListKind := map[schema.GroupVersionResource]string{
+		deploymentGVR:   "DeploymentList",
+		crdGVR:          "CustomResourceDefinitionList",
+		subscriptionGVR: "SubscriptionList",
+		csvGVR:          "ClusterServiceVersionList",
+	}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objs...)
+
+	// namespace is the operator's own namespace, deliberately different from
+	// mcpGatewayNamespace -- proves migrateMCPGateway doesn't fall back to it.
+	cleaner := &OLMCleaner{client: client, namespace: "kuadrant-system", logger: logr.Discard()}
+
+	result, err := cleaner.migrateMCPGateway(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Namespace != mcpGatewayNamespace {
+		t.Errorf("Namespace = %q, want %q", result.Namespace, mcpGatewayNamespace)
+	}
+	if result.SubscriptionName != subscription.GetName() {
+		t.Errorf("SubscriptionName = %q, want %q", result.SubscriptionName, subscription.GetName())
+	}
+	if result.CSVName != "mcp-gateway.v0.8.0" {
+		t.Errorf("CSVName = %q, want %q", result.CSVName, "mcp-gateway.v0.8.0")
+	}
+
+	// The Deployment is deliberately left untouched -- migrateMCPGateway
+	// doesn't strip it, so its original OLM labels/ownerReferences survive
+	// unchanged (it's meant to cascade-delete along with the CSV).
+	got, err := client.Resource(deploymentGVR).Namespace(mcpGatewayNamespace).Get(context.Background(), "mcp-gateway-controller", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error re-fetching Deployment: %v", err)
+	}
+	if _, ok := got.GetLabels()["olm.owner.kind"]; !ok {
+		t.Error("Deployment: OLM labels should NOT have been stripped")
+	}
+	if refs, _, _ := unstructured.NestedSlice(got.Object, "metadata", "ownerReferences"); len(refs) == 0 {
+		t.Error("Deployment: CSV ownerReference should NOT have been stripped")
+	}
+
+	for _, crd := range crdNames {
+		got, err := client.Resource(crdGVR).Get(context.Background(), crd, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("expected CRD %s to survive, got error: %v", crd, err)
+		}
+		if _, ok := got.GetLabels()["olm.owner.kind"]; ok {
+			t.Errorf("CRD %s: OLM labels should have been stripped", crd)
+		}
+	}
+
+	if _, err := client.Resource(subscriptionGVR).Namespace(mcpGatewayNamespace).Get(context.Background(), subscription.GetName(), metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Errorf("expected Subscription to be deleted, got err: %v", err)
+	}
+	if _, err := client.Resource(csvGVR).Namespace(mcpGatewayNamespace).Get(context.Background(), "mcp-gateway.v0.8.0", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Errorf("expected CSV to be deleted, got err: %v", err)
 	}
 }

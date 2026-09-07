@@ -33,6 +33,15 @@ dns_operator_image="quay.io/kuadrant/dns-operator:$dns_operator_version"
 V=$dns_operator_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
+# Set desired mcp-gateway images
+mcp_gateway_version=$(mod_version $(yq '.dependencies.mcp-gateway' $env/release.yaml))
+mcp_gateway_image="ghcr.io/kuadrant/mcp-controller:$mcp_gateway_version"
+V=$mcp_gateway_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+mcp_gateway_broker_image="ghcr.io/kuadrant/mcp-gateway:$mcp_gateway_version"
+V=$mcp_gateway_broker_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY_BROKER").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
 # Set desired operator image
 cd $env/config/manager
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))

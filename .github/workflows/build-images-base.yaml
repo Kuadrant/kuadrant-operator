@@ -23,6 +23,14 @@ on:
         description: Related image DNS Operator
         default: quay.io/kuadrant/dns-operator:latest
         type: string
+      relatedImageMcpGateway:
+        description: Related image MCP Gateway Controller
+        default: ghcr.io/kuadrant/mcp-controller:latest
+        type: string
+      relatedImageMcpGatewayBroker:
+        description: Related image MCP Gateway Broker
+        default: ghcr.io/kuadrant/mcp-gateway:latest
+        type: string
       relatedImageWasmShim:
         description: Related image WASM Shim
         default: quay.io/kuadrant/wasm-shim:latest
@@ -80,6 +88,14 @@ on:
       relatedImageDnsOperator:
         description: Related image DNS Operator
         default: quay.io/kuadrant/dns-operator:latest
+        type: string
+      relatedImageMcpGateway:
+        description: Related image MCP Gateway Controller
+        default: ghcr.io/kuadrant/mcp-controller:latest
+        type: string
+      relatedImageMcpGatewayBroker:
+        description: Related image MCP Gateway Broker
+        default: ghcr.io/kuadrant/mcp-gateway:latest
         type: string
       relatedImageWasmShim:
         description: Related image WASM Shim
@@ -193,6 +209,8 @@ jobs:
             AUTHORINO_OPERATOR_BUNDLE_IMG=${{ inputs.authorinoBundleImg }} \
             LIMITADOR_OPERATOR_BUNDLE_IMG=${{ inputs.limitadorBundleImg }} \
             RELATED_IMAGE_DNS_OPERATOR=${{ inputs.relatedImageDnsOperator }} \
+            RELATED_IMAGE_MCP_GATEWAY=${{ inputs.relatedImageMcpGateway }} \
+            RELATED_IMAGE_MCP_GATEWAY_BROKER=${{ inputs.relatedImageMcpGatewayBroker }} \
             RELATED_IMAGE_WASMSHIM=${{ inputs.relatedImageWasmShim }} \
             RELATED_IMAGE_DEVELOPERPORTAL=${{ inputs.relatedImageDeveloperPortalController }} \
             RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=${{ inputs.relatedImageConsolePluginLatest}} \

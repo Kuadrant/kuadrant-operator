@@ -208,10 +208,12 @@ func extractDeploymentImages(objects []*unstructured.Unstructured) []DeployedIma
 }
 
 // PatchContainerEnvVars overrides named env vars on the first container of
-// every Deployment in the slice, using values from the given map (env var
+// the specified Deployment, using values from the given map (env var
 // name -> value read from kuadrant-operator's own environment). Entries with
 // an empty value are skipped, leaving the chart's baked-in default in place.
 // Env vars not already present in the container are appended.
+// Only the Deployment matching deploymentName is modified; other Deployments
+// are left unchanged.
 //
 // This is a stopgap for child-operator charts that bake a related image
 // directly into an env var as a hardcoded literal instead of exposing it as
@@ -221,12 +223,15 @@ func extractDeploymentImages(objects []*unstructured.Unstructured) []DeployedIma
 // When a chart adds value-based configurability for this, prefer
 // Component.ChartValueOverrides instead, as mcp-gateway already does for its
 // broker image.
-func PatchContainerEnvVars(objects []*unstructured.Unstructured, envVars map[string]string) error {
+func PatchContainerEnvVars(objects []*unstructured.Unstructured, deploymentName string, envVars map[string]string) error {
 	if len(envVars) == 0 {
 		return nil
 	}
 	for _, obj := range objects {
 		if obj.GetKind() != "Deployment" {
+			continue
+		}
+		if obj.GetName() != deploymentName {
 			continue
 		}
 		containers, found, err := unstructured.NestedSlice(obj.Object,

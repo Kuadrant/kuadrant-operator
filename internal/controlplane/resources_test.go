@@ -4,6 +4,7 @@ package controlplane
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -262,34 +263,39 @@ func TestApplyResources_OwnerReference(t *testing.T) {
 
 func TestPatchContainerEnvVars(t *testing.T) {
 	tests := []struct {
-		name    string
-		objects []*unstructured.Unstructured
-		envVars map[string]string
-		want    map[string]string
+		name           string
+		objects        []*unstructured.Unstructured
+		deploymentName string
+		envVars        map[string]string
+		want           map[string]string
+		wantUnchanged  []string
 	}{
 		{
 			name: "overrides existing env var",
 			objects: []*unstructured.Unstructured{
 				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
 			},
-			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
-			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			deploymentName: "my-deploy",
+			envVars:        map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:           map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
 		},
 		{
 			name: "appends env var not already present",
 			objects: []*unstructured.Unstructured{
 				deploymentWithEnv("my-deploy", map[string]string{}),
 			},
-			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
-			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			deploymentName: "my-deploy",
+			envVars:        map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:           map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
 		},
 		{
 			name: "empty value leaves chart default in place",
 			objects: []*unstructured.Unstructured{
 				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
 			},
-			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": ""},
-			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"},
+			deploymentName: "my-deploy",
+			envVars:        map[string]string{"RELATED_IMAGE_AUTHORINO": ""},
+			want:           map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"},
 		},
 		{
 			name: "only patches Deployments",
@@ -297,14 +303,26 @@ func TestPatchContainerEnvVars(t *testing.T) {
 				newUnstructured("Service", "my-svc"),
 				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
 			},
-			envVars: map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
-			want:    map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			deploymentName: "my-deploy",
+			envVars:        map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:           map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+		},
+		{
+			name: "skips unmatched Deployments",
+			objects: []*unstructured.Unstructured{
+				deploymentWithEnv("other-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
+				deploymentWithEnv("my-deploy", map[string]string{"RELATED_IMAGE_AUTHORINO": "original:latest"}),
+			},
+			deploymentName: "my-deploy",
+			envVars:        map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			want:           map[string]string{"RELATED_IMAGE_AUTHORINO": "override:v1.0"},
+			wantUnchanged:  []string{"other-deploy"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := PatchContainerEnvVars(tt.objects, tt.envVars); err != nil {
+			if err := PatchContainerEnvVars(tt.objects, tt.deploymentName, tt.envVars); err != nil {
 				t.Fatalf("PatchContainerEnvVars() error = %v", err)
 			}
 
@@ -324,9 +342,17 @@ func TestPatchContainerEnvVars(t *testing.T) {
 					entry := e.(map[string]interface{})
 					got[entry["name"].(string)] = entry["value"].(string)
 				}
-				for name, wantValue := range tt.want {
-					if got[name] != wantValue {
-						t.Errorf("env[%q] = %q, want %q", name, got[name], wantValue)
+
+				if obj.GetName() == tt.deploymentName {
+					for name, wantValue := range tt.want {
+						if got[name] != wantValue {
+							t.Errorf("env[%q] = %q, want %q", name, got[name], wantValue)
+						}
+					}
+				} else if slices.Contains(tt.wantUnchanged, obj.GetName()) {
+					// verify unrelated Deployments remain unchanged
+					if got["RELATED_IMAGE_AUTHORINO"] != "original:latest" {
+						t.Errorf("unexpected patch on %q: env[RELATED_IMAGE_AUTHORINO] = %q, want original:latest", obj.GetName(), got["RELATED_IMAGE_AUTHORINO"])
 					}
 				}
 			}

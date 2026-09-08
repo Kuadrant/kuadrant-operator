@@ -11,9 +11,17 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
+      relatedImageAuthorino:
+        description: Related image Authorino
+        default: quay.io/kuadrant/authorino:latest
+        type: string
       relatedImageAuthorinoOperator:
         description: Related image Authorino Operator
         default: quay.io/kuadrant/authorino-operator:latest
+        type: string
+      relatedImageLimitador:
+        description: Related image Limitador
+        default: quay.io/kuadrant/limitador:latest
         type: string
       relatedImageLimitadorOperator:
         description: Related image Limitador Operator
@@ -77,9 +85,17 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
+      relatedImageAuthorino:
+        description: Related image Authorino
+        default: quay.io/kuadrant/authorino:latest
+        type: string
       relatedImageAuthorinoOperator:
         description: Related image Authorino Operator
         default: quay.io/kuadrant/authorino-operator:latest
+        type: string
+      relatedImageLimitador:
+        description: Related image Limitador
+        default: quay.io/kuadrant/limitador:latest
         type: string
       relatedImageLimitadorOperator:
         description: Related image Limitador Operator
@@ -206,7 +222,9 @@ jobs:
           make bundle \
             IMG=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ inputs.kuadrantOperatorTag }} \
             VERSION=${{ inputs.kuadrantOperatorVersion }} \
+            RELATED_IMAGE_AUTHORINO=${{ inputs.relatedImageAuthorino }} \
             RELATED_IMAGE_AUTHORINO_OPERATOR=${{ inputs.relatedImageAuthorinoOperator }} \
+            RELATED_IMAGE_LIMITADOR=${{ inputs.relatedImageLimitador }} \
             RELATED_IMAGE_LIMITADOR_OPERATOR=${{ inputs.relatedImageLimitadorOperator }} \
             RELATED_IMAGE_DNS_OPERATOR=${{ inputs.relatedImageDnsOperator }} \
             RELATED_IMAGE_MCP_GATEWAY=${{ inputs.relatedImageMcpGateway }} \

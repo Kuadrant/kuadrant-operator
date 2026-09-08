@@ -35,7 +35,9 @@ A release follows two sequential PR phases:
    filling the following fields:
    - `gitRef`: branch/tag/commit to cut the release from.
    - `kuadrantOperatorVersion`: the [Semantic Version](https://semver.org/) of the desired release (e.g. `1.4.0-rc1`).
+   - `authorinoVersion`: Authorino version (X.Y.Z)
    - `authorinoOperatorVersion`: Authorino Operator version (X.Y.Z)
+   - `limitadorVersion`: Limitador version (X.Y.Z)
    - `limitadorOperatorVersion`: Limitador Operator version (X.Y.Z)
    - `dnsOperatorVersion`: DNS Operator version (X.Y.Z)
    - `mcpGatewayVersion`: MCP Gateway version (X.Y.Z)
@@ -138,10 +140,12 @@ olm:
   channels:
     - "stable"
 dependencies:
+  authorino: "0.19.0"
   authorino-operator: "0.16.0"
   console-plugin: "0.0.14"
   developer-portal-controller: "0.1.0"
   dns-operator: "0.12.0"
+  limitador: "1.5.0"
   limitador-operator: "0.12.1"
   mcp-gateway: "0.9.0"
   wasm-shim: "0.8.1"
@@ -150,13 +154,18 @@ dependencies:
 The `kuadrant-operator` section relates to the release version of the kuadrant operator.
 The `olm` section relates to fields required for building the OLM catalogs.
 The `dependencies` section relates to the released versions of the subcomponents included in the release.
+`authorino` and `limitador` pin the operand images (`RELATED_IMAGE_AUTHORINO`/`RELATED_IMAGE_LIMITADOR`)
+bundled by their respective operator charts, separately from the `authorino-operator`/`limitador-operator`
+versions themselves.
 
 > There are validation steps during `make prepare-release` that require dependencies to be released
 > before generating the Kuadrant Operator release.
 
 ## Kuadrant Operator Dependencies
 
+   * [Authorino](https://github.com/Kuadrant/authorino/blob/main/RELEASE.md)
    * [Authorino Operator](https://github.com/Kuadrant/authorino-operator/blob/main/RELEASE.md)
+   * [Limitador](https://github.com/Kuadrant/limitador/blob/main/RELEASE.md)
    * [Limitador Operator](https://github.com/Kuadrant/limitador-operator/blob/main/RELEASE.md)
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md)
    * [MCP Gateway](https://github.com/Kuadrant/mcp-gateway)

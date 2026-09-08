@@ -14,6 +14,7 @@ import (
 	is "gotest.tools/assert/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,6 +84,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = gatewayapiv1.AddToScheme(scheme)
 	_ = consolev1.AddToScheme(scheme)
@@ -113,7 +115,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 		subscription := reconciler.Subscription()
 		assert.Assert(subT, subscription != nil)
 		events := subscription.Events
-		assert.Assert(subT, is.Len(events, 3))
+		assert.Assert(subT, is.Len(events, 4))
 		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ConsolePluginGVK.GroupKind()))
 		assert.DeepEqual(subT, events[1].Kind, ptr.To(ConfigMapGroupKind))
 		assert.DeepEqual(subT, events[1].ObjectName, TopologyConfigMapName)
@@ -123,6 +125,39 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.DeepEqual(subT, events[2].ObjectName, TopologyConfigMapName)
 		assert.DeepEqual(subT, events[2].ObjectNamespace, TestNamespace)
 		assert.DeepEqual(subT, events[2].EventType, ptr.To(controller.DeleteEvent))
+		assert.DeepEqual(subT, events[3].Kind, ptr.To(networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy").GroupKind()))
+		assert.Equal(subT, events[3].ObjectName, consoleplugin.KuadrantConsoleName)
+		assert.Equal(subT, events[3].ObjectNamespace, TestNamespace)
+		assert.Assert(subT, events[3].EventType == nil)
+	})
+
+	t.Run("Create, repair, recreate and delete network policy", func(t *testing.T) {
+		topology := buildTopologyWithClusterVersion(t)
+		assert.NilError(t, reconciler.Run(context.TODO(), nil, topology, nil, nil))
+		policy := &networkingv1.NetworkPolicy{}
+		key := client.ObjectKey{Name: consoleplugin.KuadrantConsoleName, Namespace: TestNamespace}
+		assert.NilError(t, manager.GetClient().Get(context.TODO(), key, policy))
+		expected := policy.DeepCopy()
+		assert.DeepEqual(t, policy.Spec, consoleplugin.NetworkPolicy(TestNamespace).Spec)
+		assert.Assert(t, is.Len(policy.OwnerReferences, 1))
+		assert.Equal(t, policy.OwnerReferences[0].Name, TopologyConfigMapName)
+		policy.Spec.Ingress = []networkingv1.NetworkPolicyIngressRule{{}}
+		policy.Labels = nil
+		policy.OwnerReferences = nil
+		assert.NilError(t, manager.GetClient().Update(context.TODO(), policy))
+		assert.NilError(t, reconciler.Run(context.TODO(), nil, topology, nil, nil))
+		assert.NilError(t, manager.GetClient().Get(context.TODO(), key, policy))
+		assert.DeepEqual(t, policy.Spec, expected.Spec)
+		assert.DeepEqual(t, policy.Labels, expected.Labels)
+		assert.DeepEqual(t, policy.OwnerReferences, expected.OwnerReferences)
+		assert.Assert(t, !consoleplugin.NetworkPolicyMutator(expected, policy))
+		assert.NilError(t, manager.GetClient().Delete(context.TODO(), policy))
+		assert.NilError(t, reconciler.Run(context.TODO(), nil, topology, nil, nil))
+		assert.NilError(t, manager.GetClient().Get(context.TODO(), key, policy))
+		empty, err := machinery.NewTopology()
+		assert.NilError(t, err)
+		assert.NilError(t, reconciler.Run(context.TODO(), nil, empty, nil, nil))
+		assert.Assert(t, apierrors.IsNotFound(manager.GetClient().Get(context.TODO(), key, policy)))
 	})
 
 	t.Run("Create service", func(subT *testing.T) {
@@ -211,6 +246,7 @@ func TestConsolePluginReconcilerWithDevelopmentImageOverride(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = consolev1.AddToScheme(scheme)
 	_ = configv1.AddToScheme(scheme)
@@ -248,4 +284,7 @@ func TestConsolePluginReconcilerWithDevelopmentImageOverride(t *testing.T) {
 	assert.NilError(t, manager.GetClient().Get(context.TODO(), client.ObjectKey{Name: consoleplugin.Name()}, consolePlugin))
 	err = manager.GetClient().Get(context.TODO(), client.ObjectKeyFromObject(legacyConfigMap), &corev1.ConfigMap{})
 	assert.Assert(t, apierrors.IsNotFound(err))
+	policy := &networkingv1.NetworkPolicy{}
+	assert.NilError(t, manager.GetClient().Get(context.TODO(), client.ObjectKey{Name: consoleplugin.KuadrantConsoleName, Namespace: TestNamespace}, policy))
+	assert.DeepEqual(t, policy.Spec, consoleplugin.NetworkPolicy(TestNamespace).Spec)
 }

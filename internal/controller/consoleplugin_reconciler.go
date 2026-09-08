@@ -12,8 +12,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
@@ -23,6 +25,7 @@ import (
 
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 
 type ConsolePluginReconciler struct {
 	*reconcilers.BaseReconciler
@@ -60,6 +63,11 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 				ObjectName:      TopologyConfigMapName,
 				EventType:       ptr.To(controller.DeleteEvent),
 			},
+			{
+				Kind:            ptr.To(networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy").GroupKind()),
+				ObjectNamespace: r.namespace,
+				ObjectName:      consoleplugin.KuadrantConsoleName,
+			},
 		},
 	}
 }
@@ -83,12 +91,30 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	clusterVersionExists := len(clusterVersions) > 0
 	consolePluginSupported := clusterVersionExists || r.imageOverride != ""
 
+	// Apply ingress protection before starting the backend. The topology
+	// ConfigMap anchors the plugin's lifecycle, including garbage collection.
+	networkPolicy := consoleplugin.NetworkPolicy(r.namespace)
+	if !topologyExists || !consolePluginSupported {
+		utils.TagObjectToDelete(networkPolicy)
+	} else {
+		owner := existingTopologyConfigMaps[0].(*controller.RuntimeObject).Object
+		if err := controllerutil.SetOwnerReference(owner, networkPolicy, r.Scheme()); err != nil {
+			return err
+		}
+	}
+	_, err := r.ReconcileResource(ctx, &networkingv1.NetworkPolicy{}, networkPolicy,
+		reconcilers.Mutator[*networkingv1.NetworkPolicy](consoleplugin.NetworkPolicyMutator))
+	if err != nil {
+		logger.Error(err, "reconciling network policy")
+		return err
+	}
+
 	// Service
 	service := consoleplugin.Service(r.namespace)
 	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(service)
 	}
-	_, err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
+	_, err = r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling service")
 		return err

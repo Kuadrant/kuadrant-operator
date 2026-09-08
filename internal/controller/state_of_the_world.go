@@ -548,6 +548,11 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
 		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+		// Filter by name, not labels, so removing a managed label still triggers repair.
+		controller.WithRunnable("consoleplugin networkpolicy watcher", controller.Watch(
+			&networkingv1.NetworkPolicy{}, networkingv1.SchemeGroupVersion.WithResource("networkpolicies"), operatorNamespace,
+			controller.FilterResourcesByField[*networkingv1.NetworkPolicy]("metadata.name="+consoleplugin.KuadrantConsoleName))),
+		controller.WithObjectKinds(networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy").GroupKind()),
 	)
 	if b.isClusterVersionInstalled {
 		opts = append(opts, controller.WithRunnable("cluster version watcher", controller.Watch(

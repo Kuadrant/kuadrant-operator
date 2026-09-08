@@ -26,6 +26,7 @@ check_field ".dependencies.console-plugin" "dependencies.console-plugin"
 check_field ".dependencies.developer-portal-controller" "dependencies.developer-portal-controller"
 check_field ".dependencies.dns-operator" "dependencies.dns-operator"
 check_field ".dependencies.limitador-operator" "dependencies.limitador-operator"
+check_field ".dependencies.mcp-gateway" "dependencies.mcp-gateway"
 check_field ".dependencies.wasm-shim" "dependencies.wasm-shim"
 
 exit $has_error

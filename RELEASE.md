@@ -38,6 +38,7 @@ A release follows two sequential PR phases:
    - `authorinoOperatorVersion`: Authorino Operator version (X.Y.Z)
    - `limitadorOperatorVersion`: Limitador Operator version (X.Y.Z)
    - `dnsOperatorVersion`: DNS Operator version (X.Y.Z)
+   - `mcpGatewayVersion`: MCP Gateway version (X.Y.Z)
    - `wasmShimVersion`: WASM Shim version (X.Y.Z)
    - `consolePluginVersion`: ConsolePlugin version (X.Y.Z)
    - `developerPortalControllerVersion`: Developer Portal Controller version (X.Y.Z)
@@ -142,6 +143,7 @@ dependencies:
   developer-portal-controller: "0.1.0"
   dns-operator: "0.12.0"
   limitador-operator: "0.12.1"
+  mcp-gateway: "0.9.0"
   wasm-shim: "0.8.1"
 ```
 
@@ -157,6 +159,7 @@ The `dependencies` section relates to the released versions of the subcomponents
    * [Authorino Operator](https://github.com/Kuadrant/authorino-operator/blob/main/RELEASE.md)
    * [Limitador Operator](https://github.com/Kuadrant/limitador-operator/blob/main/RELEASE.md)
    * [DNS Operator](https://github.com/Kuadrant/dns-operator/blob/main/docs/RELEASE.md)
+   * [MCP Gateway](https://github.com/Kuadrant/mcp-gateway)
    * [WASM Shim](https://github.com/Kuadrant/wasm-shim/)
    * [Console Plugin](https://github.com/Kuadrant/kuadrant-console-plugin)
    * [Developer Portal Controller](https://github.com/Kuadrant/developer-portal-controller/blob/main/RELEASE.md)

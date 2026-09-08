@@ -17,6 +17,21 @@ jobs:
     steps:
       - id: release_date
         run: echo "release_date=nightly-$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
+  authorino-latest-digest:
+    name: Get the digest sha of the latest authorino docker image
+    runs-on: ubuntu-latest
+    outputs:
+      authorino_digest: ${{ steps.authorino-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: authorino-get-digest
+        name: Get digest of latest authorino image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/authorino:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Authorino latest digest: ${DIGEST}"
   authorino-operator-latest-digest:
     name: Get the digest sha of the latest authorino-operator docker image
     runs-on: ubuntu-latest
@@ -32,6 +47,21 @@ jobs:
           DIGEST=$(crane digest quay.io/kuadrant/authorino-operator:latest)
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
           echo "Authorino operator latest digest: ${DIGEST}"
+  limitador-latest-digest:
+    name: Get the digest sha of the latest limitador docker image
+    runs-on: ubuntu-latest
+    outputs:
+      limitador_digest: ${{ steps.limitador-get-digest.outputs.digest }}
+    steps:
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
+      - id: limitador-get-digest
+        name: Get digest of latest limitador image
+        run: |
+          # Get the manifest digest of the latest tag (works for both single-arch and multi-arch images)
+          DIGEST=$(crane digest quay.io/kuadrant/limitador:latest)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Limitador latest digest: ${DIGEST}"
   limitador-operator-latest-digest:
     name: Get the digest sha of the latest limitador-operator docker image
     runs-on: ubuntu-latest
@@ -152,7 +182,9 @@ jobs:
   workflow-build:
     needs:
       - release-date
+      - authorino-latest-digest
       - authorino-operator-latest-digest
+      - limitador-latest-digest
       - limitador-operator-latest-digest
       - dns-operator-latest-digest
       - mcp-gateway-latest-digest
@@ -166,7 +198,9 @@ jobs:
     with:
       kuadrantOperatorVersion: 0.0.0
       kuadrantOperatorTag: ${{ needs.release-date.outputs.release_date }}
+      relatedImageAuthorino: quay.io/kuadrant/authorino@${{ needs.authorino-latest-digest.outputs.authorino_digest }}
       relatedImageAuthorinoOperator: quay.io/kuadrant/authorino-operator@${{ needs.authorino-operator-latest-digest.outputs.authorino_operator_digest }}
+      relatedImageLimitador: quay.io/kuadrant/limitador@${{ needs.limitador-latest-digest.outputs.limitador_digest }}
       relatedImageLimitadorOperator: quay.io/kuadrant/limitador-operator@${{ needs.limitador-operator-latest-digest.outputs.limitador_operator_digest }}
       relatedImageDnsOperator: quay.io/kuadrant/dns-operator@${{ needs.dns-operator-latest-digest.outputs.dns_operator_digest }}
       relatedImageMcpGateway: ghcr.io/kuadrant/mcp-controller@${{ needs.mcp-gateway-latest-digest.outputs.mcp_gateway_digest }}

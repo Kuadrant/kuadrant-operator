@@ -247,7 +247,7 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component, own
 		for _, name := range component.RelatedImageEnvVars {
 			envVars[name] = os.Getenv(name)
 		}
-		if err := PatchContainerEnvVars(rendered.Resources, envVars); err != nil {
+		if err := PatchContainerEnvVars(rendered.Resources, component.DeploymentName, envVars); err != nil {
 			return fmt.Errorf("patching related image env vars for %s: %w", component.Name, err)
 		}
 	}

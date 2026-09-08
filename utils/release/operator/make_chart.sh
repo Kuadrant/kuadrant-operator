@@ -27,11 +27,23 @@ consoleplugin_image="quay.io/kuadrant/console-plugin:$consoleplugin_version"
 V=$consoleplugin_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
+# Set desired authorino image
+authorino_version=$(mod_version $(yq '.dependencies.authorino' $env/release.yaml))
+authorino_image="quay.io/kuadrant/authorino:$authorino_version"
+V=$authorino_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_AUTHORINO").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
 # Set desired authorino-operator image
 authorino_operator_version=$(mod_version $(yq '.dependencies.authorino-operator' $env/release.yaml))
 authorino_operator_image="quay.io/kuadrant/authorino-operator:$authorino_operator_version"
 V=$authorino_operator_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_AUTHORINO_OPERATOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
+# Set desired limitador image
+limitador_version=$(mod_version $(yq '.dependencies.limitador' $env/release.yaml))
+limitador_image="quay.io/kuadrant/limitador:$limitador_version"
+V=$limitador_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_LIMITADOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
 # Set desired limitador-operator image
 limitador_operator_version=$(mod_version $(yq '.dependencies.limitador-operator' $env/release.yaml))

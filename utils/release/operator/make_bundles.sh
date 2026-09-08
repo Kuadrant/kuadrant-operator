@@ -27,9 +27,17 @@ echo "make bundle"
 root=$(pwd)
 cd $env
 
+# Set desired authorino image
+authorino_version=$(mod_version $AUTHORINO_VERSION)
+authorino_image="quay.io/kuadrant/authorino:$authorino_version"
+
 # Set desired authorino-operator image
 authorino_operator_version=$(mod_version $AUTHORINO_OPERATOR_VERSION)
 authorino_operator_image="quay.io/kuadrant/authorino-operator:$authorino_operator_version"
+
+# Set desired limitador image
+limitador_version=$(mod_version $LIMITADOR_VERSION)
+limitador_image="quay.io/kuadrant/limitador:$limitador_version"
 
 # Set desired limitador-operator image
 limitador_operator_version=$(mod_version $LIMITADOR_OPERATOR_VERSION)
@@ -68,7 +76,9 @@ make bundle \
   BUNDLE_VERSION=$KUADRANT_OPERATOR_VERSION \
   BUNDLE_METADATA_OPTS="--channels $OLM_CHANNELS $default_channel_opt" \
   IMG=$operator_image \
+  RELATED_IMAGE_AUTHORINO=$authorino_image \
   RELATED_IMAGE_AUTHORINO_OPERATOR=$authorino_operator_image \
+  RELATED_IMAGE_LIMITADOR=$limitador_image \
   RELATED_IMAGE_LIMITADOR_OPERATOR=$limitador_operator_image \
   RELATED_IMAGE_DNS_OPERATOR=$dns_operator_image \
   RELATED_IMAGE_MCP_GATEWAY=$mcp_gateway_image \
@@ -76,7 +86,9 @@ make bundle \
   RELATED_IMAGE_WASMSHIM=$wasm_shim_image \
   RELATED_IMAGE_DEVELOPERPORTAL=$developerportal_image \
   RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=$consoleplugin_image \
+  AUTHORINO_VERSION=$(mod_version_for_make $AUTHORINO_VERSION) \
   AUTHORINO_OPERATOR_VERSION=$(mod_version_for_make $AUTHORINO_OPERATOR_VERSION) \
+  LIMITADOR_VERSION=$(mod_version_for_make $LIMITADOR_VERSION) \
   LIMITADOR_OPERATOR_VERSION=$(mod_version_for_make $LIMITADOR_OPERATOR_VERSION) \
   DNS_OPERATOR_VERSION=$(mod_version_for_make $DNS_OPERATOR_VERSION) \
   MCP_GATEWAY_VERSION=$(mod_version_for_make $MCP_GATEWAY_VERSION) \

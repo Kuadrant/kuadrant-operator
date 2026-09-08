@@ -3,9 +3,17 @@
 package controlplane
 
 import (
+	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
 func newUnstructured(kind, name string) *unstructured.Unstructured {
@@ -182,6 +190,70 @@ func TestPatchDeploymentImage(t *testing.T) {
 				got := container["image"].(string)
 				if got != tt.wantImage {
 					t.Errorf("image = %q, want %q", got, tt.wantImage)
+				}
+			}
+		})
+	}
+}
+
+func TestApplyResources_OwnerReference(t *testing.T) {
+	ownerRef := &metav1.OwnerReference{
+		APIVersion: "kuadrant.io/v1alpha1",
+		Kind:       "KuadrantControlPlane",
+		Name:       "default",
+		UID:        "test-uid",
+	}
+
+	tests := []struct {
+		name       string
+		object     *unstructured.Unstructured
+		ownerRef   *metav1.OwnerReference
+		wantOwners int
+	}{
+		{
+			name:       "sets ownerReference when provided",
+			object:     newUnstructured("ServiceAccount", "test-sa"),
+			ownerRef:   ownerRef,
+			wantOwners: 1,
+		},
+		{
+			name:       "leaves no ownerReference when nil (CRDs)",
+			object:     newUnstructured("ServiceAccount", "test-sa"),
+			ownerRef:   nil,
+			wantOwners: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+			_ = appsv1.AddToScheme(scheme)
+
+			client := dynamicfake.NewSimpleDynamicClient(scheme)
+			applier := &ResourceApplier{
+				client:    client,
+				mapper:    testrestmapper.TestOnlyStaticRESTMapper(scheme),
+				logger:    logr.Discard(),
+				namespace: "kuadrant-system",
+			}
+
+			// The fake dynamic client's server-side apply support can't
+			// round-trip a plain *unstructured.Unstructured (it needs a
+			// registered Go type to structurally merge against), so the
+			// apply call itself is expected to error here. That's not what
+			// this test checks: applyResource sets ownerRef on obj before
+			// ever calling Apply, so the mutation is observable regardless.
+			_ = applier.ApplyResources(context.Background(), []*unstructured.Unstructured{tt.object}, tt.ownerRef)
+
+			refs, _, _ := unstructured.NestedSlice(tt.object.Object, "metadata", "ownerReferences")
+			if len(refs) != tt.wantOwners {
+				t.Fatalf("ownerReferences = %v, want %d entries", refs, tt.wantOwners)
+			}
+			if tt.wantOwners > 0 {
+				ref := refs[0].(map[string]interface{})
+				if ref["name"] != ownerRef.Name || ref["uid"] != string(ownerRef.UID) {
+					t.Errorf("ownerReference = %v, want name=%q uid=%q", ref, ownerRef.Name, ownerRef.UID)
 				}
 			}
 		})

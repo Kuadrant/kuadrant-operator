@@ -82,20 +82,27 @@ func kindOrder(kind string) int {
 	return len(installOrder)
 }
 
-func (a *ResourceApplier) ApplyResources(ctx context.Context, objects []*unstructured.Unstructured) error {
+// ApplyResources applies each object via server-side apply. If ownerRef is
+// non-nil, it's set on every object first, so deleting the owner (the
+// KuadrantControlPlane CR) cascade-deletes everything the deployer applied.
+func (a *ResourceApplier) ApplyResources(ctx context.Context, objects []*unstructured.Unstructured, ownerRef *metav1.OwnerReference) error {
 	for _, obj := range objects {
-		if err := a.applyResource(ctx, obj); err != nil {
+		if err := a.applyResource(ctx, obj, ownerRef); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.Unstructured) error {
+func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.Unstructured, ownerRef *metav1.OwnerReference) error {
 	gvk := obj.GroupVersionKind()
 	mapping, err := a.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
 		return fmt.Errorf("mapping GVK %s: %w", gvk, err)
+	}
+
+	if ownerRef != nil {
+		obj.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
 	}
 
 	var rc dynamic.ResourceInterface

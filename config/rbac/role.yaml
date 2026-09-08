@@ -408,6 +408,7 @@ rules:
   - clusterroles
   verbs:
   - bind
+  - delete
   - escalate
   - get
   - patch

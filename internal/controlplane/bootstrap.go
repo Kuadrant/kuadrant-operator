@@ -17,8 +17,9 @@ import (
 )
 
 // BootstrapRunnable executes one-time startup tasks after the manager starts
-// and leader election is acquired. It ensures the default KuadrantControlPlane
-// CR exists and cleans up orphaned OLM resources from pre-consolidation installs.
+// and leader election is acquired. It is the sole place that creates the
+// default KuadrantControlPlane CR if missing. It also cleans up
+// orphaned OLM resources from pre-consolidation installs.
 type BootstrapRunnable struct {
 	restConfig *rest.Config
 	scheme     *runtime.Scheme

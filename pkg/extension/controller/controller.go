@@ -331,13 +331,11 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 		return result, err
 	}
 
-	if eventType == EventTypeUpdate {
-		if err := ec.cleanupFinalizer(ctx, request); err != nil {
-			if errors.IsNotFound(err) {
-				return reconcile.Result{}, nil
-			}
-			return reconcile.Result{RequeueAfter: time.Second}, err
+	if err := ec.cleanupFinalizer(ctx, request); err != nil {
+		if errors.IsNotFound(err) {
+			return reconcile.Result{}, nil
 		}
+		return reconcile.Result{RequeueAfter: time.Second}, err
 	}
 
 	return result, nil
@@ -348,6 +346,9 @@ func (ec *ExtensionController) setupContext(ctx context.Context) context.Context
 	//  have to inject here instead of in Start(). Is there any benefit to us storing this in the context for it be
 	//  retrieved by the user in their Reconcile method, or should it just pass them as parameters?
 	ctx = context.WithValue(ctx, logr.Logger{}, ec.logger)
+	if ec.manager == nil {
+		return ctx
+	}
 	ctx = context.WithValue(ctx, extutils.SchemeKey, ec.manager.GetScheme())
 	ctx = context.WithValue(ctx, extutils.ClientKey, ec.manager.GetClient())
 	return ctx
@@ -357,6 +358,10 @@ func (ec *ExtensionController) ensureFinalizer(ctx context.Context, request reco
 	obj := ec.config.ForType.DeepCopyObject().(client.Object)
 	if err := ec.Client().Get(ctx, types.NamespacedName{Namespace: request.Namespace, Name: request.Name}, obj); err != nil {
 		return err
+	}
+	// The API server rejects new finalizers on an object being deleted.
+	if obj.GetDeletionTimestamp() != nil {
+		return nil
 	}
 	return ec.AddFinalizer(ctx, obj, ExtensionFinalizer)
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,14 +22,19 @@ import (
 	"gotest.tools/assert"
 	"gotest.tools/assert/cmp"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ktypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
@@ -592,6 +598,7 @@ type mockExtensionServiceClient struct {
 	registerActionMethodFn func(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pipelineCommitFn       func(ctx context.Context, in *extpb.PipelineCommitRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pingFn                 func(ctx context.Context, in *extpb.PingRequest, opts ...grpc.CallOption) (*extpb.PongResponse, error)
+	clearPolicyFn          func(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error)
 }
 
 func (m *mockExtensionServiceClient) Handshake(ctx context.Context, in *extpb.HandshakeRequest, opts ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
@@ -621,8 +628,11 @@ func (m *mockExtensionServiceClient) Resolve(_ context.Context, _ *extpb.Resolve
 func (m *mockExtensionServiceClient) RegisterMutator(_ context.Context, _ *extpb.RegisterMutatorRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
 	return nil, nil
 }
-func (m *mockExtensionServiceClient) ClearPolicy(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
-	return nil, nil
+func (m *mockExtensionServiceClient) ClearPolicy(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+	if m.clearPolicyFn != nil {
+		return m.clearPolicyFn(ctx, in, opts...)
+	}
+	return &extpb.ClearPolicyResponse{}, nil
 }
 func (m *mockExtensionServiceClient) RegisterActionMethod(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	if m.registerActionMethodFn != nil {
@@ -1078,4 +1088,144 @@ func TestPipelineCommit_PropagatesError(t *testing.T) {
 	err := pipeline.Commit(context.Background())
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "bad action"))
+}
+
+func newFinalizerTestController(mock *mockExtensionServiceClient, objs ...client.Object) (*ExtensionController, client.Client) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fakeClient := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		Build()
+
+	eventCache := newEventTypeCache()
+	return &ExtensionController{
+		config: ExtensionConfig{
+			Name:       "test",
+			PolicyKind: "ConfigMap",
+			ForType:    &corev1.ConfigMap{},
+			Reconcile:  mockReconcile,
+		},
+		logger:          logr.Discard(),
+		extensionClient: &extensionClient{client: mock},
+		eventCache:      eventCache,
+		BaseReconciler:  basereconciler.NewBaseReconciler(fakeClient, scheme, fakeClient),
+	}, fakeClient
+}
+
+func terminatingPolicy(namespace, name string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         namespace,
+			Name:              name,
+			Finalizers:        []string{ExtensionFinalizer},
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		},
+	}
+}
+
+// A policy deleted while the extension was down is replayed as a create.
+func TestReconcile_ClearsFinalizerOnCreateEvent(t *testing.T) {
+	var cleared *extpb.ClearPolicyRequest
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, in *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			cleared = in
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+	ec, fakeClient := newFinalizerTestController(mock, terminatingPolicy("ns", "p"))
+	ec.eventCache.pushEvent("ns", "p", EventTypeCreate)
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+
+	assert.Assert(t, cleared != nil)
+	assert.Equal(t, cleared.Policy.Metadata.Kind, "ConfigMap")
+	assert.Equal(t, cleared.Policy.Metadata.Name, "p")
+
+	// Removing the last finalizer lets the fake client complete the deletion.
+	err = fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, &corev1.ConfigMap{})
+	assert.Assert(t, apierrors.IsNotFound(err))
+}
+
+func TestReconcile_ClearsFinalizerOnUnknownEvent(t *testing.T) {
+	var clearCalls int
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			clearCalls++
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+	ec, _ := newFinalizerTestController(mock, terminatingPolicy("ns", "p"))
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+	assert.Equal(t, clearCalls, 1)
+}
+
+func TestReconcile_LivePolicyIsNotCleared(t *testing.T) {
+	var clearCalls int
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			clearCalls++
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+	live := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "p"}}
+	ec, fakeClient := newFinalizerTestController(mock, live)
+	ec.eventCache.pushEvent("ns", "p", EventTypeCreate)
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+	assert.Equal(t, clearCalls, 0)
+
+	got := &corev1.ConfigMap{}
+	assert.NilError(t, fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, got))
+	assert.Assert(t, cmp.Contains(got.Finalizers, ExtensionFinalizer))
+}
+
+func TestReconcile_DoesNotAddFinalizerToTerminatingPolicy(t *testing.T) {
+	mock := &mockExtensionServiceClient{}
+	terminating := terminatingPolicy("ns", "p")
+	terminating.Finalizers = append(terminating.Finalizers, "other.io/keep")
+	ec, fakeClient := newFinalizerTestController(mock, terminating)
+	ec.eventCache.pushEvent("ns", "p", EventTypeCreate)
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+
+	got := &corev1.ConfigMap{}
+	assert.NilError(t, fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, got))
+	assert.Assert(t, !slices.Contains(got.Finalizers, ExtensionFinalizer))
+}
+
+func TestReconcile_KeepsFinalizerWhenClearPolicyFails(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			return nil, status.Error(codes.Unavailable, "operator down")
+		},
+	}
+	ec, fakeClient := newFinalizerTestController(mock, terminatingPolicy("ns", "p"))
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	result, err := ec.Reconcile(context.Background(), req)
+	assert.Assert(t, err != nil)
+	assert.Equal(t, result.RequeueAfter, time.Second)
+
+	got := &corev1.ConfigMap{}
+	assert.NilError(t, fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, got))
+	assert.Assert(t, cmp.Contains(got.Finalizers, ExtensionFinalizer))
+}
+
+func TestReconcile_MissingPolicyIsNotAnError(t *testing.T) {
+	ec, _ := newFinalizerTestController(&mockExtensionServiceClient{})
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "gone"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
 }

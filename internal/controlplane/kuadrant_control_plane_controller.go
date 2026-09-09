@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +33,7 @@ const requeueInterval = 5 * time.Minute
 
 // Component deployer RBAC — ClusterRole management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller,verbs=get;update;patch;bind;escalate
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller,verbs=delete;get;update;patch;bind;escalate
 
 // Component deployer RBAC — ClusterRoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create
@@ -72,8 +73,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	cp := &kuadrantv1alpha1.KuadrantControlPlane{}
 	if err := r.Get(ctx, req.NamespacedName, cp); err != nil {
 		if apierrors.IsNotFound(err) {
-			r.logger.Info("KuadrantControlPlane deleted, re-creating")
-			return r.ensureDefaultCR(ctx)
+			r.logger.Info("KuadrantControlPlane not found")
+			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
@@ -83,7 +84,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	deployErr := deployComponents(ctx, r.deployer.EnabledComponents(), r.deployer.DeployComponent, func(component Component, err error) {
+	ownerRef := kcpOwnerReference(cp)
+	deploy := func(ctx context.Context, component Component) error {
+		return r.deployer.DeployComponent(ctx, component, ownerRef)
+	}
+	deployErr := deployComponents(ctx, r.deployer.EnabledComponents(), deploy, func(component Component, err error) {
 		r.logger.Error(err, "failed to deploy component", "component", component.Name)
 		if r.recorder != nil {
 			r.recorder.Eventf(cp, componentReference(component.Name), corev1.EventTypeWarning, "ComponentDeployFailed", "ComponentDeploy", "failed to deploy component %s: %s", component.Name, err)
@@ -173,11 +178,18 @@ func (r *Reconciler) childDeploymentPredicate() predicate.Predicate {
 	})
 }
 
-func (r *Reconciler) ensureDefaultCR(ctx context.Context) (ctrl.Result, error) {
-	if err := ensureDefaultControlPlane(ctx, r.Client, r.recorder, r.logger); err != nil {
-		return ctrl.Result{}, err
+// kcpOwnerReference builds the ownerReference set on every resource the
+// deployer applies for cp, except CRDs (see ResourceApplier.ApplyResources).
+// KuadrantControlPlane is cluster-scoped, so it can own both namespaced
+// and cluster-scoped child resources.
+func kcpOwnerReference(cp *kuadrantv1alpha1.KuadrantControlPlane) *metav1.OwnerReference {
+	return &metav1.OwnerReference{
+		APIVersion: kuadrantv1alpha1.GroupVersion.String(),
+		Kind:       "KuadrantControlPlane",
+		Name:       cp.Name,
+		UID:        cp.UID,
+		Controller: ptr.To(true),
 	}
-	return ctrl.Result{RequeueAfter: time.Second}, nil
 }
 
 func ensureDefaultControlPlane(ctx context.Context, c client.Client, recorder events.EventRecorder, logger logr.Logger) error {

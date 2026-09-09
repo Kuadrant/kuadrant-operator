@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -172,7 +173,7 @@ func (d *Deployer) ApplyCRDsForComponents(ctx context.Context, components []Comp
 		}
 
 		d.logger.Info("applying CRDs", "component", component.Name, "count", len(rendered.CRDs))
-		if err := applier.ApplyResources(ctx, rendered.CRDs); err != nil {
+		if err := applier.ApplyResources(ctx, rendered.CRDs, nil); err != nil {
 			return fmt.Errorf("applying CRDs for %s: %w", component.Name, err)
 		}
 		if err := applier.WaitForCRDs(ctx, CRDNames(rendered.CRDs)); err != nil {
@@ -182,7 +183,11 @@ func (d *Deployer) ApplyCRDsForComponents(ctx context.Context, components []Comp
 	return nil
 }
 
-func (d *Deployer) DeployComponent(ctx context.Context, component Component) error {
+// DeployComponent renders and applies a single component's chart. ownerRef,
+// if non-nil, is set on every applied resource except CRDs (see
+// ApplyResources), so deleting the KuadrantControlPlane CR cascade-deletes
+// everything the deployer created for this component.
+func (d *Deployer) DeployComponent(ctx context.Context, component Component, ownerRef *metav1.OwnerReference) error {
 	applier := d.applier
 
 	rendered, err := d.renderComponent(component)
@@ -193,7 +198,7 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component) err
 	d.chartVersions[component.Name] = rendered.ChartVersion
 
 	if len(rendered.CRDs) > 0 {
-		if err := applier.ApplyResources(ctx, rendered.CRDs); err != nil {
+		if err := applier.ApplyResources(ctx, rendered.CRDs, nil); err != nil {
 			return fmt.Errorf("applying CRDs for %s: %w", component.Name, err)
 		}
 		if err := applier.WaitForCRDs(ctx, CRDNames(rendered.CRDs)); err != nil {
@@ -213,7 +218,7 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component) err
 
 	d.deployedImages[component.Name] = extractDeploymentImages(rendered.Resources)
 
-	if err := applier.ApplyResources(ctx, rendered.Resources); err != nil {
+	if err := applier.ApplyResources(ctx, rendered.Resources, ownerRef); err != nil {
 		return fmt.Errorf("applying resources for %s: %w", component.Name, err)
 	}
 

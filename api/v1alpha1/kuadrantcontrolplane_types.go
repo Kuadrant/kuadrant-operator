@@ -23,8 +23,11 @@ const (
 //+kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // KuadrantControlPlane manages the lifecycle of Kuadrant component operators.
-// The operator auto-creates a singleton named "default" on startup.
-// Deleting this resource is a no-op — the operator re-creates it immediately.
+// The operator auto-creates a singleton named "default" once at manager
+// startup. Every resource the deployer applies (except CRDs) is owned by
+// this CR, so deleting it cascade-deletes all managed components; it's
+// re-created only on the next manager restart, not by the ongoing reconcile
+// loop.
 type KuadrantControlPlane struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

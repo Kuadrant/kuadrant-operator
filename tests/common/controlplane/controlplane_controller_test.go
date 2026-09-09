@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,6 +93,25 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 					Namespace: operatorNamespace,
 					Name:      dnsOperatorDeployment,
 				}, deploy)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("sets a controller ownerReference to the KuadrantControlPlane on dns-operator Deployment", func(ctx SpecContext) {
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      dnsOperatorDeployment,
+				}, deploy)).To(Succeed())
+
+				owner := metav1.GetControllerOf(deploy)
+				g.Expect(owner).ToNot(BeNil())
+				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+				g.Expect(owner.Name).To(Equal(cp.Name))
+				g.Expect(owner.UID).To(Equal(cp.GetUID()))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
@@ -187,46 +207,62 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 
 	})
 
-	Context("self-healing on deletion", func() {
-		It("re-creates KuadrantControlPlane CR when deleted", func(ctx SpecContext) {
+	Context("deletion", func() {
+		It("does not recreate KuadrantControlPlane CR when deleted", func(ctx SpecContext) {
 			cpKey := client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}
 
 			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
 			Expect(testClient().Get(ctx, cpKey, cp)).To(Succeed())
-			originalUID := cp.GetUID()
 
 			Expect(testClient().Delete(ctx, cp)).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				recreated := &kuadrantv1alpha1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, cpKey, recreated)).To(Succeed())
-				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new CR, not the old one")
-			}).WithContext(ctx).Should(Succeed())
+			// The reconcile loop no longer self-heals a deleted CR -- only the
+			// one-shot BootstrapRunnable creates it, at manager startup. Since
+			// the manager is already running for the whole test suite, deleting
+			// it here must not bring it back on its own.
+			Consistently(func(g Gomega) {
+				got := &kuadrantv1alpha1.KuadrantControlPlane{}
+				err := testClient().Get(ctx, cpKey, got)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected KuadrantControlPlane to remain deleted, got error: %v", err)
+			}, 5*time.Second, 1*time.Second).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
-		It("child Deployments survive KuadrantControlPlane deletion", func(ctx SpecContext) {
+		It("cascade-deletes child Deployments when KuadrantControlPlane is deleted", func(ctx SpecContext) {
 			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
 
-			// Ensure dns-operator is running and capture its UID
-			var originalUID types.UID
+			// Ensure dns-operator is running and owned by the KuadrantControlPlane
+			var cpUID types.UID
 			Eventually(func(g Gomega) {
 				deploy := &appsv1.Deployment{}
 				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
 				g.Expect(deploy.Status.ReadyReplicas).To(BeNumerically(">", 0))
-				originalUID = deploy.GetUID()
+
+				owner := metav1.GetControllerOf(deploy)
+				g.Expect(owner).ToNot(BeNil(), "expected dns-operator Deployment to have a controller ownerReference")
+				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+				cpUID = owner.UID
 			}).WithContext(ctx).Should(Succeed())
 
-			// Delete the CR
 			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
 			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+			Expect(cp.GetUID()).To(Equal(cpUID), "expected Deployment to be owned by the current KuadrantControlPlane instance")
 			Expect(testClient().Delete(ctx, cp)).To(Succeed())
 
-			// Deployment should still exist with the same UID (preserved, not recreated)
-			Consistently(func(g Gomega) {
+			// Garbage collection cascade-deletes the Deployment once its owner is gone.
+			Eventually(func(g Gomega) {
 				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
-				g.Expect(deploy.GetUID()).To(Equal(originalUID))
-			}, 5*time.Second, 1*time.Second).WithContext(ctx).Should(Succeed())
+				err := testClient().Get(ctx, deployKey, deploy)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected dns-operator Deployment to be cascade-deleted, got error: %v", err)
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("does not set an ownerReference on CRDs", func(ctx SpecContext) {
+			// Deleting a CRD deletes every custom resource of that type
+			// cluster-wide, so CRDs must never be tied to the KCP's lifecycle
+			// regardless of what happens to Deployments/Services/etc.
+			crd := &apiextensionsv1.CustomResourceDefinition{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: "dnsrecords.kuadrant.io"}, crd)).To(Succeed())
+			Expect(crd.OwnerReferences).To(BeEmpty(), "CRDs must not have owner references")
 		}, testTimeOut)
 	})
 

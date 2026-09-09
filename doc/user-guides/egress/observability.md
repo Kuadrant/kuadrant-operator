@@ -59,7 +59,7 @@ The same labels appear on egress metrics as on ingress, but their values differ 
 | `response_flags` | Envoy response flags | Key for diagnosing egress failures |
 | `connection_security_policy` | `unknown` | Security policy of incoming connection (workload to gateway) |
 
-**Understanding `source_workload`:** On the egress gateway, `source_workload` identifies the gateway itself, not the workload that initiated the request. To attribute egress traffic to specific workloads, use [workload identity via AuthPolicy](egress-gateway.md#workload-identity) and correlate using access logs or traces.
+**Understanding `source_workload`:** On the egress gateway, `source_workload` identifies the gateway itself, not the workload that initiated the request. To attribute egress traffic to specific workloads, use [workload identity via AuthPolicy](egress-gateway.md#workload-identity) and correlate using access logs or traces. Alternatively, if the route is rate limited, [TelemetryPolicy](#custom-metric-labels-with-telemetrypolicy) can record the calling workload directly as a label on the Kuadrant data plane metrics.
 
 ### Querying Egress Metrics
 
@@ -137,6 +137,180 @@ sum(rate(istio_requests_total{
 For Kubernetes queries (kubectl, log filtering), use the pod label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`. This label is not a Prometheus metric label.
 
 For PromQL queries, filter by `source_workload="kuadrant-egressgateway-istio"` to isolate egress traffic from ingress traffic on the same Prometheus instance. This is the Istio proxy workload name, which appears as a label on all `istio_*` metrics.
+
+## Custom Metric Labels with TelemetryPolicy
+
+The `istio_*` metrics above cannot tell you which workload made an outbound call: on an egress gateway, `source_workload` is always the gateway itself. [TelemetryPolicy](../../overviews/telemetrypolicy.md) closes that gap by adding custom labels, derived from CEL expressions, to the metrics Kuadrant's own data plane emits. Because the wasm-shim evaluates these expressions direction-agnostically, TelemetryPolicy works on an egress gateway with no egress-specific configuration.
+
+### Which Metrics Get Labelled
+
+TelemetryPolicy labels the **Limitador** counters, not the `istio_*` metrics. Custom labels appear on:
+
+| Metric | Description |
+|--------|-------------|
+| `authorized_calls` | Requests allowed by a rate limit check |
+| `limited_calls` | Requests rejected by a rate limit check |
+| `authorized_hits` | Hits counted against a limit (for TokenRateLimitPolicy, token consumption) |
+| `report_calls` | Report-only rate limit calls |
+
+Each series also carries Limitador's own `limitador_namespace` label, which identifies the targeted route (for example, `gateway-system/ai-mock-external`).
+
+This is a separate metric stream from the `istio_*` metrics. Adding a TelemetryPolicy does not change `istio_requests_total` in any way.
+
+### Prerequisites
+
+TelemetryPolicy has two requirements that are easy to miss on egress:
+
+1. **A rate limit policy must be in effect on the route.** Custom labels are attached to the descriptor the wasm-shim sends to Limitador, so a route with no `RateLimitPolicy` or `TokenRateLimitPolicy` produces no Limitador metrics and therefore no labels. A TelemetryPolicy attached to a gateway whose routes are not rate limited is accepted and enforced, but emits nothing.
+2. **`targetRef` must be a Gateway.** The API rejects any other kind, so a TelemetryPolicy cannot be scoped to an individual HTTPRoute. Labels apply to every rate limited route on the gateway.
+
+Additionally, labels that reference `auth.identity.*` require an [AuthPolicy](egress-gateway.md#workload-identity) establishing workload identity on the route.
+
+The examples below use the resources from the [Egress Gateway Setup](egress-gateway.md) guide, plus an AI service route that carries both an AuthPolicy and a TokenRateLimitPolicy:
+
+| Resource | Value |
+|----------|-------|
+| Route | `ai-mock-external` |
+| External service | `api.ai-mock.local` |
+| Calling workload | `team-gold` service account in `egress-test` |
+
+### Attributing Egress Traffic to the Calling Workload
+
+Attach a TelemetryPolicy to the egress gateway, labelling each metric with the authenticated identity of the calling workload and the external destination:
+
+```yaml
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: TelemetryPolicy
+metadata:
+  name: egress-telemetry
+  namespace: gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-egressgateway
+  metrics:
+    default:
+      labels:
+        workload: auth.identity.username
+        destination: request.host
+        source_ip: source.address.split(":")[0]
+```
+
+Confirm the policy was accepted and enforced:
+
+```sh
+kubectl get telemetrypolicy egress-telemetry -n gateway-system \
+    -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'
+```
+
+Expected output:
+
+```text
+Accepted=True
+Enforced=True
+```
+
+Send some authenticated traffic through the egress gateway, then read the Limitador metrics:
+
+```sh
+kubectl exec -n egress-test test-client -- \
+    curl -sS --max-time 15 \
+    http://limitador-limitador.kuadrant-system.svc.cluster.local:8080/metrics \
+    | grep -v '^#' | grep authorized_calls
+```
+
+Expected output:
+
+```text
+authorized_calls{destination="api.ai-mock.local",source_ip="10.244.0.25",workload="system:serviceaccount:egress-test:team-gold",limitador_namespace="gateway-system/ai-mock-external"} 2
+```
+
+The `workload` label now identifies the service account that originated the outbound request, which the `istio_*` metrics cannot express.
+
+The same labels appear on `limited_calls` when a workload exceeds its limit, so you can see exactly who is being throttled and on which destination:
+
+```text
+limited_calls{source_ip="10.244.0.24",workload="system:serviceaccount:egress-test:default",destination="api.ai-mock.local",limitador_namespace="gateway-system/ai-mock-external"} 12
+```
+
+### CEL Attributes Available on Egress
+
+Label expressions are evaluated in the **request** phase, before the external service responds. This is the single most important constraint on egress: response attributes are not available.
+
+| Expression | Available | Example value |
+|------------|-----------|---------------|
+| `auth.identity.username` | Yes | `system:serviceaccount:egress-test:team-gold` |
+| `request.host` | Yes | `api.ai-mock.local` |
+| `request.path` | Yes | `/v1/chat/completions` |
+| `request.method` | Yes | `POST` |
+| `request.scheme` | Yes | `http` |
+| `source.address` | Yes | `10.244.0.25:54146` (see [cardinality](#label-cardinality)) |
+| A literal, for example `"egress"` | Yes | `egress` |
+| `response.code` | **No** | Fails the whole policy, see [known limitations](#known-limitations) |
+
+Note that `request.scheme` describes the workload-to-gateway leg, not the gateway-to-external-service leg. A workload calling the gateway over plain HTTP reports `http` even when the gateway originates TLS to the external service.
+
+To label by response status, use the `istio_requests_total` metric and its `response_code` label instead, as shown in [PromQL examples](#promql-examples).
+
+### Label Cardinality
+
+Every distinct combination of label values creates a new Prometheus time series, so a high-cardinality expression on a busy egress gateway is expensive.
+
+`source.address` is the common trap: it includes the ephemeral source port, so **every connection produces a new series**. Strip the port with CEL:
+
+```yaml
+source_ip: source.address.split(":")[0]
+```
+
+Prefer bounded dimensions such as the workload identity, the destination host, or the request method. Avoid `request.path` unless the path set is small and known; on an API with per-resource paths it will grow without limit.
+
+### PromQL with Custom Labels
+
+Once the labels exist, egress traffic can be broken down by dimensions the Istio metrics do not carry.
+
+**Request rate by calling workload:**
+
+```promql
+sum(rate(authorized_calls[5m])) by (workload)
+```
+
+**Rate limited requests by workload and destination:**
+
+```promql
+sum(rate(limited_calls[5m])) by (workload, destination)
+```
+
+**Token consumption per workload (with TokenRateLimitPolicy):**
+
+```promql
+sum(rate(authorized_hits[5m])) by (workload)
+```
+
+**Which workloads are calling which external services:**
+
+```promql
+sum(rate(authorized_calls[5m])) by (workload, destination)
+```
+
+### Known Limitations
+
+**A label expression referencing an unavailable attribute breaks all traffic.** An expression such as `response.code` is not dropped: it fails the entire descriptor, the wasm-shim fails closed, and every request through the gateway returns HTTP 500 with no metrics recorded at all. The gateway logs show:
+
+```text
+Failed to evaluate message builder: CelError::Resolve { UndeclaredReference("response") }
+```
+
+The policy still reports `Accepted=True` and `Enforced=True`, so check traffic after applying a new label. Tracked in [#2242](https://github.com/Kuadrant/kuadrant-operator/issues/2242).
+
+**Removing a label from the spec does not remove it.** Editing a TelemetryPolicy to drop a label leaves the old binding in the generated configuration, so editing cannot undo a bad label. Delete and recreate the policy instead:
+
+```sh
+kubectl delete telemetrypolicy egress-telemetry -n gateway-system
+kubectl apply -f telemetrypolicy.yaml
+```
+
+Tracked in [#2243](https://github.com/Kuadrant/kuadrant-operator/issues/2243).
 
 ## Access Logging
 
@@ -367,7 +541,7 @@ If Prometheus uses annotation-based discovery, verify that the pod has `promethe
 ## Next Steps
 
 - [Distributed tracing for egress](../../observability/tracing.md): trace requests end-to-end from workload through the egress gateway to the external service
-- [TelemetryPolicy](../../overviews/telemetrypolicy.md): add custom metric labels to egress traffic via CEL expressions
+- [TelemetryPolicy](../../overviews/telemetrypolicy.md): the full policy API behind the [custom metric labels](#custom-metric-labels-with-telemetrypolicy) described above
 - [TokenRateLimitPolicy](../../overviews/rate-limiting.md): cap AI inference costs by token consumption per workload
 
 ## References
@@ -378,4 +552,6 @@ If Prometheus uses annotation-based discovery, verify that the pod has `promethe
 - [Envoy Access Log Format](https://www.envoyproxy.io/docs/envoy/latest/configuration/observability/access_log/usage#format-strings)
 - [Kuadrant Observability Stack](../../observability/README.md)
 - [Kuadrant Metrics Reference](../../observability/metrics.md)
+- [TelemetryPolicy CRD Reference](../../reference/telemetrypolicy.md)
+- [Token Metrics User Guide](../observability/token-metrics.md)
 - [Envoy Access Logs and Request Correlation](../../observability/envoy-access-logs.md)

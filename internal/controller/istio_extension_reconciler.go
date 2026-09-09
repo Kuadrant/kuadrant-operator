@@ -445,8 +445,8 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 	tokenRateLimitPaths := lo.Entries(lo.MapValues(effectiveTokenRateLimitPoliciesMap, func(p EffectiveTokenRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))
 	allPaths = append(allPaths, tokenRateLimitPaths...)
 
-	// unique paths by key
-	paths := lo.UniqBy(allPaths, func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
+	// unique paths by key with deterministic ordering
+	paths := uniqueSortedPaths(allPaths)
 
 	logger.V(1).Info("processing paths for wasm config", "totalPaths", len(paths))
 

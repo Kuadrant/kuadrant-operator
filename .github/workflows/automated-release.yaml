@@ -28,6 +28,10 @@ on:
         description: Limitador Operator bundle version (semver)
         default: 0.0.0
         type: string
+      mcpGatewayVersion:
+        description: MCP Gateway version (semver)
+        default: 0.0.0
+        type: string
       wasmShimVersion:
         description: WASM Shim version (semver)
         default: 0.0.0
@@ -104,6 +108,7 @@ jobs:
           AUTHORINO_OPERATOR_VERSION=${{ github.event.inputs.authorinoOperatorVersion }} \
           DNS_OPERATOR_VERSION=${{ github.event.inputs.dnsOperatorVersion }} \
           LIMITADOR_OPERATOR_VERSION=${{ github.event.inputs.limitadorOperatorVersion }} \
+          MCP_GATEWAY_VERSION=${{ github.event.inputs.mcpGatewayVersion }} \
           CONSOLE_PLUGIN_VERSION=${{ github.event.inputs.consolePluginVersion }} \
           WASM_SHIM_VERSION=${{ github.event.inputs.wasmShimVersion }} \
           DEVELOPERPORTAL_VERSION=${{ github.event.inputs.developerPortalControllerVersion }} \
@@ -112,6 +117,7 @@ jobs:
             (.dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION)) |
             (.dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION)) |
             (.dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION)) |
+            (.dependencies.mcp-gateway = strenv(MCP_GATEWAY_VERSION)) |
             (.dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION)) |
             (.dependencies.wasm-shim = strenv(WASM_SHIM_VERSION)) |
             (.dependencies.developer-portal-controller = strenv(DEVELOPERPORTAL_VERSION)) |
@@ -145,6 +151,7 @@ jobs:
             - Authorino Operator version ${{ github.event.inputs.authorinoOperatorVersion }}
             - DNS Operator version ${{ github.event.inputs.dnsOperatorVersion }}
             - Limitador Operator version ${{ github.event.inputs.limitadorOperatorVersion }}
+            - MCP Gateway version ${{ github.event.inputs.mcpGatewayVersion }}
             - Console Plugin version ${{ github.event.inputs.consolePluginVersion }}
             - WASM Shim version ${{ github.event.inputs.wasmShimVersion }}
             - Developer Portal Controller version ${{ github.event.inputs.developerPortalControllerVersion }}

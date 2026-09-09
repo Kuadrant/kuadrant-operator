@@ -3,6 +3,8 @@
 package controlplane
 
 import (
+	"os"
+	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,15 +16,48 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	corev1apply "k8s.io/client-go/applyconfigurations/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
 const (
-	operatorNamespace     = "kuadrant-system"
-	dnsOperatorDeployment = "dns-operator-controller-manager"
+	operatorNamespace       = "kuadrant-system"
+	dnsOperatorDeployment   = "dns-operator-controller-manager"
+	dnsOperatorEnvConfigMap = "dns-operator-controller-env"
+	devSetupFieldOwner      = "dev-setup"
 )
+
+// devDNSOperatorConfigMapPath is the same file make local-env-setup applies
+// (see make/development-environments.mk's deploy-dependencies target) to
+// enable the "inmemory" DNS provider for local development and this test
+// suite. The dns-operator chart renders this ConfigMap with no "data" at
+// all, so normal reconciles never touch it -- but tests that delete the
+// KuadrantControlPlane cascade-delete it along with everything else it owns,
+// and the deployer's redeploy re-creates it blank. restoreDevEnvOverrides
+// (called from AfterEach) re-applies it so a destructive test here doesn't
+// silently break dnspolicy tests relying on the inmemory provider.
+var devDNSOperatorConfigMapPath = filepath.Join("..", "..", "..", "config", "dev", "dns-operator-configmap.yaml")
+
+func restoreDevEnvOverrides(ctx SpecContext) {
+	data, err := os.ReadFile(devDNSOperatorConfigMapPath)
+	Expect(err).ToNot(HaveOccurred())
+
+	want := &corev1.ConfigMap{}
+	Expect(yaml.Unmarshal(data, want)).To(Succeed())
+	want.Namespace = operatorNamespace
+
+	applyConfig := corev1apply.ConfigMap(want.Name, want.Namespace).WithData(want.Data)
+
+	Expect(testClient().Apply(ctx, applyConfig,
+		client.ForceOwnership, client.FieldOwner(devSetupFieldOwner))).To(Succeed())
+
+	got := &corev1.ConfigMap{}
+	Expect(testClient().Get(ctx, client.ObjectKey{Namespace: operatorNamespace, Name: want.Name}, got)).To(Succeed())
+	Expect(got.Data).To(Equal(want.Data))
+}
 
 // Serial: KuadrantControlPlane is a cluster-scoped singleton. Destructive tests
 // (deletion, drift) must not run in parallel with status or deployment tests.
@@ -37,6 +72,20 @@ var _ = Describe("KuadrantControlPlane controller", Serial, func() {
 		cp := &kuadrantv1alpha1.KuadrantControlPlane{}
 		err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)
 		if apierrors.IsNotFound(err) {
+			// The same deletion that took out the CR cascade-deleted
+			// everything it owned, including dns-operator's env ConfigMap
+			// carrying the local-dev "inmemory" provider override. GC
+			// processes that cascade asynchronously, so wait for the old
+			// ConfigMap to actually be gone before restoring the override.
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				err := testClient().Get(ctx, client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorEnvConfigMap}, cm)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected dns-operator env ConfigMap to be cascade-deleted, got error: %v", err)
+			}).WithContext(ctx).Should(Succeed())
+
+			// Restore the override before recreating the CR.
+			restoreDevEnvOverrides(ctx)
+
 			cp = &kuadrantv1alpha1.KuadrantControlPlane{
 				ObjectMeta: metav1.ObjectMeta{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName},
 			}

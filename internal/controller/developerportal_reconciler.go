@@ -107,8 +107,8 @@ func (r *DeveloperPortalReconciler) Reconcile(baseCtx context.Context, _ []contr
 		logger.Info("added finalizer to Kuadrant CR")
 	}
 
-	enabled := kObj.IsDeveloperPortalEnabled()
-	deployment := r.buildDeployment(kuadrantOperatorNamespace, !enabled)
+	// The developer portal is always enabled (GA); the deployment is created unconditionally.
+	deployment := r.buildDeployment(kuadrantOperatorNamespace, false)
 
 	if err := r.reconcileDeployment(ctx, deployment, logger); err != nil {
 		return err

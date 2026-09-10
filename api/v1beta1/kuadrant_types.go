@@ -71,13 +71,6 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
-func (k *Kuadrant) IsDeveloperPortalEnabled() bool {
-	if k == nil || k.Spec.Components == nil || k.Spec.Components.DeveloperPortal == nil {
-		return false
-	}
-	return k.Spec.Components.DeveloperPortal.Enabled
-}
-
 // GetOwnerReference returns the owner reference pointing to this Kuadrant CR,
 func (k *Kuadrant) BuildOwnerReference() []metav1.OwnerReference {
 	if k == nil {
@@ -104,7 +97,10 @@ type KuadrantSpec struct {
 	// gateway and the Kuadrant components.
 	MTLS *MTLS `json:"mtls,omitempty"`
 	// +optional
-	// Components configures optional Kuadrant components
+	// Components is a deprecated no-op, ignored by the operator and kept only for
+	// backwards compatibility. Removing it would break OLM CRD upgrade safety checks.
+	//
+	// Deprecated: ignored; kept only for backwards compatibility.
 	Components *Components `json:"components,omitempty"`
 }
 
@@ -172,13 +168,23 @@ type LogLevel struct {
 	Error *string `json:"error,omitempty"`
 }
 
+// Components is a deprecated no-op, ignored by the operator and kept only for
+// backwards compatibility.
+//
+// Deprecated: ignored; kept only for backwards compatibility.
 type Components struct {
 	// +optional
-	// DeveloperPortal enables the developer portal integration including APIProduct and APIKeyRequest CRDs
+	// DeveloperPortal is a deprecated no-op; the developer portal is always enabled (GA).
+	//
+	// Deprecated: the developer portal is always enabled (GA); this field is ignored.
 	DeveloperPortal *DeveloperPortal `json:"developerPortal,omitempty"`
 }
 
+// DeveloperPortal is a deprecated no-op; the developer portal is always enabled (GA).
+//
+// Deprecated: the developer portal is always enabled (GA); this field is ignored.
 type DeveloperPortal struct {
+	// Deprecated: the developer portal is always enabled (GA); this field is ignored.
 	Enabled bool `json:"enabled,omitempty"`
 }
 

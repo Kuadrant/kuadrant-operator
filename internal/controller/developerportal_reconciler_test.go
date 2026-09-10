@@ -12,6 +12,7 @@ import (
 	is "gotest.tools/assert/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -27,7 +28,7 @@ const (
 	developerPortalTestNamespace = "test-namespace"
 )
 
-func buildTopologyWithKuadrant(t *testing.T, enabled bool) *machinery.Topology {
+func buildTopologyWithKuadrant(t *testing.T) *machinery.Topology {
 	kuadrantCR := &kuadrantv1beta1.Kuadrant{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantv1beta1.KuadrantGroupKind.Kind,
@@ -37,13 +38,6 @@ func buildTopologyWithKuadrant(t *testing.T, enabled bool) *machinery.Topology {
 			Name:      "kuadrant",
 			Namespace: developerPortalTestNamespace,
 			UID:       "test-uid",
-		},
-		Spec: kuadrantv1beta1.KuadrantSpec{
-			Components: &kuadrantv1beta1.Components{
-				DeveloperPortal: &kuadrantv1beta1.DeveloperPortal{
-					Enabled: enabled,
-				},
-			},
 		},
 	}
 
@@ -85,15 +79,14 @@ func TestDeveloperPortalReconciler(t *testing.T) {
 	})
 
 	t.Run("Topology with Kuadrant CR", func(subT *testing.T) {
-		topology := buildTopologyWithKuadrant(subT, true)
+		topology := buildTopologyWithKuadrant(subT)
 		kuadrantCR := GetKuadrantFromTopology(topology, nil)
 		assert.Assert(subT, kuadrantCR != nil, "GetKuadrantFromTopology should return Kuadrant CR")
 		assert.Equal(subT, kuadrantCR.Name, "kuadrant")
-		assert.Equal(subT, kuadrantCR.IsDeveloperPortalEnabled(), true)
 	})
 
-	t.Run("Reconcile deployment when enabled", func(subT *testing.T) {
-		topology := buildTopologyWithKuadrant(subT, true)
+	t.Run("Reconcile always creates the deployment", func(subT *testing.T) {
+		topology := buildTopologyWithKuadrant(subT)
 		err := reconciler.Reconcile(context.TODO(), nil, topology, nil, nil)
 		assert.NilError(subT, err, "Reconcile should succeed")
 		// Verify Deployment was created
@@ -101,6 +94,54 @@ func TestDeveloperPortalReconciler(t *testing.T) {
 		deployKey := client.ObjectKey{Name: "developer-portal-controller", Namespace: kuadrantOperatorNamespace}
 		err = manager.GetClient().Get(context.TODO(), deployKey, deployment)
 		assert.NilError(subT, err, "Deployment should be created")
+	})
+
+	t.Run("Reconcile ignores the deprecated enabled=false field", func(subT *testing.T) {
+		// The developer portal is always enabled (GA). The deprecated
+		// spec.components.developerPortal.enabled field must be ignored, so setting
+		// it to false must NOT prevent the deployment from being created.
+		//
+		// Use a dedicated manager/reconciler so the Deployment cannot be left over
+		// from a previous subtest: it can only exist if THIS Reconcile creates it.
+		isolatedManager := controllersfake.
+			NewManagerBuilder().
+			WithClient(fake.NewClientBuilder().WithScheme(scheme).Build()).
+			WithScheme(scheme).
+			Build()
+		isolatedReconciler := NewDeveloperPortalReconciler(isolatedManager)
+
+		kuadrantCR := &kuadrantv1beta1.Kuadrant{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       kuadrantv1beta1.KuadrantGroupKind.Kind,
+				APIVersion: kuadrantv1beta1.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kuadrant",
+				Namespace: developerPortalTestNamespace,
+				UID:       "test-uid",
+			},
+			Spec: kuadrantv1beta1.KuadrantSpec{
+				Components: &kuadrantv1beta1.Components{
+					DeveloperPortal: &kuadrantv1beta1.DeveloperPortal{Enabled: false},
+				},
+			},
+		}
+		topology, err := machinery.NewTopology(machinery.WithObjects(kuadrantCR))
+		assert.NilError(subT, err)
+
+		deployment := &appsv1.Deployment{}
+		deployKey := client.ObjectKey{Name: "developer-portal-controller", Namespace: kuadrantOperatorNamespace}
+
+		// Precondition: the Deployment must not exist before reconciliation.
+		err = isolatedManager.GetClient().Get(context.TODO(), deployKey, deployment)
+		assert.Assert(subT, apierrors.IsNotFound(err), "Deployment should not exist before reconcile")
+
+		err = isolatedReconciler.Reconcile(context.TODO(), nil, topology, nil, nil)
+		assert.NilError(subT, err, "Reconcile should succeed")
+
+		// Deployment must exist even though enabled=false (the field is a deprecated no-op).
+		err = isolatedManager.GetClient().Get(context.TODO(), deployKey, deployment)
+		assert.NilError(subT, err, "Deployment should be created even when enabled=false")
 	})
 
 	t.Run("No Kuadrant CR in topology", func(subT *testing.T) {

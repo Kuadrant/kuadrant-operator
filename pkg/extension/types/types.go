@@ -24,6 +24,9 @@ const (
 	// KuadrantMetricsPrefix is the prefix applied to metric bindings injected
 	// via AddDataTo / KuadrantMetricBinding.
 	KuadrantMetricsPrefix = "metrics.labels"
+	// KuadrantLoggingPrefix is the prefix applied to logging bindings injected
+	// via AddDataTo / KuadrantLoggingBinding.
+	KuadrantLoggingPrefix = "logging.fields"
 )
 
 // Domain enumerates the supported logical domains for mutator injected data.
@@ -113,4 +116,10 @@ func (eb *ExtensionBase) Configure(ctx context.Context) error {
 // enrichment.
 func KuadrantMetricBinding(binding string) string {
 	return fmt.Sprintf("%s.%s", KuadrantMetricsPrefix, binding)
+}
+
+// KuadrantLoggingBinding creates a fully qualified binding name for logging
+// enrichment.
+func KuadrantLoggingBinding(binding string) string {
+	return fmt.Sprintf("%s.%s", KuadrantLoggingPrefix, binding)
 }

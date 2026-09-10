@@ -275,6 +275,7 @@ type BootOptionsBuilder struct {
 	isCertManagerInstalled           bool
 	isConsolePluginInstalled         bool
 	isClusterVersionInstalled        bool
+	consolePluginImageOverride       string
 	isDNSOperatorInstalled           bool
 	isLimitadorOperatorInstalled     bool
 	isAuthorinoOperatorInstalled     bool
@@ -535,7 +536,9 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		return nil, err
 	}
 
-	if !b.isConsolePluginInstalled || !b.isClusterVersionInstalled {
+	b.consolePluginImageOverride = env.GetString(openshift.ConsolePluginImageOverrideEnvVar, "")
+
+	if !b.isConsolePluginInstalled || (!b.isClusterVersionInstalled && b.consolePluginImageOverride == "") {
 		b.logger.Info("console plugin or openshift cluster version is not installed, skipping related watches and reconcilers")
 		return opts, nil
 	}
@@ -544,13 +547,20 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		controller.WithRunnable("consoleplugin watcher", controller.Watch(
 			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
-		controller.WithRunnable("cluster version watcher", controller.Watch(
+		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+		// Filter by name, not labels, so removing a managed label still triggers repair.
+		controller.WithRunnable("consoleplugin networkpolicy watcher", controller.Watch(
+			&networkingv1.NetworkPolicy{}, networkingv1.SchemeGroupVersion.WithResource("networkpolicies"), operatorNamespace,
+			controller.FilterResourcesByField[*networkingv1.NetworkPolicy]("metadata.name="+consoleplugin.KuadrantConsoleName))),
+		controller.WithObjectKinds(networkingv1.SchemeGroupVersion.WithKind("NetworkPolicy").GroupKind()),
+	)
+	if b.isClusterVersionInstalled {
+		opts = append(opts, controller.WithRunnable("cluster version watcher", controller.Watch(
 			&configv1.ClusterVersion{},
 			openshift.ClusterVersionResource,
 			metav1.NamespaceAll,
-		)),
-		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
-	)
+		)), controller.WithObjectKinds(openshift.ClusterVersionGroupKind.GroupKind()))
+	}
 
 	return opts, nil
 }
@@ -867,9 +877,9 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}
 
-	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {
+	if b.isConsolePluginInstalled && (b.isClusterVersionInstalled || b.consolePluginImageOverride != "") {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile),
+			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace, b.consolePluginImageOverride).Subscription().Reconcile),
 		)
 	}
 

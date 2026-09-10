@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -81,18 +82,23 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 	})
 
 	Context("when the deprecated developerPortal.enabled field is set to false", func() {
-		var savedSpec kuadrantv1beta1.KuadrantSpec
+		var savedSpec *kuadrantv1beta1.KuadrantSpec
 
 		AfterEach(func(ctx SpecContext) {
 			// Restore the original spec so this test does not affect the others.
+			// Guard on savedSpec so an early failure (before we captured the spec)
+			// does not write a zero-value spec back to the shared Kuadrant CR.
+			if savedSpec == nil {
+				return
+			}
 			Eventually(func(g Gomega) {
 				kuadrantCR := getKuadrantCR(ctx, testClient())
-				kuadrantCR.Spec = savedSpec
+				kuadrantCR.Spec = *savedSpec
 				g.Expect(testClient().Update(ctx, kuadrantCR)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 		}, afterEachTimeOut)
 
-		It("keeps the developer portal deployment (the field is a deprecated no-op)", func(ctx SpecContext) {
+		It("recreates the developer portal deployment even when enabled=false (deprecated no-op)", func(ctx SpecContext) {
 			deployment := &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "developer-portal-controller",
@@ -100,28 +106,41 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 				},
 			}
 
-			// The Deployment must already exist (enabled by default).
+			// Capture the original spec up-front, before any wait, so AfterEach can
+			// always restore it (see the nil guard above).
+			kuadrantCR := getKuadrantCR(ctx, testClient())
+			savedSpec = kuadrantCR.Spec.DeepCopy()
+
+			// The Deployment must already exist (enabled by default). Keep this wait
+			// well under the SpecTimeout so the recreation assertion below still fits.
+			var originalUID types.UID
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
 				g.Expect(err).NotTo(HaveOccurred())
-			}).WithTimeout(2 * time.Minute).WithContext(ctx).Should(Succeed())
+				originalUID = deployment.GetUID()
+			}).WithTimeout(time.Minute).WithContext(ctx).Should(Succeed())
 
 			// Set the deprecated enabled=false field through the real API server.
 			Eventually(func(g Gomega) {
 				kuadrantCR := getKuadrantCR(ctx, testClient())
-				savedSpec = *kuadrantCR.Spec.DeepCopy()
 				kuadrantCR.Spec.Components = &kuadrantv1beta1.Components{
 					DeveloperPortal: &kuadrantv1beta1.DeveloperPortal{Enabled: false},
 				}
 				g.Expect(testClient().Update(ctx, kuadrantCR)).NotTo(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
-			// The Deployment must remain: enabled=false is ignored.
-			Consistently(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
+			// Delete the Deployment to actively exercise reconciliation.
+			Expect(testClient().Delete(ctx, deployment)).To(Succeed())
+
+			// The reconciler must recreate the Deployment: enabled=false is ignored.
+			// A different UID proves it is a fresh object, not the one we deleted.
+			Eventually(func(g Gomega) {
+				recreated := &appsv1.Deployment{}
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), recreated)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(deployment.Labels).To(HaveKeyWithValue(kuadrant.DeveloperPortalLabel, "true"))
-			}).WithTimeout(30 * time.Second).WithContext(ctx).Should(Succeed())
+				g.Expect(recreated.GetUID()).NotTo(Equal(originalUID))
+				g.Expect(recreated.Labels).To(HaveKeyWithValue(kuadrant.DeveloperPortalLabel, "true"))
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 

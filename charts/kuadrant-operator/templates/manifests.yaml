@@ -11810,13 +11810,21 @@ spec:
             description: KuadrantSpec defines the desired state of Kuadrant
             properties:
               components:
-                description: Components configures optional Kuadrant components
+                description: |-
+                  Components is a deprecated no-op, ignored by the operator and kept only for
+                  backwards compatibility. Removing it would break OLM CRD upgrade safety checks.
+
+                  Deprecated: ignored; kept only for backwards compatibility.
                 properties:
                   developerPortal:
-                    description: DeveloperPortal enables the developer portal integration
-                      including APIProduct and APIKeyRequest CRDs
+                    description: |-
+                      DeveloperPortal is a deprecated no-op; the developer portal is always enabled (GA).
+
+                      Deprecated: the developer portal is always enabled (GA); this field is ignored.
                     properties:
                       enabled:
+                        description: 'Deprecated: the developer portal is always enabled
+                          (GA); this field is ignored.'
                         type: boolean
                     type: object
                 type: object

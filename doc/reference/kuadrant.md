@@ -13,7 +13,7 @@
 |-----------|-----------------------------------|:------------:|--------------------------------------|
 | `observability`    | [Observability](#observability)     | No | Kuadrant observability configuration. |
 | `mtls`  | [mTLS](#mtls) |      No      | Two way authentication between kuadrant components. |
-| `components`  | [Components](#components) |      No      | Optional Kuadrant components configuration. |
+| `components`  | [Components](#components) |      No      | **Deprecated:** ignored. Kept only for backwards compatibility. |
 
 #### mTLS
 
@@ -94,15 +94,19 @@ Configures distributed tracing integration for request flows. It enables tracing
 
 #### Components
 
+> **Deprecated:** This section is kept only for backwards compatibility and is ignored by the operator. The developer portal is now enabled by default (GA) and cannot be turned off.
+
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `developerPortal`    | [DeveloperPortal](#developerportal)     |  No | Developer portal integration configuration. |
+| `developerPortal`    | [DeveloperPortal](#developerportal)     |  No | **Deprecated:** ignored no-op, kept only for backwards compatibility. |
 
 ##### DeveloperPortal
 
+> **Deprecated:** This field is ignored. The developer portal (including the APIProduct and APIKeyRequest CRDs) is always enabled as of GA. The field is retained only for backwards compatibility and has no effect regardless of its value.
+
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `enabled`    | Boolean     |  No | Enable the developer portal integration including APIProduct and APIKeyRequest CRDs. Default: `false` |
+| `enabled`    | Boolean     |  No | **Deprecated:** ignored. The developer portal is always enabled; setting this to `true` or `false` has no effect. |
 
 ### KuadrantStatus
 

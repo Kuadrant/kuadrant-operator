@@ -33,8 +33,8 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 		return &kuadrantList.Items[0]
 	}
 
-	Context("when developer portal is enabled and then disabled", func() {
-		It("creates and deletes deployment", func(ctx SpecContext) {
+	Context("when a Kuadrant CR exists", func() {
+		It("creates the developer portal deployment by default", func(ctx SpecContext) {
 			deployment := &appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "Deployment",
@@ -42,29 +42,13 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "developer-portal-controller",
-					Namespace: "",
+					Namespace: "kuadrant-system",
 				},
 			}
 
 			kuadrantCR := getKuadrantCR(ctx, testClient())
-			deployment.Namespace = "kuadrant-system"
 
-			// Enable developer portal
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-				if kuadrantCR.Spec.Components == nil {
-					kuadrantCR.Spec.Components = &kuadrantv1beta1.Components{}
-				}
-				if kuadrantCR.Spec.Components.DeveloperPortal == nil {
-					kuadrantCR.Spec.Components.DeveloperPortal = &kuadrantv1beta1.DeveloperPortal{}
-				}
-				kuadrantCR.Spec.Components.DeveloperPortal.Enabled = true
-				err = testClient().Update(ctx, kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-			}).WithTimeout(5 * time.Minute).WithContext(ctx).Should(Succeed())
-
-			// Verify Deployment is created
+			// Verify Deployment is created by default (no opt-in required)
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -85,7 +69,7 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 				g.Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/healthz"))
 				g.Expect(container.ReadinessProbe).NotTo(BeNil())
 				g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
-			}).WithContext(ctx).Should(Succeed())
+			}).WithTimeout(2 * time.Minute).WithContext(ctx).Should(Succeed())
 
 			// Verify finalizer is present
 			Eventually(func(g Gomega) {
@@ -93,29 +77,55 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(kuadrantCR.GetFinalizers()).To(ContainElement("kuadrant.io/developerportal"))
 			}).WithContext(ctx).Should(Succeed())
-
-			// Now disable developer portal
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(kuadrantCR.Spec.Components).NotTo(BeNil())
-				g.Expect(kuadrantCR.Spec.Components.DeveloperPortal).NotTo(BeNil())
-				kuadrantCR.Spec.Components.DeveloperPortal.Enabled = false
-				err = testClient().Update(ctx, kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-			}).WithContext(ctx).Should(Succeed())
-
-			// Verify Deployment is deleted
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
-
 		}, testTimeOut)
 	})
 
-	Context("when Kuadrant CR is deleted without disabling developer portal first", func() {
+	Context("when the deprecated developerPortal.enabled field is set to false", func() {
+		var savedSpec kuadrantv1beta1.KuadrantSpec
+
+		AfterEach(func(ctx SpecContext) {
+			// Restore the original spec so this test does not affect the others.
+			Eventually(func(g Gomega) {
+				kuadrantCR := getKuadrantCR(ctx, testClient())
+				kuadrantCR.Spec = savedSpec
+				g.Expect(testClient().Update(ctx, kuadrantCR)).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
+		}, afterEachTimeOut)
+
+		It("keeps the developer portal deployment (the field is a deprecated no-op)", func(ctx SpecContext) {
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "developer-portal-controller",
+					Namespace: "kuadrant-system",
+				},
+			}
+
+			// The Deployment must already exist (enabled by default).
+			Eventually(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
+				g.Expect(err).NotTo(HaveOccurred())
+			}).WithTimeout(2 * time.Minute).WithContext(ctx).Should(Succeed())
+
+			// Set the deprecated enabled=false field through the real API server.
+			Eventually(func(g Gomega) {
+				kuadrantCR := getKuadrantCR(ctx, testClient())
+				savedSpec = *kuadrantCR.Spec.DeepCopy()
+				kuadrantCR.Spec.Components = &kuadrantv1beta1.Components{
+					DeveloperPortal: &kuadrantv1beta1.DeveloperPortal{Enabled: false},
+				}
+				g.Expect(testClient().Update(ctx, kuadrantCR)).NotTo(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
+
+			// The Deployment must remain: enabled=false is ignored.
+			Consistently(func(g Gomega) {
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(deployment.Labels).To(HaveKeyWithValue(kuadrant.DeveloperPortalLabel, "true"))
+			}).WithTimeout(30 * time.Second).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("when Kuadrant CR is deleted", func() {
 		var savedKuadrantCR *kuadrantv1beta1.Kuadrant
 
 		BeforeEach(func(ctx SpecContext) {
@@ -166,27 +176,12 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 			kuadrantCR := getKuadrantCR(ctx, testClient())
 			deployment.Namespace = "kuadrant-system"
 
-			// Enable developer portal
-			Eventually(func(g Gomega) {
-				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-				if kuadrantCR.Spec.Components == nil {
-					kuadrantCR.Spec.Components = &kuadrantv1beta1.Components{}
-				}
-				if kuadrantCR.Spec.Components.DeveloperPortal == nil {
-					kuadrantCR.Spec.Components.DeveloperPortal = &kuadrantv1beta1.DeveloperPortal{}
-				}
-				kuadrantCR.Spec.Components.DeveloperPortal.Enabled = true
-				err = testClient().Update(ctx, kuadrantCR)
-				g.Expect(err).NotTo(HaveOccurred())
-			}).WithTimeout(5 * time.Minute).WithContext(ctx).Should(Succeed())
-
-			// Verify Deployment is created
+			// Verify Deployment is created by default
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(deployment), deployment)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(deployment.Labels).To(HaveKeyWithValue("app", "developer-portal-controller"))
-			}).WithContext(ctx).Should(Succeed())
+			}).WithTimeout(2 * time.Minute).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
 				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kuadrantCR)

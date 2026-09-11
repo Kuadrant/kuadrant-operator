@@ -510,6 +510,149 @@ func TestMigrateMCPGateway_EndToEnd(t *testing.T) {
 	}
 }
 
+// TestMigrateTwoTierOperators_EndToEnd covers migrateAuthorinoOperator and
+// migrateLimitadorOperator: both two-tier components, otherwise following
+// the same Deployment+CRD stripping and Subscription/CSV deletion sequence
+// common to every component. Asserts spec.replicas is left untouched --
+// these migrations don't pause the operator (see their doc comments for
+// why that's neither needed nor done).
+func TestMigrateTwoTierOperators_EndToEnd(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = appsv1.AddToScheme(scheme)
+
+	tests := []struct {
+		name           string
+		pkg            string
+		migrate        func(c *OLMCleaner) (ComponentCleanupResult, error)
+		deploymentName string
+		crdNames       []string
+	}{
+		{
+			name: "authorino-operator",
+			pkg:  "authorino-operator",
+			migrate: func(c *OLMCleaner) (ComponentCleanupResult, error) {
+				return c.migrateAuthorinoOperator(context.Background())
+			},
+			deploymentName: "authorino-operator",
+			crdNames:       []string{"authconfigs.authorino.kuadrant.io", "authorinos.operator.authorino.kuadrant.io"},
+		},
+		{
+			name: "limitador-operator",
+			pkg:  "limitador-operator",
+			migrate: func(c *OLMCleaner) (ComponentCleanupResult, error) {
+				return c.migrateLimitadorOperator(context.Background())
+			},
+			deploymentName: "limitador-operator-controller-manager",
+			crdNames:       []string{"limitadors.limitador.kuadrant.io"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			olmLabels := map[string]string{
+				"control-plane":  tt.deploymentName,
+				"olm.owner":      tt.pkg + ".v0.8.0",
+				"olm.owner.kind": "ClusterServiceVersion",
+			}
+			olmOwnerRefs := []interface{}{
+				map[string]interface{}{
+					"apiVersion": "operators.coreos.com/v1alpha1",
+					"kind":       "ClusterServiceVersion",
+					"name":       tt.pkg + ".v0.8.0",
+				},
+			}
+
+			deployment := newOwnedObj(deploymentGVR, "Deployment", tt.deploymentName, "kuadrant-system", olmLabels, olmOwnerRefs)
+			_ = unstructured.SetNestedField(deployment.Object, int64(1), "spec", "replicas")
+
+			objs := []runtime.Object{deployment}
+			for _, crd := range tt.crdNames {
+				objs = append(objs, newOwnedObj(crdGVR, "CustomResourceDefinition", crd, "", olmLabels, olmOwnerRefs))
+			}
+
+			subscription := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "operators.coreos.com/v1alpha1",
+					"kind":       "Subscription",
+					"metadata": map[string]interface{}{
+						"name":      tt.pkg + "-preview-kuadrant-operator-catalog-kuadrant-system",
+						"namespace": "kuadrant-system",
+					},
+					"spec": map[string]interface{}{
+						"name": tt.pkg,
+					},
+				},
+			}
+			csv := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "operators.coreos.com/v1alpha1",
+					"kind":       "ClusterServiceVersion",
+					"metadata": map[string]interface{}{
+						"name":      tt.pkg + ".v0.8.0",
+						"namespace": "kuadrant-system",
+					},
+				},
+			}
+			objs = append(objs, subscription, csv)
+
+			gvrToListKind := map[schema.GroupVersionResource]string{
+				deploymentGVR:   "DeploymentList",
+				crdGVR:          "CustomResourceDefinitionList",
+				subscriptionGVR: "SubscriptionList",
+				csvGVR:          "ClusterServiceVersionList",
+			}
+			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objs...)
+			cleaner := &OLMCleaner{client: client, namespace: "kuadrant-system", logger: logr.Discard()}
+
+			result, err := tt.migrate(cleaner)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Package != tt.pkg {
+				t.Errorf("Package = %q, want %q", result.Package, tt.pkg)
+			}
+			if result.SubscriptionName != subscription.GetName() {
+				t.Errorf("SubscriptionName = %q, want %q", result.SubscriptionName, subscription.GetName())
+			}
+			wantCSVName := tt.pkg + ".v0.8.0"
+			if result.CSVName != wantCSVName {
+				t.Errorf("CSVName = %q, want %q", result.CSVName, wantCSVName)
+			}
+
+			got, err := client.Resource(deploymentGVR).Namespace("kuadrant-system").Get(context.Background(), tt.deploymentName, metav1.GetOptions{})
+			if err != nil {
+				t.Fatalf("expected Deployment %s to survive, got error: %v", tt.deploymentName, err)
+			}
+			if replicas, found, _ := unstructured.NestedInt64(got.Object, "spec", "replicas"); !found || replicas != 1 {
+				t.Errorf("Deployment %s: spec.replicas = %v (found=%v), want 1 (untouched)", tt.deploymentName, replicas, found)
+			}
+			if _, ok := got.GetLabels()["olm.owner.kind"]; ok {
+				t.Errorf("Deployment %s: OLM labels should have been stripped", tt.deploymentName)
+			}
+			if refs, _, _ := unstructured.NestedSlice(got.Object, "metadata", "ownerReferences"); len(refs) != 0 {
+				t.Errorf("Deployment %s: CSV ownerReference should have been stripped", tt.deploymentName)
+			}
+
+			for _, crd := range tt.crdNames {
+				got, err := client.Resource(crdGVR).Get(context.Background(), crd, metav1.GetOptions{})
+				if err != nil {
+					t.Fatalf("expected CRD %s to survive, got error: %v", crd, err)
+				}
+				if _, ok := got.GetLabels()["olm.owner.kind"]; ok {
+					t.Errorf("CRD %s: OLM labels should have been stripped", crd)
+				}
+			}
+
+			if _, err := client.Resource(subscriptionGVR).Namespace("kuadrant-system").Get(context.Background(), subscription.GetName(), metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+				t.Errorf("expected Subscription to be deleted, got err: %v", err)
+			}
+			if _, err := client.Resource(csvGVR).Namespace("kuadrant-system").Get(context.Background(), wantCSVName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+				t.Errorf("expected CSV to be deleted, got err: %v", err)
+			}
+		})
+	}
+}
+
 func newTestDeployment(labels map[string]string, ownerRefs []interface{}) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{

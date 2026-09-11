@@ -33,8 +33,6 @@ $(CATALOG_FILE): opm yq
 	@echo Build kuadrant operator catalog
 	@echo
 	@echo BUNDLE_IMG                     = $(BUNDLE_IMG)
-	@echo LIMITADOR_OPERATOR_BUNDLE_IMG  = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
-	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	@echo CHANNEL                        = $(CHANNEL)
 	@echo CATALOG_FILE                   = $@
 	@echo "************************************************************"
@@ -42,7 +40,6 @@ $(CATALOG_FILE): opm yq
 	@echo Please check this matches your expectations and override variables if needed.
 	@echo
 	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) \
-			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) \
 			$(CHANNEL) $@
 
 .PHONY: catalog
@@ -51,9 +48,7 @@ catalog: opm ## Generate catalog content and validate.
 	-rm -rf $(PROJECT_PATH)/catalog/kuadrant-operator-catalog
 	-rm -rf $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfile
 	$(MAKE) $(CATALOG_DOCKERFILE)
-	$(MAKE) $(CATALOG_FILE) LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
-		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		BUNDLE_IMG=$(BUNDLE_IMG) CHANNEL=$(CHANNEL)
+	$(MAKE) $(CATALOG_FILE) BUNDLE_IMG=$(BUNDLE_IMG) CHANNEL=$(CHANNEL)
 	cd $(PROJECT_PATH)/catalog && $(OPM) validate kuadrant-operator-catalog
 
 # Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.

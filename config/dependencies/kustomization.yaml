@@ -1,14 +1,8 @@
 namespace: kuadrant-system
 
 resources:
-  - authorino
-  - limitador
   - developer-portal
   - openshift
-
-patchesStrategicMerge:
-  - authorino/delete-ns.yaml
-  - limitador/delete-ns.yaml
 
 # replacements:
 # - source:

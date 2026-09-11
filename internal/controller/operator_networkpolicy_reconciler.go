@@ -40,6 +40,7 @@ type response struct {
 }
 
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments/finalizers,verbs=update
 
 func NewOperatorNetworkPolicyReconciler(client *dynamic.DynamicClient) *OperatorNetworkPolicyReconciler {
 	return &OperatorNetworkPolicyReconciler{Client: client}

@@ -17,6 +17,12 @@ type ActionSpec struct {
 	Sources         []string
 	Bindings        []DataBinding
 	Execution       ExecutionMode
+
+	// Token Rate Limiting Reservation fields (RFC 0021 / Limitador PR #515)
+	ReservationAmount    string // CEL expression for ReserveRequest.amount (e.g. "uint(5000)")
+	ReservationTTL       string // CEL expression for ReserveRequest.ttl (e.g. "duration('60s')")
+	CommitActualAmount   string // CEL expression for CommitRequest.actual_amount (e.g. "uint(responseBodyJSON(\"/usage/total_tokens\"))")
+	ReservationStorePath string // Store path for reservation_id (defaults to ReservationStorePath)
 }
 
 type DataBinding struct {
@@ -60,13 +66,23 @@ const (
 	authResponseVar      = "auth_response"
 	rateLimitResponseVar = "ratelimit_response"
 	reportResponseVar    = "report_response"
+	reserveResponseVar   = "reserve_response"
+	commitResponseVar    = "commit_response"
 
-	AuthStorePath = "auth"
+	AuthStorePath        = "auth"
+	ReservationStorePath = "kuadrant.internal.reservation.id"
 )
 
 // IsGuard returns true if this spec produces a guard action (runs during request phase).
 func (s ActionSpec) IsGuard() bool {
-	return s.ServiceName != RateLimitReportServiceName
+	return s.ServiceName != RateLimitReportServiceName && s.ServiceName != RateLimitCommitServiceName
+}
+
+func (s ActionSpec) getReservationStorePath() string {
+	if s.ReservationStorePath != "" {
+		return s.ReservationStorePath
+	}
+	return ReservationStorePath
 }
 
 // ProducedStorePaths returns the store paths that this spec's onReply chain will produce.
@@ -74,6 +90,8 @@ func (s ActionSpec) ProducedStorePaths() []string {
 	switch s.ServiceName {
 	case AuthServiceName:
 		return []string{AuthStorePath}
+	case RateLimitReserveServiceName:
+		return []string{s.getReservationStorePath()}
 	default:
 		return nil
 	}
@@ -88,6 +106,10 @@ func (s ActionSpec) Build() Action {
 		return s.buildRateLimit(rateLimitResponseVar, true, "ratelimit")
 	case RateLimitReportServiceName:
 		return s.buildRateLimit(reportResponseVar, false, "ratelimit_report")
+	case RateLimitReserveServiceName:
+		return s.buildReserve()
+	case RateLimitCommitServiceName:
+		return s.buildCommit()
 	default:
 		return NewFailAction("true", fmt.Sprintf("unknown service: %s", s.ServiceName)).
 			WithSources(s.Sources)
@@ -125,6 +147,28 @@ func BuildActions(specs []ActionSpec) []Action {
 		}
 		for _, b := range spec.Bindings {
 			for _, ref := range extractBodyRefs(b.Expression) {
+				if byDirection[ref.Direction] == nil {
+					byDirection[ref.Direction] = make(map[string]refEntry)
+				}
+				entry := byDirection[ref.Direction][ref.Pointer]
+				entry.ref = ref
+				entry.sources = appendUnique(entry.sources, spec.Sources...)
+				byDirection[ref.Direction][ref.Pointer] = entry
+			}
+		}
+		if spec.ReservationAmount != "" {
+			for _, ref := range extractBodyRefs(spec.ReservationAmount) {
+				if byDirection[ref.Direction] == nil {
+					byDirection[ref.Direction] = make(map[string]refEntry)
+				}
+				entry := byDirection[ref.Direction][ref.Pointer]
+				entry.ref = ref
+				entry.sources = appendUnique(entry.sources, spec.Sources...)
+				byDirection[ref.Direction][ref.Pointer] = entry
+			}
+		}
+		if spec.CommitActualAmount != "" {
+			for _, ref := range extractBodyRefs(spec.CommitActualAmount) {
 				if byDirection[ref.Direction] == nil {
 					byDirection[ref.Direction] = make(map[string]refEntry)
 				}
@@ -241,14 +285,28 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 		newBindings[i] = DataBinding{Domain: b.Domain, Field: b.Field, Expression: newExpr}
 	}
 
+	newAmount := s.ReservationAmount
+	for original, storePath := range replacements {
+		newAmount = strings.ReplaceAll(newAmount, original, storePath)
+	}
+
+	newActualAmount := s.CommitActualAmount
+	for original, storePath := range replacements {
+		newActualAmount = strings.ReplaceAll(newActualAmount, original, storePath)
+	}
+
 	return ActionSpec{
-		ServiceName:     s.ServiceName,
-		Scope:           s.Scope,
-		Predicates:      s.Predicates,
-		ConditionalData: newCD,
-		Sources:         s.Sources,
-		Bindings:        newBindings,
-		Execution:       s.Execution,
+		ServiceName:          s.ServiceName,
+		Scope:                s.Scope,
+		Predicates:           s.Predicates,
+		ConditionalData:      newCD,
+		Sources:              s.Sources,
+		Bindings:             newBindings,
+		Execution:            s.Execution,
+		ReservationAmount:    newAmount,
+		ReservationTTL:       s.ReservationTTL,
+		CommitActualAmount:   newActualAmount,
+		ReservationStorePath: s.ReservationStorePath,
 	}
 }
 
@@ -739,6 +797,120 @@ func buildReportOnReply(name string) []Action {
 		NewFailAction(
 			fmt.Sprintf("!has(%s.overall_code)", name),
 			"Rate limit report failed: invalid gRPC response",
+		).WithTerminal(false).WithGuard(false),
+	}
+}
+
+// --- Reserve and Commit message construction (RFC 0021 / Limitador PR #515) ---
+
+func (s ActionSpec) buildReserve() *GrpcAction {
+	request := buildReserveRequest(s.Scope, s.ConditionalData, s.Bindings, s.ReservationAmount, s.ReservationTTL)
+	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
+
+	return NewGrpcAction(predicate, reserveResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_reserve").
+		WithGuard(true).
+		WithExecution(s.Execution).
+		WithSources(s.Sources).
+		WithOnReply(buildReserveOnReply(reserveResponseVar, s.getReservationStorePath())...)
+}
+
+func (s ActionSpec) buildCommit() *GrpcAction {
+	request := buildCommitRequest(s.Scope, s.ConditionalData, s.Bindings, s.CommitActualAmount, s.getReservationStorePath())
+	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
+
+	return NewGrpcAction(predicate, commitResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_commit").
+		WithGuard(false).
+		WithExecution(s.Execution).
+		WithSources(s.Sources).
+		WithOnReply(buildCommitOnReply(commitResponseVar)...)
+}
+
+func buildReserveRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, amount, ttl string) ReserveRequestCEL {
+	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
+	if domain == "" {
+		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+	}
+
+	var descriptors []RateLimitDescriptorCEL
+	if desc := conditionalDataToDescriptor(conditionalData); desc != nil {
+		descriptors = append(descriptors, *desc)
+	}
+	if bindingDesc := bindingsToDescriptor(bindings); bindingDesc != nil {
+		descriptors = append(descriptors, *bindingDesc)
+	}
+
+	if amount == "" {
+		amount = "uint(5000)"
+	}
+	if ttl == "" {
+		ttl = "duration('60s')"
+	}
+
+	return ReserveRequestCEL{
+		Domain:      domain,
+		Descriptors: descriptors,
+		Amount:      amount,
+		TTL:         ttl,
+	}
+}
+
+func buildCommitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, actualAmount, storePath string) CommitRequestCEL {
+	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
+	if domain == "" {
+		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+	}
+
+	var descriptors []RateLimitDescriptorCEL
+	if desc := conditionalDataToDescriptor(conditionalData); desc != nil {
+		descriptors = append(descriptors, *desc)
+	}
+	if bindingDesc := bindingsToDescriptor(bindings); bindingDesc != nil {
+		descriptors = append(descriptors, *bindingDesc)
+	}
+
+	if actualAmount == "" {
+		actualAmount = "uint(responseBodyJSON(\"/usage/total_tokens\"))"
+	}
+
+	if storePath == "" {
+		storePath = ReservationStorePath
+	}
+	reservationIDExpr := fmt.Sprintf(`has(%s) ? %s : ""`, storePath, storePath)
+
+	return CommitRequestCEL{
+		Domain:        domain,
+		Descriptors:   descriptors,
+		ReservationID: reservationIDExpr,
+		ActualAmount:  actualAmount,
+	}
+}
+
+func buildReserveOnReply(name, storePath string) []Action {
+	if storePath == "" {
+		storePath = ReservationStorePath
+	}
+	return []Action{
+		NewDenyAction(
+			fmt.Sprintf("%s.code == 2", name),
+			`DenyResponse{status: 429u, headers: [], body: "Too Many Requests\n"}`,
+		),
+		NewStoreAction(
+			fmt.Sprintf("%s.code == 1 && has(%s.reservation_id)", name, name),
+			storePath,
+			fmt.Sprintf("%s.reservation_id", name),
+		),
+		NewFailAction(
+			fmt.Sprintf("%s.code != 1 && %s.code != 2", name, name),
+			fmt.Sprintf("Unknown reserve response code from %s", name),
+		),
+	}
+}
+
+func buildCommitOnReply(name string) []Action {
+	return []Action{
+		NewFailAction(
+			fmt.Sprintf("!has(%s.reservation_released)", name),
+			"Rate limit commit failed: invalid gRPC response",
 		).WithTerminal(false).WithGuard(false),
 	}
 }

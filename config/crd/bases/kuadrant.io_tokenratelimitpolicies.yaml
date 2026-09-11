@@ -121,6 +121,21 @@ spec:
                             - window
                             type: object
                           type: array
+                        reservation:
+                          description: Reservation defines token reservation configuration
+                            for this limit
+                          properties:
+                            amount:
+                              description: |-
+                                Amount is a CEL expression defining the estimated tokens to reserve on request arrival.
+                                Defaults to uint(5000) if omitted. Setting to "0" disables reservations for this limit.
+                              type: string
+                            ttl:
+                              description: |-
+                                TTL is a CEL expression defining how long to hold the reservation before automatically releasing it.
+                                Defaults to the route's backendRequest timeout if configured, or duration('60s').
+                              type: string
+                          type: object
                         when:
                           description: |-
                             When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -210,6 +225,21 @@ spec:
                         - window
                         type: object
                       type: array
+                    reservation:
+                      description: Reservation defines token reservation configuration
+                        for this limit
+                      properties:
+                        amount:
+                          description: |-
+                            Amount is a CEL expression defining the estimated tokens to reserve on request arrival.
+                            Defaults to uint(5000) if omitted. Setting to "0" disables reservations for this limit.
+                          type: string
+                        ttl:
+                          description: |-
+                            TTL is a CEL expression defining how long to hold the reservation before automatically releasing it.
+                            Defaults to the route's backendRequest timeout if configured, or duration('60s').
+                          type: string
+                      type: object
                     when:
                       description: |-
                         When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -280,6 +310,21 @@ spec:
                             - window
                             type: object
                           type: array
+                        reservation:
+                          description: Reservation defines token reservation configuration
+                            for this limit
+                          properties:
+                            amount:
+                              description: |-
+                                Amount is a CEL expression defining the estimated tokens to reserve on request arrival.
+                                Defaults to uint(5000) if omitted. Setting to "0" disables reservations for this limit.
+                              type: string
+                            ttl:
+                              description: |-
+                                TTL is a CEL expression defining how long to hold the reservation before automatically releasing it.
+                                Defaults to the route's backendRequest timeout if configured, or duration('60s').
+                              type: string
+                          type: object
                         when:
                           description: |-
                             When holds a list of "limit-level" `Predicate`s for token-based conditions

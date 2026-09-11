@@ -957,6 +957,7 @@ func TestProducedStorePaths(t *testing.T) {
 		{"ratelimit", RateLimitServiceName, nil},
 		{"ratelimit check", RateLimitCheckServiceName, nil},
 		{"ratelimit report", RateLimitReportServiceName, nil},
+		{"ratelimit reserve", RateLimitReserveServiceName, []string{ReservationStorePath}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1036,3 +1037,167 @@ func TestAttachBindings_NoBindings(t *testing.T) {
 		}
 	}
 }
+
+func TestActionSpec_IsGuard(t *testing.T) {
+	tests := []struct {
+		serviceName string
+		expected    bool
+	}{
+		{AuthServiceName, true},
+		{RateLimitServiceName, true},
+		{RateLimitCheckServiceName, true},
+		{RateLimitReserveServiceName, true},
+		{RateLimitReportServiceName, false},
+		{RateLimitCommitServiceName, false},
+	}
+	for _, tc := range tests {
+		spec := ActionSpec{ServiceName: tc.serviceName}
+		if got := spec.IsGuard(); got != tc.expected {
+			t.Errorf("ActionSpec{ServiceName: %q}.IsGuard() = %v, want %v", tc.serviceName, got, tc.expected)
+		}
+	}
+}
+
+func TestReserveRequestCEL_ToCEL(t *testing.T) {
+	req := ReserveRequestCEL{
+		Domain: `"my-ratelimit"`,
+		Descriptors: []RateLimitDescriptorCEL{{
+			Entries: []DescriptorEntryCEL{{Key: "tier", ValueCEL: `"gold"`}},
+		}},
+		Amount: "uint(5000)",
+		TTL:    "duration('60s')",
+	}
+	got := req.ToCEL()
+	expected := `kuadrant.service.ratelimit.v1.ReserveRequest {
+    domain: "my-ratelimit",
+    descriptors: [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor { entries: [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor.Entry { key: "tier", value: "gold" }] }],
+    amount: uint(5000),
+    ttl: duration('60s')
+}`
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestCommitRequestCEL_ToCEL(t *testing.T) {
+	req := CommitRequestCEL{
+		Domain: `"my-ratelimit"`,
+		Descriptors: []RateLimitDescriptorCEL{{
+			Entries: []DescriptorEntryCEL{{Key: "tier", ValueCEL: `"gold"`}},
+		}},
+		ReservationID: `has(kuadrant.internal.reservation.id) ? kuadrant.internal.reservation.id : ""`,
+		ActualAmount:  "uint(kuadrant.internal.response.body.total_tokens)",
+	}
+	got := req.ToCEL()
+	expected := `kuadrant.service.ratelimit.v1.CommitRequest {
+    domain: "my-ratelimit",
+    descriptors: [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor { entries: [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor.Entry { key: "tier", value: "gold" }] }],
+    reservation_id: has(kuadrant.internal.reservation.id) ? kuadrant.internal.reservation.id : "",
+    actual_amount: uint(kuadrant.internal.response.body.total_tokens)
+}`
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestActionSpec_Build_ReserveAndCommit(t *testing.T) {
+	reserveSpec := ActionSpec{
+		ServiceName:       RateLimitReserveServiceName,
+		Scope:             "my-scope",
+		ReservationAmount: "uint(2000)",
+		ReservationTTL:    "duration('30s')",
+	}
+	reserveAction := reserveSpec.Build()
+	grpcReserve, ok := reserveAction.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction for reserve, got %T", reserveAction)
+	}
+	if grpcReserve.Service != RateLimitReserveServiceName {
+		t.Errorf("expected service %q, got %q", RateLimitReserveServiceName, grpcReserve.Service)
+	}
+	if !strings.Contains(grpcReserve.MessageBuilder, "kuadrant.service.ratelimit.v1.ReserveRequest") {
+		t.Errorf("expected ReserveRequest in message, got:\n%s", grpcReserve.MessageBuilder)
+	}
+	if !strings.Contains(grpcReserve.MessageBuilder, "amount: uint(2000)") {
+		t.Errorf("expected amount: uint(2000) in message, got:\n%s", grpcReserve.MessageBuilder)
+	}
+	if !strings.Contains(grpcReserve.MessageBuilder, "ttl: duration('30s')") {
+		t.Errorf("expected ttl: duration('30s') in message, got:\n%s", grpcReserve.MessageBuilder)
+	}
+
+	// Verify onReply has store action for reservation_id
+	var hasReservationStore bool
+	for _, action := range grpcReserve.OnReply {
+		if store, ok := action.(*StoreAction); ok && store.Path == ReservationStorePath {
+			hasReservationStore = true
+			if !strings.Contains(store.Value, "reservation_id") {
+				t.Errorf("expected reservation_id in store value, got %q", store.Value)
+			}
+		}
+	}
+	if !hasReservationStore {
+		t.Errorf("expected StoreAction with path %q in reserve OnReply", ReservationStorePath)
+	}
+
+	commitSpec := ActionSpec{
+		ServiceName:        RateLimitCommitServiceName,
+		Scope:              "my-scope",
+		CommitActualAmount: "uint(responseBodyJSON(\"/usage/total_tokens\"))",
+	}
+	commitAction := commitSpec.Build()
+	grpcCommit, ok := commitAction.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction for commit, got %T", commitAction)
+	}
+	if grpcCommit.Service != RateLimitCommitServiceName {
+		t.Errorf("expected service %q, got %q", RateLimitCommitServiceName, grpcCommit.Service)
+	}
+	if !strings.Contains(grpcCommit.MessageBuilder, "kuadrant.service.ratelimit.v1.CommitRequest") {
+		t.Errorf("expected CommitRequest in message, got:\n%s", grpcCommit.MessageBuilder)
+	}
+	if !strings.Contains(grpcCommit.MessageBuilder, ReservationStorePath) {
+		t.Errorf("expected %s in commit message reservation_id, got:\n%s", ReservationStorePath, grpcCommit.MessageBuilder)
+	}
+}
+
+func TestActionSpec_Build_ReserveAndCommit_CustomStorePath(t *testing.T) {
+	customPath := "kuadrant.internal.reservation.tokenlimit_prompt_tokens__13adad8e"
+	reserveSpec := ActionSpec{
+		ServiceName:          RateLimitReserveServiceName,
+		Scope:                "my-scope",
+		ReservationAmount:    "uint(2000)",
+		ReservationTTL:       "duration('30s')",
+		ReservationStorePath: customPath,
+	}
+	reserveAction := reserveSpec.Build()
+	grpcReserve, ok := reserveAction.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction for reserve, got %T", reserveAction)
+	}
+
+	var hasReservationStore bool
+	for _, action := range grpcReserve.OnReply {
+		if store, ok := action.(*StoreAction); ok && store.Path == customPath {
+			hasReservationStore = true
+		}
+	}
+	if !hasReservationStore {
+		t.Errorf("expected StoreAction with custom path %q in reserve OnReply", customPath)
+	}
+
+	commitSpec := ActionSpec{
+		ServiceName:          RateLimitCommitServiceName,
+		Scope:                "my-scope",
+		CommitActualAmount:   "uint(responseBodyJSON(\"/usage/total_tokens\"))",
+		ReservationStorePath: customPath,
+	}
+	commitAction := commitSpec.Build()
+	grpcCommit, ok := commitAction.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction for commit, got %T", commitAction)
+	}
+	if !strings.Contains(grpcCommit.MessageBuilder, customPath) {
+		t.Errorf("expected %s in commit message reservation_id, got:\n%s", customPath, grpcCommit.MessageBuilder)
+	}
+}
+

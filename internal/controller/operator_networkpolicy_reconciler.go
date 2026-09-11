@@ -40,6 +40,7 @@ type response struct {
 }
 
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=apps,resources=deployments/finalizers,verbs=update
 
 func NewOperatorNetworkPolicyReconciler(client *dynamic.DynamicClient) *OperatorNetworkPolicyReconciler {
 	return &OperatorNetworkPolicyReconciler{Client: client}
@@ -349,7 +350,7 @@ func setOwnerRef(policy, existingPolicy *networkingv1.NetworkPolicy, deployment 
 		Kind:               deployment.Kind,
 		Name:               deployment.GetName(),
 		UID:                deployment.GetUID(),
-		BlockOwnerDeletion: new(false),
+		BlockOwnerDeletion: new(true),
 		Controller:         new(true),
 	}
 

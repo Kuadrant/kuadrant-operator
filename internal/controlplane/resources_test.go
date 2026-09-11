@@ -297,6 +297,210 @@ func TestIsCRDEstablished(t *testing.T) {
 	}
 }
 
+func TestPatchDeploymentEnv(t *testing.T) {
+	tests := []struct {
+		name    string
+		objects []*unstructured.Unstructured
+		envVars map[string]string
+		wantEnv map[string]string
+	}{
+		{
+			name: "adds env vars to deployment",
+			objects: []*unstructured.Unstructured{
+				deploymentWithImage("my-deploy", "img:latest"),
+			},
+			envVars: map[string]string{"RELATED_IMAGE_COREDNS": "quay.io/kuadrant/coredns:latest"},
+			wantEnv: map[string]string{"RELATED_IMAGE_COREDNS": "quay.io/kuadrant/coredns:latest"},
+		},
+		{
+			name:    "empty envVars is no-op",
+			objects: []*unstructured.Unstructured{deploymentWithImage("my-deploy", "img:latest")},
+			envVars: nil,
+			wantEnv: nil,
+		},
+		{
+			name: "overwrites existing env var",
+			objects: []*unstructured.Unstructured{
+				deploymentWithEnv("my-deploy", map[string]string{"KEY": "old"}),
+			},
+			envVars: map[string]string{"KEY": "new"},
+			wantEnv: map[string]string{"KEY": "new"},
+		},
+		{
+			name: "merges with existing env vars",
+			objects: []*unstructured.Unstructured{
+				deploymentWithEnv("my-deploy", map[string]string{"EXISTING": "keep"}),
+			},
+			envVars: map[string]string{"NEW": "added"},
+			wantEnv: map[string]string{"EXISTING": "keep", "NEW": "added"},
+		},
+		{
+			name: "only patches deployments",
+			objects: []*unstructured.Unstructured{
+				newUnstructured("Service", "my-svc"),
+				deploymentWithImage("my-deploy", "img:latest"),
+			},
+			envVars: map[string]string{"KEY": "value"},
+			wantEnv: map[string]string{"KEY": "value"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := PatchDeploymentEnv(tt.objects, tt.envVars); err != nil {
+				t.Fatalf("PatchDeploymentEnv() error = %v", err)
+			}
+
+			for _, obj := range tt.objects {
+				if obj.GetKind() != "Deployment" {
+					continue
+				}
+				containers, _, _ := unstructured.NestedSlice(obj.Object,
+					"spec", "template", "spec", "containers")
+				if len(containers) == 0 {
+					t.Fatal("no containers found")
+				}
+				container := containers[0].(map[string]interface{})
+				envSlice, _ := container["env"].([]interface{})
+
+				got := make(map[string]string)
+				for _, e := range envSlice {
+					entry := e.(map[string]interface{})
+					got[entry["name"].(string)] = entry["value"].(string)
+				}
+
+				for k, v := range tt.wantEnv {
+					if got[k] != v {
+						t.Errorf("env[%q] = %q, want %q", k, got[k], v)
+					}
+				}
+				if len(got) != len(tt.wantEnv) {
+					t.Errorf("env has %d entries, want %d: got %v", len(got), len(tt.wantEnv), got)
+				}
+			}
+		})
+	}
+}
+
+func deploymentWithEnv(name string, envVars map[string]string) *unstructured.Unstructured {
+	var envSlice []interface{}
+	for k, v := range envVars {
+		envSlice = append(envSlice, map[string]interface{}{"name": k, "value": v})
+	}
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata":   map[string]interface{}{"name": name},
+			"spec": map[string]interface{}{
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "manager",
+								"image": "img:latest",
+								"env":   envSlice,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestPatchConfigMapData(t *testing.T) {
+	tests := []struct {
+		name     string
+		objects  []*unstructured.Unstructured
+		cmName   string
+		data     map[string]string
+		wantData map[string]string
+	}{
+		{
+			name: "patches empty ConfigMap",
+			objects: []*unstructured.Unstructured{
+				configMapWithData("my-cm", nil),
+			},
+			cmName:   "my-cm",
+			data:     map[string]string{"KEY": "value"},
+			wantData: map[string]string{"KEY": "value"},
+		},
+		{
+			name: "merges with existing data",
+			objects: []*unstructured.Unstructured{
+				configMapWithData("my-cm", map[string]string{"EXISTING": "old"}),
+			},
+			cmName:   "my-cm",
+			data:     map[string]string{"NEW": "new"},
+			wantData: map[string]string{"EXISTING": "old", "NEW": "new"},
+		},
+		{
+			name: "only patches named ConfigMap",
+			objects: []*unstructured.Unstructured{
+				configMapWithData("other-cm", nil),
+				configMapWithData("my-cm", nil),
+			},
+			cmName:   "my-cm",
+			data:     map[string]string{"KEY": "value"},
+			wantData: map[string]string{"KEY": "value"},
+		},
+		{
+			name: "no-op when ConfigMap not found",
+			objects: []*unstructured.Unstructured{
+				newUnstructured("Service", "my-svc"),
+			},
+			cmName:   "missing-cm",
+			data:     map[string]string{"KEY": "value"},
+			wantData: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := PatchConfigMapData(tt.objects, tt.cmName, tt.data); err != nil {
+				t.Fatalf("PatchConfigMapData() error = %v", err)
+			}
+
+			for _, obj := range tt.objects {
+				if obj.GetKind() != "ConfigMap" || obj.GetName() != tt.cmName {
+					continue
+				}
+				got, _, _ := unstructured.NestedStringMap(obj.Object, "data")
+				if len(got) != len(tt.wantData) {
+					t.Errorf("data = %v, want %v", got, tt.wantData)
+					return
+				}
+				for k, v := range tt.wantData {
+					if got[k] != v {
+						t.Errorf("data[%q] = %q, want %q", k, got[k], v)
+					}
+				}
+			}
+		})
+	}
+}
+
+func configMapWithData(name string, data map[string]string) *unstructured.Unstructured {
+	obj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name": name,
+			},
+		},
+	}
+	if data != nil {
+		d := make(map[string]interface{})
+		for k, v := range data {
+			d[k] = v
+		}
+		obj.Object["data"] = d
+	}
+	return obj
+}
+
 func deploymentWithImage(name, image string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{

@@ -15123,6 +15123,8 @@ spec:
           value: ghcr.io/kuadrant/mcp-controller:latest
         - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
           value: ghcr.io/kuadrant/mcp-gateway:latest
+        - name: RELATED_IMAGE_COREDNS
+          value: quay.io/kuadrant/coredns-kuadrant:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

@@ -44,6 +44,29 @@ type Component struct {
 	// the specified chart value key. Keys support dotted paths for nested
 	// values (e.g., "controller.image" sets values["controller"]["image"]).
 	ChartValueOverrides []ChartValueOverride
+
+	// DeploymentEnvVars injects environment variables into the rendered
+	// Deployment's container spec. Each entry maps a kuadrant-operator env
+	// var name to the env var name set on the child container. If the source
+	// env var is empty, the entry is skipped.
+	DeploymentEnvVars map[string]string
+
+	// ConfigMapPatches injects env var values into named ConfigMaps rendered
+	// by this component's chart. Used to propagate feature flags to child
+	// operators that read configuration via envFrom.
+	ConfigMapPatches []ConfigMapPatch
+}
+
+// ConfigMapPatch injects data entries into a named ConfigMap in the rendered chart.
+type ConfigMapPatch struct {
+	// Name is the ConfigMap name to patch.
+	Name string
+	// EnvVars maps ConfigMap data keys to kuadrant-operator env var names.
+	// For each entry, if the env var is set and non-empty, its value is
+	// written as the ConfigMap data entry.
+	EnvVars map[string]string
+	// Static entries are always written when at least one EnvVar is present.
+	Static map[string]string
 }
 
 type Deployer struct {
@@ -85,7 +108,10 @@ func allComponents() []Component {
 			ChartPath:      chartsBasePath + "/dns-operator",
 			ImageEnvVar:    "RELATED_IMAGE_DNS_OPERATOR",
 			DeploymentName: "dns-operator-controller-manager",
-			CRDNames:       []string{"dnsrecords.kuadrant.io", "dnshealthcheckprobes.kuadrant.io"},
+			CRDNames: []string{"dnsrecords.kuadrant.io", "dnshealthcheckprobes.kuadrant.io"},
+			DeploymentEnvVars: map[string]string{
+				"RELATED_IMAGE_COREDNS": "RELATED_IMAGE_COREDNS",
+			},
 		},
 		{
 			Name:           "mcp-gateway",
@@ -216,6 +242,29 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component, own
 		}
 	}
 
+	// Post-render env var injection into the Deployment container spec.
+	if len(component.DeploymentEnvVars) > 0 {
+		envPatch := make(map[string]string)
+		for containerEnv, sourceEnv := range component.DeploymentEnvVars {
+			if v := os.Getenv(sourceEnv); v != "" {
+				envPatch[containerEnv] = v
+			}
+		}
+		if err := PatchDeploymentEnv(rendered.Resources, envPatch); err != nil {
+			return fmt.Errorf("patching deployment env for %s: %w", component.Name, err)
+		}
+	}
+
+	// Post-render ConfigMap patching for propagating feature flags to child operators.
+	for _, patch := range component.ConfigMapPatches {
+		data := buildConfigMapPatchData(patch)
+		if len(data) > 0 {
+			if err := PatchConfigMapData(rendered.Resources, patch.Name, data); err != nil {
+				return fmt.Errorf("patching ConfigMap %s for %s: %w", patch.Name, component.Name, err)
+			}
+		}
+	}
+
 	d.deployedImages[component.Name] = extractDeploymentImages(rendered.Resources)
 
 	if err := applier.ApplyResources(ctx, rendered.Resources, ownerRef); err != nil {
@@ -255,4 +304,17 @@ func (c Component) effectiveValues() map[string]any {
 		return nil
 	}
 	return values
+}
+
+func buildConfigMapPatchData(patch ConfigMapPatch) map[string]string {
+	data := make(map[string]string)
+	for cmKey, envVar := range patch.EnvVars {
+		if v := os.Getenv(envVar); v != "" {
+			data[cmKey] = v
+		}
+	}
+	for k, v := range patch.Static {
+		data[k] = v
+	}
+	return data
 }

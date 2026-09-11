@@ -241,3 +241,77 @@ func PatchDeploymentImage(objects []*unstructured.Unstructured, image string) er
 	}
 	return nil
 }
+
+// PatchDeploymentEnv adds environment variables to the first container of all
+// Deployment objects in the slice. If a variable already exists, its value is
+// overwritten. Used to propagate RELATED_IMAGE values into child operator
+// Deployments so they appear in the container spec rather than via ConfigMap.
+func PatchDeploymentEnv(objects []*unstructured.Unstructured, envVars map[string]string) error {
+	if len(envVars) == 0 {
+		return nil
+	}
+	for _, obj := range objects {
+		if obj.GetKind() != "Deployment" {
+			continue
+		}
+		containers, found, err := unstructured.NestedSlice(obj.Object,
+			"spec", "template", "spec", "containers")
+		if err != nil || !found || len(containers) == 0 {
+			continue
+		}
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		existing, _ := container["env"].([]interface{})
+		nameIndex := make(map[string]int)
+		for i, e := range existing {
+			if entry, ok := e.(map[string]interface{}); ok {
+				if n, ok := entry["name"].(string); ok {
+					nameIndex[n] = i
+				}
+			}
+		}
+
+		for name, value := range envVars {
+			entry := map[string]interface{}{"name": name, "value": value}
+			if idx, exists := nameIndex[name]; exists {
+				existing[idx] = entry
+			} else {
+				existing = append(existing, entry)
+			}
+		}
+
+		container["env"] = existing
+		containers[0] = container
+		if err := unstructured.SetNestedSlice(obj.Object,
+			containers, "spec", "template", "spec", "containers"); err != nil {
+			return fmt.Errorf("patching env on Deployment %s: %w", obj.GetName(), err)
+		}
+	}
+	return nil
+}
+
+// PatchConfigMapData adds or updates data entries in a named ConfigMap within
+// the rendered resource slice. Used to inject env vars into component ConfigMaps
+// so child operators receive them at startup via envFrom.
+func PatchConfigMapData(objects []*unstructured.Unstructured, name string, data map[string]string) error {
+	for _, obj := range objects {
+		if obj.GetKind() != "ConfigMap" || obj.GetName() != name {
+			continue
+		}
+		existing, _, _ := unstructured.NestedStringMap(obj.Object, "data")
+		if existing == nil {
+			existing = make(map[string]string)
+		}
+		for k, v := range data {
+			existing[k] = v
+		}
+		if err := unstructured.SetNestedStringMap(obj.Object, existing, "data"); err != nil {
+			return fmt.Errorf("patching ConfigMap %s data: %w", name, err)
+		}
+		return nil
+	}
+	return nil
+}

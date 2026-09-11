@@ -739,11 +739,34 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
   - namespaces
+  - services
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - secrets
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - kuadrant.io
@@ -771,6 +794,18 @@ rules:
   - dnshealthcheckprobes/status
   - dnsrecords/status
   verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterrolebindings
+  - clusterroles
+  verbs:
+  - bind
+  - create
+  - escalate
   - get
   - patch
   - update

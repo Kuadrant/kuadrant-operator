@@ -33,7 +33,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/types/descriptorpb"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantmachinery "github.com/kuadrant/kuadrant-operator/internal/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -95,11 +95,11 @@ func (r *MutatorRegistry) ApplyAuthConfigMutators(authConfig *authorinov1beta3.A
 
 func policyTargetRef(kind, name, namespace string) machinery.PolicyTargetReference {
 	return machinery.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-				Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
-				Kind:  gatewayapiv1alpha2.Kind(kind),
-				Name:  gatewayapiv1alpha2.ObjectName(name),
+		LocalPolicyTargetReferenceWithSectionName: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
+				Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+				Kind:  gatewayapiv1.Kind(kind),
+				Name:  gatewayapiv1.ObjectName(name),
 			},
 		},
 		PolicyNamespace: namespace,

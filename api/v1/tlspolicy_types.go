@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 
@@ -42,7 +41,7 @@ type TLSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	CertificateSpec `json:",inline"`
 }
@@ -178,7 +177,7 @@ func (p *TLSPolicy) Kind() string {
 }
 
 // Deprecated: Use GetTargetRefs instead
-func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+func (p *TLSPolicy) GetTargetRef() gatewayapiv1.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
@@ -216,8 +215,8 @@ func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 }
 
 func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
-	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+	p.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 			Group: gatewayapiv1.GroupName,
 			Kind:  "Gateway",
 			Name:  gatewayapiv1.ObjectName(gwName),
@@ -227,8 +226,8 @@ func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 }
 
 func (p *TLSPolicy) WithTargetGatewaySection(gwName string, sectionName string) *TLSPolicy {
-	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+	p.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 			Group: gatewayapiv1.GroupName,
 			Kind:  "Gateway",
 			Name:  gatewayapiv1.ObjectName(gwName),

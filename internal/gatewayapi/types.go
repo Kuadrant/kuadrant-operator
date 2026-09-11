@@ -9,14 +9,13 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
 
 type Policy interface {
 	client.Object
-	GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference
+	GetTargetRef() gatewayapiv1.LocalPolicyTargetReference
 	GetStatus() PolicyStatus
 }
 

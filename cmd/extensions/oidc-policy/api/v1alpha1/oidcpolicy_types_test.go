@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestGetIssuerTokenExchangeURL(t *testing.T) {
@@ -265,8 +265,8 @@ func mockMinimalOIDCPolicy() *OIDCPolicy {
 		TypeMeta:   metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: OIDCPolicySpec{
-			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 					Group: "gateway.networking.k8s.io",
 					Kind:  "HTTPRoute",
 					Name:  "test-route",

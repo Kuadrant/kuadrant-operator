@@ -21,7 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	extctrl "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
@@ -43,7 +43,7 @@ type ThreatPolicySpec struct {
 	// Reference to the Gateway API resource to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Threshold is the threat level threshold (0-10) for blocking requests.
 	// Requests with a threat score at or above this threshold will be blocked.
@@ -60,8 +60,8 @@ func (p *ThreatPolicy) GetNamespace() string {
 	return p.Namespace
 }
 
-func (p *ThreatPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+func (p *ThreatPolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
 		p.Spec.TargetRef,
 	}
 }

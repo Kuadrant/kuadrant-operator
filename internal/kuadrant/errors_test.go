@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestIsTargetNotFound(t *testing.T) {
@@ -17,7 +17,7 @@ func TestIsTargetNotFound(t *testing.T) {
 	}{
 		{
 			name: "err is NewErrTargetNotFound",
-			err:  NewErrTargetNotFound("foo", gatewayapiv1alpha2.LocalPolicyTargetReference{}, errors.New("bar")),
+			err:  NewErrTargetNotFound("foo", gatewayapiv1.LocalPolicyTargetReference{}, errors.New("bar")),
 			want: true,
 		},
 		{

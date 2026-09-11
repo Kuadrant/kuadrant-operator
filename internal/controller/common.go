@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -42,7 +42,7 @@ func PolicyAffectedCondition(policyKind string, policies []machinery.Policy) met
 	condition := metav1.Condition{
 		Type:   PolicyAffectedConditionType(policyKind),
 		Status: metav1.ConditionTrue,
-		Reason: string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Reason: string(gatewayapiv1.PolicyReasonAccepted),
 		Message: fmt.Sprintf("Object affected by %s %s", policyKind, lo.Map(policies, func(item machinery.Policy, _ int) client.ObjectKey {
 			return client.ObjectKey{Name: item.GetName(), Namespace: item.GetNamespace()}
 		})),

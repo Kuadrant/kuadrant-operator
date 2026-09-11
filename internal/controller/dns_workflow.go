@@ -114,7 +114,7 @@ func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error)
 	if !ok {
 		return
 	}
-	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gwapiv1.PolicyConditionAccepted)); condition != nil {
 		accepted = condition.Status == metav1.ConditionTrue
 		if !accepted {
 			err = errors.New(condition.Message)

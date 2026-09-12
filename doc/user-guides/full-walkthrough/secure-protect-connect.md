@@ -223,7 +223,8 @@ spec:
     authorization:
       deny-all:
         opa:
-          rego: "allow = false"
+          rego: "allow := false"
+          version: v1
     response:
       unauthorized:
         headers:

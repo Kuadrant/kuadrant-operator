@@ -10,6 +10,9 @@ on:
 jobs:
   workflow-build:
     name: Calls build-images-base workflow
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/build-images-base.yaml
     secrets: inherit
     with:

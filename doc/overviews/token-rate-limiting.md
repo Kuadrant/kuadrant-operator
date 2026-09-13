@@ -24,6 +24,29 @@ This approach ensures accurate usage-based rate limiting where limits are enforc
 
 **Important**: TokenRateLimitPolicy supports both non-streaming and streaming OpenAI-style API responses. For streaming, the request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event. Only OpenAI-style completions responses are supported today — this includes `/v1/chat/completions` and `/v1/completions`, and any backend implementing the OpenAI-compatible API such as vLLM and kServe. Other provider formats (e.g. Anthropic, Google Gemini) are not yet parsed; see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
 
+### Enforcement modes
+
+Because the real token cost of a request is only known *after* the upstream responds, the gateway has to decide what to do on the way in. This is controlled cluster-wide by the Kuadrant CR field `spec.tokenRateLimiting.mode`, which applies to every TokenRateLimitPolicy in the cluster:
+
+- **`Reservation`** (default): On request arrival the gateway *reserves* an estimated token amount from Limitador. If the reservation would exceed the limit, the request is rejected with `429` before it ever reaches the upstream. Once the upstream responds, the gateway *commits* the actual `usage.total_tokens` and releases the unused portion of the reservation. This closes the race window where many concurrent requests could each pass a zero-cost check before any of them reports usage. It costs one extra call to Limitador per request. The reservation is designed per RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md), and the reserved amount / hold time are tuned per limit with [`reservation`](../reference/tokenratelimitpolicy.md#reservation).
+
+- **`CheckReport`**: On request arrival the gateway checks the limit with `hits_addend=0` (does the counter already exceed the limit?) and, on response, reports the actual usage. This is one fewer call to Limitador, but two requests arriving together can both pass the check before either reports, so an already-near-limit counter can be briefly overshot by the cost of the in-flight requests.
+
+Set the mode on the Kuadrant CR:
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec:
+  tokenRateLimiting:
+    mode: Reservation   # or CheckReport
+```
+
+When `spec.tokenRateLimiting` is omitted the mode defaults to `Reservation`. The per-limit `reservation` block on a TokenRateLimitPolicy only has an effect in `Reservation` mode; it is ignored under `CheckReport`.
+
 ### The TokenRateLimitPolicy custom resource
 
 #### Overview
@@ -38,6 +61,7 @@ Each limit definition includes:
 - A set of rate limits (`spec.limits.<limit-name>.rates[]`)
 - (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
 - (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
+- (Optional) Reservation tuning for the limit (`spec.limits.<limit-name>.reservation`), used only in [`Reservation` mode](#enforcement-modes)
 
 The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
 

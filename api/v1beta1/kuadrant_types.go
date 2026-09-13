@@ -71,6 +71,15 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
+// GetTokenRateLimitingMode returns the effective cluster-wide TokenRateLimitPolicy
+// enforcement mode, defaulting to Reservation when unset.
+func (k *Kuadrant) GetTokenRateLimitingMode() TokenRateLimitingMode {
+	if k == nil || k.Spec.TokenRateLimiting == nil || k.Spec.TokenRateLimiting.Mode == "" {
+		return TokenRateLimitingModeReservation
+	}
+	return k.Spec.TokenRateLimiting.Mode
+}
+
 // GetOwnerReference returns the owner reference pointing to this Kuadrant CR,
 func (k *Kuadrant) BuildOwnerReference() []metav1.OwnerReference {
 	if k == nil {
@@ -102,6 +111,33 @@ type KuadrantSpec struct {
 	//
 	// Deprecated: ignored; kept only for backwards compatibility.
 	Components *Components `json:"components,omitempty"`
+
+	// +optional
+	// TokenRateLimiting configures cluster-wide behavior for TokenRateLimitPolicy.
+	TokenRateLimiting *TokenRateLimiting `json:"tokenRateLimiting,omitempty"`
+}
+
+// TokenRateLimitingMode selects how TokenRateLimitPolicy limits are enforced.
+// +kubebuilder:validation:Enum=Reservation;CheckReport
+type TokenRateLimitingMode string
+
+const (
+	// TokenRateLimitingModeReservation reserves an estimated token amount on
+	// request arrival and commits the actual usage on response, closing the
+	// check/report race window (see RFC 0021).
+	TokenRateLimitingModeReservation TokenRateLimitingMode = "Reservation"
+
+	// TokenRateLimitingModeCheckReport checks the limit (hits_addend=0) on
+	// request arrival and reports the actual usage on response.
+	TokenRateLimitingModeCheckReport TokenRateLimitingMode = "CheckReport"
+)
+
+// TokenRateLimiting configures cluster-wide behavior for TokenRateLimitPolicy.
+type TokenRateLimiting struct {
+	// Mode selects how TokenRateLimitPolicy limits are enforced across the cluster.
+	// +kubebuilder:default=Reservation
+	// +optional
+	Mode TokenRateLimitingMode `json:"mode,omitempty"`
 }
 
 // Observability configures telemetry and monitoring settings for Kuadrant components.

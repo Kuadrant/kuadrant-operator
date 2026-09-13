@@ -8,9 +8,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -58,6 +60,8 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 		limitIdentifier    string
 		scope              ActionScope
 		topLevelPredicates kuadrantv1.WhenPredicates
+		mode               kuadrantv1beta1.TokenRateLimitingMode
+		defaultTTL         string
 		expectedActions    []wasm.ActionSpec
 	}{
 		{
@@ -65,6 +69,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			tokenLimit:      &kuadrantv1alpha1.TokenLimit{},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
 			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeCheckReport,
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -135,6 +140,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
 			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeCheckReport,
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -224,6 +230,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			},
 			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
 			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeCheckReport,
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -311,6 +318,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			limitIdentifier:    "tokenlimit.myTokenLimit__d681f6c3",
 			scope:              ActionScope("my-ns/my-route"),
 			topLevelPredicates: kuadrantv1.WhenPredicates{{Predicate: `request.method == "POST"`}},
+			mode:               kuadrantv1beta1.TokenRateLimitingModeCheckReport,
 			expectedActions: []wasm.ActionSpec{
 				// Request phase action
 				{
@@ -372,11 +380,139 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:            "reservation mode with defaults (no reservation spec, no route ttl)",
+			tokenLimit:      &kuadrantv1alpha1.TokenLimit{},
+			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
+			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeReservation,
+			expectedActions: []wasm.ActionSpec{
+				// Reserve (request phase): default amount, ttl omitted
+				{
+					ServiceName: wasm.RateLimitReserveServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+							},
+						},
+					},
+				},
+				// Commit (response phase): actual usage from response body
+				{
+					ServiceName: wasm.RateLimitCommitServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:            "reservation mode with route backendRequest ttl fallback",
+			tokenLimit:      &kuadrantv1alpha1.TokenLimit{},
+			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
+			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeReservation,
+			defaultTTL:      "45s",
+			expectedActions: []wasm.ActionSpec{
+				{
+					ServiceName: wasm.RateLimitReserveServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: `duration("45s")`}}},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitCommitServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "reservation mode with explicit amount and ttl overriding route fallback",
+			tokenLimit: &kuadrantv1alpha1.TokenLimit{
+				Reservation: &kuadrantv1alpha1.Reservation{
+					Amount: ptr.To(kuadrantv1.Expression("8000")),
+					TTL:    ptr.To(kuadrantv1.Expression(`duration("30s")`)),
+				},
+			},
+			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
+			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeReservation,
+			defaultTTL:      "45s", // overridden by explicit policy ttl
+			expectedActions: []wasm.ActionSpec{
+				{
+					ServiceName: wasm.RateLimitReserveServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "8000"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: `duration("30s")`}}},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitCommitServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedActions := wasmActionSpecsFromTokenLimit(tc.tokenLimit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates)
+			computedActions := wasmActionSpecsFromTokenLimit(tc.tokenLimit, tc.limitIdentifier, tc.scope, "test/policy/locator", tc.topLevelPredicates, tc.mode, tc.defaultTTL)
 			if diff := cmp.Diff(tc.expectedActions, computedActions); diff != "" {
 				t.Errorf("unexpected wasm actions (-want +got):\n%s", diff)
 			}

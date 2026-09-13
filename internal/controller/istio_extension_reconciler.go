@@ -432,7 +432,10 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		logger.V(1).Info("no effective token rate limit policies found in state, continuing with empty map")
 	}
 
-	logger.V(1).Info("building wasm configs for istio extension", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveTokenRateLimitPolicies", len(effectiveTokenRateLimitPoliciesMap))
+	// cluster-wide TokenRateLimitPolicy enforcement mode (Reservation by default)
+	tokenRateLimitingMode := GetKuadrantFromTopology(topology, state).GetTokenRateLimitingMode()
+
+	logger.V(1).Info("building wasm configs for istio extension", "effectiveAuthPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap), "effectiveTokenRateLimitPolicies", len(effectiveTokenRateLimitPoliciesMap), "tokenRateLimitingMode", tokenRateLimitingMode)
 
 	// unique paths from different policy types
 	var allPaths []lo.Entry[string, []machinery.Targetable]
@@ -517,7 +520,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
 			if specsHaveAuthAccess(trlSpecs) {
 				specs = append(specs, trlSpecs...)
 			} else {

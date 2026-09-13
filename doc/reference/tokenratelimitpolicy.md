@@ -48,6 +48,56 @@
 | `rates`   | [][Rate](#rate)              | No           | List of rate limit details including limit and window. If not specified, no rate limits are applied for this limit definition |
 | `when`    | [][WhenPredicate](#whenpredicate)    | No           | List of predicates for this limit. Used in combination with top-level predicates                                     |
 | `counters`| [][Counter](#counter)        | No           | CEL expressions that define counter keys for rate limiting. If not specified, rate limiting will be applied globally without user-specific tracking |
+| `reservation`| [Reservation](#reservation) | No        | Tunes token reservation for this limit. Only takes effect when the Kuadrant CR `spec.tokenRateLimiting.mode` is `Reservation` (the default). Ignored in `CheckReport` mode. |
+
+### Reservation
+
+Configures how many tokens are reserved on request arrival and for how long, when the cluster is in `Reservation` mode (see the [Kuadrant CR `tokenRateLimiting`](kuadrant.md#tokenratelimiting) reference). Both fields are optional; when the whole `reservation` block is omitted, defaults are generated.
+
+| **Field** | **Type** | **Required** | **Description**                                                                                                              |
+|-----------|----------|:------------:|----------------------------------------------------------------------------------------------------------------------------|
+| `amount`  | String   | No           | CEL expression evaluating to the number of tokens (`uint`) to reserve on request arrival. When omitted, a flat default of `5000` is used. |
+| `ttl`     | String   | No           | CEL expression evaluating to the maximum duration (`google.protobuf.Duration`) the reservation is held before it expires. When omitted, the value falls back to the route's `HTTPRoute.spec.rules[].timeouts.backendRequest`; if that is also unset, `ttl` is left unset and Limitador applies its own default. |
+
+The reserved `amount` is an estimate: once the upstream responds, the actual `usage.total_tokens` is committed and the unused portion of the reservation is released. The `ttl` bounds how long a reservation survives if a request never reaches the commit phase (e.g. the client disconnects), so it should comfortably exceed the upstream request timeout.
+
+Example — reserve a flat 8000 tokens per request and hold the reservation for 30s:
+
+```yaml
+limits:
+  chat:
+    rates:
+    - limit: 100000
+      window: 1h
+    reservation:
+      amount: "8000"
+      ttl: 'duration("30s")'
+```
+| `reservation`| [Reservation](#reservation) | No        | Tunes token reservation for this limit. Only takes effect when the Kuadrant CR `spec.tokenRateLimiting.mode` is `Reservation` (the default). Ignored in `CheckReport` mode. |
+
+### Reservation
+
+Configures how many tokens are reserved on request arrival and for how long, when the cluster is in `Reservation` mode (see the [Kuadrant CR `tokenRateLimiting`](kuadrant.md#tokenratelimiting) reference). Both fields are optional; when the whole `reservation` block is omitted, defaults are generated.
+
+| **Field** | **Type** | **Required** | **Description**                                                                                                              |
+|-----------|----------|:------------:|----------------------------------------------------------------------------------------------------------------------------|
+| `amount`  | String   | No           | CEL expression evaluating to the number of tokens (`uint`) to reserve on request arrival. When omitted, a flat default of `5000` is used. |
+| `ttl`     | String   | No           | CEL expression evaluating to the maximum duration (`google.protobuf.Duration`) the reservation is held before it expires. When omitted, the value falls back to the route's `HTTPRoute.spec.rules[].timeouts.backendRequest`; if that is also unset, `ttl` is left unset and Limitador applies its own default. |
+
+The reserved `amount` is an estimate: once the upstream responds, the actual `usage.total_tokens` is committed and the unused portion of the reservation is released. The `ttl` bounds how long a reservation survives if a request never reaches the commit phase (e.g. the client disconnects), so it should comfortably exceed the upstream request timeout.
+
+Example — reserve a flat 8000 tokens per request and hold the reservation for 30s:
+
+```yaml
+limits:
+  chat:
+    rates:
+    - limit: 100000
+      window: 1h
+    reservation:
+      amount: "8000"
+      ttl: 'duration("30s")'
+```
 
 ### Rate
 

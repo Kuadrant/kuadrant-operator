@@ -13,7 +13,21 @@
 |-----------|-----------------------------------|:------------:|--------------------------------------|
 | `observability`    | [Observability](#observability)     | No | Kuadrant observability configuration. |
 | `mtls`  | [mTLS](#mtls) |      No      | Two way authentication between kuadrant components. |
+| `tokenRateLimiting` | [TokenRateLimiting](#tokenratelimiting) | No | Cluster-wide behavior for TokenRateLimitPolicy enforcement. |
 | `components`  | [Components](#components) |      No      | **Deprecated:** ignored. Kept only for backwards compatibility. |
+
+#### TokenRateLimiting
+
+Configures cluster-wide behavior for every `TokenRateLimitPolicy` in the cluster.
+
+| **Field** | **Type** | **Required** | **Description**                      |
+|-----------|----------|:------------:|--------------------------------------|
+| `mode`    | String   | No | Enforcement mode for token limits. One of `Reservation` (default) or `CheckReport`. |
+
+- **`Reservation`** (default): On request arrival the gateway *reserves* an estimated token amount from Limitador and, once the upstream responds, *commits* the actual usage (releasing the difference). This closes the race window that exists between checking and reporting under concurrency, at the cost of an extra call to Limitador per request. See [RFC 0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md). Reservation behavior per limit is tuned with [`spec.limits.<name>.reservation`](tokenratelimitpolicy.md#reservation) on the `TokenRateLimitPolicy`.
+- **`CheckReport`**: On request arrival the gateway checks the limit with `hits_addend=0` and, once the upstream responds, reports the actual usage. Simpler, but two concurrent requests can both pass the check before either reports, so the limit can be briefly overshot.
+
+The mode is cluster-wide: it is not settable per policy. When `spec.tokenRateLimiting` is omitted, `Reservation` is used.
 
 #### mTLS
 

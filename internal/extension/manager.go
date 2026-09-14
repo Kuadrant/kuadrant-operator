@@ -538,6 +538,15 @@ func (s *extensionService) Handshake(ctx context.Context, request *extpb.Handsha
 		}, nil
 	}
 
+	ownedIDs, err := ownedResourceIDs(request.PolicyKind, request.OwnedPolicies)
+	if err != nil {
+		s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
+		return &extpb.HandshakeResponse{
+			Accepted: false,
+			Reason:   "invalid owned_policies",
+		}, nil
+	}
+
 	identity, isBuiltin := s.sessionStore.matchBuiltin(request.Token)
 	if !isBuiltin {
 		// Built-in extensions claim their policy kinds before standalone
@@ -550,7 +559,6 @@ func (s *extensionService) Handshake(ctx context.Context, request *extpb.Handsha
 			}, nil
 		}
 
-		var err error
 		identity, err = s.authenticateStandalone(ctx, request.Token, request.PolicyKind)
 		if err != nil {
 			s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
@@ -569,6 +577,8 @@ func (s *extensionService) Handshake(ctx context.Context, request *extpb.Handsha
 			Reason:   "handshake failed",
 		}, nil
 	}
+
+	s.pruneStalePolicies(request.PolicyKind, ownedIDs)
 
 	s.logger.Info("handshake accepted", "identity", identity, "version", request.Version, "policyKind", request.PolicyKind)
 	return &extpb.HandshakeResponse{
@@ -595,6 +605,43 @@ func (s *extensionService) authenticateStandalone(ctx context.Context, token []b
 	}
 
 	return user.Username, nil
+}
+
+func ownedResourceIDs(policyKind string, owned []*extpb.Metadata) ([]ResourceID, error) {
+	result := make([]ResourceID, 0, len(owned))
+	for i, entry := range owned {
+		if entry == nil {
+			return nil, fmt.Errorf("owned_policies[%d]: entry is nil", i)
+		}
+		if entry.Kind != "" && entry.Kind != policyKind {
+			return nil, fmt.Errorf("owned_policies[%d] (%s/%s): kind %q does not match policy_kind %q", i, entry.Namespace, entry.Name, entry.Kind, policyKind)
+		}
+		if entry.Name == "" {
+			return nil, fmt.Errorf("owned_policies[%d] (%s): name is empty", i, entry.Namespace)
+		}
+		result = append(result, ResourceID{
+			Kind:      policyKind,
+			Namespace: entry.Namespace,
+			Name:      entry.Name,
+		})
+	}
+	return result, nil
+}
+
+func (s *extensionService) pruneStalePolicies(policyKind string, owned []ResourceID) {
+	pruned, counts := s.registeredData.PruneToOwned(policyKind, owned)
+	if len(pruned) == 0 {
+		return
+	}
+
+	s.logger.Info("pruned stale policies", "policyKind", policyKind, "pruned", pruned, "mutators", counts.Mutators, "subscriptions", counts.Subscriptions, "upstreams", counts.Upstreams, "pipelineActions", counts.PipelineActions)
+
+	if (counts.Mutators > 0 || counts.Upstreams > 0 || counts.PipelineActions > 0) && s.changeNotifier != nil {
+		reason := fmt.Sprintf("pruned stale policies for kind %s (mutators: %d, upstreams: %d, pipeline actions: %d)", policyKind, counts.Mutators, counts.Upstreams, counts.PipelineActions)
+		if err := s.changeNotifier(reason); err != nil {
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
 }
 
 func (s *extensionService) GetServiceDescriptors(_ context.Context, request *extpb.GetServiceDescriptorsRequest) (*extpb.GetServiceDescriptorsResponse, error) {

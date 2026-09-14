@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlruntimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
@@ -91,6 +92,21 @@ type ExtensionController struct {
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
+type informerCache interface {
+	GetInformer(ctx context.Context, obj client.Object, opts ...ctrlruntimecache.InformerGetOption) (ctrlruntimecache.Informer, error)
+	WaitForCacheSync(ctx context.Context) bool
+}
+
+func awaitCacheSync(ctx context.Context, cache informerCache, forType client.Object) error {
+	if _, err := cache.GetInformer(ctx, forType); err != nil {
+		return fmt.Errorf("failed to register informer for %T: %w", forType, err)
+	}
+	if !cache.WaitForCacheSync(ctx) {
+		return fmt.Errorf("cache sync did not complete: %w", ctx.Err())
+	}
+	return nil
+}
+
 // Start runs the controller manager and a background session supervisor. The
 // manager (and its health probes) must come up regardless of session state, so
 // a successful handshake is deliberately not a precondition for starting it.
@@ -137,6 +153,12 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 
 func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
 	defer ec.shutdown()
+	if ec.manager != nil {
+		if err := awaitCacheSync(ctx, ec.manager.GetCache(), ec.config.ForType); err != nil {
+			ec.logger.Error(err, "not handshaking")
+			return
+		}
+	}
 	for {
 		if err := ec.handshakeWithBackoff(ctx); err != nil {
 			return

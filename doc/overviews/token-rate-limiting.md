@@ -47,6 +47,11 @@ spec:
 
 When `spec.tokenRateLimiting` is omitted the mode defaults to `Reservation`. The per-limit `reservation` block on a TokenRateLimitPolicy only has an effect in `Reservation` mode; it is ignored under `CheckReport`.
 
+#### Handling reserve and upstream failures
+
+- If no reservation ends up being held — whether because the reserve call itself failed (e.g. a gRPC error or timeout talking to Limitador) or because Limitador's response simply didn't include a reservation id — the request still proceeds to the upstream. Once the response is parsed for the actual token count, a commit is still sent regardless, without a reservation id.
+- If a reservation was held but the upstream call fails, times out, or its response can't be parsed for token usage, the reservation is automatically released with a commit sent with `amount` `0` — reclaiming capacity without waiting for the counter window to roll over.
+
 ### The TokenRateLimitPolicy custom resource
 
 #### Overview

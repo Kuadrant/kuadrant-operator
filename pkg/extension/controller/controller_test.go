@@ -314,7 +314,7 @@ func TestHandshake_Success(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), []byte("token-value"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token-value"), "MyPolicy", nil)
 	assert.NilError(t, err)
 	assert.Equal(t, session.getToken(), "returned-token")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
@@ -335,7 +335,7 @@ func TestHandshake_Rejected(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), []byte("bad-token"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("bad-token"), "MyPolicy", nil)
 	assert.ErrorContains(t, err, "handshake rejected")
 	assert.Equal(t, session.getToken(), "")
 }
@@ -350,7 +350,7 @@ func TestHandshake_RPCError(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy", nil)
 	assert.ErrorContains(t, err, "handshake RPC failed")
 	assert.Equal(t, session.getToken(), "")
 }
@@ -1236,6 +1236,8 @@ type fakeInformerCache struct {
 	getInformerErr error
 	syncResult     bool
 	callOrder      []string
+	listFn         func(list client.ObjectList) error
+	listErr        error
 }
 
 func (f *fakeInformerCache) GetInformer(ctx context.Context, obj client.Object, opts ...ctrlruntimecache.InformerGetOption) (ctrlruntimecache.Informer, error) {
@@ -1246,6 +1248,16 @@ func (f *fakeInformerCache) GetInformer(ctx context.Context, obj client.Object, 
 func (f *fakeInformerCache) WaitForCacheSync(ctx context.Context) bool {
 	f.callOrder = append(f.callOrder, "WaitForCacheSync")
 	return f.syncResult
+}
+
+func (f *fakeInformerCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if f.listErr != nil {
+		return f.listErr
+	}
+	if f.listFn != nil {
+		return f.listFn(list)
+	}
+	return nil
 }
 
 func TestAwaitCacheSync_Success(t *testing.T) {
@@ -1268,4 +1280,140 @@ func TestAwaitCacheSync_WaitForCacheSyncFalse(t *testing.T) {
 	fake := &fakeInformerCache{syncResult: false}
 	err := awaitCacheSync(ctx, fake, &corev1.ConfigMap{})
 	assert.ErrorContains(t, err, "cache sync did not complete")
+}
+
+func TestListOwnedPolicies_Success(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fake := &fakeInformerCache{
+		listFn: func(list client.ObjectList) error {
+			cmList := list.(*corev1.ConfigMapList)
+			cmList.Items = []corev1.ConfigMap{
+				{ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "ns1"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "cm2", Namespace: "ns2"}},
+			}
+			return nil
+		},
+	}
+
+	owned, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.NilError(t, err)
+	assert.Equal(t, len(owned), 2)
+	assert.Equal(t, owned[0].Group, "")
+	assert.Equal(t, owned[0].Namespace, "ns1")
+	assert.Equal(t, owned[0].Name, "cm1")
+	assert.Equal(t, owned[0].Kind, "")
+	assert.Equal(t, owned[1].Group, "")
+	assert.Equal(t, owned[1].Namespace, "ns2")
+	assert.Equal(t, owned[1].Name, "cm2")
+	assert.Equal(t, owned[1].Kind, "")
+}
+
+func TestListOwnedPolicies_TerminatingIncluded(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	now := metav1.Now()
+	fake := &fakeInformerCache{
+		listFn: func(list client.ObjectList) error {
+			cmList := list.(*corev1.ConfigMapList)
+			cmList.Items = []corev1.ConfigMap{
+				{ObjectMeta: metav1.ObjectMeta{Name: "terminating", Namespace: "ns1", DeletionTimestamp: &now}},
+			}
+			return nil
+		},
+	}
+
+	owned, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.NilError(t, err)
+	assert.Equal(t, len(owned), 1)
+	assert.Equal(t, owned[0].Name, "terminating")
+}
+
+func TestListOwnedPolicies_EmptyList(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fake := &fakeInformerCache{
+		listFn: func(list client.ObjectList) error {
+			return nil
+		},
+	}
+
+	owned, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.NilError(t, err)
+	assert.Equal(t, len(owned), 0)
+}
+
+func TestListOwnedPolicies_ListError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fake := &fakeInformerCache{
+		listErr: errors.New("cache error"),
+	}
+
+	_, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.ErrorContains(t, err, "failed to list")
+}
+
+func TestListOwnedPolicies_MissingListType(t *testing.T) {
+	scheme := runtime.NewScheme()
+	gv := corev1.SchemeGroupVersion
+	scheme.AddKnownTypes(gv, &corev1.ConfigMap{})
+
+	fake := &fakeInformerCache{}
+
+	_, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.ErrorContains(t, err, "failed to resolve list type")
+}
+
+func TestAttemptHandshake_NilManagerPassesNilOwnedPolicies(t *testing.T) {
+	var capturedReq *extpb.HandshakeRequest
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			capturedReq = in
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "token"}, nil
+		},
+	}
+
+	ec := &ExtensionController{
+		extensionClient: &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:     func(ctx context.Context) ([]byte, error) { return []byte("test-token"), nil },
+		config:          ExtensionConfig{PolicyKind: "TestPolicy"},
+		manager:         nil,
+	}
+
+	err := ec.attemptHandshake(context.Background())
+	assert.NilError(t, err)
+	assert.Assert(t, capturedReq.OwnedPolicies == nil)
+}
+
+func TestHandshake_SetsOwnedPolicies(t *testing.T) {
+	var capturedReq *extpb.HandshakeRequest
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			capturedReq = in
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "token"}, nil
+		},
+	}
+
+	session := &sessionCredentials{}
+	ec := &extensionClient{client: mock, session: session}
+
+	owned := []*extpb.Metadata{
+		{Group: "test.io", Namespace: "ns1", Name: "policy1"},
+		{Group: "test.io", Namespace: "ns2", Name: "policy2"},
+	}
+
+	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy", owned)
+	assert.NilError(t, err)
+	assert.Equal(t, len(capturedReq.OwnedPolicies), 2)
+	assert.Equal(t, capturedReq.OwnedPolicies[0].Group, "test.io")
+	assert.Equal(t, capturedReq.OwnedPolicies[0].Namespace, "ns1")
+	assert.Equal(t, capturedReq.OwnedPolicies[0].Name, "policy1")
+	assert.Equal(t, capturedReq.OwnedPolicies[1].Group, "test.io")
+	assert.Equal(t, capturedReq.OwnedPolicies[1].Namespace, "ns2")
+	assert.Equal(t, capturedReq.OwnedPolicies[1].Name, "policy2")
 }

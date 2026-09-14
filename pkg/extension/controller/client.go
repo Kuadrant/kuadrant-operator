@@ -83,11 +83,12 @@ func newExtensionClient(address string) (*extensionClient, error) {
 	}, nil
 }
 
-func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKind string) error {
+func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKind string, ownedPolicies []*extpb.Metadata) error {
 	resp, err := ec.client.Handshake(ctx, &extpb.HandshakeRequest{
-		Version:    protocolVersion,
-		Token:      token,
-		PolicyKind: policyKind,
+		Version:       protocolVersion,
+		Token:         token,
+		PolicyKind:    policyKind,
+		OwnedPolicies: ownedPolicies,
 	})
 	if err != nil {
 		return fmt.Errorf("handshake RPC failed: %w", err)

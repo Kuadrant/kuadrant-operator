@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ktypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	ctrlruntimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
@@ -1229,4 +1230,42 @@ func TestReconcile_MissingPolicyIsNotAnError(t *testing.T) {
 	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "gone"}}
 	_, err := ec.Reconcile(context.Background(), req)
 	assert.NilError(t, err)
+}
+
+type fakeInformerCache struct {
+	getInformerErr error
+	syncResult     bool
+	callOrder      []string
+}
+
+func (f *fakeInformerCache) GetInformer(ctx context.Context, obj client.Object, opts ...ctrlruntimecache.InformerGetOption) (ctrlruntimecache.Informer, error) {
+	f.callOrder = append(f.callOrder, "GetInformer")
+	return nil, f.getInformerErr
+}
+
+func (f *fakeInformerCache) WaitForCacheSync(ctx context.Context) bool {
+	f.callOrder = append(f.callOrder, "WaitForCacheSync")
+	return f.syncResult
+}
+
+func TestAwaitCacheSync_Success(t *testing.T) {
+	fake := &fakeInformerCache{syncResult: true}
+	err := awaitCacheSync(context.Background(), fake, &corev1.ConfigMap{})
+	assert.NilError(t, err)
+	assert.DeepEqual(t, fake.callOrder, []string{"GetInformer", "WaitForCacheSync"})
+}
+
+func TestAwaitCacheSync_GetInformerError(t *testing.T) {
+	fake := &fakeInformerCache{getInformerErr: errors.New("informer error")}
+	err := awaitCacheSync(context.Background(), fake, &corev1.ConfigMap{})
+	assert.ErrorContains(t, err, "failed to register informer")
+	assert.DeepEqual(t, fake.callOrder, []string{"GetInformer"})
+}
+
+func TestAwaitCacheSync_WaitForCacheSyncFalse(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	fake := &fakeInformerCache{syncResult: false}
+	err := awaitCacheSync(ctx, fake, &corev1.ConfigMap{})
+	assert.ErrorContains(t, err, "cache sync did not complete")
 }

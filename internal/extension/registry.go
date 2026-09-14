@@ -920,7 +920,11 @@ func pipelineTargetRefsMatch(storedRefs []TargetRef, targetRefs []machinery.Poli
 	return false
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int, clearedPipelineActions int) {
+func (r *RegisteredDataStore) ClearPolicyData(policies ...ResourceID) PruneCounts {
+	if len(policies) == 0 {
+		return PruneCounts{}
+	}
+
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	r.upstreamsMutex.Lock()
@@ -930,36 +934,49 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 	defer r.upstreamsMutex.Unlock()
 	defer r.pipelineMutex.Unlock()
 
-	// clear data providers
-	for key := range r.dataProviders {
-		if key.Policy == policy {
-			delete(r.dataProviders, key)
-			clearedMutators++
-		}
-	}
-
-	// clear subscriptions
-	for key := range r.subscriptions {
-		if key.Policy == policy {
-			delete(r.subscriptions, key)
-			clearedSubscriptions++
-		}
-	}
-
-	// Collect upstreams to check for cache cleanup
+	var counts PruneCounts
 	var upstreamsToCheck []RegisteredUpstreamEntry
-	for key, entry := range r.registeredUpstreams {
-		if key.Policy == policy {
-			upstreamsToCheck = append(upstreamsToCheck, entry)
-		}
-	}
 
-	// clear registered upstreams
-	for key := range r.registeredUpstreams {
-		if key.Policy == policy {
-			delete(r.registeredUpstreams, key)
-			clearedUpstreams++
+	for _, policy := range policies {
+		// clear data providers
+		for key := range r.dataProviders {
+			if key.Policy == policy {
+				delete(r.dataProviders, key)
+				counts.Mutators++
+			}
 		}
+
+		// clear subscriptions
+		for key := range r.subscriptions {
+			if key.Policy == policy {
+				delete(r.subscriptions, key)
+				counts.Subscriptions++
+			}
+		}
+
+		// Collect upstreams to check for cache cleanup
+		for key, entry := range r.registeredUpstreams {
+			if key.Policy == policy {
+				upstreamsToCheck = append(upstreamsToCheck, entry)
+			}
+		}
+
+		// clear registered upstreams
+		for key := range r.registeredUpstreams {
+			if key.Policy == policy {
+				delete(r.registeredUpstreams, key)
+				counts.Upstreams++
+			}
+		}
+
+		// clear pipeline actions and target refs
+		for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+			key := pipelineKey{Policy: policy, Phase: phase}
+			counts.PipelineActions += len(r.pipelineActions[key])
+			delete(r.pipelineActions, key)
+			delete(r.pipelineCounters, key)
+		}
+		delete(r.pipelineTargetRefs, policy)
 	}
 
 	// Clean up proto cache for upstreams that are no longer referenced
@@ -981,16 +998,80 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 		}
 	}
 
-	// clear pipeline actions and target refs (lock already held)
-	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
-		key := pipelineKey{Policy: policy, Phase: phase}
-		clearedPipelineActions += len(r.pipelineActions[key])
-		delete(r.pipelineActions, key)
-		delete(r.pipelineCounters, key)
-	}
-	delete(r.pipelineTargetRefs, policy)
+	return counts
+}
 
-	return clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions
+func (r *RegisteredDataStore) PolicyIDsForKind(kind string) []ResourceID {
+	r.dataMutex.RLock()
+	r.subsMutex.RLock()
+	r.upstreamsMutex.RLock()
+	r.pipelineMutex.RLock()
+	defer r.dataMutex.RUnlock()
+	defer r.subsMutex.RUnlock()
+	defer r.upstreamsMutex.RUnlock()
+	defer r.pipelineMutex.RUnlock()
+
+	seen := make(map[ResourceID]struct{})
+
+	for key := range r.dataProviders {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for key := range r.subscriptions {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for key := range r.registeredUpstreams {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for key := range r.pipelineActions {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for id := range r.pipelineTargetRefs {
+		if id.Kind == kind {
+			seen[id] = struct{}{}
+		}
+	}
+
+	result := make([]ResourceID, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+type PruneCounts struct {
+	Mutators        int
+	Subscriptions   int
+	Upstreams       int
+	PipelineActions int
+}
+
+func (r *RegisteredDataStore) PruneToOwned(kind string, owned []ResourceID) ([]ResourceID, PruneCounts) {
+	ownedSet := make(map[ResourceID]struct{}, len(owned))
+	for _, id := range owned {
+		ownedSet[id] = struct{}{}
+	}
+
+	var stale []ResourceID
+	for _, id := range r.PolicyIDsForKind(kind) {
+		if _, isOwned := ownedSet[id]; !isOwned {
+			stale = append(stale, id)
+		}
+	}
+
+	return stale, r.ClearPolicyData(stale...)
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {

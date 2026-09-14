@@ -200,16 +200,16 @@ func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 		t.Errorf("Expected 3 entries for target ref, got %d", len(entries))
 	}
 
-	clearedMutators, clearedSubscriptions, _, clearedPipelineActions := store.ClearPolicyData(testPolicy)
+	counts := store.ClearPolicyData(testPolicy)
 
-	if clearedMutators != 2 {
-		t.Errorf("Expected 2 cleared mutators, got %d", clearedMutators)
+	if counts.Mutators != 2 {
+		t.Errorf("Expected 2 cleared mutators, got %d", counts.Mutators)
 	}
-	if clearedSubscriptions != 1 {
-		t.Errorf("Expected 1 cleared subscription, got %d", clearedSubscriptions)
+	if counts.Subscriptions != 1 {
+		t.Errorf("Expected 1 cleared subscription, got %d", counts.Subscriptions)
 	}
-	if clearedPipelineActions != 0 {
-		t.Errorf("Expected 0 cleared pipeline actions, got %d", clearedPipelineActions)
+	if counts.PipelineActions != 0 {
+		t.Errorf("Expected 0 cleared pipeline actions, got %d", counts.PipelineActions)
 	}
 
 	entries = store.GetAllForTargetRef(mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_AUTH)
@@ -266,7 +266,7 @@ func TestRegisteredDataStore_PolicyDataLifecycle(t *testing.T) {
 		t.Error("Expected policy data after adding entry")
 	}
 
-	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1")) //nolint:dogsled,exhaustruct
+	store.ClearPolicyData(testResourceID("Extension", "ns1", "ext1"))
 
 	subscription := Subscription{
 		CAst: &cel.Ast{},
@@ -438,9 +438,9 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 	store.SetSubscription(testResourceID("AuthPolicy", "test-ns", "test-policy"), "expression2", subscription2)
 	store.SetSubscription(testResourceID("AuthPolicy", "other-ns", "other-policy"), "expression3", subscription3)
 
-	_, cleared, _, _ := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
-	if cleared != 2 {
-		t.Errorf("Expected 2 cleared subscriptions, got %d", cleared)
+	counts := store.ClearPolicyData(testResourceID("AuthPolicy", "test-ns", "test-policy"))
+	if counts.Subscriptions != 2 {
+		t.Errorf("Expected 2 cleared subscriptions, got %d", counts.Subscriptions)
 	}
 
 	subscriptions := store.GetPolicySubscriptions(testResourceID("AuthPolicy", "test-ns", "test-policy"))
@@ -453,9 +453,9 @@ func TestRegisteredDataStore_ClearPolicySubscriptions(t *testing.T) {
 		t.Errorf("Expected 1 subscription for other policy, got %d", len(subscriptions))
 	}
 
-	_, cleared, _, _ = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
-	if cleared != 0 {
-		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", cleared)
+	counts = store.ClearPolicyData(testResourceID("AuthPolicy", "non-existent", "policy"))
+	if counts.Subscriptions != 0 {
+		t.Errorf("Expected 0 cleared subscriptions for non-existent policy, got %d", counts.Subscriptions)
 	}
 }
 
@@ -784,9 +784,9 @@ func TestRegisteredDataStoreEdgeCases(t *testing.T) {
 	t.Run("clear empty target", func(t *testing.T) {
 		store := NewRegisteredDataStore()
 
-		cleared, _, _, _ := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
-		if cleared != 0 {
-			t.Errorf("Expected 0 cleared entries, got %d", cleared)
+		counts := store.ClearPolicyData(testResourceID("non-existent", "ns", "name"))
+		if counts.Mutators != 0 {
+			t.Errorf("Expected 0 cleared entries, got %d", counts.Mutators)
 		}
 	})
 
@@ -1101,9 +1101,9 @@ func TestRegisteredDataStore_ClearPolicyData_WithUpstreams(t *testing.T) {
 	cacheKey1b := ProtoCacheKey{ClusterName: "ext-svc2-8082", Service: "test.ServiceB"}
 	cacheKey2 := ProtoCacheKey{ClusterName: "ext-svc3-8083", Service: "test.ServiceC"}
 
-	_, _, clearedUpstreams, _ := store.ClearPolicyData(policy1)
-	if clearedUpstreams != 2 {
-		t.Errorf("Expected 2 cleared upstreams, got %d", clearedUpstreams)
+	counts := store.ClearPolicyData(policy1)
+	if counts.Upstreams != 2 {
+		t.Errorf("Expected 2 cleared upstreams, got %d", counts.Upstreams)
 	}
 
 	if upstreams := store.GetUpstreamsForPolicy(policy1); len(upstreams) != 0 {
@@ -1619,10 +1619,10 @@ func TestPipelineActionStore_ClearPolicyDataIncludesPipeline(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
 	})
 
-	_, _, _, clearedPipelineActions := store.ClearPolicyData(policy)
+	counts := store.ClearPolicyData(policy)
 
-	if clearedPipelineActions != 1 {
-		t.Errorf("Expected 1 cleared pipeline action, got %d", clearedPipelineActions)
+	if counts.PipelineActions != 1 {
+		t.Errorf("Expected 1 cleared pipeline action, got %d", counts.PipelineActions)
 	}
 	if actions := store.GetPipelineActions(policy, PipelinePhaseRequest); actions != nil {
 		t.Errorf("Expected pipeline actions to be cleared by ClearPolicyData, got %v", actions)
@@ -2998,11 +2998,435 @@ func TestPipelineTargetRefCleanup(t *testing.T) {
 		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, refs)
-	_, _, _, clearedPipeline := store.ClearPolicyData(policyID)
-	if clearedPipeline != 1 {
-		t.Fatalf("Expected 1 cleared pipeline action, got %d", clearedPipeline)
+	counts := store.ClearPolicyData(policyID)
+	if counts.PipelineActions != 1 {
+		t.Fatalf("Expected 1 cleared pipeline action, got %d", counts.PipelineActions)
 	}
 	if got := store.GetPipelineTargetRefs(policyID); got != nil {
 		t.Fatalf("Expected nil target refs after ClearPolicyData, got %v", got)
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_FindsInDataProviders(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry := DataProviderEntry{
+		Policy:     policy,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry)
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy {
+		t.Errorf("Expected policy %+v, got %+v", policy, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_FindsInSubscriptions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+
+	sub := Subscription{
+		CAst:       &cel.Ast{},
+		PolicyKind: "TestPolicy",
+	}
+	store.SetSubscription(policy, "gateway.name == 'test'", sub)
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy {
+		t.Errorf("Expected policy %+v, got %+v", policy, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_FindsInUpstreams(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+
+	key := RegisteredUpstreamKey{
+		Policy:  policy,
+		Name:    "upstream1",
+		URL:     "grpc://example.com:8080",
+		Service: "test.Service",
+		Method:  "Method1",
+	}
+	entry := RegisteredUpstreamEntry{
+		ClusterName: "cluster1",
+		Host:        "example.com",
+		Port:        8080,
+		Service:     "test.Service",
+		Method:      "Method1",
+		TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test", Namespace: "default"},
+	}
+	store.SetUpstream(key, entry, testFileDescriptorSet())
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy {
+		t.Errorf("Expected policy %+v, got %+v", policy, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_FindsInPipelineActions(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+
+	actions := []PipelineActionEntry{{
+		Index:      0,
+		ActionType: extpb.ActionType_ACTION_TYPE_DENY,
+		Phase:      string(PipelinePhaseRequest),
+	}}
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, actions)
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy {
+		t.Errorf("Expected policy %+v, got %+v", policy, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_FindsInPipelineTargetRefs(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+
+	refs := []TargetRef{{
+		Group:     "gateway.networking.k8s.io",
+		Kind:      "Gateway",
+		Name:      "test",
+		Namespace: "default",
+	}}
+	store.SetPipelineTargetRefs(policy, refs)
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy {
+		t.Errorf("Expected policy %+v, got %+v", policy, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_Deduplicates(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry := DataProviderEntry{
+		Policy:     policy,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry)
+
+	sub := Subscription{
+		CAst:       &cel.Ast{},
+		PolicyKind: "TestPolicy",
+	}
+	store.SetSubscription(policy, "gateway.name == 'test'", sub)
+
+	actions := []PipelineActionEntry{{
+		Index:      0,
+		ActionType: extpb.ActionType_ACTION_TYPE_DENY,
+		Phase:      string(PipelinePhaseRequest),
+	}}
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, actions)
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 deduplicated policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy {
+		t.Errorf("Expected policy %+v, got %+v", policy, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PolicyIDsForKind_ExcludesOtherKinds(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy1 := testResourceID("TestPolicy", "ns1", "policy1")
+	policy2 := testResourceID("OtherPolicy", "ns1", "policy2")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry1 := DataProviderEntry{
+		Policy:     policy1,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy1, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry1)
+
+	entry2 := DataProviderEntry{
+		Policy:     policy2,
+		Binding:    "org",
+		Expression: "user.org",
+	}
+	store.Set(policy2, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org", entry2)
+
+	ids := store.PolicyIDsForKind("TestPolicy")
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 policy ID, got %d", len(ids))
+	}
+	if ids[0] != policy1 {
+		t.Errorf("Expected policy %+v, got %+v", policy1, ids[0])
+	}
+}
+
+func TestRegisteredDataStore_PruneToOwned_EmptyOwnedPrunesAll(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy1 := testResourceID("TestPolicy", "ns1", "policy1")
+	policy2 := testResourceID("TestPolicy", "ns2", "policy2")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry1 := DataProviderEntry{
+		Policy:     policy1,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy1, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry1)
+
+	sub := Subscription{
+		CAst:       &cel.Ast{},
+		PolicyKind: "TestPolicy",
+	}
+	store.SetSubscription(policy2, "gateway.name == 'test'", sub)
+
+	pruned, counts := store.PruneToOwned("TestPolicy", []ResourceID{})
+
+	if len(pruned) != 2 {
+		t.Fatalf("Expected 2 pruned policies, got %d", len(pruned))
+	}
+	if counts.Mutators != 1 {
+		t.Errorf("Expected 1 mutator pruned, got %d", counts.Mutators)
+	}
+	if counts.Subscriptions != 1 {
+		t.Errorf("Expected 1 subscription pruned, got %d", counts.Subscriptions)
+	}
+
+	_, exists := store.Get(policy1, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user")
+	if exists {
+		t.Fatal("Expected policy1 data to be pruned")
+	}
+	_, exists = store.GetSubscription(policy2, "gateway.name == 'test'")
+	if exists {
+		t.Fatal("Expected policy2 data to be pruned")
+	}
+}
+
+func TestRegisteredDataStore_PruneToOwned_SubsetOwnedPrunesComplement(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy1 := testResourceID("TestPolicy", "ns1", "policy1")
+	policy2 := testResourceID("TestPolicy", "ns2", "policy2")
+	policy3 := testResourceID("TestPolicy", "ns3", "policy3")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry1 := DataProviderEntry{
+		Policy:     policy1,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy1, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry1)
+
+	entry2 := DataProviderEntry{
+		Policy:     policy2,
+		Binding:    "org",
+		Expression: "user.org",
+	}
+	store.Set(policy2, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org", entry2)
+
+	entry3 := DataProviderEntry{
+		Policy:     policy3,
+		Binding:    "role",
+		Expression: "user.role",
+	}
+	store.Set(policy3, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "role", entry3)
+
+	pruned, counts := store.PruneToOwned("TestPolicy", []ResourceID{policy2})
+
+	if len(pruned) != 2 {
+		t.Fatalf("Expected 2 pruned policies, got %d", len(pruned))
+	}
+	if counts.Mutators != 2 {
+		t.Errorf("Expected 2 mutators pruned, got %d", counts.Mutators)
+	}
+
+	found := make(map[ResourceID]bool)
+	for _, p := range pruned {
+		found[p] = true
+	}
+	if !found[policy1] || !found[policy3] {
+		t.Fatal("Expected policy1 and policy3 to be pruned")
+	}
+	if found[policy2] {
+		t.Fatal("Expected policy2 to be retained")
+	}
+
+	_, exists := store.Get(policy2, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org")
+	if !exists {
+		t.Fatal("Expected policy2 data to be retained")
+	}
+}
+
+func TestRegisteredDataStore_PruneToOwned_AllOwnedPrunesNothing(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy1 := testResourceID("TestPolicy", "ns1", "policy1")
+	policy2 := testResourceID("TestPolicy", "ns2", "policy2")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry1 := DataProviderEntry{
+		Policy:     policy1,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy1, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry1)
+
+	entry2 := DataProviderEntry{
+		Policy:     policy2,
+		Binding:    "org",
+		Expression: "user.org",
+	}
+	store.Set(policy2, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org", entry2)
+
+	pruned, counts := store.PruneToOwned("TestPolicy", []ResourceID{policy1, policy2})
+
+	if len(pruned) != 0 {
+		t.Fatalf("Expected 0 pruned policies, got %d", len(pruned))
+	}
+	if counts.Mutators != 0 || counts.Subscriptions != 0 || counts.Upstreams != 0 || counts.PipelineActions != 0 {
+		t.Errorf("Expected zero counts, got %+v", counts)
+	}
+}
+
+func TestRegisteredDataStore_PruneToOwned_LeavesOtherKindsUntouched(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy1 := testResourceID("TestPolicy", "ns1", "policy1")
+	policy2 := testResourceID("OtherPolicy", "ns1", "policy2")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry1 := DataProviderEntry{
+		Policy:     policy1,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy1, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry1)
+
+	entry2 := DataProviderEntry{
+		Policy:     policy2,
+		Binding:    "org",
+		Expression: "user.org",
+	}
+	store.Set(policy2, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org", entry2)
+
+	pruned, counts := store.PruneToOwned("TestPolicy", []ResourceID{})
+
+	if len(pruned) != 1 {
+		t.Fatalf("Expected 1 pruned policy, got %d", len(pruned))
+	}
+	if pruned[0] != policy1 {
+		t.Errorf("Expected policy1 to be pruned, got %+v", pruned[0])
+	}
+	if counts.Mutators != 1 {
+		t.Errorf("Expected 1 mutator pruned, got %d", counts.Mutators)
+	}
+
+	_, exists := store.Get(policy2, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org")
+	if !exists {
+		t.Fatal("Expected OtherPolicy data to be untouched")
+	}
+}
+
+func TestRegisteredDataStore_PruneToOwned_CountsMatchRemovedData(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TestPolicy", "ns1", "policy1")
+	mockTargetRef := createMockGatewayTargetRef()
+
+	entry1 := DataProviderEntry{
+		Policy:     policy,
+		Binding:    "user",
+		Expression: "user.id",
+	}
+	store.Set(policy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "user", entry1)
+
+	entry2 := DataProviderEntry{
+		Policy:     policy,
+		Binding:    "org",
+		Expression: "user.org",
+	}
+	store.Set(policy, mockTargetRef.GetLocator(), extpb.Domain_DOMAIN_UNSPECIFIED, "org", entry2)
+
+	sub1 := Subscription{
+		CAst:       &cel.Ast{},
+		PolicyKind: "TestPolicy",
+	}
+	store.SetSubscription(policy, "gateway.name == 'test1'", sub1)
+
+	sub2 := Subscription{
+		CAst:       &cel.Ast{},
+		PolicyKind: "TestPolicy",
+	}
+	store.SetSubscription(policy, "gateway.name == 'test2'", sub2)
+
+	key1 := RegisteredUpstreamKey{
+		Policy:  policy,
+		Name:    "upstream1",
+		URL:     "grpc://example.com:8080",
+		Service: "test.Service",
+		Method:  "Method1",
+	}
+	upstreamEntry1 := RegisteredUpstreamEntry{
+		ClusterName: "cluster1",
+		Host:        "example.com",
+		Port:        8080,
+		Service:     "test.Service",
+		Method:      "Method1",
+		TargetRef:   TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test", Namespace: "default"},
+	}
+	store.SetUpstream(key1, upstreamEntry1, testFileDescriptorSet())
+
+	actions := []PipelineActionEntry{
+		{
+			Index:      0,
+			ActionType: extpb.ActionType_ACTION_TYPE_DENY,
+			Phase:      string(PipelinePhaseRequest),
+		},
+		{
+			Index:      1,
+			ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD,
+			Phase:      string(PipelinePhaseRequest),
+		},
+		{
+			Index:      0,
+			ActionType: extpb.ActionType_ACTION_TYPE_DENY,
+			Phase:      string(PipelinePhaseResponse),
+		},
+	}
+	store.AppendPipelineActions(policy, PipelinePhaseRequest, actions[:2])
+	store.AppendPipelineActions(policy, PipelinePhaseResponse, actions[2:])
+
+	pruned, counts := store.PruneToOwned("TestPolicy", []ResourceID{})
+
+	if len(pruned) != 1 {
+		t.Fatalf("Expected 1 pruned policy, got %d", len(pruned))
+	}
+	if counts.Mutators != 2 {
+		t.Errorf("Expected 2 mutators pruned, got %d", counts.Mutators)
+	}
+	if counts.Subscriptions != 2 {
+		t.Errorf("Expected 2 subscriptions pruned, got %d", counts.Subscriptions)
+	}
+	if counts.Upstreams != 1 {
+		t.Errorf("Expected 1 upstream pruned, got %d", counts.Upstreams)
+	}
+	if counts.PipelineActions != 3 {
+		t.Errorf("Expected 3 pipeline actions pruned, got %d", counts.PipelineActions)
 	}
 }

@@ -832,19 +832,19 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		Name:      request.Policy.Metadata.Name,
 	}
 
-	clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions := s.registeredData.ClearPolicyData(policyID)
+	counts := s.registeredData.ClearPolicyData(policyID)
 
 	// Trigger notifier when mutators, upstreams, or pipeline actions are cleared
-	if (clearedMutators > 0 || clearedUpstreams > 0 || clearedPipelineActions > 0) && s.changeNotifier != nil {
-		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d, pipeline actions: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, clearedMutators, clearedUpstreams, clearedPipelineActions)
+	if (counts.Mutators > 0 || counts.Upstreams > 0 || counts.PipelineActions > 0) && s.changeNotifier != nil {
+		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d, pipeline actions: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, counts.Mutators, counts.Upstreams, counts.PipelineActions)
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}
 	}
 
 	return &extpb.ClearPolicyResponse{
-		ClearedMutators:      int32(clearedMutators),      // #nosec G115
-		ClearedSubscriptions: int32(clearedSubscriptions), // #nosec G115
+		ClearedMutators:      int32(counts.Mutators),      // #nosec G115
+		ClearedSubscriptions: int32(counts.Subscriptions), // #nosec G115
 	}, nil
 }
 

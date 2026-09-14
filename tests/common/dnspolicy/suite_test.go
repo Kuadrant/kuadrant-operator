@@ -80,7 +80,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	controllers.SetupKuadrantOperatorForTest(controllers.BootstrapScheme(), cfg)
+	controllers.SetupKuadrantOperatorForTest(controllers.BootstrapScheme(), cfg, true)
 
 	data := controllers.MarshalConfig(cfg)
 

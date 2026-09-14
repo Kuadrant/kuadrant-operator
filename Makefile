@@ -465,7 +465,7 @@ $(1): export RELATED_IMAGE_CONSOLE_PLUGIN_LATEST := $(RELATED_IMAGE_CONSOLE_PLUG
 $(1): export RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 := $(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)
 $(1): export RELATED_IMAGE_CONSOLE_PLUGIN_PF5 := $(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)
 endef
-$(foreach t,run test-bare-k8s-integration test-gatewayapi-env-integration test-istio-env-integration test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
+$(foreach t,run test-bare-k8s-integration test-controlplane-integration test-gatewayapi-env-integration test-istio-env-integration test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
@@ -667,6 +667,7 @@ INTEGRATION_TEST_ENV ?=
 # Integration test configurations using colon delimiters
 INTEGRATION_CONFIGS := \
 	bare-k8s:local-k8s-env-setup:test-bare-k8s-integration: \
+	controlplane:local-gatewayapi-env-setup:test-controlplane-integration: \
 	gatewayapi:local-gatewayapi-env-setup:test-gatewayapi-env-integration: \
 	istio:local-env-setup:test-istio-env-integration:GATEWAYAPI_PROVIDER=istio \
 	envoygateway:local-env-setup:test-envoygateway-env-integration:GATEWAYAPI_PROVIDER=envoygateway \

@@ -5,6 +5,7 @@ package controlplane
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -30,19 +31,31 @@ const (
 	devSetupFieldOwner      = "dev-setup"
 )
 
-// devDNSOperatorConfigMapPath is the same file make local-env-setup applies
-// (see make/development-environments.mk's deploy-dependencies target) to
-// enable the "inmemory" DNS provider for local development and this test
-// suite. The dns-operator chart renders this ConfigMap with no "data" at
-// all, so normal reconciles never touch it -- but tests that delete the
-// KuadrantControlPlane cascade-delete it along with everything else it owns,
-// and the deployer's redeploy re-creates it blank. restoreDevEnvOverrides
-// (called from AfterEach) re-applies it so a destructive test here doesn't
-// silently break dnspolicy tests relying on the inmemory provider.
-var devDNSOperatorConfigMapPath = filepath.Join("..", "..", "..", "config", "dev", "dns-operator-configmap.yaml")
+// findRepoRoot walks up the directory tree from this test file to find the repo root (directory containing go.mod).
+// It works regardless of what directory the tests are run from.
+func findRepoRoot() string {
+	_, filename, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(filename)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
 
+// restoreDevEnvOverrides re-applies the dns-operator-controller-env ConfigMap
+// to enable the "inmemory" DNS provider for controlplane tests. When tests
+// delete the KuadrantControlPlane, cascade-deletion removes this ConfigMap
+// along with everything it owns. Restoring it here prevents breakage of
+// dnspolicy tests relying on the inmemory provider.
 func restoreDevEnvOverrides(ctx SpecContext) {
-	data, err := os.ReadFile(devDNSOperatorConfigMapPath)
+	configPath := filepath.Join(findRepoRoot(), "config", "dev", "dns-operator-configmap.yaml")
+	data, err := os.ReadFile(configPath)
 	Expect(err).ToNot(HaveOccurred())
 
 	want := &corev1.ConfigMap{}

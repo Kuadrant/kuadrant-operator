@@ -418,13 +418,16 @@ func TestActionSpecBuild_Commit(t *testing.T) {
 	if grpc.IsGuard {
 		t.Error("expected isGuard=false (commit runs in response phase)")
 	}
-	// commit only runs when a reservation_id was actually stored
+	// commit always runs (RFC 0021): a missing reservation degrades gracefully
+	// to Report-style accounting in Limitador rather than being skipped.
 	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
-	if grpc.Predicate != fmt.Sprintf("has(%s)", wantPath) {
-		t.Errorf("predicate = %q, want %q", grpc.Predicate, fmt.Sprintf("has(%s)", wantPath))
+	if grpc.Predicate != "true" {
+		t.Errorf("predicate = %q, want %q", grpc.Predicate, "true")
 	}
-	// the reserved id is read back from the same store path used by reserve
-	if !strings.Contains(grpc.MessageBuilder, "reservation_id: "+wantPath) {
+	// the reserved id is read back from the same store path used by reserve,
+	// falling back to an empty string when no reservation was stored
+	wantReservationID := fmt.Sprintf(`has(%s) ? %s : ""`, wantPath, wantPath)
+	if !strings.Contains(grpc.MessageBuilder, "reservation_id: "+wantReservationID) {
 		t.Errorf("messageBuilder should read back reservation id from store path:\n%s", grpc.MessageBuilder)
 	}
 	if !strings.Contains(grpc.MessageBuilder, `actual_amount: uint(responseBodyJSON("/usage/total_tokens"))`) {

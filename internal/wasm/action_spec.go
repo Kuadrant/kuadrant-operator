@@ -330,17 +330,15 @@ func (s ActionSpec) buildReserve() *GrpcAction {
 
 // buildCommit materializes a Commit action (RFC 0021): on response it commits the
 // actual token usage against the reservation captured by the paired Reserve
-// action. It only runs when a reservation_id was actually stored (guarded on the
-// per-limit store path), so a failed-open reservation does not produce a spurious
-// commit.
+// action. Per RFC 0021, Commit always runs: when no reservation_id was stored
+// (e.g. a failed-open Reserve), it sends an empty reservation_id and Limitador
+// degrades gracefully to plain Report-style accounting instead of dropping the
+// usage entirely.
 func (s ActionSpec) buildCommit() *GrpcAction {
 	id := findReservationAttrCEL(s.ConditionalData, reservationIDAttr)
 	storePath := reservationStorePath(id)
 	request := buildCommitRequest(s.Scope, s.ConditionalData, s.Bindings, storePath)
-	predicate := andPredicate(
-		buildRateLimitPredicate(s.Predicates, s.ConditionalData),
-		fmt.Sprintf("has(%s)", storePath),
-	)
+	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
 
 	return NewGrpcAction(predicate, commitResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_commit").
 		WithGuard(false).
@@ -350,16 +348,6 @@ func (s ActionSpec) buildCommit() *GrpcAction {
 }
 
 // --- Predicate helpers ---
-
-func andPredicate(a, b string) string {
-	if a == "true" {
-		return b
-	}
-	if b == "true" {
-		return a
-	}
-	return fmt.Sprintf("(%s) && (%s)", a, b)
-}
 
 func buildActionPredicate(predicates []string) string {
 	return joinPredicates(predicates, "&&")
@@ -711,6 +699,18 @@ func findReservationAttrCEL(conditionalData []ConditionalData, attrKey string) s
 	return ""
 }
 
+// ReservationAmountCEL returns the CEL expression this spec carries for
+// reservation.amount (RFC 0021), or "" if it carries none.
+func (s ActionSpec) ReservationAmountCEL() string {
+	return findReservationAttrCEL(s.ConditionalData, reservationAmountAttr)
+}
+
+// ReservationTTLCEL returns the CEL expression this spec carries for
+// reservation.ttl (RFC 0021), or "" if it carries none.
+func (s ActionSpec) ReservationTTLCEL() string {
+	return findReservationAttrCEL(s.ConditionalData, reservationTTLAttr)
+}
+
 func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string) string {
 	for _, cd := range conditionalData {
 		for _, item := range cd.Data {
@@ -807,9 +807,14 @@ func buildCommitRequest(scope string, conditionalData []ConditionalData, binding
 		actualAmount = "0u"
 	}
 
+	// The store path is only populated when Reserve actually captured a
+	// reservation_id; fall back to an empty string otherwise so Commit still
+	// fires and Limitador can degrade to Report-style accounting (RFC 0021).
+	reservationID := fmt.Sprintf(`has(%s) ? %s : ""`, reservationStorePath, reservationStorePath)
+
 	return CommitRequestCEL{
 		Domain:        domain,
-		ReservationID: reservationStorePath,
+		ReservationID: reservationID,
 		ActualAmount:  actualAmount,
 		Descriptors:   collectDescriptors(conditionalData, bindings),
 	}

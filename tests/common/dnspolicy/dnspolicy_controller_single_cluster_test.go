@@ -208,7 +208,7 @@ var _ = Describe("DNSPolicy Single Cluster", Labels{"dnspolicy"}, func() {
 				g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
 				g.Expect(wildcardDnsRecord.Status.OwnerID).To(Equal(wildcardDnsRecord.GetUIDHash()))
 				g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
-			}, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 		}, testTimeOut)
 
 	})

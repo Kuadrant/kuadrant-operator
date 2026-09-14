@@ -164,13 +164,15 @@ func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileCh
 		}
 	}
 	for {
-		if err := ec.handshakeWithBackoff(ctx); err != nil {
+		owned, err := ec.handshakeWithBackoff(ctx)
+		if err != nil {
 			return
 		}
 		ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind)
 		if ctx.Err() != nil {
 			return
 		}
+		ec.replayOwnedPolicies(ctx, owned, reconcileChan)
 
 		streamCtx, cancel := context.WithCancel(ctx)
 		go ec.heartbeat(streamCtx, cancel)
@@ -183,19 +185,19 @@ func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileCh
 	}
 }
 
-func (ec *ExtensionController) handshakeWithBackoff(ctx context.Context) error {
+func (ec *ExtensionController) handshakeWithBackoff(ctx context.Context) ([]*extpb.Metadata, error) {
 	backoff := ec.newReconnectBackoff()
 	for {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
-		err := ec.attemptHandshake(ctx)
+		owned, err := ec.attemptHandshake(ctx)
 		if err == nil {
-			return nil
+			return owned, nil
 		}
 		ec.logger.Error(err, "handshake attempt failed, retrying")
 		if !waitBackoff(ctx, &backoff) {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 	}
 }
@@ -206,6 +208,24 @@ func waitBackoff(ctx context.Context, backoff *wait.Backoff) bool {
 		return false
 	case <-time.After(backoff.Step()):
 		return true
+	}
+}
+
+func (ec *ExtensionController) replayOwnedPolicies(ctx context.Context, owned []*extpb.Metadata, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+	if len(owned) == 0 {
+		return
+	}
+	ec.logger.Info("replaying owned policies", "policyKind", ec.config.PolicyKind, "count", len(owned))
+	for _, policy := range owned {
+		trigger := &unstructured.Unstructured{}
+		trigger.SetName(policy.Name)
+		trigger.SetNamespace(policy.Namespace)
+		trigger.SetKind(ec.config.PolicyKind)
+		select {
+		case reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -246,24 +266,24 @@ func listOwnedPolicies(ctx context.Context, cache informerCache, forType client.
 	return owned, nil
 }
 
-func (ec *ExtensionController) attemptHandshake(ctx context.Context) error {
+func (ec *ExtensionController) attemptHandshake(ctx context.Context) ([]*extpb.Metadata, error) {
 	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 	token, err := ec.tokenSource(handshakeCtx)
 	if err != nil {
-		return fmt.Errorf("failed to obtain handshake credential: %w", err)
+		return nil, fmt.Errorf("failed to obtain handshake credential: %w", err)
 	}
 	var owned []*extpb.Metadata
 	if ec.manager != nil {
 		owned, err = listOwnedPolicies(handshakeCtx, ec.manager.GetCache(), ec.config.ForType, ec.manager.GetScheme())
 		if err != nil {
-			return fmt.Errorf("failed to enumerate owned policies: %w", err)
+			return nil, fmt.Errorf("failed to enumerate owned policies: %w", err)
 		}
 	}
 	if err := ec.extensionClient.handshake(handshakeCtx, token, ec.config.PolicyKind, owned); err != nil {
-		return fmt.Errorf("extension handshake failed: %w", err)
+		return nil, fmt.Errorf("extension handshake failed: %w", err)
 	}
-	return nil
+	return owned, nil
 }
 
 // streamSession rides out transient Unavailable errors on the same session, and

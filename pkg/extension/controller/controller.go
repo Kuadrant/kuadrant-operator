@@ -15,12 +15,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
@@ -95,6 +98,7 @@ type ExtensionController struct {
 type informerCache interface {
 	GetInformer(ctx context.Context, obj client.Object, opts ...ctrlruntimecache.InformerGetOption) (ctrlruntimecache.Informer, error)
 	WaitForCacheSync(ctx context.Context) bool
+	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
 }
 
 func awaitCacheSync(ctx context.Context, cache informerCache, forType client.Object) error {
@@ -205,6 +209,43 @@ func waitBackoff(ctx context.Context, backoff *wait.Backoff) bool {
 	}
 }
 
+func listOwnedPolicies(ctx context.Context, cache informerCache, forType client.Object, scheme *runtime.Scheme) ([]*extpb.Metadata, error) {
+	gvk, err := apiutil.GVKForObject(forType, scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve GVK for %T: %w", forType, err)
+	}
+	listGVK := gvk
+	listGVK.Kind += "List"
+	obj, err := scheme.New(listGVK)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve list type %s: %w", listGVK, err)
+	}
+	list, ok := obj.(client.ObjectList)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a client.ObjectList", listGVK)
+	}
+	if err := cache.List(ctx, list); err != nil {
+		return nil, fmt.Errorf("failed to list %s: %w", listGVK.Kind, err)
+	}
+
+	var owned []*extpb.Metadata
+	if err := apimeta.EachListItem(list, func(o runtime.Object) error {
+		accessor, err := apimeta.Accessor(o)
+		if err != nil {
+			return err
+		}
+		owned = append(owned, &extpb.Metadata{
+			Group:     gvk.Group,
+			Namespace: accessor.GetNamespace(),
+			Name:      accessor.GetName(),
+		})
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to read %s items: %w", listGVK.Kind, err)
+	}
+	return owned, nil
+}
+
 func (ec *ExtensionController) attemptHandshake(ctx context.Context) error {
 	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
@@ -212,7 +253,14 @@ func (ec *ExtensionController) attemptHandshake(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to obtain handshake credential: %w", err)
 	}
-	if err := ec.extensionClient.handshake(handshakeCtx, token, ec.config.PolicyKind); err != nil {
+	var owned []*extpb.Metadata
+	if ec.manager != nil {
+		owned, err = listOwnedPolicies(handshakeCtx, ec.manager.GetCache(), ec.config.ForType, ec.manager.GetScheme())
+		if err != nil {
+			return fmt.Errorf("failed to enumerate owned policies: %w", err)
+		}
+	}
+	if err := ec.extensionClient.handshake(handshakeCtx, token, ec.config.PolicyKind, owned); err != nil {
 		return fmt.Errorf("extension handshake failed: %w", err)
 	}
 	return nil

@@ -328,17 +328,38 @@ func (s ActionSpec) buildReserve() *GrpcAction {
 		WithOnReply(buildReserveOnReply(reserveResponseVar, id)...)
 }
 
-// buildCommit materializes a Commit action (RFC 0021): on response it commits the
-// actual token usage against the reservation captured by the paired Reserve
-// action. Per RFC 0021, Commit always runs: when no reservation_id was stored
-// (e.g. a failed-open Reserve), it sends an empty reservation_id and Limitador
-// degrades gracefully to plain Report-style accounting instead of dropping the
-// usage entirely.
+// buildCommit materializes a Commit action (RFC 0021): on response it commits
+// the actual token usage against the reservation captured by the paired
+// Reserve action.
+//
+// There are two independent runtime facts: whether a reservation_id was
+// stored (a Reserve succeeded and held capacity) and whether the actual token
+// usage could be parsed from the upstream response. Commit is skipped
+// entirely only when neither is true (e.g. Reserve failed open on a gRPC
+// error/timeout AND the upstream response body doesn't carry a parseable
+// usage figure - a connection issue or a non-JSON error body) - there would
+// be nothing to release and nothing to report. Otherwise it always fires:
+//   - reservation held, usage parseable: normal commit.
+//   - reservation held, usage unparseable: commit with actual_amount 0, so
+//     the hold is still released without charging for an unknown amount.
+//   - no reservation, usage parseable: commit with an empty reservation_id,
+//     which Limitador treats like a plain Report (RFC 0021).
 func (s ActionSpec) buildCommit() *GrpcAction {
 	id := findReservationAttrCEL(s.ConditionalData, reservationIDAttr)
 	storePath := reservationStorePath(id)
-	request := buildCommitRequest(s.Scope, s.ConditionalData, s.Bindings, storePath)
-	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
+	hasReservation := fmt.Sprintf("has(%s)", storePath)
+
+	rawActualAmount := lookupReservationAttr(s.ConditionalData, reservationActualAmountAttr)
+	amountKnown := "false"
+	if rawActualAmount != "" {
+		amountKnown = fmt.Sprintf("(%s) != null", rawActualAmount)
+	}
+
+	request := buildCommitRequest(s.Scope, s.ConditionalData, s.Bindings, storePath, hasReservation, rawActualAmount, amountKnown)
+	predicate := andPredicate(
+		buildRateLimitPredicate(s.Predicates, s.ConditionalData),
+		fmt.Sprintf("(%s) || (%s)", hasReservation, amountKnown),
+	)
 
 	return NewGrpcAction(predicate, commitResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_commit").
 		WithGuard(false).
@@ -348,6 +369,16 @@ func (s ActionSpec) buildCommit() *GrpcAction {
 }
 
 // --- Predicate helpers ---
+
+func andPredicate(a, b string) string {
+	if a == "true" {
+		return b
+	}
+	if b == "true" {
+		return a
+	}
+	return fmt.Sprintf("(%s) && (%s)", a, b)
+}
 
 func buildActionPredicate(predicates []string) string {
 	return joinPredicates(predicates, "&&")
@@ -668,35 +699,42 @@ func isRateLimitKnownAttr(data DataType) bool {
 	return isReservationKnownAttr(key)
 }
 
-// findReservationAttrCEL returns the CEL rendering of a reservation known attr:
-//   - reservation.amount / reservation.actual_amount are wrapped in uint().
-//   - reservation.id is returned as its raw (config-time) value so it can seed a
-//     store path; it is never rendered into a gRPC message.
-//   - reservation.ttl is returned as-is (expected to resolve to a duration).
-func findReservationAttrCEL(conditionalData []ConditionalData, attrKey string) string {
-	wrap := func(value string) string {
-		switch attrKey {
-		case reservationAmountAttr, reservationActualAmountAttr:
-			return fmt.Sprintf("uint(%s)", value)
-		default:
-			return value
-		}
-	}
+// lookupReservationAttr returns the raw (unwrapped) CEL value stored for a
+// reservation known attr, or "" if this spec carries none.
+func lookupReservationAttr(conditionalData []ConditionalData, attrKey string) string {
 	for _, cd := range conditionalData {
 		for _, item := range cd.Data {
 			switch val := item.Value.(type) {
 			case *Static:
 				if val.Static.Key == attrKey {
-					return wrap(val.Static.Value)
+					return val.Static.Value
 				}
 			case *Expression:
 				if val.ExpressionItem.Key == attrKey {
-					return wrap(val.ExpressionItem.Value)
+					return val.ExpressionItem.Value
 				}
 			}
 		}
 	}
 	return ""
+}
+
+// findReservationAttrCEL returns the CEL rendering of a reservation known attr:
+//   - reservation.amount is wrapped in uint().
+//   - reservation.id is returned as its raw (config-time) value so it can seed a
+//     store path; it is never rendered into a gRPC message.
+//   - reservation.ttl is returned as-is (expected to resolve to a duration).
+//   - reservation.actual_amount is looked up via lookupReservationAttr instead,
+//     since buildCommit needs the raw (unwrapped) value to null-check it.
+func findReservationAttrCEL(conditionalData []ConditionalData, attrKey string) string {
+	value := lookupReservationAttr(conditionalData, attrKey)
+	if value == "" {
+		return ""
+	}
+	if attrKey == reservationAmountAttr {
+		return fmt.Sprintf("uint(%s)", value)
+	}
+	return value
 }
 
 // ReservationAmountCEL returns the CEL expression this spec carries for
@@ -796,21 +834,27 @@ func buildReserveRequest(scope string, conditionalData []ConditionalData, bindin
 	}
 }
 
-func buildCommitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservationStorePath string) CommitRequestCEL {
+// buildCommitRequest builds the CommitRequest CEL message. hasReservation and
+// amountKnown are the same CEL boolean expressions used by buildCommit to
+// decide whether to send Commit at all; rawActualAmount is the unwrapped
+// reservation.actual_amount expression (e.g. a responseBodyJSON(...) call, or
+// its hoisted store-path reference after BuildActions runs).
+func buildCommitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservationStorePath, hasReservation, rawActualAmount, amountKnown string) CommitRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
 		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
 	}
 
-	actualAmount := findReservationAttrCEL(conditionalData, reservationActualAmountAttr)
-	if actualAmount == "" {
-		actualAmount = "0u"
+	// Unparseable usage (connection issue, non-JSON/error body) still commits,
+	// releasing any held reservation without charging for an unknown amount.
+	actualAmount := "0u"
+	if rawActualAmount != "" {
+		actualAmount = fmt.Sprintf("(%s) ? uint(%s) : 0u", amountKnown, rawActualAmount)
 	}
 
-	// The store path is only populated when Reserve actually captured a
-	// reservation_id; fall back to an empty string otherwise so Commit still
-	// fires and Limitador can degrade to Report-style accounting (RFC 0021).
-	reservationID := fmt.Sprintf(`has(%s) ? %s : ""`, reservationStorePath, reservationStorePath)
+	// No reservation held (e.g. Reserve failed open) but usage is known: commit
+	// with an empty reservation_id, which Limitador treats like a plain Report.
+	reservationID := fmt.Sprintf(`(%s) ? %s : ""`, hasReservation, reservationStorePath)
 
 	return CommitRequestCEL{
 		Domain:        domain,

@@ -418,19 +418,23 @@ func TestActionSpecBuild_Commit(t *testing.T) {
 	if grpc.IsGuard {
 		t.Error("expected isGuard=false (commit runs in response phase)")
 	}
-	// commit always runs (RFC 0021): a missing reservation degrades gracefully
-	// to Report-style accounting in Limitador rather than being skipped.
+	// commit is skipped only when neither a reservation was held nor the usage
+	// is parseable (RFC 0021); otherwise it always runs.
 	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
-	if grpc.Predicate != "true" {
-		t.Errorf("predicate = %q, want %q", grpc.Predicate, "true")
+	hasReservation := fmt.Sprintf("has(%s)", wantPath)
+	amountKnown := `(responseBodyJSON("/usage/total_tokens")) != null`
+	wantPredicate := fmt.Sprintf("(%s) || (%s)", hasReservation, amountKnown)
+	if grpc.Predicate != wantPredicate {
+		t.Errorf("predicate = %q, want %q", grpc.Predicate, wantPredicate)
 	}
-	// the reserved id is read back from the same store path used by reserve,
-	// falling back to an empty string when no reservation was stored
-	wantReservationID := fmt.Sprintf(`has(%s) ? %s : ""`, wantPath, wantPath)
+	// no reservation held -> empty reservation_id, which Limitador treats like a plain Report
+	wantReservationID := fmt.Sprintf(`(%s) ? %s : ""`, hasReservation, wantPath)
 	if !strings.Contains(grpc.MessageBuilder, "reservation_id: "+wantReservationID) {
 		t.Errorf("messageBuilder should read back reservation id from store path:\n%s", grpc.MessageBuilder)
 	}
-	if !strings.Contains(grpc.MessageBuilder, `actual_amount: uint(responseBodyJSON("/usage/total_tokens"))`) {
+	// unparseable usage -> commit 0 so a held reservation is still released without charging an unknown amount
+	wantActualAmount := fmt.Sprintf(`(%s) ? uint(responseBodyJSON("/usage/total_tokens")) : 0u`, amountKnown)
+	if !strings.Contains(grpc.MessageBuilder, "actual_amount: "+wantActualAmount) {
 		t.Errorf("messageBuilder missing actual_amount:\n%s", grpc.MessageBuilder)
 	}
 	if len(grpc.OnReply) != 1 {
@@ -438,6 +442,38 @@ func TestActionSpecBuild_Commit(t *testing.T) {
 	}
 	if grpc.OnReply[0].ActionType() != ActionKindFail {
 		t.Errorf("onReply[0] type = %s, want fail", grpc.OnReply[0].ActionType())
+	}
+}
+
+func TestActionSpecBuild_Commit_NoActualAmountData(t *testing.T) {
+	// Defensive case: a Commit spec with no reservation.actual_amount known
+	// attr at all (shouldn't happen from the reconciler, which always sets
+	// one, but the builder must not panic and must still gate correctly on
+	// whether a reservation was held).
+	spec := ActionSpec{
+		ServiceName: RateLimitCommitServiceName,
+		Scope:       "my-scope",
+		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+		ConditionalData: []ConditionalData{{
+			Data: []DataType{
+				{Value: &Static{Static: StaticSpec{Key: "reservation.id", Value: "tokenlimit.foo__abcd"}}},
+			},
+		}},
+	}
+	action := spec.Build()
+
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction, got %T", action)
+	}
+
+	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
+	wantPredicate := fmt.Sprintf("(has(%s)) || (false)", wantPath)
+	if grpc.Predicate != wantPredicate {
+		t.Errorf("predicate = %q, want %q", grpc.Predicate, wantPredicate)
+	}
+	if !strings.Contains(grpc.MessageBuilder, "actual_amount: 0u") {
+		t.Errorf("messageBuilder should default actual_amount to 0u:\n%s", grpc.MessageBuilder)
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -470,6 +471,117 @@ var _ = Describe("wasm controller", func() {
 				logf.Log.V(1).Info("Fetching EnvoyExtensionPolicy", "key", extKey.String(), "error", err)
 				return apierrors.IsNotFound(err)
 			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+
+	Context("TokenRateLimitPolicy reservation mode", func() {
+		It("Simple TokenRateLimitPolicy in default (Reservation) mode creates Reserve/Commit actions", func(ctx SpecContext) {
+			// create httproute (no backendRequest timeout, so reservation ttl stays unset)
+			gwRoute := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
+			err := testClient().Create(ctx, gwRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create tokenratelimitpolicy targeting the route, with no reservation
+			// overrides, so the reconciler generates the RFC 0021 defaults: a flat
+			// amount and no ttl (no route backendRequest timeout to fall back to).
+			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "TokenRateLimitPolicy", APIVersion: kuadrantv1alpha1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: "toystore-trlp", Namespace: testNamespace},
+				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
+						},
+					},
+					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1alpha1.TokenLimit{
+							"l1": {
+								Rates: []kuadrantv1.Rate{
+									{Limit: 5000, Window: kuadrantv1.Duration("1m")},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = testClient().Create(ctx, trlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			trlpKey := client.ObjectKeyFromObject(trlp)
+			Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+
+			extKey := client.ObjectKey{
+				Name:      wasm.ExtensionName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+			Eventually(IsEnvoyExtensionPolicyAccepted).
+				WithContext(ctx).
+				WithArguments(testClient(), extKey, client.ObjectKeyFromObject(gateway)).
+				Should(Succeed())
+
+			ext := &egv1alpha1.EnvoyExtensionPolicy{}
+			err = testClient().Get(ctx, extKey, ext)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ext.Spec.Wasm).To(HaveLen(1))
+			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
+			Expect(err).ToNot(HaveOccurred())
+
+			// the reserve/commit services are always registered, regardless of which policies are in play
+			Expect(existingWASMConfig.Services).To(HaveKey(wasm.RateLimitReserveServiceName))
+			Expect(existingWASMConfig.Services).To(HaveKey(wasm.RateLimitCommitServiceName))
+
+			Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+			actionSet := existingWASMConfig.ActionSets[0]
+
+			limitIdentifier := controllers.TokenLimitNameToLimitadorIdentifier(trlpKey, "l1")
+			scope := string(controllers.LimitsNamespaceFromRoute(gwRoute).ToActionScope())
+			source := "tokenratelimitpolicy.kuadrant.io:" + trlpKey.String()
+
+			// Built via wasm.BuildActions (not ActionSpec.Build directly) because the
+			// commit spec's reservation.actual_amount references responseBodyJSON(...),
+			// which BuildActions hoists into a shared response-body-extraction action
+			// ahead of the reserve/commit actions themselves.
+			expectedActions := wasm.BuildActions([]wasm.ActionSpec{
+				{
+					ServiceName: wasm.RateLimitReserveServiceName,
+					Scope:       scope,
+					Sources:     []string{source},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitCommitServiceName,
+					Scope:       scope,
+					Sources:     []string{source},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							},
+						},
+					},
+				},
+			})
+
+			Expect(actionSet.Actions).To(HaveLen(len(expectedActions)))
+			for i, expected := range expectedActions {
+				Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
+			}
 		}, testTimeOut)
 	})
 

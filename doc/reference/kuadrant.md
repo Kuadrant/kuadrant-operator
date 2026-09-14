@@ -122,6 +122,8 @@ Configures token rate limiting behavior for all TokenRateLimitPolicy resources a
 - **Reservation Mode (`Reservation`, default)**: On request arrival, the policy reserves estimated token capacity with a TTL using Limitador's `Reserve` method. When the backend responds, the policy commits the reservation with actual token usage (`responseBodyJSON("/usage/total_tokens")`) using Limitador's `Commit` method, immediately releasing any unused capacity. This prevents concurrent in-flight requests from racing past limits before usage is reported.
 - **CheckReport Mode (`CheckReport`)**: On request arrival, the policy checks limits without holding capacity (`hits_addend: 0`), and reports actual usage upon response. Useful for low-concurrency environments or when capacity reservation is not required.
 
+Reservation Mode requires a Limitador version that supports the `Reserve` and `Commit` methods. See [Upgrades and compatibility](../overviews/token-rate-limiting.md#upgrades-and-compatibility) before upgrading.
+
 ### KuadrantStatus
 
 | **Field**            | **Type**                                                                                     | **Description**                                                                                                                     |

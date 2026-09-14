@@ -26,7 +26,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("TLSPolicy controller", func() {
+var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 	const (
 		testTimeOut      = SpecTimeout(1 * time.Minute)
 		afterEachTimeOut = NodeTimeout(2 * time.Minute)

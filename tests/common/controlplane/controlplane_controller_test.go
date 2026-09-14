@@ -61,7 +61,7 @@ func restoreDevEnvOverrides(ctx SpecContext) {
 
 // Serial: KuadrantControlPlane is a cluster-scoped singleton. Destructive tests
 // (deletion, drift) must not run in parallel with status or deployment tests.
-var _ = Describe("KuadrantControlPlane controller", Serial, func() {
+var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane"}, func() {
 	var (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)

@@ -26,7 +26,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("RateLimitPolicy controller (GRPCRoute)", func() {
+var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"ratelimitpolicy"}, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)

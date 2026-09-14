@@ -317,6 +317,7 @@ func TestHandshake_Success(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, session.getToken(), "returned-token")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
+	assert.Equal(t, capturedReq.Version, protocolVersion)
 	assert.DeepEqual(t, capturedReq.Token, []byte("token-value"))
 }
 

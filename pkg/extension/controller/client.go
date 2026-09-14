@@ -85,6 +85,7 @@ func newExtensionClient(address string) (*extensionClient, error) {
 
 func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKind string) error {
 	resp, err := ec.client.Handshake(ctx, &extpb.HandshakeRequest{
+		Version:    protocolVersion,
 		Token:      token,
 		PolicyKind: policyKind,
 	})

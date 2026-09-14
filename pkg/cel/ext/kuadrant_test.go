@@ -28,6 +28,7 @@ var tests = []struct {
 	{expr: `self.findAuthPolicies()[0].targetRefs[0].group == "gateway.networking.k8s.io"`},
 	{expr: `self.findAuthPolicies()[0].targetRefs[0].name == "kuadrant-gw"`},
 	{expr: `self.findAuthPolicies()[0].targetRefs[0].namespace == "some-ns"`},
+	{expr: `self.findGateways()[?0].spec.listeners[0].hostname.hasValue()`},
 }
 
 func TestKuadrantExt(t *testing.T) {

@@ -90,6 +90,82 @@ func TestValidateWasmActionValid(t *testing.T) {
 	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
 }
 
+func TestValidateWasmActionReservationAmountInvalid(t *testing.T) {
+	// reservation.amount is always wrapped in uint(...) before it reaches
+	// ValidateWasmActionSpec (see findReservationAttrCEL), so a malformed
+	// user expression surfaces as a CEL type-check error rather than the
+	// output-type guard.
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Data: []wasm.DataType{
+					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "duration('1s')"}}},
+				},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "found no matching overload")
+}
+
+func TestValidateWasmActionReservationTTLInvalidType(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Data: []wasm.DataType{
+					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: "'30s'"}}},
+				},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "reservation ttl expression must evaluate to duration")
+}
+
+func TestValidateWasmActionReservationValid(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       "scope",
+		ConditionalData: []wasm.ConditionalData{
+			{
+				Data: []wasm.DataType{
+					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: "duration('30s')"}}},
+				},
+			},
+		},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
+func TestPolicyKindFromWasmServiceName_ReserveAndCommit(t *testing.T) {
+	assert.Equal(t, policyKindFromWasmServiceName(wasm.RateLimitReserveServiceName), TokenRateLimitPolicyKind)
+	assert.Equal(t, policyKindFromWasmServiceName(wasm.RateLimitCommitServiceName), TokenRateLimitPolicyKind)
+}
+
 func TestNewIssue(t *testing.T) {
 	action := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitServiceName,

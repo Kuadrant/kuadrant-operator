@@ -102,7 +102,17 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 			cp = &kuadrantv1alpha1.KuadrantControlPlane{
 				ObjectMeta: metav1.ObjectMeta{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName},
 			}
-			_ = testClient().Create(ctx, cp)
+			Expect(testClient().Create(ctx, cp)).To(Succeed())
+
+			// The next destructive test must not delete the replacement CR
+			// before it adopts the restored ConfigMap for garbage collection.
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorEnvConfigMap}, cm)).To(Succeed())
+				owner := metav1.GetControllerOf(cm)
+				g.Expect(owner).ToNot(BeNil())
+				g.Expect(owner.UID).To(Equal(cp.UID))
+			}).WithContext(ctx).Should(Succeed())
 		}
 	}, afterEachTimeOut)
 

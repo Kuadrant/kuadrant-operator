@@ -24,7 +24,7 @@ var _ = Describe("Kuadrant controller when gateway provider is missing", func() 
 	var (
 		testNamespace string
 		// 20s to allow for slow CI runners where the operator may take longer to reconcile status
-		testTimeOut      = SpecTimeout(20 * time.Second)
+		testTimeOut      = NodeTimeout(20 * time.Second)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 

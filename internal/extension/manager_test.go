@@ -1705,3 +1705,236 @@ func TestManager_Reaper_RevokesStaleSessions(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestHandshake_OwnedPolicies_KindMismatch(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Kind: "WrongKind", Namespace: "default", Name: "policy1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for kind mismatch")
+	}
+	if resp.Reason != "invalid owned_policies" {
+		t.Fatalf("expected reason %q, got %q", "invalid owned_policies", resp.Reason)
+	}
+	if len(svc.sessionStore.sessions) != 0 {
+		t.Fatalf("expected no session to be created, got %d", len(svc.sessionStore.sessions))
+	}
+}
+
+func TestHandshake_OwnedPolicies_EmptyName(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Namespace: "default", Name: ""},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for empty name")
+	}
+	if resp.Reason != "invalid owned_policies" {
+		t.Fatalf("expected reason %q, got %q", "invalid owned_policies", resp.Reason)
+	}
+}
+
+func TestHandshake_OwnedPolicies_NilEntry(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Namespace: "default", Name: "policy1"},
+			nil,
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for nil entry")
+	}
+	if resp.Reason != "invalid owned_policies" {
+		t.Fatalf("expected reason %q, got %q", "invalid owned_policies", resp.Reason)
+	}
+}
+
+func TestHandshake_OwnedPolicies_EmptyKind(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Kind: "", Namespace: "default", Name: "policy1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted with empty kind, got reason: %s", resp.Reason)
+	}
+	if resp.SessionToken == "" {
+		t.Fatal("expected non-empty session token")
+	}
+}
+
+func TestHandshake_OwnedPolicies_PrunesAll(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	policyID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "stale-policy"}
+	svc.registeredData.SetSubscription(policyID, "test.expression", Subscription{PolicyKind: "TestPolicy"})
+	svc.registeredData.SetPipelineTargetRefs(policyID, []TargetRef{
+		{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route1", Namespace: "default"},
+	})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	subs := svc.registeredData.GetSubscriptionsForPolicyKind("TestPolicy")
+	if len(subs) != 0 {
+		t.Fatalf("expected all subscriptions to be pruned, got %d", len(subs))
+	}
+	if refs := svc.registeredData.GetPipelineTargetRefs(policyID); len(refs) != 0 {
+		t.Fatalf("expected pipeline target refs to be pruned, got %d", len(refs))
+	}
+}
+
+func TestHandshake_OwnedPolicies_PrunesSubset(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	ownedID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "owned-policy"}
+	staleID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "stale-policy"}
+
+	svc.registeredData.SetSubscription(ownedID, "owned.expression", Subscription{PolicyKind: "TestPolicy"})
+	svc.registeredData.SetSubscription(staleID, "stale.expression", Subscription{PolicyKind: "TestPolicy"})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Namespace: "default", Name: "owned-policy"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	allSubs := svc.registeredData.GetAllSubscriptions()
+	foundOwned := false
+	foundStale := false
+	for key := range allSubs {
+		if key.Policy == ownedID {
+			foundOwned = true
+		}
+		if key.Policy == staleID {
+			foundStale = true
+		}
+	}
+
+	if !foundOwned {
+		t.Fatal("expected owned policy subscription to remain")
+	}
+	if foundStale {
+		t.Fatal("expected stale policy subscription to be pruned")
+	}
+}
+
+func TestHandshake_OwnedPolicies_DifferentKindUntouched(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	otherKindID := ResourceID{Kind: "OtherPolicy", Namespace: "default", Name: "other-policy"}
+	svc.registeredData.SetSubscription(otherKindID, "other.expression", Subscription{PolicyKind: "OtherPolicy"})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	otherSubs := svc.registeredData.GetSubscriptionsForPolicyKind("OtherPolicy")
+	if len(otherSubs) == 0 {
+		t.Fatal("expected OtherPolicy subscriptions to remain untouched")
+	}
+}
+
+func TestHandshake_OwnedPolicies_ChangeNotifierFires(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	notified := false
+	svc.changeNotifier = func(reason string) error {
+		notified = true
+		return nil
+	}
+
+	policyID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "stale-policy"}
+	svc.registeredData.Set(policyID, "targetRef1", extpb.Domain_DOMAIN_AUTH, "binding1", DataProviderEntry{
+		Binding:    "binding1",
+		Expression: "test",
+	})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	if !notified {
+		t.Fatal("expected change notifier to fire when mutators are pruned")
+	}
+}

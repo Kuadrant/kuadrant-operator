@@ -35,8 +35,9 @@ import (
 
 var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(1 * time.Minute)
-		afterEachTimeOut = NodeTimeout(2 * time.Minute)
+		testTimeOut       = NodeTimeout(1 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	var gatewayClass *gatewayapiv1.GatewayClass
@@ -55,7 +56,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 
 		dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace, domain)
 		Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		if gateway != nil {
@@ -622,7 +623,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("should not create a dns record", func(ctx SpecContext) {
 			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
@@ -702,7 +703,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
 			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
-		})
+		}, beforeEachTimeOut)
 
 		It("should create dns records and have correct policy status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
@@ -1429,7 +1430,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
 			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
-		})
+		}, beforeEachTimeOut)
 
 		It("should create records with enforced and not healthy status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
@@ -1582,7 +1583,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
-		})
+		}, beforeEachTimeOut)
 
 		It("should have an accepted and enforced policy with additional context", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
@@ -1615,7 +1616,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
 				Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 		It("should create a DNSPolicy with an invalid CIDR", func(ctx SpecContext) {
 			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
@@ -1804,7 +1805,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
 				Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("should conflict on the second created policy", func(ctx SpecContext) {
 			By("creating a dns policy")

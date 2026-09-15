@@ -27,8 +27,9 @@ import (
 
 var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -56,7 +57,7 @@ var _ = Describe("Upstream cluster EnvoyPatchPolicy controller", Serial, func() 
 		}
 		mutator := extension.NewRegisteredDataMutator[*wasm.Config](store)
 		extension.GlobalMutatorRegistry.RegisterWasmConfigMutator(mutator)
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		store.ClearPolicyData(policyID)

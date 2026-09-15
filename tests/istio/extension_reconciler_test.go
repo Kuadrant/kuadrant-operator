@@ -39,8 +39,9 @@ import (
 
 var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 	const (
-		testTimeOut      = SpecTimeout(3 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(3 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -126,7 +127,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -151,7 +152,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("Simple RLP targeting HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
@@ -873,7 +874,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("Wasmplugin must not be created", func(ctx SpecContext) {
 			// create ratelimitpolicy
@@ -946,7 +947,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("RLP targeting a gateway, GwA should not have wasmplugin and GwB should not have wasmplugin", func(ctx SpecContext) {
 			// Initial state
@@ -1536,7 +1537,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("wasmplugin config should update config", func(ctx SpecContext) {
 			// Initial state
@@ -1885,7 +1886,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("wasmplugin should update config", func(ctx SpecContext) {
 			// Initial state
@@ -2227,7 +2228,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("wasmplugin should update config", func(ctx SpecContext) {
 			// Initial state
@@ -2638,7 +2639,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("RLP with hostnames in route selector targeting hostname less HTTPRoute creates envoyfilter", func(ctx SpecContext) {
 			// create httproute
@@ -2879,7 +2880,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			}
 		}
 
-		BeforeEach(beforeEachCallback)
+		BeforeEach(beforeEachCallback, beforeEachTimeOut)
 
 		It("Limit key shifts correctly from Gateway RLP default -> Route RLP -> Gateway RLP overrides", func(ctx SpecContext) {
 			// create httproute

@@ -23,9 +23,10 @@ import (
 // The tests need to be run in serial as kuadrant CR namespace is shared
 var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 	const (
-		testTimeOut      = SpecTimeout(3 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
-		rlpName          = "toystore-rlp"
+		testTimeOut       = NodeTimeout(3 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
+		rlpName           = "toystore-rlp"
 	)
 
 	var (
@@ -81,7 +82,7 @@ var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 		Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -95,7 +96,7 @@ var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("peerauthentication is created", func(ctx SpecContext) {
 			peerAuth := &istiosecurityv1.PeerAuthentication{}
@@ -138,7 +139,7 @@ var _ = Describe("PeerAuthentication reconciler", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("peerauthentication does not exist", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {

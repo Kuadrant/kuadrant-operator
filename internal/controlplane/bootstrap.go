@@ -19,7 +19,8 @@ import (
 // BootstrapRunnable executes one-time startup tasks after the manager starts
 // and leader election is acquired. It is the sole place that creates the
 // default KuadrantControlPlane CR if missing. It also cleans up
-// orphaned OLM resources from pre-consolidation installs.
+// orphaned OLM resources from pre-consolidation installs and legacy
+// developer portal finalizers left on Kuadrant CRs.
 type BootstrapRunnable struct {
 	restConfig *rest.Config
 	scheme     *runtime.Scheme
@@ -62,7 +63,45 @@ func (r *BootstrapRunnable) Start(ctx context.Context) error {
 	if r.recorder != nil {
 		r.emitCleanupEvent(ctx, directClient, result)
 	}
+
+	cleaned, cleanupErr := RunDeveloperPortalFinalizerCleanup(ctx, directClient, r.logger)
+	if cleanupErr != nil {
+		r.logger.Error(cleanupErr, "developer portal finalizer cleanup incomplete")
+	}
+	if r.recorder != nil {
+		r.emitDeveloperPortalCleanupEvents(ctx, directClient, cleaned, cleanupErr)
+	}
 	return nil
+}
+
+// controlPlane fetches the default KuadrantControlPlane, the regarding object
+// for every bootstrap event. Returns nil when it cannot be read.
+func (r *BootstrapRunnable) controlPlane(ctx context.Context, c client.Client) *kuadrantv1alpha1.KuadrantControlPlane {
+	cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+	if err := c.Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp); err != nil {
+		r.logger.V(1).Info("unable to fetch KuadrantControlPlane for cleanup event", "error", err)
+		return nil
+	}
+	return cp
+}
+
+func (r *BootstrapRunnable) emitDeveloperPortalCleanupEvents(ctx context.Context, c client.Client, cleaned []string, cleanupErr error) {
+	if len(cleaned) == 0 && cleanupErr == nil {
+		return
+	}
+
+	cp := r.controlPlane(ctx, c)
+	if cp == nil {
+		return
+	}
+
+	related := componentReference("developer-portal-controller")
+	for _, name := range cleaned {
+		r.recorder.Eventf(cp, related, corev1.EventTypeNormal, "DeveloperPortalFinalizerRemoved", "DeveloperPortalMigration", "removed legacy finalizer %s from Kuadrant %s", developerPortalFinalizer, name)
+	}
+	if cleanupErr != nil {
+		r.recorder.Eventf(cp, related, corev1.EventTypeWarning, "DeveloperPortalMigrationIncomplete", "DeveloperPortalMigration", "%s", cleanupErr.Error())
+	}
 }
 
 func (r *BootstrapRunnable) emitCleanupEvent(ctx context.Context, c client.Client, result OLMCleanupResult) {
@@ -70,9 +109,8 @@ func (r *BootstrapRunnable) emitCleanupEvent(ctx context.Context, c client.Clien
 		return
 	}
 
-	cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-	if err := c.Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp); err != nil {
-		r.logger.V(1).Info("unable to fetch KuadrantControlPlane for cleanup event", "error", err)
+	cp := r.controlPlane(ctx, c)
+	if cp == nil {
 		return
 	}
 

@@ -208,6 +208,22 @@ var _ = Describe("wasm controller", func() {
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+					},
 				},
 				ActionSets: []wasm.ActionSet{
 					{
@@ -399,6 +415,22 @@ var _ = Describe("wasm controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 					},
 				},
 				ActionSets: []wasm.ActionSet{

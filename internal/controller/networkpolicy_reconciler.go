@@ -43,6 +43,8 @@ type NetworkPolicyReconciler struct {
 }
 
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos/finalizers,verbs=update
+//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors/finalizers,verbs=update
 
 func NewNetworkPolicyReconciler(client *dynamic.DynamicClient) *NetworkPolicyReconciler {
 	return &NetworkPolicyReconciler{Client: client}

@@ -227,7 +227,7 @@ metadata:
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
     createdAt: "2026-09-10T11:07:10Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
-    operators.operatorframework.io/builder: operator-sdk-v1.33.0
+    operators.operatorframework.io/builder: operator-sdk-v1.42.3
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
@@ -464,6 +464,12 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - apps
+          resources:
+          - deployments/finalizers
+          verbs:
+          - update
         - apiGroups:
           - authentication.k8s.io
           resources:
@@ -723,6 +729,12 @@ spec:
           - update
           - watch
         - apiGroups:
+          - limitador.kuadrant.io
+          resources:
+          - limitadors/finalizers
+          verbs:
+          - update
+        - apiGroups:
           - monitoring.coreos.com
           resources:
           - podmonitors
@@ -771,6 +783,12 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - operator.authorino.kuadrant.io
+          resources:
+          - authorinos/finalizers
+          verbs:
+          - update
         - apiGroups:
           - rbac.authorization.k8s.io
           resourceNames:

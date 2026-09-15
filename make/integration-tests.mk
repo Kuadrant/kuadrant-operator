@@ -27,6 +27,26 @@ test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only ba
 		--output-interceptor-mode=none \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/bare_k8s/...
 
+.PHONY: test-controlplane-integration
+test-controlplane-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI installed (mcp-gateway fails to start without GatewayAPI).
+	mkdir -p $(PROJECT_PATH)/coverage/controlplane-integration
+#	Check `ginkgo help run` for command line options. For example to filtering tests.
+	$(GINKGO) \
+		--coverpkg $(INTEGRATION_COVER_PKGS) \
+		--output-dir $(PROJECT_PATH)/coverage/controlplane-integration \
+		--coverprofile cover.out \
+		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=1 \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
+		--race \
+		--output-interceptor-mode=none \
+		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/controlplane/...
+
 .PHONY: test-gatewayapi-env-integration
 test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI installed.
 	mkdir -p $(PROJECT_PATH)/coverage/gatewayapi-integration

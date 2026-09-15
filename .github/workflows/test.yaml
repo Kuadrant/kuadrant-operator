@@ -25,6 +25,8 @@ jobs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@f75dd6564bb646f95277dc8c3b80612e46a4a1ea # ratchet:fkirc/skip-duplicate-actions@v3.4.1
         with:
@@ -54,6 +56,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
@@ -105,6 +109,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
@@ -138,6 +144,55 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+  controlplane-integration-tests:
+    name: Integration Tests for kuadrant-operator/tests/controlplane
+    if: needs.pre-job.outputs.should_skip != 'true'
+    needs: pre-job
+    runs-on: ubuntu-latest
+    env:
+      KIND_CLUSTER_NAME: kuadrant-test
+      KUADRANT_NAMESPACE: kuadrant-system
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+        id: go
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@94729529f85113b88f4f819c17ce61382e6d8478 # ratchet:helm/kind-action@v1.2.0
+        with:
+          version: v0.31.0
+          config: utils/kind-cluster.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+      - name: Check cluster info
+        run: |
+          kubectl cluster-info dump
+      - name: Run make gatewayapi-env-setup
+        run: |
+          make gatewayapi-env-setup
+      - name: Run integration tests
+        run: |
+          make test-controlplane-integration
+      - name: Upload integration-test coverage reports to CodeCov
+        # more at https://github.com/codecov/codecov-action
+        # Only run if the feature branch is in your repo (not in a fork)
+        # as Tokenless uploading is rate limited for public repos
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # ratchet:codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: controlplane-integration
+          fail_ci_if_error: false
+          verbose: true
+
   gatewayapi-integration-tests:
     name: Integration Tests for kuadrant-operator/tests/gatewayapi
     if: needs.pre-job.outputs.should_skip != 'true'
@@ -152,6 +207,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
@@ -208,6 +265,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
         with:
@@ -247,9 +306,11 @@ jobs:
 
   required-checks:
     name: Test Required Checks
-    needs: [controllers-integration-tests, bare-k8s-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests]
+    needs: [controllers-integration-tests, bare-k8s-integration-tests, controlplane-integration-tests, gatewayapi-integration-tests, gatewayapi-provider-integration-tests]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")'

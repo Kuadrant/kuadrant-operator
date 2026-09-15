@@ -12,7 +12,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 )
@@ -24,17 +23,17 @@ func IsEnvoyExtensionPolicyAccepted(g Gomega, ctx context.Context, cl client.Cli
 	policy := &egv1alpha1.EnvoyExtensionPolicy{}
 	g.Expect(cl.Get(ctx, key, policy)).To(Succeed())
 
-	ancestor, ok := utils.Find(policy.Status.Ancestors, func(ancestor gatewayapiv1alpha2.PolicyAncestorStatus) bool {
+	ancestor, ok := utils.Find(policy.Status.Ancestors, func(ancestor gatewayapiv1.PolicyAncestorStatus) bool {
 		// Only supporting gateways
 		ancestorNamespace := ptr.Deref(ancestor.AncestorRef.Namespace, gatewayapiv1.Namespace(gwKey.Namespace))
 		return string(ancestor.AncestorRef.Name) == gwKey.Name && string(ancestorNamespace) == gwKey.Namespace
 	})
 	g.Expect(ok).To(BeTrue())
 
-	acceptedCond := meta.FindStatusCondition(ancestor.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	acceptedCond := meta.FindStatusCondition(ancestor.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 	g.Expect(acceptedCond).ToNot(BeNil())
 	g.Expect(acceptedCond.Status).To(Equal(metav1.ConditionTrue))
-	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)))
+	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1.PolicyReasonAccepted)))
 }
 
 // IsEnvoyPatchPolicyAccepted checks patch policy accepted status for a given target ref.
@@ -44,15 +43,15 @@ func IsEnvoyPatchPolicyAccepted(g Gomega, ctx context.Context, cl client.Client,
 	policy := &egv1alpha1.EnvoyPatchPolicy{}
 	g.Expect(cl.Get(ctx, key, policy)).To(Succeed())
 
-	ancestor, ok := utils.Find(policy.Status.Ancestors, func(ancestor gatewayapiv1alpha2.PolicyAncestorStatus) bool {
+	ancestor, ok := utils.Find(policy.Status.Ancestors, func(ancestor gatewayapiv1.PolicyAncestorStatus) bool {
 		// Only supporting gateways
 		ancestorNamespace := ptr.Deref(ancestor.AncestorRef.Namespace, gatewayapiv1.Namespace(gwKey.Namespace))
 		return string(ancestor.AncestorRef.Name) == gwKey.Name && string(ancestorNamespace) == gwKey.Namespace
 	})
 	g.Expect(ok).To(BeTrue())
 
-	acceptedCond := meta.FindStatusCondition(ancestor.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	acceptedCond := meta.FindStatusCondition(ancestor.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 	g.Expect(acceptedCond).ToNot(BeNil())
 	g.Expect(acceptedCond.Status).To(Equal(metav1.ConditionTrue))
-	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)))
+	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1.PolicyReasonAccepted)))
 }

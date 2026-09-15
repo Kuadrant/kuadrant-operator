@@ -10,7 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/json"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
@@ -87,9 +87,9 @@ func Resolve[T any](ctx context.Context, kuadrantCtx exttypes.KuadrantCtx, polic
 func AcceptedCondition(p exttypes.Policy, err error) *metav1.Condition {
 	policyKind := p.GetObjectKind().GroupVersionKind().Kind
 	cond := &metav1.Condition{
-		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+		Type:    string(gatewayapiv1.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Reason:  string(gatewayapiv1.PolicyReasonAccepted),
 		Message: fmt.Sprintf("%s has been accepted", policyKind),
 	}
 	if err == nil {

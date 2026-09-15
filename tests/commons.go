@@ -30,7 +30,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -362,7 +361,7 @@ func DeleteKuadrantCR(ctx context.Context, cl client.Client, namespace string) {
 }
 
 func RLPIsAccepted(ctx context.Context, cl client.Client, rlpKey client.ObjectKey) func() bool {
-	return RLPIsConditionTrue(ctx, cl, rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	return RLPIsConditionTrue(ctx, cl, rlpKey, string(gatewayapiv1.PolicyConditionAccepted))
 }
 
 func RLPIsEnforced(ctx context.Context, cl client.Client, rlpKey client.ObjectKey) func() bool {
@@ -382,7 +381,7 @@ func RLPIsConditionTrue(ctx context.Context, cl client.Client, rlpKey client.Obj
 	}
 }
 
-func RLPEnforcedCondition(ctx context.Context, cl client.Client, rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
+func RLPEnforcedCondition(ctx context.Context, cl client.Client, rlpKey client.ObjectKey, reason gatewayapiv1.PolicyConditionReason, message string) bool {
 	p := &kuadrantv1.RateLimitPolicy{}
 	if err := cl.Get(ctx, rlpKey, p); err != nil {
 		return false
@@ -446,14 +445,14 @@ func IsAuthPolicyAcceptedAndNotEnforced(ctx context.Context, cl client.Client, p
 }
 
 func IsAuthPolicyAccepted(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy) func() bool {
-	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(gatewayapiv1.PolicyConditionAccepted))
 }
 
 func IsAuthPolicyEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy) func() bool {
 	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(kuadrant.PolicyConditionEnforced))
 }
 
-func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) func() bool {
+func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1.PolicyConditionReason, message string) func() bool {
 	return func() bool {
 		p := &kuadrantv1.AuthPolicy{}
 		if err := cl.Get(ctx, key, p); err != nil {
@@ -485,7 +484,7 @@ func RLPIsNotAccepted(ctx context.Context, k8sClient client.Client, rlpKey clien
 			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
 			return false
 		}
-		if meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+		if meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted)) {
 			logf.Log.V(1).Info("ratelimitpolicy still accepted", "rlp", rlpKey)
 			return false
 		}
@@ -694,7 +693,7 @@ func (t *GatewayBuilder) WithHTTPSListener(hostname, tlsSecretName string) *Gate
 		Hostname: &typedHostname,
 		Port:     gatewayapiv1.PortNumber(443),
 		Protocol: gatewayapiv1.HTTPSProtocolType,
-		TLS: &gatewayapiv1.GatewayTLSConfig{
+		TLS: &gatewayapiv1.ListenerTLSConfig{
 			Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 			CertificateRefs: []gatewayapiv1.SecretObjectReference{
 				{
@@ -796,10 +795,10 @@ func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, p
 	existingPolicy := &kuadrantv1.RateLimitPolicy{}
 	g.Expect(cl.Get(ctx, policyKey, existingPolicy)).To(Succeed())
 
-	acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 	g.Expect(acceptedCond).ToNot(BeNil())
 	g.Expect(acceptedCond.Status).To(Equal(metav1.ConditionTrue))
-	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)))
+	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1.PolicyReasonAccepted)))
 
 	enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
 	g.Expect(enforcedCond).ToNot(BeNil())
@@ -828,7 +827,7 @@ func TokenRateLimitPolicyIsReady(ctx context.Context, cl client.Client, key clie
 }
 
 func TokenRateLimitPolicyIsAccepted(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {
-	return TokenRateLimitPolicyIsConditionTrue(ctx, cl, key, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	return TokenRateLimitPolicyIsConditionTrue(ctx, cl, key, string(gatewayapiv1.PolicyConditionAccepted))
 }
 
 func TokenRateLimitPolicyIsEnforced(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {
@@ -837,18 +836,13 @@ func TokenRateLimitPolicyIsEnforced(ctx context.Context, cl client.Client, key c
 
 func TokenRateLimitPolicyIsConditionTrue(ctx context.Context, cl client.Client, key client.ObjectKey, condition string) func() bool {
 	return func() bool {
-		policy := &kuadrantv1alpha1.TokenRateLimitPolicy{}
-		err := cl.Get(ctx, key, policy)
-		if err != nil {
-			logf.Log.V(1).Error(err, "tokenratelimitpolicy not read", "policy", key)
-			return false
-		}
-
-		return meta.IsStatusConditionTrue(policy.Status.Conditions, condition)
+		p := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+		err := cl.Get(ctx, key, p)
+		return err == nil && meta.IsStatusConditionTrue(p.Status.Conditions, condition)
 	}
 }
 
-func TokenRateLimitPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
+func TokenRateLimitPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1.PolicyConditionReason, message string) bool {
 	p := &kuadrantv1alpha1.TokenRateLimitPolicy{}
 	if err := cl.Get(ctx, key, p); err != nil {
 		return false

@@ -28,8 +28,9 @@ import (
 
 var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(1 * time.Minute)
-		afterEachTimeOut = NodeTimeout(2 * time.Minute)
+		testTimeOut       = NodeTimeout(1 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	var gatewayClass *gatewayapiv1.GatewayClass
@@ -47,7 +48,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 
 		issuer, issuerRef = tests.BuildSelfSignedIssuer("testissuer", testNamespace)
 		Expect(k8sClient.Create(ctx, issuer)).To(BeNil())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		if gateway != nil {
@@ -75,7 +76,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithTargetGateway("test-gateway").
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should have accepted condition with status false and correct reason", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
@@ -151,7 +152,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener("test-listener", "test.example.com").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("unable to find issuer - should have accepted condition with status false and correct reason", func(ctx SpecContext) {
 			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
@@ -188,7 +189,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should have accepted condition with status true", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
@@ -228,7 +229,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*clusterIssuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		AfterEach(func(ctx SpecContext) {
 			err := k8sClient.Delete(ctx, clusterIssuer)
@@ -268,7 +269,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should not create any certificates when TLS is not present", func(ctx SpecContext) {
 			Consistently(func() []certmanv1.Certificate {
@@ -317,7 +318,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should create tls certificate", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -340,7 +341,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithHTTPSListener("test2.example.com", "test-tls-secret").
 				WithHTTPSListener("test3.example.com", "test2-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should create tls certificates but one cert will not be ready", func(ctx SpecContext) {
 			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
@@ -411,7 +412,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should create tls certificates", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -619,7 +620,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 			tlsPolicy.Spec.RevisionHistoryLimit = ptr.To(int32(1))
 
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("should create tls certificate", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -704,7 +705,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 				WithHTTPSListener("test2.example.com", "test2-tls-secret").
 				WithHTTPSListener("test3.example.com", "test3-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("cert for only the targeted section is created", func(ctx SpecContext) {
 			// Create first TLS Policy targeting one section
@@ -1001,7 +1002,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		It("Should conflict on the second created policy", func(ctx context.Context) {
 			p1 := kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
@@ -1047,7 +1048,7 @@ var _ = Describe("TLSPolicy controller", Labels{"tlspolicy"}, func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("Should not delete unmanaged cert", func(ctx context.Context) {
 			certList := &certmanv1.CertificateList{}

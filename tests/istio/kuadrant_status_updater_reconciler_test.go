@@ -22,10 +22,11 @@ import (
 // The tests need to be run in serial as kuadrant CR namespace is shared
 var _ = Describe("kuadrant status reconciler", Serial, func() {
 	const (
-		testTimeOut      = SpecTimeout(3 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
-		rlpName          = "toystore-rlp"
-		kapName          = "toystore-kap"
+		testTimeOut       = NodeTimeout(3 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
+		rlpName           = "toystore-rlp"
+		kapName           = "toystore-kap"
 	)
 
 	var (
@@ -110,7 +111,7 @@ var _ = Describe("kuadrant status reconciler", Serial, func() {
 		Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), authPolicy)).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -124,7 +125,7 @@ var _ = Describe("kuadrant status reconciler", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("reconciles status mtls fields", func(ctx SpecContext) {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
@@ -172,7 +173,7 @@ var _ = Describe("kuadrant status reconciler", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("reconciles status mtls fields", func(ctx SpecContext) {
 			kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}

@@ -28,8 +28,9 @@ import (
 
 var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"ratelimitpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -58,7 +59,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"ratelimitpoli
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -118,7 +119,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"ratelimitpoli
 			err := k8sClient.Create(ctx, grpcRoute)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GRPCRouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(grpcRoute))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Attaches policy to the Gateway", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {

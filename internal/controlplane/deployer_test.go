@@ -19,6 +19,7 @@ func TestDefaultComponents(t *testing.T) {
 		wantChart               string
 		wantEnvVar              string
 		wantChartValueOverrides int
+		wantRelatedImageEnvVars []string
 	}{
 		{
 			name:       "dns-operator is registered",
@@ -31,6 +32,20 @@ func TestDefaultComponents(t *testing.T) {
 			wantName:                "mcp-gateway",
 			wantChart:               chartsBasePath + "/mcp-gateway",
 			wantChartValueOverrides: 2,
+		},
+		{
+			name:                    "authorino-operator is registered",
+			wantName:                "authorino-operator",
+			wantChart:               chartsBasePath + "/authorino-operator",
+			wantEnvVar:              "RELATED_IMAGE_AUTHORINO_OPERATOR",
+			wantRelatedImageEnvVars: []string{"RELATED_IMAGE_AUTHORINO"},
+		},
+		{
+			name:                    "limitador-operator is registered",
+			wantName:                "limitador-operator",
+			wantChart:               chartsBasePath + "/limitador-operator",
+			wantEnvVar:              "RELATED_IMAGE_LIMITADOR_OPERATOR",
+			wantRelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
 		},
 	}
 
@@ -52,6 +67,16 @@ func TestDefaultComponents(t *testing.T) {
 			}
 			if tt.wantChartValueOverrides > 0 && len(c.ChartValueOverrides) != tt.wantChartValueOverrides {
 				t.Errorf("ChartValueOverrides count = %d, want %d", len(c.ChartValueOverrides), tt.wantChartValueOverrides)
+			}
+			if len(tt.wantRelatedImageEnvVars) > 0 {
+				if len(c.RelatedImageEnvVars) != len(tt.wantRelatedImageEnvVars) {
+					t.Fatalf("RelatedImageEnvVars = %v, want %v", c.RelatedImageEnvVars, tt.wantRelatedImageEnvVars)
+				}
+				for i, name := range tt.wantRelatedImageEnvVars {
+					if c.RelatedImageEnvVars[i] != name {
+						t.Errorf("RelatedImageEnvVars[%d] = %q, want %q", i, c.RelatedImageEnvVars[i], name)
+					}
+				}
 			}
 		})
 	}

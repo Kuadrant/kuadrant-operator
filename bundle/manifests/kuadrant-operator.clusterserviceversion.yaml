@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-09-10T11:07:10Z"
+    createdAt: "2026-09-11T07:04:59Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -439,8 +439,11 @@ spec:
         - apiGroups:
           - apiextensions.k8s.io
           resourceNames:
+          - authconfigs.authorino.kuadrant.io
+          - authorinos.operator.authorino.kuadrant.io
           - dnshealthcheckprobes.kuadrant.io
           - dnsrecords.kuadrant.io
+          - limitadors.limitador.kuadrant.io
           - mcpgatewayextensions.mcp.kuadrant.io
           - mcpserverregistrations.mcp.kuadrant.io
           - mcpvirtualservers.mcp.kuadrant.io
@@ -774,8 +777,10 @@ spec:
         - apiGroups:
           - rbac.authorization.k8s.io
           resourceNames:
+          - authorino-operator-manager
           - dns-operator-manager-rolebinding
           - dns-operator-remote-cluster-rolebinding
+          - limitador-operator-manager-rolebinding
           - mcp-gateway-controller
           resources:
           - clusterrolebindings
@@ -794,8 +799,16 @@ spec:
         - apiGroups:
           - rbac.authorization.k8s.io
           resourceNames:
+          - authorino-authconfig-editor-role
+          - authorino-authconfig-viewer-role
+          - authorino-manager-k8s-auth-role
+          - authorino-manager-role
+          - authorino-operator
+          - authorino-operator-manager
           - dns-operator-manager-role
           - dns-operator-remote-cluster-role
+          - limitador-operator-controller-manager
+          - limitador-operator-manager-role
           - mcp-gateway-controller
           resources:
           - clusterroles
@@ -878,6 +891,14 @@ spec:
                   value: ghcr.io/kuadrant/mcp-controller:latest
                 - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
                   value: ghcr.io/kuadrant/mcp-gateway:latest
+                - name: RELATED_IMAGE_AUTHORINO_OPERATOR
+                  value: quay.io/kuadrant/authorino-operator:latest
+                - name: RELATED_IMAGE_LIMITADOR_OPERATOR
+                  value: quay.io/kuadrant/limitador-operator:latest
+                - name: RELATED_IMAGE_AUTHORINO
+                  value: quay.io/kuadrant/authorino:latest
+                - name: RELATED_IMAGE_LIMITADOR
+                  value: quay.io/kuadrant/limitador:latest
                 - name: OPERATOR_NAMESPACE
                   valueFrom:
                     fieldRef:
@@ -1055,4 +1076,12 @@ spec:
     name: mcp-gateway
   - image: ghcr.io/kuadrant/mcp-gateway:latest
     name: mcp-gateway-broker
+  - image: quay.io/kuadrant/authorino-operator:latest
+    name: authorino-operator
+  - image: quay.io/kuadrant/limitador-operator:latest
+    name: limitador-operator
+  - image: quay.io/kuadrant/authorino:latest
+    name: authorino
+  - image: quay.io/kuadrant/limitador:latest
+    name: limitador
   version: 0.0.0

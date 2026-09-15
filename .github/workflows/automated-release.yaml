@@ -12,6 +12,10 @@ on:
         description: Kuadrant Operator version (semver)
         default: 0.0.0
         type: string
+      authorinoVersion:
+        description: Authorino version (semver)
+        default: 0.0.0
+        type: string
       authorinoOperatorVersion:
         description: Authorino Operator bundle version (semver)
         default: 0.0.0
@@ -22,6 +26,10 @@ on:
         type: string
       dnsOperatorVersion:
         description: DNS Operator bundle version (semver)
+        default: 0.0.0
+        type: string
+      limitadorVersion:
+        description: Limitador version (semver)
         default: 0.0.0
         type: string
       limitadorOperatorVersion:
@@ -105,8 +113,10 @@ jobs:
           echo "Updating release.yaml with desired versions"
 
           VERSION=${{ github.event.inputs.kuadrantOperatorVersion }} \
+          AUTHORINO_VERSION=${{ github.event.inputs.authorinoVersion }} \
           AUTHORINO_OPERATOR_VERSION=${{ github.event.inputs.authorinoOperatorVersion }} \
           DNS_OPERATOR_VERSION=${{ github.event.inputs.dnsOperatorVersion }} \
+          LIMITADOR_VERSION=${{ github.event.inputs.limitadorVersion }} \
           LIMITADOR_OPERATOR_VERSION=${{ github.event.inputs.limitadorOperatorVersion }} \
           MCP_GATEWAY_VERSION=${{ github.event.inputs.mcpGatewayVersion }} \
           CONSOLE_PLUGIN_VERSION=${{ github.event.inputs.consolePluginVersion }} \
@@ -114,8 +124,10 @@ jobs:
           DEVELOPERPORTAL_VERSION=${{ github.event.inputs.developerPortalControllerVersion }} \
           OLM_CHANNEL=${{ github.event.inputs.olmChannel }} \
           yq eval '(.kuadrant-operator.version = strenv(VERSION)) |
+            (.dependencies.authorino = strenv(AUTHORINO_VERSION)) |
             (.dependencies.authorino-operator = strenv(AUTHORINO_OPERATOR_VERSION)) |
             (.dependencies.dns-operator = strenv(DNS_OPERATOR_VERSION)) |
+            (.dependencies.limitador = strenv(LIMITADOR_VERSION)) |
             (.dependencies.limitador-operator = strenv(LIMITADOR_OPERATOR_VERSION)) |
             (.dependencies.mcp-gateway = strenv(MCP_GATEWAY_VERSION)) |
             (.dependencies.console-plugin = strenv(CONSOLE_PLUGIN_VERSION)) |
@@ -148,8 +160,10 @@ jobs:
           title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
           body: |
             The following PR for the release candidate of Kuadrant Operator version ${{ github.event.inputs.kuadrantOperatorVersion }} includes:
+            - Authorino version ${{ github.event.inputs.authorinoVersion }}
             - Authorino Operator version ${{ github.event.inputs.authorinoOperatorVersion }}
             - DNS Operator version ${{ github.event.inputs.dnsOperatorVersion }}
+            - Limitador version ${{ github.event.inputs.limitadorVersion }}
             - Limitador Operator version ${{ github.event.inputs.limitadorOperatorVersion }}
             - MCP Gateway version ${{ github.event.inputs.mcpGatewayVersion }}
             - Console Plugin version ${{ github.event.inputs.consolePluginVersion }}

@@ -16,18 +16,18 @@ components:
     tracked-branch: main
     ref: cdf775c9ff606305b9773e985820d885d5b660f5
     auto-merge: false
-#  authorino-operator:
-#    repo: Kuadrant/authorino-operator
-#    chart-path: charts/authorino-operator
-#    tracked-branch: main
-#    ref: main
-#    auto-merge: false
-#  limitador-operator:
-#    repo: Kuadrant/limitador-operator
-#    chart-path: charts/limitador-operator
-#    tracked-branch: main
-#    ref: main
-#    auto-merge: false
+  authorino-operator:
+    repo: Kuadrant/authorino-operator
+    chart-path: charts/authorino-operator
+    tracked-branch: main
+    ref: d054b9ba6c4b270135a8b159a879e6dff8c63da2
+    auto-merge: false
+  limitador-operator:
+    repo: Kuadrant/limitador-operator
+    chart-path: charts/limitador-operator
+    tracked-branch: main
+    ref: 6cb82e9b232b4444a47f6770322d8c1efeeb4d9e
+    auto-merge: false
   mcp-gateway:
     repo: Kuadrant/mcp-gateway
     chart-path: charts/mcp-gateway

@@ -44,6 +44,14 @@ type Component struct {
 	// the specified chart value key. Keys support dotted paths for nested
 	// values (e.g., "controller.image" sets values["controller"]["image"]).
 	ChartValueOverrides []ChartValueOverride
+	// RelatedImageEnvVars lists env var names (e.g. "RELATED_IMAGE_AUTHORINO")
+	// read from kuadrant-operator's own environment and used to override
+	// same-named env vars in containers[0] of DeploymentName post-render.
+	// Stopgap for charts where a related image is a hardcoded literal in an
+	// env var rather than a Helm value -- once a chart adds value-based
+	// configurability for it, prefer ChartValueOverrides instead (see
+	// mcp-gateway's broker image for that pattern).
+	RelatedImageEnvVars []string
 }
 
 type Deployer struct {
@@ -100,6 +108,22 @@ func allComponents() []Component {
 				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_MCP_GATEWAY", ValueKey: "imageController", Description: "controller"}},
 				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_MCP_GATEWAY_BROKER", ValueKey: "image", Description: "broker"}},
 			},
+		},
+		{
+			Name:                "authorino-operator",
+			ChartPath:           chartsBasePath + "/authorino-operator",
+			ImageEnvVar:         "RELATED_IMAGE_AUTHORINO_OPERATOR",
+			DeploymentName:      "authorino-operator",
+			CRDNames:            []string{"authconfigs.authorino.kuadrant.io", "authorinos.operator.authorino.kuadrant.io"},
+			RelatedImageEnvVars: []string{"RELATED_IMAGE_AUTHORINO"},
+		},
+		{
+			Name:                "limitador-operator",
+			ChartPath:           chartsBasePath + "/limitador-operator",
+			ImageEnvVar:         "RELATED_IMAGE_LIMITADOR_OPERATOR",
+			DeploymentName:      "limitador-operator-controller-manager",
+			CRDNames:            []string{"limitadors.limitador.kuadrant.io"},
+			RelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
 		},
 	}
 }
@@ -213,6 +237,18 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component, own
 		image := os.Getenv(component.ImageEnvVar)
 		if err := PatchDeploymentImage(rendered.Resources, image); err != nil {
 			return fmt.Errorf("patching image for %s: %w", component.Name, err)
+		}
+	}
+
+	// Post-render env var patching for charts that bake a related image into
+	// an env var as a hardcoded literal (see RelatedImageEnvVars doc comment).
+	if len(component.RelatedImageEnvVars) > 0 {
+		envVars := make(map[string]string, len(component.RelatedImageEnvVars))
+		for _, name := range component.RelatedImageEnvVars {
+			envVars[name] = os.Getenv(name)
+		}
+		if err := PatchContainerEnvVars(rendered.Resources, component.DeploymentName, envVars); err != nil {
+			return fmt.Errorf("patching related image env vars for %s: %w", component.Name, err)
 		}
 	}
 

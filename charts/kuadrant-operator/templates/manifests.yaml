@@ -14522,8 +14522,11 @@ rules:
 - apiGroups:
   - apiextensions.k8s.io
   resourceNames:
+  - authconfigs.authorino.kuadrant.io
+  - authorinos.operator.authorino.kuadrant.io
   - dnshealthcheckprobes.kuadrant.io
   - dnsrecords.kuadrant.io
+  - limitadors.limitador.kuadrant.io
   - mcpgatewayextensions.mcp.kuadrant.io
   - mcpserverregistrations.mcp.kuadrant.io
   - mcpvirtualservers.mcp.kuadrant.io
@@ -14857,8 +14860,10 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - authorino-operator-manager
   - dns-operator-manager-rolebinding
   - dns-operator-remote-cluster-rolebinding
+  - limitador-operator-manager-rolebinding
   - mcp-gateway-controller
   resources:
   - clusterrolebindings
@@ -14877,8 +14882,16 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - authorino-authconfig-editor-role
+  - authorino-authconfig-viewer-role
+  - authorino-manager-k8s-auth-role
+  - authorino-manager-role
+  - authorino-operator
+  - authorino-operator-manager
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role
+  - limitador-operator-controller-manager
+  - limitador-operator-manager-role
   - mcp-gateway-controller
   resources:
   - clusterroles
@@ -15123,6 +15136,14 @@ spec:
           value: ghcr.io/kuadrant/mcp-controller:latest
         - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
           value: ghcr.io/kuadrant/mcp-gateway:latest
+        - name: RELATED_IMAGE_AUTHORINO_OPERATOR
+          value: quay.io/kuadrant/authorino-operator:latest
+        - name: RELATED_IMAGE_LIMITADOR_OPERATOR
+          value: quay.io/kuadrant/limitador-operator:latest
+        - name: RELATED_IMAGE_AUTHORINO
+          value: quay.io/kuadrant/authorino:latest
+        - name: RELATED_IMAGE_LIMITADOR
+          value: quay.io/kuadrant/limitador:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

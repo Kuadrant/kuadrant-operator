@@ -35,7 +35,7 @@ install-olm: operator-sdk
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
-deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
+deploy-dependencies: kustomize ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(MAKE) namespace
 	$(KUSTOMIZE) build config/dependencies | kubectl apply --server-side -f -
 	@deployments=$$(kubectl -n "$(KUADRANT_NAMESPACE)" get deployments -o name 2>&1); \

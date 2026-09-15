@@ -49,7 +49,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 USE_IMAGE_DIGESTS ?= false
 
 # BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
-BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) --extra-service-accounts=developer-portal-controller-manager
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
 ifeq ($(USE_IMAGE_DIGESTS), true)
 	BUNDLE_GEN_FLAGS += --use-image-digests
 endif
@@ -226,13 +226,10 @@ developerportal_version_is_semantic := $(call is_semantic_version,$(DEVELOPERPOR
 
 ifeq (latest,$(DEVELOPERPORTAL_VERSION))
 RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:latest
-DEVELOPERPORTAL_GITREF = main
 else ifeq (true,$(developerportal_version_is_semantic))
 RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:v$(DEVELOPERPORTAL_VERSION)
-DEVELOPERPORTAL_GITREF = v$(DEVELOPERPORTAL_VERSION)
 else
 RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(DEVELOPERPORTAL_VERSION)
-DEVELOPERPORTAL_GITREF = $(DEVELOPERPORTAL_VERSION)
 endif
 
 ## console-plugin
@@ -369,12 +366,6 @@ $(RATCHET_V_BINARY): $(LOCALBIN)
 	$(call go-install-tool,$(RATCHET),github.com/sethvargo/ratchet,$(RATCHET_VERSION))
 
 ##@ Development
-define patch-config
-	envsubst \
-		< $1 \
-		> $2
-endef
-
 define update-csv-config
 	V="$1" \
 	$(YQ) eval '$(3) = strenv(V)' -i $2
@@ -400,11 +391,6 @@ extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRo
 		$(CONTROLLER_GEN) rbac:roleName="$$role_name" webhook paths="$$ext_dir/..." output:rbac:artifacts:config="$$ext_dir/config/rbac"; \
 	done
 
-
-.PHONY: dependencies-manifests
-dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITREF)
-dependencies-manifests: ## Update kuadrant dependencies manifests.
-	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
 COMPONENT_CHARTS_DIR = $(PROJECT_PATH)/component-charts
 
@@ -577,7 +563,7 @@ set-related-images: yq ## Set RELATED_IMAGE_* env vars in config/manager/manager
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_PF5").value) = strenv(V)' -i config/manager/manager.yaml
 
 .PHONY: bundle
-bundle: opm manifests dependencies-manifests kustomize operator-sdk set-related-images ## Generate bundle manifests and metadata, then validate generated files.
+bundle: opm manifests kustomize operator-sdk set-related-images ## Generate bundle manifests and metadata, then validate generated files.
 	@echo "Cleaning bundle manifests..."
 	rm -rf bundle/manifests
 	$(OPERATOR_SDK) generate kustomize manifests -q

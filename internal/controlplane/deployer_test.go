@@ -47,6 +47,12 @@ func TestDefaultComponents(t *testing.T) {
 			wantEnvVar:              "RELATED_IMAGE_LIMITADOR_OPERATOR",
 			wantRelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
 		},
+		{
+			name:                    "developer-portal-controller is registered",
+			wantName:                "developer-portal-controller",
+			wantChart:               chartsBasePath + "/developer-portal-controller",
+			wantChartValueOverrides: 1,
+		},
 	}
 
 	if len(components) != len(tests) {
@@ -387,15 +393,101 @@ func TestEffectiveValues(t *testing.T) {
 
 func findDNSOperatorChartForDeployer(t *testing.T) string {
 	t.Helper()
+	return findComponentChartForDeployer(t, "dns-operator")
+}
+
+func findComponentChartForDeployer(t *testing.T, name string) string {
+	t.Helper()
 	candidates := []string{
-		filepath.Join("..", "..", "component-charts", "dns-operator"),
-		filepath.Join("component-charts", "dns-operator"),
+		filepath.Join("..", "..", "component-charts", name),
+		filepath.Join("component-charts", name),
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(filepath.Join(p, "Chart.yaml")); err == nil {
 			return p
 		}
 	}
-	t.Skip("dns-operator chart not found, skipping deployer tests against real chart")
+	t.Skipf("%s chart not found, skipping deployer tests against real chart", name)
 	return ""
+}
+
+// TestRenderDeveloperPortalComponent renders the vendored
+// developer-portal-controller chart exactly as the deployer does at runtime:
+// registered component values plus the RELATED_IMAGE_DEVELOPERPORTAL override.
+// The chart reads its ClusterRole rules via .Files.Get, so this also proves
+// the Helm SDK loader path used by the operator picks those files up.
+func TestRenderDeveloperPortalComponent(t *testing.T) {
+	registry := &Deployer{components: allComponents()}
+	component, ok := registry.ComponentByName("developer-portal-controller")
+	if !ok {
+		t.Fatal("developer-portal-controller not registered")
+	}
+	component.ChartPath = findComponentChartForDeployer(t, "developer-portal-controller")
+
+	d := &Deployer{namespace: "kuadrant-system"}
+
+	tests := []struct {
+		name  string
+		image string
+	}{
+		{name: "tag reference", image: "quay.io/kuadrant/developer-portal-controller:v1.2.3"},
+		{name: "digest reference", image: "quay.io/kuadrant/developer-portal-controller@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("RELATED_IMAGE_DEVELOPERPORTAL", tt.image)
+
+			rendered, err := d.renderComponent(component)
+			if err != nil {
+				t.Fatalf("renderComponent() error = %v", err)
+			}
+
+			wantCRDs := map[string]bool{}
+			for _, name := range component.CRDNames {
+				wantCRDs[name] = true
+			}
+			for _, crd := range rendered.CRDs {
+				delete(wantCRDs, crd.GetName())
+			}
+			if len(rendered.CRDs) != len(component.CRDNames) || len(wantCRDs) != 0 {
+				t.Errorf("rendered CRDs = %v, want exactly %v", CRDNames(rendered.CRDs), component.CRDNames)
+			}
+
+			var deployment, clusterRole *unstructured.Unstructured
+			for _, obj := range rendered.Resources {
+				switch {
+				case obj.GetKind() == "Deployment" && obj.GetName() == component.DeploymentName:
+					deployment = obj
+				case obj.GetKind() == "ClusterRole" && obj.GetName() == "developer-portal-controller-manager-role":
+					clusterRole = obj
+				}
+			}
+			if deployment == nil {
+				t.Fatalf("Deployment %q not rendered", component.DeploymentName)
+			}
+			if clusterRole == nil {
+				t.Fatal("ClusterRole developer-portal-controller-manager-role not rendered")
+			}
+
+			containers, _, err := unstructured.NestedSlice(deployment.Object, "spec", "template", "spec", "containers")
+			if err != nil || len(containers) != 1 {
+				t.Fatalf("containers = %v (err %v), want exactly one", containers, err)
+			}
+			container, _ := containers[0].(map[string]interface{})
+			if got := container["image"]; got != tt.image {
+				t.Errorf("container image = %v, want %q", got, tt.image)
+			}
+
+			rules, found, err := unstructured.NestedSlice(clusterRole.Object, "rules")
+			if err != nil || !found || len(rules) == 0 {
+				t.Errorf("ClusterRole rules = %v (found %v, err %v), want rules from rbac/role.yaml", rules, found, err)
+			}
+
+			images := extractDeploymentImages(rendered.Resources)
+			if len(images) != 1 || images[0].Container != "manager" || images[0].Image != tt.image {
+				t.Errorf("extractDeploymentImages() = %v, want manager=%s", images, tt.image)
+			}
+		})
+	}
 }

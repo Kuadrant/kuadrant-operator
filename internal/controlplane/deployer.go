@@ -125,6 +125,20 @@ func allComponents() []Component {
 			CRDNames:            []string{"limitadors.limitador.kuadrant.io"},
 			RelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
 		},
+		{
+			Name:           "developer-portal-controller",
+			ChartPath:      chartsBasePath + "/developer-portal-controller",
+			DeploymentName: "developer-portal-controller",
+			CRDNames: []string{
+				"apiproducts.devportal.kuadrant.io",
+				"apikeys.devportal.kuadrant.io",
+				"apikeyrequests.devportal.kuadrant.io",
+				"apikeyapprovals.devportal.kuadrant.io",
+			},
+			ChartValueOverrides: []ChartValueOverride{
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_DEVELOPERPORTAL", ValueKey: "image", Description: "controller"}},
+			},
+		},
 	}
 }
 

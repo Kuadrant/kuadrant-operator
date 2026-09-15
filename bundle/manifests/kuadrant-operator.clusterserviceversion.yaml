@@ -465,6 +465,12 @@ spec:
           - update
           - watch
         - apiGroups:
+          - apps
+          resources:
+          - deployments/finalizers
+          verbs:
+          - update
+        - apiGroups:
           - authentication.k8s.io
           resources:
           - tokenreviews
@@ -723,6 +729,12 @@ spec:
           - update
           - watch
         - apiGroups:
+          - limitador.kuadrant.io
+          resources:
+          - limitadors/finalizers
+          verbs:
+          - update
+        - apiGroups:
           - monitoring.coreos.com
           resources:
           - podmonitors
@@ -771,6 +783,12 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - operator.authorino.kuadrant.io
+          resources:
+          - authorinos/finalizers
+          verbs:
+          - update
         - apiGroups:
           - rbac.authorization.k8s.io
           resourceNames:

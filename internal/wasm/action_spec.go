@@ -300,7 +300,7 @@ func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label strin
 
 	var onReply []Action
 	if isGuard {
-		onReply = buildRateLimitOnReply(responseVar)
+		onReply = buildRateLimitOnReply(responseVar, s.ServiceName == RateLimitCheckServiceName)
 	} else {
 		onReply = buildReportOnReply(responseVar)
 	}
@@ -945,13 +945,30 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 
 // --- RateLimit on_reply ---
 
-func buildRateLimitOnReply(name string) []Action {
+// tokenRateLimitDenyBody is an OpenAI-style JSON error, so OpenAI-compatible
+// clients (which expect a JSON error body, not plain text) can parse a
+// TokenRateLimitPolicy denial instead of failing to decode it.
+const tokenRateLimitDenyBody = `"{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"`
+
+// tokenRateLimitDenyContentTypeHeader pairs with tokenRateLimitDenyBody: without
+// an explicit content-type header, the DenyResponse defaults to none, and the
+// data plane serves the body as text/plain regardless of its actual content -
+// OpenAI-compatible clients then refuse to parse it as JSON.
+const tokenRateLimitDenyContentTypeHeader = `["content-type", "application/json"]`
+
+func buildRateLimitOnReply(name string, tokenBased bool) []Action {
+	denyBody := `"Too Many Requests\n"`
+	denyHeaders := fmt.Sprintf("%s.response_headers_to_add", name)
+	if tokenBased {
+		denyBody = tokenRateLimitDenyBody
+		denyHeaders = fmt.Sprintf("%s.response_headers_to_add + [%s]", name, tokenRateLimitDenyContentTypeHeader)
+	}
 	return []Action{
 		NewDenyAction(
 			fmt.Sprintf("%s.overall_code == 2", name),
 			fmt.Sprintf(
-				`DenyResponse{status: 429u, headers: %s.response_headers_to_add, body: "Too Many Requests\n"}`,
-				name,
+				`DenyResponse{status: 429u, headers: %s, body: %s}`,
+				denyHeaders, denyBody,
 			),
 		),
 		NewHeadersAction(
@@ -981,13 +998,14 @@ func buildReportOnReply(name string) []Action {
 //   - code OVER_LIMIT (2): deny the request with 429.
 //   - code OK (1) with a reservation_id: stash the id at the per-limit store path
 //     so the paired Commit can read it back. A missing reservation_id (e.g.
-//     failed-open) leaves the path unset, and Commit skips itself.
+//     failed-open) leaves the path unset; Commit still fires (RFC 0021), just
+//     with an empty reservation_id, degrading to Report-style accounting.
 //   - any other code: fail (invalid/unknown response).
 func buildReserveOnReply(name, id string) []Action {
 	return []Action{
 		NewDenyAction(
 			fmt.Sprintf("%s.code == 2", name),
-			`DenyResponse{status: 429u, body: "Too Many Requests\n"}`,
+			fmt.Sprintf(`DenyResponse{status: 429u, headers: [%s], body: %s}`, tokenRateLimitDenyContentTypeHeader, tokenRateLimitDenyBody),
 		),
 		NewStoreAction(
 			fmt.Sprintf("%s.code == 1 && has(%s.reservation_id)", name, name),

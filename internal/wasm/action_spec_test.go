@@ -374,8 +374,16 @@ func TestActionSpecBuild_Reserve(t *testing.T) {
 	if len(grpc.OnReply) != 3 {
 		t.Fatalf("onReply length = %d, want 3", len(grpc.OnReply))
 	}
-	if grpc.OnReply[0].ActionType() != ActionKindDeny {
-		t.Errorf("onReply[0] type = %s, want deny", grpc.OnReply[0].ActionType())
+	deny, ok := grpc.OnReply[0].(*DenyAction)
+	if !ok {
+		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
+	}
+	wantDenyBody := `body: "{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"`
+	if !strings.Contains(deny.DenyWith, wantDenyBody) {
+		t.Errorf("deny body = %q, want it to contain %q", deny.DenyWith, wantDenyBody)
+	}
+	if !strings.Contains(deny.DenyWith, `["content-type", "application/json"]`) {
+		t.Errorf("deny headers = %q, want a content-type: application/json header", deny.DenyWith)
 	}
 	store, ok := grpc.OnReply[1].(*StoreAction)
 	if !ok {
@@ -594,14 +602,49 @@ func TestActionSpecBuild_RateLimit(t *testing.T) {
 	if len(grpc.OnReply) != 3 {
 		t.Fatalf("onReply length = %d, want 3", len(grpc.OnReply))
 	}
-	if grpc.OnReply[0].ActionType() != ActionKindDeny {
-		t.Errorf("onReply[0] type = %s, want deny", grpc.OnReply[0].ActionType())
+	deny, ok := grpc.OnReply[0].(*DenyAction)
+	if !ok {
+		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
+	}
+	// plain RateLimitPolicy keeps the plain-text body; the JSON error body is
+	// only used for TokenRateLimitPolicy denials (Reserve, CheckReport's Check).
+	if !strings.Contains(deny.DenyWith, `body: "Too Many Requests\n"`) {
+		t.Errorf("deny body = %q, want plain-text \"Too Many Requests\"", deny.DenyWith)
 	}
 	if grpc.OnReply[1].ActionType() != ActionKindHeaders {
 		t.Errorf("onReply[1] type = %s, want headers", grpc.OnReply[1].ActionType())
 	}
 	if grpc.OnReply[2].ActionType() != ActionKindFail {
 		t.Errorf("onReply[2] type = %s, want fail", grpc.OnReply[2].ActionType())
+	}
+}
+
+func TestActionSpecBuild_Check_DenyBody(t *testing.T) {
+	spec := ActionSpec{
+		ServiceName: RateLimitCheckServiceName,
+		Scope:       "my-scope",
+		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+	}
+	action := spec.Build()
+
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction, got %T", action)
+	}
+	deny, ok := grpc.OnReply[0].(*DenyAction)
+	if !ok {
+		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
+	}
+	wantDenyBody := `body: "{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"`
+	if !strings.Contains(deny.DenyWith, wantDenyBody) {
+		t.Errorf("deny body = %q, want it to contain %q", deny.DenyWith, wantDenyBody)
+	}
+	if !strings.Contains(deny.DenyWith, `["content-type", "application/json"]`) {
+		t.Errorf("deny headers = %q, want a content-type: application/json header", deny.DenyWith)
+	}
+	// the rate limit response's own response_headers_to_add must still be present
+	if !strings.Contains(deny.DenyWith, "ratelimit_response.response_headers_to_add") {
+		t.Errorf("deny headers = %q, want ratelimit_response.response_headers_to_add preserved", deny.DenyWith)
 	}
 }
 

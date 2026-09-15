@@ -61,7 +61,7 @@ TokenRateLimitPolicy automatically extracts token usage from AI/LLM responses wi
 - **Response parsing**: Automatically extracts `usage.total_tokens` from response bodies
 - **Provider scope**: Supports any backend returning that field, e.g. OpenAI `/v1/chat/completions` and `/v1/completions`, and OpenAI-compatible backends like vLLM, kServe, Ollama, Azure OpenAI, and Gemini's OpenAI-compat endpoint. Anthropic and Gemini's native response formats aren't supported yet — see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864)
 - **Accurate accounting**: Tracks actual token consumption, not estimates
-- **Graceful fallback**: If token parsing fails, falls back to request counting
+- **Silent pass-through on failure**: If token parsing fails (missing `usage.total_tokens` in the response), the report phase fails silently and no tokens are counted. The default `failureMode: allow` means requests succeed but rate limiting is not applied. Set `RATELIMIT_REPORT_SERVICE_FAILURE_MODE=deny` to reject requests when usage cannot be extracted
 
 ### User Segmentation
 

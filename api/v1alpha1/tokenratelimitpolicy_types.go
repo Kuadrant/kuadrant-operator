@@ -222,8 +222,32 @@ type TokenLimit struct {
 	// +optional
 	Counters []kuadrantv1.Counter `json:"counters,omitempty"`
 
+	// Reservation configures token reservation for this limit. It only takes
+	// effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+	// an estimated token amount is reserved on request arrival and committed
+	// with the actual usage once the upstream responds. When omitted, defaults
+	// are generated (flat amount, route backendRequest timeout for ttl).
+	// +optional
+	Reservation *Reservation `json:"reservation,omitempty"`
+
 	// Source stores the locator of the policy where the limit is originally defined (internal use)
 	Source string `json:"-"`
+}
+
+// Reservation configures token reservation behavior for a TokenLimit, used when
+// the Kuadrant CR is in Reservation mode (see RFC 0021).
+type Reservation struct {
+	// Amount is a CEL expression evaluating to the number of tokens (uint) to
+	// reserve on request arrival. When omitted, a flat default is used.
+	// +optional
+	Amount *kuadrantv1.Expression `json:"amount,omitempty"`
+
+	// TTL is a CEL expression evaluating to the maximum duration
+	// (google.protobuf.Duration) the reservation is held before it expires.
+	// When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+	// is used.
+	// +optional
+	TTL *kuadrantv1.Expression `json:"ttl,omitempty"`
 }
 
 func (l TokenLimit) CountersAsStringList() []string {

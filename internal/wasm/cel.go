@@ -147,6 +147,56 @@ func (r RateLimitRequestCEL) ToCEL() string {
 }`, r.Domain, r.HitsAddend, descriptorsCEL)
 }
 
+// ReserveRequestCEL models kuadrant.service.ratelimit.v1.ReserveRequest for CEL rendering.
+type ReserveRequestCEL struct {
+	Domain      string
+	Descriptors []RateLimitDescriptorCEL
+	Amount      string
+	TTL         string
+}
+
+func (r ReserveRequestCEL) ToCEL() string {
+	descriptorsCEL := "[]"
+	if len(r.Descriptors) > 0 {
+		parts := make([]string, len(r.Descriptors))
+		for i, d := range r.Descriptors {
+			parts[i] = d.ToCEL()
+		}
+		descriptorsCEL = fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+	}
+	return fmt.Sprintf(`kuadrant.service.ratelimit.v1.ReserveRequest {
+    domain: %s,
+    descriptors: %s,
+    amount: %s,
+    ttl: %s
+}`, r.Domain, descriptorsCEL, r.Amount, r.TTL)
+}
+
+// CommitRequestCEL models kuadrant.service.ratelimit.v1.CommitRequest for CEL rendering.
+type CommitRequestCEL struct {
+	Domain        string
+	Descriptors   []RateLimitDescriptorCEL
+	ReservationID string
+	ActualAmount  string
+}
+
+func (r CommitRequestCEL) ToCEL() string {
+	descriptorsCEL := "[]"
+	if len(r.Descriptors) > 0 {
+		parts := make([]string, len(r.Descriptors))
+		for i, d := range r.Descriptors {
+			parts[i] = d.ToCEL()
+		}
+		descriptorsCEL = fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+	}
+	return fmt.Sprintf(`kuadrant.service.ratelimit.v1.CommitRequest {
+    domain: %s,
+    descriptors: %s,
+    reservation_id: %s,
+    actual_amount: %s
+}`, r.Domain, descriptorsCEL, r.ReservationID, r.ActualAmount)
+}
+
 // RateLimitDescriptorCEL models a single descriptor with entries.
 //
 // Two modes:

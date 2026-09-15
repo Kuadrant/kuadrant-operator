@@ -1532,6 +1532,8 @@ func TestBuildConfigForActionSetWithObservability(t *testing.T) {
 			assert.Assert(subT, config.Services[AuthServiceName] != Service{}, "auth service should be present")
 			assert.Assert(subT, config.Services[RateLimitCheckServiceName] != Service{}, "ratelimit check service should be present")
 			assert.Assert(subT, config.Services[RateLimitReportServiceName] != Service{}, "ratelimit report service should be present")
+			assert.Assert(subT, config.Services[RateLimitReserveServiceName] != Service{}, "ratelimit reserve service should be present")
+			assert.Assert(subT, config.Services[RateLimitCommitServiceName] != Service{}, "ratelimit commit service should be present")
 		})
 	}
 }

@@ -1,7 +1,6 @@
 namespace: kuadrant-system
 
 resources:
-  - developer-portal
   - openshift
 
 # replacements:

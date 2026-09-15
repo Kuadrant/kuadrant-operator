@@ -12,7 +12,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/cel-go v0.26.0
 	github.com/google/go-cmp v0.7.0
-	github.com/kuadrant/authorino v0.25.0
+	github.com/kuadrant/authorino v0.27.0
 	github.com/kuadrant/authorino-operator v0.26.0
 	github.com/kuadrant/dns-operator v0.0.0-20260819172149-de271431efea
 	github.com/kuadrant/limitador-operator v0.15.0

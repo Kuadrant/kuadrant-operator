@@ -948,13 +948,13 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 // tokenRateLimitDenyBody is an OpenAI-style JSON error, so OpenAI-compatible
 // clients (which expect a JSON error body, not plain text) can parse a
 // TokenRateLimitPolicy denial instead of failing to decode it.
-const tokenRateLimitDenyBody = `"{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"`
+const tokenRateLimitDenyBody = `"{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"` //nolint:gosec
 
 // tokenRateLimitDenyContentTypeHeader pairs with tokenRateLimitDenyBody: without
 // an explicit content-type header, the DenyResponse defaults to none, and the
 // data plane serves the body as text/plain regardless of its actual content -
 // OpenAI-compatible clients then refuse to parse it as JSON.
-const tokenRateLimitDenyContentTypeHeader = `["content-type", "application/json"]`
+const tokenRateLimitDenyContentTypeHeader = `["content-type", "application/json"]` //nolint:gosec
 
 func buildRateLimitOnReply(name string, tokenBased bool) []Action {
 	denyBody := `"Too Many Requests\n"`

@@ -43,7 +43,7 @@ var (
 	mcpAuthTestServerNS     = mcpAuthEnv("MCP_AUTH_TEST_SERVER_NAMESPACE", mcpAuthTestServerNamespaceDefault)
 )
 
-var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, func() {
+var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gateway", "long-running"), func() {
 	var (
 		createdResources  []*unstructured.Unstructured
 		originalExtension *unstructured.Unstructured

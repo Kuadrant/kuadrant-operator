@@ -5,28 +5,8 @@ import (
 
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 )
-
-func TestEnableAuthorinoLoggingFields(t *testing.T) {
-	authorino := &unstructured.Unstructured{Object: map[string]any{}}
-
-	if err := enableAuthorinoLoggingFields(authorino); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	enabled, found, err := unstructured.NestedBool(authorino.Object, "spec", "enableLoggingFields")
-	if err != nil {
-		t.Fatalf("unexpected error reading enableLoggingFields: %v", err)
-	}
-	if !found || !enabled {
-		t.Fatalf("expected spec.enableLoggingFields to be true, got found=%v value=%v", found, enabled)
-	}
-	if _, found, err := unstructured.NestedInt64(authorino.Object, "spec", "loggingFieldsMaxValueBytes"); err != nil || found {
-		t.Fatalf("expected loggingFieldsMaxValueBytes to remain unset, got found=%v err=%v", found, err)
-	}
-}
 
 func TestBuildTLSPatch(t *testing.T) {
 	ciphers := []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}

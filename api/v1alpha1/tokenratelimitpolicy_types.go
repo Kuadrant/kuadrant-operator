@@ -20,6 +20,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -237,10 +238,12 @@ type TokenLimit struct {
 // Reservation configures token reservation behavior for a TokenLimit, used when
 // the Kuadrant CR is in Reservation mode (see RFC 0021).
 type Reservation struct {
-	// Amount is a CEL expression evaluating to the number of tokens (uint) to
-	// reserve on request arrival. When omitted, a flat default is used.
+	// Amount is either a literal integer number of tokens to reserve on request
+	// arrival, or a CEL expression evaluating to the number of tokens (uint).
+	// When omitted, a flat default is used.
 	// +optional
-	Amount *kuadrantv1.Expression `json:"amount,omitempty"`
+	// +kubebuilder:validation:XIntOrString
+	Amount *intstr.IntOrString `json:"amount,omitempty"`
 
 	// TTL is a CEL expression evaluating to the maximum duration
 	// (google.protobuf.Duration) the reservation is held before it expires.

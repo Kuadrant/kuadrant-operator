@@ -130,11 +130,14 @@ spec:
                             are generated (flat amount, route backendRequest timeout for ttl).
                           properties:
                             amount:
+                              anyOf:
+                              - type: integer
+                              - type: string
                               description: |-
-                                Amount is a CEL expression evaluating to the number of tokens (uint) to
-                                reserve on request arrival. When omitted, a flat default is used.
-                              minLength: 1
-                              type: string
+                                Amount is either a literal integer number of tokens to reserve on request
+                                arrival, or a CEL expression evaluating to the number of tokens (uint).
+                                When omitted, a flat default is used.
+                              x-kubernetes-int-or-string: true
                             ttl:
                               description: |-
                                 TTL is a CEL expression evaluating to the maximum duration
@@ -242,11 +245,14 @@ spec:
                         are generated (flat amount, route backendRequest timeout for ttl).
                       properties:
                         amount:
+                          anyOf:
+                          - type: integer
+                          - type: string
                           description: |-
-                            Amount is a CEL expression evaluating to the number of tokens (uint) to
-                            reserve on request arrival. When omitted, a flat default is used.
-                          minLength: 1
-                          type: string
+                            Amount is either a literal integer number of tokens to reserve on request
+                            arrival, or a CEL expression evaluating to the number of tokens (uint).
+                            When omitted, a flat default is used.
+                          x-kubernetes-int-or-string: true
                         ttl:
                           description: |-
                             TTL is a CEL expression evaluating to the maximum duration
@@ -335,11 +341,14 @@ spec:
                             are generated (flat amount, route backendRequest timeout for ttl).
                           properties:
                             amount:
+                              anyOf:
+                              - type: integer
+                              - type: string
                               description: |-
-                                Amount is a CEL expression evaluating to the number of tokens (uint) to
-                                reserve on request arrival. When omitted, a flat default is used.
-                              minLength: 1
-                              type: string
+                                Amount is either a literal integer number of tokens to reserve on request
+                                arrival, or a CEL expression evaluating to the number of tokens (uint).
+                                When omitted, a flat default is used.
+                              x-kubernetes-int-or-string: true
                             ttl:
                               description: |-
                                 TTL is a CEL expression evaluating to the maximum duration

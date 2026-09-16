@@ -348,7 +348,10 @@ func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentif
 	}
 	if r := tokenLimit.Reservation; r != nil {
 		if r.Amount != nil {
-			amount = string(*r.Amount)
+			// String() returns the literal integer (e.g. "8000") when Amount is an
+			// int, or the CEL expression verbatim when it is a string; both are
+			// valid CEL, so no branching is needed here.
+			amount = r.Amount.String()
 		}
 		if r.TTL != nil {
 			ttl = string(*r.TTL)

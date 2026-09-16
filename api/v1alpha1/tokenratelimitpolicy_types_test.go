@@ -21,6 +21,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -330,7 +331,7 @@ func TestTokenRateLimitPolicy_Merge_Reservation(t *testing.T) {
 	reservation := func(amount, ttl string) *Reservation {
 		r := &Reservation{}
 		if amount != "" {
-			r.Amount = ptr.To(kuadrantv1.Expression(amount))
+			r.Amount = ptr.To(intstr.Parse(amount))
 		}
 		if ttl != "" {
 			r.TTL = ptr.To(kuadrantv1.Expression(ttl))
@@ -374,7 +375,7 @@ func TestTokenRateLimitPolicy_Merge_Reservation(t *testing.T) {
 		}
 
 		limitA, ok := proper.Limits["limit-a"]
-		if !ok || limitA.Reservation == nil || limitA.Reservation.Amount == nil || *limitA.Reservation.Amount != "1000" {
+		if !ok || limitA.Reservation == nil || limitA.Reservation.Amount == nil || limitA.Reservation.Amount.String() != "1000" {
 			t.Errorf("expected limit-a to inherit reservation amount 1000, got %+v", limitA.Reservation)
 		}
 		if limitA.Reservation == nil || limitA.Reservation.TTL == nil || *limitA.Reservation.TTL != "duration('30s')" {
@@ -382,7 +383,7 @@ func TestTokenRateLimitPolicy_Merge_Reservation(t *testing.T) {
 		}
 
 		limitB, ok := proper.Limits["limit-b"]
-		if !ok || limitB.Reservation == nil || limitB.Reservation.Amount == nil || *limitB.Reservation.Amount != "500" {
+		if !ok || limitB.Reservation == nil || limitB.Reservation.Amount == nil || limitB.Reservation.Amount.String() != "500" {
 			t.Errorf("expected limit-b to keep reservation amount 500, got %+v", limitB.Reservation)
 		}
 	})
@@ -419,7 +420,7 @@ func TestTokenRateLimitPolicy_Merge_Reservation(t *testing.T) {
 		}
 		proper := merged.Spec.Proper()
 		limitA, ok := proper.Limits["limit-a"]
-		if !ok || limitA.Reservation == nil || limitA.Reservation.Amount == nil || *limitA.Reservation.Amount != "2000" {
+		if !ok || limitA.Reservation == nil || limitA.Reservation.Amount == nil || limitA.Reservation.Amount.String() != "2000" {
 			t.Errorf("expected limit-a to be overridden with reservation amount 2000, got %+v", limitA.Reservation)
 		}
 	})
@@ -456,7 +457,7 @@ func TestTokenRateLimitPolicy_Merge_Reservation(t *testing.T) {
 		}
 		proper := merged.Spec.Proper()
 		limitA, ok := proper.Limits["limit-a"]
-		if !ok || limitA.Reservation == nil || limitA.Reservation.Amount == nil || *limitA.Reservation.Amount != "5000" {
+		if !ok || limitA.Reservation == nil || limitA.Reservation.Amount == nil || limitA.Reservation.Amount.String() != "5000" {
 			t.Errorf("expected limit-a to be overridden by gateway policy with reservation amount 5000, got %+v", limitA.Reservation)
 		}
 	})

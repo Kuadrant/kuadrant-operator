@@ -56,7 +56,7 @@ Configures how many tokens are reserved on request arrival and for how long, whe
 
 | **Field** | **Type** | **Required** | **Description**                                                                                                              |
 |-----------|----------|:------------:|----------------------------------------------------------------------------------------------------------------------------|
-| `amount`  | String   | No           | CEL expression evaluating to the number of tokens (`uint`) to reserve on request arrival. When omitted, a flat default of `5000` is used. |
+| `amount`  | Integer or String | No | Either a literal integer number of tokens, or a CEL expression evaluating to the number of tokens (`uint`), to reserve on request arrival. When omitted, a flat default of `5000` is used. |
 | `ttl`     | String   | No           | CEL expression evaluating to the maximum duration (`google.protobuf.Duration`) the reservation is held before it expires. When omitted, the value falls back to the route's `HTTPRoute.spec.rules[].timeouts.backendRequest`; if that is also unset, `ttl` is left unset and Limitador applies its own default. |
 
 The reserved `amount` is an estimate: once the upstream responds, the actual `usage.total_tokens` is committed and the unused portion of the reservation is released.
@@ -72,9 +72,11 @@ limits:
     - limit: 100000
       window: 1h
     reservation:
-      amount: "8000"
+      amount: 8000
       ttl: 'duration("30s")'
 ```
+
+`amount` also accepts a CEL expression as a quoted string, e.g. `amount: "1 + 1"`. Note: expressions that read the request body (e.g. a `requestBodyJSON(...)`-based token estimate) are not yet supported for `reservation.amount`.
 
 ### Rate
 

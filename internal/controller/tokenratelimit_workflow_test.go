@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -463,10 +464,10 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			},
 		},
 		{
-			name: "reservation mode with explicit amount and ttl overriding route fallback",
+			name: "reservation mode with explicit integer amount and ttl overriding route fallback",
 			tokenLimit: &kuadrantv1alpha1.TokenLimit{
 				Reservation: &kuadrantv1alpha1.Reservation{
-					Amount: ptr.To(kuadrantv1.Expression("8000")),
+					Amount: ptr.To(intstr.FromInt32(8000)),
 					TTL:    ptr.To(kuadrantv1.Expression(`duration("30s")`)),
 				},
 			},
@@ -487,6 +488,49 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "8000"}}},
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: `duration("30s")`}}},
+							},
+						},
+					},
+				},
+				{
+					ServiceName: wasm.RateLimitCommitServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "reservation mode with CEL expression amount",
+			tokenLimit: &kuadrantv1alpha1.TokenLimit{
+				Reservation: &kuadrantv1alpha1.Reservation{
+					Amount: ptr.To(intstr.FromString("1 + 1")),
+				},
+			},
+			limitIdentifier: "tokenlimit.myTokenLimit__d681f6c3",
+			scope:           ActionScope("my-ns/my-route"),
+			mode:            kuadrantv1beta1.TokenRateLimitingModeReservation,
+			expectedActions: []wasm.ActionSpec{
+				{
+					ServiceName: wasm.RateLimitReserveServiceName,
+					Scope:       "my-ns/my-route",
+					Sources:     []string{"test/policy/locator"},
+					ConditionalData: []wasm.ConditionalData{
+						{
+							Predicates: []string{},
+							Data: []wasm.DataType{
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
+								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "1 + 1"}}},
 							},
 						},
 					},

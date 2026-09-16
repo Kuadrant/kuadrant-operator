@@ -116,6 +116,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				return err
 			}
 		}
+		if err := enableAuthorinoLoggingFields(unstructuredAuthorino); err != nil {
+			return err
+		}
 
 		// Only force ownership if tracing field is available for ownership
 		force := clusterAuthorino.Spec.Tracing.Endpoint == ""
@@ -198,6 +201,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		logger.Error(err, "failed to destruct authorino", "status", "error")
 		return err
 	}
+	if err := enableAuthorinoLoggingFields(unstructuredAuthorino); err != nil {
+		return err
+	}
 
 	logger.V(1).Info("creating authorino resource", "status", "processing")
 	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
@@ -230,6 +236,12 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	return nil
+}
+
+// enableAuthorinoLoggingFields uses the unstructured representation until the
+// independently managed authorino-operator dependency revision is updated.
+func enableAuthorinoLoggingFields(authorino *unstructured.Unstructured) error {
+	return unstructured.SetNestedField(authorino.Object, true, "spec", "enableLoggingFields")
 }
 
 func buildTLSPatch(existing authorinoopapi.Tls, minVersion string, cipherSuites []string) authorinoopapi.Tls {

@@ -113,7 +113,7 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 			Kind:               authorinoObj.Kind,
 			Name:               authorinoObj.GetName(),
 			UID:                authorinoObj.GetUID(),
-			BlockOwnerDeletion: new(true),
+			BlockOwnerDeletion: new(false),
 			Controller:         new(true),
 		}
 
@@ -171,7 +171,7 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 			Kind:               lObj.Kind,
 			Name:               lObj.GetName(),
 			UID:                lObj.GetUID(),
-			BlockOwnerDeletion: new(true),
+			BlockOwnerDeletion: new(false),
 			Controller:         new(true),
 		}
 

@@ -117,6 +117,26 @@ make test-integration
 make test-integration INTEGRATION_TESTS_EXTRA_ARGS="--focus=TestFoo"
 ```
 
+### Testing Against Existing Cluster
+
+To run tests against a cluster that already has Kuadrant installed (instead of starting an in-process operator):
+
+```bash
+export USE_EXISTING_OPERATOR=true
+make test-bare-k8s-integration
+make test-gatewayapi-env-integration
+make test-istio-env-integration
+# etc.
+```
+
+When `USE_EXISTING_OPERATOR=true`:
+- Skips in-process manager startup and CRD bootstrapping
+- Uses the cluster's existing Kuadrant installation
+- Tests connect via kubeconfig and verify against live operators
+- Useful for validating fixes without cluster churn or testing against production-like setups
+
+**Requirement:** The target cluster must have Kuadrant and all dependencies (Authorino, Limitador, etc.) already installed and running.
+
 ## Common Targets
 
 - `make local-<suite>-env-setup` — Create Kind cluster and install all dependencies

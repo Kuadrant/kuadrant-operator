@@ -1,0 +1,496 @@
+name: MCP Gateway Nightly
+
+on:
+  schedule:
+    - cron: '45 2 * * *'
+  workflow_dispatch:
+    inputs:
+      mcp_ref:
+        description: MCP Gateway ref (commit SHA or branch) for reproducing a nightly failure; operator checkout remains on main
+        required: false
+        default: main
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-gateway-nightly:
+    name: mcp-gateway-nightly
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KIND_CLUSTER_NAME: kuadrant-mcp-nightly
+      OPERATOR_IMAGE: quay.io/kuadrant/kuadrant-operator:nightly-${{ github.run_id }}
+      MCP_CONTROLLER_IMAGE: ghcr.io/kuadrant/mcp-controller:nightly-${{ github.run_id }}
+      MCP_BROKER_IMAGE: ghcr.io/kuadrant/mcp-gateway:nightly-${{ github.run_id }}
+      GATEWAYAPI_PROVIDER: istio
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out operator main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check out MCP Gateway source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          repository: Kuadrant/mcp-gateway
+          ref: ${{ inputs.mcp_ref || 'main' }}
+          path: mcp-gateway
+          persist-credentials: false
+
+      - name: Record source SHAs
+        id: source-shas
+        env:
+          MCP_REF: ${{ inputs.mcp_ref || 'main' }}
+        run: |
+          echo "operator_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "mcp_sha=$(git -C mcp-gateway rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          {
+            echo "## MCP Gateway nightly source pair"
+            echo ""
+            echo "The \`main\` ref means the commit resolved when this run started."
+            echo ""
+            echo "| Repository | Requested ref | Resolved SHA |"
+            echo "|---|---|---|"
+            echo "| kuadrant-operator | \`main\` | \`$(git rev-parse HEAD)\` |"
+            echo "| mcp-gateway | \`$MCP_REF\` | \`$(git -C mcp-gateway rev-parse HEAD)\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # ratchet:actions/setup-go@v6
+        with:
+          go-version: '1.26.0'
+      - name: Prepare Kind config for MCP E2E ports
+        run: |
+          cp utils/kind-cluster.yaml "$RUNNER_TEMP/mcp-kind-cluster.yaml"
+          cat >> "$RUNNER_TEMP/mcp-kind-cluster.yaml" <<'EOF'
+            extraPortMappings:
+            - containerPort: 30080 # mcp-gateway (standard)
+              hostPort: 8001
+              protocol: TCP
+            - containerPort: 30082 # mcp-gateway HTTPS
+              hostPort: 8009
+              protocol: TCP
+            - containerPort: 30071 # e2e-2 gateway
+              hostPort: 8003
+              protocol: TCP
+            - containerPort: 30072 # e2e-1 gateway
+              hostPort: 8004
+              protocol: TCP
+            - containerPort: 30073 # shared-gateway team-a
+              hostPort: 8005
+              protocol: TCP
+            - containerPort: 30074 # shared-gateway team-b
+              hostPort: 8006
+              protocol: TCP
+            - containerPort: 30077 # e2e-elicitation gateway
+              hostPort: 8010
+              protocol: TCP
+            - containerPort: 30083 # protocol-2026 listener
+              hostPort: 8011
+              protocol: TCP
+            - containerPort: 30084 # resources-federation listener
+              hostPort: 8012
+              protocol: TCP
+            - containerPort: 30085 # a2a-passthrough listener
+              hostPort: 8013
+              protocol: TCP
+          EOF
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@94729529f85113b88f4f819c17ce61382e6d8478 # ratchet:helm/kind-action@v1.2.0
+        with:
+          version: v0.31.0
+          node_image: kindest/node:v1.35.0
+          config: ${{ runner.temp }}/mcp-kind-cluster.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+
+      - name: Check cluster info
+        run: kubectl cluster-info dump
+
+      - name: Set up Istio environment
+        run: make env-setup GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=false
+        timeout-minutes: 30
+
+      - name: Build and load operator image
+        run: |
+          test -d component-charts/mcp-gateway
+          test -f component-charts/mcp-gateway/Chart.yaml
+          make docker-build IMG="$OPERATOR_IMAGE"
+          make kind-load-image IMG="$OPERATOR_IMAGE" KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+
+
+      - name: Verify operator image is loaded in Kind
+        run: |
+          docker exec "${KIND_CLUSTER_NAME}-control-plane" crictl images -o json \
+            | jq -e --arg image "$OPERATOR_IMAGE" '.images[].repoTags[]? | select(. == $image)'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+
+      - name: Compute MCP image build LDFLAGS
+        id: mcp-ldflags
+        working-directory: mcp-gateway
+        run: echo "ldflags=$(make -s print-ldflags)" >> "$GITHUB_OUTPUT"
+
+      - name: Build MCP Gateway broker image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # ratchet:docker/build-push-action@v5
+        with:
+          context: mcp-gateway
+          load: true
+          tags: ${{ env.MCP_BROKER_IMAGE }}
+          build-args: |
+            LDFLAGS=${{ steps.mcp-ldflags.outputs.ldflags }}
+          cache-from: type=gha,scope=mcp-gateway-nightly-broker
+          cache-to: type=gha,mode=max,scope=mcp-gateway-nightly-broker
+
+      - name: Build MCP Gateway controller image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # ratchet:docker/build-push-action@v5
+        with:
+          context: mcp-gateway
+          file: mcp-gateway/Dockerfile.controller
+          load: true
+          tags: ${{ env.MCP_CONTROLLER_IMAGE }}
+          build-args: |
+            LDFLAGS=${{ steps.mcp-ldflags.outputs.ldflags }}
+          cache-from: type=gha,scope=mcp-gateway-nightly-controller
+          cache-to: type=gha,mode=max,scope=mcp-gateway-nightly-controller
+
+      - name: Load MCP images into Kind
+        run: |
+          make -C mcp-gateway \
+            KIND_VERSION=v0.31.0 \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
+            GATEWAY_IMG="$MCP_BROKER_IMAGE" \
+            IMAGE_TAG_BASE=ghcr.io/kuadrant/mcp-controller \
+            IMAGE_TAG="nightly-${GITHUB_RUN_ID}" \
+            load-image
+          for image in "$MCP_BROKER_IMAGE" "$MCP_CONTROLLER_IMAGE"; do
+            docker exec "${KIND_CLUSTER_NAME}-control-plane" crictl images -o json \
+              | jq -e --arg image "$image" '.images[].repoTags[]? | select(. == $image)'
+          done
+
+      - name: Record image tags
+        run: |
+          {
+            echo ""
+            echo "## Images"
+            echo ""
+            echo "| Image | Reference |"
+            echo "|---|---|"
+            echo "| Operator | \`$OPERATOR_IMAGE\` |"
+            echo "| MCP controller | \`$MCP_CONTROLLER_IMAGE\` |"
+            echo "| MCP broker/router | \`$MCP_BROKER_IMAGE\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Render and install Kuadrant Helm chart
+        env:
+          RELATED_IMAGE_MCP_GATEWAY: ${{ env.MCP_CONTROLLER_IMAGE }}
+          RELATED_IMAGE_MCP_GATEWAY_BROKER: ${{ env.MCP_BROKER_IMAGE }}
+        run: |
+          make yq
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          test -d component-charts/mcp-gateway
+          test "$(yq eval '.imageController.pullPolicy' component-charts/mcp-gateway/values.yaml)" = "IfNotPresent"
+
+          export MCP_CONTROLLER_IMAGE MCP_BROKER_IMAGE
+          V="$MCP_CONTROLLER_IMAGE" yq eval \
+            '(select(.kind == "Deployment" and .metadata.name == "kuadrant-operator-controller-manager").spec.template.spec.containers[0].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY").value) = strenv(V)' \
+            -i config/manager/manager.yaml
+          V="$MCP_BROKER_IMAGE" yq eval \
+            '(select(.kind == "Deployment" and .metadata.name == "kuadrant-operator-controller-manager").spec.template.spec.containers[0].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY_BROKER").value) = strenv(V)' \
+            -i config/manager/manager.yaml
+
+          make helm-build IMG="$OPERATOR_IMAGE"
+          make helm-dependency-build
+
+          assert_rendered_related_image() {
+            local env_name="$1"
+            local expected="$2"
+            NAME="$env_name" V="$expected" yq eval -e \
+              'select(.kind == "Deployment" and .metadata.name == "kuadrant-operator-controller-manager").spec.template.spec.containers[0].env[] | select(.name == strenv(NAME) and .value == strenv(V))' \
+              charts/kuadrant-operator/templates/manifests.yaml >/dev/null
+          }
+          assert_rendered_related_image RELATED_IMAGE_MCP_GATEWAY "$MCP_CONTROLLER_IMAGE"
+          assert_rendered_related_image RELATED_IMAGE_MCP_GATEWAY_BROKER "$MCP_BROKER_IMAGE"
+
+          helm upgrade --install kuadrant charts/kuadrant-operator \
+            --namespace kuadrant-system \
+            --create-namespace \
+            --wait \
+            --timeout 10m
+
+      - name: Wait for Kuadrant and MCP controller
+        run: |
+          kubectl wait --for=condition=Ready kuadrantcontrolplane/default \
+            --timeout=10m
+          kubectl wait --for=condition=Available \
+            deployment/kuadrant-operator-controller-manager \
+            -n kuadrant-system --timeout=5m
+          for crd in \
+            mcpgatewayextensions.mcp.kuadrant.io \
+            mcpserverregistrations.mcp.kuadrant.io \
+            mcpvirtualservers.mcp.kuadrant.io; do
+            kubectl wait --for=condition=Established "crd/$crd" --timeout=5m
+          done
+          kubectl wait --for=condition=Available \
+            deployment/mcp-gateway-controller \
+            -n kuadrant-system --timeout=5m
+          controller_image="$(kubectl get deployment/mcp-gateway-controller -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+          if [[ "$controller_image" != "$MCP_CONTROLLER_IMAGE" ]]; then
+            printf 'ASSERTION FAILED: managed MCP controller deployment image\n  expected: %s\n  actual:   %s\n' \
+              "$MCP_CONTROLLER_IMAGE" "${controller_image:-<empty>}" >&2
+            exit 1
+          fi
+
+      - name: Prepare MCP Gateway fixtures
+        run: |
+          kubectl apply -f mcp-gateway/config/istio/gateway/namespace.yaml
+          make -C mcp-gateway \
+            KIND_VERSION=v0.31.0 \
+            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            TEST_SERVER_IMAGE_SOURCE=build \
+            deploy-tls-test-server
+          make -C mcp-gateway \
+            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            deploy-gateway
+          make yq
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          yq eval '
+            .spec.listeners |= (
+              map(select(.name != "mcp-tls")) + [{
+                "name": "mcp-tls",
+                "hostname": "*.mcp-gateway.local",
+                "port": 8443,
+                "protocol": "HTTPS",
+                "tls": {
+                  "mode": "Terminate",
+                  "certificateRefs": [{"kind": "Secret", "name": "mcp-gateway-tls-cert"}]
+                },
+                "allowedRoutes": {"namespaces": {"from": "All"}}
+              }]
+            )
+          ' mcp-gateway/config/istio/gateway/gateway.yaml \
+            > "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
+          kubectl apply -f "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
+          make -C mcp-gateway \
+            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            E2E_DOMAIN=127-0-0-1.sslip.io \
+            GATEWAY_CLASS_NAME=istio \
+            E2E_PLATFORM=kind \
+            deploy-e2e-gateways
+          kubectl wait --for=condition=Programmed gateway/mcp-gateway \
+            -n gateway-system --timeout=5m
+
+      - name: Create managed MCPGatewayExtension
+        run: |
+          make yq
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          yq eval '.spec.from[0].namespace = "kuadrant-system"' \
+            mcp-gateway/config/istio/gateway/referencegrant.yaml \
+            > "$RUNNER_TEMP/mcp-gateway-referencegrant.yaml"
+          kubectl apply -f "$RUNNER_TEMP/mcp-gateway-referencegrant.yaml"
+          kubectl apply -f - <<'EOF'
+          apiVersion: mcp.kuadrant.io/v1
+          kind: MCPGatewayExtension
+          metadata:
+            name: mcp-gateway-extension
+            namespace: kuadrant-system
+          spec:
+            targetRef:
+              group: gateway.networking.k8s.io
+              kind: Gateway
+              name: mcp-gateway
+              namespace: gateway-system
+              sectionName: mcp-tls
+          EOF
+          kubectl wait --for=condition=Ready \
+            mcpgatewayextension/mcp-gateway-extension \
+            -n kuadrant-system --timeout=10m
+          kubectl wait --for=condition=Available \
+            deployment/mcp-gateway -n kuadrant-system --timeout=5m
+          broker_image="$(kubectl get deployment/mcp-gateway -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+          broker_pull_policy="$(kubectl get deployment/mcp-gateway -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}' 2>/dev/null || true)"
+          controller_pull_policy="$(kubectl get deployment/mcp-gateway-controller -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}' 2>/dev/null || true)"
+          if [[ "$broker_image" != "$MCP_BROKER_IMAGE" ]]; then
+            printf 'ASSERTION FAILED: managed MCP broker deployment image\n  expected: %s\n  actual:   %s\n' \
+              "$MCP_BROKER_IMAGE" "${broker_image:-<empty>}" >&2
+            exit 1
+          fi
+          if [[ "$controller_pull_policy" != "IfNotPresent" ]]; then
+            printf 'ASSERTION FAILED: managed MCP controller image pull policy\n  expected: IfNotPresent\n  actual:   %s\n' \
+              "${controller_pull_policy:-<empty>}" >&2
+            exit 1
+          fi
+          if [[ "$broker_pull_policy" != "IfNotPresent" ]]; then
+            printf 'ASSERTION FAILED: managed MCP broker image pull policy\n  expected: IfNotPresent\n  actual:   %s\n' \
+              "${broker_pull_policy:-<empty>}" >&2
+            exit 1
+          fi
+
+      - name: Assert deployed image identities
+        run: |
+          failures=0
+          assert_equal() {
+            local description="$1"
+            local expected="$2"
+            local actual="$3"
+            local actual_display="${actual:-<empty>}"
+            if [[ "$actual" != "$expected" ]]; then
+              printf 'ASSERTION FAILED: %s\n  expected: %s\n  actual:   %s\n' \
+                "$description" "$expected" "$actual_display" >&2
+              failures=$((failures + 1))
+            else
+              printf 'Verified %s: %s\n' "$description" "$actual"
+            fi
+          }
+
+          operator_image="$(kubectl get deployment/kuadrant-operator-controller-manager \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+          operator_mcp_controller_image="$(kubectl get deployment/kuadrant-operator-controller-manager \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="RELATED_IMAGE_MCP_GATEWAY")].value}' \
+            2>/dev/null || true)"
+          operator_mcp_broker_image="$(kubectl get deployment/kuadrant-operator-controller-manager \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="RELATED_IMAGE_MCP_GATEWAY_BROKER")].value}' \
+            2>/dev/null || true)"
+          mcp_controller_image="$(kubectl get deployment/mcp-gateway-controller \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+          mcp_controller_pull_policy="$(kubectl get deployment/mcp-gateway-controller \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}' 2>/dev/null || true)"
+          mcp_broker_image="$(kubectl get deployment/mcp-gateway \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+          mcp_broker_pull_policy="$(kubectl get deployment/mcp-gateway \
+            -n kuadrant-system \
+            -o jsonpath='{.spec.template.spec.containers[0].imagePullPolicy}' 2>/dev/null || true)"
+
+          assert_equal \
+            "operator deployment image" \
+            "$OPERATOR_IMAGE" \
+            "$operator_image"
+          assert_equal \
+            "operator RELATED_IMAGE_MCP_GATEWAY" \
+            "$MCP_CONTROLLER_IMAGE" \
+            "$operator_mcp_controller_image"
+          assert_equal \
+            "operator RELATED_IMAGE_MCP_GATEWAY_BROKER" \
+            "$MCP_BROKER_IMAGE" \
+            "$operator_mcp_broker_image"
+          assert_equal \
+            "managed MCP controller deployment image" \
+            "$MCP_CONTROLLER_IMAGE" \
+            "$mcp_controller_image"
+          assert_equal \
+            "managed MCP controller image pull policy" \
+            "IfNotPresent" \
+            "$mcp_controller_pull_policy"
+          assert_equal \
+            "managed MCP broker deployment image" \
+            "$MCP_BROKER_IMAGE" \
+            "$mcp_broker_image"
+          assert_equal \
+            "managed MCP broker image pull policy" \
+            "IfNotPresent" \
+            "$mcp_broker_pull_policy"
+
+          if (( failures > 0 )); then
+            printf '%d deployed image identity assertion(s) failed\n' "$failures" >&2
+            exit 1
+          fi
+
+      - name: Prepare MCP test servers
+        run: |
+          make -C mcp-gateway \
+            KIND_VERSION=v0.31.0 \
+            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            TEST_SERVER_IMAGE_SOURCE=build \
+            deploy-test-servers-ci
+          kubectl wait --for=condition=Available deployment --all \
+            -n mcp-test --timeout=5m
+
+
+      - name: Run MCP Gateway E2E suite
+        env:
+          MCP_GATEWAY_NAMESPACE: kuadrant-system
+          GATEWAY_NAMESPACE: gateway-system
+          TEST_SERVER_NAMESPACE: mcp-test
+          E2E_DOMAIN: 127-0-0-1.sslip.io
+          E2E_SCHEME: http
+          GATEWAY_CLASS_NAME: istio
+        run: |
+          mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
+          MCP_GATEWAY_NAMESPACE="$MCP_GATEWAY_NAMESPACE" \
+          GATEWAY_NAMESPACE="$GATEWAY_NAMESPACE" \
+          TEST_SERVER_NAMESPACE="$TEST_SERVER_NAMESPACE" \
+          E2E_DOMAIN="$E2E_DOMAIN" \
+          E2E_SCHEME="$E2E_SCHEME" \
+          GATEWAY_CLASS_NAME="$GATEWAY_CLASS_NAME" \
+          make -C mcp-gateway test-e2e-ci-full E2E_PROCS=4 \
+            2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/e2e.log"
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
+          {
+            make -C mcp-gateway ci-debug-logs ci-debug-test-servers-logs || true
+            kubectl logs -n kuadrant-system deployment/mcp-gateway-controller --tail=200 || true
+            kubectl logs -n kuadrant-system deployment/mcp-gateway --tail=200 || true
+            kubectl get pods,deployments,gateways,httproutes -A -o wide || true
+            kubectl get kuadrantcontrolplane default -o yaml || true
+            kubectl get mcpgatewayextensions,mcpserverregistrations -A -o yaml || true
+            kubectl cluster-info dump || true
+          } 2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/diagnostics.log"
+
+      - name: Publish nightly summary
+        if: always()
+        env:
+          OPERATOR_SHA: ${{ steps.source-shas.outputs.operator_sha }}
+          MCP_SHA: ${{ steps.source-shas.outputs.mcp_sha }}
+        run: |
+          operator_chart_version="$(awk '$1 == "version:" {print $2; exit}' charts/kuadrant-operator/Chart.yaml 2>/dev/null || echo unknown)"
+          mcp_chart_version="$(awk '$1 == "version:" {print $2; exit}' component-charts/mcp-gateway/Chart.yaml 2>/dev/null || echo unknown)"
+          {
+            echo ""
+            echo "## MCP Gateway nightly result"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Operator SHA | \`${OPERATOR_SHA:-unknown}\` |"
+            echo "| MCP Gateway SHA | \`${MCP_SHA:-unknown}\` |"
+            echo "| Operator image | \`$OPERATOR_IMAGE\` |"
+            echo "| MCP controller image | \`$MCP_CONTROLLER_IMAGE\` |"
+            echo "| MCP broker image | \`$MCP_BROKER_IMAGE\` |"
+            echo "| Operator chart version | \`$operator_chart_version\` |"
+            echo "| MCP chart version | \`$mcp_chart_version\` |"
+            echo "| Gateway API provider | \`$GATEWAYAPI_PROVIDER\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload nightly diagnostics and test output
+        if: always()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # ratchet:actions/upload-artifact@v4.6.3
+        with:
+          name: mcp-gateway-nightly-${{ github.run_id }}
+          path: ${{ runner.temp }}/mcp-gateway-nightly
+          if-no-files-found: warn
+          retention-days: 14

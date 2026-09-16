@@ -14,7 +14,7 @@ components:
     repo: Kuadrant/dns-operator
     chart-path: charts/dns-operator
     tracked-branch: main
-    ref: cdf775c9ff606305b9773e985820d885d5b660f5
+    ref: 12dcf389618a02d4bbf17ec9409aac8ba2bbd1b3
     auto-merge: false
   authorino-operator:
     repo: Kuadrant/authorino-operator

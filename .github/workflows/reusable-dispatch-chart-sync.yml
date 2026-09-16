@@ -10,6 +10,10 @@ on:
         required: true
         type: string
         description: Component name (e.g., dns-operator, limitador-operator)
+    secrets:
+      KUADRANT_DEV_PAT:
+        required: true
+        description: GitHub PAT for dispatching chart sync events
 
 permissions:
   contents: read

@@ -27,8 +27,9 @@ import (
 
 var _ = Describe("tracing cluster controller", Serial, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -82,7 +83,7 @@ var _ = Describe("tracing cluster controller", Serial, func() {
 		err = testClient().Create(ctx, gwRoute)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		// Clean up tracing configuration

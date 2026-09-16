@@ -28,8 +28,9 @@ import (
 
 var _ = Describe("limitador cluster controller", func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -46,7 +47,7 @@ var _ = Describe("limitador cluster controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -128,7 +129,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Eventually(tests.IsRLPAcceptedAndEnforced).
 				WithContext(ctx).
 				WithArguments(testClient(), gwPolicyKey).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("Creates envoypatchpolicy for limitador cluster", func(ctx SpecContext) {
 			patchKey := client.ObjectKey{

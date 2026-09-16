@@ -76,7 +76,7 @@ func restoreDevEnvOverrides(ctx SpecContext) {
 // (deletion, drift) must not run in parallel with status or deployment tests.
 var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane"}, func() {
 	var (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
+		testTimeOut      = NodeTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 
@@ -132,7 +132,7 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 				}
 				g.Expect(found).To(BeTrue(), "expected OLM migration event on KuadrantControlPlane")
 			}).WithContext(ctx).Should(Succeed())
-		}, SpecTimeout(10*time.Second))
+		}, NodeTimeout(10*time.Second))
 	})
 
 	Context("singleton enforcement", func() {

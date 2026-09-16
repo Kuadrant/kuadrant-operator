@@ -24,9 +24,10 @@ import (
 // The tests need to be run in serial as kuadrant CR namespace is shared
 var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 	const (
-		testTimeOut      = SpecTimeout(3 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
-		rlpName          = "toystore-rlp"
+		testTimeOut       = NodeTimeout(3 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
+		rlpName           = "toystore-rlp"
 	)
 
 	var (
@@ -82,7 +83,7 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 		Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -102,7 +103,7 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 				Name:      kuadrant.LimitadorName,
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -143,7 +144,7 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 				Name:      "limitador",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}
@@ -169,7 +170,7 @@ var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
 				Name:      "limitador",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}

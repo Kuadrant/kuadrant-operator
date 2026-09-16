@@ -33,8 +33,9 @@ import (
 
 var _ = Describe("wasm controller", func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -57,7 +58,7 @@ var _ = Describe("wasm controller", func() {
 		logger = controller.LoggerFromContext(ctx).WithName("EnvoyExtensionReconcilerTest")
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -142,7 +143,7 @@ var _ = Describe("wasm controller", func() {
 			Eventually(tests.IsRLPAcceptedAndEnforced).
 				WithContext(ctx).
 				WithArguments(testClient(), gwPolicyKey).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
@@ -333,7 +334,7 @@ var _ = Describe("wasm controller", func() {
 			Eventually(tests.IsRLPAcceptedAndEnforced).
 				WithContext(ctx).
 				WithArguments(testClient(), client.ObjectKeyFromObject(routePolicy)).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{

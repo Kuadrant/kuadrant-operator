@@ -21,8 +21,9 @@ import (
 
 var _ = Describe("Developer Portal Controller", Serial, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	getKuadrantCR := func(ctx context.Context, cl client.Client) *kuadrantv1beta1.Kuadrant {
@@ -150,7 +151,7 @@ var _ = Describe("Developer Portal Controller", Serial, func() {
 		BeforeEach(func(ctx SpecContext) {
 			// Save the current Kuadrant CR state before the test
 			savedKuadrantCR = getKuadrantCR(ctx, testClient()).DeepCopy()
-		})
+		}, beforeEachTimeOut)
 
 		AfterEach(func(ctx SpecContext) {
 			// Recreate the Kuadrant CR after the test deletes it

@@ -171,9 +171,21 @@ Neither of the following requirements is specific to egress, but both are common
 1. **A rate limit policy must be in effect on the route.** Custom labels are attached to the descriptor the wasm-shim sends to Limitador, so a route with no `RateLimitPolicy` or `TokenRateLimitPolicy` produces no Limitador metrics and therefore no labels. A TelemetryPolicy attached to a gateway whose routes are not rate limited is accepted and enforced, but emits nothing.
 2. **`targetRef` must be a Gateway.** The API rejects any other kind, so a TelemetryPolicy cannot be scoped to an individual HTTPRoute. Labels apply to every rate limited route on the gateway.
 
-Additionally, labels that reference `auth.identity.*` require an [AuthPolicy](egress-gateway.md#workload-identity) establishing workload identity on the route.
+A label that references `auth.identity.*` adds a third requirement. Besides an [AuthPolicy](egress-gateway.md#workload-identity) establishing workload identity, the rate limit policy on the route must itself reference `auth.*`, typically through a counter:
 
-The examples below use the resources from the [Egress Gateway Setup](egress-gateway.md) guide, plus an AI service route that carries both an AuthPolicy and a TokenRateLimitPolicy:
+```yaml
+limits:
+  per-workload:
+    rates:
+      - limit: 100
+        window: 1m
+    counters:
+      - expression: auth.identity.username
+```
+
+Kuadrant runs the rate limit check *before* authentication whenever the rate limit policy has no need for an identity, and a label cannot reference an identity that has not been resolved yet. Under that ordering the `auth.*` label is dropped from the Limitador descriptor with no error and no change in policy status: the other labels keep working, so the symptom is a single missing label rather than missing metrics.
+
+The examples below use the resources from the [Egress Gateway Setup](egress-gateway.md) guide, plus an AI service route that carries both an AuthPolicy and a TokenRateLimitPolicy counting tokens per `auth.identity.username`:
 
 | Resource | Value |
 |----------|-------|
@@ -250,7 +262,7 @@ Each label is attached to both the rate limit check descriptor and the report de
 
 | Expression | Available | Example value |
 |------------|-----------|---------------|
-| `auth.identity.username` | Yes | `system:serviceaccount:egress-test:team-gold` |
+| `auth.identity.username` | Yes, with an AuthPolicy and an auth-aware rate limit policy (see [requirements](#requirements-for-emitting-labels)) | `system:serviceaccount:egress-test:team-gold` |
 | `request.host` | Yes | `api.ai-mock.local` |
 | `request.path` | Yes | `/v1/chat/completions` |
 | `request.method` | Yes | `POST` |

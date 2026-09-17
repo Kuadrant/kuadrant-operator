@@ -2206,8 +2206,43 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 	if headers2.Headers != `{"x-checked": "true"}` {
 		t.Errorf("typed[2]: expected headers, got %q", headers2.Headers)
 	}
-	if headers2.Target != "response" {
+	if headers2.Target != wasm.HeaderTargetResponse {
 		t.Errorf("typed[2]: expected target 'response', got %q", headers2.Target)
+	}
+}
+
+func TestEntryToAction_AddHeadersTargetFollowsPhase(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		phase extpb.Phase
+		want  wasm.HeaderTarget
+	}{
+		{"request", extpb.Phase_PHASE_REQUEST, wasm.HeaderTargetRequest},
+		{"response", extpb.Phase_PHASE_RESPONSE, wasm.HeaderTargetResponse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			action, err := entryToAction(addHeadersEntry(`{"x-checked": "true"}`, "", tc.phase), nil)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			headers, ok := action.(*wasm.HeadersAction)
+			if !ok {
+				t.Fatalf("Expected *wasm.HeadersAction, got %T", action)
+			}
+			if headers.Target != tc.want {
+				t.Errorf("Target = %q, want %q", headers.Target, tc.want)
+			}
+		})
+	}
+}
+
+func TestEntryToAction_AddHeadersRejectsUnsetPhase(t *testing.T) {
+	action, err := entryToAction(addHeadersEntry(`{"x-checked": "true"}`, "", extpb.Phase_PHASE_UNSPECIFIED), nil)
+	if err == nil {
+		t.Fatalf("Expected error for unset phase, got action %T", action)
+	}
+	if action != nil {
+		t.Errorf("Expected no action alongside error, got %T", action)
 	}
 }
 

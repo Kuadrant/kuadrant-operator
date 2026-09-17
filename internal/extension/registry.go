@@ -1241,10 +1241,13 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
 		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
 
-		pipelineActions := translatePipelineToActions(
+		pipelineActions, err := translatePipelineToActions(
 			requestEntries, responseEntries,
 			methods, upstreamByMethod[policyID], sources,
 		)
+		if err != nil {
+			return fmt.Errorf("policy %s: %w", policyLocator, err)
+		}
 		if len(pipelineActions) == 0 {
 			continue
 		}
@@ -1295,7 +1298,7 @@ func translatePipelineToActions(
 	methods map[string]string,
 	upstreamByMethod map[string]RegisteredUpstreamEntry,
 	sources []string,
-) []wasm.Action {
+) ([]wasm.Action, error) {
 	varToMethod := make(map[string]string)
 	for _, e := range requestEntries {
 		if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
@@ -1315,12 +1318,15 @@ func translatePipelineToActions(
 
 	grpcOnReply := make(map[string][]wasm.Action)
 
-	classifyAndConvert := func(entries []PipelineActionEntry, phase PipelinePhase) {
+	classifyAndConvert := func(entries []PipelineActionEntry) error {
 		for _, e := range entries {
 			if e.Entry.GetGrpc() != nil {
 				continue
 			}
-			ta := entryToAction(e, sources, phase)
+			ta, err := entryToAction(e, sources)
+			if err != nil {
+				return err
+			}
 			for varName, methodName := range varToMethod {
 				if entryMatchesVar(e, varPatterns[varName]) {
 					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
@@ -1328,14 +1334,19 @@ func translatePipelineToActions(
 				}
 			}
 		}
+		return nil
 	}
-	classifyAndConvert(requestEntries, PipelinePhaseRequest)
-	classifyAndConvert(responseEntries, PipelinePhaseResponse)
+	if err := classifyAndConvert(requestEntries); err != nil {
+		return nil, err
+	}
+	if err := classifyAndConvert(responseEntries); err != nil {
+		return nil, err
+	}
 
 	var result []wasm.Action
 	emittedGRPC := make(map[string]bool)
 
-	emit := func(entries []PipelineActionEntry, phase PipelinePhase) {
+	emit := func(entries []PipelineActionEntry) error {
 		for _, e := range entries {
 			if grpc := e.Entry.GetGrpc(); grpc != nil {
 				method := grpc.GetMethod()
@@ -1356,14 +1367,23 @@ func translatePipelineToActions(
 				}
 			}
 			if !isVarDependent {
-				result = append(result, entryToAction(e, sources, phase))
+				ta, err := entryToAction(e, sources)
+				if err != nil {
+					return err
+				}
+				result = append(result, ta)
 			}
 		}
+		return nil
 	}
-	emit(requestEntries, PipelinePhaseRequest)
-	emit(responseEntries, PipelinePhaseResponse)
+	if err := emit(requestEntries); err != nil {
+		return nil, err
+	}
+	if err := emit(responseEntries); err != nil {
+		return nil, err
+	}
 
-	return result
+	return result, nil
 }
 
 func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
@@ -1380,25 +1400,29 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	return false
 }
 
-func entryToAction(entry PipelineActionEntry, sources []string, phase PipelinePhase) wasm.Action {
+func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, error) {
 	predicate := predicateOrTrue(entry.Entry.Predicate)
 	switch a := entry.Entry.Action.(type) {
 	case *extpb.ActionEntry_Deny:
 		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(int(a.Deny.WithStatus), a.Deny.WithHeaders, a.Deny.WithBody)).
-			WithSources(sources)
+			WithSources(sources), nil
 	case *extpb.ActionEntry_AddHeaders:
-		target := ""
-		if phase == PipelinePhaseResponse {
-			target = "response"
+		var target wasm.HeaderTarget
+		switch entry.Entry.Phase {
+		case extpb.Phase_PHASE_REQUEST:
+			target = wasm.HeaderTargetRequest
+		case extpb.Phase_PHASE_RESPONSE:
+			target = wasm.HeaderTargetResponse
+		default:
+			return nil, fmt.Errorf("actions[%d]: add_headers has invalid phase %v", entry.Index, entry.Entry.Phase)
 		}
 		return wasm.NewHeadersAction(predicate, target, a.AddHeaders.HeadersToAdd).
-			WithSources(sources)
+			WithSources(sources), nil
 	case *extpb.ActionEntry_Fail:
 		return wasm.NewFailAction(predicate, a.Fail.LogMessage).
-			WithSources(sources)
+			WithSources(sources), nil
 	default:
-		return wasm.NewFailAction(predicate, "unknown action type").
-			WithSources(sources)
+		return nil, fmt.Errorf("actions[%d]: unknown action type %T", entry.Index, entry.Entry.Action)
 	}
 }
 

@@ -1465,8 +1465,8 @@ func TestPipelineActionStore_AppendAndGet(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	actions := []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "checkThreat", Var: "threatResponse"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "checkThreat", Var: "threatResponse"},
+		{Kind: PipelineActionKindDeny, WithStatus: 403},
 	}
 
 	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, actions)
@@ -1487,8 +1487,8 @@ func TestPipelineActionStore_AppendAndGet(t *testing.T) {
 	if retrieved[0].Method != "checkThreat" {
 		t.Errorf("First action method = %q, want %q", retrieved[0].Method, "checkThreat")
 	}
-	if retrieved[1].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
-		t.Errorf("Second action type = %v, want DENY", retrieved[1].ActionType)
+	if retrieved[1].Kind != PipelineActionKindDeny {
+		t.Errorf("Second action kind = %v, want DENY", retrieved[1].Kind)
 	}
 }
 
@@ -1498,7 +1498,7 @@ func TestPipelineActionStore_SequentialAppends(t *testing.T) {
 
 	// First append
 	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check1"},
+		{Kind: PipelineActionKindGRPC, Method: "check1"},
 	})
 	if startIdx != 0 {
 		t.Errorf("First append start index = %d, want 0", startIdx)
@@ -1506,8 +1506,8 @@ func TestPipelineActionStore_SequentialAppends(t *testing.T) {
 
 	// Second append continues index sequence
 	startIdx = store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check2"},
+		{Kind: PipelineActionKindDeny, WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "check2"},
 	})
 	if startIdx != 1 {
 		t.Errorf("Second append start index = %d, want 1", startIdx)
@@ -1529,11 +1529,11 @@ func TestPipelineActionStore_SeparatePhases(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+		{Kind: PipelineActionKindGRPC, Method: "check"},
 	})
 	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: "{'x-checked': 'true'}"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, LogMessage: "blocked"},
+		{Kind: PipelineActionKindAddHeaders, HeadersToAdd: "{'x-checked': 'true'}"},
+		{Kind: PipelineActionKindFail, LogMessage: "blocked"},
 	})
 
 	reqActions := store.GetPipelineActions(policy, PipelinePhaseRequest)
@@ -1557,10 +1557,10 @@ func TestPipelineActionStore_SeparatePolicies(t *testing.T) {
 	policy2 := testResourceID("ThreatPolicy", "default", "policy-2")
 
 	store.AppendPipelineActions(policy1, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check1"},
+		{Kind: PipelineActionKindGRPC, Method: "check1"},
 	})
 	store.AppendPipelineActions(policy2, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
+		{Kind: PipelineActionKindDeny, WithStatus: 403},
 	})
 
 	p1Actions := store.GetPipelineActions(policy1, PipelinePhaseRequest)
@@ -1572,8 +1572,8 @@ func TestPipelineActionStore_SeparatePolicies(t *testing.T) {
 	if p1Actions[0].Method != "check1" {
 		t.Errorf("Policy1 action method = %q, want %q", p1Actions[0].Method, "check1")
 	}
-	if p2Actions[0].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
-		t.Errorf("Policy2 action type = %v, want DENY", p2Actions[0].ActionType)
+	if p2Actions[0].Kind != PipelineActionKindDeny {
+		t.Errorf("Policy2 action kind = %v, want DENY", p2Actions[0].Kind)
 	}
 }
 
@@ -1583,13 +1583,13 @@ func TestPipelineActionStore_ClearPipelineActions(t *testing.T) {
 	otherPolicy := testResourceID("ThreatPolicy", "default", "other-policy")
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+		{Kind: PipelineActionKindGRPC, Method: "check"},
 	})
 	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: "{'x': '1'}"},
+		{Kind: PipelineActionKindAddHeaders, HeadersToAdd: "{'x': '1'}"},
 	})
 	store.AppendPipelineActions(otherPolicy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
+		{Kind: PipelineActionKindDeny, WithStatus: 403},
 	})
 
 	cleared := store.ClearPipelineActions(policy)
@@ -1616,7 +1616,7 @@ func TestPipelineActionStore_ClearPolicyDataIncludesPipeline(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+		{Kind: PipelineActionKindGRPC, Method: "check"},
 	})
 
 	counts := store.ClearPolicyData(policy)
@@ -1634,15 +1634,15 @@ func TestPipelineActionStore_CounterResetsAfterClear(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
+		{Kind: PipelineActionKindGRPC},
+		{Kind: PipelineActionKindDeny, WithStatus: 403},
 	})
 
 	store.ClearPipelineActions(policy)
 
 	// After clear, index should restart at 0
 	startIdx := store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "new"},
+		{Kind: PipelineActionKindGRPC, Method: "new"},
 	})
 	if startIdx != 0 {
 		t.Errorf("Expected start index 0 after clear, got %d", startIdx)
@@ -1677,7 +1677,7 @@ func TestPipelineActionStore_ConcurrentAppends(t *testing.T) {
 		go func(index int) {
 			defer wg.Done()
 			store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-				{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: fmt.Sprintf("method-%d", index)},
+				{Kind: PipelineActionKindGRPC, Method: fmt.Sprintf("method-%d", index)},
 			})
 		}(i)
 	}
@@ -1704,7 +1704,7 @@ func TestPipelineActionStore_PredicatePreserved(t *testing.T) {
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
 		{
-			ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD,
+			Kind: PipelineActionKindGRPC,
 			Predicate:  "request.headers['check'] == '1' && request.method == 'GET'",
 			Method:     "checkThreat",
 			Var:        "threatResponse",
@@ -1722,7 +1722,7 @@ func TestPipelineActionStore_GetReturnsCopy(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "original"},
+		{Kind: PipelineActionKindGRPC, Method: "original"},
 	})
 
 	// Mutating the returned slice should not affect the store
@@ -2052,14 +2052,14 @@ func TestMutateWasmConfig_TranslatesPipelineActions(t *testing.T) {
 
 	// Request phase: deny (root), grpc with var, deny referencing var (onReply)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse", Predicate: `"x-assess-threat" in request.headers`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
+		{Kind: PipelineActionKindDeny, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "assess-threat", Var: "threatResponse", Predicate: `"x-assess-threat" in request.headers`},
+		{Kind: PipelineActionKindDeny, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
 	})
 	// Response phase: add_headers (root), fail referencing var (onReply)
 	store.AppendPipelineActions(policyID, PipelinePhaseResponse, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-checked": "true"}`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, Predicate: "threatResponse.blocked", LogMessage: "blocked by threat policy"},
+		{Kind: PipelineActionKindAddHeaders, HeadersToAdd: `{"x-checked": "true"}`},
+		{Kind: PipelineActionKindFail, Predicate: "threatResponse.blocked", LogMessage: "blocked by threat policy"},
 	})
 
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)
@@ -2208,8 +2208,8 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 	)
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "request.method == 'GET'", WithStatus: 403},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+		{Kind: PipelineActionKindDeny, Predicate: "request.method == 'GET'", WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "check"},
 	})
 
 	mutator := NewRegisteredDataMutator[*wasm.Config](store)
@@ -2293,9 +2293,9 @@ func TestApplyWasmConfigMutators_CreatesActionSetsFromTopology(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
+		{Kind: PipelineActionKindDeny, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "assess-threat", Var: "threatResponse"},
+		{Kind: PipelineActionKindDeny, Predicate: "threatResponse.threat_level > 5", WithStatus: 429},
 	})
 
 	savedRegistry := GlobalMutatorRegistry
@@ -2375,7 +2375,7 @@ func TestApplyWasmConfigMutators_NoRoutesNoActionSets(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY},
+		{Kind: PipelineActionKindDeny},
 	})
 
 	savedRegistry := GlobalMutatorRegistry
@@ -2414,8 +2414,8 @@ func TestApplyWasmConfigMutators_ExistingActionSetsPreserved(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "request.method == 'GET'", WithStatus: 403},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat"},
+		{Kind: PipelineActionKindDeny, Predicate: "request.method == 'GET'", WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "assess-threat"},
 	})
 
 	savedRegistry := GlobalMutatorRegistry
@@ -2472,21 +2472,21 @@ func TestReplacePipelineActions(t *testing.T) {
 
 	// Seed with initial actions for both policies
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "old-check"},
+		{Kind: PipelineActionKindGRPC, Method: "old-check"},
 	})
 	store.AppendPipelineActions(policy, PipelinePhaseResponse, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, HeadersToAdd: `{"x-old": "true"}`},
+		{Kind: PipelineActionKindAddHeaders, HeadersToAdd: `{"x-old": "true"}`},
 	})
 	store.AppendPipelineActions(otherPolicy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, WithStatus: 403},
+		{Kind: PipelineActionKindDeny, WithStatus: 403},
 	})
 
 	// Replace both phases atomically
 	err := store.ReplacePipelineActions(policy, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403, Predicate: `request.url_path == "/blocked"`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "new-check", Var: "threatResponse"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: `{"x-new": "true"}`},
-		{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, Phase: "response", LogMessage: "blocked"},
+		{Kind: PipelineActionKindDeny, Phase: "request", WithStatus: 403, Predicate: `request.url_path == "/blocked"`},
+		{Kind: PipelineActionKindGRPC, Phase: "request", Method: "new-check", Var: "threatResponse"},
+		{Kind: PipelineActionKindAddHeaders, Phase: "response", HeadersToAdd: `{"x-new": "true"}`},
+		{Kind: PipelineActionKindFail, Phase: "response", LogMessage: "blocked"},
 	})
 	if err != nil {
 		t.Fatalf("ReplacePipelineActions returned error: %v", err)
@@ -2497,8 +2497,8 @@ func TestReplacePipelineActions(t *testing.T) {
 	if len(reqActions) != 2 {
 		t.Fatalf("Expected 2 request actions, got %d", len(reqActions))
 	}
-	if reqActions[0].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
-		t.Errorf("First request action type = %v, want DENY", reqActions[0].ActionType)
+	if reqActions[0].Kind != PipelineActionKindDeny {
+		t.Errorf("First request action kind = %v, want DENY", reqActions[0].Kind)
 	}
 	if reqActions[1].Method != "new-check" {
 		t.Errorf("Second request action method = %q, want %q", reqActions[1].Method, "new-check")
@@ -2524,8 +2524,8 @@ func TestReplacePipelineActions(t *testing.T) {
 	if len(otherActions) != 1 {
 		t.Fatalf("Expected other policy to still have 1 action, got %d", len(otherActions))
 	}
-	if otherActions[0].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
-		t.Errorf("Other policy action type = %v, want DENY", otherActions[0].ActionType)
+	if otherActions[0].Kind != PipelineActionKindDeny {
+		t.Errorf("Other policy action kind = %v, want DENY", otherActions[0].Kind)
 	}
 }
 
@@ -2534,7 +2534,7 @@ func TestReplacePipelineActions_InvalidPhase(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	err := store.ReplacePipelineActions(policy, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "invalid", WithStatus: 403},
+		{Kind: PipelineActionKindDeny, Phase: "invalid", WithStatus: 403},
 	})
 	if err == nil {
 		t.Fatal("Expected error for invalid phase, got nil")
@@ -2546,7 +2546,7 @@ func TestReplacePipelineActions_EmptyReplacement(t *testing.T) {
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "check"},
+		{Kind: PipelineActionKindGRPC, Method: "check"},
 	})
 
 	// Replace with nil clears everything
@@ -2575,8 +2575,8 @@ func TestApplyWasmConfigMutators_RouteTargetedPipelineActions(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat"},
+		{Kind: PipelineActionKindDeny, Predicate: `request.url_path == "/blocked"`, WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "assess-threat"},
 	})
 
 	savedRegistry := GlobalMutatorRegistry
@@ -2667,8 +2667,8 @@ func TestApplyWasmConfigMutators_RouteTargetedExtensionWithBuiltinActionSets(t *
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess-threat", Var: "threatResponse"},
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "threatResponse.threat_level > 5", WithStatus: 403},
+		{Kind: PipelineActionKindGRPC, Method: "assess-threat", Var: "threatResponse"},
+		{Kind: PipelineActionKindDeny, Predicate: "threatResponse.threat_level > 5", WithStatus: 403},
 	})
 
 	savedRegistry := GlobalMutatorRegistry
@@ -2749,7 +2749,7 @@ func TestMutateWasmConfig_DenyOnlyPipelineProducesRootAction(t *testing.T) {
 	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "test-route", Namespace: "test-namespace"}
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: `request.url_path == "/admin"`, WithStatus: 403},
+		{Kind: PipelineActionKindDeny, Predicate: `request.url_path == "/admin"`, WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
@@ -2798,7 +2798,7 @@ func TestMutateWasmConfig_CrossGatewayIsolation(t *testing.T) {
 		testFileDescriptorSet(),
 	)
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Method: "assess"},
+		{Kind: PipelineActionKindGRPC, Method: "assess"},
 	})
 	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
@@ -2859,7 +2859,7 @@ func TestMutateWasmConfig_PipelineOnlyRouteIsolation(t *testing.T) {
 	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-a", Namespace: "test-ns"}
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+		{Kind: PipelineActionKindDeny, Predicate: "true", WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
@@ -2897,7 +2897,7 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "test-ns"}
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+		{Kind: PipelineActionKindDeny, Predicate: "true", WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, []TargetRef{routeRef})
 
@@ -2980,7 +2980,7 @@ func TestPipelineTargetRefCleanup(t *testing.T) {
 	refs := []TargetRef{{Kind: "HTTPRoute", Name: "route-a", Namespace: "default"}}
 
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+		{Kind: PipelineActionKindDeny, Predicate: "true", WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, refs)
 
@@ -2995,7 +2995,7 @@ func TestPipelineTargetRefCleanup(t *testing.T) {
 
 	// Verify ClearPolicyData also cleans up
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
-		{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Predicate: "true", WithStatus: 403},
+		{Kind: PipelineActionKindDeny, Predicate: "true", WithStatus: 403},
 	})
 	store.SetPipelineTargetRefs(policyID, refs)
 	counts := store.ClearPolicyData(policyID)

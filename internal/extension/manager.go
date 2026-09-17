@@ -1128,61 +1128,52 @@ type actionValidationCtx struct {
 	varToMethod map[string]string
 }
 
-type actionEntryValidator func(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error
-
-var actionEntryValidators = map[extpb.ActionType]actionEntryValidator{
-	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: validateGRPCMethodEntry,
-	extpb.ActionType_ACTION_TYPE_DENY:        validateDenyEntry,
-	extpb.ActionType_ACTION_TYPE_FAIL:        validateFailEntry,
-	extpb.ActionType_ACTION_TYPE_ADD_HEADERS: validateAddHeadersEntry,
-}
-
-func validateGRPCMethodEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error {
-	if action.Method == "" {
-		return fmt.Errorf("actions[%d]: method must be specified for grpc_method actions", index)
+func validateGRPCEntry(grpc *extpb.GrpcAction, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error {
+	if grpc.Method == "" {
+		return fmt.Errorf("actions[%d]: method must be specified for grpc actions", index)
 	}
-	if !vctx.store.HasUpstreamName(vctx.policyID, action.Method) {
-		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, action.Method)
+	if !vctx.store.HasUpstreamName(vctx.policyID, grpc.Method) {
+		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, grpc.Method)
 	}
-	if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
-		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, action.Var)
+	if grpc.Var != "" && !varNameRegexp.MatchString(grpc.Var) {
+		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, grpc.Var)
 	}
-	entry.Method = action.Method
-	entry.Var = action.Var
-	if action.Var != "" {
-		vctx.varToMethod[action.Var] = action.Method
+	entry.Method = grpc.Method
+	entry.Var = grpc.Var
+	if grpc.Var != "" {
+		vctx.varToMethod[grpc.Var] = grpc.Method
 	}
 	return nil
 }
 
-func validateDenyEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if action.WithStatus != 0 {
-		if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", index)); err != nil {
+func validateDenyEntry(deny *extpb.DenyAction, index int, entry *PipelineActionEntry) error {
+	if deny.WithStatus != 0 {
+		if err := validateHTTPStatusCode(fmt.Sprintf("%d", deny.WithStatus), fmt.Sprintf("actions[%d].with_status", index)); err != nil {
 			return err
 		}
 	}
-	entry.WithStatus = int(action.WithStatus)
-	entry.WithHeaders = action.WithHeaders
-	entry.WithBody = action.WithBody
+	entry.WithStatus = int(deny.WithStatus)
+	entry.WithHeaders = deny.WithHeaders
+	entry.WithBody = deny.WithBody
 	return nil
 }
 
-func validateFailEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if strings.TrimSpace(action.LogMessage) == "" {
+func validateFailEntry(fail *extpb.FailAction, index int, entry *PipelineActionEntry) error {
+	if strings.TrimSpace(fail.LogMessage) == "" {
 		return fmt.Errorf("actions[%d]: log_message must be specified for fail actions", index)
 	}
-	entry.LogMessage = action.LogMessage
+	entry.LogMessage = fail.LogMessage
 	return nil
 }
 
-func validateAddHeadersEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if action.HeadersToAdd == "" {
+func validateAddHeadersEntry(addHeaders *extpb.AddHeadersAction, index int, entry *PipelineActionEntry) error {
+	if addHeaders.HeadersToAdd == "" {
 		return fmt.Errorf("actions[%d]: headers_to_add must be specified for add_headers actions", index)
 	}
-	if err := validateCELExpression(action.HeadersToAdd); err != nil {
+	if err := validateCELExpression(addHeaders.HeadersToAdd); err != nil {
 		return fmt.Errorf("actions[%d].headers_to_add: %w", index, err)
 	}
-	entry.HeadersToAdd = action.HeadersToAdd
+	entry.HeadersToAdd = addHeaders.HeadersToAdd
 	return nil
 }
 
@@ -1198,12 +1189,6 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 		if action == nil {
 			return nil, fmt.Errorf("actions[%d]: entry cannot be nil", i)
 		}
-		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("actions[%d]: action_type must be specified", i)
-		}
-		if action.Phase != string(PipelinePhaseRequest) && action.Phase != string(PipelinePhaseResponse) {
-			return nil, fmt.Errorf("actions[%d]: phase must be %q or %q, got %q", i, PipelinePhaseRequest, PipelinePhaseResponse, action.Phase)
-		}
 		if action.Predicate != "" {
 			if err := validateCELExpression(action.Predicate); err != nil {
 				return nil, fmt.Errorf("actions[%d].predicate: %w", i, err)
@@ -1211,17 +1196,43 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 		}
 
 		entry := PipelineActionEntry{
-			ActionType: action.ActionType,
-			Predicate:  action.Predicate,
-			Phase:      action.Phase,
+			Predicate: action.Predicate,
 		}
 
-		validator, ok := actionEntryValidators[action.ActionType]
-		if !ok {
-			return nil, fmt.Errorf("actions[%d]: unknown action_type %s", i, action.ActionType)
+		switch action.Phase {
+		case extpb.Phase_PHASE_REQUEST:
+			entry.Phase = PipelinePhaseRequest
+		case extpb.Phase_PHASE_RESPONSE:
+			entry.Phase = PipelinePhaseResponse
+		default:
+			return nil, fmt.Errorf("actions[%d]: phase must be specified", i)
 		}
-		if err := validator(action, i, &entry, &vctx); err != nil {
-			return nil, err
+
+		switch a := action.Action.(type) {
+		case *extpb.ActionEntry_Grpc:
+			entry.Kind = PipelineActionKindGRPC
+			if err := validateGRPCEntry(a.Grpc, i, &entry, &vctx); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Deny:
+			entry.Kind = PipelineActionKindDeny
+			if err := validateDenyEntry(a.Deny, i, &entry); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_AddHeaders:
+			entry.Kind = PipelineActionKindAddHeaders
+			if err := validateAddHeadersEntry(a.AddHeaders, i, &entry); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Fail:
+			entry.Kind = PipelineActionKindFail
+			if err := validateFailEntry(a.Fail, i, &entry); err != nil {
+				return nil, err
+			}
+		case nil:
+			return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+		default:
+			return nil, fmt.Errorf("actions[%d]: unknown action type", i)
 		}
 
 		entries = append(entries, entry)
@@ -1291,8 +1302,18 @@ func collectCELExpressions(action *extpb.ActionEntry) []string {
 	if action.Predicate != "" {
 		exprs = append(exprs, action.Predicate)
 	}
-	if action.HeadersToAdd != "" {
-		exprs = append(exprs, action.HeadersToAdd)
+	switch a := action.Action.(type) {
+	case *extpb.ActionEntry_Deny:
+		if a.Deny.WithHeaders != "" {
+			exprs = append(exprs, a.Deny.WithHeaders)
+		}
+		if a.Deny.WithBody != "" {
+			exprs = append(exprs, a.Deny.WithBody)
+		}
+	case *extpb.ActionEntry_AddHeaders:
+		if a.AddHeaders.HeadersToAdd != "" {
+			exprs = append(exprs, a.AddHeaders.HeadersToAdd)
+		}
 	}
 	return exprs
 }

@@ -375,19 +375,28 @@ const (
 	PipelinePhaseResponse PipelinePhase = "response"
 )
 
+type PipelineActionKind string
+
+const (
+	PipelineActionKindGRPC       PipelineActionKind = "grpc"
+	PipelineActionKindDeny       PipelineActionKind = "deny"
+	PipelineActionKindAddHeaders PipelineActionKind = "add_headers"
+	PipelineActionKindFail       PipelineActionKind = "fail"
+)
+
 // PipelineActionEntry represents a single stored pipeline action.
 type PipelineActionEntry struct {
 	Index        int
-	ActionType   extpb.ActionType
+	Kind         PipelineActionKind
 	Predicate    string
-	Phase        string // "request" or "response"
-	Method       string // registered action method name (grpc_method)
-	Var          string // variable name for gRPC response (grpc_method)
-	WithStatus   int    // HTTP status code (deny); 0 means unset
-	WithHeaders  string // CEL expression — array of [name, value] pairs (deny)
-	WithBody     string // response body string (deny)
-	HeadersToAdd string // CEL expression for headers (add_headers)
-	LogMessage   string // error message to log (fail)
+	Phase        PipelinePhase
+	Method       string
+	Var          string
+	WithStatus   int
+	WithHeaders  string
+	WithBody     string
+	HeadersToAdd string
+	LogMessage   string
 }
 
 // pipelineKey identifies a set of actions for a specific policy and phase.
@@ -789,7 +798,7 @@ func (r *RegisteredDataStore) ClearPipelinePhase(policy ResourceID, phase Pipeli
 // Returns an error if any entry has an invalid phase.
 func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries []PipelineActionEntry) error {
 	for i, entry := range entries {
-		if entry.Phase != string(PipelinePhaseRequest) && entry.Phase != string(PipelinePhaseResponse) {
+		if entry.Phase != PipelinePhaseRequest && entry.Phase != PipelinePhaseResponse {
 			return fmt.Errorf("entries[%d]: invalid phase %q, must be %q or %q", i, entry.Phase, PipelinePhaseRequest, PipelinePhaseResponse)
 		}
 	}
@@ -1264,12 +1273,12 @@ func translatePipelineToActions(
 ) []wasm.Action {
 	varToMethod := make(map[string]string)
 	for _, e := range requestEntries {
-		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+		if e.Kind == PipelineActionKindGRPC && e.Var != "" {
 			varToMethod[e.Var] = e.Method
 		}
 	}
 	for _, e := range responseEntries {
-		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
+		if e.Kind == PipelineActionKindGRPC && e.Var != "" {
 			varToMethod[e.Var] = e.Method
 		}
 	}
@@ -1281,9 +1290,9 @@ func translatePipelineToActions(
 
 	grpcOnReply := make(map[string][]wasm.Action)
 
-	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
+	classifyAndConvert := func(entries []PipelineActionEntry, phase PipelinePhase) {
 		for _, e := range entries {
-			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+			if e.Kind == PipelineActionKindGRPC {
 				continue
 			}
 			ta := entryToAction(e, sources, phase)
@@ -1295,15 +1304,15 @@ func translatePipelineToActions(
 			}
 		}
 	}
-	classifyAndConvert(requestEntries, string(PipelinePhaseRequest))
-	classifyAndConvert(responseEntries, string(PipelinePhaseResponse))
+	classifyAndConvert(requestEntries, PipelinePhaseRequest)
+	classifyAndConvert(responseEntries, PipelinePhaseResponse)
 
 	var result []wasm.Action
 	emittedGRPC := make(map[string]bool)
 
-	emit := func(entries []PipelineActionEntry, phase string) {
+	emit := func(entries []PipelineActionEntry, phase PipelinePhase) {
 		for _, e := range entries {
-			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+			if e.Kind == PipelineActionKindGRPC {
 				if emittedGRPC[e.Method] {
 					continue
 				}
@@ -1325,8 +1334,8 @@ func translatePipelineToActions(
 			}
 		}
 	}
-	emit(requestEntries, string(PipelinePhaseRequest))
-	emit(responseEntries, string(PipelinePhaseResponse))
+	emit(requestEntries, PipelinePhaseRequest)
+	emit(responseEntries, PipelinePhaseResponse)
 
 	return result
 }
@@ -1350,20 +1359,20 @@ func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
 	return false
 }
 
-func entryToAction(entry PipelineActionEntry, sources []string, phase string) wasm.Action {
+func entryToAction(entry PipelineActionEntry, sources []string, phase PipelinePhase) wasm.Action {
 	predicate := predicateOrTrue(entry.Predicate)
-	switch entry.ActionType {
-	case extpb.ActionType_ACTION_TYPE_DENY:
+	switch entry.Kind {
+	case PipelineActionKindDeny:
 		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)).
 			WithSources(sources)
-	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
+	case PipelineActionKindAddHeaders:
 		target := ""
-		if phase == string(PipelinePhaseResponse) {
+		if phase == PipelinePhaseResponse {
 			target = "response"
 		}
 		return wasm.NewHeadersAction(predicate, target, entry.HeadersToAdd).
 			WithSources(sources)
-	case extpb.ActionType_ACTION_TYPE_FAIL:
+	case PipelineActionKindFail:
 		return wasm.NewFailAction(predicate, entry.LogMessage).
 			WithSources(sources)
 	default:

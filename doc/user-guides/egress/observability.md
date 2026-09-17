@@ -220,13 +220,14 @@ Accepted=True
 Enforced=True
 ```
 
-Send some authenticated traffic through the egress gateway, then read the Limitador metrics:
+Send some authenticated traffic through the egress gateway, then read the Limitador metrics. The `kuadrant-limitador` NetworkPolicy only admits traffic to Limitador from namespaces that contain a Gateway, so port-forward to it rather than calling the service from the workload namespace:
 
 ```sh
-kubectl exec -n egress-test test-client -- \
-    curl -sS --max-time 15 \
-    http://limitador-limitador.kuadrant-system.svc.cluster.local:8080/metrics \
-    | grep -v '^#' | grep authorized_calls
+kubectl port-forward -n kuadrant-system svc/limitador-limitador 8080:8080 >/dev/null 2>&1 &
+```
+
+```sh
+curl -sS --max-time 15 http://localhost:8080/metrics | grep -v '^#' | grep authorized_calls
 ```
 
 Expected output:
@@ -548,7 +549,7 @@ A recommended JSON format for egress includes these egress-relevant fields:
 
 Distributed tracing shows the complete request flow through the egress gateway, including policy evaluation by the wasm-shim, authentication checks in Authorino, and rate limit checks in Limitador. This section covers egress-specific tracing behavior. For general tracing setup, see the [tracing guide](../../observability/tracing.md).
 
-### Prerequisites
+### Tracing Prerequisites
 
 In addition to the [general prerequisites](#prerequisites), tracing requires two layers of configuration that work together:
 

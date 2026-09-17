@@ -119,8 +119,14 @@ jobs:
       - name: Check cluster info
         run: kubectl cluster-info dump
 
-      - name: Set up Istio environment
-        run: make env-setup GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=false
+      - name: Set up Helm prerequisites
+        run: |
+          make gateway-api-install
+          make install-cert-manager
+          make install-observability-crds
+          make install-metallb
+          make istio-install ISTIO_INSTALL_SAIL=false
+          make deploy-istio-gateway
         timeout-minutes: 30
 
       - name: Build and load operator image

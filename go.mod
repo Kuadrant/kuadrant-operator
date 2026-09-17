@@ -43,7 +43,7 @@ require (
 	go.uber.org/zap v1.28.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688
-	google.golang.org/grpc v1.83.1
+	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	gotest.tools v2.2.0+incompatible
@@ -192,3 +192,8 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
+
+// Pinned ahead of a tagged release to pick up the Reservations CRD field (limitador-operator#283),
+// Remove this replace once a limitador-operator release ships Reservation fields.
+// git describe --tags --match 'v*' returns v0.10.0-237-gece3f4b5b5a3, meaning v0.10.0 is the highest tag actually reachable from this commit, this is not a regression.
+replace github.com/kuadrant/limitador-operator => github.com/kuadrant/limitador-operator v0.10.1-0.20260911154343-ece3f4b5b5a3

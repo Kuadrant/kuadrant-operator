@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
@@ -1007,6 +1008,65 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			for i, expected := range expectedActions {
 				Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
 			}
+		}, testTimeOut)
+
+		It("TokenRateLimitPolicy is not enforced when Limitador has reservations disabled", func(ctx SpecContext) {
+			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+			err := testClient().Create(ctx, httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "TokenRateLimitPolicy", APIVersion: kuadrantv1alpha1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: trlpName, Namespace: testNamespace},
+				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
+					},
+					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1alpha1.TokenLimit{
+							"l1": {
+								Rates: []kuadrantv1.Rate{
+									{Limit: 5000, Window: kuadrantv1.Duration("1m")},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = testClient().Create(ctx, trlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			trlpKey := client.ObjectKeyFromObject(trlp)
+			Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// Limitador is a singleton owned by the suite-wide Kuadrant CR (kuadrantInstallationNS),
+			// not by the per-test namespace, so restore it on cleanup to avoid poisoning other specs.
+			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
+			DeferCleanup(func(ctx SpecContext) {
+				limitadorObj := &limitadorv1alpha1.Limitador{}
+				Expect(testClient().Get(ctx, limitadorKey, limitadorObj)).To(Succeed())
+				limitadorObj.Spec.Reservations = nil
+				Expect(testClient().Update(ctx, limitadorObj)).To(Succeed())
+			})
+
+			limitadorObj := &limitadorv1alpha1.Limitador{}
+			Expect(testClient().Get(ctx, limitadorKey, limitadorObj)).To(Succeed())
+			limitadorObj.Spec.Reservations = &limitadorv1alpha1.Reservations{Enabled: ptr.To(false)}
+			Expect(testClient().Update(ctx, limitadorObj)).To(Succeed())
+
+			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeFalse())
+			Eventually(func() bool {
+				return tests.TokenRateLimitPolicyEnforcedCondition(ctx, testClient(), trlpKey, kuadrant.PolicyReasonReservationsDisabled,
+					"TokenRateLimitPolicy cannot be enforced: Kuadrant spec.tokenRateLimiting.mode is Reservation, but Limitador has reservations disabled (spec.reservations.enabled=false)")
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 

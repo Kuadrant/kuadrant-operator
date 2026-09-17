@@ -218,8 +218,8 @@ github.com/kuadrant/authorino-operator v0.26.0 h1:BJSi6Q42P/3xxCihwGCGJsmE8qX1Zc
 github.com/kuadrant/authorino-operator v0.26.0/go.mod h1:uTmMoPkCpkCzdMPgOjqK08vo2X45oCgq1BzYqvOD+2E=
 github.com/kuadrant/dns-operator v0.0.0-20260819172149-de271431efea h1:Xyni+AAoiVyzkf3Bfn5JssXE2/6T5S2CStOeMAV+w78=
 github.com/kuadrant/dns-operator v0.0.0-20260819172149-de271431efea/go.mod h1:w/WVporz85RmtOoxic1DWe//RIYJokhHEI2Q56eiIME=
-github.com/kuadrant/limitador-operator v0.15.0 h1:BWgYKV0iasFY3+zKQhLpTdfIlI2pD4MuGr8Hc30ypfg=
-github.com/kuadrant/limitador-operator v0.15.0/go.mod h1:58b5gdSemjXUijd2TBPKBwaQskU7rynHGHD7rTqk2OE=
+github.com/kuadrant/limitador-operator v0.10.1-0.20260911154343-ece3f4b5b5a3 h1:e21X2EseJEIiNWi0m9HdHmyljBFlYiXGqdxKC1FmdYE=
+github.com/kuadrant/limitador-operator v0.10.1-0.20260911154343-ece3f4b5b5a3/go.mod h1:SZ9+SLGGGNkDyyjMn4x5/DmZVkF3eLRqS5cxrYIzmA4=
 github.com/kuadrant/policy-machinery v0.9.0 h1:qsNqfzikW9a3HYZjV9fEHdcO3wQ3kmbFt9XpcsECl0o=
 github.com/kuadrant/policy-machinery v0.9.0/go.mod h1:r7V8wn8UwL80p1FHgJJR5R2daPz1NX3FBHsj80xMC/o=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
@@ -461,8 +461,8 @@ google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 h1:
 google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688/go.mod h1:1RJ9BQGyNdZwkGc1eTqkErfRZ6RJyYPHZo73BZ1vQqI=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 h1:cYNAzI2sUwhmCcoj9TxvihSrqsxt6uIkj3rDRhSDmW4=
 google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688/go.mod h1:DjtHYE8FKJLivXcBEjGwndXfIC23G0VpXiXKqG179uA=
-google.golang.org/grpc v1.83.1 h1:HIO0+BEtBP6soyqvqC8sNUjZ7bTs+0hFQuFF+RAy++Y=
-google.golang.org/grpc v1.83.1/go.mod h1:kDyl6SKsiHKt0uylY5gtn5cEjkrIOhQOGDgIc4JGwzQ=
+google.golang.org/grpc v1.83.2 h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=
+google.golang.org/grpc v1.83.2/go.mod h1:YPI1hK3kDked6iHvgX3tR0y+nX/qpMFKhPgFsokw1S8=
 google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
 google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=

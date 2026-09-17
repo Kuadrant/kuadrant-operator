@@ -32,6 +32,7 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -375,28 +376,20 @@ const (
 	PipelinePhaseResponse PipelinePhase = "response"
 )
 
-type PipelineActionKind string
+func phaseFromProto(p extpb.Phase) (PipelinePhase, error) {
+	switch p {
+	case extpb.Phase_PHASE_REQUEST:
+		return PipelinePhaseRequest, nil
+	case extpb.Phase_PHASE_RESPONSE:
+		return PipelinePhaseResponse, nil
+	default:
+		return "", fmt.Errorf("invalid phase: %v", p)
+	}
+}
 
-const (
-	PipelineActionKindGRPC       PipelineActionKind = "grpc"
-	PipelineActionKindDeny       PipelineActionKind = "deny"
-	PipelineActionKindAddHeaders PipelineActionKind = "add_headers"
-	PipelineActionKindFail       PipelineActionKind = "fail"
-)
-
-// PipelineActionEntry represents a single stored pipeline action.
 type PipelineActionEntry struct {
-	Index        int
-	Kind         PipelineActionKind
-	Predicate    string
-	Phase        PipelinePhase
-	Method       string
-	Var          string
-	WithStatus   int
-	WithHeaders  string
-	WithBody     string
-	HeadersToAdd string
-	LogMessage   string
+	Index int
+	Entry *extpb.ActionEntry
 }
 
 // pipelineKey identifies a set of actions for a specific policy and phase.
@@ -757,9 +750,12 @@ func (r *RegisteredDataStore) AppendPipelineActions(policy ResourceID, phase Pip
 	key := pipelineKey{Policy: policy, Phase: phase}
 	startIndex := r.pipelineCounters[key]
 
-	for i := range actions {
-		actions[i].Index = startIndex + i
-		r.pipelineActions[key] = append(r.pipelineActions[key], actions[i])
+	for i, action := range actions {
+		cloned := PipelineActionEntry{
+			Index: startIndex + i,
+			Entry: proto.Clone(action.Entry).(*extpb.ActionEntry),
+		}
+		r.pipelineActions[key] = append(r.pipelineActions[key], cloned)
 	}
 	r.pipelineCounters[key] = startIndex + len(actions)
 
@@ -778,7 +774,12 @@ func (r *RegisteredDataStore) GetPipelineActions(policy ResourceID, phase Pipeli
 	}
 
 	result := make([]PipelineActionEntry, len(actions))
-	copy(result, actions)
+	for i, action := range actions {
+		result[i] = PipelineActionEntry{
+			Index: action.Index,
+			Entry: proto.Clone(action.Entry).(*extpb.ActionEntry),
+		}
+	}
 	return result
 }
 
@@ -798,8 +799,11 @@ func (r *RegisteredDataStore) ClearPipelinePhase(policy ResourceID, phase Pipeli
 // Returns an error if any entry has an invalid phase.
 func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries []PipelineActionEntry) error {
 	for i, entry := range entries {
-		if entry.Phase != PipelinePhaseRequest && entry.Phase != PipelinePhaseResponse {
-			return fmt.Errorf("entries[%d]: invalid phase %q, must be %q or %q", i, entry.Phase, PipelinePhaseRequest, PipelinePhaseResponse)
+		if entry.Entry == nil {
+			return fmt.Errorf("entries[%d]: Entry cannot be nil", i)
+		}
+		if _, err := phaseFromProto(entry.Entry.Phase); err != nil {
+			return fmt.Errorf("entries[%d]: %w", i, err)
 		}
 	}
 
@@ -814,7 +818,7 @@ func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries 
 
 	grouped := map[PipelinePhase][]PipelineActionEntry{}
 	for _, entry := range entries {
-		phase := PipelinePhase(entry.Phase)
+		phase, _ := phaseFromProto(entry.Entry.Phase)
 		grouped[phase] = append(grouped[phase], entry)
 	}
 
@@ -1265,6 +1269,27 @@ func predicateOrTrue(predicate string) string {
 	return predicate
 }
 
+func celExpressionsFromEntry(entry *extpb.ActionEntry) []string {
+	var exprs []string
+	if entry.Predicate != "" {
+		exprs = append(exprs, entry.Predicate)
+	}
+	if deny := entry.GetDeny(); deny != nil {
+		if deny.WithHeaders != "" {
+			exprs = append(exprs, deny.WithHeaders)
+		}
+		if deny.WithBody != "" {
+			exprs = append(exprs, deny.WithBody)
+		}
+	}
+	if addHeaders := entry.GetAddHeaders(); addHeaders != nil {
+		if addHeaders.HeadersToAdd != "" {
+			exprs = append(exprs, addHeaders.HeadersToAdd)
+		}
+	}
+	return exprs
+}
+
 func translatePipelineToActions(
 	requestEntries, responseEntries []PipelineActionEntry,
 	methods map[string]string,
@@ -1273,13 +1298,13 @@ func translatePipelineToActions(
 ) []wasm.Action {
 	varToMethod := make(map[string]string)
 	for _, e := range requestEntries {
-		if e.Kind == PipelineActionKindGRPC && e.Var != "" {
-			varToMethod[e.Var] = e.Method
+		if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
+			varToMethod[grpc.GetVar()] = grpc.GetMethod()
 		}
 	}
 	for _, e := range responseEntries {
-		if e.Kind == PipelineActionKindGRPC && e.Var != "" {
-			varToMethod[e.Var] = e.Method
+		if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
+			varToMethod[grpc.GetVar()] = grpc.GetMethod()
 		}
 	}
 
@@ -1292,7 +1317,7 @@ func translatePipelineToActions(
 
 	classifyAndConvert := func(entries []PipelineActionEntry, phase PipelinePhase) {
 		for _, e := range entries {
-			if e.Kind == PipelineActionKindGRPC {
+			if e.Entry.GetGrpc() != nil {
 				continue
 			}
 			ta := entryToAction(e, sources, phase)
@@ -1312,13 +1337,14 @@ func translatePipelineToActions(
 
 	emit := func(entries []PipelineActionEntry, phase PipelinePhase) {
 		for _, e := range entries {
-			if e.Kind == PipelineActionKindGRPC {
-				if emittedGRPC[e.Method] {
+			if grpc := e.Entry.GetGrpc(); grpc != nil {
+				method := grpc.GetMethod()
+				if emittedGRPC[method] {
 					continue
 				}
-				emittedGRPC[e.Method] = true
+				emittedGRPC[method] = true
 				ta := grpcToAction(e, methods, upstreamByMethod, sources)
-				ta.WithOnReply(grpcOnReply[e.Method]...)
+				ta.WithOnReply(grpcOnReply[method]...)
 				result = append(result, ta)
 				continue
 			}
@@ -1341,39 +1367,34 @@ func translatePipelineToActions(
 }
 
 func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
-	if entry.Predicate != "" && pattern.MatchString(entry.Predicate) {
-		return true
+	for _, expr := range celExpressionsFromEntry(entry.Entry) {
+		if pattern.MatchString(expr) {
+			return true
+		}
 	}
-	if entry.HeadersToAdd != "" && pattern.MatchString(entry.HeadersToAdd) {
-		return true
-	}
-	if entry.WithHeaders != "" && pattern.MatchString(entry.WithHeaders) {
-		return true
-	}
-	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
-		return true
-	}
-	if entry.WithBody != "" && pattern.MatchString(entry.WithBody) {
-		return true
+	if fail := entry.Entry.GetFail(); fail != nil && fail.GetLogMessage() != "" {
+		if pattern.MatchString(fail.GetLogMessage()) {
+			return true
+		}
 	}
 	return false
 }
 
 func entryToAction(entry PipelineActionEntry, sources []string, phase PipelinePhase) wasm.Action {
-	predicate := predicateOrTrue(entry.Predicate)
-	switch entry.Kind {
-	case PipelineActionKindDeny:
-		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)).
+	predicate := predicateOrTrue(entry.Entry.Predicate)
+	switch a := entry.Entry.Action.(type) {
+	case *extpb.ActionEntry_Deny:
+		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(int(a.Deny.WithStatus), a.Deny.WithHeaders, a.Deny.WithBody)).
 			WithSources(sources)
-	case PipelineActionKindAddHeaders:
+	case *extpb.ActionEntry_AddHeaders:
 		target := ""
 		if phase == PipelinePhaseResponse {
 			target = "response"
 		}
-		return wasm.NewHeadersAction(predicate, target, entry.HeadersToAdd).
+		return wasm.NewHeadersAction(predicate, target, a.AddHeaders.HeadersToAdd).
 			WithSources(sources)
-	case PipelineActionKindFail:
-		return wasm.NewFailAction(predicate, entry.LogMessage).
+	case *extpb.ActionEntry_Fail:
+		return wasm.NewFailAction(predicate, a.Fail.LogMessage).
 			WithSources(sources)
 	default:
 		return wasm.NewFailAction(predicate, "unknown action type").
@@ -1399,11 +1420,12 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 }
 
 func grpcToAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) *wasm.GrpcAction {
+	grpc := entry.Entry.GetGrpc()
 	mb := ""
-	if upstream, ok := upstreamByMethod[entry.Method]; ok {
+	if upstream, ok := upstreamByMethod[grpc.GetMethod()]; ok {
 		mb = upstream.MessageTemplate
 	}
-	return wasm.NewGrpcAction(predicateOrTrue(entry.Predicate), entry.Var, methods[entry.Method], mb, "").
+	return wasm.NewGrpcAction(predicateOrTrue(entry.Entry.Predicate), grpc.GetVar(), methods[grpc.GetMethod()], mb, "").
 		WithSources(sources)
 }
 

@@ -1216,31 +1216,31 @@ func TestPipelineCommit_BothPhases(t *testing.T) {
 	if len(reqActions) != 2 {
 		t.Fatalf("Expected 2 request actions, got %d", len(reqActions))
 	}
-	if reqActions[0].Kind != PipelineActionKindGRPC {
-		t.Errorf("Expected first request action GRPC, got %s", reqActions[0].Kind)
+	if reqActions[0].Entry.GetGrpc() == nil {
+		t.Error("Expected first request action to be GRPC")
 	}
-	if reqActions[0].Method != "assess-threat" {
-		t.Errorf("Expected method 'assess-threat', got %q", reqActions[0].Method)
+	if reqActions[0].Entry.GetGrpc().GetMethod() != "assess-threat" {
+		t.Errorf("Expected method 'assess-threat', got %q", reqActions[0].Entry.GetGrpc().GetMethod())
 	}
-	if reqActions[0].Var != "threatResponse" {
-		t.Errorf("Expected var 'threatResponse', got %q", reqActions[0].Var)
+	if reqActions[0].Entry.GetGrpc().GetVar() != "threatResponse" {
+		t.Errorf("Expected var 'threatResponse', got %q", reqActions[0].Entry.GetGrpc().GetVar())
 	}
-	if reqActions[1].Kind != PipelineActionKindDeny {
-		t.Errorf("Expected second request action DENY, got %s", reqActions[1].Kind)
+	if reqActions[1].Entry.GetDeny() == nil {
+		t.Error("Expected second request action to be DENY")
 	}
-	if reqActions[1].WithStatus != 403 {
-		t.Errorf("Expected WithStatus 403, got %d", reqActions[1].WithStatus)
+	if reqActions[1].Entry.GetDeny().GetWithStatus() != 403 {
+		t.Errorf("Expected WithStatus 403, got %d", reqActions[1].Entry.GetDeny().GetWithStatus())
 	}
 
 	respActions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseResponse)
 	if len(respActions) != 2 {
 		t.Fatalf("Expected 2 response actions, got %d", len(respActions))
 	}
-	if respActions[0].HeadersToAdd != `{"x-checked": "true"}` {
-		t.Errorf("Expected headers_to_add, got %q", respActions[0].HeadersToAdd)
+	if respActions[0].Entry.GetAddHeaders().GetHeadersToAdd() != `{"x-checked": "true"}` {
+		t.Errorf("Expected headers_to_add, got %q", respActions[0].Entry.GetAddHeaders().GetHeadersToAdd())
 	}
-	if respActions[1].LogMessage != "internal error" {
-		t.Errorf("Expected log message 'internal error', got %q", respActions[1].LogMessage)
+	if respActions[1].Entry.GetFail().GetLogMessage() != "internal error" {
+		t.Errorf("Expected log message 'internal error', got %q", respActions[1].Entry.GetFail().GetLogMessage())
 	}
 }
 
@@ -1293,6 +1293,37 @@ func TestPipelineCommit_MissingAction(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "action must be specified") {
 		t.Errorf("Expected action error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_NilActionPayload(t *testing.T) {
+	svc := newTestExtensionService()
+	tests := []struct {
+		name  string
+		entry *extpb.ActionEntry
+	}{
+		{"grpc", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{}}},
+		{"deny", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{}}},
+		{"add_headers", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_AddHeaders{}}},
+		{"fail", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Fail{}}},
+		{"nil grpc wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Grpc)(nil)}},
+		{"nil deny wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Deny)(nil)}},
+		{"nil add_headers wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_AddHeaders)(nil)}},
+		{"nil fail wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Fail)(nil)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+				Policy:  testPipelinePolicy(),
+				Actions: []*extpb.ActionEntry{tt.entry},
+			})
+			if err == nil {
+				t.Fatal("Expected error for nil action payload")
+			}
+			if !strings.Contains(err.Error(), "action must be specified") {
+				t.Errorf("Expected action error, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -1380,6 +1411,47 @@ func TestPipelineCommit_Deny_InvalidStatusCode(t *testing.T) {
 			})
 			if err == nil {
 				t.Fatalf("Expected error for WithStatus=%d", tt.withStatus)
+			}
+		})
+	}
+}
+
+func TestPipelineCommit_Deny_UnsetStatusCodeAccepted(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected unset with_status to be accepted, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Deny_InvalidCEL(t *testing.T) {
+	svc := newTestExtensionService()
+	tests := []struct {
+		name  string
+		deny  *extpb.DenyAction
+		field string
+	}{
+		{"with_headers", &extpb.DenyAction{WithStatus: 403, WithHeaders: "!!!invalid cel"}, "with_headers"},
+		{"with_body", &extpb.DenyAction{WithStatus: 403, WithBody: "!!!invalid cel"}, "with_body"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+				Policy: testPipelinePolicy(),
+				Actions: []*extpb.ActionEntry{
+					{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: tt.deny}},
+				},
+			})
+			if err == nil {
+				t.Fatalf("Expected error for invalid CEL in %s", tt.field)
+			}
+			if !strings.Contains(err.Error(), tt.field) {
+				t.Errorf("Expected %s error, got: %v", tt.field, err)
 			}
 		})
 	}
@@ -1573,8 +1645,8 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("Expected 1 action after replacement, got %d", len(actions))
 	}
-	if actions[0].WithStatus != 401 {
-		t.Errorf("Expected replaced action with WithStatus 401, got %d", actions[0].WithStatus)
+	if actions[0].Entry.GetDeny().GetWithStatus() != 401 {
+		t.Errorf("Expected replaced action with WithStatus 401, got %d", actions[0].Entry.GetDeny().GetWithStatus())
 	}
 }
 

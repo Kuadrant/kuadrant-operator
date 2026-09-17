@@ -1290,6 +1290,11 @@ func celExpressionsFromEntry(entry *extpb.ActionEntry) []string {
 			exprs = append(exprs, addHeaders.HeadersToAdd)
 		}
 	}
+	if store := entry.GetStore(); store != nil {
+		if store.Value != "" {
+			exprs = append(exprs, store.Value)
+		}
+	}
 	return exprs
 }
 
@@ -1420,6 +1425,10 @@ func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, er
 			WithSources(sources), nil
 	case *extpb.ActionEntry_Fail:
 		return wasm.NewFailAction(predicate, a.Fail.LogMessage).
+			WithSources(sources), nil
+	case *extpb.ActionEntry_Store:
+		return wasm.NewStoreAction(predicate, a.Store.Path, a.Store.Value).
+			WithExportToHost(a.Store.ExportToHost).
 			WithSources(sources), nil
 	default:
 		return nil, fmt.Errorf("actions[%d]: unknown action type %T", entry.Index, entry.Entry.Action)

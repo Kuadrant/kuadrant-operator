@@ -1306,10 +1306,12 @@ func TestPipelineCommit_NilActionPayload(t *testing.T) {
 		{"deny", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{}}},
 		{"add_headers", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_AddHeaders{}}},
 		{"fail", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Fail{}}},
+		{"store", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{}}},
 		{"nil grpc wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Grpc)(nil)}},
 		{"nil deny wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Deny)(nil)}},
 		{"nil add_headers wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_AddHeaders)(nil)}},
 		{"nil fail wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Fail)(nil)}},
+		{"nil store wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Store)(nil)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1486,6 +1488,67 @@ func TestPipelineCommit_AddHeaders_InvalidCEL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "headers_to_add") {
 		t.Errorf("Expected headers_to_add error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_MissingPath(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Value: "request.path"}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing path")
+	}
+	if !strings.Contains(err.Error(), "path must be specified") {
+		t.Errorf("Expected path error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_MissingValue(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Path: "my_key"}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing value")
+	}
+	if !strings.Contains(err.Error(), "value must be specified") {
+		t.Errorf("Expected value error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_InvalidCEL(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Path: "my_key", Value: "!!!invalid cel"}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid CEL in value")
+	}
+	if !strings.Contains(err.Error(), "value") {
+		t.Errorf("Expected value error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_ValidAction(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Path: "request_path", Value: "request.path", ExportToHost: true}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected valid store action to succeed, got: %v", err)
 	}
 }
 

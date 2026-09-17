@@ -1180,6 +1180,19 @@ func validateAddHeadersEntry(addHeaders *extpb.AddHeadersAction, index int) erro
 	return nil
 }
 
+func validateStoreEntry(store *extpb.StoreAction, index int) error {
+	if store.Path == "" {
+		return fmt.Errorf("actions[%d]: path must be specified for store actions", index)
+	}
+	if store.Value == "" {
+		return fmt.Errorf("actions[%d]: value must be specified for store actions", index)
+	}
+	if err := validateCELExpression(store.Value); err != nil {
+		return fmt.Errorf("actions[%d].value: %w", index, err)
+	}
+	return nil
+}
+
 func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb.ActionEntry) ([]PipelineActionEntry, error) {
 	entries := make([]PipelineActionEntry, 0, len(actions))
 	vctx := actionValidationCtx{
@@ -1229,6 +1242,13 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
 			}
 			if err := validateFailEntry(a.Fail, i); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Store:
+			if a == nil || a.Store == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateStoreEntry(a.Store, i); err != nil {
 				return nil, err
 			}
 		case nil:

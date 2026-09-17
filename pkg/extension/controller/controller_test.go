@@ -801,6 +801,23 @@ func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
 	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
 }
 
+func TestPipeline_VarAvailability_StoreForwardReference(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.StoreAction{
+			Path:  "threat_level",
+			Value: "threatResponse.threat_level",
+		},
+		exttypes.GRPCAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
+}
+
 func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 

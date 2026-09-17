@@ -151,7 +151,9 @@ The `istio_*` metrics above cannot tell you which workload made an outbound call
 
 ### Which Metrics Get Labeled
 
-TelemetryPolicy labels the **Limitador** counters, not the `istio_*` metrics. Custom labels appear on:
+TelemetryPolicy labels the metrics Kuadrant's own components emit; it does not touch the `istio_*` metrics. Two components consume the labels.
+
+The **Limitador** counters carry the complete label set:
 
 | Metric | Description |
 |--------|-------------|
@@ -162,7 +164,22 @@ TelemetryPolicy labels the **Limitador** counters, not the `istio_*` metrics. Cu
 
 Each series also carries Limitador's own `limitador_namespace` label, which identifies the targeted route (for example, `gateway-system/ai-mock-external`). For the full set of Limitador counters and their built-in labels, see the [Limitador metrics guide](../observability/limitador-metrics.md).
 
-These are a separate metric stream: adding a TelemetryPolicy does not change `istio_requests_total` in any way.
+**Authorino** receives the same labels on any route that carries an AuthPolicy, and applies them to its own per-AuthConfig metrics, which it serves on `/server-metrics` rather than `/metrics`:
+
+| Metric | Labels applied |
+|--------|----------------|
+| `auth_server_authconfig_response_status` | All labels |
+| `auth_server_authconfig_total` | All labels except those derived from `auth.*` |
+| `auth_server_authconfig_duration_seconds` | All labels except those derived from `auth.*` |
+| `auth_server_evaluator_*` | All labels except those derived from `auth.*` |
+
+The `auth_server_evaluator_*` metrics are only exported for evaluators that set `metrics: true`, or when Authorino runs with deep metrics enabled.
+
+Authorino resolves the labels at several points in its pipeline, and only the last of them runs after authentication has established an identity. A label such as `workload: auth.identity.username` therefore reaches `auth_server_authconfig_response_status` but none of the others, and Authorino logs a `failed to evaluate CEL expression` error at each of the earlier points. Those errors are expected and have no bearing on the Limitador labels.
+
+Two consequences follow. A single Authorino metric can hold series with different label sets, so aggregate it with an explicit `sum by (...)` rather than summing the metric as a whole. And Authorino allocates one counter per distinct label combination without ever reaping them, so a high-cardinality expression is paid for twice, in Limitador and in Authorino.
+
+Adding a TelemetryPolicy does not change `istio_requests_total` in any way.
 
 ### Requirements for Emitting Labels
 

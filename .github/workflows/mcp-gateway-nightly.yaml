@@ -128,7 +128,7 @@ jobs:
           test -d component-charts/mcp-gateway
           test -f component-charts/mcp-gateway/Chart.yaml
           make docker-build IMG="$OPERATOR_IMAGE"
-          make kind-load-image IMG="$OPERATOR_IMAGE" KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+          make kind-load-image KIND="$(command -v kind)" IMG="$OPERATOR_IMAGE" KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
 
 
       - name: Verify operator image is loaded in Kind

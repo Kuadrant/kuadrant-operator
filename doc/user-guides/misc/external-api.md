@@ -22,7 +22,7 @@ graph LR
 
 ## Requirements
 
-This guide uses Istio as the gateway provider. The pattern relies on three Istio-specific capabilities that the gateway provider must support:
+This guide uses Istio as the gateway provider. The pattern relies on four capabilities that the gateway provider must support — the first three are Istio-specific, the fourth is an Extended Gateway API feature:
 
 1. **ServiceEntry** — registers an external hostname in the service mesh so it becomes routable
 2. **DestinationRule** — configures TLS origination to the external backend
@@ -93,7 +93,7 @@ spec:
   listeners:
     - name: ingress-http
       port: 80
-      hostname: '${EXTERNAL_HOST}'
+      hostname: ${EXTERNAL_HOST}
       protocol: HTTP
       allowedRoutes:
         namespaces:

@@ -91,6 +91,22 @@ func failEntry(message, predicate string, phase extpb.Phase) PipelineActionEntry
 	}
 }
 
+func storeEntry(path, value string, exportToHost bool, predicate string, phase extpb.Phase) PipelineActionEntry {
+	return PipelineActionEntry{
+		Entry: &extpb.ActionEntry{
+			Predicate: predicate,
+			Phase:     phase,
+			Action: &extpb.ActionEntry_Store{
+				Store: &extpb.StoreAction{
+					Path:         path,
+					Value:        value,
+					ExportToHost: exportToHost,
+				},
+			},
+		},
+	}
+}
+
 func TestRegisteredDataStore_Set_Get_Delete(t *testing.T) {
 	store := NewRegisteredDataStore()
 
@@ -2243,6 +2259,91 @@ func TestEntryToAction_AddHeadersRejectsUnsetPhase(t *testing.T) {
 	}
 	if action != nil {
 		t.Errorf("Expected no action alongside error, got %T", action)
+	}
+}
+
+func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
+	action, err := entryToAction(storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST), []string{"TestPolicy/default/my-policy"})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	store, ok := action.(*wasm.StoreAction)
+	if !ok {
+		t.Fatalf("Expected *wasm.StoreAction, got %T", action)
+	}
+	if store.Path != "my_key" {
+		t.Errorf("Path = %q, want %q", store.Path, "my_key")
+	}
+	if store.Value != "request.path" {
+		t.Errorf("Value = %q, want %q", store.Value, "request.path")
+	}
+	if !store.ExportToHost {
+		t.Error("ExportToHost should be true")
+	}
+	if len(store.SourcePolicyLocators) != 1 || store.SourcePolicyLocators[0] != "TestPolicy/default/my-policy" {
+		t.Errorf("SourcePolicyLocators = %v, want [%q]", store.SourcePolicyLocators, "TestPolicy/default/my-policy")
+	}
+}
+
+func TestMutateWasmConfig_StoreReferencingGRPCVarLandsInOnReply(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	targetRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: mockTargetRef.GetName(), Namespace: mockTargetRef.GetNamespace()}
+	policyID := testResourceID("TestPolicy", "default", "my-policy")
+
+	store.SetUpstream(
+		RegisteredUpstreamKey{Policy: policyID, Name: "check-threat", URL: "grpc://svc:8081", Service: "threat.Service", Method: "Check"},
+		RegisteredUpstreamEntry{ClusterName: "ext-svc-8081", Host: "svc", Port: 8081, TargetRef: targetRef, FailureMode: "deny", Timeout: "100ms", Service: "threat.Service", Method: "Check", MessageTemplate: "threat.v1.Request{path: request.path}"},
+		testFileDescriptorSet(),
+	)
+
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		grpcEntry("check-threat", "threatResponse", "true", extpb.Phase_PHASE_REQUEST),
+		storeEntry("threat_level", "threatResponse.level", false, "true", extpb.Phase_PHASE_REQUEST),
+	})
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	wasmConfig := &wasm.Config{
+		Services: make(map[string]wasm.Service),
+		ActionSets: []wasm.ActionSet{
+			{Name: "test-action-set"},
+		},
+	}
+
+	err := mutator.Mutate(wasmConfig, []machinery.PolicyTargetReference{mockTargetRef})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	typed := wasmConfig.ActionSets[0].Actions
+	if len(typed) != 1 {
+		t.Fatalf("Expected 1 root-level action (grpc), got %d", len(typed))
+	}
+
+	grpc, ok := typed[0].(*wasm.GrpcAction)
+	if !ok {
+		t.Fatalf("Expected *wasm.GrpcAction, got %T", typed[0])
+	}
+	if grpc.Var != "threatResponse" {
+		t.Errorf("grpc.Var = %q, want %q", grpc.Var, "threatResponse")
+	}
+
+	if len(grpc.OnReply) != 1 {
+		t.Fatalf("Expected 1 onReply action (store), got %d", len(grpc.OnReply))
+	}
+
+	storeAction, ok := grpc.OnReply[0].(*wasm.StoreAction)
+	if !ok {
+		t.Fatalf("Expected *wasm.StoreAction in onReply, got %T", grpc.OnReply[0])
+	}
+	if storeAction.Path != "threat_level" {
+		t.Errorf("storeAction.Path = %q, want %q", storeAction.Path, "threat_level")
+	}
+	if storeAction.Value != "threatResponse.level" {
+		t.Errorf("storeAction.Value = %q, want %q", storeAction.Value, "threatResponse.level")
+	}
+	if storeAction.ExportToHost {
+		t.Error("storeAction.ExportToHost should be false")
 	}
 }
 

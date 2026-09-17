@@ -265,6 +265,9 @@ jobs:
       - name: Prepare MCP Gateway fixtures
         run: |
           kubectl apply -f mcp-gateway/config/istio/gateway/namespace.yaml
+          make kustomize
+          KUSTOMIZE="$GITHUB_WORKSPACE/bin/kustomize"
+          test -x "$KUSTOMIZE"
           make -C mcp-gateway \
             KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
@@ -272,6 +275,7 @@ jobs:
             TEST_SERVER_IMAGE_SOURCE=build \
             deploy-tls-test-server
           make -C mcp-gateway \
+            KUSTOMIZE="$KUSTOMIZE" \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             deploy-gateway
           make yq
@@ -294,6 +298,7 @@ jobs:
             > "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
           kubectl apply -f "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
           make -C mcp-gateway \
+            KUSTOMIZE="$KUSTOMIZE" \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             E2E_DOMAIN=127-0-0-1.sslip.io \
             GATEWAY_CLASS_NAME=istio \

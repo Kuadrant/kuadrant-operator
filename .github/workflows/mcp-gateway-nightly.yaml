@@ -170,6 +170,7 @@ jobs:
       - name: Load MCP images into Kind
         run: |
           make -C mcp-gateway \
+            KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
             KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
             GATEWAY_IMG="$MCP_BROKER_IMAGE" \
@@ -259,6 +260,7 @@ jobs:
         run: |
           kubectl apply -f mcp-gateway/config/istio/gateway/namespace.yaml
           make -C mcp-gateway \
+            KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             TEST_SERVER_IMAGE_SOURCE=build \
@@ -421,6 +423,7 @@ jobs:
       - name: Prepare MCP test servers
         run: |
           make -C mcp-gateway \
+            KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             TEST_SERVER_IMAGE_SOURCE=build \

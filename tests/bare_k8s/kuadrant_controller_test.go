@@ -28,7 +28,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
+var _ = Describe("Kuadrant controller when Gateway API is missing", Labels{"bare_k8s"}, func() {
 	var (
 		testNamespace     string
 		testTimeOut       = NodeTimeout(30 * time.Second)

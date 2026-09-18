@@ -22,7 +22,7 @@ import (
 )
 
 // The tests need to be run in serial as kuadrant CR namespace is shared
-var _ = Describe("Limitador Istio integration reconciler", Serial, func() {
+var _ = Describe("Limitador Istio integration reconciler", Serial, Labels{"istio", "ratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(3 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

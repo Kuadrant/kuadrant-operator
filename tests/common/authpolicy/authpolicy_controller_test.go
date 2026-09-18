@@ -32,7 +32,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("AuthPolicy controller", Labels{"authpolicy"}, func() {
+var _ = Describe("AuthPolicy controller", Labels{"common", "authpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -928,7 +928,7 @@ var _ = Describe("AuthPolicy controller", Labels{"authpolicy"}, func() {
 	})
 })
 
-var _ = Describe("AuthPolicy CEL Validations", Labels{"authpolicy"}, func() {
+var _ = Describe("AuthPolicy CEL Validations", Labels{"common", "authpolicy"}, func() {
 	const (
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
 		afterEachTimeOut  = NodeTimeout(3 * time.Minute)

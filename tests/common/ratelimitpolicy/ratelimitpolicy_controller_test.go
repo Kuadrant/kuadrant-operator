@@ -27,7 +27,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"ratelimitpolicy"}, func() {
+var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"common", "ratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -151,7 +151,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"ratelimi
 	})
 })
 
-var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func() {
+var _ = Describe("RateLimitPolicy controller", Labels{"common", "ratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -974,7 +974,7 @@ var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func()
 	})
 })
 
-var _ = Describe("RateLimitPolicy CEL Validations", Labels{"ratelimitpolicy"}, func() {
+var _ = Describe("RateLimitPolicy CEL Validations", Labels{"common", "ratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

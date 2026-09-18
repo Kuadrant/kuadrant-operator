@@ -20,7 +20,7 @@ import (
 )
 
 // The tests need to be run in serial as kuadrant CR namespace is shared
-var _ = Describe("kuadrant status reconciler", Serial, func() {
+var _ = Describe("kuadrant status reconciler", Serial, Labels{"istio", "authpolicy", "ratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(3 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

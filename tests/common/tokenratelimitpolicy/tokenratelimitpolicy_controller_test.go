@@ -20,7 +20,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("TokenRateLimitPolicy controller (Serial)", Serial, Labels{"tokenratelimitpolicy"}, func() {
+var _ = Describe("TokenRateLimitPolicy controller (Serial)", Serial, Labels{"common", "tokenratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

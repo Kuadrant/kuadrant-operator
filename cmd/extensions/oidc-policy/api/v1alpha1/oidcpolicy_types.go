@@ -27,7 +27,7 @@ import (
 	"github.com/kuadrant/limitador-operator/pkg/helpers"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -47,7 +47,7 @@ type OIDCPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Bare set of policy rules (implicit defaults).
 	OIDCPolicySpecProper `json:""`
@@ -146,15 +146,9 @@ type OIDCPolicy struct {
 	Status OIDCPolicyStatus `json:"status,omitempty"`
 }
 
-func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-		{
-			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-				Group: p.Spec.TargetRef.Group,
-				Kind:  p.Spec.TargetRef.Kind,
-				Name:  p.Spec.TargetRef.Name,
-			},
-		},
+func (p *OIDCPolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
+	return []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+		p.Spec.TargetRef,
 	}
 }
 

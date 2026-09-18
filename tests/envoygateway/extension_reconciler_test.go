@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -493,8 +492,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -552,8 +551,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "HTTPRoute",
 							Name:  gatewayapiv1.ObjectName(routeName),
@@ -626,8 +625,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -685,8 +684,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "HTTPRoute",
 							Name:  gatewayapiv1.ObjectName(routeName),
@@ -757,8 +756,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -816,8 +815,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "HTTPRoute",
 							Name:  gatewayapiv1.ObjectName(routeName),
@@ -887,8 +886,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: gwAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -946,8 +945,8 @@ var _ = Describe("wasm controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: routeAuthPolicyName, Namespace: testNamespace},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "HTTPRoute",
 							Name:  gatewayapiv1.ObjectName(routeName),

@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -96,8 +95,8 @@ var _ = Describe("AuthPolicy controller", Labels{"authpolicy"}, func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  TestHTTPRouteName,
@@ -599,7 +598,7 @@ var _ = Describe("AuthPolicy controller", Labels{"authpolicy"}, func() {
 				if err != nil {
 					return false
 				}
-				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				if acceptedCond == nil {
 					return false
 				}
@@ -623,7 +622,7 @@ var _ = Describe("AuthPolicy controller", Labels{"authpolicy"}, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(ctx, policy, string(gatewayapiv1.PolicyReasonTargetNotFound),
 				fmt.Sprintf("AuthPolicy target %s was not found", TestHTTPRouteName))).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
@@ -638,12 +637,12 @@ var _ = Describe("AuthPolicy controller", Labels{"authpolicy"}, func() {
 				if err != nil {
 					return false
 				}
-				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				if acceptedCond == nil {
 					return false
 				}
 
-				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
+				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1.PolicyReasonAccepted)
 
 				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
 				if enforcedCond == nil {
@@ -951,8 +950,8 @@ var _ = Describe("AuthPolicy CEL Validations", Labels{"authpolicy"}, func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "my-target",

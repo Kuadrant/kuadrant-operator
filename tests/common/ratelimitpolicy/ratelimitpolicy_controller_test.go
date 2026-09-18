@@ -19,7 +19,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -51,8 +50,8 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"ratelimi
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -100,10 +99,10 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"ratelimi
 			return func(g Gomega) {
 				existingPolicy := &kuadrantv1.RateLimitPolicy{}
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)).To(Succeed())
-				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(acceptedCond).ToNot(BeNil())
 
-				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
+				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1.PolicyReasonAccepted)
 
 				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
 				g.Expect(enforcedCond).ToNot(BeNil())
@@ -175,8 +174,8 @@ var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func()
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -296,8 +295,8 @@ var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func()
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 							Kind:  "Gateway",
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -727,7 +726,7 @@ var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func()
 					return false
 				}
 
-				return meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				return meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 			}
 		}
 
@@ -737,7 +736,7 @@ var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func()
 				existingRLP := &kuadrantv1.RateLimitPolicy{}
 				g.Expect(k8sClient.Get(ctx, rlpKey, existingRLP)).To(Succeed())
 
-				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status == metav1.ConditionFalse && cond.Reason == reason && cond.Message == message).To(BeTrue())
 			}
@@ -749,7 +748,7 @@ var _ = Describe("RateLimitPolicy controller", Labels{"ratelimitpolicy"}, func()
 			rlp := policyFactory()
 			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
 
-			Eventually(assertAcceptedConditionFalse(ctx, rlp, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+			Eventually(assertAcceptedConditionFalse(ctx, rlp, string(gatewayapiv1.PolicyReasonTargetNotFound),
 				fmt.Sprintf("RateLimitPolicy target %s was not found", routeName)),
 			).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
@@ -998,8 +997,8 @@ var _ = Describe("RateLimitPolicy CEL Validations", Labels{"ratelimitpolicy"}, f
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "my-target",

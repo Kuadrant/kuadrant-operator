@@ -23,7 +23,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
@@ -369,9 +368,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 			g.Expect(dnsPolicy1.Status.Conditions).To(
 				ContainElements(
 					MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonAccepted)),
 						"Message": Equal("DNSPolicy has been accepted"),
 					}),
 					MatchFields(IgnoreExtras, Fields{
@@ -486,9 +485,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyReasonTargetNotFound)),
 						"Message": Equal("DNSPolicy target test-gateway was not found"),
 					})),
 				)
@@ -642,9 +641,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status":  Equal(metav1.ConditionTrue),
-							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Message": Equal("DNSPolicy has been accepted"),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -725,9 +724,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status":  Equal(metav1.ConditionTrue),
-							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Message": Equal("DNSPolicy has been accepted"),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -776,7 +775,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionTrue),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -831,7 +830,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ConsistOf(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionFalse),
 							"Reason": Equal("TargetNotFound"),
 						}),
@@ -871,7 +870,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ConsistOf(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionFalse),
 							"Reason": Equal("TargetNotFound"),
 						}),
@@ -941,7 +940,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionTrue),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -1490,9 +1489,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status":  Equal(metav1.ConditionTrue),
-							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Message": Equal("DNSPolicy has been accepted"),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -1591,7 +1590,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
 						"Message": ContainSubstring("DNSPolicy has been accepted"),
 					})),
@@ -1657,7 +1656,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
 						"Message": ContainSubstring("could not parse the CIDR from the excludeAddresses field"),
 					})),
@@ -1706,7 +1705,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status": Equal(metav1.ConditionTrue),
 					})),
 				)
@@ -1780,9 +1779,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Reason":  Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
@@ -1820,7 +1819,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionTrue),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -1843,9 +1842,9 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy2.Status.Conditions).To(
 					ContainElement(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":    Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status":  Equal(metav1.ConditionFalse),
-							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonConflicted)),
+							"Reason":  Equal(string(gatewayapiv1.PolicyReasonConflicted)),
 							"Message": Equal(fmt.Sprintf("DNSPolicy is conflicted by %s: conflicting policy", client.ObjectKeyFromObject(dnsPolicy).String())),
 						}),
 					),
@@ -1858,7 +1857,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionTrue),
 						}),
 						MatchFields(IgnoreExtras, Fields{
@@ -1878,7 +1877,7 @@ var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
 				g.Expect(dnsPolicy2.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Type":   Equal(string(gatewayapiv1.PolicyConditionAccepted)),
 							"Status": Equal(metav1.ConditionTrue),
 						}),
 						MatchFields(IgnoreExtras, Fields{

@@ -22,7 +22,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -137,7 +136,7 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		})
 	}
 
-	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference, routeNames ...string) bool {
+	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1.LocalPolicyTargetReference, routeNames ...string) bool {
 		switch string(targetRef.Kind) {
 		case "Gateway":
 			if !gatewayAffected(ctx, string(targetRef.Name), conditionType, policyKey) {
@@ -171,8 +170,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "HTTPRoute",
 							Name:  TestHTTPRouteName,
@@ -257,8 +256,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -272,8 +271,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -313,8 +312,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 
 			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -337,8 +336,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("adds section name polices only to specific listener status conditions", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "section-ap"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -372,8 +371,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("gateway policy is also listed with section policy", func(ctx SpecContext) {
 			gwPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gateway-ap"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -386,8 +385,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 
 			lPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "section-ap"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -426,8 +425,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("route should list it's own policy and the parent policies", func(ctx SpecContext) {
 			gwPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gateway-ap"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -440,8 +439,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 
 			lPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "section-ap"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -481,8 +480,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "HTTPRoute",
 							Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
@@ -548,8 +547,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -563,8 +562,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -604,8 +603,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 
 			gatewayPolicy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -628,8 +627,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("adds section name polices only to specific listener status conditions", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "section-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -663,8 +662,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("gateway policy is also listed with section policy", func(ctx SpecContext) {
 			gwPolicy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -677,8 +676,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 
 			lPolicy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "section-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -717,8 +716,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 		It("route should list it's own policy and the parent policies", func(ctx SpecContext) {
 			gwPolicy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -731,8 +730,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 
 			lPolicy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "section-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				policy.Spec.TargetRef = gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  TestGatewayName,
@@ -775,7 +774,7 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 			if err != nil {
 				return false
 			}
-			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 		}
 
 		isDNSPolicyEnforced := func(ctx context.Context, policyKey client.ObjectKey) bool {
@@ -957,7 +956,7 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 			if err != nil {
 				return false
 			}
-			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1.PolicyConditionAccepted))
 		}
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a TLSPolicy is accepted
@@ -1100,8 +1099,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "GRPCRoute",
 							Name:  TestGRPCRouteName,
@@ -1142,8 +1141,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "GRPCRoute",
 							Name:  TestGRPCRouteName,
@@ -1196,8 +1195,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  TestGatewayName,
@@ -1246,8 +1245,8 @@ var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"},
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 							Group: gatewayapiv1.GroupName,
 							Kind:  "GRPCRoute",
 							Name:  TestGRPCRouteName,

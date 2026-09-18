@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ktypes "k8s.io/apimachinery/pkg/types"
@@ -362,7 +363,7 @@ func TestAttemptHandshake_TokenSourceError(t *testing.T) {
 		tokenSource: func(context.Context) ([]byte, error) { return nil, errors.New("token file missing") },
 	}
 
-	err := ec.attemptHandshake(context.Background())
+	_, err := ec.attemptHandshake(context.Background())
 	assert.ErrorContains(t, err, "failed to obtain handshake credential")
 	assert.ErrorContains(t, err, "token file missing")
 }
@@ -383,7 +384,7 @@ func TestAttemptHandshake_UsesSourcedToken(t *testing.T) {
 		tokenSource:     staticTokenSource([]byte("sourced-token")),
 	}
 
-	err := ec.attemptHandshake(context.Background())
+	_, err := ec.attemptHandshake(context.Background())
 	assert.NilError(t, err)
 	assert.DeepEqual(t, capturedReq.Token, []byte("sourced-token"))
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
@@ -494,7 +495,7 @@ func TestHandshakeWithBackoff_RetriesUntilAccepted(t *testing.T) {
 		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
 	}
 
-	err := ec.handshakeWithBackoff(context.Background())
+	_, err := ec.handshakeWithBackoff(context.Background())
 	assert.NilError(t, err)
 	assert.Equal(t, attempts, 3)
 }
@@ -516,7 +517,7 @@ func TestHandshakeWithBackoff_ReturnsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
-	err := ec.handshakeWithBackoff(ctx)
+	_, err := ec.handshakeWithBackoff(ctx)
 	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
 }
 
@@ -1385,7 +1386,7 @@ func TestAttemptHandshake_NilManagerPassesNilOwnedPolicies(t *testing.T) {
 		manager:         nil,
 	}
 
-	err := ec.attemptHandshake(context.Background())
+	_, err := ec.attemptHandshake(context.Background())
 	assert.NilError(t, err)
 	assert.Assert(t, capturedReq.OwnedPolicies == nil)
 }
@@ -1416,4 +1417,78 @@ func TestHandshake_SetsOwnedPolicies(t *testing.T) {
 	assert.Equal(t, capturedReq.OwnedPolicies[1].Group, "test.io")
 	assert.Equal(t, capturedReq.OwnedPolicies[1].Namespace, "ns2")
 	assert.Equal(t, capturedReq.OwnedPolicies[1].Name, "policy2")
+}
+
+func TestReplayOwnedPolicies_SendsEventPerPolicy(t *testing.T) {
+	ec := &ExtensionController{
+		config: ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger: logr.Discard(),
+	}
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent, 10)
+	owned := []*extpb.Metadata{
+		{Namespace: "ns1", Name: "a"},
+		{Namespace: "ns1", Name: "b"},
+		{Namespace: "ns2", Name: "c"},
+	}
+
+	ec.replayOwnedPolicies(context.Background(), owned, reconcileChan)
+	close(reconcileChan)
+
+	var events []ctrlruntimeevent.GenericEvent
+	for event := range reconcileChan {
+		events = append(events, event)
+	}
+
+	assert.Equal(t, len(events), 3)
+	assert.Equal(t, events[0].Object.GetNamespace(), "ns1")
+	assert.Equal(t, events[0].Object.GetName(), "a")
+	assert.Equal(t, events[0].Object.(*unstructured.Unstructured).GetKind(), "MyPolicy")
+	assert.Equal(t, events[1].Object.GetNamespace(), "ns1")
+	assert.Equal(t, events[1].Object.GetName(), "b")
+	assert.Equal(t, events[1].Object.(*unstructured.Unstructured).GetKind(), "MyPolicy")
+	assert.Equal(t, events[2].Object.GetNamespace(), "ns2")
+	assert.Equal(t, events[2].Object.GetName(), "c")
+	assert.Equal(t, events[2].Object.(*unstructured.Unstructured).GetKind(), "MyPolicy")
+}
+
+func TestReplayOwnedPolicies_EmptyIsNoOp(t *testing.T) {
+	ec := &ExtensionController{
+		config: ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger: logr.Discard(),
+	}
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent)
+
+	ec.replayOwnedPolicies(context.Background(), nil, reconcileChan)
+
+	select {
+	case <-reconcileChan:
+		t.Fatal("unexpected event received")
+	default:
+	}
+}
+
+func TestReplayOwnedPolicies_StopsOnContextCancel(t *testing.T) {
+	ec := &ExtensionController{
+		config: ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger: logr.Discard(),
+	}
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	owned := []*extpb.Metadata{
+		{Namespace: "ns1", Name: "a"},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		ec.replayOwnedPolicies(ctx, owned, reconcileChan)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("replayOwnedPolicies did not return after context cancellation")
+	}
 }

@@ -108,10 +108,11 @@ jobs:
           EOF
 
       - name: Create Kind cluster
-        uses: helm/kind-action@94729529f85113b88f4f819c17ce61382e6d8478 # ratchet:helm/kind-action@v1.2.0
+        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # ratchet:helm/kind-action@v1.15.0
         with:
           version: v0.31.0
           node_image: kindest/node:v1.35.0
+          kubectl_version: v1.35.0
           config: ${{ runner.temp }}/mcp-kind-cluster.yaml
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           wait: 120s
@@ -119,8 +120,14 @@ jobs:
       - name: Check cluster info
         run: kubectl cluster-info dump
 
-      - name: Set up Istio environment
-        run: make env-setup GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=false
+      - name: Set up Helm prerequisites
+        run: |
+          make gateway-api-install
+          make install-cert-manager
+          make install-observability-crds
+          make install-metallb
+          make istio-install ISTIO_INSTALL_SAIL=false
+          make deploy-istio-gateway
         timeout-minutes: 30
 
       - name: Build and load operator image
@@ -128,7 +135,7 @@ jobs:
           test -d component-charts/mcp-gateway
           test -f component-charts/mcp-gateway/Chart.yaml
           make docker-build IMG="$OPERATOR_IMAGE"
-          make kind-load-image IMG="$OPERATOR_IMAGE" KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
+          make kind-load-image KIND="$(command -v kind)" IMG="$OPERATOR_IMAGE" KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME"
 
 
       - name: Verify operator image is loaded in Kind
@@ -170,6 +177,7 @@ jobs:
       - name: Load MCP images into Kind
         run: |
           make -C mcp-gateway \
+            KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
             KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
             GATEWAY_IMG="$MCP_BROKER_IMAGE" \
@@ -258,12 +266,17 @@ jobs:
       - name: Prepare MCP Gateway fixtures
         run: |
           kubectl apply -f mcp-gateway/config/istio/gateway/namespace.yaml
+          make kustomize
+          KUSTOMIZE="$GITHUB_WORKSPACE/bin/kustomize"
+          test -x "$KUSTOMIZE"
           make -C mcp-gateway \
+            KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             TEST_SERVER_IMAGE_SOURCE=build \
             deploy-tls-test-server
           make -C mcp-gateway \
+            KUSTOMIZE="$KUSTOMIZE" \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             deploy-gateway
           make yq
@@ -286,6 +299,7 @@ jobs:
             > "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
           kubectl apply -f "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
           make -C mcp-gateway \
+            KUSTOMIZE="$KUSTOMIZE" \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             E2E_DOMAIN=127-0-0-1.sslip.io \
             GATEWAY_CLASS_NAME=istio \
@@ -421,6 +435,7 @@ jobs:
       - name: Prepare MCP test servers
         run: |
           make -C mcp-gateway \
+            KIND="$(command -v kind)" \
             KIND_VERSION=v0.31.0 \
             KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
             TEST_SERVER_IMAGE_SOURCE=build \
@@ -439,13 +454,17 @@ jobs:
           GATEWAY_CLASS_NAME: istio
         run: |
           mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
+          ginkgo_version="$(cd mcp-gateway && go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)"
+          echo "Using Ginkgo CLI ${ginkgo_version}"
           MCP_GATEWAY_NAMESPACE="$MCP_GATEWAY_NAMESPACE" \
           GATEWAY_NAMESPACE="$GATEWAY_NAMESPACE" \
           TEST_SERVER_NAMESPACE="$TEST_SERVER_NAMESPACE" \
           E2E_DOMAIN="$E2E_DOMAIN" \
           E2E_SCHEME="$E2E_SCHEME" \
           GATEWAY_CLASS_NAME="$GATEWAY_CLASS_NAME" \
-          make -C mcp-gateway test-e2e-ci-full E2E_PROCS=4 \
+          make -C mcp-gateway \
+            GINKGO_VERSION="$ginkgo_version" \
+            test-e2e-ci-full E2E_PROCS=4 \
             2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/e2e.log"
 
       - name: Collect diagnostics on failure

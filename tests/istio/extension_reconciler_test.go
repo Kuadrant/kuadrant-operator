@@ -4,8 +4,6 @@ package istio_test
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"reflect"
 	"time"
 
@@ -13,13 +11,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"google.golang.org/protobuf/types/known/structpb"
-	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiotypev1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -32,7 +27,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
@@ -61,69 +55,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 		}
 	}
 
-	extractWasmConfigFromEnvoyFilter := func(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) (*wasm.Config, error) {
-		if len(ef.Spec.ConfigPatches) == 0 {
-			return nil, fmt.Errorf("no config patches found in EnvoyFilter")
-		}
-
-		// Find the wasm HTTP filter patch
-		var patchValue *structpb.Struct
-		for _, patch := range ef.Spec.ConfigPatches {
-			if patch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
-				patchValue = patch.Patch.Value
-				break
-			}
-		}
-
-		if patchValue == nil {
-			return nil, fmt.Errorf("no HTTP_FILTER patch found in EnvoyFilter config patches")
-		}
-
-		// Marshal to JSON to navigate the nested structure
-		valueJSON, err := patchValue.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-
-		// Unmarshal to a map to extract the wasm configuration
-		var filterConfig map[string]any
-		if err := json.Unmarshal(valueJSON, &filterConfig); err != nil {
-			return nil, err
-		}
-
-		// Navigate: typed_config -> value -> config -> configuration (JSON string)
-		typedConfig, ok := filterConfig["typed_config"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing typed_config in filter configuration")
-		}
-
-		value, ok := typedConfig["value"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing value in typed_config")
-		}
-
-		config, ok := value["config"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing config in typed_config.value")
-		}
-
-		configuration, ok := config["configuration"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing configuration in config")
-		}
-
-		configJSON, ok := configuration["value"].(string)
-		if !ok {
-			return nil, fmt.Errorf("missing value in configuration")
-		}
-
-		var wasmConfig wasm.Config
-		if err := json.Unmarshal([]byte(configJSON), &wasmConfig); err != nil {
-			return nil, err
-		}
-
-		return &wasmConfig, nil
-	}
+	// extractWasmConfigFromEnvoyFilter is defined in tokenratelimitpolicy_test.go (same package).
 
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
@@ -891,182 +823,6 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 					},
 				},
 			}))
-		}, testTimeOut)
-	})
-
-	Context("TokenRateLimitPolicy reservation mode", func() {
-		var (
-			routeName = "toystore-route"
-			trlpName  = "toystore-trlp"
-			gateway   *gatewayapiv1.Gateway
-		)
-
-		BeforeEach(func(ctx SpecContext) {
-			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-		})
-
-		It("Simple TokenRateLimitPolicy in default (Reservation) mode creates Reserve/Commit actions", func(ctx SpecContext) {
-			// create httproute (no backendRequest timeout, so reservation ttl stays unset)
-			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
-			err := testClient().Create(ctx, httpRoute)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-
-			// create tokenratelimitpolicy targeting the route, with no reservation
-			// overrides, so the reconciler generates the RFC 0021 defaults: a flat
-			// amount and no ttl (no route backendRequest timeout to fall back to).
-			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind: "TokenRateLimitPolicy", APIVersion: kuadrantv1alpha1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: trlpName, Namespace: testNamespace},
-				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-							Group: gatewayapiv1.GroupName,
-							Kind:  "HTTPRoute",
-							Name:  gatewayapiv1.ObjectName(routeName),
-						},
-					},
-					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1alpha1.TokenLimit{
-							"l1": {
-								Rates: []kuadrantv1.Rate{
-									{Limit: 5000, Window: kuadrantv1.Duration("1m")},
-								},
-							},
-						},
-					},
-				},
-			}
-			err = testClient().Create(ctx, trlp)
-			Expect(err).ToNot(HaveOccurred())
-
-			trlpKey := client.ObjectKeyFromObject(trlp)
-			Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
-
-			// Check envoy filter
-			envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
-			Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
-			existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
-			err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
-			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
-			Expect(err).ToNot(HaveOccurred())
-
-			// the reserve/commit services are always registered, regardless of which policies are in play
-			Expect(existingWASMConfig.Services).To(HaveKey(wasm.RateLimitReserveServiceName))
-			Expect(existingWASMConfig.Services).To(HaveKey(wasm.RateLimitCommitServiceName))
-
-			Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
-			actionSet := existingWASMConfig.ActionSets[0]
-
-			limitIdentifier := controllers.TokenLimitNameToLimitadorIdentifier(trlpKey, "l1")
-			scope := string(controllers.LimitsNamespaceFromRoute(httpRoute).ToActionScope())
-			source := "tokenratelimitpolicy.kuadrant.io:" + trlpKey.String()
-
-			// Built via wasm.BuildActions (not ActionSpec.Build directly) because the
-			// commit spec's reservation.actual_amount references responseBodyJSON(...),
-			// which BuildActions hoists into a shared response-body-extraction action
-			// ahead of the reserve/commit actions themselves.
-			expectedActions := wasm.BuildActions([]wasm.ActionSpec{
-				{
-					ServiceName: wasm.RateLimitReserveServiceName,
-					Scope:       scope,
-					Sources:     []string{source},
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
-							},
-						},
-					},
-				},
-				{
-					ServiceName: wasm.RateLimitCommitServiceName,
-					Scope:       scope,
-					Sources:     []string{source},
-					ConditionalData: []wasm.ConditionalData{
-						{
-							Data: []wasm.DataType{
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
-							},
-						},
-					},
-				},
-			})
-
-			Expect(actionSet.Actions).To(HaveLen(len(expectedActions)))
-			for i, expected := range expectedActions {
-				Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
-			}
-		}, testTimeOut)
-
-		It("TokenRateLimitPolicy is not enforced when Limitador has reservations disabled", func(ctx SpecContext) {
-			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
-			err := testClient().Create(ctx, httpRoute)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-
-			trlp := &kuadrantv1alpha1.TokenRateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind: "TokenRateLimitPolicy", APIVersion: kuadrantv1alpha1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: trlpName, Namespace: testNamespace},
-				Spec: kuadrantv1alpha1.TokenRateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-							Group: gatewayapiv1.GroupName,
-							Kind:  "HTTPRoute",
-							Name:  gatewayapiv1.ObjectName(routeName),
-						},
-					},
-					TokenRateLimitPolicySpecProper: kuadrantv1alpha1.TokenRateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1alpha1.TokenLimit{
-							"l1": {
-								Rates: []kuadrantv1.Rate{
-									{Limit: 5000, Window: kuadrantv1.Duration("1m")},
-								},
-							},
-						},
-					},
-				},
-			}
-			err = testClient().Create(ctx, trlp)
-			Expect(err).ToNot(HaveOccurred())
-
-			trlpKey := client.ObjectKeyFromObject(trlp)
-			Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
-
-			// Limitador is a singleton owned by the suite-wide Kuadrant CR (kuadrantInstallationNS),
-			// not by the per-test namespace, so restore it on cleanup to avoid poisoning other specs.
-			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
-			DeferCleanup(func(ctx SpecContext) {
-				limitadorObj := &limitadorv1alpha1.Limitador{}
-				Expect(testClient().Get(ctx, limitadorKey, limitadorObj)).To(Succeed())
-				limitadorObj.Spec.Reservations = nil
-				Expect(testClient().Update(ctx, limitadorObj)).To(Succeed())
-			})
-
-			limitadorObj := &limitadorv1alpha1.Limitador{}
-			Expect(testClient().Get(ctx, limitadorKey, limitadorObj)).To(Succeed())
-			limitadorObj.Spec.Reservations = &limitadorv1alpha1.Reservations{Enabled: ptr.To(false)}
-			Expect(testClient().Update(ctx, limitadorObj)).To(Succeed())
-
-			Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeFalse())
-			Eventually(func() bool {
-				return tests.TokenRateLimitPolicyEnforcedCondition(ctx, testClient(), trlpKey, kuadrant.PolicyReasonReservationsDisabled,
-					"TokenRateLimitPolicy cannot be enforced: Kuadrant spec.tokenRateLimiting.mode is Reservation, but Limitador has reservations disabled (spec.reservations.enabled=false)")
-			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 

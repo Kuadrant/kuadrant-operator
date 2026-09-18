@@ -20,7 +20,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller when gateway provider is missing", func() {
+var _ = Describe("Kuadrant controller when gateway provider is missing", Labels{"gatewayapi"}, func() {
 	var (
 		testNamespace string
 		// 20s to allow for slow CI runners where the operator may take longer to reconcile status

@@ -454,13 +454,17 @@ jobs:
           GATEWAY_CLASS_NAME: istio
         run: |
           mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
+          ginkgo_version="$(cd mcp-gateway && go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)"
+          echo "Using Ginkgo CLI ${ginkgo_version}"
           MCP_GATEWAY_NAMESPACE="$MCP_GATEWAY_NAMESPACE" \
           GATEWAY_NAMESPACE="$GATEWAY_NAMESPACE" \
           TEST_SERVER_NAMESPACE="$TEST_SERVER_NAMESPACE" \
           E2E_DOMAIN="$E2E_DOMAIN" \
           E2E_SCHEME="$E2E_SCHEME" \
           GATEWAY_CLASS_NAME="$GATEWAY_CLASS_NAME" \
-          make -C mcp-gateway test-e2e-ci-full E2E_PROCS=4 \
+          make -C mcp-gateway \
+            GINKGO_VERSION="$ginkgo_version" \
+            test-e2e-ci-full E2E_PROCS=4 \
             2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/e2e.log"
 
       - name: Collect diagnostics on failure

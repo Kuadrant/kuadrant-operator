@@ -4,10 +4,19 @@ package controllers
 // HTTP/2 is always enabled since all current callers require it (gRPC upstreams).
 func buildClusterPatch(clusterName, host string, port int, mTLS bool) map[string]any {
 	base := map[string]any{
-		"name":            clusterName,
-		"type":            "STRICT_DNS",
-		"connect_timeout": "1s",
-		"lb_policy":       "ROUND_ROBIN",
+		"name":              clusterName,
+		"type":              "STRICT_DNS",
+		"connect_timeout":   "1s",
+		"dns_refresh_rate":  "5s",
+		"dns_lookup_family": "V4_ONLY",
+		"outlier_detection": map[string]any{
+			"consecutive_gateway_failure":           5,
+			"enforcing_consecutive_gateway_failure": 100,
+			"interval":                              "10s",
+			"base_ejection_time":                    "30s",
+			"max_ejection_percent":                  100,
+		},
+		"lb_policy": "ROUND_ROBIN",
 		"load_assignment": map[string]any{
 			"cluster_name": clusterName,
 			"endpoints": []map[string]any{

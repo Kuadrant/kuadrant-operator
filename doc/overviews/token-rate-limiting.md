@@ -38,6 +38,7 @@ Each limit definition includes:
 - A set of rate limits (`spec.limits.<limit-name>.rates[]`)
 - (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
 - (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
+- (Optional) Token reservation settings (`spec.limits.<limit-name>.reservation.amount` and `spec.limits.<limit-name>.reservation.ttl`)
 
 The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
 
@@ -52,6 +53,33 @@ The limit definitions (`limits`) can be declared at the top-level level of the s
 Check out the [API reference](../reference/tokenratelimitpolicy.md) for a full specification of the TokenRateLimitPolicy CRD.
 
 ## Key Features
+
+### Token Rate Limit Reservations (RFC 0021)
+
+By default, Kuadrant operates in **Reservation Mode**, which solves the in-flight request race condition where concurrent requests arrive before actual usage has been reported by the AI/LLM model:
+
+1. **Request Phase (Reserve)**: When an incoming request arrives, the gateway reserves an estimated volume of tokens with a TTL against Limitador's capacity (`reservation.amount` and `reservation.ttl`).
+   - If not configured, `amount` defaults to `uint(5000)`.
+   - `ttl` defaults to the route rule's `timeouts.backendRequest` if specified, or `duration('60s')`.
+   - Limitador caps every reservation: it holds at most `--max-reservation-fraction` of the limit (default `0.5`) for at most `--max-reservation-ttl` (default 60 seconds), so a longer `backendRequest` timeout is capped at 60 seconds by default.
+   - Setting `amount: "0"` disables holding capacity for that specific limit while maintaining the reservation lifecycle.
+2. **Response Phase (Commit)**: When the backend model responds, the gateway commits the reservation using the actual token count (`responseBodyJSON("/usage/total_tokens")`), immediately releasing any over-reserved capacity back to the pool.
+
+For environments where capacity reservation is not desired, the cluster operator can configure `spec.tokenRateLimiting.mode: CheckReport` on the `Kuadrant` custom resource. In **CheckReport Mode**, limits are checked without holding capacity (`hits_addend: 0`) and actual usage is reported upon response.
+
+#### Upgrades and compatibility
+
+Reservation Mode requires a Limitador version that serves the `Reserve` and `Commit` gRPC methods. The operator does not detect whether Limitador supports them: it generates `Reserve`/`Commit` actions whenever the mode is `Reservation`, including when `spec.tokenRateLimiting` is omitted.
+
+If Limitador cannot serve those calls, for example when the operator is upgraded before Limitador, or when Limitador runs with reservations disabled (`--disable-reservations`), the `Reserve` and `Commit` calls fail. With the default failure mode (`allow`), those requests are let through and their token usage is not counted.
+
+To avoid this:
+
+- Upgrade Limitador to a version that supports reservations before upgrading the operator.
+- Alternatively, set `spec.tokenRateLimiting.mode: CheckReport` before upgrading, and switch back to `Reservation` once every component is upgraded.
+- If reservations are disabled in Limitador, set `spec.tokenRateLimiting.mode: CheckReport`.
+
+The timeout and failure mode of the reserve and commit calls can be changed with the operator environment variables `RATELIMIT_RESERVE_SERVICE_TIMEOUT`, `RATELIMIT_RESERVE_SERVICE_FAILURE_MODE`, `RATELIMIT_COMMIT_SERVICE_TIMEOUT` and `RATELIMIT_COMMIT_SERVICE_FAILURE_MODE` (defaults: `100ms` and `allow`).
 
 ### Automatic Token Tracking
 

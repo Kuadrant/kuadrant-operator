@@ -32,5 +32,5 @@ components:
     repo: Kuadrant/mcp-gateway
     chart-path: charts/mcp-gateway
     tracked-branch: main
-    ref: d5f4c635160ca7bee863a2ee537ab32b54531da7
+    ref: f77d958ec9ff7c3f46eba0469bfe9287157ac6d3
     auto-merge: false

@@ -46,6 +46,7 @@ message HandshakeRequest {
   string version = 1;
   bytes token = 2;
   string policy_kind = 3;
+  repeated Metadata owned_policies = 4;
 }
 
 message HandshakeResponse {

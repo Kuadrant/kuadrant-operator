@@ -230,7 +230,17 @@ const (
 	// arrival when a TokenLimit does not specify spec...reservation.amount. The
 	// reserve message requires an amount, so a repo-defined default is always
 	// emitted.
-	defaultReservationAmount = "5000"
+	//
+	// It defaults to 0 rather than a non-zero flat amount: amount "0" is a
+	// documented Limitador short-circuit that skips holding capacity while
+	// still exercising the Reserve/Commit lifecycle. This makes Reservation
+	// mode a no-op equivalent to CheckReport for any TokenRateLimitPolicy that
+	// doesn't explicitly opt in with a non-zero reservation.amount -- notably
+	// every policy that predates RFC 0021, since Reservation is the cluster-wide
+	// default mode. Closing the concurrent-request race window RFC 0021
+	// describes requires setting reservation.amount to a real, non-zero
+	// estimate of tokens per request.
+	defaultReservationAmount = "0"
 
 	// tokenUsageBodyRef is the response-body reference resolving to the number of
 	// tokens actually consumed by the upstream (OpenAI-compatible usage schema).

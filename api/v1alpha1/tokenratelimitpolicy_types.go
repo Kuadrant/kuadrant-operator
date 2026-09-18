@@ -227,7 +227,8 @@ type TokenLimit struct {
 	// effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
 	// an estimated token amount is reserved on request arrival and committed
 	// with the actual usage once the upstream responds. When omitted, defaults
-	// are generated (flat amount, route backendRequest timeout for ttl).
+	// are generated (amount 0, meaning no capacity is reserved, and the route
+	// backendRequest timeout for ttl).
 	// +optional
 	Reservation *Reservation `json:"reservation,omitempty"`
 
@@ -240,7 +241,9 @@ type TokenLimit struct {
 type Reservation struct {
 	// Amount is either a literal integer number of tokens to reserve on request
 	// arrival, or a CEL expression evaluating to the number of tokens (uint).
-	// When omitted, a flat default is used.
+	// Defaults to 0 when omitted, which reserves no capacity: Limitador
+	// short-circuits amount-0 reservations, so this limit behaves like
+	// CheckReport unless amount is set explicitly to a non-zero estimate.
 	// +optional
 	// +kubebuilder:validation:XIntOrString
 	Amount *intstr.IntOrString `json:"amount,omitempty"`

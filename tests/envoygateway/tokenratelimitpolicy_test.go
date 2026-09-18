@@ -12,7 +12,9 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -87,7 +89,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		}
 	}
 
-	It("Reservation mode (default) creates Reserve/Commit actions", func(ctx SpecContext) {
+	It("Reservation mode (default) reserves zero capacity (no-op, equivalent to CheckReport)", func(ctx SpecContext) {
 		// create httproute (no backendRequest timeout, so reservation ttl stays unset)
 		gwRoute := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
 		err := testClient().Create(ctx, gwRoute)
@@ -95,8 +97,10 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
 		// create tokenratelimitpolicy targeting the route, with no reservation
-		// overrides, so the reconciler generates the RFC 0021 defaults: a flat
-		// amount and no ttl (no route backendRequest timeout to fall back to).
+		// overrides. The reconciler defaults reservation.amount to 0, a documented
+		// Limitador short-circuit that skips holding capacity, so upgrading to
+		// Reservation mode is behavior-neutral for any policy that doesn't
+		// explicitly opt in with a non-zero amount.
 		trlp := buildTRLP()
 		err = testClient().Create(ctx, trlp)
 		Expect(err).ToNot(HaveOccurred())
@@ -146,7 +150,84 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
 							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
+						},
+					},
+				},
+			},
+			{
+				ServiceName: wasm.RateLimitCommitServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+						},
+					},
+				},
+			},
+		})
+
+		Expect(actionSet.Actions).To(HaveLen(len(expectedActions)))
+		for i, expected := range expectedActions {
+			Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
+		}
+	}, testTimeOut)
+
+	It("Reservation mode with explicit amount reserves real capacity", func(ctx SpecContext) {
+		gwRoute := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
+		err := testClient().Create(ctx, gwRoute)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
+
+		trlp := buildTRLP()
+		limit := trlp.Spec.Limits["l1"]
+		limit.Reservation = &kuadrantv1alpha1.Reservation{Amount: ptr.To(intstr.FromInt32(8000))}
+		trlp.Spec.Limits["l1"] = limit
+		err = testClient().Create(ctx, trlp)
+		Expect(err).ToNot(HaveOccurred())
+
+		trlpKey := client.ObjectKeyFromObject(trlp)
+		Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+		Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+
+		extKey := client.ObjectKey{
+			Name:      wasm.ExtensionName(TestGatewayName),
+			Namespace: testNamespace,
+		}
+		Eventually(IsEnvoyExtensionPolicyAccepted).
+			WithContext(ctx).
+			WithArguments(testClient(), extKey, client.ObjectKeyFromObject(gateway)).
+			Should(Succeed())
+
+		ext := &egv1alpha1.EnvoyExtensionPolicy{}
+		err = testClient().Get(ctx, extKey, ext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(ext.Spec.Wasm).To(HaveLen(1))
+		existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+		actionSet := existingWASMConfig.ActionSets[0]
+
+		limitIdentifier := controllers.TokenLimitNameToLimitadorIdentifier(trlpKey, "l1")
+		scope := string(controllers.LimitsNamespaceFromRoute(gwRoute).ToActionScope())
+		source := "tokenratelimitpolicy.kuadrant.io:" + trlpKey.String()
+
+		expectedActions := wasm.BuildActions([]wasm.ActionSpec{
+			{
+				ServiceName: wasm.RateLimitReserveServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "8000"}}},
 						},
 					},
 				},

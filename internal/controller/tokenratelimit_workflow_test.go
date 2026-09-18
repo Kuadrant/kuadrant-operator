@@ -388,7 +388,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 			scope:           ActionScope("my-ns/my-route"),
 			mode:            kuadrantv1beta1.TokenRateLimitingModeReservation,
 			expectedActions: []wasm.ActionSpec{
-				// Reserve (request phase): default amount, ttl omitted
+				// Reserve (request phase): default amount (0, no capacity held), ttl omitted
 				{
 					ServiceName: wasm.RateLimitReserveServiceName,
 					Scope:       "my-ns/my-route",
@@ -399,7 +399,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
 								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
 							},
 						},
 					},
@@ -440,7 +440,7 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
 								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: `duration("45s")`}}},
 							},
 						},

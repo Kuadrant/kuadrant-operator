@@ -13,6 +13,8 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -141,7 +143,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		}
 	}
 
-	It("Reservation mode (default) creates Reserve/Commit actions", func(ctx SpecContext) {
+	It("Reservation mode (default) reserves zero capacity (no-op, equivalent to CheckReport)", func(ctx SpecContext) {
 		// create httproute (no backendRequest timeout, so reservation ttl stays unset)
 		httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 		err := testClient().Create(ctx, httpRoute)
@@ -149,8 +151,10 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
 		// create tokenratelimitpolicy targeting the route, with no reservation
-		// overrides, so the reconciler generates the RFC 0021 defaults: a flat
-		// amount and no ttl (no route backendRequest timeout to fall back to).
+		// overrides. The reconciler defaults reservation.amount to 0, a documented
+		// Limitador short-circuit that skips holding capacity, so upgrading to
+		// Reservation mode is behavior-neutral for any policy that doesn't
+		// explicitly opt in with a non-zero amount.
 		trlp := buildTRLP()
 		err = testClient().Create(ctx, trlp)
 		Expect(err).ToNot(HaveOccurred())
@@ -193,7 +197,76 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
 							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
+						},
+					},
+				},
+			},
+			{
+				ServiceName: wasm.RateLimitCommitServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+						},
+					},
+				},
+			},
+		})
+
+		Expect(actionSet.Actions).To(HaveLen(len(expectedActions)))
+		for i, expected := range expectedActions {
+			Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
+		}
+	}, testTimeOut)
+
+	It("Reservation mode with explicit amount reserves real capacity", func(ctx SpecContext) {
+		httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+		err := testClient().Create(ctx, httpRoute)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+		trlp := buildTRLP()
+		limit := trlp.Spec.Limits["l1"]
+		limit.Reservation = &kuadrantv1alpha1.Reservation{Amount: ptr.To(intstr.FromInt32(8000))}
+		trlp.Spec.Limits["l1"] = limit
+		err = testClient().Create(ctx, trlp)
+		Expect(err).ToNot(HaveOccurred())
+
+		trlpKey := client.ObjectKeyFromObject(trlp)
+		Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+		Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+
+		envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+		Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+		existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+		err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
+		Expect(err).ToNot(HaveOccurred())
+		existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+		actionSet := existingWASMConfig.ActionSets[0]
+
+		limitIdentifier := controllers.TokenLimitNameToLimitadorIdentifier(trlpKey, "l1")
+		scope := string(controllers.LimitsNamespaceFromRoute(httpRoute).ToActionScope())
+		source := "tokenratelimitpolicy.kuadrant.io:" + trlpKey.String()
+
+		expectedActions := wasm.BuildActions([]wasm.ActionSpec{
+			{
+				ServiceName: wasm.RateLimitReserveServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "8000"}}},
 						},
 					},
 				},

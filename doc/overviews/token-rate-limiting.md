@@ -47,6 +47,8 @@ spec:
 
 When `spec.tokenRateLimiting` is omitted the mode defaults to `Reservation`. The per-limit `reservation` block on a TokenRateLimitPolicy only has an effect in `Reservation` mode; it is ignored under `CheckReport`.
 
+**Important: `reservation.amount` defaults to `0`, which reserves no capacity.** Since `Reservation` is the cluster-wide default mode, every existing TokenRateLimitPolicy — including ones written before reservations existed — starts running in `Reservation` mode without any code changes. Defaulting `amount` to `0` makes that transition behavior-neutral: `0` is a documented Limitador short-circuit that skips holding capacity entirely, so a limit with no `reservation` block behaves exactly like `CheckReport` — no protection against the concurrent-request race that RFC 0021 exists to close. **To actually get that protection, set `reservation.amount` explicitly** to a meaningful, non-zero estimate of tokens consumed per request (see [`reservation`](../reference/tokenratelimitpolicy.md#reservation)).
+
 #### Handling reserve and upstream failures
 
 - If no reservation ends up being held — whether because the reserve call itself failed (e.g. a gRPC error or timeout talking to Limitador) or because Limitador's response simply didn't include a reservation id — the request still proceeds to the upstream. Once the response is parsed for the actual token count, a commit is still sent regardless, without a reservation id.

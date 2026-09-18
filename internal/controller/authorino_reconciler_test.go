@@ -1,12 +1,60 @@
 package controllers
 
 import (
+	"os"
 	"testing"
 
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 )
+
+func TestConfigureAuthorinoLoggingFields(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		value   *string
+		enabled bool
+	}{
+		{name: "unset"},
+		{name: "empty", value: ptr.To("")},
+		{name: "false", value: ptr.To("false")},
+		{name: "true", value: ptr.To("true"), enabled: true},
+		{name: "invalid", value: ptr.To("invalid")},
+		{name: "numeric", value: ptr.To("1")},
+		{name: "uppercase", value: ptr.To("TRUE")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AUTHORINO_ENABLE_LOGGING_FIELDS", "")
+			if tc.value == nil {
+				if err := os.Unsetenv("AUTHORINO_ENABLE_LOGGING_FIELDS"); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				t.Setenv("AUTHORINO_ENABLE_LOGGING_FIELDS", *tc.value)
+			}
+			for _, initial := range []map[string]any{
+				{},
+				{"spec": map[string]any{"enableLoggingFields": true, "loggingFieldsMaxValueBytes": int64(4096)}},
+				{"spec": map[string]any{"enableLoggingFields": false}},
+			} {
+				authorino := &unstructured.Unstructured{Object: initial}
+				for range 2 {
+					if err := configureAuthorinoLoggingFields(authorino); err != nil {
+						t.Fatal(err)
+					}
+					enabled, found, err := unstructured.NestedBool(authorino.Object, "spec", "enableLoggingFields")
+					if err != nil || !found || enabled != tc.enabled {
+						t.Fatalf("expected enableLoggingFields=%v, got %v (found=%v, err=%v)", tc.enabled, enabled, found, err)
+					}
+				}
+				if limit, found, err := unstructured.NestedInt64(authorino.Object, "spec", "loggingFieldsMaxValueBytes"); err != nil || (found && limit != 4096) {
+					t.Fatalf("unexpected value limit: %d (found=%v, err=%v)", limit, found, err)
+				}
+			}
+		})
+	}
+}
 
 func TestBuildTLSPatch(t *testing.T) {
 	ciphers := []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}

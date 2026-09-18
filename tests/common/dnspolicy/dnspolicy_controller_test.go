@@ -33,7 +33,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("DNSPolicy controller", Labels{"dnspolicy"}, func() {
+var _ = Describe("DNSPolicy controller", Labels{"common", "dnspolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(1 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

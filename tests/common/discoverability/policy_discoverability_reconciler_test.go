@@ -31,7 +31,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Policy discoverability reconciler", Labels{"discoverability"}, func() {
+var _ = Describe("Policy discoverability reconciler", Labels{"common", "discoverability"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

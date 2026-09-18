@@ -85,6 +85,7 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 		--trace \
 		--race \
 		--output-interceptor-mode=none \
+		--label-filter='!mcp-gateway' \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/istio/...
 
 test-envoygateway-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI and EnvoyGateway installed.

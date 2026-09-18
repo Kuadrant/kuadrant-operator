@@ -78,6 +78,9 @@ jobs:
             - containerPort: 30080 # mcp-gateway (standard)
               hostPort: 8001
               protocol: TCP
+            - containerPort: 30081 # Keycloak HTTPS
+              hostPort: 8002
+              protocol: TCP
             - containerPort: 30082 # mcp-gateway HTTPS
               hostPort: 8009
               protocol: TCP
@@ -260,11 +263,11 @@ jobs:
           kubectl apply -f mcp-gateway/config/istio/gateway/namespace.yaml
           make -C mcp-gateway \
             KIND_VERSION=v0.31.0 \
-            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
             TEST_SERVER_IMAGE_SOURCE=build \
             deploy-tls-test-server
           make -C mcp-gateway \
-            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
             deploy-gateway
           make yq
           export PATH="$GITHUB_WORKSPACE/bin:$PATH"
@@ -286,7 +289,7 @@ jobs:
             > "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
           kubectl apply -f "$RUNNER_TEMP/mcp-gateway-fixture.yaml"
           make -C mcp-gateway \
-            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
             E2E_DOMAIN=127-0-0-1.sslip.io \
             GATEWAY_CLASS_NAME=istio \
             E2E_PLATFORM=kind \
@@ -422,11 +425,12 @@ jobs:
         run: |
           make -C mcp-gateway \
             KIND_VERSION=v0.31.0 \
-            KIND_CLUSTER_NAME=kuadrant-mcp-nightly \
+            KIND_CLUSTER_NAME="$KIND_CLUSTER_NAME" \
             TEST_SERVER_IMAGE_SOURCE=build \
             deploy-test-servers-ci
           kubectl wait --for=condition=Available deployment --all \
             -n mcp-test --timeout=5m
+
 
 
       - name: Run MCP Gateway E2E suite
@@ -447,6 +451,135 @@ jobs:
           GATEWAY_CLASS_NAME="$GATEWAY_CLASS_NAME" \
           make -C mcp-gateway test-e2e-ci-full E2E_PROCS=4 \
             2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/e2e.log"
+      - name: Prepare MCP AuthPolicy fixtures
+        run: |
+          kubectl create namespace keycloak --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f mcp-gateway/config/keycloak/realm-import.yaml
+          kubectl apply -f mcp-gateway/config/keycloak/deployment.yaml
+          kubectl rollout status deployment/keycloak \
+            -n keycloak --timeout=5m
+
+          kubectl patch gateway/mcp-gateway -n gateway-system \
+            --type=json \
+            -p "$(cat mcp-gateway/config/keycloak/patch-gateway.json)"
+          kubectl apply -f mcp-gateway/config/keycloak/httproute.yaml
+          kubectl apply -f mcp-gateway/config/keycloak/certificate.yaml
+
+          for attempt in $(seq 1 150); do
+            if ca_data="$(kubectl get secret mcp-gateway-keycloak-cert \
+              -n gateway-system -o jsonpath='{.data.ca\.crt}' 2>/dev/null)" &&
+              [[ -n "$ca_data" ]]; then
+              break
+            fi
+            if (( attempt == 150 )); then
+              echo "Timed out waiting for mcp-gateway-keycloak-cert" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          gateway_ip="$(kubectl get gateway/mcp-gateway -n gateway-system \
+            -o jsonpath='{.status.addresses[0].value}')"
+          if [[ -z "$gateway_ip" ]]; then
+            echo "Gateway has no status address" >&2
+            exit 1
+          fi
+          docker exec -e "GATEWAY_IP=$gateway_ip" \
+            "${KIND_CLUSTER_NAME}-control-plane" \
+            sh -c 'grep -Fq "keycloak.127-0-0-1.sslip.io" /etc/hosts ||
+              echo "$GATEWAY_IP keycloak.127-0-0-1.sslip.io" >> /etc/hosts'
+
+          make yq
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          kubectl get secret private-ca-keypair -n cert-manager \
+            -o jsonpath='{.data.ca\.crt}' | base64 --decode \
+            > "$RUNNER_TEMP/gateway-ca.crt"
+          test -s "$RUNNER_TEMP/gateway-ca.crt"
+          kubectl create secret generic gateway-ca-bundle \
+            -n kuadrant-system \
+            --from-file=ca.crt="$RUNNER_TEMP/gateway-ca.crt" \
+            --dry-run=client -o yaml \
+            > "$RUNNER_TEMP/gateway-ca-bundle.yaml"
+          yq eval \
+            '.metadata.labels."mcp.kuadrant.io/secret" = "true"' \
+            -i "$RUNNER_TEMP/gateway-ca-bundle.yaml"
+          kubectl apply -f "$RUNNER_TEMP/gateway-ca-bundle.yaml"
+
+          yq eval '.spec.from[0].namespace = "kuadrant-system"' \
+            mcp-gateway/config/istio/gateway/referencegrant.yaml \
+            > "$RUNNER_TEMP/mcp-gateway-referencegrant.yaml"
+          kubectl apply -f "$RUNNER_TEMP/mcp-gateway-referencegrant.yaml"
+          kubectl apply -f - <<'EOF'
+          apiVersion: mcp.kuadrant.io/v1
+          kind: MCPGatewayExtension
+          metadata:
+            name: mcp-gateway-extension
+            namespace: kuadrant-system
+          spec:
+            caCertBundleRef:
+              name: gateway-ca-bundle
+              key: ca.crt
+            targetRef:
+              group: gateway.networking.k8s.io
+              kind: Gateway
+              name: mcp-gateway
+              namespace: gateway-system
+              sectionName: mcp-tls
+          EOF
+          kubectl wait --for=condition=Ready \
+            mcpgatewayextension/mcp-gateway-extension \
+            -n kuadrant-system --timeout=10m
+          kubectl wait --for=condition=Available \
+            deployment/mcp-gateway -n kuadrant-system --timeout=5m
+
+          public_key_fixture="$RUNNER_TEMP/trusted-header-public-key.yaml"
+          sed 's/namespace: mcp-system/namespace: kuadrant-system/' \
+            mcp-gateway/config/samples/oauth-token-exchange/trusted-header-public-key.yaml \
+            > "$public_key_fixture"
+          kubectl apply -f "$public_key_fixture"
+          kubectl apply -n kuadrant-system \
+            -f mcp-gateway/config/samples/oauth-token-exchange/trusted-headers-private-key.yaml
+
+          auth_policy_fixture="$RUNNER_TEMP/mcp-auth-policy.yaml"
+          sed 's/namespace: mcp-system/namespace: kuadrant-system/' \
+            mcp-gateway/config/e2e/auth/mcp-auth-policy.yaml \
+            > "$auth_policy_fixture"
+          kubectl apply -f "$auth_policy_fixture"
+          kubectl apply -f mcp-gateway/config/e2e/auth/mcps-auth-policy.yaml
+
+          mkdir -p mcp-gateway/out/certs
+          kubectl get secret mcp-gateway-keycloak-cert -n gateway-system \
+            -o jsonpath='{.data.ca\.crt}' | base64 --decode \
+            > mcp-gateway/out/certs/ca.crt
+          test -s mcp-gateway/out/certs/ca.crt
+          (cd mcp-gateway && ./utils/patch-authorino-to-keycloak.sh kuadrant-system)
+
+          for policy in mcp-auth-policy mcps-auth-policy; do
+            policy_namespace=kuadrant-system
+            if [[ "$policy" == "mcps-auth-policy" ]]; then
+              policy_namespace=gateway-system
+            fi
+            kubectl wait --for=condition=Accepted \
+              "authpolicy/$policy" -n "$policy_namespace" --timeout=5m
+            kubectl wait --for=condition=Enforced \
+              "authpolicy/$policy" -n "$policy_namespace" --timeout=5m
+          done
+
+      - name: Run operator MCP AuthPolicy E2E
+        env:
+          MCP_AUTH_E2E: "true"
+          MCP_AUTH_GATEWAY_URL: https://mcp.mcp-gateway.local:8009/mcp
+          MCP_AUTH_KEYCLOAK_TOKEN_URL: https://keycloak.127-0-0-1.sslip.io:8002/realms/mcp/protocol/openid-connect/token
+          MCP_AUTH_NAMESPACE: kuadrant-system
+          MCP_AUTH_TEST_SERVER_NAMESPACE: mcp-test
+          GATEWAYAPI_PROVIDER: istio
+        run: |
+          mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
+          go test -tags=integration,mcp_auth_e2e ./tests/istio \
+            -run TestAPIs \
+            -ginkgo.focus='MCP Gateway AuthPolicy integration' \
+            -timeout 15m \
+            2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/operator-mcp-auth-e2e.log"
 
       - name: Collect diagnostics on failure
         if: failure()
@@ -459,6 +592,9 @@ jobs:
             kubectl get pods,deployments,gateways,httproutes -A -o wide || true
             kubectl get kuadrantcontrolplane default -o yaml || true
             kubectl get mcpgatewayextensions,mcpserverregistrations -A -o yaml || true
+            kubectl get authpolicies -A -o yaml || true
+            kubectl get authorino -A -o yaml || true
+            kubectl logs -n kuadrant-system deployment/authorino --tail=200 || true
             kubectl cluster-info dump || true
           } 2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/diagnostics.log"
 

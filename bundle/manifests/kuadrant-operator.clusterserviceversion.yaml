@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-09-11T07:04:59Z"
+    createdAt: "2026-09-15T15:36:46Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.42.3
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -237,18 +237,6 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - kind: APIKeyApproval
-      name: apikeyapprovals.devportal.kuadrant.io
-      version: v1alpha1
-    - kind: APIKeyRequest
-      name: apikeyrequests.devportal.kuadrant.io
-      version: v1alpha1
-    - kind: APIKey
-      name: apikeys.devportal.kuadrant.io
-      version: v1alpha1
-    - kind: APIProduct
-      name: apiproducts.devportal.kuadrant.io
-      version: v1alpha1
     - description: AuthPolicy enables authentication and authorization for service
         workloads in a Gateway API network
       displayName: AuthPolicy
@@ -306,100 +294,6 @@ spec:
         - apiGroups:
           - ""
           resources:
-          - secrets
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - devportal.kuadrant.io
-          resources:
-          - apikeyapprovals
-          - apikeyrequests
-          - apiproducts
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - devportal.kuadrant.io
-          resources:
-          - apikeyapprovals/status
-          - apikeyrequests/status
-          - apikeys/status
-          - apiproducts/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - devportal.kuadrant.io
-          resources:
-          - apikeyrequests/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - devportal.kuadrant.io
-          resources:
-          - apikeys
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - extensions.kuadrant.io
-          resources:
-          - planpolicies
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - extensions.kuadrant.io
-          resources:
-          - planpolicies/status
-          verbs:
-          - get
-        - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - httproutes
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - httproutes/status
-          verbs:
-          - get
-        - apiGroups:
-          - kuadrant.io
-          resources:
-          - authpolicies
-          - kuadrants
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - kuadrant.io
-          resources:
-          - authpolicies/status
-          verbs:
-          - get
-        serviceAccountName: developer-portal-controller-manager
-      - rules:
-        - apiGroups:
-          - ""
-          resources:
           - configmaps
           - leases
           - serviceaccounts
@@ -439,6 +333,10 @@ spec:
         - apiGroups:
           - apiextensions.k8s.io
           resourceNames:
+          - apikeyapprovals.devportal.kuadrant.io
+          - apikeyrequests.devportal.kuadrant.io
+          - apikeys.devportal.kuadrant.io
+          - apiproducts.devportal.kuadrant.io
           - authconfigs.authorino.kuadrant.io
           - authorinos.operator.authorino.kuadrant.io
           - dnshealthcheckprobes.kuadrant.io
@@ -778,6 +676,7 @@ spec:
           - rbac.authorization.k8s.io
           resourceNames:
           - authorino-operator-manager
+          - developer-portal-controller-manager-rolebinding
           - dns-operator-manager-rolebinding
           - dns-operator-remote-cluster-rolebinding
           - limitador-operator-manager-rolebinding
@@ -805,6 +704,7 @@ spec:
           - authorino-manager-role
           - authorino-operator
           - authorino-operator-manager
+          - developer-portal-controller-manager-role
           - dns-operator-manager-role
           - dns-operator-remote-cluster-role
           - limitador-operator-controller-manager
@@ -947,39 +847,6 @@ spec:
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
       permissions:
-      - rules:
-        - apiGroups:
-          - ""
-          resources:
-          - configmaps
-          verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-        - apiGroups:
-          - coordination.k8s.io
-          resources:
-          - leases
-          verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-        - apiGroups:
-          - ""
-          resources:
-          - events
-          verbs:
-          - create
-          - patch
-        serviceAccountName: developer-portal-controller-manager
       - rules:
         - apiGroups:
           - ""

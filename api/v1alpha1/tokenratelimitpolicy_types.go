@@ -20,6 +20,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -222,8 +223,37 @@ type TokenLimit struct {
 	// +optional
 	Counters []kuadrantv1.Counter `json:"counters,omitempty"`
 
+	// Reservation configures token reservation for this limit. It only takes
+	// effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+	// an estimated token amount is reserved on request arrival and committed
+	// with the actual usage once the upstream responds. When omitted, defaults
+	// are generated (amount 0, meaning no capacity is reserved, and the route
+	// backendRequest timeout for ttl).
+	// +optional
+	Reservation *Reservation `json:"reservation,omitempty"`
+
 	// Source stores the locator of the policy where the limit is originally defined (internal use)
 	Source string `json:"-"`
+}
+
+// Reservation configures token reservation behavior for a TokenLimit, used when
+// the Kuadrant CR is in Reservation mode (see RFC 0021).
+type Reservation struct {
+	// Amount is either a literal integer number of tokens to reserve on request
+	// arrival, or a CEL expression evaluating to the number of tokens (uint).
+	// Defaults to 0 when omitted, which reserves no capacity: Limitador
+	// short-circuits amount-0 reservations, so this limit behaves like
+	// CheckReport unless amount is set explicitly to a non-zero estimate.
+	// +optional
+	// +kubebuilder:validation:XIntOrString
+	Amount *intstr.IntOrString `json:"amount,omitempty"`
+
+	// TTL is a CEL expression evaluating to the maximum duration
+	// (google.protobuf.Duration) the reservation is held before it expires.
+	// When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+	// is used.
+	// +optional
+	TTL *kuadrantv1.Expression `json:"ttl,omitempty"`
 }
 
 func (l TokenLimit) CountersAsStringList() []string {

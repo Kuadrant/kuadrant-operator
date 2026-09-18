@@ -4,8 +4,6 @@ package istio_test
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"reflect"
 	"time"
 
@@ -17,8 +15,6 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"google.golang.org/protobuf/types/known/structpb"
-	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiotypev1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -59,69 +55,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 		}
 	}
 
-	extractWasmConfigFromEnvoyFilter := func(ef *istioclientgonetworkingv1alpha3.EnvoyFilter) (*wasm.Config, error) {
-		if len(ef.Spec.ConfigPatches) == 0 {
-			return nil, fmt.Errorf("no config patches found in EnvoyFilter")
-		}
-
-		// Find the wasm HTTP filter patch
-		var patchValue *structpb.Struct
-		for _, patch := range ef.Spec.ConfigPatches {
-			if patch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
-				patchValue = patch.Patch.Value
-				break
-			}
-		}
-
-		if patchValue == nil {
-			return nil, fmt.Errorf("no HTTP_FILTER patch found in EnvoyFilter config patches")
-		}
-
-		// Marshal to JSON to navigate the nested structure
-		valueJSON, err := patchValue.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-
-		// Unmarshal to a map to extract the wasm configuration
-		var filterConfig map[string]any
-		if err := json.Unmarshal(valueJSON, &filterConfig); err != nil {
-			return nil, err
-		}
-
-		// Navigate: typed_config -> value -> config -> configuration (JSON string)
-		typedConfig, ok := filterConfig["typed_config"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing typed_config in filter configuration")
-		}
-
-		value, ok := typedConfig["value"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing value in typed_config")
-		}
-
-		config, ok := value["config"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing config in typed_config.value")
-		}
-
-		configuration, ok := config["configuration"].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("missing configuration in config")
-		}
-
-		configJSON, ok := configuration["value"].(string)
-		if !ok {
-			return nil, fmt.Errorf("missing value in configuration")
-		}
-
-		var wasmConfig wasm.Config
-		if err := json.Unmarshal([]byte(configJSON), &wasmConfig); err != nil {
-			return nil, err
-		}
-
-		return &wasmConfig, nil
-	}
+	// extractWasmConfigFromEnvoyFilter is defined in tokenratelimitpolicy_test.go (same package).
 
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
@@ -253,6 +187,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 					},
 				},
 				ActionSets: []wasm.ActionSet{
@@ -822,6 +772,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+					},
 				},
 				ActionSets: []wasm.ActionSet{
 					{
@@ -1077,6 +1043,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+						},
 					},
 					ActionSets: []wasm.ActionSet{
 						{
@@ -1315,6 +1297,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+						},
 					},
 					ActionSets: []wasm.ActionSet{
 						{
@@ -1470,6 +1468,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 						},
 					},
 					ActionSets: []wasm.ActionSet{
@@ -1701,6 +1715,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+						},
 					},
 					ActionSets: []wasm.ActionSet{
 						{
@@ -1819,6 +1849,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 						},
 					},
 					ActionSets: []wasm.ActionSet{
@@ -2025,6 +2071,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+						},
 					},
 					ActionSets: []wasm.ActionSet{
 						{
@@ -2161,6 +2223,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 						},
 					},
 					ActionSets: []wasm.ActionSet{
@@ -2403,6 +2481,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+						},
 					},
 					ActionSets: []wasm.ActionSet{
 						{
@@ -2536,6 +2630,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 							GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+						},
+						wasm.RateLimitReserveServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+						},
+						wasm.RateLimitCommitServiceName: {
+							Type:        wasm.DynamicServiceType,
+							Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+							FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+							Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+							GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+							GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 						},
 					},
 					ActionSets: []wasm.ActionSet{
@@ -2737,6 +2847,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+					},
 				},
 				ActionSets: []wasm.ActionSet{
 					{
@@ -2842,6 +2968,22 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 					},
 				},
 				ActionSets: []wasm.ActionSet{

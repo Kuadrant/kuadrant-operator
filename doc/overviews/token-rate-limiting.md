@@ -24,6 +24,36 @@ This approach ensures accurate usage-based rate limiting where limits are enforc
 
 **Important**: TokenRateLimitPolicy supports both non-streaming and streaming OpenAI-style API responses. For streaming, the request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event. Only OpenAI-style completions responses are supported today — this includes `/v1/chat/completions` and `/v1/completions`, and any backend implementing the OpenAI-compatible API such as vLLM and kServe. Other provider formats (e.g. Anthropic, Google Gemini) are not yet parsed; see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
 
+### Enforcement modes
+
+Because the real token cost of a request is only known *after* the upstream responds, the gateway has to decide what to do on the way in. This is controlled cluster-wide by the Kuadrant CR field `spec.tokenRateLimiting.mode`, which applies to every TokenRateLimitPolicy in the cluster:
+
+- **`Reservation`** (default): On request arrival the gateway *reserves* an estimated token amount from Limitador. If the reservation would exceed the limit, the request is rejected with `429` before it ever reaches the upstream. Once the upstream responds, the gateway *commits* the actual `usage.total_tokens` and releases the unused portion of the reservation. This closes the race window where many concurrent requests could each pass a zero-cost check before any of them reports usage. The reservation is designed per RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md), and the reserved amount / hold time are tuned per limit with [`reservation`](../reference/tokenratelimitpolicy.md#reservation).
+
+- **`CheckReport`**: On request arrival the gateway checks the limit with `hits_addend=0` (does the counter already exceed the limit?) and, on response, reports the actual usage. Two requests arriving together can both pass the check before either reports, so an already-near-limit counter can be briefly overshot by the cost of the in-flight requests.
+
+Set the mode on the Kuadrant CR:
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec:
+  tokenRateLimiting:
+    mode: Reservation   # or CheckReport
+```
+
+When `spec.tokenRateLimiting` is omitted the mode defaults to `Reservation`. The per-limit `reservation` block on a TokenRateLimitPolicy only has an effect in `Reservation` mode; it is ignored under `CheckReport`.
+
+**Important: `reservation.amount` defaults to `0`, which reserves no capacity.** Since `Reservation` is the cluster-wide default mode, every existing TokenRateLimitPolicy — including ones written before reservations existed — starts running in `Reservation` mode without any code changes. Defaulting `amount` to `0` makes that transition behavior-neutral: `0` is a documented Limitador short-circuit that skips holding capacity entirely, so a limit with no `reservation` block behaves exactly like `CheckReport` — no protection against the concurrent-request race that RFC 0021 exists to close. **To actually get that protection, set `reservation.amount` explicitly** to a meaningful, non-zero estimate of tokens consumed per request (see [`reservation`](../reference/tokenratelimitpolicy.md#reservation)).
+
+#### Handling reserve and upstream failures
+
+- If no reservation ends up being held — whether because the reserve call itself failed (e.g. a gRPC error or timeout talking to Limitador) or because Limitador's response simply didn't include a reservation id — the request still proceeds to the upstream. Once the response is parsed for the actual token count, a commit is still sent regardless, without a reservation id.
+- If a reservation was held but the upstream call fails, times out, or its response can't be parsed for token usage, the reservation is automatically released with a commit sent with `amount` `0` — reclaiming capacity without waiting for the counter window to roll over.
+
 ### The TokenRateLimitPolicy custom resource
 
 #### Overview
@@ -38,6 +68,7 @@ Each limit definition includes:
 - A set of rate limits (`spec.limits.<limit-name>.rates[]`)
 - (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
 - (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
+- (Optional) Reservation tuning for the limit (`spec.limits.<limit-name>.reservation`), used only in [`Reservation` mode](#enforcement-modes)
 
 The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
 

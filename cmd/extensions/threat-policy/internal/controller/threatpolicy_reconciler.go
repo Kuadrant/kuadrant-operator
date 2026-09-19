@@ -119,7 +119,7 @@ func (r *ThreatPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha
 	pipeline := kuadrantCtx.NewPipeline(pol)
 
 	if err := pipeline.OnHTTPRequest(
-		types.GRPCMethodAction{
+		types.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},

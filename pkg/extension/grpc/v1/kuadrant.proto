@@ -136,6 +136,12 @@ message FailAction {
   string log_message = 1;
 }
 
+message StoreAction {
+  string path = 1;
+  string value = 2; // CEL expression
+  bool export_to_host = 3;
+}
+
 message ActionEntry {
   Phase phase = 1;
   string predicate = 2; // CEL predicate — if false, skip this action
@@ -144,6 +150,7 @@ message ActionEntry {
     DenyAction deny = 4;
     AddHeadersAction add_headers = 5;
     FailAction fail = 6;
+    StoreAction store = 7;
   }
 }
 

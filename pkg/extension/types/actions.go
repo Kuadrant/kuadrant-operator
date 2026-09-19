@@ -133,6 +133,35 @@ func (a AddHeadersAction) PopulateProtobuf(entry *extpb.ActionEntry) {
 	}}
 }
 
+type StoreAction struct {
+	Predicate    string // CEL — if true, store the value
+	Path         string
+	Value        string // CEL expression
+	ExportToHost bool
+}
+
+func (a StoreAction) sealedAction() {}
+
+func (a StoreAction) CelExpressions() []string {
+	var exprs []string
+	if a.Predicate != "" {
+		exprs = append(exprs, a.Predicate)
+	}
+	if a.Value != "" {
+		exprs = append(exprs, a.Value)
+	}
+	return exprs
+}
+
+func (a StoreAction) PopulateProtobuf(entry *extpb.ActionEntry) {
+	entry.Predicate = a.Predicate
+	entry.Action = &extpb.ActionEntry_Store{Store: &extpb.StoreAction{
+		Path:         a.Path,
+		Value:        a.Value,
+		ExportToHost: a.ExportToHost,
+	}}
+}
+
 // Pipeline provides a builder for composing ordered actions on HTTP request
 // and response phases. Actions accumulate locally with immediate ordering
 // validation. Commit sends all actions atomically to the operator.

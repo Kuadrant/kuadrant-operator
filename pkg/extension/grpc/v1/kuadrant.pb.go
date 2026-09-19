@@ -1035,6 +1035,66 @@ func (x *FailAction) GetLogMessage() string {
 	return ""
 }
 
+type StoreAction struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"` // CEL expression
+	ExportToHost  bool                   `protobuf:"varint,3,opt,name=export_to_host,json=exportToHost,proto3" json:"export_to_host,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StoreAction) Reset() {
+	*x = StoreAction{}
+	mi := &file_v1_kuadrant_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StoreAction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StoreAction) ProtoMessage() {}
+
+func (x *StoreAction) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_kuadrant_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StoreAction.ProtoReflect.Descriptor instead.
+func (*StoreAction) Descriptor() ([]byte, []int) {
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *StoreAction) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *StoreAction) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *StoreAction) GetExportToHost() bool {
+	if x != nil {
+		return x.ExportToHost
+	}
+	return false
+}
+
 type ActionEntry struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Phase     Phase                  `protobuf:"varint,1,opt,name=phase,proto3,enum=kuadrant.v1.Phase" json:"phase,omitempty"`
@@ -1045,6 +1105,7 @@ type ActionEntry struct {
 	//	*ActionEntry_Deny
 	//	*ActionEntry_AddHeaders
 	//	*ActionEntry_Fail
+	//	*ActionEntry_Store
 	Action        isActionEntry_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1052,7 +1113,7 @@ type ActionEntry struct {
 
 func (x *ActionEntry) Reset() {
 	*x = ActionEntry{}
-	mi := &file_v1_kuadrant_proto_msgTypes[17]
+	mi := &file_v1_kuadrant_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1064,7 +1125,7 @@ func (x *ActionEntry) String() string {
 func (*ActionEntry) ProtoMessage() {}
 
 func (x *ActionEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_kuadrant_proto_msgTypes[17]
+	mi := &file_v1_kuadrant_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1077,7 +1138,7 @@ func (x *ActionEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionEntry.ProtoReflect.Descriptor instead.
 func (*ActionEntry) Descriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{17}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ActionEntry) GetPhase() Phase {
@@ -1137,6 +1198,15 @@ func (x *ActionEntry) GetFail() *FailAction {
 	return nil
 }
 
+func (x *ActionEntry) GetStore() *StoreAction {
+	if x != nil {
+		if x, ok := x.Action.(*ActionEntry_Store); ok {
+			return x.Store
+		}
+	}
+	return nil
+}
+
 type isActionEntry_Action interface {
 	isActionEntry_Action()
 }
@@ -1157,6 +1227,10 @@ type ActionEntry_Fail struct {
 	Fail *FailAction `protobuf:"bytes,6,opt,name=fail,proto3,oneof"`
 }
 
+type ActionEntry_Store struct {
+	Store *StoreAction `protobuf:"bytes,7,opt,name=store,proto3,oneof"`
+}
+
 func (*ActionEntry_Grpc) isActionEntry_Action() {}
 
 func (*ActionEntry_Deny) isActionEntry_Action() {}
@@ -1164,6 +1238,8 @@ func (*ActionEntry_Deny) isActionEntry_Action() {}
 func (*ActionEntry_AddHeaders) isActionEntry_Action() {}
 
 func (*ActionEntry_Fail) isActionEntry_Action() {}
+
+func (*ActionEntry_Store) isActionEntry_Action() {}
 
 // PipelineCommitRequest atomically replaces all pipeline actions for a policy.
 type PipelineCommitRequest struct {
@@ -1176,7 +1252,7 @@ type PipelineCommitRequest struct {
 
 func (x *PipelineCommitRequest) Reset() {
 	*x = PipelineCommitRequest{}
-	mi := &file_v1_kuadrant_proto_msgTypes[18]
+	mi := &file_v1_kuadrant_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1188,7 +1264,7 @@ func (x *PipelineCommitRequest) String() string {
 func (*PipelineCommitRequest) ProtoMessage() {}
 
 func (x *PipelineCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_kuadrant_proto_msgTypes[18]
+	mi := &file_v1_kuadrant_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1201,7 +1277,7 @@ func (x *PipelineCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PipelineCommitRequest.ProtoReflect.Descriptor instead.
 func (*PipelineCommitRequest) Descriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{18}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PipelineCommitRequest) GetPolicy() *Policy {
@@ -1288,7 +1364,11 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\n" +
 	"FailAction\x12\x1f\n" +
 	"\vlog_message\x18\x01 \x01(\tR\n" +
-	"logMessage\"\xae\x02\n" +
+	"logMessage\"]\n" +
+	"\vStoreAction\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12$\n" +
+	"\x0eexport_to_host\x18\x03 \x01(\bR\fexportToHost\"\xe0\x02\n" +
 	"\vActionEntry\x12(\n" +
 	"\x05phase\x18\x01 \x01(\x0e2\x12.kuadrant.v1.PhaseR\x05phase\x12\x1c\n" +
 	"\tpredicate\x18\x02 \x01(\tR\tpredicate\x12-\n" +
@@ -1296,7 +1376,8 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x04deny\x18\x04 \x01(\v2\x17.kuadrant.v1.DenyActionH\x00R\x04deny\x12@\n" +
 	"\vadd_headers\x18\x05 \x01(\v2\x1d.kuadrant.v1.AddHeadersActionH\x00R\n" +
 	"addHeaders\x12-\n" +
-	"\x04fail\x18\x06 \x01(\v2\x17.kuadrant.v1.FailActionH\x00R\x04failB\b\n" +
+	"\x04fail\x18\x06 \x01(\v2\x17.kuadrant.v1.FailActionH\x00R\x04fail\x120\n" +
+	"\x05store\x18\a \x01(\v2\x18.kuadrant.v1.StoreActionH\x00R\x05storeB\b\n" +
 	"\x06action\"x\n" +
 	"\x15PipelineCommitRequest\x12+\n" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x122\n" +
@@ -1333,7 +1414,7 @@ func file_v1_kuadrant_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_kuadrant_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_v1_kuadrant_proto_goTypes = []any{
 	(Domain)(0),                         // 0: kuadrant.v1.Domain
 	(Phase)(0),                          // 1: kuadrant.v1.Phase
@@ -1354,58 +1435,60 @@ var file_v1_kuadrant_proto_goTypes = []any{
 	(*DenyAction)(nil),                  // 16: kuadrant.v1.DenyAction
 	(*AddHeadersAction)(nil),            // 17: kuadrant.v1.AddHeadersAction
 	(*FailAction)(nil),                  // 18: kuadrant.v1.FailAction
-	(*ActionEntry)(nil),                 // 19: kuadrant.v1.ActionEntry
-	(*PipelineCommitRequest)(nil),       // 20: kuadrant.v1.PipelineCommitRequest
-	(*timestamp.Timestamp)(nil),         // 21: google.protobuf.Timestamp
-	(*Metadata)(nil),                    // 22: kuadrant.v1.Metadata
-	(*Policy)(nil),                      // 23: kuadrant.v1.Policy
-	(*v1alpha1.Value)(nil),              // 24: google.api.expr.v1alpha1.Value
-	(*status.Status)(nil),               // 25: google.rpc.Status
-	(*empty.Empty)(nil),                 // 26: google.protobuf.Empty
+	(*StoreAction)(nil),                 // 19: kuadrant.v1.StoreAction
+	(*ActionEntry)(nil),                 // 20: kuadrant.v1.ActionEntry
+	(*PipelineCommitRequest)(nil),       // 21: kuadrant.v1.PipelineCommitRequest
+	(*timestamp.Timestamp)(nil),         // 22: google.protobuf.Timestamp
+	(*Metadata)(nil),                    // 23: kuadrant.v1.Metadata
+	(*Policy)(nil),                      // 24: kuadrant.v1.Policy
+	(*v1alpha1.Value)(nil),              // 25: google.api.expr.v1alpha1.Value
+	(*status.Status)(nil),               // 26: google.rpc.Status
+	(*empty.Empty)(nil),                 // 27: google.protobuf.Empty
 }
 var file_v1_kuadrant_proto_depIdxs = []int32{
-	21, // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
-	21, // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
-	22, // 2: kuadrant.v1.HandshakeRequest.owned_policies:type_name -> kuadrant.v1.Metadata
-	23, // 3: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
-	24, // 4: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
+	22, // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
+	22, // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
+	23, // 2: kuadrant.v1.HandshakeRequest.owned_policies:type_name -> kuadrant.v1.Metadata
+	24, // 3: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
+	25, // 4: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
 	10, // 5: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
-	25, // 6: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
-	22, // 7: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
-	23, // 8: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
+	26, // 6: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
+	23, // 7: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
+	24, // 8: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
 	0,  // 9: kuadrant.v1.RegisterMutatorRequest.domain:type_name -> kuadrant.v1.Domain
-	23, // 10: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
-	23, // 11: kuadrant.v1.RegisterActionMethodRequest.policy:type_name -> kuadrant.v1.Policy
+	24, // 10: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
+	24, // 11: kuadrant.v1.RegisterActionMethodRequest.policy:type_name -> kuadrant.v1.Policy
 	1,  // 12: kuadrant.v1.ActionEntry.phase:type_name -> kuadrant.v1.Phase
 	15, // 13: kuadrant.v1.ActionEntry.grpc:type_name -> kuadrant.v1.GrpcAction
 	16, // 14: kuadrant.v1.ActionEntry.deny:type_name -> kuadrant.v1.DenyAction
 	17, // 15: kuadrant.v1.ActionEntry.add_headers:type_name -> kuadrant.v1.AddHeadersAction
 	18, // 16: kuadrant.v1.ActionEntry.fail:type_name -> kuadrant.v1.FailAction
-	23, // 17: kuadrant.v1.PipelineCommitRequest.policy:type_name -> kuadrant.v1.Policy
-	19, // 18: kuadrant.v1.PipelineCommitRequest.actions:type_name -> kuadrant.v1.ActionEntry
-	4,  // 19: kuadrant.v1.ExtensionService.Handshake:input_type -> kuadrant.v1.HandshakeRequest
-	2,  // 20: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
-	26, // 21: kuadrant.v1.ExtensionService.ReleaseSession:input_type -> google.protobuf.Empty
-	9,  // 22: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
-	6,  // 23: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
-	11, // 24: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
-	12, // 25: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
-	14, // 26: kuadrant.v1.ExtensionService.RegisterActionMethod:input_type -> kuadrant.v1.RegisterActionMethodRequest
-	20, // 27: kuadrant.v1.ExtensionService.PipelineCommit:input_type -> kuadrant.v1.PipelineCommitRequest
-	5,  // 28: kuadrant.v1.ExtensionService.Handshake:output_type -> kuadrant.v1.HandshakeResponse
-	3,  // 29: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
-	26, // 30: kuadrant.v1.ExtensionService.ReleaseSession:output_type -> google.protobuf.Empty
-	8,  // 31: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
-	7,  // 32: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
-	26, // 33: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
-	13, // 34: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
-	26, // 35: kuadrant.v1.ExtensionService.RegisterActionMethod:output_type -> google.protobuf.Empty
-	26, // 36: kuadrant.v1.ExtensionService.PipelineCommit:output_type -> google.protobuf.Empty
-	28, // [28:37] is the sub-list for method output_type
-	19, // [19:28] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	19, // 17: kuadrant.v1.ActionEntry.store:type_name -> kuadrant.v1.StoreAction
+	24, // 18: kuadrant.v1.PipelineCommitRequest.policy:type_name -> kuadrant.v1.Policy
+	20, // 19: kuadrant.v1.PipelineCommitRequest.actions:type_name -> kuadrant.v1.ActionEntry
+	4,  // 20: kuadrant.v1.ExtensionService.Handshake:input_type -> kuadrant.v1.HandshakeRequest
+	2,  // 21: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
+	27, // 22: kuadrant.v1.ExtensionService.ReleaseSession:input_type -> google.protobuf.Empty
+	9,  // 23: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
+	6,  // 24: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
+	11, // 25: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
+	12, // 26: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
+	14, // 27: kuadrant.v1.ExtensionService.RegisterActionMethod:input_type -> kuadrant.v1.RegisterActionMethodRequest
+	21, // 28: kuadrant.v1.ExtensionService.PipelineCommit:input_type -> kuadrant.v1.PipelineCommitRequest
+	5,  // 29: kuadrant.v1.ExtensionService.Handshake:output_type -> kuadrant.v1.HandshakeResponse
+	3,  // 30: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
+	27, // 31: kuadrant.v1.ExtensionService.ReleaseSession:output_type -> google.protobuf.Empty
+	8,  // 32: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
+	7,  // 33: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
+	27, // 34: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
+	13, // 35: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
+	27, // 36: kuadrant.v1.ExtensionService.RegisterActionMethod:output_type -> google.protobuf.Empty
+	27, // 37: kuadrant.v1.ExtensionService.PipelineCommit:output_type -> google.protobuf.Empty
+	29, // [29:38] is the sub-list for method output_type
+	20, // [20:29] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_v1_kuadrant_proto_init() }
@@ -1415,11 +1498,12 @@ func file_v1_kuadrant_proto_init() {
 	}
 	file_v1_common_proto_init()
 	file_v1_policy_proto_init()
-	file_v1_kuadrant_proto_msgTypes[17].OneofWrappers = []any{
+	file_v1_kuadrant_proto_msgTypes[18].OneofWrappers = []any{
 		(*ActionEntry_Grpc)(nil),
 		(*ActionEntry_Deny)(nil),
 		(*ActionEntry_AddHeaders)(nil),
 		(*ActionEntry_Fail)(nil),
+		(*ActionEntry_Store)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1427,7 +1511,7 @@ func file_v1_kuadrant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_kuadrant_proto_rawDesc), len(file_v1_kuadrant_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

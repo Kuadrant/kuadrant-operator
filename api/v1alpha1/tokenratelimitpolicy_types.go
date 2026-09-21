@@ -250,10 +250,12 @@ type DataExtraction struct {
 type ResponseDataExtraction struct {
 	// TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
 	// response body to determine total token usage. The first pointer that resolves to a numeric
-	// value is used.
+	// value is used. Reference tokens may not contain '"' or '\': these are legal, unescaped RFC 6901
+	// characters, but this implementation embeds each pointer as a CEL string literal, so they are
+	// excluded here to avoid ambiguity between JSON Pointer content and CEL/wasm string escaping.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:items:Pattern=`^(/([^/~]|~[01])*)+$`
+	// +kubebuilder:validation:items:Pattern=`^(/([^/~"\\]|~[01])*)+$`
 	// +optional
 	TotalTokens []string `json:"totalTokens,omitempty"`
 }

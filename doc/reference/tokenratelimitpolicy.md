@@ -92,7 +92,7 @@ limits:
 
 | **Field**     | **Type**   | **Required** | **Description**                                                                                                                                                                                       |
 |---------------|------------|:------------:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `totalTokens` | []String   | No           | Ordered list (1-8 items) of JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) expressions evaluated against the response body. The first pointer that resolves to a numeric value is used. If omitted, a built-in default list is used (see [Token Usage Tracking](#token-usage-tracking)) |
+| `totalTokens` | []String   | No           | Ordered list (1-8 items) of JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) expressions evaluated against the response body. The first pointer that resolves to a numeric value is used. Pointers may not contain `"` or `\` characters. If omitted, a built-in default list is used (see [Token Usage Tracking](#token-usage-tracking)) |
 
 ### Rate
 

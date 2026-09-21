@@ -340,11 +340,13 @@ func TestActionSpecBuild_Reserve(t *testing.T) {
 		ConditionalData: []ConditionalData{{
 			Data: []DataType{
 				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "tokenlimit.foo__abcd", Value: "1"}}},
-				{Value: &Static{Static: StaticSpec{Key: "reservation.id", Value: "tokenlimit.foo__abcd"}}},
-				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
-				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "reservation.ttl", Value: `duration("30s")`}}},
 			},
 		}},
+		Reservation: &ReservationSpec{
+			ID:     "tokenlimit.foo__abcd",
+			Amount: "5000",
+			TTL:    `duration("30s")`,
+		},
 	}
 	action := spec.Build()
 
@@ -406,10 +408,12 @@ func TestActionSpecBuild_Commit(t *testing.T) {
 		ConditionalData: []ConditionalData{{
 			Data: []DataType{
 				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "tokenlimit.foo__abcd", Value: "1"}}},
-				{Value: &Static{Static: StaticSpec{Key: "reservation.id", Value: "tokenlimit.foo__abcd"}}},
-				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 			},
 		}},
+		Reservation: &ReservationSpec{
+			ID:           "tokenlimit.foo__abcd",
+			ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
+		},
 	}
 	action := spec.Build()
 
@@ -454,19 +458,16 @@ func TestActionSpecBuild_Commit(t *testing.T) {
 }
 
 func TestActionSpecBuild_Commit_NoActualAmountData(t *testing.T) {
-	// Defensive case: a Commit spec with no reservation.actual_amount known
-	// attr at all (shouldn't happen from the reconciler, which always sets
-	// one, but the builder must not panic and must still gate correctly on
-	// whether a reservation was held).
+	// Defensive case: a Commit spec with no ActualAmount set at all (shouldn't
+	// happen from the reconciler, which always sets one, but the builder must
+	// not panic and must still gate correctly on whether a reservation was held).
 	spec := ActionSpec{
 		ServiceName: RateLimitCommitServiceName,
 		Scope:       "my-scope",
 		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
-		ConditionalData: []ConditionalData{{
-			Data: []DataType{
-				{Value: &Static{Static: StaticSpec{Key: "reservation.id", Value: "tokenlimit.foo__abcd"}}},
-			},
-		}},
+		Reservation: &ReservationSpec{
+			ID: "tokenlimit.foo__abcd",
+		},
 	}
 	action := spec.Build()
 
@@ -965,6 +966,76 @@ func TestBuildActions_TokenLimitHitsAddend(t *testing.T) {
 	}
 	if strings.Contains(reportGrpc.MessageBuilder, "responseBodyJSON") {
 		t.Error("report message should not contain responseBodyJSON after replacement")
+	}
+}
+
+// TestBuildActions_ReservationActualAmount mirrors TestBuildActions_TokenLimitHitsAddend
+// for Reservation mode: Reservation.ActualAmount (not ConditionalData) is where a
+// responseBodyJSON(...) reference lives for Commit, so BuildActions/replaceBodyRefs
+// must hoist and rewrite it there too.
+func TestBuildActions_ReservationActualAmount(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitReserveServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{ID: "tokenlimit.foo__abcd", Amount: "5000"},
+		},
+		{
+			ServiceName: RateLimitCommitServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{
+				ID:           "tokenlimit.foo__abcd",
+				ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
+			},
+		},
+	}
+	actions := BuildActions(specs)
+
+	// Expect: store action + reserve action + commit action
+	if len(actions) != 3 {
+		t.Fatalf("expected 3 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	if store.Path != responseBodyStorePath {
+		t.Errorf("store path = %q, want %q", store.Path, responseBodyStorePath)
+	}
+	expectedValue := `{"total_tokens": responseBodyJSON("/usage/total_tokens")}`
+	if store.Value != expectedValue {
+		t.Errorf("store value = %q, want %q", store.Value, expectedValue)
+	}
+
+	// Reserve action should be unchanged (no body refs in its Reservation data)
+	reserveGrpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if !reserveGrpc.IsGuard {
+		t.Error("reserve action should be a guard")
+	}
+	if strings.Contains(reserveGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("reserve message should not reference responseBodyJSON")
+	}
+
+	// Commit action should reference the store path instead of responseBodyJSON
+	commitGrpc, ok := actions[2].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[2] type = %s, want grpc", actions[2].ActionType())
+	}
+	if commitGrpc.IsGuard {
+		t.Error("commit action should not be a guard")
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(commitGrpc.MessageBuilder, expectedStorePath) {
+		t.Errorf("commit message should contain %q, got:\n%s", expectedStorePath, commitGrpc.MessageBuilder)
+	}
+	if strings.Contains(commitGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("commit message should not contain responseBodyJSON after replacement")
 	}
 }
 

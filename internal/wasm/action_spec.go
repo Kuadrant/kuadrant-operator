@@ -17,6 +17,31 @@ type ActionSpec struct {
 	Sources         []string
 	Bindings        []DataBinding
 	Execution       ExecutionMode
+
+	// Reservation carries Reserve/Commit-only parameters (RFC 0021). Unlike
+	// ratelimit.domain/hits_addend, these never need to be predicate-gated or
+	// merged across limits -- RateLimitReserveServiceName/RateLimitCommitServiceName
+	// are excluded from mergeableServices, so one ActionSpec always corresponds
+	// to exactly one limit -- so a typed field is used instead of the
+	// ConditionalData known-attr convention the mergeable rate-limit services use.
+	Reservation *ReservationSpec
+}
+
+// ReservationSpec carries per-limit reservation parameters for Reserve/Commit
+// actions (RFC 0021).
+type ReservationSpec struct {
+	// ID is a config-time per-limit identifier used to derive the filter-local
+	// store path for the reservation_id (see reservationStorePath).
+	ID string
+	// Amount is the CEL expression evaluating to the number of tokens to
+	// reserve on request arrival (uint).
+	Amount string
+	// TTL is the CEL expression evaluating to the reservation hold duration,
+	// or "" to leave it unset so Limitador applies its own default.
+	TTL string
+	// ActualAmount is the CEL expression evaluating to the actual tokens
+	// consumed, consumed by Commit (e.g. responseBodyJSON("/usage/total_tokens")).
+	ActualAmount string
 }
 
 type DataBinding struct {
@@ -141,6 +166,17 @@ func BuildActions(specs []ActionSpec) []Action {
 				byDirection[ref.Direction][ref.Pointer] = entry
 			}
 		}
+		if spec.Reservation != nil {
+			for _, ref := range extractBodyRefs(spec.Reservation.ActualAmount) {
+				if byDirection[ref.Direction] == nil {
+					byDirection[ref.Direction] = make(map[string]refEntry)
+				}
+				entry := byDirection[ref.Direction][ref.Pointer]
+				entry.ref = ref
+				entry.sources = appendUnique(entry.sources, spec.Sources...)
+				byDirection[ref.Direction][ref.Pointer] = entry
+			}
+		}
 	}
 
 	if len(byDirection) == 0 {
@@ -248,6 +284,19 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 		newBindings[i] = DataBinding{Domain: b.Domain, Field: b.Field, Expression: newExpr}
 	}
 
+	newReservation := s.Reservation
+	if s.Reservation != nil {
+		newActualAmount := s.Reservation.ActualAmount
+		for original, storePath := range replacements {
+			newActualAmount = strings.ReplaceAll(newActualAmount, original, storePath)
+		}
+		if newActualAmount != s.Reservation.ActualAmount {
+			r := *s.Reservation
+			r.ActualAmount = newActualAmount
+			newReservation = &r
+		}
+	}
+
 	return ActionSpec{
 		ServiceName:     s.ServiceName,
 		Scope:           s.Scope,
@@ -256,6 +305,7 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 		Sources:         s.Sources,
 		Bindings:        newBindings,
 		Execution:       s.Execution,
+		Reservation:     newReservation,
 	}
 }
 
@@ -317,8 +367,11 @@ func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label strin
 // returned reservation_id at a per-limit filter-local store path for the paired
 // Commit action to read back.
 func (s ActionSpec) buildReserve() *GrpcAction {
-	id := findReservationAttrCEL(s.ConditionalData, reservationIDAttr)
-	request := buildReserveRequest(s.Scope, s.ConditionalData, s.Bindings)
+	var id string
+	if s.Reservation != nil {
+		id = s.Reservation.ID
+	}
+	request := buildReserveRequest(s.Scope, s.ConditionalData, s.Bindings, s.Reservation)
 	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
 
 	return NewGrpcAction(predicate, reserveResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_reserve").
@@ -345,11 +398,14 @@ func (s ActionSpec) buildReserve() *GrpcAction {
 //   - no reservation, usage parseable: commit with an empty reservation_id,
 //     which Limitador treats like a plain Report (RFC 0021).
 func (s ActionSpec) buildCommit() *GrpcAction {
-	id := findReservationAttrCEL(s.ConditionalData, reservationIDAttr)
+	var id, rawActualAmount string
+	if s.Reservation != nil {
+		id = s.Reservation.ID
+		rawActualAmount = s.Reservation.ActualAmount
+	}
 	storePath := reservationStorePath(id)
 	hasReservation := fmt.Sprintf("has(%s)", storePath)
 
-	rawActualAmount := lookupReservationAttr(s.ConditionalData, reservationActualAmountAttr)
 	amountKnown := "false"
 	if rawActualAmount != "" {
 		amountKnown = fmt.Sprintf("(%s) != null", rawActualAmount)
@@ -652,37 +708,6 @@ func buildAuthOnReply(name string) []Action {
 
 var rateLimitKnownAttrs = [2]string{"ratelimit.domain", "ratelimit.hits_addend"}
 
-// reservation known attrs carry per-limit reservation parameters through the
-// ConditionalData intermediate. They are not emitted as descriptor entries;
-// instead they are consumed by buildReserve/buildCommit:
-//   - reservation.id: config-time per-limit identifier used to derive the
-//     filter-local store path for the reservation_id (see reservationStorePath).
-//   - reservation.amount: tokens to reserve on request arrival (uint).
-//   - reservation.ttl: how long the reservation is held (duration).
-//   - reservation.actual_amount: actual tokens to commit on response (uint).
-const (
-	reservationIDAttr           = "reservation.id"
-	reservationAmountAttr       = "reservation.amount"
-	reservationTTLAttr          = "reservation.ttl"
-	reservationActualAmountAttr = "reservation.actual_amount"
-)
-
-var reservationKnownAttrs = [4]string{
-	reservationIDAttr,
-	reservationAmountAttr,
-	reservationTTLAttr,
-	reservationActualAmountAttr,
-}
-
-func isReservationKnownAttr(key string) bool {
-	for _, attr := range reservationKnownAttrs {
-		if key == attr {
-			return true
-		}
-	}
-	return false
-}
-
 func isRateLimitKnownAttr(data DataType) bool {
 	var key string
 	switch val := data.Value.(type) {
@@ -696,57 +721,25 @@ func isRateLimitKnownAttr(data DataType) bool {
 			return true
 		}
 	}
-	return isReservationKnownAttr(key)
-}
-
-// lookupReservationAttr returns the raw (unwrapped) CEL value stored for a
-// reservation known attr, or "" if this spec carries none.
-func lookupReservationAttr(conditionalData []ConditionalData, attrKey string) string {
-	for _, cd := range conditionalData {
-		for _, item := range cd.Data {
-			switch val := item.Value.(type) {
-			case *Static:
-				if val.Static.Key == attrKey {
-					return val.Static.Value
-				}
-			case *Expression:
-				if val.ExpressionItem.Key == attrKey {
-					return val.ExpressionItem.Value
-				}
-			}
-		}
-	}
-	return ""
-}
-
-// findReservationAttrCEL returns the CEL rendering of a reservation known attr:
-//   - reservation.amount is wrapped in uint().
-//   - reservation.id is returned as its raw (config-time) value so it can seed a
-//     store path; it is never rendered into a gRPC message.
-//   - reservation.ttl is returned as-is (expected to resolve to a duration).
-//   - reservation.actual_amount is looked up via lookupReservationAttr instead,
-//     since buildCommit needs the raw (unwrapped) value to null-check it.
-func findReservationAttrCEL(conditionalData []ConditionalData, attrKey string) string {
-	value := lookupReservationAttr(conditionalData, attrKey)
-	if value == "" {
-		return ""
-	}
-	if attrKey == reservationAmountAttr {
-		return fmt.Sprintf("uint(%s)", value)
-	}
-	return value
+	return false
 }
 
 // ReservationAmountCEL returns the CEL expression this spec carries for
-// reservation.amount (RFC 0021), or "" if it carries none.
+// reservation.amount (RFC 0021), wrapped in uint(), or "" if it carries none.
 func (s ActionSpec) ReservationAmountCEL() string {
-	return findReservationAttrCEL(s.ConditionalData, reservationAmountAttr)
+	if s.Reservation == nil || s.Reservation.Amount == "" {
+		return ""
+	}
+	return fmt.Sprintf("uint(%s)", s.Reservation.Amount)
 }
 
 // ReservationTTLCEL returns the CEL expression this spec carries for
 // reservation.ttl (RFC 0021), or "" if it carries none.
 func (s ActionSpec) ReservationTTLCEL() string {
-	return findReservationAttrCEL(s.ConditionalData, reservationTTLAttr)
+	if s.Reservation == nil {
+		return ""
+	}
+	return s.Reservation.TTL
 }
 
 func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string) string {
@@ -808,7 +801,7 @@ func collectDescriptors(conditionalData []ConditionalData, bindings []DataBindin
 	return descriptors
 }
 
-func buildReserveRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding) ReserveRequestCEL {
+func buildReserveRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservation *ReservationSpec) ReserveRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
 		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
@@ -817,14 +810,16 @@ func buildReserveRequest(scope string, conditionalData []ConditionalData, bindin
 	// amount is required by the message; the controller always emits it (with a
 	// repo-defined default when the policy omits it). The fallback here is purely
 	// defensive.
-	amount := findReservationAttrCEL(conditionalData, reservationAmountAttr)
-	if amount == "" {
-		amount = "0u"
+	amount := "0u"
+	var ttl string
+	if reservation != nil {
+		if reservation.Amount != "" {
+			amount = fmt.Sprintf("uint(%s)", reservation.Amount)
+		}
+		// ttl is optional; leaving it empty omits the field so Limitador applies
+		// its own default.
+		ttl = reservation.TTL
 	}
-
-	// ttl is optional; leaving it empty omits the field so Limitador applies its
-	// own default.
-	ttl := findReservationAttrCEL(conditionalData, reservationTTLAttr)
 
 	return ReserveRequestCEL{
 		Domain:      domain,

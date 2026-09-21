@@ -92,19 +92,13 @@ func TestValidateWasmActionValid(t *testing.T) {
 
 func TestValidateWasmActionReservationAmountInvalid(t *testing.T) {
 	// reservation.amount is always wrapped in uint(...) before it reaches
-	// ValidateWasmActionSpec (see findReservationAttrCEL), so a malformed
-	// user expression surfaces as a CEL type-check error rather than the
-	// output-type guard.
+	// ValidateWasmActionSpec (see ActionSpec.ReservationAmountCEL), so a
+	// malformed user expression surfaces as a CEL type-check error rather
+	// than the output-type guard.
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitReserveServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Data: []wasm.DataType{
-					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "duration('1s')"}}},
-				},
-			},
-		},
+		Reservation: &wasm.ReservationSpec{Amount: "duration('1s')"},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
@@ -120,13 +114,7 @@ func TestValidateWasmActionReservationTTLInvalidType(t *testing.T) {
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitReserveServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Data: []wasm.DataType{
-					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: "'30s'"}}},
-				},
-			},
-		},
+		Reservation: &wasm.ReservationSpec{TTL: "'30s'"},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
@@ -142,14 +130,7 @@ func TestValidateWasmActionReservationValid(t *testing.T) {
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitReserveServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Data: []wasm.DataType{
-					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "5000"}}},
-					{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: "duration('30s')"}}},
-				},
-			},
-		},
+		Reservation: &wasm.ReservationSpec{Amount: "5000", TTL: "duration('30s')"},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)

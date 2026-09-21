@@ -398,10 +398,12 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:     "tokenlimit.myTokenLimit__d681f6c3",
+						Amount: "0",
 					},
 				},
 				// Commit (response phase): actual usage from response body
@@ -414,10 +416,12 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:           "tokenlimit.myTokenLimit__d681f6c3",
+						ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
 					},
 				},
 			},
@@ -439,11 +443,13 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: `duration("45s")`}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:     "tokenlimit.myTokenLimit__d681f6c3",
+						Amount: "0",
+						TTL:    `duration("45s")`,
 					},
 				},
 				{
@@ -455,10 +461,12 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:           "tokenlimit.myTokenLimit__d681f6c3",
+						ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
 					},
 				},
 			},
@@ -485,11 +493,13 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "8000"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: `duration("30s")`}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:     "tokenlimit.myTokenLimit__d681f6c3",
+						Amount: "8000",
+						TTL:    `duration("30s")`,
 					},
 				},
 				{
@@ -501,10 +511,12 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:           "tokenlimit.myTokenLimit__d681f6c3",
+						ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
 					},
 				},
 			},
@@ -529,10 +541,12 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "1 + 1"}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:     "tokenlimit.myTokenLimit__d681f6c3",
+						Amount: "1 + 1",
 					},
 				},
 				{
@@ -544,10 +558,12 @@ func TestWasmActionSpecsFromTokenLimit(t *testing.T) {
 							Predicates: []string{},
 							Data: []wasm.DataType{
 								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "tokenlimit.myTokenLimit__d681f6c3", Value: "1"}}},
-								{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: "tokenlimit.myTokenLimit__d681f6c3"}}},
-								{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 							},
 						},
+					},
+					Reservation: &wasm.ReservationSpec{
+						ID:           "tokenlimit.myTokenLimit__d681f6c3",
+						ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
 					},
 				},
 			},

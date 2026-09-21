@@ -149,11 +149,10 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "0"}}},
 						},
 					},
 				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, Amount: "0"},
 			},
 			{
 				ServiceName: wasm.RateLimitCommitServiceName,
@@ -163,11 +162,10 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 						},
 					},
 				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
 			},
 		})
 
@@ -226,11 +224,10 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: "8000"}}},
 						},
 					},
 				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, Amount: "8000"},
 			},
 			{
 				ServiceName: wasm.RateLimitCommitServiceName,
@@ -240,11 +237,10 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: `responseBodyJSON("/usage/total_tokens")`}}},
 						},
 					},
 				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
 			},
 		})
 

@@ -344,8 +344,8 @@ func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predic
 
 // tokenReservationSpecs builds the request-phase reserve and response-phase
 // commit specs for Reservation mode (RFC 0021). Both specs carry the same
-// reservation.id known-attr so the operator-generated config stores and reads
-// back the reservation_id under a single per-limit store path.
+// reservation ID so the operator-generated config stores and reads back the
+// reservation_id under a single per-limit store path.
 //
 // amount is required and defaults to defaultReservationAmount when the policy
 // omits it. ttl is optional: the policy value wins, else the route backendRequest
@@ -368,46 +368,31 @@ func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentif
 		}
 	}
 
-	// reservation.id is a config-time constant shared by both specs; it seeds the
-	// filter-local store path for the captured reservation_id.
-	idData := wasm.DataType{
-		Value: &wasm.Static{Static: wasm.StaticSpec{Key: "reservation.id", Value: limitIdentifier}},
-	}
-
-	// Reserve (request phase): reserve an estimated amount, optionally with a TTL.
-	reserveData := make([]wasm.DataType, 0, len(commonData)+3)
-	reserveData = append(reserveData, commonData...)
-	reserveData = append(reserveData, idData,
-		wasm.DataType{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.amount", Value: amount}}},
-	)
-	if ttl != "" {
-		reserveData = append(reserveData,
-			wasm.DataType{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.ttl", Value: ttl}}},
-		)
-	}
-
 	reserveSpec := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitReserveServiceName,
 		Scope:       string(scope),
 		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
 		ConditionalData: []wasm.ConditionalData{
-			{Predicates: predicates, Data: reserveData},
+			{Predicates: predicates, Data: commonData},
+		},
+		Reservation: &wasm.ReservationSpec{
+			ID:     limitIdentifier,
+			Amount: amount,
+			TTL:    ttl,
 		},
 	}
 
 	// Commit (response phase): commit the tokens actually consumed upstream.
-	commitData := make([]wasm.DataType, 0, len(commonData)+2)
-	commitData = append(commitData, commonData...)
-	commitData = append(commitData, idData,
-		wasm.DataType{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "reservation.actual_amount", Value: tokenUsageBodyRef}}},
-	)
-
 	commitSpec := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitCommitServiceName,
 		Scope:       string(scope),
 		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
 		ConditionalData: []wasm.ConditionalData{
-			{Predicates: predicates, Data: commitData},
+			{Predicates: predicates, Data: commonData},
+		},
+		Reservation: &wasm.ReservationSpec{
+			ID:           limitIdentifier,
+			ActualAmount: tokenUsageBodyRef,
 		},
 	}
 

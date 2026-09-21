@@ -32,7 +32,7 @@ Because the real token cost of a request is only known *after* the upstream resp
 
   Reservation still allows some overshoot, independently of the race above: Limitador caps every `Reserve` call to at most `spec.reservations.maxFraction` of a limit's `max_value` (a Limitador CR field, default `0.5`). So no single reservation can ever claim the whole limit — it takes at least `1/maxFraction` requests' worth of held reservations (2, by default) before Limitador itself starts rejecting on capacity. Because each of those holds is only an estimate of real usage, actual consumption can land above what was reserved, so the achievable overshoot scales with the number of concurrent holders allowed under `maxFraction`. A lower `maxFraction` permits more concurrent in-flight requests before capacity-rejects kick in but widens that overshoot window; a higher `maxFraction` tightens the bound at the cost of concurrency headroom.
 
-- **`CheckReport`**: On request arrival the gateway checks the limit with `hits_addend=0` (does the counter already exceed the limit?) and, on response, reports the actual usage. Two requests arriving together can both pass the check before either reports, so an already-near-limit counter can be briefly overshot by the cost of the in-flight requests.
+- **`Optimistic`**: On request arrival the gateway checks the limit with `hits_addend=0` (does the counter already exceed the limit?) and, on response, reports the actual usage. Two requests arriving together can both pass the check before either reports, so an already-near-limit counter can be briefly overshot by the cost of the in-flight requests.
 
 Set the mode on the Kuadrant CR:
 
@@ -44,12 +44,12 @@ metadata:
   namespace: kuadrant-system
 spec:
   tokenRateLimiting:
-    mode: Reservation   # or CheckReport
+    mode: Reservation   # or Optimistic
 ```
 
-When `spec.tokenRateLimiting` is omitted the mode defaults to `Reservation`. The per-limit `reservation` block on a TokenRateLimitPolicy only has an effect in `Reservation` mode; it is ignored under `CheckReport`.
+When `spec.tokenRateLimiting` is omitted the mode defaults to `Reservation`. The per-limit `reservation` block on a TokenRateLimitPolicy only has an effect in `Reservation` mode; it is ignored under `Optimistic`.
 
-**Important: `reservation.amount` defaults to `0`, which reserves no capacity.** Since `Reservation` is the cluster-wide default mode, every existing TokenRateLimitPolicy — including ones written before reservations existed — starts running in `Reservation` mode without any code changes. Defaulting `amount` to `0` makes that transition behavior-neutral: `0` is a documented Limitador short-circuit that skips holding capacity entirely, so a limit with no `reservation` block behaves exactly like `CheckReport` — no protection against the concurrent-request race that RFC 0021 exists to close. **To actually get that protection, set `reservation.amount` explicitly** to a meaningful, non-zero estimate of tokens consumed per request (see [`reservation`](../reference/tokenratelimitpolicy.md#reservation)).
+**Important: `reservation.amount` defaults to `0`, which reserves no capacity.** Since `Reservation` is the cluster-wide default mode, every existing TokenRateLimitPolicy — including ones written before reservations existed — starts running in `Reservation` mode without any code changes. Defaulting `amount` to `0` makes that transition behavior-neutral: `0` is a documented Limitador short-circuit that skips holding capacity entirely, so a limit with no `reservation` block behaves exactly like `Optimistic` — no protection against the concurrent-request race that RFC 0021 exists to close. **To actually get that protection, set `reservation.amount` explicitly** to a meaningful, non-zero estimate of tokens consumed per request (see [`reservation`](../reference/tokenratelimitpolicy.md#reservation)).
 
 #### Handling reserve and upstream failures
 

@@ -608,7 +608,7 @@ func TestActionSpecBuild_RateLimit(t *testing.T) {
 		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
 	}
 	// plain RateLimitPolicy keeps the plain-text body; the JSON error body is
-	// only used for TokenRateLimitPolicy denials (Reserve, CheckReport's Check).
+	// only used for TokenRateLimitPolicy denials (Reserve, Optimistic's Check).
 	if !strings.Contains(deny.DenyWith, `body: "Too Many Requests\n"`) {
 		t.Errorf("deny body = %q, want plain-text \"Too Many Requests\"", deny.DenyWith)
 	}

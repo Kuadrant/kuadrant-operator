@@ -118,7 +118,7 @@ type KuadrantSpec struct {
 }
 
 // TokenRateLimitingMode selects how TokenRateLimitPolicy limits are enforced.
-// +kubebuilder:validation:Enum=Reservation;CheckReport
+// +kubebuilder:validation:Enum=Reservation;Optimistic
 type TokenRateLimitingMode string
 
 const (
@@ -127,9 +127,9 @@ const (
 	// check/report race window (see RFC 0021).
 	TokenRateLimitingModeReservation TokenRateLimitingMode = "Reservation"
 
-	// TokenRateLimitingModeCheckReport checks the limit (hits_addend=0) on
+	// TokenRateLimitingModeOptimistic checks the limit (hits_addend=0) on
 	// request arrival and reports the actual usage on response.
-	TokenRateLimitingModeCheckReport TokenRateLimitingMode = "CheckReport"
+	TokenRateLimitingModeOptimistic TokenRateLimitingMode = "Optimistic"
 )
 
 // TokenRateLimiting configures cluster-wide behavior for TokenRateLimitPolicy.

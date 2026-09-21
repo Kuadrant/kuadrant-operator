@@ -234,7 +234,7 @@ const (
 	// It defaults to 0 rather than a non-zero flat amount: amount "0" is a
 	// documented Limitador short-circuit that skips holding capacity while
 	// still exercising the Reserve/Commit lifecycle. This makes Reservation
-	// mode a no-op equivalent to CheckReport for any TokenRateLimitPolicy that
+	// mode a no-op equivalent to Optimistic for any TokenRateLimitPolicy that
 	// doesn't explicitly opt in with a non-zero reservation.amount -- notably
 	// every policy that predates RFC 0021, since Reservation is the cluster-wide
 	// default mode. Closing the concurrent-request race window RFC 0021
@@ -251,7 +251,7 @@ const (
 // limit according to the cluster-wide enforcement mode:
 //   - Reservation (RFC 0021): a Reserve action reserves an estimated amount on
 //     request arrival and a Commit action commits the actual usage on response.
-//   - CheckReport: a Check action (hits_addend=0) enforces the limit on request
+//   - Optimistic: a Check action (hits_addend=0) enforces the limit on request
 //     arrival and a Report action increments the counter with the actual usage.
 //
 // defaultTTL is a Gateway API duration string (the route's backendRequest
@@ -296,7 +296,7 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 }
 
 // tokenCheckReportSpecs builds the request-phase check (hits_addend=0) and
-// response-phase report (hits_addend=actual usage) specs for CheckReport mode.
+// response-phase report (hits_addend=actual usage) specs for Optimistic mode.
 func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType) []wasm.ActionSpec {
 	// Independent copies because each phase carries a different hits_addend.
 	requestPhaseData := make([]wasm.DataType, 0, len(commonData)+1)

@@ -143,7 +143,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		}
 	}
 
-	It("Reservation mode (default) reserves zero capacity (no-op, equivalent to CheckReport)", func(ctx SpecContext) {
+	It("Reservation mode (default) reserves zero capacity (no-op, equivalent to Optimistic)", func(ctx SpecContext) {
 		// create httproute (no backendRequest timeout, so reservation ttl stays unset)
 		httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 		err := testClient().Create(ctx, httpRoute)
@@ -289,7 +289,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		}
 	}, testTimeOut)
 
-	It("CheckReport mode creates Check/Report actions", func(ctx SpecContext) {
+	It("Optimistic mode creates Check/Report actions", func(ctx SpecContext) {
 		// Mode is a cluster-wide switch on the singleton Kuadrant CR (kuadrantInstallationNS),
 		// so restore it on cleanup to avoid poisoning other specs.
 		kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
@@ -302,7 +302,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 
 		kuadrantObj := &kuadrantv1beta1.Kuadrant{}
 		Expect(testClient().Get(ctx, kuadrantKey, kuadrantObj)).To(Succeed())
-		kuadrantObj.Spec.TokenRateLimiting = &kuadrantv1beta1.TokenRateLimiting{Mode: kuadrantv1beta1.TokenRateLimitingModeCheckReport}
+		kuadrantObj.Spec.TokenRateLimiting = &kuadrantv1beta1.TokenRateLimiting{Mode: kuadrantv1beta1.TokenRateLimitingModeOptimistic}
 		Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 
 		httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})

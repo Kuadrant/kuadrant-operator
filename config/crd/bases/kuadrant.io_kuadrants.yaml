@@ -160,7 +160,7 @@ spec:
                       enforced across the cluster.
                     enum:
                     - Reservation
-                    - CheckReport
+                    - Optimistic
                     type: string
                 type: object
             type: object

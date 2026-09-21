@@ -243,7 +243,7 @@ type Reservation struct {
 	// arrival, or a CEL expression evaluating to the number of tokens (uint).
 	// Defaults to 0 when omitted, which reserves no capacity: Limitador
 	// short-circuits amount-0 reservations, so this limit behaves like
-	// CheckReport unless amount is set explicitly to a non-zero estimate.
+	// Optimistic unless amount is set explicitly to a non-zero estimate.
 	// +optional
 	// +kubebuilder:validation:XIntOrString
 	Amount *intstr.IntOrString `json:"amount,omitempty"`

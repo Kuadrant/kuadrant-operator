@@ -564,8 +564,13 @@ func referencesPendingPath(expr string, pendingPaths []string) bool {
 	return false
 }
 
-// bodyJSONPattern matches responseBodyJSON("...") and requestBodyJSON("...") with either quote style.
-var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(["']([^"']+)["']\)`)
+// bodyJSONPattern matches responseBodyJSON(...) and requestBodyJSON(...) calls, either with a single
+// quoted JSON pointer argument (e.g. responseBodyJSON("/usage/total_tokens")) or with an ordered list of
+// pointer candidates plus an optional type hint (e.g. responseBodyJSON(["/a", "/b"], "number")).
+var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(\s*(\[[^\]]*\]|"[^"]*"|'[^']*')\s*(?:,\s*"([^"]*)")?\s*\)`)
+
+// pointerListItemPattern extracts individual quoted string literals from within a list literal argument.
+var pointerListItemPattern = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
 
 const (
 	responseBodyStorePath = "kuadrant.internal.response.body"
@@ -578,6 +583,9 @@ const (
 	// A per-limit segment is appended (see reservationStorePath) so concurrent
 	// reservations for different limits do not clobber one another.
 	reservationStorePathPrefix = "kuadrant.internal.tokenratelimit.reservation"
+	// pointerListKeySep separates ordered pointer candidates (plus trailing type hint) when building the
+	// canonical dedup/collision identity key for a list-form body ref.
+	pointerListKeySep = "\x1f"
 )
 
 // reservationStorePath returns the per-limit store path for a reservation id.
@@ -591,7 +599,7 @@ type bodyRef struct {
 	Original  string // the full matched call, e.g. responseBodyJSON("/usage/total_tokens")
 	Direction string // "response" or "request"
 	FieldName string // derived map key, e.g. "total_tokens"
-	Pointer   string // the JSON pointer, e.g. "/usage/total_tokens"
+	Pointer   string // identity key: the JSON pointer, or an ordered-list+type-hint canonical key
 }
 
 func bodyRefFieldName(jsonPointer string) string {
@@ -599,8 +607,9 @@ func bodyRefFieldName(jsonPointer string) string {
 	return segments[len(segments)-1]
 }
 
-func sanitizePointer(jsonPointer string) string {
-	return strings.ReplaceAll(strings.TrimPrefix(jsonPointer, "/"), "/", "_")
+func sanitizePointer(pointer string) string {
+	replacer := strings.NewReplacer("/", "_", pointerListKeySep, "_")
+	return strings.Trim(replacer.Replace(strings.TrimPrefix(pointer, "/")), "_")
 }
 
 func bodyRefStorePath(direction, fieldName string) string {
@@ -608,6 +617,21 @@ func bodyRefStorePath(direction, fieldName string) string {
 		return requestBodyStorePath + "." + fieldName
 	}
 	return responseBodyStorePath + "." + fieldName
+}
+
+// parsePointerList extracts the ordered quoted string literals from a list literal argument,
+// e.g. `["/a", "/b"]` -> ["/a", "/b"].
+func parsePointerList(listArg string) []string {
+	matches := pointerListItemPattern.FindAllStringSubmatch(listArg, -1)
+	pointers := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if strings.HasPrefix(m[0], `"`) {
+			pointers = append(pointers, m[1])
+		} else {
+			pointers = append(pointers, m[2])
+		}
+	}
+	return pointers
 }
 
 func extractBodyRefs(expr string) []bodyRef {
@@ -623,11 +647,28 @@ func extractBodyRefs(expr string) []bodyRef {
 			continue
 		}
 		seen[original] = true
+
+		arg, typeHint := m[2], m[3]
+
+		var fieldName, pointer string
+		if strings.HasPrefix(arg, "[") {
+			pointers := parsePointerList(arg)
+			if len(pointers) == 0 {
+				continue
+			}
+			fieldName = bodyRefFieldName(pointers[0])
+			pointer = strings.Join(pointers, pointerListKeySep) + pointerListKeySep + typeHint
+		} else {
+			p := strings.Trim(arg, `"'`)
+			fieldName = bodyRefFieldName(p)
+			pointer = p
+		}
+
 		refs = append(refs, bodyRef{
 			Original:  original,
 			Direction: m[1],
-			FieldName: bodyRefFieldName(m[2]),
-			Pointer:   m[2],
+			FieldName: fieldName,
+			Pointer:   pointer,
 		})
 	}
 	return refs
@@ -972,7 +1013,7 @@ func buildRateLimitOnReply(name string, tokenBased bool) []Action {
 		),
 		NewHeadersAction(
 			fmt.Sprintf("%s.overall_code == 1", name),
-			HeaderTargetResponse,
+			"response",
 			fmt.Sprintf("%s.response_headers_to_add", name),
 		),
 		NewFailAction(

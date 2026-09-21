@@ -15,6 +15,7 @@
 | `defaults`  | [MergeableTokenRateLimitPolicySpec](#mergeabletokenratelimitpolicyspec)                                                                                     | No           | Default limit definitions. This field is mutually exclusive with the `limits` field                                                                                                         |
 | `overrides` | [MergeableTokenRateLimitPolicySpec](#mergeabletokenratelimitpolicyspec)                                                                                     | No           | Overrides limit definitions. This field is mutually exclusive with the `limits` field and `defaults` field. This field is only allowed for policies targeting `Gateway` in `targetRef.kind` |
 | `limits`    | Map<String: [TokenLimit](#tokenlimit)>                                                                                                                | No           | Limit definitions. This field is mutually exclusive with the [`defaults`](#mergeabletokenratelimitpolicyspec) field                                                                                 |
+| `dataExtraction` | [DataExtraction](#dataextraction)                                                                                                                     | No           | Configures how token usage data is extracted from responses. If omitted, built-in defaults are used                                                                                        |
 
 ### LocalPolicyTargetReferenceWithSectionName
 | **Field**       | **Type**                                | **Required** | **Description**                                            |
@@ -40,6 +41,7 @@
 |-----------|------------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------|
 | `strategy`| String                       | No           | Merge strategy to apply when merging with other policies. Values: `atomic` (default), `merge`                               |
 | `limits`  | Map<String: [TokenLimit](#tokenlimit)> | Yes           | Map of named token-based rate limit configurations                                                                   |
+| `dataExtraction` | [DataExtraction](#dataextraction) | No    | Configures how token usage data is extracted from responses                                                                  |
 
 ### TokenLimit
 
@@ -79,6 +81,18 @@ limits:
 ```
 
 `amount` also accepts a CEL expression as a quoted string, e.g. `amount: "1 + 1"`. Note: expressions that read the request body (e.g. a `requestBodyJSON(...)`-based token estimate) are not yet supported for `reservation.amount`.
+
+### DataExtraction
+
+| **Field**  | **Type**                                        | **Required** | **Description**                                     |
+|------------|--------------------------------------------------|:------------:|-------------------------------------------------------|
+| `response` | [ResponseDataExtraction](#responsedataextraction) | No           | Configures data extraction from the response body     |
+
+### ResponseDataExtraction
+
+| **Field**     | **Type**   | **Required** | **Description**                                                                                                                                                                                       |
+|---------------|------------|:------------:|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `totalTokens` | []String   | No           | Ordered list (1-8 items) of JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) expressions evaluated against the response body. The first pointer that resolves to a numeric value is used. If omitted, a built-in default list is used (see [Token Usage Tracking](#token-usage-tracking)) |
 
 ### Rate
 
@@ -144,13 +158,43 @@ The policy automatically parses token usage from response bodies in the followin
 
 This is compatible with OpenAI-style API responses and similar AI/LLM services.
 
-**What's actually checked**: Token extraction looks for a single JSON pointer, `/usage/total_tokens`, in the response body. Any backend that returns that exact field works out of the box, including OpenAI Chat Completions (`/v1/chat/completions`), OpenAI legacy Completions (`/v1/completions`), OpenAI Embeddings, and OpenAI-compatible backends like vLLM, kServe, Ollama, Azure OpenAI, and Gemini's OpenAI-compatibility endpoint.
+**What's actually checked**: Token extraction evaluates an ordered list of JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) expressions against the response body — the first pointer that resolves to a numeric value is used. When `spec.dataExtraction.response.totalTokens` is unset, the following built-in default list is used, in order:
 
-**Not currently supported**: Providers that return token usage under a different field name — Anthropic's `/v1/messages` (`usage.input_tokens` / `usage.output_tokens`, no `total_tokens`) or Google Gemini's native endpoint (`usageMetadata.totalTokenCount`) — are not parsed. Multi-provider support is tracked in [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
+| Order | JSON Pointer                     | Provider(s)                                                                              |
+|-------|-----------------------------------|-------------------------------------------------------------------------------------------|
+| 1     | `/usage/total_tokens`             | OpenAI, Azure OpenAI, OpenAI-compatible servers (vLLM, kServe, Ollama, etc.), OpenAI Responses API (non-streaming) |
+| 2     | `/usageMetadata/totalTokenCount`  | Google Gemini                                                                              |
+| 3     | `/response/usage/total_tokens`    | OpenAI Responses API (streaming)                                                            |
+| 4     | `/usage/totalTokens`              | AWS Bedrock Converse API (non-streaming)                                                    |
 
-**Streaming Support**: Both streaming and non-streaming responses are supported:
-- **Non-streaming**: Works with `stream: false` or when `stream` is omitted
-- **Streaming**: Requires `"stream": true` and `"stream_options": { "include_usage": true }` to extract usage from the final stream event
+To target a provider not covered by the defaults, or to restrict/reorder the candidates, set `spec.dataExtraction.response.totalTokens` explicitly:
+
+```yaml
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: custom-data-extraction
+  namespace: gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: ai-gateway
+  dataExtraction:
+    response:
+      totalTokens:
+      - /usage/total_tokens
+      - /usageMetadata/totalTokenCount
+  limits:
+    global:
+      rates:
+      - limit: 100000
+        window: 1h
+```
+
+`dataExtraction` participates in the same defaults/overrides hierarchy as `limits`: it can be set at the top level, within `spec.defaults`, or within `spec.overrides`, and is inherited down the Gateway API hierarchy like any other policy rule.
+
+**Streaming Support**: Both streaming and non-streaming responses are supported for providers whose streaming response shape is covered by the resolved pointer list. Many providers only include token usage in the final stream event when the client explicitly opts in — for example, OpenAI requires `"stream": true` and `"stream_options": { "include_usage": true }` in the request body; check your provider's documentation for the equivalent header or field.
 
 ## CEL Expression Context
 

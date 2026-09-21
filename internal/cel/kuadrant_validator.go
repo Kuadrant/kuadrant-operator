@@ -79,28 +79,32 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	builder.AddBinding("destination", cel.AnyType)
 	builder.AddBinding("connection", cel.AnyType)
 
-	requestBodyJSON := cel.Overload("request_body_json_string",
-		[]*cel.Type{cel.StringType},
-		cel.AnyType,
-		cel.UnaryBinding(func(_ ref.Val) ref.Val {
-			// just for parsing and checking purposes, not evaluation
-			return nil
-		},
-		),
-	)
+	noopUnary := func(_ ref.Val) ref.Val {
+		// just for parsing and checking purposes, not evaluation
+		return nil
+	}
+	noopBinary := func(_, _ ref.Val) ref.Val {
+		// just for parsing and checking purposes, not evaluation
+		return nil
+	}
 
-	builder.AddFunction("requestBodyJSON", requestBodyJSON)
+	requestBodyJSONString := cel.Overload("request_body_json_string",
+		[]*cel.Type{cel.StringType}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	requestBodyJSONList := cel.Overload("request_body_json_list",
+		[]*cel.Type{cel.ListType(cel.StringType)}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	requestBodyJSONListWithHint := cel.Overload("request_body_json_list_with_type_hint",
+		[]*cel.Type{cel.ListType(cel.StringType), cel.StringType}, cel.AnyType, cel.BinaryBinding(noopBinary))
 
-	responseBodyJSON := cel.Overload("response_body_json_string",
-		[]*cel.Type{cel.StringType},
-		cel.AnyType,
-		cel.UnaryBinding(func(_ ref.Val) ref.Val {
-			// just for parsing and checking purposes, not evaluation
-			return nil
-		},
-		),
-	)
-	builder.AddFunction("responseBodyJSON", responseBodyJSON)
+	builder.AddFunction("requestBodyJSON", requestBodyJSONString, requestBodyJSONList, requestBodyJSONListWithHint)
+
+	responseBodyJSONString := cel.Overload("response_body_json_string",
+		[]*cel.Type{cel.StringType}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	responseBodyJSONList := cel.Overload("response_body_json_list",
+		[]*cel.Type{cel.ListType(cel.StringType)}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	responseBodyJSONListWithHint := cel.Overload("response_body_json_list_with_type_hint",
+		[]*cel.Type{cel.ListType(cel.StringType), cel.StringType}, cel.AnyType, cel.BinaryBinding(noopBinary))
+
+	builder.AddFunction("responseBodyJSON", responseBodyJSONString, responseBodyJSONList, responseBodyJSONListWithHint)
 
 	return builder
 }

@@ -806,6 +806,7 @@ func TestSanitizePointer(t *testing.T) {
 		{"/usage/total_tokens", "usage_total_tokens"},
 		{"/model", "model"},
 		{"/a/b/c", "a_b_c"},
+		{"/a/b" + pointerListKeySep + "/c/d" + pointerListKeySep + "number", "a_b__c_d_number"},
 	}
 	for _, tc := range tests {
 		got := sanitizePointer(tc.pointer)
@@ -863,6 +864,54 @@ func TestExtractBodyRefs(t *testing.T) {
 		refs := extractBodyRefs(`responseBodyJSON("/model") + responseBodyJSON("/model")`)
 		if len(refs) != 1 {
 			t.Errorf("expected 1 deduplicated ref, got %d", len(refs))
+		}
+	})
+
+	t.Run("list of candidates with type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].Direction != "response" {
+			t.Errorf("direction = %q, want %q", refs[0].Direction, "response")
+		}
+		if refs[0].FieldName != "total_tokens" {
+			t.Errorf("fieldName = %q, want %q (leaf of first candidate)", refs[0].FieldName, "total_tokens")
+		}
+		expectedPointer := "/usage/total_tokens" + pointerListKeySep + "/usageMetadata/totalTokenCount" + pointerListKeySep + "number"
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
+
+	t.Run("list of candidates without type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/a", "/b"])`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		expectedPointer := "/a" + pointerListKeySep + "/b" + pointerListKeySep
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
+
+	t.Run("single-candidate list with type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`requestBodyJSON(['/prompt'], "string")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].Direction != "request" {
+			t.Errorf("direction = %q, want %q", refs[0].Direction, "request")
+		}
+		if refs[0].FieldName != "prompt" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "prompt")
+		}
+	})
+
+	t.Run("distinguishes lists differing only in order", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/a", "/b"], "number") + responseBodyJSON(["/b", "/a"], "number")`)
+		if len(refs) != 2 {
+			t.Fatalf("expected 2 distinct refs (order matters), got %d", len(refs))
 		}
 	})
 }
@@ -1036,6 +1085,60 @@ func TestBuildActions_ReservationActualAmount(t *testing.T) {
 	}
 	if strings.Contains(commitGrpc.MessageBuilder, "responseBodyJSON") {
 		t.Error("commit message should not contain responseBodyJSON after replacement")
+	}
+}
+
+func TestBuildActions_ListBodyRef(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitCheckServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{Key: "ratelimit.hits_addend", Value: "0"}}},
+				},
+			}},
+		},
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "ratelimit.hits_addend",
+						Value: `responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")`,
+					}}},
+				},
+			}},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected 3 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	expectedValue := `{"total_tokens": responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")}`
+	if store.Value != expectedValue {
+		t.Errorf("store value = %q, want %q", store.Value, expectedValue)
+	}
+
+	reportGrpc, ok := actions[2].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[2] type = %s, want grpc", actions[2].ActionType())
+	}
+	if strings.Contains(reportGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("report message should not contain responseBodyJSON after replacement")
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(reportGrpc.MessageBuilder, "uint("+expectedStorePath+")") {
+		t.Errorf("report message should reference store path for total_tokens, got:\n%s", reportGrpc.MessageBuilder)
 	}
 }
 

@@ -14629,11 +14629,57 @@ spec:
             type: object
           spec:
             properties:
+              dataExtraction:
+                description: |-
+                  DataExtraction configures how token usage data is extracted from requests and responses.
+                  If omitted, built-in defaults are used to extract total token usage from common LLM provider
+                  response shapes.
+                properties:
+                  response:
+                    description: Response configures data extraction from the response
+                      body.
+                    properties:
+                      totalTokens:
+                        description: |-
+                          TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
+                          response body to determine total token usage. The first pointer that resolves to a numeric
+                          value is used.
+                        items:
+                          pattern: ^(/([^/~]|~[01])*)+$
+                          type: string
+                        maxItems: 8
+                        minItems: 1
+                        type: array
+                    type: object
+                type: object
               defaults:
                 description: |-
                   Rules to apply as defaults. Can be overridden by more specific policy rules lower in the hierarchy and by less specific policy overrides.
                   Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
+                  dataExtraction:
+                    description: |-
+                      DataExtraction configures how token usage data is extracted from requests and responses.
+                      If omitted, built-in defaults are used to extract total token usage from common LLM provider
+                      response shapes.
+                    properties:
+                      response:
+                        description: Response configures data extraction from the
+                          response body.
+                        properties:
+                          totalTokens:
+                            description: |-
+                              TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
+                              response body to determine total token usage. The first pointer that resolves to a numeric
+                              value is used.
+                            items:
+                              pattern: ^(/([^/~]|~[01])*)+$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                        type: object
+                    type: object
                   limits:
                     additionalProperties:
                       description: TokenLimit represents a complete token-based rate
@@ -14851,6 +14897,29 @@ spec:
                   Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overridden by less specific policy overrides.
                   Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
+                  dataExtraction:
+                    description: |-
+                      DataExtraction configures how token usage data is extracted from requests and responses.
+                      If omitted, built-in defaults are used to extract total token usage from common LLM provider
+                      response shapes.
+                    properties:
+                      response:
+                        description: Response configures data extraction from the
+                          response body.
+                        properties:
+                          totalTokens:
+                            description: |-
+                              TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
+                              response body to determine total token usage. The first pointer that resolves to a numeric
+                              value is used.
+                            items:
+                              pattern: ^(/([^/~]|~[01])*)+$
+                              type: string
+                            maxItems: 8
+                            minItems: 1
+                            type: array
+                        type: object
+                    type: object
                   limits:
                     additionalProperties:
                       description: TokenLimit represents a complete token-based rate

@@ -32,6 +32,20 @@ import (
 var (
 	TokenRateLimitPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "TokenRateLimitPolicy"}
 	TokenRateLimitPoliciesResource = GroupVersion.WithResource("tokenratelimitpolicies")
+
+	// RulesKeyDataExtraction is the key used to store the dataExtraction rule within the Rules() map,
+	// following the same "not a limit name" trick as kuadrantv1.RulesKeyTopLevelPredicates.
+	RulesKeyDataExtraction = "###_DATA_EXTRACTION_###"
+
+	// DefaultTotalTokensPointers is the built-in, ordered list of JSON Pointer (RFC 6901) candidates used
+	// to extract total token usage from the response body when dataExtraction.response.totalTokens is
+	// unset. Order matters: the first candidate that resolves wins.
+	DefaultTotalTokensPointers = []string{
+		"/usage/total_tokens",            // OpenAI, Azure OpenAI, OpenAI-compatible servers, OpenAI Responses API (non-streaming)
+		"/usageMetadata/totalTokenCount", // Google Gemini
+		"/response/usage/total_tokens",   // OpenAI Responses API (streaming)
+		"/usage/totalTokens",             // AWS Bedrock Converse API (non-streaming)
+	}
 )
 
 // +kubebuilder:object:root=true
@@ -114,6 +128,10 @@ func (p *TokenRateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 		rules[kuadrantv1.RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(&whenPredicates, policyLocator)
 	}
 
+	if spec.DataExtraction != nil {
+		rules[RulesKeyDataExtraction] = kuadrantv1.NewMergeableRule(spec.DataExtraction, policyLocator)
+	}
+
 	for ruleID := range spec.Limits {
 		limit := spec.Limits[ruleID]
 		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
@@ -126,15 +144,19 @@ func (p *TokenRateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRul
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().Limits = nil
 	p.Spec.Proper().MergeableWhenPredicates = kuadrantv1.MergeableWhenPredicates{}
+	p.Spec.Proper().DataExtraction = nil
 
 	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]TokenLimit)
 	}
 
 	for ruleID := range rules {
-		if ruleID == kuadrantv1.RulesKeyTopLevelPredicates {
+		switch ruleID {
+		case kuadrantv1.RulesKeyTopLevelPredicates:
 			p.Spec.Proper().MergeableWhenPredicates = *rules[ruleID].(*kuadrantv1.MergeableWhenPredicates)
-		} else {
+		case RulesKeyDataExtraction:
+			p.Spec.Proper().DataExtraction = rules[ruleID].(*DataExtraction)
+		default:
 			p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*TokenLimit)
 		}
 	}
@@ -205,6 +227,60 @@ type TokenRateLimitPolicySpecProper struct {
 	// Limits holds the struct of token-based limits indexed by a unique name
 	// +optional
 	Limits map[string]TokenLimit `json:"limits,omitempty"`
+
+	// DataExtraction configures how token usage data is extracted from requests and responses.
+	// If omitted, built-in defaults are used to extract total token usage from common LLM provider
+	// response shapes.
+	// +optional
+	DataExtraction *DataExtraction `json:"dataExtraction,omitempty"`
+}
+
+// DataExtraction defines how the wasm data plane extracts application-level data (e.g. token usage)
+// from requests and responses, for use in token-based rate limiting.
+type DataExtraction struct {
+	// Response configures data extraction from the response body.
+	// +optional
+	Response *ResponseDataExtraction `json:"response,omitempty"`
+
+	// Source stores the locator of the policy where this rule is originally defined (internal use)
+	Source string `json:"-"`
+}
+
+// ResponseDataExtraction defines the fields extracted from the response body.
+type ResponseDataExtraction struct {
+	// TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
+	// response body to determine total token usage. The first pointer that resolves to a numeric
+	// value is used.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:items:Pattern=`^(/([^/~]|~[01])*)+$`
+	// +optional
+	TotalTokens []string `json:"totalTokens,omitempty"`
+}
+
+var _ kuadrantv1.MergeableRule = &DataExtraction{}
+
+// ResponseTotalTokensPointers resolves the effective ordered list of JSON Pointer expressions used to
+// extract total token usage from the response body, falling back to DefaultTotalTokensPointers when
+// dataExtraction.response.totalTokens is unset. Safe to call on a nil receiver.
+func (d *DataExtraction) ResponseTotalTokensPointers() []string {
+	if d == nil || d.Response == nil || len(d.Response.TotalTokens) == 0 {
+		return DefaultTotalTokensPointers
+	}
+	return d.Response.TotalTokens
+}
+
+func (d *DataExtraction) GetSpec() any {
+	return d
+}
+
+func (d *DataExtraction) GetSource() string {
+	return d.Source
+}
+
+func (d *DataExtraction) WithSource(source string) kuadrantv1.MergeableRule {
+	d.Source = source
+	return d
 }
 
 // TokenLimit represents a complete token-based rate limit configuration

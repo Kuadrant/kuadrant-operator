@@ -16,13 +16,13 @@ Kuadrant's Token Rate Limit implementation extends the Envoy [Rate Limit Service
 
 1. On incoming request, the gateway evaluates matching rules and predicates from TokenRateLimitPolicy resources
 2. If the request matches, the gateway prepares rate limit descriptors and monitors the response
-3. After receiving the response, the gateway extracts `usage.total_tokens` from the response body
+3. After receiving the response, the gateway extracts total token usage from the response body by trying an ordered list of JSON Pointer candidates until one resolves (see [Data Extraction](../reference/tokenratelimitpolicy.md#dataextraction))
 4. The gateway sends a [RateLimitRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto#service-ratelimit-v3-ratelimitrequest) to Limitador with the actual token count as `hits_addend`
 5. Limitador tracks the cumulative token usage and responds with either `OK` or `OVER_LIMIT`
 
 This approach ensures accurate usage-based rate limiting where limits are enforced based on actual AI/LLM token consumption rather than simple request counts.
 
-**Important**: TokenRateLimitPolicy supports both non-streaming and streaming OpenAI-style API responses. For streaming, the request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event. Only OpenAI-style completions responses are supported today — this includes `/v1/chat/completions` and `/v1/completions`, and any backend implementing the OpenAI-compatible API such as vLLM and kServe. Other provider formats (e.g. Anthropic, Google Gemini) are not yet parsed; see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
+**Important**: TokenRateLimitPolicy supports both non-streaming and streaming API responses. Out of the box, the built-in candidate list covers OpenAI, Azure OpenAI, OpenAI-compatible servers (vLLM, kServe, Ollama, etc.), the OpenAI Responses API (streaming and non-streaming), Google Gemini, and AWS Bedrock Converse API (non-streaming) response shapes. `spec.dataExtraction.response.totalTokens` lets you customize or extend this list for other providers — see the [API reference](../reference/tokenratelimitpolicy.md#dataextraction). For streaming requests, many providers only include token usage in the final stream event when the client explicitly opts in — for example, OpenAI requires `"stream_options": { "include_usage": true }` in the request body; check your provider's documentation for the equivalent header or field.
 
 ### Enforcement modes
 
@@ -92,9 +92,9 @@ Check out the [API reference](../reference/tokenratelimitpolicy.md) for a full s
 
 TokenRateLimitPolicy automatically extracts token usage from AI/LLM responses without requiring any additional configuration:
 
-- **Zero configuration**: Works out-of-the-box with OpenAI-compatible APIs
-- **Response parsing**: Automatically extracts `usage.total_tokens` from response bodies
-- **Provider scope**: Supports any backend returning that field, e.g. OpenAI `/v1/chat/completions` and `/v1/completions`, and OpenAI-compatible backends like vLLM, kServe, Ollama, Azure OpenAI, and Gemini's OpenAI-compat endpoint. Anthropic and Gemini's native response formats aren't supported yet — see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864)
+- **Zero configuration**: Works out-of-the-box with multiple LLM provider response shapes
+- **Response parsing**: Tries an ordered list of JSON Pointer candidates against the response body until one resolves to a numeric value (see [Data Extraction](../reference/tokenratelimitpolicy.md#dataextraction))
+- **Provider scope**: The built-in defaults cover OpenAI, Azure OpenAI, OpenAI-compatible backends (vLLM, kServe, Ollama, etc.), the OpenAI Responses API, Google Gemini, and AWS Bedrock Converse API. `spec.dataExtraction.response.totalTokens` lets you configure custom pointers for other providers
 - **Accurate accounting**: Tracks actual token consumption, not estimates
 - **Graceful fallback**: If token parsing fails, falls back to request counting
 

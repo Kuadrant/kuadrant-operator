@@ -404,7 +404,11 @@ func (s ActionSpec) buildCommit() *GrpcAction {
 		rawActualAmount = s.Reservation.ActualAmount
 	}
 	storePath := reservationStorePath(id)
-	hasReservation := fmt.Sprintf("has(%s)", storePath)
+	// != null rather than has(): wasm-shim's dynamic kuadrant.* map inserts a
+	// null placeholder for any referenced-but-unstored leaf once a sibling
+	// path exists anywhere under the shared root, which makes has() report
+	// false positives for reservations that were never actually held.
+	hasReservation := fmt.Sprintf("%s != null", storePath)
 
 	amountKnown := "false"
 	if rawActualAmount != "" {

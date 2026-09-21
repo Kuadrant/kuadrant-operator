@@ -433,7 +433,7 @@ func TestActionSpecBuild_Commit(t *testing.T) {
 	// commit is skipped only when neither a reservation was held nor the usage
 	// is parseable (RFC 0021); otherwise it always runs.
 	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
-	hasReservation := fmt.Sprintf("has(%s)", wantPath)
+	hasReservation := fmt.Sprintf("%s != null", wantPath)
 	amountKnown := `(responseBodyJSON("/usage/total_tokens")) != null`
 	wantPredicate := fmt.Sprintf("(%s) || (%s)", hasReservation, amountKnown)
 	if grpc.Predicate != wantPredicate {
@@ -477,7 +477,7 @@ func TestActionSpecBuild_Commit_NoActualAmountData(t *testing.T) {
 	}
 
 	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
-	wantPredicate := fmt.Sprintf("(has(%s)) || (false)", wantPath)
+	wantPredicate := fmt.Sprintf("(%s != null) || (false)", wantPath)
 	if grpc.Predicate != wantPredicate {
 		t.Errorf("predicate = %q, want %q", grpc.Predicate, wantPredicate)
 	}

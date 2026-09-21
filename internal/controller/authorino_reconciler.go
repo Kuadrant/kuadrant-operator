@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"os"
 	"sync"
 
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -16,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -244,8 +244,11 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 // configureAuthorinoLoggingFields uses the unstructured representation until the
 // independently managed authorino-operator dependency revision is updated.
 func configureAuthorinoLoggingFields(authorino *unstructured.Unstructured) error {
-	enabled := os.Getenv("AUTHORINO_ENABLE_LOGGING_FIELDS") == "true"
-	return unstructured.SetNestedField(authorino.Object, enabled, "spec", "enableLoggingFields")
+	enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false)
+	if !enabled {
+		return nil
+	}
+	return unstructured.SetNestedField(authorino.Object, true, "spec", "enableLoggingFields")
 }
 
 func buildTLSPatch(existing authorinoopapi.Tls, minVersion string, cipherSuites []string) authorinoopapi.Tls {

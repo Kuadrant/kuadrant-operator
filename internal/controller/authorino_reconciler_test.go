@@ -14,15 +14,15 @@ func TestConfigureAuthorinoLoggingFields(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		value   *string
-		enabled bool
+		enabled *bool
 	}{
 		{name: "unset"},
 		{name: "empty", value: ptr.To("")},
 		{name: "false", value: ptr.To("false")},
-		{name: "true", value: ptr.To("true"), enabled: true},
+		{name: "true", value: ptr.To("true"), enabled: ptr.To(true)},
 		{name: "invalid", value: ptr.To("invalid")},
-		{name: "numeric", value: ptr.To("1")},
-		{name: "uppercase", value: ptr.To("TRUE")},
+		{name: "numeric", value: ptr.To("1"), enabled: ptr.To(true)},
+		{name: "uppercase", value: ptr.To("TRUE"), enabled: ptr.To(true)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("AUTHORINO_ENABLE_LOGGING_FIELDS", "")
@@ -44,8 +44,11 @@ func TestConfigureAuthorinoLoggingFields(t *testing.T) {
 						t.Fatal(err)
 					}
 					enabled, found, err := unstructured.NestedBool(authorino.Object, "spec", "enableLoggingFields")
-					if err != nil || !found || enabled != tc.enabled {
+					if err != nil || (tc.enabled != nil && (!found || enabled != *tc.enabled)) {
 						t.Fatalf("expected enableLoggingFields=%v, got %v (found=%v, err=%v)", tc.enabled, enabled, found, err)
+					}
+					if tc.enabled == nil && initial["spec"] == nil && found {
+						t.Fatalf("expected enableLoggingFields to remain unset, got %v", enabled)
 					}
 				}
 				if limit, found, err := unstructured.NestedInt64(authorino.Object, "spec", "loggingFieldsMaxValueBytes"); err != nil || (found && limit != 4096) {

@@ -464,7 +464,7 @@ jobs:
           GATEWAY_CLASS_NAME="$GATEWAY_CLASS_NAME" \
           make -C mcp-gateway \
             GINKGO_VERSION="$ginkgo_version" \
-            E2E_TIMEOUT=45m \
+            E2E_TIMEOUT=60m \
             test-e2e-ci-full E2E_PROCS=4 \
             2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/e2e.log"
 

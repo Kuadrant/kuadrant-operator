@@ -550,7 +550,7 @@ func buildAuthOnReply(name string) []Action {
 		).WithExportToHost(true),
 		NewHeadersAction(
 			fmt.Sprintf("has(%s.ok_response)", name),
-			"request",
+			HeaderTargetRequest,
 			fmt.Sprintf("%s.ok_response.headers", name),
 		),
 		NewFailAction(
@@ -724,7 +724,7 @@ func buildRateLimitOnReply(name string) []Action {
 		),
 		NewHeadersAction(
 			fmt.Sprintf("%s.overall_code == 1", name),
-			"response",
+			HeaderTargetResponse,
 			fmt.Sprintf("%s.response_headers_to_add", name),
 		),
 		NewFailAction(

@@ -738,7 +738,7 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
@@ -762,10 +762,10 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 	assert.NilError(t, err)
 
 	assert.Equal(t, len(p.actions), 4)
-	assert.Equal(t, p.actions[0].phase, "request")
-	assert.Equal(t, p.actions[1].phase, "request")
-	assert.Equal(t, p.actions[2].phase, "response")
-	assert.Equal(t, p.actions[3].phase, "response")
+	assert.Equal(t, p.actions[0].phase, extpb.Phase_PHASE_REQUEST)
+	assert.Equal(t, p.actions[1].phase, extpb.Phase_PHASE_REQUEST)
+	assert.Equal(t, p.actions[2].phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Equal(t, p.actions[3].phase, extpb.Phase_PHASE_RESPONSE)
 }
 
 func TestPipeline_PhaseOrdering_RequestAfterResponse(t *testing.T) {
@@ -792,7 +792,7 @@ func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
 			Predicate:  "threatResponse.threat_level >= 5",
 			WithStatus: 403,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -805,7 +805,7 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -820,7 +820,7 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 func TestPipeline_VarAvailability_CrossCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+	err := p.OnHTTPRequest(exttypes.GRPCAction{
 		Method: "assess-threat",
 		Var:    "threatResponse",
 	})
@@ -837,8 +837,8 @@ func TestPipeline_DuplicateVarName(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"},
-		exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"},
+		exttypes.GRPCAction{Method: "method-a", Var: "myVar"},
+		exttypes.GRPCAction{Method: "method-b", Var: "myVar"},
 	)
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
@@ -847,10 +847,10 @@ func TestPipeline_DuplicateVarName(t *testing.T) {
 func TestPipeline_DuplicateVarName_AcrossCalls(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"})
+	err := p.OnHTTPRequest(exttypes.GRPCAction{Method: "method-a", Var: "myVar"})
 	assert.NilError(t, err)
 
-	err = p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"})
+	err = p.OnHTTPRequest(exttypes.GRPCAction{Method: "method-b", Var: "myVar"})
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
 }
@@ -887,7 +887,7 @@ func TestPipeline_MultipleOnHTTPRequestCalls(t *testing.T) {
 func TestPipeline_VarInHeadersToAdd(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+	err := p.OnHTTPRequest(exttypes.GRPCAction{
 		Method: "assess-threat",
 		Var:    "threatResponse",
 	})
@@ -906,7 +906,7 @@ func TestPipeline_VarInHeadersToAdd_ForwardReference(t *testing.T) {
 		exttypes.AddHeadersAction{
 			HeadersToAdd: `{"x-threat-level": string(threatResponse.threat_level)}`,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -942,7 +942,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{
 				Predicate:  `request.url_path == "/blocked"`,
 				LogMessage: "blocked",
@@ -956,7 +956,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{
 				Predicate:  `threatResponse.threat_level >= 5`,
 				LogMessage: "threat detected",
@@ -968,7 +968,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 	t.Run("fail action referencing grpc var from previous call", func(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-		err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"})
+		err := p.OnHTTPRequest(exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"})
 		assert.NilError(t, err)
 
 		err = p.OnHTTPResponse(exttypes.FailAction{
@@ -982,7 +982,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{LogMessage: "always fail"},
 		)
 		assert.Assert(t, err != nil)
@@ -1007,7 +1007,7 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 			Predicate:  `request.url_path == "/blocked"`,
 			WithStatus: 403,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
@@ -1038,25 +1038,25 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 
 	assert.Assert(t, cmp.Len(capturedReq.Actions, 5))
 
-	assert.Equal(t, capturedReq.Actions[0].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
-	assert.Equal(t, capturedReq.Actions[0].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[0].WithStatus, int32(403))
+	assert.Equal(t, capturedReq.Actions[0].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[0].GetDeny() != nil)
+	assert.Equal(t, capturedReq.Actions[0].GetDeny().WithStatus, int32(403))
 
-	assert.Equal(t, capturedReq.Actions[1].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
-	assert.Equal(t, capturedReq.Actions[1].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[1].Method, "assess-threat")
-	assert.Equal(t, capturedReq.Actions[1].Var, "threatResponse")
+	assert.Equal(t, capturedReq.Actions[1].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[1].GetGrpc() != nil)
+	assert.Equal(t, capturedReq.Actions[1].GetGrpc().Method, "assess-threat")
+	assert.Equal(t, capturedReq.Actions[1].GetGrpc().Var, "threatResponse")
 
-	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAIL)
-	assert.Equal(t, capturedReq.Actions[2].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[2].LogMessage, "Request blocked")
+	assert.Equal(t, capturedReq.Actions[2].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[2].GetFail() != nil)
+	assert.Equal(t, capturedReq.Actions[2].GetFail().LogMessage, "Request blocked")
 
-	assert.Equal(t, capturedReq.Actions[3].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
-	assert.Equal(t, capturedReq.Actions[3].Phase, "response")
+	assert.Equal(t, capturedReq.Actions[3].Phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Assert(t, capturedReq.Actions[3].GetDeny() != nil)
 
-	assert.Equal(t, capturedReq.Actions[4].ActionType, extpb.ActionType_ACTION_TYPE_ADD_HEADERS)
-	assert.Equal(t, capturedReq.Actions[4].Phase, "response")
-	assert.Equal(t, capturedReq.Actions[4].HeadersToAdd, `{"x-threat-checked": "true"}`)
+	assert.Equal(t, capturedReq.Actions[4].Phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Assert(t, capturedReq.Actions[4].GetAddHeaders() != nil)
+	assert.Equal(t, capturedReq.Actions[4].GetAddHeaders().HeadersToAdd, `{"x-threat-checked": "true"}`)
 }
 
 func TestPipelineCommit_EmptyPipeline(t *testing.T) {

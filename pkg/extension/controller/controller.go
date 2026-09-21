@@ -610,16 +610,9 @@ func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipe
 	}
 }
 
-type pipelinePhase = string
-
-const (
-	phaseRequest  pipelinePhase = "request"
-	phaseResponse pipelinePhase = "response"
-)
-
 type pipelineEntry struct {
 	action exttypes.Action
-	phase  pipelinePhase
+	phase  extpb.Phase
 }
 
 // PipelineImpl implements Pipeline by accumulating actions locally with
@@ -633,21 +626,21 @@ type PipelineImpl struct {
 
 func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
 	for _, entry := range p.actions {
-		if entry.phase == phaseResponse {
+		if entry.phase == extpb.Phase_PHASE_RESPONSE {
 			return fmt.Errorf("cannot add request actions after response actions have been added")
 		}
 	}
-	return p.validateAndAppend(phaseRequest, actions)
+	return p.validateAndAppend(extpb.Phase_PHASE_REQUEST, actions)
 }
 
 func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
-	return p.validateAndAppend(phaseResponse, actions)
+	return p.validateAndAppend(extpb.Phase_PHASE_RESPONSE, actions)
 }
 
-func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action) error {
+func (p *PipelineImpl) validateAndAppend(phase extpb.Phase, actions []exttypes.Action) error {
 	batchVars := make(map[string]bool)
 	for _, action := range actions {
-		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {
 			batchVars[grpc.Var] = true
 		}
 	}
@@ -695,7 +688,7 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 			}
 		}
 
-		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {
 			if localPopulated[grpc.Var] {
 				return fmt.Errorf("duplicate variable name %q", grpc.Var)
 			}

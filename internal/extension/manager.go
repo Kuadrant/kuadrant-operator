@@ -1128,61 +1128,55 @@ type actionValidationCtx struct {
 	varToMethod map[string]string
 }
 
-type actionEntryValidator func(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error
-
-var actionEntryValidators = map[extpb.ActionType]actionEntryValidator{
-	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: validateGRPCMethodEntry,
-	extpb.ActionType_ACTION_TYPE_DENY:        validateDenyEntry,
-	extpb.ActionType_ACTION_TYPE_FAIL:        validateFailEntry,
-	extpb.ActionType_ACTION_TYPE_ADD_HEADERS: validateAddHeadersEntry,
-}
-
-func validateGRPCMethodEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error {
-	if action.Method == "" {
-		return fmt.Errorf("actions[%d]: method must be specified for grpc_method actions", index)
+func validateGRPCEntry(grpc *extpb.GrpcAction, index int, vctx *actionValidationCtx) error {
+	if grpc.Method == "" {
+		return fmt.Errorf("actions[%d]: method must be specified for grpc actions", index)
 	}
-	if !vctx.store.HasUpstreamName(vctx.policyID, action.Method) {
-		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, action.Method)
+	if !vctx.store.HasUpstreamName(vctx.policyID, grpc.Method) {
+		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, grpc.Method)
 	}
-	if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
-		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, action.Var)
+	if grpc.Var != "" && !varNameRegexp.MatchString(grpc.Var) {
+		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, grpc.Var)
 	}
-	entry.Method = action.Method
-	entry.Var = action.Var
-	if action.Var != "" {
-		vctx.varToMethod[action.Var] = action.Method
+	if grpc.Var != "" {
+		vctx.varToMethod[grpc.Var] = grpc.Method
 	}
 	return nil
 }
 
-func validateDenyEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if action.WithStatus != 0 {
-		if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", index)); err != nil {
+func validateDenyEntry(deny *extpb.DenyAction, index int) error {
+	if deny.WithStatus != 0 {
+		if err := validateHTTPStatusCode(deny.WithStatus, fmt.Sprintf("actions[%d].with_status", index)); err != nil {
 			return err
 		}
 	}
-	entry.WithStatus = int(action.WithStatus)
-	entry.WithHeaders = action.WithHeaders
-	entry.WithBody = action.WithBody
+	if deny.WithHeaders != "" {
+		if err := validateCELExpression(deny.WithHeaders); err != nil {
+			return fmt.Errorf("actions[%d].with_headers: %w", index, err)
+		}
+	}
+	if deny.WithBody != "" {
+		if err := validateCELExpression(deny.WithBody); err != nil {
+			return fmt.Errorf("actions[%d].with_body: %w", index, err)
+		}
+	}
 	return nil
 }
 
-func validateFailEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if strings.TrimSpace(action.LogMessage) == "" {
+func validateFailEntry(fail *extpb.FailAction, index int) error {
+	if strings.TrimSpace(fail.LogMessage) == "" {
 		return fmt.Errorf("actions[%d]: log_message must be specified for fail actions", index)
 	}
-	entry.LogMessage = action.LogMessage
 	return nil
 }
 
-func validateAddHeadersEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if action.HeadersToAdd == "" {
+func validateAddHeadersEntry(addHeaders *extpb.AddHeadersAction, index int) error {
+	if addHeaders.HeadersToAdd == "" {
 		return fmt.Errorf("actions[%d]: headers_to_add must be specified for add_headers actions", index)
 	}
-	if err := validateCELExpression(action.HeadersToAdd); err != nil {
+	if err := validateCELExpression(addHeaders.HeadersToAdd); err != nil {
 		return fmt.Errorf("actions[%d].headers_to_add: %w", index, err)
 	}
-	entry.HeadersToAdd = action.HeadersToAdd
 	return nil
 }
 
@@ -1198,33 +1192,52 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 		if action == nil {
 			return nil, fmt.Errorf("actions[%d]: entry cannot be nil", i)
 		}
-		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("actions[%d]: action_type must be specified", i)
-		}
-		if action.Phase != string(PipelinePhaseRequest) && action.Phase != string(PipelinePhaseResponse) {
-			return nil, fmt.Errorf("actions[%d]: phase must be %q or %q, got %q", i, PipelinePhaseRequest, PipelinePhaseResponse, action.Phase)
-		}
 		if action.Predicate != "" {
 			if err := validateCELExpression(action.Predicate); err != nil {
 				return nil, fmt.Errorf("actions[%d].predicate: %w", i, err)
 			}
 		}
 
-		entry := PipelineActionEntry{
-			ActionType: action.ActionType,
-			Predicate:  action.Predicate,
-			Phase:      action.Phase,
+		if _, err := phaseFromProto(action.Phase); err != nil {
+			return nil, fmt.Errorf("actions[%d]: phase must be specified", i)
 		}
 
-		validator, ok := actionEntryValidators[action.ActionType]
-		if !ok {
-			return nil, fmt.Errorf("actions[%d]: unknown action_type %s", i, action.ActionType)
-		}
-		if err := validator(action, i, &entry, &vctx); err != nil {
-			return nil, err
+		switch a := action.Action.(type) {
+		case *extpb.ActionEntry_Grpc:
+			if a == nil || a.Grpc == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateGRPCEntry(a.Grpc, i, &vctx); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Deny:
+			if a == nil || a.Deny == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateDenyEntry(a.Deny, i); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_AddHeaders:
+			if a == nil || a.AddHeaders == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateAddHeadersEntry(a.AddHeaders, i); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Fail:
+			if a == nil || a.Fail == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateFailEntry(a.Fail, i); err != nil {
+				return nil, err
+			}
+		case nil:
+			return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+		default:
+			return nil, fmt.Errorf("actions[%d]: unknown action type", i)
 		}
 
-		entries = append(entries, entry)
+		entries = append(entries, PipelineActionEntry{Entry: action})
 	}
 
 	if len(vctx.varToMethod) > 0 {
@@ -1236,24 +1249,16 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 	return entries, nil
 }
 
-func validateHTTPStatusCode(code, field string) error {
-	if code == "" {
-		return fmt.Errorf("%s: must be specified", field)
-	}
-	n, err := strconv.Atoi(code)
-	if err != nil {
-		return fmt.Errorf("%s: %q is not a valid integer", field, code)
-	}
-	if n < 100 || n > 599 {
-		return fmt.Errorf("%s: must be between 100 and 599, got %d", field, n)
+func validateHTTPStatusCode(code int32, field string) error {
+	if code < 100 || code > 599 {
+		return fmt.Errorf("%s: must be between 100 and 599, got %d", field, code)
 	}
 	return nil
 }
 
 func (s *extensionService) validateCrossActionVars(policyID ResourceID, actions []*extpb.ActionEntry, varToMethod map[string]string) error {
 	for i, action := range actions {
-		exprs := collectCELExpressions(action)
-		for _, expr := range exprs {
+		for _, expr := range celExpressionsFromEntry(action) {
 			fieldAccesses, err := extractVarFieldAccesses(expr, varToMethod)
 			if err != nil {
 				return fmt.Errorf("actions[%d]: %w", i, err)
@@ -1284,17 +1289,6 @@ func (s *extensionService) validateCrossActionVars(policyID ResourceID, actions 
 		}
 	}
 	return nil
-}
-
-func collectCELExpressions(action *extpb.ActionEntry) []string {
-	var exprs []string
-	if action.Predicate != "" {
-		exprs = append(exprs, action.Predicate)
-	}
-	if action.HeadersToAdd != "" {
-		exprs = append(exprs, action.HeadersToAdd)
-	}
-	return exprs
 }
 
 // Creates a locator matching the definition in policy-machinery

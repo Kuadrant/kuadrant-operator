@@ -168,16 +168,18 @@ Each series also carries Limitador's own `limitador_namespace` label, which iden
 
 | Metric | Labels applied |
 |--------|----------------|
-| `auth_server_authconfig_response_status` | All labels |
 | `auth_server_authconfig_total` | All labels except those derived from `auth.*` |
+| `auth_server_authconfig_response_status` | All labels except those derived from `auth.*` |
 | `auth_server_authconfig_duration_seconds` | All labels except those derived from `auth.*` |
 | `auth_server_evaluator_*` | All labels except those derived from `auth.*` |
 
 The `auth_server_evaluator_*` metrics are only exported for evaluators that set `metrics: true`, or when Authorino runs with deep metrics enabled.
 
-Authorino resolves the labels at several points in its pipeline, and only the last of them runs after authentication has established an identity. A label such as `workload: auth.identity.username` therefore reaches `auth_server_authconfig_response_status` but none of the others, and Authorino logs a `failed to evaluate CEL expression` error at each of the earlier points. Those errors are expected and have no bearing on the Limitador labels.
+An `auth.*` label reaches Limitador but never Authorino, because the two resolve the expression against differently shaped data. The wasm-shim resolves Limitador's copy against the flattened dynamic metadata an AuthPolicy exports, where a TokenReview identity is `auth.identity.username`. Authorino resolves its own copy against its internal authorization JSON, where the same identity is `auth.identity.user.username`. The expression this guide uses is the one Limitador needs, so Authorino cannot resolve it and logs a `failed to evaluate CEL expression` error for every request. Those errors are expected and have no bearing on the Limitador labels.
 
-Two consequences follow. A single Authorino metric can hold series with different label sets, so aggregate it with an explicit `sum by (...)` rather than summing the metric as a whole. And Authorino allocates one counter per distinct label combination without ever reaping them, so a high-cardinality expression is paid for twice, in Limitador and in Authorino.
+Writing the label the way Authorino expects is not a workaround. The wasm-shim then cannot resolve it, and a single unresolvable attribute discards the whole descriptor, so the route stops producing Limitador metrics entirely while still returning 200 (see [Known Limitations](#known-limitations)). Write `auth.*` labels for Limitador and treat their absence from the Authorino metrics as expected.
+
+For the labels Authorino does apply, a single metric can hold series with different label sets: Authorino allocates one counter per distinct label combination and never reaps them, so every edit to the TelemetryPolicy leaves the earlier series behind. Aggregate with an explicit `sum by (...)` rather than summing the metric as a whole, and note that a high-cardinality expression is paid for twice, in Limitador and in Authorino.
 
 Adding a TelemetryPolicy does not change `istio_requests_total` in any way.
 

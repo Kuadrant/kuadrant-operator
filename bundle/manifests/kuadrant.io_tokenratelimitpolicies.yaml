@@ -122,6 +122,35 @@ spec:
                             - window
                             type: object
                           type: array
+                        reservation:
+                          description: |-
+                            Reservation configures token reservation for this limit. It only takes
+                            effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+                            an estimated token amount is reserved on request arrival and committed
+                            with the actual usage once the upstream responds. When omitted, defaults
+                            are generated (amount 0, meaning no capacity is reserved, and the route
+                            backendRequest timeout for ttl).
+                          properties:
+                            amount:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Amount is either a literal integer number of tokens to reserve on request
+                                arrival, or a CEL expression evaluating to the number of tokens (uint).
+                                Defaults to 0 when omitted, which reserves no capacity: Limitador
+                                short-circuits amount-0 reservations, so this limit behaves like
+                                Optimistic unless amount is set explicitly to a non-zero estimate.
+                              x-kubernetes-int-or-string: true
+                            ttl:
+                              description: |-
+                                TTL is a CEL expression evaluating to the maximum duration
+                                (google.protobuf.Duration) the reservation is held before it expires.
+                                When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+                                is used.
+                              minLength: 1
+                              type: string
+                          type: object
                         when:
                           description: |-
                             When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -211,6 +240,35 @@ spec:
                         - window
                         type: object
                       type: array
+                    reservation:
+                      description: |-
+                        Reservation configures token reservation for this limit. It only takes
+                        effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+                        an estimated token amount is reserved on request arrival and committed
+                        with the actual usage once the upstream responds. When omitted, defaults
+                        are generated (amount 0, meaning no capacity is reserved, and the route
+                        backendRequest timeout for ttl).
+                      properties:
+                        amount:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            Amount is either a literal integer number of tokens to reserve on request
+                            arrival, or a CEL expression evaluating to the number of tokens (uint).
+                            Defaults to 0 when omitted, which reserves no capacity: Limitador
+                            short-circuits amount-0 reservations, so this limit behaves like
+                            Optimistic unless amount is set explicitly to a non-zero estimate.
+                          x-kubernetes-int-or-string: true
+                        ttl:
+                          description: |-
+                            TTL is a CEL expression evaluating to the maximum duration
+                            (google.protobuf.Duration) the reservation is held before it expires.
+                            When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+                            is used.
+                          minLength: 1
+                          type: string
+                      type: object
                     when:
                       description: |-
                         When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -281,6 +339,35 @@ spec:
                             - window
                             type: object
                           type: array
+                        reservation:
+                          description: |-
+                            Reservation configures token reservation for this limit. It only takes
+                            effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+                            an estimated token amount is reserved on request arrival and committed
+                            with the actual usage once the upstream responds. When omitted, defaults
+                            are generated (amount 0, meaning no capacity is reserved, and the route
+                            backendRequest timeout for ttl).
+                          properties:
+                            amount:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Amount is either a literal integer number of tokens to reserve on request
+                                arrival, or a CEL expression evaluating to the number of tokens (uint).
+                                Defaults to 0 when omitted, which reserves no capacity: Limitador
+                                short-circuits amount-0 reservations, so this limit behaves like
+                                Optimistic unless amount is set explicitly to a non-zero estimate.
+                              x-kubernetes-int-or-string: true
+                            ttl:
+                              description: |-
+                                TTL is a CEL expression evaluating to the maximum duration
+                                (google.protobuf.Duration) the reservation is held before it expires.
+                                When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+                                is used.
+                              minLength: 1
+                              type: string
+                          type: object
                         when:
                           description: |-
                             When holds a list of "limit-level" `Predicate`s for token-based conditions

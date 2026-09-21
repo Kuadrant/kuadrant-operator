@@ -48,6 +48,37 @@
 | `rates`   | [][Rate](#rate)              | No           | List of rate limit details including limit and window. If not specified, no rate limits are applied for this limit definition |
 | `when`    | [][WhenPredicate](#whenpredicate)    | No           | List of predicates for this limit. Used in combination with top-level predicates                                     |
 | `counters`| [][Counter](#counter)        | No           | CEL expressions that define counter keys for rate limiting. If not specified, rate limiting will be applied globally without user-specific tracking |
+| `reservation`| [Reservation](#reservation) | No        | Tunes token reservation for this limit. Only takes effect when the Kuadrant CR `spec.tokenRateLimiting.mode` is `Reservation` (the default). Ignored in `Optimistic` mode. |
+
+### Reservation
+
+Configures how many tokens are reserved on request arrival and for how long, when the cluster is in `Reservation` mode (see the [Kuadrant CR `tokenRateLimiting`](kuadrant.md#tokenratelimiting) reference). Both fields are optional; when the whole `reservation` block is omitted, defaults are generated.
+
+| **Field** | **Type** | **Required** | **Description**                                                                                                              |
+|-----------|----------|:------------:|----------------------------------------------------------------------------------------------------------------------------|
+| `amount`  | Integer or String | No | Either a literal integer number of tokens, or a CEL expression evaluating to the number of tokens (`uint`), to reserve on request arrival. **Defaults to `0` when omitted.** |
+| `ttl`     | String   | No           | CEL expression evaluating to the maximum duration (`google.protobuf.Duration`) the reservation is held before it expires. When omitted, the value falls back to the route's `HTTPRoute.spec.rules[].timeouts.backendRequest`; if that is also unset, `ttl` is left unset and Limitador applies its own default. |
+
+**`amount` defaults to `0`, which reserves no capacity at all.** `0` is a documented Limitador short-circuit: the Reserve/Commit calls still happen, but no capacity is held, so `Reservation` mode behaves identically to `Optimistic` mode for any limit that doesn't set `amount` explicitly — no protection against the concurrent-request race RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md) exists to close. This is intentional: `Reservation` is the cluster-wide default mode, so a `0` default keeps upgrading behavior-neutral for every TokenRateLimitPolicy that predates reservations, instead of silently reserving an arbitrary flat amount for policies that were never tuned for it. **To get real protection against concurrent-request races, `amount` must be set explicitly** to a meaningful, non-zero estimate of tokens consumed per request.
+
+The reserved `amount` is an estimate: once the upstream responds, the actual `usage.total_tokens` is committed and the unused portion of the reservation is released.
+
+When omitted, `ttl` defaults to the route's own `HTTPRoute.spec.rules[].timeouts.backendRequest`, since a reservation only needs to survive as long as the request it protects can legitimately run; setting it much larger than that only extends how long an abandoned reservation (e.g. a disconnected client) blocks capacity for no benefit.
+
+Example — reserve a flat 8000 tokens per request and hold the reservation for 30s:
+
+```yaml
+limits:
+  chat:
+    rates:
+    - limit: 100000
+      window: 1h
+    reservation:
+      amount: 8000
+      ttl: 'duration("30s")'
+```
+
+`amount` also accepts a CEL expression as a quoted string, e.g. `amount: "1 + 1"`. Note: expressions that read the request body (e.g. a `requestBodyJSON(...)`-based token estimate) are not yet supported for `reservation.amount`.
 
 ### Rate
 

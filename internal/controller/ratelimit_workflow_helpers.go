@@ -225,8 +225,41 @@ func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
-func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates) []wasm.ActionSpec {
-	predicates := make([]string, 0, len(topLevelPredicates)+1)
+const (
+	// defaultReservationAmount is the flat number of tokens reserved on request
+	// arrival when a TokenLimit does not specify spec...reservation.amount. The
+	// reserve message requires an amount, so a repo-defined default is always
+	// emitted.
+	//
+	// It defaults to 0 rather than a non-zero flat amount: amount "0" is a
+	// documented Limitador short-circuit that skips holding capacity while
+	// still exercising the Reserve/Commit lifecycle. This makes Reservation
+	// mode a no-op equivalent to Optimistic for any TokenRateLimitPolicy that
+	// doesn't explicitly opt in with a non-zero reservation.amount -- notably
+	// every policy that predates RFC 0021, since Reservation is the cluster-wide
+	// default mode. Closing the concurrent-request race window RFC 0021
+	// describes requires setting reservation.amount to a real, non-zero
+	// estimate of tokens per request.
+	defaultReservationAmount = "0"
+
+	// tokenUsageBodyRef is the response-body reference resolving to the number of
+	// tokens actually consumed by the upstream (OpenAI-compatible usage schema).
+	tokenUsageBodyRef = `responseBodyJSON("/usage/total_tokens")`
+)
+
+// wasmActionSpecsFromTokenLimit builds the wasm action specs for a single token
+// limit according to the cluster-wide enforcement mode:
+//   - Reservation (RFC 0021): a Reserve action reserves an estimated amount on
+//     request arrival and a Commit action commits the actual usage on response.
+//   - Optimistic: a Check action (hits_addend=0) enforces the limit on request
+//     arrival and a Report action increments the counter with the actual usage.
+//
+// defaultTTL is a Gateway API duration string (the route's backendRequest
+// timeout) applied as the reservation TTL when the limit does not set its own; it
+// may be empty (leaving ttl unset so Limitador defaults it) and is ignored
+// outside Reservation mode.
+func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates, mode kuadrantv1beta1.TokenRateLimitingMode, defaultTTL string) []wasm.ActionSpec {
+	predicates := make([]string, 0, len(topLevelPredicates)+len(tokenLimit.When))
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
 	}
@@ -234,7 +267,7 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 		predicates = append(predicates, pred.Predicate)
 	}
 
-	// common both actions
+	// descriptor data shared by every phase: the limit identifier plus counters
 	commonData := make([]wasm.DataType, 0, 1+len(tokenLimit.Counters))
 	commonData = append(commonData, wasm.DataType{
 		Value: &wasm.Expression{
@@ -244,8 +277,6 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 			},
 		},
 	})
-
-	// add counters if specified
 	for _, counter := range tokenLimit.Counters {
 		counterExpr := string(counter.Expression)
 		commonData = append(commonData, wasm.DataType{
@@ -258,10 +289,16 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 		})
 	}
 
-	// Create separate data slices for request and response phases
-	// We need independent copies because each phase has different hits_addend values
+	if mode == kuadrantv1beta1.TokenRateLimitingModeReservation {
+		return tokenReservationSpecs(tokenLimit, limitIdentifier, scope, sourcePolicyLocator, predicates, commonData, defaultTTL)
+	}
+	return tokenCheckReportSpecs(scope, sourcePolicyLocator, predicates, commonData)
+}
 
-	// Request phase - check limit without consuming tokens
+// tokenCheckReportSpecs builds the request-phase check (hits_addend=0) and
+// response-phase report (hits_addend=actual usage) specs for Optimistic mode.
+func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType) []wasm.ActionSpec {
+	// Independent copies because each phase carries a different hits_addend.
 	requestPhaseData := make([]wasm.DataType, 0, len(commonData)+1)
 	requestPhaseData = append(requestPhaseData, commonData...)
 	requestPhaseData = append(requestPhaseData, wasm.DataType{
@@ -278,21 +315,17 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 		Scope:       string(scope),
 		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
 		ConditionalData: []wasm.ConditionalData{
-			{
-				Predicates: predicates,
-				Data:       requestPhaseData,
-			},
+			{Predicates: predicates, Data: requestPhaseData},
 		},
 	}
 
-	// Response phase - increment counter with actual token usage
 	responsePhaseData := make([]wasm.DataType, 0, len(commonData)+1)
 	responsePhaseData = append(responsePhaseData, commonData...)
 	responsePhaseData = append(responsePhaseData, wasm.DataType{
 		Value: &wasm.Expression{
 			ExpressionItem: wasm.ExpressionItem{
 				Key:   "ratelimit.hits_addend",
-				Value: "responseBodyJSON(\"/usage/total_tokens\")",
+				Value: tokenUsageBodyRef,
 			},
 		},
 	})
@@ -302,14 +335,68 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 		Scope:       string(scope),
 		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
 		ConditionalData: []wasm.ConditionalData{
-			{
-				Predicates: predicates,
-				Data:       responsePhaseData,
-			},
+			{Predicates: predicates, Data: responsePhaseData},
 		},
 	}
 
 	return []wasm.ActionSpec{requestSpec, responseSpec}
+}
+
+// tokenReservationSpecs builds the request-phase reserve and response-phase
+// commit specs for Reservation mode (RFC 0021). Both specs carry the same
+// reservation ID so the operator-generated config stores and reads back the
+// reservation_id under a single per-limit store path.
+//
+// amount is required and defaults to defaultReservationAmount when the policy
+// omits it. ttl is optional: the policy value wins, else the route backendRequest
+// timeout (defaultTTL), else it is left unset for Limitador to default.
+func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType, defaultTTL string) []wasm.ActionSpec {
+	amount := defaultReservationAmount
+	ttl := ""
+	if defaultTTL != "" {
+		ttl = fmt.Sprintf(`duration("%s")`, defaultTTL)
+	}
+	if r := tokenLimit.Reservation; r != nil {
+		if r.Amount != nil {
+			// String() returns the literal integer (e.g. "8000") when Amount is an
+			// int, or the CEL expression verbatim when it is a string; both are
+			// valid CEL, so no branching is needed here.
+			amount = r.Amount.String()
+		}
+		if r.TTL != nil {
+			ttl = string(*r.TTL)
+		}
+	}
+
+	reserveSpec := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       string(scope),
+		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
+		ConditionalData: []wasm.ConditionalData{
+			{Predicates: predicates, Data: commonData},
+		},
+		Reservation: &wasm.ReservationSpec{
+			ID:     limitIdentifier,
+			Amount: amount,
+			TTL:    ttl,
+		},
+	}
+
+	// Commit (response phase): commit the tokens actually consumed upstream.
+	commitSpec := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitCommitServiceName,
+		Scope:       string(scope),
+		Sources:     []string{sourcePolicyLocator}, // Single policy for individual token limits
+		ConditionalData: []wasm.ConditionalData{
+			{Predicates: predicates, Data: commonData},
+		},
+		Reservation: &wasm.ReservationSpec{
+			ID:           limitIdentifier,
+			ActualAmount: tokenUsageBodyRef,
+		},
+	}
+
+	return []wasm.ActionSpec{reserveSpec, commitSpec}
 }
 
 func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.ActionSpec {
@@ -328,7 +415,7 @@ func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, 
 	)
 }
 
-func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.ActionSpec {
+func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool, mode kuadrantv1beta1.TokenRateLimitingMode) []wasm.ActionSpec {
 	path := effectivePolicy.Path
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
@@ -339,6 +426,10 @@ func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLim
 		return []wasm.ActionSpec{}
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
+	// reservation TTL fallback derived once per route: the route rule's
+	// backendRequest timeout, used only in Reservation mode when a limit does not
+	// set its own ttl.
+	reservationDefaultTTL := reservationTTLFromRoute(parsed)
 
 	rulesEntries := lo.Entries(rules)
 	slices.SortFunc(rulesEntries, func(a, b lo.Entry[string, kuadrantv1.MergeableRule]) int {
@@ -375,11 +466,23 @@ func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLim
 		sourcePolicyLocator := source.GetLocator()
 
 		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
-		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates)
+		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates, mode, reservationDefaultTTL)
 		allSpecs = append(allSpecs, tokenSpecs...)
 	}
 
 	return allSpecs
+}
+
+// reservationTTLFromRoute returns the route rule's backendRequest timeout as a
+// Gateway API duration string, or "" when the route does not set one.
+func reservationTTLFromRoute(parsed *kuadrantpolicymachinery.ParsedTopologyPath) string {
+	if parsed == nil || parsed.HTTPRouteRule == nil || parsed.HTTPRouteRule.HTTPRouteRule == nil {
+		return ""
+	}
+	if t := parsed.HTTPRouteRule.Timeouts; t != nil && t.BackendRequest != nil {
+		return string(*t.BackendRequest)
+	}
+	return ""
 }
 
 // buildWasmActionSpecsForAnyRateLimit is the generic implementation used by both rate limit policy types

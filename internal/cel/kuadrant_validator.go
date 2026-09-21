@@ -1,6 +1,8 @@
 package cel
 
 import (
+	"fmt"
+
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/samber/lo"
@@ -117,6 +119,20 @@ func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 			}
 		}
 	}
+	if amount := spec.ReservationAmountCEL(); amount != "" {
+		if _, err := validator.Validate(pol, amount); err != nil {
+			return err
+		}
+	}
+	if ttl := spec.ReservationTTLCEL(); ttl != "" {
+		ast, err := validator.Validate(pol, ttl)
+		if err != nil {
+			return err
+		}
+		if ast.OutputType() != cel.DurationType {
+			return fmt.Errorf("reservation ttl expression must evaluate to duration, got %s", ast.OutputType())
+		}
+	}
 	return nil
 }
 
@@ -126,9 +142,9 @@ func policyKindFromWasmServiceName(serviceName string) string {
 		return AuthPolicyKind
 	case wasm.RateLimitServiceName:
 		return RateLimitPolicyKind
-	case wasm.RateLimitCheckServiceName:
+	case wasm.RateLimitCheckServiceName, wasm.RateLimitReserveServiceName:
 		return TokenRateLimitPolicyKind
-	case wasm.RateLimitReportServiceName:
+	case wasm.RateLimitReportServiceName, wasm.RateLimitCommitServiceName:
 		return TokenRateLimitPolicyKind
 	default:
 		return RateLimitPolicyKind

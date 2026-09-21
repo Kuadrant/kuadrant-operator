@@ -120,12 +120,8 @@ func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 		}
 	}
 	if amount := spec.ReservationAmountCEL(); amount != "" {
-		ast, err := validator.Validate(pol, amount)
-		if err != nil {
+		if _, err := validator.Validate(pol, amount); err != nil {
 			return err
-		}
-		if ast.OutputType() != cel.UintType {
-			return fmt.Errorf("reservation amount expression must evaluate to uint, got %s", ast.OutputType())
 		}
 	}
 	if ttl := spec.ReservationTTLCEL(); ttl != "" {

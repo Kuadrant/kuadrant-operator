@@ -801,6 +801,23 @@ func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
 	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
 }
 
+func TestPipeline_VarAvailability_StoreForwardReference(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.StoreAction{
+			Path:  "threat_level",
+			Value: "threatResponse.threat_level",
+		},
+		exttypes.GRPCAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
+}
+
 func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
@@ -1491,4 +1508,56 @@ func TestReplayOwnedPolicies_StopsOnContextCancel(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("replayOwnedPolicies did not return after context cancellation")
 	}
+}
+
+func TestPipeline_VarSpansSeparateReplyHooks(t *testing.T) {
+	tests := []struct {
+		name   string
+		action exttypes.Action
+	}{
+		{"store value", exttypes.StoreAction{Path: "combined", Value: "aResp.x + bResp.y"}},
+		{"deny predicate", exttypes.DenyAction{Predicate: "aResp.x > 1 && bResp.y > 1", WithStatus: 403}},
+		{"deny body", exttypes.DenyAction{Predicate: "true", WithStatus: 403, WithBody: "aResp.x + bResp.y"}},
+		{"add headers", exttypes.AddHeadersAction{HeadersToAdd: `{"x-a": aResp.x, "x-b": bResp.y}`}},
+		{"fail predicate", exttypes.FailAction{Predicate: "aResp.x > 1 && bResp.y > 1", LogMessage: "blocked"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+			err := p.OnHTTPRequest(
+				exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+				exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+				tt.action,
+			)
+			assert.Assert(t, err != nil)
+			assert.Assert(t, cmp.Contains(err.Error(), `references variables ["aResp" "bResp"] from separate gRPC actions`))
+		})
+	}
+}
+
+func TestPipeline_VarSpansSeparateReplyHooks_AcrossCalls(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+		exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+	)
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(exttypes.StoreAction{Path: "combined", Value: "aResp.x + bResp.y"})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), `references variables ["aResp" "bResp"] from separate gRPC actions`))
+}
+
+func TestPipeline_SingleVarAcrossMultipleProducers(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+		exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+		exttypes.StoreAction{Path: "just_b", Value: "bResp.y"},
+	)
+	assert.NilError(t, err)
 }

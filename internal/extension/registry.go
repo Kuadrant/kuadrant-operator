@@ -1290,6 +1290,11 @@ func celExpressionsFromEntry(entry *extpb.ActionEntry) []string {
 			exprs = append(exprs, addHeaders.HeadersToAdd)
 		}
 	}
+	if store := entry.GetStore(); store != nil {
+		if store.Value != "" {
+			exprs = append(exprs, store.Value)
+		}
+	}
 	return exprs
 }
 
@@ -1299,21 +1304,29 @@ func translatePipelineToActions(
 	upstreamByMethod map[string]RegisteredUpstreamEntry,
 	sources []string,
 ) ([]wasm.Action, error) {
-	varToMethod := make(map[string]string)
-	for _, e := range requestEntries {
-		if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
-			varToMethod[grpc.GetVar()] = grpc.GetMethod()
-		}
-	}
-	for _, e := range responseEntries {
-		if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
-			varToMethod[grpc.GetVar()] = grpc.GetMethod()
-		}
+	type varProducer struct {
+		method  string
+		pattern *regexp.Regexp
 	}
 
-	varPatterns := make(map[string]*regexp.Regexp, len(varToMethod))
-	for varName := range varToMethod {
-		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	var producers []varProducer
+	collectProducers := func(entries []PipelineActionEntry) {
+		for _, e := range entries {
+			if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
+				producers = append(producers, varProducer{
+					method:  grpc.GetMethod(),
+					pattern: regexp.MustCompile(`\b` + regexp.QuoteMeta(grpc.GetVar()) + `\b`),
+				})
+			}
+		}
+	}
+	collectProducers(requestEntries)
+	collectProducers(responseEntries)
+
+	producerFor := func(e PipelineActionEntry) (varProducer, bool) {
+		return lo.Find(producers, func(p varProducer) bool {
+			return entryMatchesVar(e, p.pattern)
+		})
 	}
 
 	grpcOnReply := make(map[string][]wasm.Action)
@@ -1327,11 +1340,8 @@ func translatePipelineToActions(
 			if err != nil {
 				return err
 			}
-			for varName, methodName := range varToMethod {
-				if entryMatchesVar(e, varPatterns[varName]) {
-					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
-					break
-				}
+			if p, ok := producerFor(e); ok {
+				grpcOnReply[p.method] = append(grpcOnReply[p.method], ta)
 			}
 		}
 		return nil
@@ -1359,14 +1369,7 @@ func translatePipelineToActions(
 				result = append(result, ta)
 				continue
 			}
-			isVarDependent := false
-			for varName := range varToMethod {
-				if entryMatchesVar(e, varPatterns[varName]) {
-					isVarDependent = true
-					break
-				}
-			}
-			if !isVarDependent {
+			if _, ok := producerFor(e); !ok {
 				ta, err := entryToAction(e, sources)
 				if err != nil {
 					return err
@@ -1387,17 +1390,7 @@ func translatePipelineToActions(
 }
 
 func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
-	for _, expr := range celExpressionsFromEntry(entry.Entry) {
-		if pattern.MatchString(expr) {
-			return true
-		}
-	}
-	if fail := entry.Entry.GetFail(); fail != nil && fail.GetLogMessage() != "" {
-		if pattern.MatchString(fail.GetLogMessage()) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(celExpressionsFromEntry(entry.Entry), pattern.MatchString)
 }
 
 func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, error) {
@@ -1420,6 +1413,10 @@ func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, er
 			WithSources(sources), nil
 	case *extpb.ActionEntry_Fail:
 		return wasm.NewFailAction(predicate, a.Fail.LogMessage).
+			WithSources(sources), nil
+	case *extpb.ActionEntry_Store:
+		return wasm.NewStoreAction(predicate, a.Store.Path, a.Store.Value).
+			WithExportToHost(a.Store.ExportToHost).
 			WithSources(sources), nil
 	default:
 		return nil, fmt.Errorf("actions[%d]: unknown action type %T", entry.Index, entry.Entry.Action)

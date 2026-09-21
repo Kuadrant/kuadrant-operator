@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -661,31 +662,27 @@ func (p *PipelineImpl) validateAndAppend(phase extpb.Phase, actions []exttypes.A
 	}
 
 	for _, action := range actions {
-		if _, ok := action.(exttypes.FailAction); ok {
-			refsVar := false
-			for _, expr := range action.CelExpressions() {
-				for _, pattern := range varPatterns {
-					if pattern.MatchString(expr) {
-						refsVar = true
-						break
-					}
-				}
-				if refsVar {
-					break
-				}
+		exprs := action.CelExpressions()
+		referenced := make([]string, 0, len(varPatterns))
+		for varName, pattern := range varPatterns {
+			if slices.ContainsFunc(exprs, pattern.MatchString) {
+				referenced = append(referenced, varName)
 			}
-			if !refsVar {
-				return fmt.Errorf("fail action must reference a gRPC response variable")
+		}
+		slices.Sort(referenced)
+
+		if _, ok := action.(exttypes.FailAction); ok && len(referenced) == 0 {
+			return fmt.Errorf("fail action must reference a gRPC response variable")
+		}
+
+		for _, varName := range referenced {
+			if !localPopulated[varName] {
+				return fmt.Errorf("action references variable %q before it is populated", varName)
 			}
 		}
 
-		exprs := action.CelExpressions()
-		for _, expr := range exprs {
-			for varName, pattern := range varPatterns {
-				if !localPopulated[varName] && pattern.MatchString(expr) {
-					return fmt.Errorf("action references variable %q before it is populated", varName)
-				}
-			}
+		if len(referenced) > 1 {
+			return fmt.Errorf("action references variables %q from separate gRPC actions; a response variable is only in scope within its own reply hook", referenced)
 		}
 
 		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {

@@ -65,34 +65,50 @@ kubectl get gateway kuadrant-egressgateway -n "$EGRESS_NS" > /dev/null 2>&1 || {
     exit 1
 }
 
-kubectl get pod test-client -n "$EGRESS_TEST_NS" > /dev/null 2>&1 || {
+TEST_CLIENT_PHASE=$(kubectl get pod test-client -n "$EGRESS_TEST_NS" --request-timeout=5s \
+    -o jsonpath='{.status.phase}' 2>/dev/null || true)
+if [ -z "$TEST_CLIENT_PHASE" ]; then
     error "test-client pod not found in $EGRESS_TEST_NS. Run setup-egress.sh first."
     exit 1
-}
+fi
+if [ "$TEST_CLIENT_PHASE" != "Running" ]; then
+    error "test-client pod in $EGRESS_TEST_NS is $TEST_CLIENT_PHASE, not Running."
+    error "A stale pod is left behind after a cluster restart. Recreate it with:"
+    error "  kubectl delete pod test-client -n $EGRESS_TEST_NS --force --grace-period=0"
+    error "  kubectl apply -f examples/egress-gateway/test-client.yaml"
+    exit 1
+fi
 
 # ── Ensure Kuadrant CR exists ────────────────────────────────────────
-if kubectl get kuadrant -A --request-timeout=5s > /dev/null 2>&1; then
-    KUADRANT_NS=$(kubectl get kuadrant -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null)
-    if [ -n "$KUADRANT_NS" ]; then
-        info "Kuadrant CR found in $KUADRANT_NS. Waiting for readiness..."
-        KUADRANT_NAME=$(kubectl get kuadrant -n "$KUADRANT_NS" -o jsonpath='{.items[0].metadata.name}')
-        kubectl wait --timeout=5m -n "$KUADRANT_NS" kuadrant/"$KUADRANT_NAME" --for=condition=Ready
-    else
-        info "Kuadrant CR not found. Creating in $KUADRANT_SYSTEM_NS..."
-        kubectl apply -f - <<EOF
+# `.items[*]` is used rather than `.items[0]` because jsonpath errors with
+# "array index out of bounds" on an empty list, which would abort under `set -e`.
+if ! KUADRANT_CRS=$(kubectl get kuadrant -A --request-timeout=5s \
+        -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
+    error "Cannot query Kuadrant CRDs. Is the Kuadrant operator installed?"
+    exit 1
+fi
+
+KUADRANT_CR=$(printf '%s\n' "$KUADRANT_CRS" | grep -v '^[[:space:]]*$' | head -1 || true)
+
+if [ -n "$KUADRANT_CR" ]; then
+    KUADRANT_NS="${KUADRANT_CR%% *}"
+    KUADRANT_NAME="${KUADRANT_CR##* }"
+    info "Kuadrant CR $KUADRANT_NAME found in namespace $KUADRANT_NS."
+else
+    KUADRANT_NS="$KUADRANT_SYSTEM_NS"
+    KUADRANT_NAME="kuadrant"
+    info "Kuadrant CR not found. Creating $KUADRANT_NAME in $KUADRANT_NS..."
+    kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
-  name: kuadrant
-  namespace: $KUADRANT_SYSTEM_NS
+  name: $KUADRANT_NAME
+  namespace: $KUADRANT_NS
 EOF
-        info "Waiting for Kuadrant to be ready..."
-        kubectl wait --timeout=5m -n "$KUADRANT_SYSTEM_NS" kuadrant/kuadrant --for=condition=Ready
-    fi
-else
-    error "Cannot query Kuadrant CRDs. Is Kuadrant operator installed?"
-    exit 1
 fi
+
+info "Waiting for Kuadrant to be ready..."
+kubectl wait --timeout=5m -n "$KUADRANT_NS" kuadrant/"$KUADRANT_NAME" --for=condition=Ready
 
 # ── Deploy mock AI API ───────────────────────────────────────────────
 info "Deploying mock AI API (llm-d-inference-sim)..."

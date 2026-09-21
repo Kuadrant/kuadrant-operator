@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
@@ -76,8 +75,8 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"ratelimitpoli
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "GRPCRoute",
 						Name:  TestGRPCRouteName,

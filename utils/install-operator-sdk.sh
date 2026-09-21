@@ -19,15 +19,27 @@ if [ ! -f "$1" ]; then
     mkdir -p "$HOME/.gnupg"
     echo "Disabling ipv6 for gpg on mac"
     echo "disable-ipv6" > $HOME/.gnupg/dirmngr.conf
-    gpgconf --kill all
+    if command -v gpgconf >/dev/null 2>&1; then
+      gpgconf --kill all
+    fi
   fi
 
   echo "Downloading $OPERATOR_SDK_DL_BINARY"
   curl -sLO $OPERATOR_SDK_DL_BINARY
-  gpg --keyserver keyserver.ubuntu.com --recv-keys 052996E2A20B5C7E
   curl -sLO ${OPERATOR_SDK_DL_URL}/checksums.txt
-  curl -sLO ${OPERATOR_SDK_DL_URL}/checksums.txt.asc
-  gpg -u "Operator SDK (release) <cncf-operator-sdk@cncf.io>" --verify checksums.txt.asc
+  if [ "${SKIP_GPG_VERIFY:-false}" = "true" ]; then
+    echo "WARNING: Skipping GPG signature verification (unverified release)"
+  else
+    if ! command -v gpg >/dev/null 2>&1; then
+      echo "ERROR: gpg is required for signature verification. Set SKIP_GPG_VERIFY=true to bypass." >&2
+      exit 1
+    fi
+    FINGERPRINT="3B2F1481D146238080B346BB052996E2A20B5C7E"
+    gpg --keyserver keyserver.ubuntu.com --recv-keys "$FINGERPRINT"
+    gpg --list-keys "$FINGERPRINT" >/dev/null 2>&1
+    curl -sLO ${OPERATOR_SDK_DL_URL}/checksums.txt.asc
+    gpg --verify checksums.txt.asc checksums.txt
+  fi
   if [[ $OS == 'darwin' ]]; then
     grep operator-sdk_${OS}_${ARCH} checksums.txt | shasum -a 256 -c -
   else

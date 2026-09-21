@@ -7,7 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
@@ -43,7 +43,7 @@ func (f *fakePolicy) GetNamespace() string {
 	return ""
 }
 
-func (f *fakePolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+func (f *fakePolicy) GetTargetRefs() []gatewayapiv1.LocalPolicyTargetReferenceWithSectionName {
 	return nil
 }
 
@@ -71,8 +71,8 @@ func TestAcceptedCondition(t *testing.T) {
 			},
 			errorInput:     nil,
 			expectedStatus: metav1.ConditionTrue,
-			expectedType:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
-			expectedReason: string(gatewayapiv1alpha2.PolicyReasonAccepted),
+			expectedType:   string(gatewayapiv1.PolicyConditionAccepted),
+			expectedReason: string(gatewayapiv1.PolicyReasonAccepted),
 		},
 		{
 			name: "error creates false condition",
@@ -81,7 +81,7 @@ func TestAcceptedCondition(t *testing.T) {
 			},
 			errorInput:     fmt.Errorf("test error"),
 			expectedStatus: metav1.ConditionFalse,
-			expectedType:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+			expectedType:   string(gatewayapiv1.PolicyConditionAccepted),
 			expectedReason: "Unknown",
 		},
 	}

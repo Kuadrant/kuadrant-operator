@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/api/v1alpha1"
@@ -484,10 +483,10 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 		return nil, err
 	}
 
-	callbackRoute := gatewayapiv1alpha2.LocalPolicyTargetReference{
-		Group: gatewayapiv1alpha2.GroupName,
-		Kind:  gatewayapiv1alpha2.Kind("HTTPRoute"),
-		Name:  gatewayapiv1alpha2.ObjectName(pol.Name + "-callback"),
+	callbackRoute := gatewayapiv1.LocalPolicyTargetReference{
+		Group: gatewayapiv1.GroupName,
+		Kind:  gatewayapiv1.Kind("HTTPRoute"),
+		Name:  gatewayapiv1.ObjectName(pol.Name + "-callback"),
 	}
 
 	callbackMethod := authorinov1beta3.HttpMethod("POST")
@@ -508,7 +507,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 			Namespace: pol.Namespace,
 		},
 		Spec: kuadrantv1.AuthPolicySpec{
-			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			TargetRef: gatewayapiv1.LocalPolicyTargetReferenceWithSectionName{
 				LocalPolicyTargetReference: callbackRoute,
 			},
 			Overrides: &kuadrantv1.MergeableAuthPolicySpec{

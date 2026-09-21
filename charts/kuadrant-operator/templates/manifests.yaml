@@ -15127,6 +15127,11 @@ spec:
             - message: At least one spec.defaults.limits must be defined
               rule: 'has(self.defaults) ? has(self.defaults.limits) && size(self.defaults.limits)
                 > 0 : true'
+            - message: Implicit dataExtraction and explicit defaults are mutually
+                exclusive
+              rule: '!(has(self.defaults) && has(self.dataExtraction))'
+            - message: Implicit dataExtraction and overrides are mutually exclusive
+              rule: '!(has(self.overrides) && has(self.dataExtraction))'
           status:
             properties:
               conditions:

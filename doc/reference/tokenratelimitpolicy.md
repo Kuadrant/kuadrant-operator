@@ -63,7 +63,7 @@ Configures how many tokens are reserved on request arrival and for how long, whe
 
 **`amount` defaults to `0`, which reserves no capacity at all.** `0` is a documented Limitador short-circuit: the Reserve/Commit calls still happen, but no capacity is held, so `Reservation` mode behaves identically to `Optimistic` mode for any limit that doesn't set `amount` explicitly — no protection against the concurrent-request race RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md) exists to close. This is intentional: `Reservation` is the cluster-wide default mode, so a `0` default keeps upgrading behavior-neutral for every TokenRateLimitPolicy that predates reservations, instead of silently reserving an arbitrary flat amount for policies that were never tuned for it. **To get real protection against concurrent-request races, `amount` must be set explicitly** to a meaningful, non-zero estimate of tokens consumed per request.
 
-The reserved `amount` is an estimate: once the upstream responds, the actual `usage.total_tokens` is committed and the unused portion of the reservation is released.
+The reserved `amount` is an estimate: once the upstream responds, the actual token usage — resolved via [`dataExtraction.response.totalTokens`](#dataextraction) and its built-in defaults — is committed and the unused portion of the reservation is released.
 
 When omitted, `ttl` defaults to the route's own `HTTPRoute.spec.rules[].timeouts.backendRequest`, since a reservation only needs to survive as long as the request it protects can legitimately run; setting it much larger than that only extends how long an abandoned reservation (e.g. a disconnected client) blocks capacity for no benefit.
 
@@ -137,7 +137,7 @@ Standard Kubernetes condition fields following Gateway API conventions:
 
 ## Token Usage Tracking
 
-TokenRateLimitPolicy automatically tracks token consumption from AI/LLM responses by monitoring the `usage.total_tokens` field in response bodies. This enables accurate usage-based rate limiting where:
+TokenRateLimitPolicy automatically tracks token consumption from AI/LLM responses by evaluating an ordered list of JSON Pointer candidates against the response body — the first candidate that resolves to a numeric value is used (see [Data Extraction](#dataextraction)). This enables accurate usage-based rate limiting where:
 
 - **Request Phase**: The policy evaluates predicates and descriptors during the request
 - **Response Phase**: The policy extracts actual token usage from the response body
@@ -145,7 +145,7 @@ TokenRateLimitPolicy automatically tracks token consumption from AI/LLM response
 
 ### Supported Response Format
 
-The policy automatically parses token usage from response bodies in the following format:
+One of the built-in default candidates, `/usage/total_tokens`, matches the OpenAI-style response shape:
 ```json
 {
   "usage": {
@@ -156,7 +156,7 @@ The policy automatically parses token usage from response bodies in the followin
 }
 ```
 
-This is compatible with OpenAI-style API responses and similar AI/LLM services.
+This is one of several provider response shapes covered out of the box — see the full built-in default list below, and [`dataExtraction`](#dataextraction) for configuring custom candidates.
 
 **What's actually checked**: Token extraction evaluates an ordered list of JSON Pointer ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) expressions against the response body — the first pointer that resolves to a numeric value is used. When `spec.dataExtraction.response.totalTokens` is unset, the following built-in default list is used, in order:
 

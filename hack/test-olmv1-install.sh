@@ -128,7 +128,7 @@ kubectl wait --for=condition=Installed clusterextension/kuadrant-operator --time
 
 kubectl get clusterextension kuadrant-operator -o yaml
 
-kubectl wait --for=condition=Established crd/kuadrants.kuadrant.io crd/authpolicies.kuadrant.io crd/ratelimitpolicies.kuadrant.io crd/authorinos.operator.authorino.kuadrant.io crd/limitadors.limitador.kuadrant.io crd/dnsrecords.kuadrant.io --timeout=300s
+kubectl wait --for=condition=Established crd/kuadrants.kuadrant.io crd/authpolicies.kuadrant.io crd/ratelimitpolicies.kuadrant.io --timeout=300s
 kubectl rollout status deployment/kuadrant-operator-controller-manager -n "$KUADRANT_NAMESPACE" --timeout=300s
 kubectl apply -n "$KUADRANT_NAMESPACE" -f - <<EOF
 apiVersion: kuadrant.io/v1beta1
@@ -137,6 +137,7 @@ metadata:
   name: kuadrant
 spec: {}
 EOF
+kubectl wait --for=condition=Established crd/authorinos.operator.authorino.kuadrant.io crd/limitadors.limitador.kuadrant.io crd/dnsrecords.kuadrant.io --timeout=300s
 kubectl wait --for=condition=Ready kuadrant/kuadrant -n "$KUADRANT_NAMESPACE" --timeout=300s
 for deployment in $(kubectl get deployments -n "$KUADRANT_NAMESPACE" -o name); do
   kubectl rollout status "$deployment" -n "$KUADRANT_NAMESPACE" --timeout=300s

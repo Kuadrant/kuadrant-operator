@@ -4,12 +4,20 @@ name: Kuadrant Upgrade Test
 on:
   workflow_call:
     inputs:
+      kuadrantStartVersion:
+        description: Kuadrant start version (X.Y.Z)
+        required: false
+        type: string
       kuadrantVersion:
         description: Published target release tag
         required: true
         type: string
   workflow_dispatch:
     inputs:
+      kuadrantVersion:
+        description: Published target release tag
+        required: true
+        type: string
       kuadrantStartVersion:
         description: Kuadrant start version (X.Y.Z); defaults to the greatest stable release below the target
         required: false
@@ -184,11 +192,12 @@ jobs:
           fi
           start=${START_VERSION#v}
           [[ "$start" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$start" != "$target" ]]
+          catalog_img=$(make -s print-catalog-image VERSION="$target")
           {
             echo "KUADRANT_START_VERSION=$start"
             echo "KUADRANT_UPGRADE_VERSION=$target"
             echo "KUADRANT_VERSION=$target"
-            echo "KUADRANT_CATALOG_IMG=$(make -s print-catalog-image VERSION="$target")"
+            echo "KUADRANT_CATALOG_IMG=$catalog_img"
           } >> "$GITHUB_ENV"
       - name: Deploy local Kind cluster
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # ratchet:helm/kind-action@v1.12.0

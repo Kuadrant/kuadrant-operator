@@ -26,13 +26,13 @@ test-gatewayapi-env-integration: test-integration ## Tests Gateway API integrati
 
 .PHONY: test-istio-env-integration
 test-istio-env-integration: INTEGRATION_COVER_OUTPUT_DIR=$(PROJECT_PATH)/coverage/istio-integration
-test-istio-env-integration: INTEGRATION_TEST_PACKAGES=tests/istio/...
+test-istio-env-integration: INTEGRATION_TEST_PACKAGES=tests/common/... tests/istio/...
 test-istio-env-integration: GATEWAYAPI_PROVIDER=istio
 test-istio-env-integration: test-integration  ## Tests Kuadrant with Istio as the gateway provider. Requires kubernetes cluster with GatewayAPI and Istio installed.
 
 .PHONY: test-envoygateway-env-integration
 test-envoygateway-env-integration: INTEGRATION_COVER_OUTPUT_DIR=$(PROJECT_PATH)/coverage/envoygateway-integration
-test-envoygateway-env-integration: INTEGRATION_TEST_PACKAGES=tests/envoygateway/...
+test-envoygateway-env-integration: INTEGRATION_TEST_PACKAGES=tests/common/... tests/envoygateway/...
 test-envoygateway-env-integration: GATEWAYAPI_PROVIDER=envoygateway
 test-envoygateway-env-integration: test-integration ## Tests Kuadrant with Envoy Gateway as the gateway provider. Requires kubernetes cluster with GatewayAPI and Envoy Gateway installed.
 

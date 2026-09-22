@@ -567,7 +567,9 @@ func referencesPendingPath(expr string, pendingPaths []string) bool {
 // bodyJSONPattern matches responseBodyJSON(...) and requestBodyJSON(...) calls, either with a single
 // quoted JSON pointer argument (e.g. responseBodyJSON("/usage/total_tokens")) or with an ordered list of
 // pointer candidates plus an optional type hint (e.g. responseBodyJSON(["/a", "/b"], "number")).
-var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(\s*(\[[^\]]*\]|"[^"]*"|'[^']*')\s*(?:,\s*"([^"]*)")?\s*\)`)
+// The list alternative only recognizes quoted elements (rather than stopping at the first "]") because
+// RFC 6901 reference tokens may legally contain "]".
+var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(\s*(\[\s*(?:"[^"]*"|'[^']*')(?:\s*,\s*(?:"[^"]*"|'[^']*'))*\s*\]|"[^"]*"|'[^']*')\s*(?:,\s*"([^"]*)")?\s*\)`)
 
 // pointerListItemPattern extracts individual quoted string literals from within a list literal argument.
 var pointerListItemPattern = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)

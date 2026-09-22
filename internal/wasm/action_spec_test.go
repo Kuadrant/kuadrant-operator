@@ -914,6 +914,29 @@ func TestExtractBodyRefs(t *testing.T) {
 			t.Fatalf("expected 2 distinct refs (order matters), got %d", len(refs))
 		}
 	})
+
+	t.Run("list candidate containing a literal ']'", func(t *testing.T) {
+		// RFC 6901 reference tokens may legally contain "]", so the list matcher must not
+		// terminate at the first "]" it sees.
+		refs := extractBodyRefs(`responseBodyJSON(["/usage/a]b"], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].FieldName != "a]b" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "a]b")
+		}
+	})
+
+	t.Run("single-quoted candidate containing a literal ']'", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(['/usage/a]b', '/other'], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		expectedPointer := "/usage/a]b" + pointerListKeySep + "/other" + pointerListKeySep + "number"
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
 }
 
 func TestBuildActions_NoBodyRefs(t *testing.T) {

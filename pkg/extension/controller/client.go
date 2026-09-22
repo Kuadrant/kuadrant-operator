@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 )
 
 const sessionMetadataKey = "x-kuadrant-session"
@@ -85,7 +86,7 @@ func newExtensionClient(address string) (*extensionClient, error) {
 
 func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKind string, ownedPolicies []*extpb.Metadata) error {
 	resp, err := ec.client.Handshake(ctx, &extpb.HandshakeRequest{
-		Version:       protocolVersion,
+		Version:       protocol.Version,
 		Token:         token,
 		PolicyKind:    policyKind,
 		OwnedPolicies: ownedPolicies,

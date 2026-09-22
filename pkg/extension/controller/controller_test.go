@@ -38,6 +38,7 @@ import (
 
 	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
@@ -319,7 +320,7 @@ func TestHandshake_Success(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, session.getToken(), "returned-token")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
-	assert.Equal(t, capturedReq.Version, protocolVersion)
+	assert.Equal(t, capturedReq.Version, protocol.Version)
 	assert.DeepEqual(t, capturedReq.Token, []byte("token-value"))
 }
 

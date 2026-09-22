@@ -25,6 +25,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type HandshakeRejection int32
+
+const (
+	HandshakeRejection_HANDSHAKE_REJECTION_UNSPECIFIED          HandshakeRejection = 0
+	HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION HandshakeRejection = 1
+	HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST      HandshakeRejection = 2
+	HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED         HandshakeRejection = 3
+	HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE          HandshakeRejection = 4
+)
+
+// Enum value maps for HandshakeRejection.
+var (
+	HandshakeRejection_name = map[int32]string{
+		0: "HANDSHAKE_REJECTION_UNSPECIFIED",
+		1: "HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION",
+		2: "HANDSHAKE_REJECTION_INVALID_REQUEST",
+		3: "HANDSHAKE_REJECTION_UNAUTHORIZED",
+		4: "HANDSHAKE_REJECTION_UNAVAILABLE",
+	}
+	HandshakeRejection_value = map[string]int32{
+		"HANDSHAKE_REJECTION_UNSPECIFIED":          0,
+		"HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION": 1,
+		"HANDSHAKE_REJECTION_INVALID_REQUEST":      2,
+		"HANDSHAKE_REJECTION_UNAUTHORIZED":         3,
+		"HANDSHAKE_REJECTION_UNAVAILABLE":          4,
+	}
+)
+
+func (x HandshakeRejection) Enum() *HandshakeRejection {
+	p := new(HandshakeRejection)
+	*p = x
+	return p
+}
+
+func (x HandshakeRejection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HandshakeRejection) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_kuadrant_proto_enumTypes[0].Descriptor()
+}
+
+func (HandshakeRejection) Type() protoreflect.EnumType {
+	return &file_v1_kuadrant_proto_enumTypes[0]
+}
+
+func (x HandshakeRejection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HandshakeRejection.Descriptor instead.
+func (HandshakeRejection) EnumDescriptor() ([]byte, []int) {
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{0}
+}
+
 type Domain int32
 
 const (
@@ -58,11 +113,11 @@ func (x Domain) String() string {
 }
 
 func (Domain) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_kuadrant_proto_enumTypes[0].Descriptor()
+	return file_v1_kuadrant_proto_enumTypes[1].Descriptor()
 }
 
 func (Domain) Type() protoreflect.EnumType {
-	return &file_v1_kuadrant_proto_enumTypes[0]
+	return &file_v1_kuadrant_proto_enumTypes[1]
 }
 
 func (x Domain) Number() protoreflect.EnumNumber {
@@ -71,7 +126,7 @@ func (x Domain) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Domain.Descriptor instead.
 func (Domain) EnumDescriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{0}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{1}
 }
 
 type Phase int32
@@ -107,11 +162,11 @@ func (x Phase) String() string {
 }
 
 func (Phase) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_kuadrant_proto_enumTypes[1].Descriptor()
+	return file_v1_kuadrant_proto_enumTypes[2].Descriptor()
 }
 
 func (Phase) Type() protoreflect.EnumType {
-	return &file_v1_kuadrant_proto_enumTypes[1]
+	return &file_v1_kuadrant_proto_enumTypes[2]
 }
 
 func (x Phase) Number() protoreflect.EnumNumber {
@@ -120,7 +175,7 @@ func (x Phase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Phase.Descriptor instead.
 func (Phase) EnumDescriptor() ([]byte, []int) {
-	return file_v1_kuadrant_proto_rawDescGZIP(), []int{1}
+	return file_v1_kuadrant_proto_rawDescGZIP(), []int{2}
 }
 
 // The request message containing the time the request was dispatched.
@@ -286,6 +341,8 @@ type HandshakeResponse struct {
 	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	SessionToken  string                 `protobuf:"bytes,2,opt,name=session_token,json=sessionToken,proto3" json:"session_token,omitempty"`
 	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	Rejection     HandshakeRejection     `protobuf:"varint,5,opt,name=rejection,proto3,enum=kuadrant.v1.HandshakeRejection" json:"rejection,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -339,6 +396,20 @@ func (x *HandshakeResponse) GetReason() string {
 		return x.Reason
 	}
 	return ""
+}
+
+func (x *HandshakeResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *HandshakeResponse) GetRejection() HandshakeRejection {
+	if x != nil {
+		return x.Rejection
+	}
+	return HandshakeRejection_HANDSHAKE_REJECTION_UNSPECIFIED
 }
 
 // evaluate the expression and whether or not to subscribe
@@ -1308,11 +1379,13 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x05token\x18\x02 \x01(\fR\x05token\x12\x1f\n" +
 	"\vpolicy_kind\x18\x03 \x01(\tR\n" +
 	"policyKind\x12<\n" +
-	"\x0eowned_policies\x18\x04 \x03(\v2\x15.kuadrant.v1.MetadataR\rownedPolicies\"l\n" +
+	"\x0eowned_policies\x18\x04 \x03(\v2\x15.kuadrant.v1.MetadataR\rownedPolicies\"\xc5\x01\n" +
 	"\x11HandshakeResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +
 	"\rsession_token\x18\x02 \x01(\tR\fsessionToken\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"{\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\x12=\n" +
+	"\trejection\x18\x05 \x01(\x0e2\x1f.kuadrant.v1.HandshakeRejectionR\trejection\"{\n" +
 	"\x0eResolveRequest\x12+\n" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x12\x1e\n" +
 	"\n" +
@@ -1381,7 +1454,13 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\x06action\"x\n" +
 	"\x15PipelineCommitRequest\x12+\n" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x122\n" +
-	"\aactions\x18\x02 \x03(\v2\x18.kuadrant.v1.ActionEntryR\aactions*E\n" +
+	"\aactions\x18\x02 \x03(\v2\x18.kuadrant.v1.ActionEntryR\aactions*\xdb\x01\n" +
+	"\x12HandshakeRejection\x12#\n" +
+	"\x1fHANDSHAKE_REJECTION_UNSPECIFIED\x10\x00\x12,\n" +
+	"(HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION\x10\x01\x12'\n" +
+	"#HANDSHAKE_REJECTION_INVALID_REQUEST\x10\x02\x12$\n" +
+	" HANDSHAKE_REJECTION_UNAUTHORIZED\x10\x03\x12#\n" +
+	"\x1fHANDSHAKE_REJECTION_UNAVAILABLE\x10\x04*E\n" +
 	"\x06Domain\x12\x16\n" +
 	"\x12DOMAIN_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vDOMAIN_AUTH\x10\x01\x12\x12\n" +
@@ -1413,82 +1492,84 @@ func file_v1_kuadrant_proto_rawDescGZIP() []byte {
 	return file_v1_kuadrant_proto_rawDescData
 }
 
-var file_v1_kuadrant_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_v1_kuadrant_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_v1_kuadrant_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_v1_kuadrant_proto_goTypes = []any{
-	(Domain)(0),                         // 0: kuadrant.v1.Domain
-	(Phase)(0),                          // 1: kuadrant.v1.Phase
-	(*PingRequest)(nil),                 // 2: kuadrant.v1.PingRequest
-	(*PongResponse)(nil),                // 3: kuadrant.v1.PongResponse
-	(*HandshakeRequest)(nil),            // 4: kuadrant.v1.HandshakeRequest
-	(*HandshakeResponse)(nil),           // 5: kuadrant.v1.HandshakeResponse
-	(*ResolveRequest)(nil),              // 6: kuadrant.v1.ResolveRequest
-	(*ResolveResponse)(nil),             // 7: kuadrant.v1.ResolveResponse
-	(*SubscribeResponse)(nil),           // 8: kuadrant.v1.SubscribeResponse
-	(*SubscribeRequest)(nil),            // 9: kuadrant.v1.SubscribeRequest
-	(*Event)(nil),                       // 10: kuadrant.v1.Event
-	(*RegisterMutatorRequest)(nil),      // 11: kuadrant.v1.RegisterMutatorRequest
-	(*ClearPolicyRequest)(nil),          // 12: kuadrant.v1.ClearPolicyRequest
-	(*ClearPolicyResponse)(nil),         // 13: kuadrant.v1.ClearPolicyResponse
-	(*RegisterActionMethodRequest)(nil), // 14: kuadrant.v1.RegisterActionMethodRequest
-	(*GrpcAction)(nil),                  // 15: kuadrant.v1.GrpcAction
-	(*DenyAction)(nil),                  // 16: kuadrant.v1.DenyAction
-	(*AddHeadersAction)(nil),            // 17: kuadrant.v1.AddHeadersAction
-	(*FailAction)(nil),                  // 18: kuadrant.v1.FailAction
-	(*StoreAction)(nil),                 // 19: kuadrant.v1.StoreAction
-	(*ActionEntry)(nil),                 // 20: kuadrant.v1.ActionEntry
-	(*PipelineCommitRequest)(nil),       // 21: kuadrant.v1.PipelineCommitRequest
-	(*timestamp.Timestamp)(nil),         // 22: google.protobuf.Timestamp
-	(*Metadata)(nil),                    // 23: kuadrant.v1.Metadata
-	(*Policy)(nil),                      // 24: kuadrant.v1.Policy
-	(*v1alpha1.Value)(nil),              // 25: google.api.expr.v1alpha1.Value
-	(*status.Status)(nil),               // 26: google.rpc.Status
-	(*empty.Empty)(nil),                 // 27: google.protobuf.Empty
+	(HandshakeRejection)(0),             // 0: kuadrant.v1.HandshakeRejection
+	(Domain)(0),                         // 1: kuadrant.v1.Domain
+	(Phase)(0),                          // 2: kuadrant.v1.Phase
+	(*PingRequest)(nil),                 // 3: kuadrant.v1.PingRequest
+	(*PongResponse)(nil),                // 4: kuadrant.v1.PongResponse
+	(*HandshakeRequest)(nil),            // 5: kuadrant.v1.HandshakeRequest
+	(*HandshakeResponse)(nil),           // 6: kuadrant.v1.HandshakeResponse
+	(*ResolveRequest)(nil),              // 7: kuadrant.v1.ResolveRequest
+	(*ResolveResponse)(nil),             // 8: kuadrant.v1.ResolveResponse
+	(*SubscribeResponse)(nil),           // 9: kuadrant.v1.SubscribeResponse
+	(*SubscribeRequest)(nil),            // 10: kuadrant.v1.SubscribeRequest
+	(*Event)(nil),                       // 11: kuadrant.v1.Event
+	(*RegisterMutatorRequest)(nil),      // 12: kuadrant.v1.RegisterMutatorRequest
+	(*ClearPolicyRequest)(nil),          // 13: kuadrant.v1.ClearPolicyRequest
+	(*ClearPolicyResponse)(nil),         // 14: kuadrant.v1.ClearPolicyResponse
+	(*RegisterActionMethodRequest)(nil), // 15: kuadrant.v1.RegisterActionMethodRequest
+	(*GrpcAction)(nil),                  // 16: kuadrant.v1.GrpcAction
+	(*DenyAction)(nil),                  // 17: kuadrant.v1.DenyAction
+	(*AddHeadersAction)(nil),            // 18: kuadrant.v1.AddHeadersAction
+	(*FailAction)(nil),                  // 19: kuadrant.v1.FailAction
+	(*StoreAction)(nil),                 // 20: kuadrant.v1.StoreAction
+	(*ActionEntry)(nil),                 // 21: kuadrant.v1.ActionEntry
+	(*PipelineCommitRequest)(nil),       // 22: kuadrant.v1.PipelineCommitRequest
+	(*timestamp.Timestamp)(nil),         // 23: google.protobuf.Timestamp
+	(*Metadata)(nil),                    // 24: kuadrant.v1.Metadata
+	(*Policy)(nil),                      // 25: kuadrant.v1.Policy
+	(*v1alpha1.Value)(nil),              // 26: google.api.expr.v1alpha1.Value
+	(*status.Status)(nil),               // 27: google.rpc.Status
+	(*empty.Empty)(nil),                 // 28: google.protobuf.Empty
 }
 var file_v1_kuadrant_proto_depIdxs = []int32{
-	22, // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
-	22, // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
-	23, // 2: kuadrant.v1.HandshakeRequest.owned_policies:type_name -> kuadrant.v1.Metadata
-	24, // 3: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
-	25, // 4: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
-	10, // 5: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
-	26, // 6: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
-	23, // 7: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
-	24, // 8: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
-	0,  // 9: kuadrant.v1.RegisterMutatorRequest.domain:type_name -> kuadrant.v1.Domain
-	24, // 10: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
-	24, // 11: kuadrant.v1.RegisterActionMethodRequest.policy:type_name -> kuadrant.v1.Policy
-	1,  // 12: kuadrant.v1.ActionEntry.phase:type_name -> kuadrant.v1.Phase
-	15, // 13: kuadrant.v1.ActionEntry.grpc:type_name -> kuadrant.v1.GrpcAction
-	16, // 14: kuadrant.v1.ActionEntry.deny:type_name -> kuadrant.v1.DenyAction
-	17, // 15: kuadrant.v1.ActionEntry.add_headers:type_name -> kuadrant.v1.AddHeadersAction
-	18, // 16: kuadrant.v1.ActionEntry.fail:type_name -> kuadrant.v1.FailAction
-	19, // 17: kuadrant.v1.ActionEntry.store:type_name -> kuadrant.v1.StoreAction
-	24, // 18: kuadrant.v1.PipelineCommitRequest.policy:type_name -> kuadrant.v1.Policy
-	20, // 19: kuadrant.v1.PipelineCommitRequest.actions:type_name -> kuadrant.v1.ActionEntry
-	4,  // 20: kuadrant.v1.ExtensionService.Handshake:input_type -> kuadrant.v1.HandshakeRequest
-	2,  // 21: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
-	27, // 22: kuadrant.v1.ExtensionService.ReleaseSession:input_type -> google.protobuf.Empty
-	9,  // 23: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
-	6,  // 24: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
-	11, // 25: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
-	12, // 26: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
-	14, // 27: kuadrant.v1.ExtensionService.RegisterActionMethod:input_type -> kuadrant.v1.RegisterActionMethodRequest
-	21, // 28: kuadrant.v1.ExtensionService.PipelineCommit:input_type -> kuadrant.v1.PipelineCommitRequest
-	5,  // 29: kuadrant.v1.ExtensionService.Handshake:output_type -> kuadrant.v1.HandshakeResponse
-	3,  // 30: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
-	27, // 31: kuadrant.v1.ExtensionService.ReleaseSession:output_type -> google.protobuf.Empty
-	8,  // 32: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
-	7,  // 33: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
-	27, // 34: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
-	13, // 35: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
-	27, // 36: kuadrant.v1.ExtensionService.RegisterActionMethod:output_type -> google.protobuf.Empty
-	27, // 37: kuadrant.v1.ExtensionService.PipelineCommit:output_type -> google.protobuf.Empty
-	29, // [29:38] is the sub-list for method output_type
-	20, // [20:29] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	23, // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
+	23, // 1: kuadrant.v1.PongResponse.in:type_name -> google.protobuf.Timestamp
+	24, // 2: kuadrant.v1.HandshakeRequest.owned_policies:type_name -> kuadrant.v1.Metadata
+	0,  // 3: kuadrant.v1.HandshakeResponse.rejection:type_name -> kuadrant.v1.HandshakeRejection
+	25, // 4: kuadrant.v1.ResolveRequest.policy:type_name -> kuadrant.v1.Policy
+	26, // 5: kuadrant.v1.ResolveResponse.cel_result:type_name -> google.api.expr.v1alpha1.Value
+	11, // 6: kuadrant.v1.SubscribeResponse.event:type_name -> kuadrant.v1.Event
+	27, // 7: kuadrant.v1.SubscribeResponse.error:type_name -> google.rpc.Status
+	24, // 8: kuadrant.v1.Event.metadata:type_name -> kuadrant.v1.Metadata
+	25, // 9: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
+	1,  // 10: kuadrant.v1.RegisterMutatorRequest.domain:type_name -> kuadrant.v1.Domain
+	25, // 11: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
+	25, // 12: kuadrant.v1.RegisterActionMethodRequest.policy:type_name -> kuadrant.v1.Policy
+	2,  // 13: kuadrant.v1.ActionEntry.phase:type_name -> kuadrant.v1.Phase
+	16, // 14: kuadrant.v1.ActionEntry.grpc:type_name -> kuadrant.v1.GrpcAction
+	17, // 15: kuadrant.v1.ActionEntry.deny:type_name -> kuadrant.v1.DenyAction
+	18, // 16: kuadrant.v1.ActionEntry.add_headers:type_name -> kuadrant.v1.AddHeadersAction
+	19, // 17: kuadrant.v1.ActionEntry.fail:type_name -> kuadrant.v1.FailAction
+	20, // 18: kuadrant.v1.ActionEntry.store:type_name -> kuadrant.v1.StoreAction
+	25, // 19: kuadrant.v1.PipelineCommitRequest.policy:type_name -> kuadrant.v1.Policy
+	21, // 20: kuadrant.v1.PipelineCommitRequest.actions:type_name -> kuadrant.v1.ActionEntry
+	5,  // 21: kuadrant.v1.ExtensionService.Handshake:input_type -> kuadrant.v1.HandshakeRequest
+	3,  // 22: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
+	28, // 23: kuadrant.v1.ExtensionService.ReleaseSession:input_type -> google.protobuf.Empty
+	10, // 24: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
+	7,  // 25: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
+	12, // 26: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
+	13, // 27: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
+	15, // 28: kuadrant.v1.ExtensionService.RegisterActionMethod:input_type -> kuadrant.v1.RegisterActionMethodRequest
+	22, // 29: kuadrant.v1.ExtensionService.PipelineCommit:input_type -> kuadrant.v1.PipelineCommitRequest
+	6,  // 30: kuadrant.v1.ExtensionService.Handshake:output_type -> kuadrant.v1.HandshakeResponse
+	4,  // 31: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
+	28, // 32: kuadrant.v1.ExtensionService.ReleaseSession:output_type -> google.protobuf.Empty
+	9,  // 33: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
+	8,  // 34: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
+	28, // 35: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
+	14, // 36: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
+	28, // 37: kuadrant.v1.ExtensionService.RegisterActionMethod:output_type -> google.protobuf.Empty
+	28, // 38: kuadrant.v1.ExtensionService.PipelineCommit:output_type -> google.protobuf.Empty
+	30, // [30:39] is the sub-list for method output_type
+	21, // [21:30] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_v1_kuadrant_proto_init() }
@@ -1510,7 +1591,7 @@ func file_v1_kuadrant_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_kuadrant_proto_rawDesc), len(file_v1_kuadrant_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,

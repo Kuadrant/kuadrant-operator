@@ -43,8 +43,6 @@ const (
 	// object deletion.
 	ExtensionFinalizer = "kuadrant.io/extensions"
 
-	protocolVersion = "1.0.0"
-
 	handshakeTimeout         = 10 * time.Second
 	defaultHeartbeatInterval = 15 * time.Second
 	releaseSessionTimeout    = 5 * time.Second

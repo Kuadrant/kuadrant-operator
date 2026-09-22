@@ -12,8 +12,8 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/cel-go v0.29.0
 	github.com/google/go-cmp v0.7.0
-	github.com/kuadrant/authorino v0.27.0
-	github.com/kuadrant/authorino-operator v0.26.0
+	github.com/kuadrant/authorino v0.28.0
+	github.com/kuadrant/authorino-operator v0.27.0
 	github.com/kuadrant/dns-operator v0.0.0-20260819172149-de271431efea
 	github.com/kuadrant/limitador-operator v0.15.0
 	github.com/kuadrant/policy-machinery v0.9.0
@@ -50,10 +50,10 @@ require (
 	helm.sh/helm/v3 v3.20.2
 	istio.io/api v1.22.3-0.20240703105953-437a88321a16
 	istio.io/client-go v1.22.3-0.20240703110620-5f69a1e4c030
-	k8s.io/api v0.35.3
-	k8s.io/apiextensions-apiserver v0.35.3
-	k8s.io/apimachinery v0.35.3
-	k8s.io/client-go v0.35.3
+	k8s.io/api v0.35.8
+	k8s.io/apiextensions-apiserver v0.35.8
+	k8s.io/apimachinery v0.35.8
+	k8s.io/client-go v0.35.8
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5
 	sigs.k8s.io/controller-runtime v0.23.3
@@ -79,7 +79,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
 	github.com/containerd/containerd v1.7.33 // indirect
-	github.com/containerd/errdefs v0.3.0 // indirect
+	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
@@ -151,11 +151,13 @@ require (
 	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/telepresenceio/watchable v0.0.0-20220726211108-9bb86f92afa7 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
@@ -179,9 +181,9 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/apiserver v0.35.3 // indirect
+	k8s.io/apiserver v0.35.8 // indirect
 	k8s.io/cli-runtime v0.35.1 // indirect
-	k8s.io/component-base v0.35.3 // indirect
+	k8s.io/component-base v0.35.8 // indirect
 	k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9 // indirect
 	k8s.io/kubectl v0.35.1 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect

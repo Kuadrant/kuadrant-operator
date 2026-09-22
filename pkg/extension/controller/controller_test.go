@@ -522,6 +522,161 @@ func TestHandshakeWithBackoff_ReturnsOnContextCancel(t *testing.T) {
 	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
 }
 
+func TestHandshakeRejectedError_Terminal(t *testing.T) {
+	testCases := []struct {
+		rejection extpb.HandshakeRejection
+		terminal  bool
+	}{
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNSPECIFIED, false},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION, true},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST, true},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED, false},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.rejection.String(), func(t *testing.T) {
+			err := &handshakeRejectedError{reason: "nope", rejection: tc.rejection}
+			assert.Equal(t, err.terminal(), tc.terminal)
+		})
+	}
+}
+
+func TestHandshakeWithBackoff_StopsOnIncompatibleVersion(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			return &extpb.HandshakeResponse{
+				Accepted:  false,
+				Reason:    "protocol version 0.1.0 is not compatible with 9.9.9",
+				Version:   "9.9.9",
+				Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+			}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.ErrorContains(t, err, "not compatible")
+	assert.Equal(t, attempts, 1)
+}
+
+func TestHandshakeWithBackoff_RetriesUnauthorizedRejection(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			if attempts < 3 {
+				return &extpb.HandshakeResponse{
+					Accepted:  false,
+					Reason:    "handshake failed",
+					Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED,
+				}, nil
+			}
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.NilError(t, err)
+	assert.Equal(t, attempts, 3)
+}
+
+// An operator predating the rejection codes sends the zero value, which must
+// not be read as a terminal rejection.
+func TestHandshakeWithBackoff_RetriesUnclassifiedRejection(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			return &extpb.HandshakeResponse{Accepted: false, Reason: "handshake failed"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := ec.handshakeWithBackoff(ctx)
+	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
+	assert.Assert(t, attempts > 1)
+}
+
+func TestHandshake_RecordsPeerVersion(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session", Version: "0.1.4"}, nil
+		},
+	}
+	ec := &extensionClient{client: mock, session: &sessionCredentials{}}
+
+	assert.NilError(t, ec.handshake(context.Background(), []byte("token"), "MyPolicy", nil))
+	assert.Equal(t, ec.peerVersion, "0.1.4")
+}
+
+func TestSuperviseSession_ReturnsTerminalRejection(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{
+				Accepted:  false,
+				Reason:    "protocol version 0.1.0 is not compatible with 9.9.9",
+				Version:   "9.9.9",
+				Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+			}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	err := ec.superviseSession(context.Background(), make(chan ctrlruntimeevent.GenericEvent, 1))
+	assert.ErrorContains(t, err, "not compatible")
+}
+
+func TestSuperviseSession_ReturnsNilOnContextCancel(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return nil, status.Error(codes.Unavailable, "operator not ready")
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	assert.NilError(t, ec.superviseSession(ctx, make(chan ctrlruntimeevent.GenericEvent, 1)))
+}
+
 func TestIsSessionLost(t *testing.T) {
 	assert.Assert(t, isSessionLost(status.Error(codes.Unauthenticated, "session gone")))
 	assert.Assert(t, !isSessionLost(status.Error(codes.Unavailable, "transient")))

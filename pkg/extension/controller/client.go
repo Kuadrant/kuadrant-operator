@@ -51,12 +51,35 @@ func (c *sessionCredentials) getToken() string {
 	return c.token
 }
 
+// handshakeRejectedError is returned when the operator answers the handshake
+// with accepted=false. Retrying a terminal rejection can never succeed.
+type handshakeRejectedError struct {
+	reason    string
+	rejection extpb.HandshakeRejection
+}
+
+func (e *handshakeRejectedError) Error() string {
+	return fmt.Sprintf("handshake rejected: %s", e.reason)
+}
+
+func (e *handshakeRejectedError) terminal() bool {
+	switch e.rejection {
+	case extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+		extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST:
+		return true
+	default:
+		return false
+	}
+}
+
 // extensionClient wraps the gRPC client connection to the operator's extension
 // service and exposes a subset of RPCs used by the controller layer.
 type extensionClient struct {
 	conn    *grpc.ClientConn
 	client  extpb.ExtensionServiceClient
 	session *sessionCredentials
+
+	peerVersion string
 }
 
 // newExtensionClient dials the operator's extension service at the given TCP
@@ -94,8 +117,9 @@ func (ec *extensionClient) handshake(ctx context.Context, token []byte, policyKi
 	if err != nil {
 		return fmt.Errorf("handshake RPC failed: %w", err)
 	}
+	ec.peerVersion = resp.Version
 	if !resp.Accepted {
-		return fmt.Errorf("handshake rejected: %s", resp.Reason)
+		return &handshakeRejectedError{reason: resp.Reason, rejection: resp.Rejection}
 	}
 	ec.session.setToken(resp.SessionToken)
 	return nil

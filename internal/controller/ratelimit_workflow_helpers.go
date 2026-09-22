@@ -103,7 +103,11 @@ func RateLimitClusterName(gatewayName string) string {
 }
 
 func rateLimitClusterPatch(host string, port int, mTLS bool) map[string]any {
-	return buildClusterPatch(kuadrant.KuadrantRateLimitClusterName, host, port, mTLS)
+	patch := buildClusterPatch(kuadrant.KuadrantRateLimitClusterName, host, port, mTLS)
+	// Limitador is a pure gRPC service. Outlier detection ejects pod IPs that
+	// accumulate consecutive gateway failures between DNS refresh cycles.
+	patch["outlier_detection"] = grpcOutlierDetection()
+	return patch
 }
 
 // wasmActionFromLimit builds a wasm rate-limit action for a given limit.

@@ -47,13 +47,17 @@ func buildClusterPatch(clusterName, host string, port int, mTLS bool) map[string
 // consecutive_5xx detector (Envoy default: 5 errors, 100% enforcing), which is
 // harmless for gRPC because gRPC always returns HTTP/2 status 200 — errors are
 // carried in trailers, not HTTP status codes.
+// Only non-default values are set here:
+//   - enforcing_consecutive_gateway_failure: defaults to 0 (unenforced); set to 100
+//     so consecutive gateway failures actually trigger ejection.
+//   - max_ejection_percent: defaults to 10; set to 100 to allow ejecting all
+//     endpoints when all pods are simultaneously unhealthy.
 func grpcOutlierDetection() map[string]any {
 	return map[string]any{
-		"consecutive_gateway_failure":           5,
+		// Default is 0 (unenforced) — must be 100 to actually eject on gateway failures.
 		"enforcing_consecutive_gateway_failure": 100,
-		"interval":                              "10s",
-		"base_ejection_time":                    "30s",
-		"max_ejection_percent":                  100,
+		// Default is 10% — set to 100 to allow all endpoints to be ejected if all are unhealthy.
+		"max_ejection_percent": 100,
 	}
 }
 

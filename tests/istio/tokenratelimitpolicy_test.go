@@ -5,6 +5,7 @@ package istio_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -91,6 +92,16 @@ func extractWasmConfigFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyF
 
 	return &wasmConfig, nil
 }
+
+// defaultTotalTokensCEL mirrors the CEL expression the operator generates by default (see
+// api/v1alpha1.DefaultTotalTokensPointers) when a TokenRateLimitPolicy doesn't override dataExtraction.
+var defaultTotalTokensCEL = func() string {
+	quoted := make([]string, len(kuadrantv1alpha1.DefaultTotalTokensPointers))
+	for i, p := range kuadrantv1alpha1.DefaultTotalTokensPointers {
+		quoted[i] = fmt.Sprintf("%q", p)
+	}
+	return fmt.Sprintf(`responseBodyJSON([%s], "number")`, strings.Join(quoted, ", "))
+}()
 
 var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 	const (
@@ -212,7 +223,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						},
 					},
 				},
-				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: defaultTotalTokensCEL},
 			},
 		})
 
@@ -279,7 +290,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						},
 					},
 				},
-				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: defaultTotalTokensCEL},
 			},
 		})
 
@@ -358,7 +369,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "ratelimit.hits_addend", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "ratelimit.hits_addend", Value: defaultTotalTokensCEL}}},
 						},
 					},
 				},

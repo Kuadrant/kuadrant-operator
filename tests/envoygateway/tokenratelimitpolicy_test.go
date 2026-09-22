@@ -27,6 +27,16 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
+// defaultTotalTokensCEL mirrors the CEL expression the operator generates by default (see
+// api/v1alpha1.DefaultTotalTokensPointers) when a TokenRateLimitPolicy doesn't override dataExtraction.
+var defaultTotalTokensCEL = func() string {
+	quoted := make([]string, len(kuadrantv1alpha1.DefaultTotalTokensPointers))
+	for i, p := range kuadrantv1alpha1.DefaultTotalTokensPointers {
+		quoted[i] = fmt.Sprintf("%q", p)
+	}
+	return fmt.Sprintf(`responseBodyJSON([%s], "number")`, strings.Join(quoted, ", "))
+}()
+
 var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
@@ -165,7 +175,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						},
 					},
 				},
-				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: defaultTotalTokensCEL},
 			},
 		})
 
@@ -240,7 +250,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						},
 					},
 				},
-				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: defaultTotalTokensCEL},
 			},
 		})
 
@@ -327,7 +337,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "ratelimit.hits_addend", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "ratelimit.hits_addend", Value: defaultTotalTokensCEL}}},
 						},
 					},
 				},

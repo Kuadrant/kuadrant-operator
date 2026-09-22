@@ -1013,7 +1013,7 @@ func buildRateLimitOnReply(name string, tokenBased bool) []Action {
 		),
 		NewHeadersAction(
 			fmt.Sprintf("%s.overall_code == 1", name),
-			"response",
+			HeaderTargetResponse,
 			fmt.Sprintf("%s.response_headers_to_add", name),
 		),
 		NewFailAction(

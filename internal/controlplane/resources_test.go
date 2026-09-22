@@ -356,6 +356,7 @@ func TestApplyResource_DeleteOnImmutableField(t *testing.T) {
 			client := dynamicfake.NewSimpleDynamicClient(scheme)
 
 			var applies, deletes int
+			var deletePropagation *metav1.DeletionPropagation
 			// Apply goes out as a patch with types.ApplyPatchType.
 			client.PrependReactor("patch", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 				applies++
@@ -363,6 +364,9 @@ func TestApplyResource_DeleteOnImmutableField(t *testing.T) {
 			})
 			client.PrependReactor("delete", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 				deletes++
+				if del, ok := action.(k8stesting.DeleteActionImpl); ok {
+					deletePropagation = del.DeleteOptions.PropagationPolicy
+				}
 				return true, nil, nil
 			})
 
@@ -383,6 +387,15 @@ func TestApplyResource_DeleteOnImmutableField(t *testing.T) {
 			}
 			if deletes != tt.wantDeletes {
 				t.Errorf("deletes = %d, want %d", deletes, tt.wantDeletes)
+			}
+			// Background must be explicit: without it the API server honours a
+			// foregroundDeletion or orphan finalizer already on the object.
+			if tt.wantDeletes > 0 {
+				if deletePropagation == nil {
+					t.Error("delete propagation policy = nil, want Background")
+				} else if *deletePropagation != metav1.DeletePropagationBackground {
+					t.Errorf("delete propagation policy = %q, want %q", *deletePropagation, metav1.DeletePropagationBackground)
+				}
 			}
 		})
 	}

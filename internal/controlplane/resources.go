@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/restmapper"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -150,8 +151,10 @@ func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.U
 		"error", err.Error(),
 	)
 
-	// deleting object which will be automatically recreated in the next reconcile cycle
-	if delErr := rc.Delete(ctx, obj.GetName(), metav1.DeleteOptions{}); delErr != nil && !apierrors.IsNotFound(delErr) {
+	// deleting object which will be automatically recreated in the next reconcile cycle.
+	if delErr := rc.Delete(ctx, obj.GetName(), metav1.DeleteOptions{
+		PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
+	}); delErr != nil && !apierrors.IsNotFound(delErr) {
 		return fmt.Errorf("deleting %s %s after immutable field conflict: %w", obj.GetKind(), obj.GetName(), delErr)
 	}
 

@@ -478,7 +478,7 @@ $(1): export RELATED_IMAGE_CONSOLE_PLUGIN_LATEST := $(RELATED_IMAGE_CONSOLE_PLUG
 $(1): export RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 := $(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)
 $(1): export RELATED_IMAGE_CONSOLE_PLUGIN_PF5 := $(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)
 endef
-$(foreach t,run test-bare-k8s-integration test-controlplane-integration test-gatewayapi-env-integration test-istio-env-integration test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
+$(foreach t,run test-bare-k8s-integration test-controlplane-integration test-gatewayapi-env-integration test-istio-env-integration test-mcp-authpolicy-e2e test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development

@@ -4,6 +4,8 @@ package wasm
 
 import (
 	"fmt"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -1271,6 +1273,71 @@ func TestBuildActions_CollidingLeafFieldNames(t *testing.T) {
 	}
 	if !strings.Contains(grpc.MessageBuilder, "kuadrant.internal.response.body.metadata_total_tokens") {
 		t.Errorf("grpc message should reference store path for metadata_total_tokens, got:\n%s", grpc.MessageBuilder)
+	}
+}
+
+func TestBuildActions_SanitizedKeyCollision(t *testing.T) {
+	// "/a" and "/_/a" both have leaf field name "a" (triggering the sanitized-pointer
+	// fallback), and sanitizePointer itself maps both to "a" (folding "_" the same way
+	// it folds "/"). Without disambiguation, one of the two extracted values would
+	// silently share the other's store path and be lost.
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "field1",
+						Value: `responseBodyJSON("/a")`,
+					}}},
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "field2",
+						Value: `responseBodyJSON("/_/a")`,
+					}}},
+				},
+			}},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+
+	// Sorted pointer order ("/_/a" < "/a") claims "a" first; "/a" must be
+	// disambiguated to a distinct key rather than colliding on "a" too.
+	if !strings.Contains(store.Value, `"a": responseBodyJSON("/_/a")`) {
+		t.Errorf("store value should contain \"a\" mapped to /_/a, got: %s", store.Value)
+	}
+	if !strings.Contains(store.Value, `"a_2": responseBodyJSON("/a")`) {
+		t.Errorf("store value should contain a disambiguated key for /a, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if strings.Contains(grpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("grpc message should not contain responseBodyJSON after replacement")
+	}
+	storePathPattern := regexp.MustCompile(`kuadrant\.internal\.response\.body\.[A-Za-z0-9_]+`)
+	gotPaths := make(map[string]bool)
+	for _, p := range storePathPattern.FindAllString(grpc.MessageBuilder, -1) {
+		gotPaths[p] = true
+	}
+	wantPaths := map[string]bool{
+		"kuadrant.internal.response.body.a":   true,
+		"kuadrant.internal.response.body.a_2": true,
+	}
+	if !reflect.DeepEqual(gotPaths, wantPaths) {
+		t.Errorf("grpc message store paths = %v, want %v (message:\n%s)", gotPaths, wantPaths, grpc.MessageBuilder)
 	}
 }
 

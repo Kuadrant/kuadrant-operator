@@ -208,12 +208,21 @@ func BuildActions(specs []ActionSpec) []Action {
 		// Build map expression: {"field1": bodyJSON("/path1"), "field2": bodyJSON("/path2")}
 		var mapEntries []string
 		var allSources []string
+		usedKeys := make(map[string]bool, len(pointers))
 		for _, pointer := range pointers {
 			entry := fields[pointer]
 			mapKey := entry.ref.FieldName
 			if leafCount[mapKey] > 1 {
 				mapKey = sanitizePointer(entry.ref.Pointer)
 			}
+			// sanitizePointer isn't guaranteed injective (e.g. "/a" and "/_/a" both
+			// sanitize to "a"), so disambiguate any residual collision deterministically
+			// rather than letting two distinct pointers silently share one store path.
+			base := mapKey
+			for n := 2; usedKeys[mapKey]; n++ {
+				mapKey = fmt.Sprintf("%s_%d", base, n)
+			}
+			usedKeys[mapKey] = true
 			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, mapKey, entry.ref.Original))
 			replacements[entry.ref.Original] = bodyRefStorePath(direction, mapKey)
 			allSources = appendUnique(allSources, entry.sources...)

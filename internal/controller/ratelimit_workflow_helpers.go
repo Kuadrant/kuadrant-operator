@@ -399,7 +399,7 @@ func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentif
 	return []wasm.ActionSpec{reserveSpec, commitSpec}
 }
 
-func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) []wasm.ActionSpec {
+func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, policyPredicate func(machinery.Policy) bool) ([]wasm.ActionSpec, error) {
 	return buildWasmActionSpecsForAnyRateLimit(
 		effectivePolicy.Path,
 		effectivePolicy.Spec.Rules(),
@@ -415,15 +415,14 @@ func buildWasmActionSpecsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, 
 	)
 }
 
-func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool, mode kuadrantv1beta1.TokenRateLimitingMode) []wasm.ActionSpec {
+func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLimitPolicy, policyPredicate func(machinery.Policy) bool, mode kuadrantv1beta1.TokenRateLimitingMode) ([]wasm.ActionSpec, error) {
 	path := effectivePolicy.Path
 	rules := effectivePolicy.Spec.Rules()
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
-		// If the path is invalid, return empty actions
-		return []wasm.ActionSpec{}
+		return nil, fmt.Errorf("failed to parse topology path: %w", err)
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 	// reservation TTL fallback derived once per route: the route rule's
@@ -470,7 +469,7 @@ func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLim
 		allSpecs = append(allSpecs, tokenSpecs...)
 	}
 
-	return allSpecs
+	return allSpecs, nil
 }
 
 // reservationTTLFromRoute returns the route rule's backendRequest timeout as a
@@ -493,13 +492,12 @@ func buildWasmActionSpecsForAnyRateLimit(
 	policyPredicate func(machinery.Policy) bool,
 	identifierFunc func(k8stypes.NamespacedName, string) string,
 	specFunc func(interface{}, string, ActionScope, string, kuadrantv1.WhenPredicates) wasm.ActionSpec,
-) []wasm.ActionSpec {
+) ([]wasm.ActionSpec, error) {
 	policiesInPath := kuadrantv1.PoliciesInPath(path, policyPredicate)
 
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
-		// If the path is invalid, return empty actions
-		return []wasm.ActionSpec{}
+		return nil, fmt.Errorf("failed to parse topology path: %w", err)
 	}
 	limitsNamespace := LimitsNamespaceFromRoute(parsed.GetRoute())
 
@@ -522,7 +520,7 @@ func buildWasmActionSpecsForAnyRateLimit(
 		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
 	}
 
-	return lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.ActionSpec, bool) {
+	specs := lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.ActionSpec, bool) {
 		uniquePolicyRuleKey := r.Key
 		policyRule := r.Value
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
@@ -538,4 +536,6 @@ func buildWasmActionSpecsForAnyRateLimit(
 
 		return specFunc(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates), true
 	})
+
+	return specs, nil
 }

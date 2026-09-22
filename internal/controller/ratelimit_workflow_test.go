@@ -4,9 +4,11 @@ package controllers
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/machinery"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -242,4 +244,29 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+
+func TestBuildWasmActionSpecsPropagatesTopologyPathErrors(t *testing.T) {
+	policyPredicate := func(machinery.Policy) bool { return true }
+
+	t.Run("rate limit", func(t *testing.T) {
+		_, err := buildWasmActionSpecsForRateLimit(EffectiveRateLimitPolicy{}, policyPredicate)
+		if err == nil {
+			t.Fatal("expected topology path parsing error")
+		}
+		if !strings.Contains(err.Error(), "failed to parse topology path") {
+			t.Fatalf("expected wrapped topology path error, got %q", err)
+		}
+	})
+
+	t.Run("token rate limit", func(t *testing.T) {
+		_, err := buildWasmActionSpecsForTokenRateLimit(EffectiveTokenRateLimitPolicy{}, policyPredicate, "")
+		if err == nil {
+			t.Fatal("expected topology path parsing error")
+		}
+		if !strings.Contains(err.Error(), "failed to parse topology path") {
+			t.Fatalf("expected wrapped topology path error, got %q", err)
+		}
+	})
 }

@@ -504,7 +504,14 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlSpecs := buildWasmActionSpecsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			rlSpecs, err := buildWasmActionSpecsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if err != nil {
+				logger.Error(err, "failed to build wasm action specs for rate limit policy", "pathID", pathID)
+				pathSpan.RecordError(err)
+				pathSpan.SetStatus(codes.Error, "failed to build rate limit action specs")
+				pathSpan.End()
+				continue
+			}
 			if specsHaveAuthAccess(rlSpecs) {
 				specs = append(specs, rlSpecs...)
 			} else {
@@ -520,7 +527,14 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
+			trlSpecs, err := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
+			if err != nil {
+				logger.Error(err, "failed to build wasm action specs for token rate limit policy", "pathID", pathID)
+				pathSpan.RecordError(err)
+				pathSpan.SetStatus(codes.Error, "failed to build token rate limit action specs")
+				pathSpan.End()
+				continue
+			}
 			if specsHaveAuthAccess(trlSpecs) {
 				specs = append(specs, trlSpecs...)
 			} else {

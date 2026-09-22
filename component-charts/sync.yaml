@@ -20,7 +20,7 @@ components:
     repo: Kuadrant/authorino-operator
     chart-path: charts/authorino-operator
     tracked-branch: main
-    ref: 042ea68d4aebef886e8f30d0ab60a7a65df4f6b2
+    ref: 60e659dcd2eff59e2d68644a30e0393ee56ac2dc
     auto-merge: false
   limitador-operator:
     repo: Kuadrant/limitador-operator

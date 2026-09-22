@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -22,6 +23,7 @@ import (
 	clienttesting "k8s.io/client-go/testing"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 )
 
 func successReflectionFetcher(_ context.Context, _, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error) {
@@ -144,7 +146,9 @@ func validRequest() *extpb.RegisterActionMethodRequest {
 func TestHandshake_MissingPolicyKind(t *testing.T) {
 	svc := newTestExtensionService()
 
-	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{})
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version: protocol.Version,
+	})
 	if err != nil {
 		t.Fatalf("expected no gRPC error, got: %v", err)
 	}
@@ -154,6 +158,101 @@ func TestHandshake_MissingPolicyKind(t *testing.T) {
 	if resp.Reason != "policy_kind is required" {
 		t.Fatalf("expected reason %q, got %q", "policy_kind is required", resp.Reason)
 	}
+	if resp.Rejection != extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST {
+		t.Fatalf("expected INVALID_REQUEST rejection, got %v", resp.Rejection)
+	}
+}
+
+func TestHandshake_IncompatibleVersion(t *testing.T) {
+	testCases := []struct {
+		name    string
+		version string
+	}{
+		{"empty", ""},
+		{"unparseable", "invalid"},
+		{"partial", "0.1"},
+		{"out of band", semver.MustParse(protocol.Version).IncMajor().String()},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newTestExtensionService()
+			cred := validCredential()
+			svc.sessionStore.SetCredential("test-ext", cred)
+
+			resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+				Version:    tc.version,
+				Token:      cred,
+				PolicyKind: "TestPolicy",
+			})
+			if err != nil {
+				t.Fatalf("expected no gRPC error, got: %v", err)
+			}
+			if resp.Accepted {
+				t.Fatalf("expected handshake to be rejected for version %q", tc.version)
+			}
+			if resp.Rejection != extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION {
+				t.Fatalf("expected INCOMPATIBLE_VERSION rejection, got %v", resp.Rejection)
+			}
+			if resp.Version != protocol.Version {
+				t.Fatalf("expected operator version %q in rejection, got %q", protocol.Version, resp.Version)
+			}
+			if resp.SessionToken != "" {
+				t.Fatal("expected no session token on a rejected handshake")
+			}
+		})
+	}
+}
+
+func TestHandshake_VersionCheckPrecedesPruning(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+	policyID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "keep-me"}
+	svc.registeredData.Set(policyID, "targetRef1", extpb.Domain_DOMAIN_AUTH, "binding1", DataProviderEntry{
+		Binding:    "binding1",
+		Expression: "test",
+	})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       "9.9.9",
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for an incompatible version")
+	}
+	if !svc.registeredData.Exists(policyID, "targetRef1", extpb.Domain_DOMAIN_AUTH, "binding1") {
+		t.Fatal("expected registered data to survive a version-rejected handshake")
+	}
+}
+
+func TestHandshake_CompatibleWithinBand(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	current := semver.MustParse(protocol.Version)
+	peer := current.IncPatch()
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    peer.String(),
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected patch-level skew %q to be accepted, got reason: %s", peer.String(), resp.Reason)
+	}
+	if resp.Version != protocol.Version {
+		t.Fatalf("expected operator version %q in response, got %q", protocol.Version, resp.Version)
+	}
 }
 
 func TestHandshake_Builtin_Success(t *testing.T) {
@@ -162,7 +261,7 @@ func TestHandshake_Builtin_Success(t *testing.T) {
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Version:    "1.0.0",
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 	})
@@ -185,6 +284,7 @@ func TestHandshake_Standalone_Success(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -207,6 +307,7 @@ func TestHandshake_Standalone_Unauthorized(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -234,6 +335,7 @@ func TestHandshake_Standalone_AuthorizedByGroup(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -261,6 +363,7 @@ func TestHandshake_Standalone_RejectedWhenGroupMissing(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -276,6 +379,7 @@ func TestHandshake_UnauthenticatedToken_GenericReason(t *testing.T) {
 	svc := newTestExtensionService()
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("bogus-token"),
 		PolicyKind: "TestPolicy",
 	})
@@ -300,6 +404,7 @@ func TestHandshake_WarmupGate_RejectsStandaloneDuringWarmup(t *testing.T) {
 	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -325,6 +430,7 @@ func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T
 	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	builtinResp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      builtinCred,
 		PolicyKind: "BuiltinPolicy",
 	})
@@ -336,6 +442,7 @@ func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T
 	}
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -1876,6 +1983,7 @@ func TestHandshake_OwnedPolicies_KindMismatch(t *testing.T) {
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{
@@ -1902,6 +2010,7 @@ func TestHandshake_OwnedPolicies_EmptyName(t *testing.T) {
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{
@@ -1925,6 +2034,7 @@ func TestHandshake_OwnedPolicies_NilEntry(t *testing.T) {
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{
@@ -1949,6 +2059,7 @@ func TestHandshake_OwnedPolicies_EmptyKind(t *testing.T) {
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{
@@ -1978,6 +2089,7 @@ func TestHandshake_OwnedPolicies_PrunesAll(t *testing.T) {
 	})
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       protocol.Version,
 		Token:         cred,
 		PolicyKind:    "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{},
@@ -2010,6 +2122,7 @@ func TestHandshake_OwnedPolicies_PrunesSubset(t *testing.T) {
 	svc.registeredData.SetSubscription(staleID, "stale.expression", Subscription{PolicyKind: "TestPolicy"})
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{
@@ -2052,6 +2165,7 @@ func TestHandshake_OwnedPolicies_DifferentKindUntouched(t *testing.T) {
 	svc.registeredData.SetSubscription(otherKindID, "other.expression", Subscription{PolicyKind: "OtherPolicy"})
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       protocol.Version,
 		Token:         cred,
 		PolicyKind:    "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{},
@@ -2087,6 +2201,7 @@ func TestHandshake_OwnedPolicies_ChangeNotifierFires(t *testing.T) {
 	})
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       protocol.Version,
 		Token:         cred,
 		PolicyKind:    "TestPolicy",
 		OwnedPolicies: []*extpb.Metadata{},

@@ -12,9 +12,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
@@ -57,6 +59,11 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 				ObjectNamespace: r.namespace,
 				ObjectName:      TopologyConfigMapName,
 				EventType:       ptr.To(controller.DeleteEvent),
+			},
+			{
+				Kind:            ptr.To(v1beta1.NetworkPolicyGroupKind),
+				ObjectNamespace: r.namespace,
+				ObjectName:      consoleplugin.NetworkPolicyName(),
 			},
 		},
 	}
@@ -112,6 +119,18 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	_, err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
 	if err != nil {
 		logger.Error(err, "reconciling deployment")
+		return err
+	}
+
+	// NetworkPolicy: default-deny-all in kuadrant-system would otherwise drop
+	// OpenShift Console traffic to the plugin on port 9443.
+	networkPolicy := consoleplugin.NetworkPolicy(r.namespace)
+	if !topologyExists || !clusterVersionExists {
+		utils.TagObjectToDelete(networkPolicy)
+	}
+	_, err = r.ReconcileResource(ctx, &networkingv1.NetworkPolicy{}, networkPolicy, reconcilers.CreateOnlyMutator)
+	if err != nil {
+		logger.Error(err, "reconciling networkpolicy")
 		return err
 	}
 

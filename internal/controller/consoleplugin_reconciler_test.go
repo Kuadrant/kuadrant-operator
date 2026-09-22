@@ -14,6 +14,7 @@ import (
 	is "gotest.tools/assert/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllersfake "github.com/kuadrant/kuadrant-operator/internal/controller/fake"
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
@@ -84,6 +86,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
+	_ = networkingv1.AddToScheme(scheme)
 	_ = gatewayapiv1.AddToScheme(scheme)
 	_ = consolev1.AddToScheme(scheme)
 	_ = configv1.AddToScheme(scheme)
@@ -113,7 +116,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 		subscription := reconciler.Subscription()
 		assert.Assert(subT, subscription != nil)
 		events := subscription.Events
-		assert.Assert(subT, is.Len(events, 3))
+		assert.Assert(subT, is.Len(events, 4))
 		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ConsolePluginGVK.GroupKind()))
 		assert.DeepEqual(subT, events[1].Kind, ptr.To(ConfigMapGroupKind))
 		assert.DeepEqual(subT, events[1].ObjectName, TopologyConfigMapName)
@@ -123,6 +126,9 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.DeepEqual(subT, events[2].ObjectName, TopologyConfigMapName)
 		assert.DeepEqual(subT, events[2].ObjectNamespace, TestNamespace)
 		assert.DeepEqual(subT, events[2].EventType, ptr.To(controller.DeleteEvent))
+		assert.DeepEqual(subT, events[3].Kind, ptr.To(v1beta1.NetworkPolicyGroupKind))
+		assert.DeepEqual(subT, events[3].ObjectName, consoleplugin.NetworkPolicyName())
+		assert.DeepEqual(subT, events[3].ObjectNamespace, TestNamespace)
 	})
 
 	t.Run("Create service", func(subT *testing.T) {
@@ -172,6 +178,29 @@ func TestConsolePluginReconciler(t *testing.T) {
 		deployment := &appsv1.Deployment{}
 		deploymentKey := client.ObjectKey{Name: consoleplugin.DeploymentName(), Namespace: TestNamespace}
 		err = manager.GetClient().Get(context.TODO(), deploymentKey, deployment)
+		assert.Assert(subT, apierrors.IsNotFound(err))
+	})
+
+	t.Run("Create networkpolicy", func(subT *testing.T) {
+		topology := buildTopologyWithClusterVersion(subT)
+		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
+		networkPolicy := &networkingv1.NetworkPolicy{}
+		npKey := client.ObjectKey{Name: consoleplugin.NetworkPolicyName(), Namespace: TestNamespace}
+		assert.NilError(subT, manager.GetClient().Get(context.TODO(), npKey, networkPolicy))
+		assert.DeepEqual(subT, networkPolicy.GetLabels(), consoleplugin.CommonLabels())
+		assert.DeepEqual(subT, networkPolicy.Spec.PodSelector.MatchLabels, consoleplugin.ServiceSelector())
+		assert.Assert(subT, is.Len(networkPolicy.Spec.Ingress, 1))
+		assert.Assert(subT, is.Len(networkPolicy.Spec.Ingress[0].Ports, 1))
+		assert.Assert(subT, *networkPolicy.Spec.Ingress[0].Ports[0].Port == intstr.FromInt32(consoleplugin.NetworkPolicyPort()))
+	})
+
+	t.Run("Delete networkpolicy", func(subT *testing.T) {
+		topology, err := machinery.NewTopology()
+		assert.Assert(subT, err == nil)
+		assert.NilError(subT, reconciler.Run(context.TODO(), nil, topology, nil, nil))
+		networkPolicy := &networkingv1.NetworkPolicy{}
+		npKey := client.ObjectKey{Name: consoleplugin.NetworkPolicyName(), Namespace: TestNamespace}
+		err = manager.GetClient().Get(context.TODO(), npKey, networkPolicy)
 		assert.Assert(subT, apierrors.IsNotFound(err))
 	})
 

@@ -172,10 +172,7 @@ var _ = Describe("limitador cluster controller", func() {
 					"type":            "STRICT_DNS",
 					"connect_timeout": "1s",
 					"outlier_detection": map[string]any{
-						"consecutive_gateway_failure":           float64(5),
 						"enforcing_consecutive_gateway_failure": float64(100),
-						"interval":                              "10s",
-						"base_ejection_time":                    "30s",
 						"max_ejection_percent":                  float64(100),
 					},
 					"lb_policy":              "ROUND_ROBIN",

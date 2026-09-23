@@ -19,7 +19,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 )
 
-var _ = Describe("Developer Portal Controller", Serial, func() {
+var _ = Describe("Developer Portal Controller", Serial, Labels{"istio"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

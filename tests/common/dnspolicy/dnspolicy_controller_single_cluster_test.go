@@ -37,7 +37,7 @@ func getClusterUID(ctx context.Context, c client.Client) (string, error) {
 	return string(ns.UID), nil
 }
 
-var _ = Describe("DNSPolicy Single Cluster", Labels{"dnspolicy"}, func() {
+var _ = Describe("DNSPolicy Single Cluster", Labels{"common", "dnspolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(1 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

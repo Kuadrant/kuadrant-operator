@@ -30,37 +30,19 @@ Tests Istio-specific functionality with Kuadrant policies. Supports two installa
 
 **Using istioctl (default):**
 ```bash
-make local-istio-env-setup test-istio-env-integration
+make local-env-setup test-istio-env-integration GATEWAYAPI_PROVIDER=istio
 ```
 
 **Using Sail (Kubernetes operator):**
 ```bash
-make local-istio-env-setup test-istio-env-integration ISTIO_INSTALL_SAIL=true
+make local-env-setup test-istio-env-integration GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=true
 ```
 
 ### envoygateway — Envoy Gateway Integration
 Tests Envoy Gateway provider integration with Kuadrant policies.
 
 ```bash
-make local-envoygateway-env-setup test-envoygateway-env-integration
-```
-
-### controllers — Controller-level Integration (internal/controller tests)
-Tests the internal controller implementations across multiple gateway providers:
-
-**Istio (istioctl):**
-```bash
-make local-env-setup test-integration GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=false
-```
-
-**Istio (Sail):**
-```bash
-make local-env-setup test-integration GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=true
-```
-
-**Envoy Gateway:**
-```bash
-make local-env-setup test-integration GATEWAYAPI_PROVIDER=envoygateway
+make local-env-setup test-envoygateway-env-integration GATEWAYAPI_PROVIDER=envoygateway
 ```
 
 ## Running Tests
@@ -79,22 +61,13 @@ make local-gatewayapi-env-setup test-gatewayapi-env-integration
 make local-gatewayapi-env-setup test-controlplane-integration
 
 # Istio (istioctl)
-make local-istio-env-setup test-istio-env-integration
+make local-env-setup test-istio-env-integration GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=false
 
 # Istio (Sail)
-make local-istio-env-setup test-istio-env-integration ISTIO_INSTALL_SAIL=true
-
-# Envoy Gateway
-make local-envoygateway-env-setup test-envoygateway-env-integration
-
-# Controllers – Istio (istioctl)
-make local-env-setup test-integration GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=false
-
-# Controllers – Istio (Sail)
 make local-env-setup test-integration GATEWAYAPI_PROVIDER=istio ISTIO_INSTALL_SAIL=true
 
-# Controllers – Envoy Gateway
-make local-env-setup test-integration GATEWAYAPI_PROVIDER=envoygateway
+# Envoy Gateway
+make local-env-setup test-envoygateway-env-integration GATEWAYAPI_PROVIDER=envoygateway
 ```
 
 ### Adding Test Options
@@ -116,6 +89,78 @@ make local-env-setup
 make test-integration
 make test-integration INTEGRATION_TESTS_EXTRA_ARGS="--focus=TestFoo"
 ```
+
+### Filtering Tests by Label
+
+All test specs are labeled to allow filtering by suite or policy. Use `--label-filter` to run specific tests:
+
+```bash
+# Run all bare_k8s tests
+make test-bare-k8s-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter=bare_k8s"
+
+# Run all Istio AuthPolicy tests
+make test-istio-env-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter=authpolicy"
+
+# Run RateLimitPolicy tests across all suites
+make test-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter=ratelimitpolicy"
+
+# Combine labels (tests matching both labels)
+make test-istio-env-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter='istio && authpolicy'"
+```
+
+**Available Labels:**
+
+| Label | Purpose |
+|-------|---------|
+| `bare_k8s` | Tests for bare Kubernetes (no gateway provider). Tests core Kuadrant functionality without external dependencies. |
+| `common` | Shared policy tests (authpolicy, ratelimitpolicy, dnspolicy, tlspolicy, discoverability). Run across all provider configurations. |
+| `gatewayapi` | Tests for Gateway API integration without a specific provider. |
+| `controlplane` | Tests for Kuadrant control plane components. |
+| `istio` | Tests for Istio provider integration. |
+| `envoygateway` | Tests for Envoy Gateway provider integration. |
+| `authpolicy` | Tests for AuthPolicy controller logic and functionality. |
+| `ratelimitpolicy` | Tests for RateLimitPolicy controller logic and functionality. |
+| `dnspolicy` | Tests for DNSPolicy controller logic and functionality. |
+| `tlspolicy` | Tests for TLSPolicy controller logic and functionality. |
+| `tokenratelimitpolicy` | Tests for TokenRateLimitPolicy controller logic and functionality. |
+| `discoverability` | Tests for policy discoverability mechanisms. |
+
+### Testing Against Existing Cluster
+
+To run tests against a cluster that already has Kuadrant installed (instead of starting an in-process operator):
+
+```bash
+export USE_EXISTING_OPERATOR=true
+make test-bare-k8s-integration
+make test-gatewayapi-env-integration
+make test-istio-env-integration
+# etc.
+```
+
+When `USE_EXISTING_OPERATOR=true`:
+- Skips in-process manager startup and CRD bootstrapping
+- Uses the cluster's existing Kuadrant installation
+- Tests connect via kubeconfig and verify against live operators
+- Useful for validating fixes without cluster churn or testing against production-like setups
+
+**Requirement:** The target cluster must have Kuadrant and all dependencies (Authorino, Limitador, etc.) already installed and running.
+
+**Example: Run AuthPolicy tests across multiple suites on existing cluster:**
+
+```bash
+make test-integration \
+  USE_EXISTING_OPERATOR=true \
+  GATEWAYAPI_PROVIDER=istio \
+  INTEGRATION_TEST_PACKAGES="tests/istio/... tests/common/..." \
+  INTEGRATION_TESTS_EXTRA_ARGS='--flake-attempts=1 --label-filter="authpolicy"'
+```
+
+This command:
+- Reuses the existing cluster instead of creating a new one
+- Targets the Istio provider
+- Runs only istio and common test packages
+- Filters to AuthPolicy tests only (across both packages)
+- Runs with flake attempt detection enabled
 
 ## Common Targets
 

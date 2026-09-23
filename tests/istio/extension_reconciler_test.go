@@ -88,7 +88,7 @@ func defaultWasmServices(logger logr.Logger) map[string]wasm.Service {
 	}
 }
 
-var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
+var _ = Describe("Rate Limiting EnvoyFilter controller", Labels{"istio"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(3 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -2578,7 +2578,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 
 		}, testTimeOut)
 
-		It("WasmPlugin config includes source policy locators for AuthPolicy with merge strategy", func(ctx SpecContext) {
+		It("WasmPlugin config includes source policy locators for AuthPolicy with merge strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
@@ -2707,7 +2707,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 
 		}, testTimeOut)
 
-		It("WasmPlugin config includes source policy locators for AuthPolicy with atomic strategy", func(ctx SpecContext) {
+		It("WasmPlugin config includes source policy locators for AuthPolicy with atomic strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
@@ -2834,7 +2834,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 
 		}, testTimeOut)
 
-		It("WasmPlugin config includes source policy locators for AuthPolicy with overrides and atomic strategy", func(ctx SpecContext) {
+		It("WasmPlugin config includes source policy locators for AuthPolicy with overrides and atomic strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())
@@ -2960,7 +2960,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 
 		}, testTimeOut)
 
-		It("WasmPlugin config includes source policy locators for AuthPolicy with overrides and merge strategy", func(ctx SpecContext) {
+		It("WasmPlugin config includes source policy locators for AuthPolicy with overrides and merge strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			// create httproute
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
 			Expect(testClient().Create(ctx, httpRoute)).To(Succeed())

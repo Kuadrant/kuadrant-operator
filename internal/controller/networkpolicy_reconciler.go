@@ -311,6 +311,9 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 		if aObj.Spec.OIDCServer.Port != nil {
 			OIDCdiscoveryPort = int(*aObj.Spec.OIDCServer.Port)
 		}
+		if aObj.Spec.Metrics.Port != nil {
+			metricsPort = int(*aObj.Spec.Metrics.Port)
+		}
 	}
 
 	ingress := []networkingv1.NetworkPolicyIngressRule{

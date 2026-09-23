@@ -444,6 +444,9 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 				OIDCServer: authorinooperatorv1beta1.OIDCServer{
 					Port: new(int32(9002)),
 				},
+				Metrics: authorinooperatorv1beta1.Metrics{
+					Port: new(int32(9090)),
+				},
 			},
 		}
 		gateway := &gatewayapiv1.Gateway{
@@ -466,8 +469,8 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 		assert.Assert(t, is.Len(result.Spec.Ingress, 4), "should have 4 ingress rules with gateways")
 		// Verify custom OIDC port (first rule)
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9002)))
-		// Verify metrics port (8080)
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8080)))
+		// Verify custom metrics port
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9090)))
 		// Verify custom gRPC port
 		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(9000)))
 		// Verify custom HTTP port
@@ -494,6 +497,9 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 				OIDCServer: authorinooperatorv1beta1.OIDCServer{
 					Port: new(int32(9002)),
 				},
+				Metrics: authorinooperatorv1beta1.Metrics{
+					Port: new(int32(9090)),
+				},
 			},
 		}
 		topology, err := machinery.NewTopology()
@@ -503,7 +509,7 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have OIDC and metrics rules without gateways")
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9002)))
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8080)))
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9090)))
 	})
 
 	t.Run("gateway in topology - peers in gRPC and HTTP but not OIDC", func(t *testing.T) {

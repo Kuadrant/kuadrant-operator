@@ -242,25 +242,30 @@ type TokenRateLimitPolicySpecProper struct {
 type DataExtraction struct {
 	// Response configures data extraction from the response body.
 	// +optional
-	Response *ResponseDataExtraction `json:"response,omitempty"`
+	Response ResponseDataExtraction `json:"response,omitempty"`
 
 	// Source stores the locator of the policy where this rule is originally defined (internal use)
 	Source string `json:"-"`
 }
 
-// ResponseDataExtraction defines the fields extracted from the response body.
-type ResponseDataExtraction struct {
-	// TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
-	// response body to determine total token usage. The first pointer that resolves to a numeric
-	// value is used. Reference tokens may not contain '"' or '\': these are legal, unescaped RFC 6901
-	// characters, but this implementation embeds each pointer as a CEL string literal, so they are
-	// excluded here to avoid ambiguity between JSON Pointer content and CEL/wasm string escaping.
-	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=8
-	// +kubebuilder:validation:items:Pattern=`^(/([^/~"\\]|~[01])*)+$`
-	// +optional
-	TotalTokens []string `json:"totalTokens,omitempty"`
-}
+// ResponseDataExtractionKeyTotalTokens is the key under which an ordered list of JSON Pointer
+// candidates for total token usage extraction is stored in a ResponseDataExtraction map.
+const ResponseDataExtractionKeyTotalTokens = "totalTokens"
+
+// JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+// the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+// may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+// implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+// ambiguity between JSON Pointer content and CEL/wasm string escaping.
+// +kubebuilder:validation:MinItems=1
+// +kubebuilder:validation:MaxItems=8
+// +kubebuilder:validation:items:Pattern=`^(/([^/~"\\]|~[01])*)+$`
+type JSONPointerCandidates []string
+
+// ResponseDataExtraction maps an extraction target name (e.g. "totalTokens", potentially
+// contributed by an extension) to the JSONPointerCandidates used to resolve it.
+// +kubebuilder:validation:MaxProperties=16
+type ResponseDataExtraction map[string]JSONPointerCandidates
 
 var _ kuadrantv1.MergeableRule = &DataExtraction{}
 
@@ -268,10 +273,13 @@ var _ kuadrantv1.MergeableRule = &DataExtraction{}
 // extract total token usage from the response body, falling back to DefaultTotalTokensPointers when
 // dataExtraction.response.totalTokens is unset. Safe to call on a nil receiver.
 func (d *DataExtraction) ResponseTotalTokensPointers() []string {
-	if d == nil || d.Response == nil || len(d.Response.TotalTokens) == 0 {
+	if d == nil {
 		return DefaultTotalTokensPointers
 	}
-	return d.Response.TotalTokens
+	if pointers := d.Response[ResponseDataExtractionKeyTotalTokens]; len(pointers) > 0 {
+		return []string(pointers)
+	}
+	return DefaultTotalTokensPointers
 }
 
 func (d *DataExtraction) GetSpec() any {

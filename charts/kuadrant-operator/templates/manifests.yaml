@@ -14636,22 +14636,22 @@ spec:
                   response shapes.
                 properties:
                   response:
+                    additionalProperties:
+                      description: |-
+                        JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+                        the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+                        may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+                        implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+                        ambiguity between JSON Pointer content and CEL/wasm string escaping.
+                      items:
+                        pattern: ^(/([^/~"\\]|~[01])*)+$
+                        type: string
+                      maxItems: 8
+                      minItems: 1
+                      type: array
                     description: Response configures data extraction from the response
                       body.
-                    properties:
-                      totalTokens:
-                        description: |-
-                          TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
-                          response body to determine total token usage. The first pointer that resolves to a numeric
-                          value is used. Reference tokens may not contain '"' or '\': these are legal, unescaped RFC 6901
-                          characters, but this implementation embeds each pointer as a CEL string literal, so they are
-                          excluded here to avoid ambiguity between JSON Pointer content and CEL/wasm string escaping.
-                        items:
-                          pattern: ^(/([^/~"\\]|~[01])*)+$
-                          type: string
-                        maxItems: 8
-                        minItems: 1
-                        type: array
+                    maxProperties: 16
                     type: object
                 type: object
               defaults:
@@ -14666,22 +14666,22 @@ spec:
                       response shapes.
                     properties:
                       response:
+                        additionalProperties:
+                          description: |-
+                            JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+                            the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+                            may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+                            implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+                            ambiguity between JSON Pointer content and CEL/wasm string escaping.
+                          items:
+                            pattern: ^(/([^/~"\\]|~[01])*)+$
+                            type: string
+                          maxItems: 8
+                          minItems: 1
+                          type: array
                         description: Response configures data extraction from the
                           response body.
-                        properties:
-                          totalTokens:
-                            description: |-
-                              TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
-                              response body to determine total token usage. The first pointer that resolves to a numeric
-                              value is used. Reference tokens may not contain '"' or '\': these are legal, unescaped RFC 6901
-                              characters, but this implementation embeds each pointer as a CEL string literal, so they are
-                              excluded here to avoid ambiguity between JSON Pointer content and CEL/wasm string escaping.
-                            items:
-                              pattern: ^(/([^/~"\\]|~[01])*)+$
-                              type: string
-                            maxItems: 8
-                            minItems: 1
-                            type: array
+                        maxProperties: 16
                         type: object
                     type: object
                   limits:
@@ -14908,22 +14908,22 @@ spec:
                       response shapes.
                     properties:
                       response:
+                        additionalProperties:
+                          description: |-
+                            JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+                            the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+                            may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+                            implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+                            ambiguity between JSON Pointer content and CEL/wasm string escaping.
+                          items:
+                            pattern: ^(/([^/~"\\]|~[01])*)+$
+                            type: string
+                          maxItems: 8
+                          minItems: 1
+                          type: array
                         description: Response configures data extraction from the
                           response body.
-                        properties:
-                          totalTokens:
-                            description: |-
-                              TotalTokens is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against the
-                              response body to determine total token usage. The first pointer that resolves to a numeric
-                              value is used. Reference tokens may not contain '"' or '\': these are legal, unescaped RFC 6901
-                              characters, but this implementation embeds each pointer as a CEL string literal, so they are
-                              excluded here to avoid ambiguity between JSON Pointer content and CEL/wasm string escaping.
-                            items:
-                              pattern: ^(/([^/~"\\]|~[01])*)+$
-                              type: string
-                            maxItems: 8
-                            minItems: 1
-                            type: array
+                        maxProperties: 16
                         type: object
                     type: object
                   limits:

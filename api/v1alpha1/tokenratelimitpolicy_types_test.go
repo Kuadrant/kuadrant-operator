@@ -291,15 +291,22 @@ func TestDataExtraction_ResponseTotalTokensPointers(t *testing.T) {
 		},
 		{
 			name:     "empty totalTokens falls back to defaults",
-			d:        &DataExtraction{Response: &ResponseDataExtraction{}},
+			d:        &DataExtraction{Response: ResponseDataExtraction{}},
 			expected: DefaultTotalTokensPointers,
 		},
 		{
 			name: "explicit totalTokens overrides defaults",
-			d: &DataExtraction{Response: &ResponseDataExtraction{
-				TotalTokens: []string{"/custom/pointer"},
+			d: &DataExtraction{Response: ResponseDataExtraction{
+				ResponseDataExtractionKeyTotalTokens: {"/custom/pointer"},
 			}},
 			expected: []string{"/custom/pointer"},
+		},
+		{
+			name: "unrelated key falls back to defaults",
+			d: &DataExtraction{Response: ResponseDataExtraction{
+				"promptTokens": {"/usage/prompt_tokens"},
+			}},
+			expected: DefaultTotalTokensPointers,
 		},
 	}
 
@@ -325,7 +332,7 @@ func TestTokenRateLimitPolicy_Rules_DataExtraction(t *testing.T) {
 			TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
 				Limits: map[string]TokenLimit{"test": {}},
 				DataExtraction: &DataExtraction{
-					Response: &ResponseDataExtraction{TotalTokens: []string{"/usage/total_tokens"}},
+					Response: ResponseDataExtraction{ResponseDataExtractionKeyTotalTokens: {"/usage/total_tokens"}},
 				},
 			},
 		},
@@ -340,8 +347,9 @@ func TestTokenRateLimitPolicy_Rules_DataExtraction(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected rule spec to be *DataExtraction, got %T", rule.GetSpec())
 	}
-	if len(dataExtraction.Response.TotalTokens) != 1 || dataExtraction.Response.TotalTokens[0] != "/usage/total_tokens" {
-		t.Errorf("unexpected TotalTokens: %v", dataExtraction.Response.TotalTokens)
+	totalTokens := dataExtraction.Response[ResponseDataExtractionKeyTotalTokens]
+	if len(totalTokens) != 1 || totalTokens[0] != "/usage/total_tokens" {
+		t.Errorf("unexpected TotalTokens: %v", totalTokens)
 	}
 
 	// round-trip through SetRules

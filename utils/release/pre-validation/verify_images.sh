@@ -77,7 +77,8 @@ if [[ "$mcp_gateway_version" == "0.0.0" ]]; then
   echo "Skipping mcp-gateway (version 0.0.0)"
 else
   tag=$(mod_version "$mcp_gateway_version")
-  echo "Checking mcp-gateway $tag image..."
+  echo "Checking mcp-gateway $tag images..."
+  check_image "ghcr.io/kuadrant/mcp-controller:$tag"
   check_image "ghcr.io/kuadrant/mcp-gateway:$tag"
 fi
 

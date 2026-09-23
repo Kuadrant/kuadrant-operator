@@ -31,20 +31,22 @@ import (
 )
 
 const (
-	mcpAuthGatewayURLDefault          = "https://mcp.mcp-gateway.local:8009/mcp"
-	mcpAuthKeycloakTokenURLDefault    = "https://keycloak.127-0-0-1.sslip.io:8002/realms/mcp/protocol/openid-connect/token"
-	mcpAuthNamespaceDefault           = "kuadrant-system"
-	mcpAuthTestServerNamespaceDefault = "mcp-test"
-	mcpAuthExtensionName              = "mcp-gateway-extension"
-	mcpAuthReadyTimeout               = 5 * time.Minute
-	mcpAuthHTTPTimeout                = 30 * time.Second
+	mcpAuthGatewayURLDefault            = "https://mcp.mcp-gateway.local:8009/mcp"
+	mcpAuthKeycloakTokenURLDefault      = "https://keycloak.127-0-0-1.sslip.io:8002/realms/mcp/protocol/openid-connect/token"
+	mcpAuthNamespaceDefault             = "kuadrant-system"
+	mcpAuthTestServerNamespaceDefault   = "mcp-test"
+	mcpAuthBackendHostnameSuffixDefault = "mcp-gateway.local"
+	mcpAuthExtensionName                = "mcp-gateway-extension"
+	mcpAuthReadyTimeout                 = 5 * time.Minute
+	mcpAuthHTTPTimeout                  = 30 * time.Second
 )
 
 var (
-	mcpAuthGatewayURL       = mcpAuthEnv("MCP_AUTH_GATEWAY_URL", mcpAuthGatewayURLDefault)
-	mcpAuthKeycloakTokenURL = mcpAuthEnv("MCP_AUTH_KEYCLOAK_TOKEN_URL", mcpAuthKeycloakTokenURLDefault)
-	mcpAuthNamespace        = mcpAuthEnv("MCP_AUTH_NAMESPACE", mcpAuthNamespaceDefault)
-	mcpAuthTestServerNS     = mcpAuthEnv("MCP_AUTH_TEST_SERVER_NAMESPACE", mcpAuthTestServerNamespaceDefault)
+	mcpAuthGatewayURL            = mcpAuthEnv("MCP_AUTH_GATEWAY_URL", mcpAuthGatewayURLDefault)
+	mcpAuthKeycloakTokenURL      = mcpAuthEnv("MCP_AUTH_KEYCLOAK_TOKEN_URL", mcpAuthKeycloakTokenURLDefault)
+	mcpAuthNamespace             = mcpAuthEnv("MCP_AUTH_NAMESPACE", mcpAuthNamespaceDefault)
+	mcpAuthTestServerNS          = mcpAuthEnv("MCP_AUTH_TEST_SERVER_NAMESPACE", mcpAuthTestServerNamespaceDefault)
+	mcpAuthBackendHostnameSuffix = mcpAuthEnv("MCP_AUTH_BACKEND_HOSTNAME_SUFFIX", mcpAuthBackendHostnameSuffixDefault)
 )
 
 var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gateway", "long-running"), func() {
@@ -84,9 +86,9 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gatew
 
 		By("creating backend HTTPRoutes on the authenticated gateway listener")
 		for _, route := range []*gatewayapiv1.HTTPRoute{
-			mcpAuthHTTPRoute("mcp-server1-route", "server1.mcp-gateway.local", "mcp-test-server1"),
-			mcpAuthHTTPRoute("mcp-server2-route", "server2.mcp-gateway.local", "mcp-test-server2"),
-			mcpAuthHTTPRoute("everything-server-route", "everything-server.mcp-gateway.local", "everything-server"),
+			mcpAuthHTTPRoute("mcp-server1-route", "server1."+mcpAuthBackendHostnameSuffix, "mcp-test-server1"),
+			mcpAuthHTTPRoute("mcp-server2-route", "server2."+mcpAuthBackendHostnameSuffix, "mcp-test-server2"),
+			mcpAuthHTTPRoute("everything-server-route", "everything-server."+mcpAuthBackendHostnameSuffix, "everything-server"),
 		} {
 			Expect(testClient().Create(ctx, route)).To(Succeed())
 			createdResources = append(createdResources, route)

@@ -613,14 +613,34 @@ type bodyRef struct {
 	Pointer   string // identity key: the JSON pointer, or an ordered-list+type-hint canonical key
 }
 
+// identifierUnsafeChars matches any single character that is not safe within a bare CEL
+// identifier segment. Store paths and map-literal keys derived from a JSON Pointer are read
+// back via dot access (e.g. "kuadrant.internal.response.body.<segment>"), which CEL parses
+// with the same grammar as a plain identifier: an unescaped "-" is subtraction, "]" is a
+// syntax error, and a leading digit is illegal. RFC 6901 permits all of these in a pointer
+// token, so every derived segment must go through sanitizeIdentifier before being embedded
+// as CEL source.
+var identifierUnsafeChars = regexp.MustCompile(`[^A-Za-z0-9_]`)
+
+// sanitizeIdentifier rewrites s into a non-empty, CEL-identifier-safe string.
+func sanitizeIdentifier(s string) string {
+	sanitized := strings.Trim(identifierUnsafeChars.ReplaceAllString(s, "_"), "_")
+	if sanitized == "" {
+		return "_"
+	}
+	if sanitized[0] >= '0' && sanitized[0] <= '9' {
+		return "_" + sanitized
+	}
+	return sanitized
+}
+
 func bodyRefFieldName(jsonPointer string) string {
 	segments := strings.Split(strings.TrimPrefix(jsonPointer, "/"), "/")
-	return segments[len(segments)-1]
+	return sanitizeIdentifier(segments[len(segments)-1])
 }
 
 func sanitizePointer(pointer string) string {
-	replacer := strings.NewReplacer("/", "_", pointerListKeySep, "_")
-	return strings.Trim(replacer.Replace(strings.TrimPrefix(pointer, "/")), "_")
+	return sanitizeIdentifier(strings.TrimPrefix(pointer, "/"))
 }
 
 func bodyRefStorePath(direction, fieldName string) string {

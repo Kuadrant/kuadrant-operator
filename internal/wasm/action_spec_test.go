@@ -791,6 +791,9 @@ func TestBodyRefFieldName(t *testing.T) {
 		{"/model", "model"},
 		{"/a/b/c", "c"},
 		{"single", "single"},
+		{"/usage/total-tokens", "total_tokens"},
+		{"/usage/weird]key", "weird_key"},
+		{"/2024", "_2024"},
 	}
 	for _, tc := range tests {
 		got := bodyRefFieldName(tc.pointer)
@@ -919,13 +922,15 @@ func TestExtractBodyRefs(t *testing.T) {
 
 	t.Run("list candidate containing a literal ']'", func(t *testing.T) {
 		// RFC 6901 reference tokens may legally contain "]", so the list matcher must not
-		// terminate at the first "]" it sees.
+		// terminate at the first "]" it sees. FieldName is sanitized to "a_b" (rather than
+		// truncated to "a") to prove the full pointer "/usage/a]b" was captured before the
+		// CEL-identifier-safe substitution was applied.
 		refs := extractBodyRefs(`responseBodyJSON(["/usage/a]b"], "number")`)
 		if len(refs) != 1 {
 			t.Fatalf("expected 1 ref, got %d", len(refs))
 		}
-		if refs[0].FieldName != "a]b" {
-			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "a]b")
+		if refs[0].FieldName != "a_b" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "a_b")
 		}
 	})
 
@@ -1338,6 +1343,46 @@ func TestBuildActions_SanitizedKeyCollision(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotPaths, wantPaths) {
 		t.Errorf("grpc message store paths = %v, want %v (message:\n%s)", gotPaths, wantPaths, grpc.MessageBuilder)
+	}
+}
+
+// TestBuildActions_PunctuationInPointer guards against a regression where a JSON Pointer's
+// last segment contains characters that are legal in RFC 6901 (e.g. "-") but unsafe in the
+// generated CEL dot-access store path (e.g. "kuadrant.internal.response.body.total-tokens",
+// where CEL parses "-" as subtraction rather than part of an identifier). Such a pointer is
+// accepted by ResponseDataExtraction's CRD validation, so BuildActions must sanitize it.
+func TestBuildActions_PunctuationInPointer(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitCommitServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{
+				ID:           "limit-a",
+				ActualAmount: `responseBodyJSON(["/usage/total-tokens"], "number")`,
+			},
+		},
+	}
+	actions := BuildActions(specs)
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	if !strings.Contains(store.Value, `"total_tokens":`) {
+		t.Errorf("store value should use a sanitized key, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(grpc.MessageBuilder, expectedStorePath) {
+		t.Errorf("commit message should reference sanitized store path %q, got:\n%s", expectedStorePath, grpc.MessageBuilder)
+	}
+	if strings.Contains(grpc.MessageBuilder, "total-tokens") {
+		t.Errorf("commit message must not contain the unsanitized punctuation-bearing key, got:\n%s", grpc.MessageBuilder)
 	}
 }
 

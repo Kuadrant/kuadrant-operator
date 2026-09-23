@@ -3,10 +3,13 @@ package controlplane
 import (
 	"context"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -64,14 +67,35 @@ func (r *BootstrapRunnable) Start(ctx context.Context) error {
 		r.emitCleanupEvent(ctx, directClient, result)
 	}
 
-	cleaned, cleanupErr := RunDeveloperPortalFinalizerCleanup(ctx, directClient, r.logger)
-	if cleanupErr != nil {
-		r.logger.Error(cleanupErr, "developer portal finalizer cleanup incomplete")
-	}
-	if r.recorder != nil {
-		r.emitDeveloperPortalCleanupEvents(ctx, directClient, cleaned, cleanupErr)
-	}
+	r.runDeveloperPortalCleanup(ctx, directClient, developerPortalCleanupBackoff)
 	return nil
+}
+
+var developerPortalCleanupBackoff = wait.Backoff{
+	Duration: time.Second,
+	Factor:   2,
+	Jitter:   0.2,
+	Cap:      5 * time.Minute,
+	Steps:    math.MaxInt32,
+}
+
+// runDeveloperPortalCleanup repeats the finalizer cleanup until a pass succeeds
+// or leadership is lost. nothing else removes the finalizer now, so giving up
+// would leave a Kuadrant CR unable to finish deleting until the next restart.
+func (r *BootstrapRunnable) runDeveloperPortalCleanup(ctx context.Context, c client.Client, backoff wait.Backoff) {
+	_ = backoff.DelayFunc().Until(ctx, true, true, func(ctx context.Context) (bool, error) {
+		cleaned, err := RunDeveloperPortalFinalizerCleanup(ctx, c, r.logger)
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		if err != nil {
+			r.logger.Error(err, "developer portal finalizer cleanup incomplete, retrying")
+		}
+		if r.recorder != nil {
+			r.emitDeveloperPortalCleanupEvents(ctx, c, cleaned, err)
+		}
+		return err == nil, nil
+	})
 }
 
 // controlPlane fetches the default KuadrantControlPlane, the regarding object

@@ -28,8 +28,8 @@ import (
 const developerPortalFinalizer = "kuadrant.io/developerportal"
 
 // RunDeveloperPortalFinalizerCleanup strips the legacy developer portal
-// finalizer from every Kuadrant CR that still carries it. It is a one-time
-// startup function called from bootstrap, NOT during reconciliation. Returns
+// finalizer from every Kuadrant CR that still carries it. It is a startup
+// function called from bootstrap, NOT during reconciliation. Returns
 // the namespaced names of the CRs cleaned; a failure on one CR does not stop
 // the others, the errors are joined and returned together.
 func RunDeveloperPortalFinalizerCleanup(ctx context.Context, c client.Client, logger logr.Logger) ([]string, error) {

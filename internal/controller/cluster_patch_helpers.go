@@ -43,10 +43,12 @@ func buildClusterPatch(clusterName, host string, port int, mTLS bool) map[string
 // upstreams. It ejects pod endpoints that accumulate consecutive gateway failures
 // (gRPC UNAVAILABLE / connection errors) between DNS refresh cycles, reducing the
 // window where traffic is routed to a dead pod after a rolling update or restart.
-// Only safe to use on gRPC upstreams: defining this block also activates the
-// consecutive_5xx detector (Envoy default: 5 errors, 100% enforcing), which is
-// harmless for gRPC because gRPC always returns HTTP/2 status 200 — errors are
-// carried in trailers, not HTTP status codes.
+// Enabling this block also activates the consecutive_5xx detector (Envoy default:
+// 5 errors, 100% enforcing). For connection-level failures (the pod-restart scenario
+// we protect against), both detectors increment on the same events and eject at the
+// same threshold — 5xx does not fire sooner. For application-level gRPC errors
+// (non-zero gRPC status in trailers), HTTP/2 status is 200, so 5xx does not fire at
+// all; only gateway_failure applies.
 // Only non-default values are set here:
 //   - enforcing_consecutive_gateway_failure: defaults to 0 (unenforced); set to 100
 //     so consecutive gateway failures actually trigger ejection.

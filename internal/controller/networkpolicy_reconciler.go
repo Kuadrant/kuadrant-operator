@@ -297,6 +297,9 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 	gRPCport := 50051
 	HTTPport := 5001
 	OIDCdiscoveryPort := 8083
+	// Authorino controller metrics (Service authorino-controller-metrics). Prometheus
+	// scrapes from a monitoring namespace, not from gateway namespaces.
+	metricsPort := 8080
 
 	if aObj != nil {
 		if aObj.Spec.Listener.Ports.GRPC != nil {
@@ -313,6 +316,8 @@ func generateAuthorinoNetworkPolicy(kObj *v1beta1.Kuadrant, aObj *authorinoopera
 	ingress := []networkingv1.NetworkPolicyIngressRule{
 		// OIDC discovery endpoint
 		ingressRule([]networkingv1.NetworkPolicyPeer{}, OIDCdiscoveryPort),
+		// Metrics scrape (empty From: any namespace, same as operator metrics NPs)
+		ingressRule([]networkingv1.NetworkPolicyPeer{}, metricsPort),
 	}
 
 	if len(fromNamespaces) > 0 {
@@ -397,13 +402,15 @@ func generateLimitadorNetworkPolicy(kObj *v1beta1.Kuadrant, lObj *limitadorv1alp
 		HTTPport = int(lObj.HTTPPort())
 	}
 
-	ingress := []networkingv1.NetworkPolicyIngressRule{}
+	// HTTP is Limitador's metrics (/metrics) and HTTP API. Prometheus scrapes from a
+	// monitoring namespace, not from gateway namespaces, so allow TCP with empty From.
+	ingress := []networkingv1.NetworkPolicyIngressRule{
+		ingressRule([]networkingv1.NetworkPolicyPeer{}, HTTPport),
+	}
 
 	if len(fromNamespaces) > 0 {
-		// gRPC ext-auth from Envoy
+		// gRPC rate-limit from Envoy
 		ingress = append(ingress, ingressRule(fromNamespaces, gRPCport))
-		// HTTP ext-auth from gateway
-		ingress = append(ingress, ingressRule(fromNamespaces, HTTPport))
 	}
 
 	return &networkingv1.NetworkPolicy{

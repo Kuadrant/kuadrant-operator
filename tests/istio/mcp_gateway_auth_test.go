@@ -224,10 +224,10 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gatew
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
 
-		status, body, err := mcpAuthGetPrompt(ctx, mcpAuthGatewayURL, sessionID, "test1_greet", map[string]string{"name": "reviewer"}, headers)
+		status, messages, err := mcpAuthGetPrompt(ctx, mcpAuthGatewayURL, sessionID, "test1_greet", map[string]string{"name": "reviewer"}, headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status).To(Equal(http.StatusOK))
-		Expect(body).To(ContainSubstring("Say hi to reviewer"))
+		Expect(messages).To(ContainElement("Say hi to reviewer"))
 	})
 
 	It("returns an empty prompt list for a JWT and MCPVirtualServer with no intersection", func(ctx SpecContext) {
@@ -458,7 +458,7 @@ func mcpAuthInitialize(ctx context.Context, endpoint string, headers map[string]
 		return "", fmt.Errorf("initialize request failed: %w", err)
 	}
 	defer response.Body.Close()
-	if _, err := io.Copy(io.Discard, response.Body); err != nil {
+	if _, err := mcpAuthReadJSONRPCResult(response, 1); err != nil {
 		return "", fmt.Errorf("read initialize response: %w", err)
 	}
 	if response.StatusCode != http.StatusOK {
@@ -495,7 +495,8 @@ func mcpAuthListPrompts(ctx context.Context, endpoint, sessionID string, headers
 }
 
 func mcpAuthListNames(ctx context.Context, endpoint, sessionID, method, resultKey string, headers map[string]string) (int, []string, error) {
-	body := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"%s"}`, time.Now().UnixNano(), method))
+	requestID := time.Now().UnixMilli()
+	body := []byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"%s"}`, requestID, method))
 	response, err := mcpAuthPost(ctx, endpoint, sessionID, body, headers)
 	if err != nil {
 		return 0, nil, fmt.Errorf("%s request failed: %w", method, err)
@@ -508,7 +509,7 @@ func mcpAuthListNames(ctx context.Context, endpoint, sessionID, method, resultKe
 		}
 		return response.StatusCode, nil, fmt.Errorf("%s returned status %d: %s", method, response.StatusCode, string(responseBody))
 	}
-	result, err := mcpAuthReadJSONRPCResult(response)
+	result, err := mcpAuthReadJSONRPCResult(response, requestID)
 	if err != nil {
 		return response.StatusCode, nil, fmt.Errorf("parse %s response: %w", method, err)
 	}
@@ -538,9 +539,10 @@ func mcpAuthCallTool(ctx context.Context, endpoint, sessionID, toolName string, 
 	if len(args) > 0 {
 		params["arguments"] = args
 	}
+	requestID := time.Now().UnixMilli()
 	requestBody, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
-		"id":      time.Now().UnixNano(),
+		"id":      requestID,
 		"method":  "tools/call",
 		"params":  params,
 	})
@@ -559,7 +561,7 @@ func mcpAuthCallTool(ctx context.Context, endpoint, sessionID, toolName string, 
 		}
 		return response.StatusCode, nil, fmt.Errorf("tools/call returned status %d: %s", response.StatusCode, string(responseBody))
 	}
-	result, err := mcpAuthReadJSONRPCResult(response)
+	result, err := mcpAuthReadJSONRPCResult(response, requestID)
 	if err != nil {
 		return response.StatusCode, nil, fmt.Errorf("parse tools/call response: %w", err)
 	}
@@ -576,25 +578,51 @@ func mcpAuthCallTool(ctx context.Context, endpoint, sessionID, toolName string, 
 	return response.StatusCode, callResult.Content, nil
 }
 
-func mcpAuthGetPrompt(ctx context.Context, endpoint, sessionID, promptName string, args map[string]string, headers map[string]string) (int, string, error) {
+func mcpAuthGetPrompt(ctx context.Context, endpoint, sessionID, promptName string, args map[string]string, headers map[string]string) (int, []string, error) {
 	params := map[string]any{"name": promptName}
 	if len(args) > 0 {
 		params["arguments"] = args
 	}
+	requestID := time.Now().UnixMilli()
 	requestBody, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
-		"id":      time.Now().UnixNano(),
+		"id":      requestID,
 		"method":  "prompts/get",
 		"params":  params,
 	})
 	if err != nil {
-		return 0, "", fmt.Errorf("marshal prompts/get request: %w", err)
+		return 0, nil, fmt.Errorf("marshal prompts/get request: %w", err)
 	}
-	status, body, _, err := mcpAuthRawPost(ctx, endpoint, sessionID, requestBody, headers)
+	response, err := mcpAuthPost(ctx, endpoint, sessionID, requestBody, headers)
 	if err != nil {
-		return status, "", fmt.Errorf("prompts/get request failed: %w", err)
+		return 0, nil, fmt.Errorf("prompts/get request failed: %w", err)
 	}
-	return status, body, nil
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return response.StatusCode, nil, fmt.Errorf("prompts/get returned status %d", response.StatusCode)
+	}
+	result, err := mcpAuthReadJSONRPCResult(response, requestID)
+	if err != nil {
+		return response.StatusCode, nil, fmt.Errorf("parse prompts/get response: %w", err)
+	}
+	var promptResult struct {
+		Messages []struct {
+			Content struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(result, &promptResult); err != nil {
+		return response.StatusCode, nil, fmt.Errorf("parse prompts/get result: %w", err)
+	}
+	messages := make([]string, 0, len(promptResult.Messages))
+	for i := range promptResult.Messages {
+		if content := &promptResult.Messages[i].Content; content.Type == "text" {
+			messages = append(messages, content.Text)
+		}
+	}
+	return response.StatusCode, messages, nil
 }
 
 func mcpAuthRawPost(ctx context.Context, endpoint, sessionID string, body []byte, headers map[string]string) (int, string, http.Header, error) {
@@ -610,28 +638,46 @@ func mcpAuthRawPost(ctx context.Context, endpoint, sessionID string, body []byte
 	return response.StatusCode, string(responseBody), response.Header, nil
 }
 
-func mcpAuthReadJSONRPCResult(response *http.Response) (json.RawMessage, error) {
+func mcpAuthReadJSONRPCResult(response *http.Response, requestID int64) (json.RawMessage, error) {
+	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		return mcpAuthParseSSEResult(response.Body, requestID)
+	}
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read JSON-RPC response: %w", err)
 	}
-	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") || mcpAuthLooksLikeSSE(body) {
-		return mcpAuthParseSSEResult(body)
+	if mcpAuthLooksLikeSSE(body) {
+		return mcpAuthParseSSEResult(bytes.NewReader(body), requestID)
 	}
+	result, matched, err := mcpAuthParseJSONRPCResult(body, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if !matched {
+		return nil, fmt.Errorf("JSON-RPC response does not match request %d", requestID)
+	}
+	return result, nil
+}
+
+func mcpAuthParseJSONRPCResult(body []byte, requestID int64) (json.RawMessage, bool, error) {
 	var message struct {
+		ID     *int64          `json:"id"`
 		Result json.RawMessage `json:"result"`
 		Error  json.RawMessage `json:"error"`
 	}
 	if err := json.Unmarshal(body, &message); err != nil {
-		return nil, fmt.Errorf("decode JSON-RPC response: %w: %s", err, string(body))
+		return nil, false, fmt.Errorf("decode JSON-RPC response: %w", err)
+	}
+	if message.ID == nil || *message.ID != requestID {
+		return nil, false, nil
 	}
 	if message.Error != nil {
-		return nil, fmt.Errorf("JSON-RPC error: %s", string(message.Error))
+		return nil, true, fmt.Errorf("JSON-RPC error: %s", string(message.Error))
 	}
 	if message.Result == nil {
-		return nil, fmt.Errorf("JSON-RPC response has no result: %s", string(body))
+		return nil, true, fmt.Errorf("JSON-RPC response has no result")
 	}
-	return message.Result, nil
+	return message.Result, true, nil
 }
 
 func mcpAuthLooksLikeSSE(body []byte) bool {
@@ -639,32 +685,38 @@ func mcpAuthLooksLikeSSE(body []byte) bool {
 	return bytes.HasPrefix(body, []byte("event:")) || bytes.HasPrefix(body, []byte("data:"))
 }
 
-func mcpAuthParseSSEResult(body []byte) (json.RawMessage, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(body))
+func mcpAuthParseSSEResult(body io.Reader, requestID int64) (json.RawMessage, error) {
+	scanner := bufio.NewScanner(body)
+	var data []byte
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
+		line := scanner.Text()
+		if line == "" {
+			if len(data) == 0 {
+				continue
+			}
+			result, matched, err := mcpAuthParseJSONRPCResult(data, requestID)
+			if err != nil {
+				return nil, err
+			}
+			if matched {
+				return result, nil
+			}
+			data = data[:0]
 			continue
 		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		var message struct {
-			Result json.RawMessage `json:"result"`
-			Error  json.RawMessage `json:"error"`
-		}
-		if err := json.Unmarshal([]byte(data), &message); err != nil {
+		field, value, _ := strings.Cut(line, ":")
+		if field != "data" {
 			continue
 		}
-		if message.Error != nil {
-			return nil, fmt.Errorf("JSON-RPC error: %s", string(message.Error))
+		if len(data) > 0 {
+			data = append(data, '\n')
 		}
-		if message.Result != nil {
-			return message.Result, nil
-		}
+		data = append(data, strings.TrimPrefix(value, " ")...)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan SSE response: %w", err)
 	}
-	return nil, fmt.Errorf("SSE response has no JSON-RPC result: %s", string(body))
+	return nil, fmt.Errorf("SSE response has no result for request %d", requestID)
 }
 
 func mcpAuthAuthorizationHeaders(ctx context.Context) map[string]string {

@@ -629,8 +629,6 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
           make test-mcp-authpolicy-e2e \
-            RELATED_IMAGE_MCP_GATEWAY="$MCP_CONTROLLER_IMAGE" \
-            RELATED_IMAGE_MCP_GATEWAY_BROKER="$MCP_BROKER_IMAGE" \
             2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/operator-mcp-auth-e2e.log"
 
       - name: Collect diagnostics on failure

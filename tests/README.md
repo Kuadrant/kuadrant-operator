@@ -139,7 +139,7 @@ make test-istio-env-integration
 
 When `USE_EXISTING_OPERATOR=true`:
 - Skips in-process manager startup and CRD bootstrapping
-- Uses the cluster's existing Kuadrant installation
+- Uses the installed operator; individual suites still manage their test resources
 - Tests connect via kubeconfig and verify against live operators
 - Useful for validating fixes without cluster churn or testing against production-like setups
 
@@ -161,6 +161,12 @@ This command:
 - Runs only istio and common test packages
 - Filters to AuthPolicy tests only (across both packages)
 - Runs with flake attempt detection enabled
+
+`make test-mcp-authpolicy-e2e` enables `USE_EXISTING_OPERATOR=true` automatically.
+It requires the authentication fixtures prepared by
+[the MCP Gateway nightly workflow](../.github/workflows/mcp-gateway-nightly.yaml)
+and does not create or delete a Kuadrant installation. The normal Istio integration
+target retains its test namespace and Kuadrant resource lifecycle.
 
 ## Common Targets
 

@@ -8,8 +8,8 @@ if [[ -z "${env:-}" ]]; then
 fi
 
 if ! command -v crane &>/dev/null; then
-  echo "WARNING: crane not installed, skipping image verification"
-  exit 0
+  echo "ERROR: crane not installed, cannot verify dependency images"
+  exit 1
 fi
 
 echo "Verifying dependency images exist on Quay"

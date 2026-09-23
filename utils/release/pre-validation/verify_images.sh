@@ -58,8 +58,8 @@ for op in "${operators[@]}"; do
   check_image "quay.io/kuadrant/$op-catalog:$tag"
 done
 
-# Supporting components: check image only
-components=("console-plugin" "wasm-shim" "developer-portal-controller")
+# Supporting components: check image only (Quay)
+components=("authorino" "limitador" "console-plugin" "wasm-shim" "developer-portal-controller")
 for comp in "${components[@]}"; do
   version=$(yq "(.dependencies.\"$comp\")" "$file")
   if [[ "$version" == "0.0.0" ]]; then
@@ -70,6 +70,16 @@ for comp in "${components[@]}"; do
   echo "Checking $comp $tag image..."
   check_image "quay.io/kuadrant/$comp:$tag"
 done
+
+# mcp-gateway is hosted on GHCR
+mcp_gateway_version=$(yq '(.dependencies."mcp-gateway")' "$file")
+if [[ "$mcp_gateway_version" == "0.0.0" ]]; then
+  echo "Skipping mcp-gateway (version 0.0.0)"
+else
+  tag=$(mod_version "$mcp_gateway_version")
+  echo "Checking mcp-gateway $tag image..."
+  check_image "ghcr.io/kuadrant/mcp-gateway:$tag"
+fi
 
 if [[ $FAILED -ne 0 ]]; then
   echo "Some dependency images are missing on Quay. Release cannot proceed."

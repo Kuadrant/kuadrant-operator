@@ -3,6 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+    helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/managed-by: helm
   name: apikeyapprovals.devportal.kuadrant.io
@@ -150,6 +151,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+    helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/managed-by: helm
   name: apikeyrequests.devportal.kuadrant.io
@@ -314,6 +316,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+    helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/managed-by: helm
   name: apikeys.devportal.kuadrant.io
@@ -642,6 +645,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+    helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/managed-by: helm
   name: apiproducts.devportal.kuadrant.io
@@ -15132,60 +15136,10 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: developer-portal-controller
-  name: developer-portal-controller-manager
-  namespace: '{{ .Release.Namespace }}'
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  labels:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-controller-manager
   namespace: '{{ .Release.Namespace }}'
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: developer-portal-controller
-  name: developer-portal-leader-election-role
-  namespace: '{{ .Release.Namespace }}'
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -15246,106 +15200,6 @@ rules:
   - get
   - list
   - delete
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: helm
-  name: developer-portal-manager-role
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - watch
-- apiGroups:
-  - devportal.kuadrant.io
-  resources:
-  - apikeyapprovals
-  - apikeyrequests
-  - apiproducts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - devportal.kuadrant.io
-  resources:
-  - apikeyapprovals/status
-  - apikeyrequests/status
-  - apikeys/status
-  - apiproducts/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - devportal.kuadrant.io
-  resources:
-  - apikeyrequests/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - devportal.kuadrant.io
-  resources:
-  - apikeys
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - extensions.kuadrant.io
-  resources:
-  - planpolicies
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - extensions.kuadrant.io
-  resources:
-  - planpolicies/status
-  verbs:
-  - get
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - httproutes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - httproutes/status
-  verbs:
-  - get
-- apiGroups:
-  - kuadrant.io
-  resources:
-  - authpolicies
-  - kuadrants
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - kuadrant.io
-  resources:
-  - authpolicies/status
-  verbs:
-  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -15632,6 +15486,10 @@ rules:
 - apiGroups:
   - apiextensions.k8s.io
   resourceNames:
+  - apikeyapprovals.devportal.kuadrant.io
+  - apikeyrequests.devportal.kuadrant.io
+  - apikeys.devportal.kuadrant.io
+  - apiproducts.devportal.kuadrant.io
   - authconfigs.authorino.kuadrant.io
   - authorinos.operator.authorino.kuadrant.io
   - dnshealthcheckprobes.kuadrant.io
@@ -15971,6 +15829,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - authorino-operator-manager
+  - developer-portal-controller-manager-rolebinding
   - dns-operator-manager-rolebinding
   - dns-operator-remote-cluster-rolebinding
   - limitador-operator-manager-rolebinding
@@ -15998,6 +15857,7 @@ rules:
   - authorino-manager-role
   - authorino-operator
   - authorino-operator-manager
+  - developer-portal-controller-manager-role
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role
   - limitador-operator-controller-manager
@@ -16042,23 +15902,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: developer-portal-controller
-  name: developer-portal-leader-election-rolebinding
-  namespace: '{{ .Release.Namespace }}'
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: developer-portal-leader-election-role
-subjects:
-- kind: ServiceAccount
-  name: developer-portal-controller-manager
-  namespace: '{{ .Release.Namespace }}'
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  labels:
     app: kuadrant
     app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-leader-election-rolebinding
@@ -16087,22 +15930,6 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: kuadrant-operator-controller-manager
-  namespace: '{{ .Release.Namespace }}'
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  labels:
-    app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/name: developer-portal-controller
-  name: developer-portal-manager-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: developer-portal-manager-role
-subjects:
-- kind: ServiceAccount
-  name: developer-portal-controller-manager
   namespace: '{{ .Release.Namespace }}'
 ---
 apiVersion: rbac.authorization.k8s.io/v1

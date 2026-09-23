@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	operatorNamespace       = "kuadrant-system"
-	dnsOperatorDeployment   = "dns-operator-controller-manager"
-	dnsOperatorEnvConfigMap = "dns-operator-controller-env"
-	devSetupFieldOwner      = "dev-setup"
+	operatorNamespace         = "kuadrant-system"
+	dnsOperatorDeployment     = "dns-operator-controller-manager"
+	dnsOperatorEnvConfigMap   = "dns-operator-controller-env"
+	developerPortalDeployment = "developer-portal-controller"
+	devSetupFieldOwner        = "dev-setup"
 )
 
 // findRepoRoot walks up the directory tree from this test file to find the repo root (directory containing go.mod).
@@ -186,6 +187,45 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 				g.Expect(owner.UID).To(Equal(cp.GetUID()))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
+
+		It("deploys developer-portal-controller Deployment in operator namespace", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      developerPortalDeployment,
+				}, deploy)).To(Succeed())
+
+				g.Expect(deploy.Spec.Template.Spec.ServiceAccountName).To(Equal("developer-portal-controller-manager"))
+				g.Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				container := deploy.Spec.Template.Spec.Containers[0]
+				g.Expect(container.Name).To(Equal("manager"))
+				g.Expect(container.Image).To(ContainSubstring("developer-portal-controller"))
+				g.Expect(container.Args).To(ContainElement("--leader-elect"))
+				g.Expect(container.LivenessProbe).NotTo(BeNil())
+				g.Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/healthz"))
+				g.Expect(container.ReadinessProbe).NotTo(BeNil())
+				g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("sets a controller ownerReference to the KuadrantControlPlane on developer-portal-controller Deployment", func(ctx SpecContext) {
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      developerPortalDeployment,
+				}, deploy)).To(Succeed())
+
+				owner := metav1.GetControllerOf(deploy)
+				g.Expect(owner).ToNot(BeNil())
+				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+				g.Expect(owner.UID).To(Equal(cp.GetUID()))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
 	})
 
 	Context("status reporting", func() {
@@ -277,6 +317,29 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
+		It("reports developer-portal-controller component status with CRD establishment", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				var portal *kuadrantv1alpha1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "developer-portal-controller" {
+						portal = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(portal).ToNot(BeNil(), "developer-portal-controller component not found in status")
+				g.Expect(portal.Ready).To(BeTrue())
+				g.Expect(portal.CRDs).To(HaveLen(4))
+				for _, crd := range portal.CRDs {
+					g.Expect(crd.Established).To(BeTrue())
+				}
+				g.Expect(portal.Images).To(HaveLen(1))
+				g.Expect(portal.Images[0].Name).To(Equal("manager"))
+				g.Expect(portal.Images[0].Image).To(ContainSubstring("developer-portal-controller"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
 	})
 
 	Context("deletion", func() {
@@ -360,6 +423,31 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
 
 			// Should be recreated with a new UID
+			Eventually(func(g Gomega) {
+				recreated := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
+				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("recreates developer-portal-controller Deployment when deleted", func(ctx SpecContext) {
+			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: developerPortalDeployment}
+
+			var originalUID types.UID
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+				originalUID = deploy.GetUID()
+			}).WithContext(ctx).Should(Succeed())
+
+			deploy := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: operatorNamespace,
+					Name:      developerPortalDeployment,
+				},
+			}
+			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
+
 			Eventually(func(g Gomega) {
 				recreated := &appsv1.Deployment{}
 				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())

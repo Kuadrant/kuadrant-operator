@@ -171,6 +171,7 @@ jobs:
           base: ${{ matrix.target.branch }}
           branch: sync/${{ matrix.target.branch }}/${{ steps.params.outputs.component }}
           delete-branch: true
+          labels: dependencies,component-chart
           title: "chore(deps): update ${{ steps.params.outputs.component }} chart on ${{ matrix.target.branch }} to ${{ steps.sync.outputs.new-ref-short }}"
           body: |
             Sync ${{ steps.params.outputs.component }} chart from upstream into `${{ matrix.target.branch }}`.

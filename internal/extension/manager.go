@@ -53,6 +53,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 )
 
 const defaultExtensionServicePort = 50052
@@ -530,21 +531,29 @@ func (s *extensionService) ReleaseSession(ctx context.Context, _ *emptypb.Empty)
 	return &emptypb.Empty{}, nil
 }
 
+func handshakeRejected(reason string, rejection extpb.HandshakeRejection) *extpb.HandshakeResponse {
+	return &extpb.HandshakeResponse{
+		Accepted:  false,
+		Reason:    reason,
+		Version:   protocol.Version,
+		Rejection: rejection,
+	}
+}
+
 func (s *extensionService) Handshake(ctx context.Context, request *extpb.HandshakeRequest) (*extpb.HandshakeResponse, error) {
+	if err := protocol.Compatible(request.Version, protocol.Version); err != nil {
+		s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "version", request.Version, "reason", err.Error())
+		return handshakeRejected(err.Error(), extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION), nil
+	}
+
 	if request.PolicyKind == "" {
-		return &extpb.HandshakeResponse{
-			Accepted: false,
-			Reason:   "policy_kind is required",
-		}, nil
+		return handshakeRejected("policy_kind is required", extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST), nil
 	}
 
 	ownedIDs, err := ownedResourceIDs(request.PolicyKind, request.OwnedPolicies)
 	if err != nil {
 		s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
-		return &extpb.HandshakeResponse{
-			Accepted: false,
-			Reason:   "invalid owned_policies",
-		}, nil
+		return handshakeRejected("invalid owned_policies", extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST), nil
 	}
 
 	identity, isBuiltin := s.sessionStore.matchBuiltin(request.Token)
@@ -553,29 +562,20 @@ func (s *extensionService) Handshake(ctx context.Context, request *extpb.Handsha
 		// extensions are admitted.
 		if !s.sessionStore.isWarmupComplete() {
 			s.logger.Info("handshake rejected during warmup", "policyKind", request.PolicyKind)
-			return &extpb.HandshakeResponse{
-				Accepted: false,
-				Reason:   "warmup in progress",
-			}, nil
+			return handshakeRejected("warmup in progress", extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE), nil
 		}
 
 		identity, err = s.authenticateStandalone(ctx, request.Token, request.PolicyKind)
 		if err != nil {
 			s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
-			return &extpb.HandshakeResponse{
-				Accepted: false,
-				Reason:   "handshake failed",
-			}, nil
+			return handshakeRejected("handshake failed", extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED), nil
 		}
 	}
 
 	token, err := s.sessionStore.CreateSession(identity, request.PolicyKind)
 	if err != nil {
 		s.logger.Info("handshake rejected", "identity", identity, "policyKind", request.PolicyKind, "reason", err.Error())
-		return &extpb.HandshakeResponse{
-			Accepted: false,
-			Reason:   "handshake failed",
-		}, nil
+		return handshakeRejected("handshake failed", extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE), nil
 	}
 
 	s.pruneStalePolicies(request.PolicyKind, ownedIDs)
@@ -584,6 +584,7 @@ func (s *extensionService) Handshake(ctx context.Context, request *extpb.Handsha
 	return &extpb.HandshakeResponse{
 		Accepted:     true,
 		SessionToken: token,
+		Version:      protocol.Version,
 	}, nil
 }
 

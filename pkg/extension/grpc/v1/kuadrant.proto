@@ -53,6 +53,16 @@ message HandshakeResponse {
   bool accepted = 1;
   string session_token = 2;
   string reason = 3;
+  string version = 4;
+  HandshakeRejection rejection = 5;
+}
+
+enum HandshakeRejection {
+  HANDSHAKE_REJECTION_UNSPECIFIED = 0;
+  HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION = 1;
+  HANDSHAKE_REJECTION_INVALID_REQUEST = 2;
+  HANDSHAKE_REJECTION_UNAUTHORIZED = 3;
+  HANDSHAKE_REJECTION_UNAVAILABLE = 4;
 }
 
 // evaluate the expression and whether or not to subscribe

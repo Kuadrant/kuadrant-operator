@@ -38,5 +38,5 @@ components:
     repo: Kuadrant/developer-portal-controller
     chart-path: charts/developer-portal-controller
     tracked-branch: main
-    ref: 9f1858a0cce2559bdf983d9817df20033df6f384
+    ref: 2f76dfa3028ace3f9464b3a2c7a45a09bc7e3615
     auto-merge: false

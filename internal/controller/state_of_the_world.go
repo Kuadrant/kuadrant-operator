@@ -546,7 +546,6 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		controller.WithRunnable("consoleplugin networkpolicy watcher", controller.Watch(
 			&networkingv1.NetworkPolicy{}, kuadrantv1beta1.NetworkPolicyResource, operatorNamespace,
 			controller.FilterResourcesByField[*networkingv1.NetworkPolicy]("metadata.name="+consoleplugin.NetworkPolicyName()))),
-		controller.WithObjectKinds(kuadrantv1beta1.NetworkPolicyGroupKind),
 	)
 	if b.isClusterVersionInstalled {
 		opts = append(opts, controller.WithRunnable("cluster version watcher", controller.Watch(

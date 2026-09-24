@@ -225,10 +225,12 @@ func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
-// responseBodyJSONTotalTokensCEL builds the CEL call used to extract total token usage from the response
+// ResponseBodyJSONTotalTokensCEL builds the CEL call used to extract total token usage from the response
 // body: an ordered list of JSON Pointer candidates plus a "number" type hint, so the wasm data plane skips
-// a present-but-non-numeric candidate and falls through to the next one.
-func responseBodyJSONTotalTokensCEL(totalTokensPointers []string) string {
+// a present-but-non-numeric candidate and falls through to the next one. Exported so integration tests
+// can derive the expected CEL for TokenRateLimitPolicy's built-in defaults without duplicating the
+// quoting logic (see tests/istio and tests/envoygateway).
+func ResponseBodyJSONTotalTokensCEL(totalTokensPointers []string) string {
 	quoted := make([]string, len(totalTokensPointers))
 	for i, pointer := range totalTokensPointers {
 		quoted[i] = fmt.Sprintf("%q", pointer)
@@ -337,7 +339,7 @@ func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predic
 		Value: &wasm.Expression{
 			ExpressionItem: wasm.ExpressionItem{
 				Key:   "ratelimit.hits_addend",
-				Value: responseBodyJSONTotalTokensCEL(totalTokensPointers),
+				Value: ResponseBodyJSONTotalTokensCEL(totalTokensPointers),
 			},
 		},
 	})
@@ -404,7 +406,7 @@ func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentif
 		},
 		Reservation: &wasm.ReservationSpec{
 			ID:           limitIdentifier,
-			ActualAmount: responseBodyJSONTotalTokensCEL(totalTokensPointers),
+			ActualAmount: ResponseBodyJSONTotalTokensCEL(totalTokensPointers),
 		},
 	}
 

@@ -5,7 +5,6 @@ package istio_test
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -95,13 +94,7 @@ func extractWasmConfigFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyF
 
 // defaultTotalTokensCEL mirrors the CEL expression the operator generates by default (see
 // api/v1alpha1.DefaultTotalTokensPointers) when a TokenRateLimitPolicy doesn't override dataExtraction.
-var defaultTotalTokensCEL = func() string {
-	quoted := make([]string, len(kuadrantv1alpha1.DefaultTotalTokensPointers))
-	for i, p := range kuadrantv1alpha1.DefaultTotalTokensPointers {
-		quoted[i] = fmt.Sprintf("%q", p)
-	}
-	return fmt.Sprintf(`responseBodyJSON([%s], "number")`, strings.Join(quoted, ", "))
-}()
+var defaultTotalTokensCEL = controllers.ResponseBodyJSONTotalTokensCEL(kuadrantv1alpha1.DefaultTotalTokensPointers)
 
 var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 	const (

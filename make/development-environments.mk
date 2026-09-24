@@ -35,13 +35,8 @@ install-olm: operator-sdk
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
-deploy-dependencies: kustomize ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
+deploy-dependencies: ## Configure local development dependencies.
 	$(MAKE) namespace
-	$(KUSTOMIZE) build config/dependencies | kubectl apply --server-side -f -
-	@deployments=$$(kubectl -n "$(KUADRANT_NAMESPACE)" get deployments -o name 2>&1); \
-	if echo "$$deployments" | grep -q .; then \
-		kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all; \
-	fi
 	@echo "Configuring dns-operator env for local development (inmemory provider)"
 	@kubectl -n "$(KUADRANT_NAMESPACE)" apply --server-side --field-manager=dev-setup -f config/dev/dns-operator-configmap.yaml
 

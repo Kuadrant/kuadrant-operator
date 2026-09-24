@@ -142,7 +142,13 @@ var _ = Describe("TokenRateLimitPolicy controller (Serial)", Serial, Labels{"com
 
 			// Remove limitador deployment to simulate enforcement error
 			// TRLP should transition to enforcement false in this case
-			Expect(testClient().Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}})).To(Succeed())
+			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
+			Expect(client.IgnoreNotFound(testClient().Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}}))).To(Succeed())
+			// Limitador is a singleton shared across specs - make sure it is back to Ready
+			// before this spec finishes, so the next spec deleting it again doesn't race a NotFound.
+			DeferCleanup(func(ctx SpecContext) {
+				Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
+			})
 
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
 				"TokenRateLimitPolicy waiting for the following components to sync: [Limitador]")).WithContext(ctx).Should(Succeed())
@@ -150,7 +156,7 @@ var _ = Describe("TokenRateLimitPolicy controller (Serial)", Serial, Labels{"com
 
 		It("Unknown Reason", func(ctx SpecContext) {
 			// Remove limitador deployment to simulate enforcement error
-			Expect(testClient().Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}})).To(Succeed())
+			Expect(client.IgnoreNotFound(testClient().Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}}))).To(Succeed())
 
 			// Enforced false as limitador is not ready
 			policy := policyFactory()
@@ -386,8 +392,8 @@ var _ = Describe("TokenRateLimitPolicy controller", Labels{"common", "tokenratel
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err = testClient().Get(ctx, limitadorKey, existingLimitador)
 				// must exist
-				Expect(err).ToNot(HaveOccurred())
-				Expect(lo.Filter(existingLimitador.Spec.Limits, func(l limitadorv1alpha1.RateLimit, _ int) bool { // a hack to isolate test namespaces sharing the same limitador cr
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(lo.Filter(existingLimitador.Spec.Limits, func(l limitadorv1alpha1.RateLimit, _ int) bool { // a hack to isolate test namespaces sharing the same limitador cr
 					return strings.HasPrefix(l.Namespace, fmt.Sprintf("%s/", testNamespace))
 				})).To(BeEmpty())
 			}).WithContext(ctx).Should(Succeed())

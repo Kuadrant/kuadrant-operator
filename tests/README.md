@@ -124,6 +124,9 @@ make test-istio-env-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter='is
 | `tlspolicy` | Tests for TLSPolicy controller logic and functionality. |
 | `tokenratelimitpolicy` | Tests for TokenRateLimitPolicy controller logic and functionality. |
 | `discoverability` | Tests for policy discoverability mechanisms. |
+| `openshift` | Tests that require an OpenShift cluster (e.g. OpenShift-specific APIs). Automatically excluded on non-OpenShift clusters. |
+
+**OpenShift detection:** The test Makefile detects whether the cluster is OpenShift by checking for the `clusterversions.config.openshift.io` API. On non-OpenShift clusters (e.g. Kind), `--label-filter='!openshift'` is added automatically so OpenShift-specific tests are skipped without any manual configuration.
 
 ### Testing Against Existing Cluster
 

@@ -5,6 +5,15 @@ INTEGRATION_TEST_NUM_CORES ?= 4
 INTEGRATION_TEST_NUM_PROCESSES ?= 10
 INTEGRATION_TEST_PACKAGES ?= tests/common/...
 
+# Detect OpenShift by checking for the clusterversions API. On non-OpenShift clusters
+# automatically exclude tests labelled "openshift" unless the caller already filters them.
+IS_OPENSHIFT := $(shell kubectl api-resources --api-group=config.openshift.io 2>/dev/null | grep -q clusterversion && echo true || echo false)
+ifeq ($(IS_OPENSHIFT),false)
+  ifeq (,$(findstring openshift,$(INTEGRATION_TESTS_EXTRA_ARGS)))
+    override INTEGRATION_TESTS_EXTRA_ARGS += --label-filter='!openshift'
+  endif
+endif
+
 ##@ Integration tests
 
 .PHONY: test-bare-k8s-integration

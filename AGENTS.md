@@ -125,8 +125,6 @@ make generate
 # Generate extension manifests
 make extensions-manifests
 
-# Update dependency manifests
-make dependencies-manifests
 ```
 
 ## Architecture

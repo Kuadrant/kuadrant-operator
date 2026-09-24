@@ -63,7 +63,7 @@ func NewReconciler(c client.Client, deployer *Deployer, recorder events.EventRec
 		Client:   c,
 		deployer: deployer,
 		recorder: recorder,
-		logger:   logger.WithName("controlplane"),
+		logger:   logger.WithName("reconciler"),
 	}
 }
 

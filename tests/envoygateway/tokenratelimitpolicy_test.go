@@ -343,4 +343,83 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 			Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
 		}
 	}, testTimeOut)
+
+	It("Custom dataExtraction.response.totalTokens overrides the defaults", func(ctx SpecContext) {
+		gwRoute := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
+		err := testClient().Create(ctx, gwRoute)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
+
+		customPointers := []string{"/custom/pointer"}
+		trlp := buildTRLP()
+		trlp.Spec.DataExtraction = &kuadrantv1alpha1.DataExtraction{
+			Response: kuadrantv1alpha1.ResponseDataExtraction{
+				kuadrantv1alpha1.ResponseDataExtractionKeyTotalTokens: customPointers,
+			},
+		}
+		err = testClient().Create(ctx, trlp)
+		Expect(err).ToNot(HaveOccurred())
+
+		trlpKey := client.ObjectKeyFromObject(trlp)
+		Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+		Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+
+		extKey := client.ObjectKey{
+			Name:      wasm.ExtensionName(TestGatewayName),
+			Namespace: testNamespace,
+		}
+		Eventually(IsEnvoyExtensionPolicyAccepted).
+			WithContext(ctx).
+			WithArguments(testClient(), extKey, client.ObjectKeyFromObject(gateway)).
+			Should(Succeed())
+
+		ext := &egv1alpha1.EnvoyExtensionPolicy{}
+		err = testClient().Get(ctx, extKey, ext)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(ext.Spec.Wasm).To(HaveLen(1))
+		existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+		actionSet := existingWASMConfig.ActionSets[0]
+
+		limitIdentifier := controllers.TokenLimitNameToLimitadorIdentifier(trlpKey, "l1")
+		scope := string(controllers.LimitsNamespaceFromRoute(gwRoute).ToActionScope())
+		source := "tokenratelimitpolicy.kuadrant.io:" + trlpKey.String()
+		customTotalTokensCEL := controllers.ResponseBodyJSONTotalTokensCEL(customPointers)
+
+		expectedActions := wasm.BuildActions([]wasm.ActionSpec{
+			{
+				ServiceName: wasm.RateLimitReserveServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+						},
+					},
+				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, Amount: "0"},
+			},
+			{
+				ServiceName: wasm.RateLimitCommitServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+						},
+					},
+				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: customTotalTokensCEL},
+			},
+		})
+
+		Expect(actionSet.Actions).To(HaveLen(len(expectedActions)))
+		for i, expected := range expectedActions {
+			Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
+		}
+	}, testTimeOut)
 })

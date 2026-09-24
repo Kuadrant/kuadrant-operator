@@ -282,8 +282,10 @@ func (r *Reconciler) emitComponentVersionEvents(cp *kuadrantv1alpha1.KuadrantCon
 		oldVersion, existed := previousVersions[cs.Name]
 		switch {
 		case !existed || oldVersion == "":
+			r.logger.Info("component installed", "component", cs.Name, "version", cs.ChartVersion)
 			r.recorder.Eventf(cp, componentReference(cs.Name), corev1.EventTypeNormal, "ComponentInstalled", "ComponentDeploy", "component %s installed at version %s", cs.Name, cs.ChartVersion)
 		case oldVersion != cs.ChartVersion:
+			r.logger.Info("component upgraded", "component", cs.Name, "from", oldVersion, "to", cs.ChartVersion)
 			r.recorder.Eventf(cp, componentReference(cs.Name), corev1.EventTypeNormal, "ComponentVersionChanged", "ComponentDeploy", "component %s updated from %s to %s", cs.Name, oldVersion, cs.ChartVersion)
 		}
 	}

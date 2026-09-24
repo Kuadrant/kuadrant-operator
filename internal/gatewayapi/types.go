@@ -3,6 +3,7 @@ package gatewayapi
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,6 +106,15 @@ func (c SortableHTTPRouteMatchConfigs) Less(i, j int) bool {
 		return qCountI > qCountJ
 	}
 
+	// Deterministic tie-break for equally specific route matches.
+	// Without this, sort may permute equal-priority matches between reconciles,
+	// generating semantically identical but byte-different WASM config payloads.
+	matchKeyI := canonicalHTTPRouteMatchKey(c[i].HTTPRouteMatch)
+	matchKeyJ := canonicalHTTPRouteMatchKey(c[j].HTTPRouteMatch)
+	if matchKeyI != matchKeyJ {
+		return matchKeyI < matchKeyJ
+	}
+
 	// Creation Timestamp
 	p1Time := ptr.To(c[i].CreationTimestamp)
 	p2Time := ptr.To(c[j].CreationTimestamp)
@@ -129,6 +139,51 @@ func (c SortableHTTPRouteMatchConfigs) Less(i, j int) bool {
 
 	// Entries can otherwise be fully equal, the tie breaker is the Identifier
 	return c[i].Identifier < c[j].Identifier
+}
+
+func canonicalHTTPRouteMatchKey(m gatewayapiv1.HTTPRouteMatch) string {
+	var method string
+	if m.Method != nil {
+		method = string(*m.Method)
+	}
+
+	var pathType, pathValue string
+	if m.Path != nil {
+		if m.Path.Type != nil {
+			pathType = string(*m.Path.Type)
+		}
+		if m.Path.Value != nil {
+			pathValue = *m.Path.Value
+		}
+	}
+
+	headers := make([]string, 0, len(m.Headers))
+	for _, h := range m.Headers {
+		hType := ""
+		if h.Type != nil {
+			hType = string(*h.Type)
+		}
+		headers = append(headers, fmt.Sprintf("%s|%s|%s", h.Name, hType, h.Value))
+	}
+	sort.Strings(headers)
+
+	queries := make([]string, 0, len(m.QueryParams))
+	for _, q := range m.QueryParams {
+		qType := ""
+		if q.Type != nil {
+			qType = string(*q.Type)
+		}
+		queries = append(queries, fmt.Sprintf("%s|%s|%s", q.Name, qType, q.Value))
+	}
+	sort.Strings(queries)
+
+	return strings.Join([]string{
+		method,
+		pathType,
+		pathValue,
+		strings.Join(headers, ","),
+		strings.Join(queries, ","),
+	}, "||")
 }
 
 func pathMatchCount(pathMatch *gatewayapiv1.HTTPPathMatch) int {

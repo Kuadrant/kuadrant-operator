@@ -139,7 +139,7 @@ make test-istio-env-integration
 
 When `USE_EXISTING_OPERATOR=true`:
 - Skips in-process manager startup and CRD bootstrapping
-- Uses the cluster's existing Kuadrant installation
+- Uses the installed operator; individual suites still manage their test resources
 - Tests connect via kubeconfig and verify against live operators
 - Useful for validating fixes without cluster churn or testing against production-like setups
 
@@ -161,6 +161,40 @@ This command:
 - Runs only istio and common test packages
 - Filters to AuthPolicy tests only (across both packages)
 - Runs with flake attempt detection enabled
+
+### MCP Gateway AuthPolicy tests
+
+`make test-mcp-authpolicy-e2e` enables `USE_EXISTING_OPERATOR=true` automatically.
+It requires the authentication fixtures prepared by
+[the MCP Gateway nightly workflow](../.github/workflows/mcp-gateway-nightly.yaml)
+and does not create or delete a Kuadrant installation. The normal Istio integration
+target retains its test namespace and Kuadrant resource lifecycle.
+
+The MCP test target supports these environment overrides:
+
+| Variable | Default |
+|----------|---------|
+| `MCP_AUTH_GATEWAY_URL` | `https://mcp.mcp-gateway.local:8009/mcp` |
+| `MCP_AUTH_KEYCLOAK_TOKEN_URL` | `https://keycloak.127-0-0-1.sslip.io:8002/realms/mcp/protocol/openid-connect/token` |
+| `MCP_AUTH_NAMESPACE` | `kuadrant-system` |
+| `MCP_AUTH_TEST_SERVER_NAMESPACE` | `mcp-test` |
+| `MCP_AUTH_BACKEND_HOSTNAME_SUFFIX` | `mcp-gateway.local` |
+
+The backend suffix forms `server1.<suffix>`, `server2.<suffix>`, and
+`everything-server.<suffix>` on the test-created HTTPRoutes. Supply a DNS suffix
+without a leading dot, scheme, or port. An unset or empty value uses the default.
+Configure the `mcp-tls` listener on `gateway-system/mcp-gateway` and its TLS
+certificate to accept and cover these hostnames. The override does not change
+the gateway listener, certificate, or public gateway URL.
+
+For example, with the authentication fixtures configured for an OpenShift domain:
+
+```bash
+MCP_AUTH_GATEWAY_URL=https://mcp.apps.cluster.example.com/mcp \
+MCP_AUTH_KEYCLOAK_TOKEN_URL=https://keycloak.apps.cluster.example.com/realms/mcp/protocol/openid-connect/token \
+MCP_AUTH_BACKEND_HOSTNAME_SUFFIX=apps.cluster.example.com \
+make test-mcp-authpolicy-e2e
+```
 
 ## Common Targets
 

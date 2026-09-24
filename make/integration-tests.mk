@@ -44,6 +44,16 @@ test-istio-env-integration: ## Tests Kuadrant with Istio as the gateway provider
 		INTEGRATION_TEST_PACKAGES="$(INTEGRATION_TEST_PACKAGES)" \
 		GATEWAYAPI_PROVIDER=istio
 
+.PHONY: test-mcp-authpolicy-e2e
+test-mcp-authpolicy-e2e: export MCP_AUTH_E2E = true
+test-mcp-authpolicy-e2e: export GATEWAYAPI_PROVIDER = istio
+test-mcp-authpolicy-e2e: export USE_EXISTING_OPERATOR = true
+test-mcp-authpolicy-e2e: ## Run MCP AuthPolicy E2E against an existing Istio cluster and fixtures.
+	go test -count=1 -tags=integration,mcp_auth_e2e ./tests/istio \
+		-run 'TestAPIs|TestMCPAuth' \
+		-ginkgo.focus='MCP Gateway AuthPolicy integration' \
+		-timeout 15m
+
 .PHONY: test-envoygateway-env-integration
 test-envoygateway-env-integration: INTEGRATION_COVER_OUTPUT_DIR=$(PROJECT_PATH)/coverage/envoygateway-integration
 test-envoygateway-env-integration: INTEGRATION_TEST_PACKAGES=tests/envoygateway/...

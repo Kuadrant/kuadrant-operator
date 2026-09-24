@@ -124,6 +124,7 @@ make test-istio-env-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter='is
 | `tlspolicy` | Tests for TLSPolicy controller logic and functionality. |
 | `tokenratelimitpolicy` | Tests for TokenRateLimitPolicy controller logic and functionality. |
 | `discoverability` | Tests for policy discoverability mechanisms. |
+| `openshift` | Tests that require OpenShift-specific APIs. These self-skip at runtime when the cluster does not have them, so no filtering is needed on Kind; the label is only there if you want to explicitly focus or exclude them. |
 
 ### Testing Against Existing Cluster
 

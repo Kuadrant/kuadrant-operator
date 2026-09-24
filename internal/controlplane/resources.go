@@ -82,20 +82,27 @@ func kindOrder(kind string) int {
 	return len(installOrder)
 }
 
-func (a *ResourceApplier) ApplyResources(ctx context.Context, objects []*unstructured.Unstructured) error {
+// ApplyResources applies each object via server-side apply. If ownerRef is
+// non-nil, it's set on every object first, so deleting the owner (the
+// KuadrantControlPlane CR) cascade-deletes everything the deployer applied.
+func (a *ResourceApplier) ApplyResources(ctx context.Context, objects []*unstructured.Unstructured, ownerRef *metav1.OwnerReference) error {
 	for _, obj := range objects {
-		if err := a.applyResource(ctx, obj); err != nil {
+		if err := a.applyResource(ctx, obj, ownerRef); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.Unstructured) error {
+func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.Unstructured, ownerRef *metav1.OwnerReference) error {
 	gvk := obj.GroupVersionKind()
 	mapping, err := a.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
 		return fmt.Errorf("mapping GVK %s: %w", gvk, err)
+	}
+
+	if ownerRef != nil {
+		obj.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
 	}
 
 	var rc dynamic.ResourceInterface
@@ -131,7 +138,7 @@ func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) er
 	crdGVR := apiextv1.SchemeGroupVersion.WithResource("customresourcedefinitions")
 
 	for _, name := range crdNames {
-		a.logger.Info("waiting for CRD to be established", "crd", name)
+		a.logger.V(1).Info("waiting for CRD to be established", "crd", name)
 		err := wait.PollUntilContextTimeout(ctx, crdWaitInterval, crdWaitTimeout, true,
 			func(ctx context.Context) (bool, error) {
 				obj, getErr := a.client.Resource(crdGVR).Get(ctx, name, metav1.GetOptions{})
@@ -144,7 +151,7 @@ func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) er
 		if err != nil {
 			return fmt.Errorf("CRD %s not established within %s: %w", name, crdWaitTimeout, err)
 		}
-		a.logger.Info("CRD established", "crd", name)
+		a.logger.V(1).Info("CRD established", "crd", name)
 	}
 	return nil
 }
@@ -198,6 +205,77 @@ func extractDeploymentImages(objects []*unstructured.Unstructured) []DeployedIma
 		}
 	}
 	return images
+}
+
+// PatchContainerEnvVars overrides named env vars on the first container of
+// the specified Deployment, using values from the given map (env var
+// name -> value read from kuadrant-operator's own environment). Entries with
+// an empty value are skipped, leaving the chart's baked-in default in place.
+// Env vars not already present in the container are appended.
+// Only the Deployment matching deploymentName is modified; other Deployments
+// are left unchanged.
+//
+// This is a stopgap for child-operator charts that bake a related image
+// directly into an env var as a hardcoded literal instead of exposing it as
+// a Helm value (e.g. authorino-operator's and limitador-operator's own
+// RELATED_IMAGE_AUTHORINO/RELATED_IMAGE_LIMITADOR env vars, which configure
+// the operand image those operators deploy, not kuadrant-operator itself).
+// When a chart adds value-based configurability for this, prefer
+// Component.ChartValueOverrides instead, as mcp-gateway already does for its
+// broker image.
+func PatchContainerEnvVars(objects []*unstructured.Unstructured, deploymentName string, envVars map[string]string) error {
+	if len(envVars) == 0 {
+		return nil
+	}
+	for _, obj := range objects {
+		if obj.GetKind() != "Deployment" {
+			continue
+		}
+		if obj.GetName() != deploymentName {
+			continue
+		}
+		containers, found, err := unstructured.NestedSlice(obj.Object,
+			"spec", "template", "spec", "containers")
+		if err != nil || !found || len(containers) == 0 {
+			continue
+		}
+		container, ok := containers[0].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		env, _, err := unstructured.NestedSlice(container, "env")
+		if err != nil {
+			return fmt.Errorf("reading env on Deployment %s: %w", obj.GetName(), err)
+		}
+		for name, value := range envVars {
+			if value == "" {
+				continue
+			}
+			env = setEnvVar(env, name, value)
+		}
+		container["env"] = env
+		containers[0] = container
+		if err := unstructured.SetNestedSlice(obj.Object,
+			containers, "spec", "template", "spec", "containers"); err != nil {
+			return fmt.Errorf("patching env on Deployment %s: %w", obj.GetName(), err)
+		}
+	}
+	return nil
+}
+
+func setEnvVar(env []interface{}, name, value string) []interface{} {
+	for i, e := range env {
+		entry, ok := e.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if entry["name"] == name {
+			entry["value"] = value
+			env[i] = entry
+			return env
+		}
+	}
+	return append(env, map[string]interface{}{"name": name, "value": value})
 }
 
 // PatchDeploymentImage overrides the first container's image on all Deployment

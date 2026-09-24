@@ -26,10 +26,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("limitador cluster controller", func() {
+var _ = Describe("limitador cluster controller", Labels{"envoygateway", "ratelimitpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -46,7 +47,7 @@ var _ = Describe("limitador cluster controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -128,7 +129,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Eventually(tests.IsRLPAcceptedAndEnforced).
 				WithContext(ctx).
 				WithArguments(testClient(), gwPolicyKey).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("Creates envoypatchpolicy for limitador cluster", func(ctx SpecContext) {
 			patchKey := client.ObjectKey{
@@ -168,9 +169,13 @@ var _ = Describe("limitador cluster controller", func() {
 
 			Expect(existingPatchValue).To(Equal(
 				map[string]any{
-					"name":                   kuadrant.KuadrantRateLimitClusterName,
-					"type":                   "STRICT_DNS",
-					"connect_timeout":        "1s",
+					"name":            kuadrant.KuadrantRateLimitClusterName,
+					"type":            "STRICT_DNS",
+					"connect_timeout": "1s",
+					"outlier_detection": map[string]any{
+						"enforcing_consecutive_gateway_failure": float64(100),
+						"max_ejection_percent":                  float64(100),
+					},
 					"lb_policy":              "ROUND_ROBIN",
 					"http2_protocol_options": map[string]any{},
 					"load_assignment": map[string]any{

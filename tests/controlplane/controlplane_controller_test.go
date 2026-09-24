@@ -1,0 +1,458 @@
+//go:build integration
+
+package controlplane
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	corev1apply "k8s.io/client-go/applyconfigurations/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
+
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+)
+
+const (
+	operatorNamespace         = "kuadrant-system"
+	dnsOperatorDeployment     = "dns-operator-controller-manager"
+	dnsOperatorEnvConfigMap   = "dns-operator-controller-env"
+	developerPortalDeployment = "developer-portal-controller"
+	devSetupFieldOwner        = "dev-setup"
+)
+
+// findRepoRoot walks up the directory tree from this test file to find the repo root (directory containing go.mod).
+// It works regardless of what directory the tests are run from.
+func findRepoRoot() string {
+	_, filename, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(filename)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// restoreDevEnvOverrides re-applies the dns-operator-controller-env ConfigMap
+// to enable the "inmemory" DNS provider for controlplane tests. When tests
+// delete the KuadrantControlPlane, cascade-deletion removes this ConfigMap
+// along with everything it owns. Restoring it here prevents breakage of
+// dnspolicy tests relying on the inmemory provider.
+func restoreDevEnvOverrides(ctx SpecContext) {
+	configPath := filepath.Join(findRepoRoot(), "config", "dev", "dns-operator-configmap.yaml")
+	data, err := os.ReadFile(configPath)
+	Expect(err).ToNot(HaveOccurred())
+
+	want := &corev1.ConfigMap{}
+	Expect(yaml.Unmarshal(data, want)).To(Succeed())
+	want.Namespace = operatorNamespace
+
+	applyConfig := corev1apply.ConfigMap(want.Name, want.Namespace).WithData(want.Data)
+
+	Expect(testClient().Apply(ctx, applyConfig,
+		client.ForceOwnership, client.FieldOwner(devSetupFieldOwner))).To(Succeed())
+
+	got := &corev1.ConfigMap{}
+	Expect(testClient().Get(ctx, client.ObjectKey{Namespace: operatorNamespace, Name: want.Name}, got)).To(Succeed())
+	Expect(got.Data).To(Equal(want.Data))
+}
+
+// Serial: KuadrantControlPlane is a cluster-scoped singleton. Destructive tests
+// (deletion, drift) must not run in parallel with status or deployment tests.
+var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane"}, func() {
+	var (
+		testTimeOut      = NodeTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
+
+	AfterEach(func(ctx SpecContext) {
+		// Ensure the default CR is restored if a test deleted it.
+		cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+		err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)
+		if apierrors.IsNotFound(err) {
+			// The same deletion that took out the CR cascade-deleted
+			// everything it owned, including dns-operator's env ConfigMap
+			// carrying the local-dev "inmemory" provider override. GC
+			// processes that cascade asynchronously, so wait for the old
+			// ConfigMap to actually be gone before restoring the override.
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				err := testClient().Get(ctx, client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorEnvConfigMap}, cm)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected dns-operator env ConfigMap to be cascade-deleted, got error: %v", err)
+			}).WithContext(ctx).Should(Succeed())
+
+			// Restore the override before recreating the CR.
+			restoreDevEnvOverrides(ctx)
+
+			cp = &kuadrantv1alpha1.KuadrantControlPlane{
+				ObjectMeta: metav1.ObjectMeta{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName},
+			}
+			Expect(testClient().Create(ctx, cp)).To(Succeed())
+
+			// The next destructive test must not delete the replacement CR
+			// before it adopts the restored ConfigMap for garbage collection.
+			Eventually(func(g Gomega) {
+				cm := &corev1.ConfigMap{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorEnvConfigMap}, cm)).To(Succeed())
+				owner := metav1.GetControllerOf(cm)
+				g.Expect(owner).ToNot(BeNil())
+				g.Expect(owner.UID).To(Equal(cp.UID))
+			}).WithContext(ctx).Should(Succeed())
+		}
+	}, afterEachTimeOut)
+
+	Context("auto-creation on startup", func() {
+		It("creates a default KuadrantControlPlane CR", func(ctx SpecContext) {
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			err := testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cp.Name).To(Equal(kuadrantv1alpha1.KuadrantControlPlaneDefaultName))
+		}, testTimeOut)
+
+		// Events are stored by the API server — requires a real cluster (UseExistingCluster: true).
+		It("emits an OLM migration event on the KuadrantControlPlane", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				events := &corev1.EventList{}
+				g.Expect(testClient().List(ctx, events, client.InNamespace("default"))).To(Succeed())
+
+				var found bool
+				for _, e := range events.Items {
+					if e.InvolvedObject.Name != kuadrantv1alpha1.KuadrantControlPlaneDefaultName {
+						continue
+					}
+					if e.Reason == "OLMMigrationComplete" || e.Reason == "OLMMigrationIncomplete" {
+						found = true
+						break
+					}
+				}
+				g.Expect(found).To(BeTrue(), "expected OLM migration event on KuadrantControlPlane")
+			}).WithContext(ctx).Should(Succeed())
+		}, NodeTimeout(10*time.Second))
+	})
+
+	Context("singleton enforcement", func() {
+		It("rejects creation of KuadrantControlPlane with non-default name", func(ctx SpecContext) {
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{
+				ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
+			}
+			err := testClient().Create(ctx, cp)
+			Expect(err).To(HaveOccurred())
+			Expect(apierrors.IsInvalid(err) || apierrors.IsForbidden(err)).To(BeTrue(),
+				"expected invalid or forbidden error, got: %v", err)
+		}, testTimeOut)
+	})
+
+	Context("component deployment", func() {
+		It("deploys dns-operator Deployment in operator namespace", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      dnsOperatorDeployment,
+				}, deploy)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("sets a controller ownerReference to the KuadrantControlPlane on dns-operator Deployment", func(ctx SpecContext) {
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      dnsOperatorDeployment,
+				}, deploy)).To(Succeed())
+
+				owner := metav1.GetControllerOf(deploy)
+				g.Expect(owner).ToNot(BeNil())
+				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+				g.Expect(owner.Name).To(Equal(cp.Name))
+				g.Expect(owner.UID).To(Equal(cp.GetUID()))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("deploys developer-portal-controller Deployment in operator namespace", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      developerPortalDeployment,
+				}, deploy)).To(Succeed())
+
+				g.Expect(deploy.Spec.Template.Spec.ServiceAccountName).To(Equal("developer-portal-controller-manager"))
+				g.Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				container := deploy.Spec.Template.Spec.Containers[0]
+				g.Expect(container.Name).To(Equal("manager"))
+				g.Expect(container.Image).To(ContainSubstring("developer-portal-controller"))
+				g.Expect(container.Args).To(ContainElement("--leader-elect"))
+				g.Expect(container.LivenessProbe).NotTo(BeNil())
+				g.Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/healthz"))
+				g.Expect(container.ReadinessProbe).NotTo(BeNil())
+				g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("sets a controller ownerReference to the KuadrantControlPlane on developer-portal-controller Deployment", func(ctx SpecContext) {
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{
+					Namespace: operatorNamespace,
+					Name:      developerPortalDeployment,
+				}, deploy)).To(Succeed())
+
+				owner := metav1.GetControllerOf(deploy)
+				g.Expect(owner).ToNot(BeNil())
+				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+				g.Expect(owner.UID).To(Equal(cp.GetUID()))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("status reporting", func() {
+		It("reports Ready=True when dns-operator is available", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1alpha1.ControlPlaneConditionReady)
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(cond.Reason).To(Equal(kuadrantv1alpha1.ControlPlaneReasonComponentsHealthy))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("reports component status with CRD establishment", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				g.Expect(cp.Status.Components).ToNot(BeEmpty())
+				var dnsComponent *kuadrantv1alpha1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "dns-operator" {
+						dnsComponent = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(dnsComponent).ToNot(BeNil(), "dns-operator component not found in status")
+				g.Expect(dnsComponent.Ready).To(BeTrue())
+				g.Expect(dnsComponent.CRDs).To(HaveLen(2))
+				for _, crd := range dnsComponent.CRDs {
+					g.Expect(crd.Established).To(BeTrue())
+				}
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("reports chart version for each component", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				for _, cs := range cp.Status.Components {
+					g.Expect(cs.ChartVersion).ToNot(BeEmpty(), "component %s should have a chart version", cs.Name)
+				}
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("reports dns-operator image status", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				var dns *kuadrantv1alpha1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "dns-operator" {
+						dns = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(dns).ToNot(BeNil(), "dns-operator component not found in status")
+				g.Expect(dns.Images).ToNot(BeEmpty())
+				g.Expect(dns.Images[0].Name).To(Equal("manager"))
+				g.Expect(dns.Images[0].Image).ToNot(BeEmpty())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("reports mcp-gateway image status", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				var mcp *kuadrantv1alpha1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "mcp-gateway" {
+						mcp = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(mcp).ToNot(BeNil(), "mcp-gateway component not found in status")
+				g.Expect(mcp.Images).ToNot(BeEmpty())
+
+				imageNames := map[string]bool{}
+				for _, img := range mcp.Images {
+					g.Expect(img.Image).ToNot(BeEmpty())
+					imageNames[img.Name] = true
+				}
+				g.Expect(imageNames).To(HaveKey("mcp-controller"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("reports developer-portal-controller component status with CRD establishment", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				var portal *kuadrantv1alpha1.ComponentStatus
+				for i := range cp.Status.Components {
+					if cp.Status.Components[i].Name == "developer-portal-controller" {
+						portal = &cp.Status.Components[i]
+						break
+					}
+				}
+				g.Expect(portal).ToNot(BeNil(), "developer-portal-controller component not found in status")
+				g.Expect(portal.Ready).To(BeTrue())
+				g.Expect(portal.CRDs).To(HaveLen(4))
+				for _, crd := range portal.CRDs {
+					g.Expect(crd.Established).To(BeTrue())
+				}
+				g.Expect(portal.Images).To(HaveLen(1))
+				g.Expect(portal.Images[0].Name).To(Equal("manager"))
+				g.Expect(portal.Images[0].Image).To(ContainSubstring("developer-portal-controller"))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("deletion", func() {
+		It("does not recreate KuadrantControlPlane CR when deleted", func(ctx SpecContext) {
+			cpKey := client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}
+
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, cpKey, cp)).To(Succeed())
+
+			Expect(testClient().Delete(ctx, cp)).To(Succeed())
+
+			// The reconcile loop no longer self-heals a deleted CR -- only the
+			// one-shot BootstrapRunnable creates it, at manager startup. Since
+			// the manager is already running for the whole test suite, deleting
+			// it here must not bring it back on its own.
+			Consistently(func(g Gomega) {
+				got := &kuadrantv1alpha1.KuadrantControlPlane{}
+				err := testClient().Get(ctx, cpKey, got)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected KuadrantControlPlane to remain deleted, got error: %v", err)
+			}, 5*time.Second, 1*time.Second).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("cascade-deletes child Deployments when KuadrantControlPlane is deleted", func(ctx SpecContext) {
+			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
+
+			// Ensure dns-operator is running and owned by the KuadrantControlPlane
+			var cpUID types.UID
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+				g.Expect(deploy.Status.ReadyReplicas).To(BeNumerically(">", 0))
+
+				owner := metav1.GetControllerOf(deploy)
+				g.Expect(owner).ToNot(BeNil(), "expected dns-operator Deployment to have a controller ownerReference")
+				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+				cpUID = owner.UID
+			}).WithContext(ctx).Should(Succeed())
+
+			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+			Expect(cp.GetUID()).To(Equal(cpUID), "expected Deployment to be owned by the current KuadrantControlPlane instance")
+			Expect(testClient().Delete(ctx, cp)).To(Succeed())
+
+			// Garbage collection cascade-deletes the Deployment once its owner is gone.
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				err := testClient().Get(ctx, deployKey, deploy)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected dns-operator Deployment to be cascade-deleted, got error: %v", err)
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("does not set an ownerReference on CRDs", func(ctx SpecContext) {
+			// Deleting a CRD deletes every custom resource of that type
+			// cluster-wide, so CRDs must never be tied to the KCP's lifecycle
+			// regardless of what happens to Deployments/Services/etc.
+			crd := &apiextensionsv1.CustomResourceDefinition{}
+			Expect(testClient().Get(ctx, client.ObjectKey{Name: "dnsrecords.kuadrant.io"}, crd)).To(Succeed())
+			Expect(crd.OwnerReferences).To(BeEmpty(), "CRDs must not have owner references")
+		}, testTimeOut)
+	})
+
+	Context("drift reconciliation", func() {
+		It("recreates dns-operator Deployment when deleted", func(ctx SpecContext) {
+			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
+
+			// Ensure it exists first and capture UID
+			var originalUID types.UID
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+				originalUID = deploy.GetUID()
+			}).WithContext(ctx).Should(Succeed())
+
+			// Delete the Deployment
+			deploy := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: operatorNamespace,
+					Name:      dnsOperatorDeployment,
+				},
+			}
+			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
+
+			// Should be recreated with a new UID
+			Eventually(func(g Gomega) {
+				recreated := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
+				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("recreates developer-portal-controller Deployment when deleted", func(ctx SpecContext) {
+			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: developerPortalDeployment}
+
+			var originalUID types.UID
+			Eventually(func(g Gomega) {
+				deploy := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+				originalUID = deploy.GetUID()
+			}).WithContext(ctx).Should(Succeed())
+
+			deploy := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: operatorNamespace,
+					Name:      developerPortalDeployment,
+				},
+			}
+			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				recreated := &appsv1.Deployment{}
+				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
+				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+})

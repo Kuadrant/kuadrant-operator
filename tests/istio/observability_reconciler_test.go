@@ -20,10 +20,11 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
-var _ = Describe("Observabiltity monitors for istio gateway", func() {
+var _ = Describe("Observabiltity monitors for istio gateway", Labels{"istio"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -52,7 +53,7 @@ var _ = Describe("Observabiltity monitors for istio gateway", func() {
 		}).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)

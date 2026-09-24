@@ -197,15 +197,43 @@ The `make bundle` target accepts the following variables:
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `quay.io/kuadrant/wasm-shim:latest`                 | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
 | `RELATED_IMAGE_DEVELOPERPORTAL` | Developer portal controller image URL | `quay.io/kuadrant/developer-portal-controller:latest` | `DEVELOPERPORTAL_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST` | Console plugin image URL (PatternFly 6) | `quay.io/kuadrant/console-plugin:latest` | `CONSOLEPLUGIN_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1` | Console plugin image URL (OpenShift 4.20–4.21) | `quay.io/kuadrant/console-plugin:v0.6.0` | |
 | `RELATED_IMAGE_CONSOLE_PLUGIN_PF5` | Console plugin image URL (PatternFly 5) | `quay.io/kuadrant/console-plugin:v0.1.5-2` | |
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`                                             |                                                                                                               |
 | `DEFAULT_CHANNEL`               | The default channel used in the bundle               | `alpha`                                             |                                                                                                               |
 
-*Note:* The console plugin image is configured via two `RELATED_IMAGE` environment variables based on OpenShift version:
-- `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST`: Used for OpenShift versions >= 4.20 (PatternFly 6 compatible)
+*Note:* The console plugin image is configured via three `RELATED_IMAGE` environment variables based on OpenShift version:
+
+- `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST`: Used for OpenShift versions >= 4.22
+- `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1`: Used for OpenShift versions 4.20–4.21
 - `RELATED_IMAGE_CONSOLE_PLUGIN_PF5`: Used for OpenShift versions < 4.20 (PatternFly 5 compatible)
 
 The operator automatically selects the appropriate image based on the detected OpenShift cluster version.
+`CONSOLE_PLUGIN_IMAGE_OVERRIDE` explicitly selects a development image, uses
+`IfNotPresent`, and permits deployment without a ClusterVersion resource when
+the ConsolePlugin API is installed.
+
+### Console plugin network access
+
+The operator reconciles a `kuadrant-console-plugin` NetworkPolicy in its namespace
+before creating the plugin Deployment. It selects only plugin pods and permits
+TCP 9443 from pods labelled `app: console` in `openshift-console` (both selectors
+must match). This covers plugin assets and the MCP Inspector backend proxy even
+when the operator namespace has default-deny ingress.
+
+The policy is owned by the topology ConfigMap and follows the plugin lifecycle.
+The operator restores its spec, labels and ownership after edits, and recreates
+it after deletion. Add separately named NetworkPolicies for additional ingress;
+do not edit the managed policy. Kubernetes NetworkPolicies are additive, so a
+broader policy selecting these pods can also grant access.
+
+This policy does not select egress or grant unrestricted outbound access. If
+your environment denies egress, permit DNS, HTTPS to the Kubernetes API, and the
+configured MCP Gateway listener on its actual destination port. Also permit
+Console egress to the plugin and, if restricted, Gateway ingress from the plugin.
+The Inspector contacts the Gateway listener, not the broker's internal ports.
+The broker's managed policy remains the MCP gateway controller's responsibility;
+see [MCP gateway PR #1429](https://github.com/Kuadrant/mcp-gateway/pull/1429).
 
 * Build the bundle manifests
 
@@ -219,6 +247,7 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:latest] \
             [RELATED_IMAGE_DEVELOPERPORTAL=quay.io/kuadrant/developer-portal-controller:latest] \
             [RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=quay.io/kuadrant/console-plugin:latest] \
+            [RELATED_IMAGE_CONSOLE_PLUGIN_SDK1=quay.io/kuadrant/console-plugin:v0.6.0] \
             [RELATED_IMAGE_CONSOLE_PLUGIN_PF5=quay.io/kuadrant/console-plugin:v0.1.5-2] \
             [CHANNELS=alpha] \
             [DEFAULT_CHANNEL=alpha]

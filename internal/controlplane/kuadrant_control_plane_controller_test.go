@@ -7,6 +7,15 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
 func TestEnabledComponents_ReturnsAllComponents(t *testing.T) {
@@ -100,6 +109,65 @@ func TestGetImageStatuses(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestKCPOwnerReference(t *testing.T) {
+	cp := &kuadrantv1alpha1.KuadrantControlPlane{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName,
+			UID:  "test-uid",
+		},
+	}
+
+	ref := kcpOwnerReference(cp)
+
+	if ref.APIVersion != kuadrantv1alpha1.GroupVersion.String() {
+		t.Errorf("APIVersion = %q, want %q", ref.APIVersion, kuadrantv1alpha1.GroupVersion.String())
+	}
+	if ref.Kind != "KuadrantControlPlane" {
+		t.Errorf("Kind = %q, want %q", ref.Kind, "KuadrantControlPlane")
+	}
+	if ref.Name != cp.Name {
+		t.Errorf("Name = %q, want %q", ref.Name, cp.Name)
+	}
+	if ref.UID != cp.UID {
+		t.Errorf("UID = %q, want %q", ref.UID, cp.UID)
+	}
+	if ref.Controller == nil || !*ref.Controller {
+		t.Error("Controller = false or nil, want true")
+	}
+	if ref.BlockOwnerDeletion != nil {
+		t.Errorf("BlockOwnerDeletion = %v, want nil (requires finalizers RBAC on the owner we don't have or need)", *ref.BlockOwnerDeletion)
+	}
+}
+
+func TestReconcile_MissingKCP_DoesNotRecreate(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := kuadrantv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("AddToScheme() error = %v", err)
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	r := &Reconciler{
+		Client:   fakeClient,
+		deployer: &Deployer{components: nil},
+	}
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	if res.RequeueAfter != 0 {
+		t.Errorf("RequeueAfter = %v, want 0 (no self-heal requeue)", res.RequeueAfter)
+	}
+
+	cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+	err = fakeClient.Get(context.Background(), client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)
+	if !apierrors.IsNotFound(err) {
+		t.Errorf("expected KuadrantControlPlane to remain absent, got error = %v", err)
 	}
 }
 

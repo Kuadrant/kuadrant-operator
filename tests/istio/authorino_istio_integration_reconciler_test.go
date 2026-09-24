@@ -21,10 +21,11 @@ import (
 )
 
 // The tests need to be run in serial as kuadrant CR namespace is shared
-var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
+var _ = Describe("Authorino Istio integration reconciler", Serial, Labels{"istio", "authpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(3 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(3 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	var (
@@ -72,7 +73,7 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 		Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -91,7 +92,7 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -133,7 +134,7 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}
@@ -159,7 +160,7 @@ var _ = Describe("Authorino Istio integration reconciler", Serial, func() {
 				Name:      "authorino",
 				Namespace: kuadrantInstallationNS,
 			})).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 		It("deployment pod template labels are correct", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				deployment := &appsv1.Deployment{}

@@ -23,10 +23,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
+var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, Labels{"istio", "ratelimitpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -47,7 +48,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 		})).WithContext(ctx).Should(Succeed())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -64,7 +65,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("EnvoyFilter only created if RLP is in the path to a route", func(ctx SpecContext) {
 			// create ratelimitpolicy
@@ -164,7 +165,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("envoy filter has transport configured with TLS", func(ctx SpecContext) {
 			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})

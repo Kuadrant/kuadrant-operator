@@ -27,11 +27,44 @@ consoleplugin_image="quay.io/kuadrant/console-plugin:$consoleplugin_version"
 V=$consoleplugin_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_LATEST").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
+# Set desired authorino image
+authorino_version=$(mod_version $(yq '.dependencies.authorino' $env/release.yaml))
+authorino_image="quay.io/kuadrant/authorino:$authorino_version"
+V=$authorino_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_AUTHORINO").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
+# Set desired authorino-operator image
+authorino_operator_version=$(mod_version $(yq '.dependencies.authorino-operator' $env/release.yaml))
+authorino_operator_image="quay.io/kuadrant/authorino-operator:$authorino_operator_version"
+V=$authorino_operator_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_AUTHORINO_OPERATOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
+# Set desired limitador image
+limitador_version=$(mod_version $(yq '.dependencies.limitador' $env/release.yaml))
+limitador_image="quay.io/kuadrant/limitador:$limitador_version"
+V=$limitador_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_LIMITADOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
+# Set desired limitador-operator image
+limitador_operator_version=$(mod_version $(yq '.dependencies.limitador-operator' $env/release.yaml))
+limitador_operator_image="quay.io/kuadrant/limitador-operator:$limitador_operator_version"
+V=$limitador_operator_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_LIMITADOR_OPERATOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
 # Set desired dns-operator image
 dns_operator_version=$(mod_version $(yq '.dependencies.dns-operator' $env/release.yaml))
 dns_operator_image="quay.io/kuadrant/dns-operator:$dns_operator_version"
 V=$dns_operator_image \
 yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+
+# Set desired mcp-gateway images
+mcp_gateway_version=$(mod_version $(yq '.dependencies.mcp-gateway' $env/release.yaml))
+mcp_gateway_image="ghcr.io/kuadrant/mcp-controller:$mcp_gateway_version"
+V=$mcp_gateway_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
+mcp_gateway_broker_image="ghcr.io/kuadrant/mcp-gateway:$mcp_gateway_version"
+V=$mcp_gateway_broker_image \
+yq eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY_BROKER").value) = strenv(V)' --inplace $env/config/manager/manager.yaml
 
 # Set desired operator image
 cd $env/config/manager
@@ -41,11 +74,10 @@ kustomize edit set image controller=$operator_image
 cd -
 
 # Build the helm chart templates from kustomize manifests
-kustomize build $env/config/helm > $env/charts/kuadrant-operator/templates/manifests.yaml
+# LoadRestrictionsNone: config/helm/developer-portal-crds reads CRDs from component-charts/ (same as make helm-build)
+kustomize build --load-restrictor LoadRestrictionsNone $env/config/helm > $env/charts/kuadrant-operator/templates/manifests.yaml
 
-# Set the helm chart version and dependencies versions
+# Set the helm chart version
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))
 V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.version = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
 V="$(yq '.kuadrant-operator.version' $env/release.yaml)" yq --inplace eval '.appVersion = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.authorino-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "authorino-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml
-V="$(yq '.dependencies.limitador-operator' $env/release.yaml)" yq --inplace eval '(.dependencies[] | select(.name == "limitador-operator").version) = strenv(V)' $env/charts/kuadrant-operator/Chart.yaml

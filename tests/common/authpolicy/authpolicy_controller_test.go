@@ -32,10 +32,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("AuthPolicy controller", func() {
+var _ = Describe("AuthPolicy controller", Labels{"common", "authpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -78,7 +79,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -129,7 +130,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(ctx, httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Attaches policy to the Gateway", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
@@ -528,7 +529,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(ctx, httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Attaches simple policy to the HTTPRoute", func(ctx SpecContext) {
 			policy := policyFactory()
@@ -659,7 +660,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(ctx, httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Enforced reason", func(ctx SpecContext) {
 			policy := policyFactory()
@@ -728,7 +729,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Gateway AuthPolicy has overrides and Route AuthPolicy is added.", func(ctx SpecContext) {
 			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
@@ -927,16 +928,17 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 })
 
-var _ = Describe("AuthPolicy CEL Validations", func() {
+var _ = Describe("AuthPolicy CEL Validations", Labels{"common", "authpolicy"}, func() {
 	const (
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)

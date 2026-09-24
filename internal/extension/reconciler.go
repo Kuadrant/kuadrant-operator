@@ -40,9 +40,27 @@ func (ngp *nilGuardedPointer[T]) set(x T) {
 
 	ngp.cond.Broadcast()
 
-	if previous != nil && ngp.updates != nil {
+	if previous != nil {
 		for _, update := range ngp.updates {
-			update <- x
+			sendLatest(update, x)
+		}
+	}
+}
+
+// sendLatest coalesces onto a buffered-of-one channel without blocking, dropping
+// any value the subscriber has not yet consumed. set holds ngp.mu, so it is the
+// only sender, which is what makes the drain-then-resend safe.
+func sendLatest[T any](ch chan T, x T) {
+	select {
+	case ch <- x:
+	default:
+		select {
+		case <-ch:
+		default:
+		}
+		select {
+		case ch <- x:
+		default:
 		}
 	}
 }
@@ -51,9 +69,21 @@ func (ngp *nilGuardedPointer[T]) newUpdateChannel() chan T {
 	ngp.mu.Lock()
 	defer ngp.mu.Unlock()
 
-	channel := make(chan T)
+	channel := make(chan T, 1)
 	ngp.updates = append(ngp.updates, channel)
 	return channel
+}
+
+func (ngp *nilGuardedPointer[T]) removeUpdateChannel(ch chan T) {
+	ngp.mu.Lock()
+	defer ngp.mu.Unlock()
+
+	for i, update := range ngp.updates {
+		if update == ch {
+			ngp.updates = append(ngp.updates[:i], ngp.updates[i+1:]...)
+			return
+		}
+	}
 }
 
 // get returns the current value of the pointer without blocking.

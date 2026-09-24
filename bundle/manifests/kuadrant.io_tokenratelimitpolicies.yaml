@@ -71,11 +71,61 @@ spec:
             type: object
           spec:
             properties:
+              dataExtraction:
+                description: |-
+                  DataExtraction configures how token usage data is extracted from requests and responses.
+                  If omitted, built-in defaults are used to extract total token usage from common LLM provider
+                  response shapes.
+                properties:
+                  response:
+                    additionalProperties:
+                      description: |-
+                        JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+                        the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+                        may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+                        implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+                        ambiguity between JSON Pointer content and CEL/wasm string escaping.
+                      items:
+                        pattern: ^(/([^/~"\\]|~[01])*)+$
+                        type: string
+                      maxItems: 8
+                      minItems: 1
+                      type: array
+                    description: Response configures data extraction from the response
+                      body.
+                    maxProperties: 16
+                    type: object
+                type: object
               defaults:
                 description: |-
                   Rules to apply as defaults. Can be overridden by more specific policy rules lower in the hierarchy and by less specific policy overrides.
                   Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
+                  dataExtraction:
+                    description: |-
+                      DataExtraction configures how token usage data is extracted from requests and responses.
+                      If omitted, built-in defaults are used to extract total token usage from common LLM provider
+                      response shapes.
+                    properties:
+                      response:
+                        additionalProperties:
+                          description: |-
+                            JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+                            the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+                            may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+                            implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+                            ambiguity between JSON Pointer content and CEL/wasm string escaping.
+                          items:
+                            pattern: ^(/([^/~"\\]|~[01])*)+$
+                            type: string
+                          maxItems: 8
+                          minItems: 1
+                          type: array
+                        description: Response configures data extraction from the
+                          response body.
+                        maxProperties: 16
+                        type: object
+                    type: object
                   limits:
                     additionalProperties:
                       description: TokenLimit represents a complete token-based rate
@@ -122,6 +172,35 @@ spec:
                             - window
                             type: object
                           type: array
+                        reservation:
+                          description: |-
+                            Reservation configures token reservation for this limit. It only takes
+                            effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+                            an estimated token amount is reserved on request arrival and committed
+                            with the actual usage once the upstream responds. When omitted, defaults
+                            are generated (amount 0, meaning no capacity is reserved, and the route
+                            backendRequest timeout for ttl).
+                          properties:
+                            amount:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Amount is either a literal integer number of tokens to reserve on request
+                                arrival, or a CEL expression evaluating to the number of tokens (uint).
+                                Defaults to 0 when omitted, which reserves no capacity: Limitador
+                                short-circuits amount-0 reservations, so this limit behaves like
+                                Optimistic unless amount is set explicitly to a non-zero estimate.
+                              x-kubernetes-int-or-string: true
+                            ttl:
+                              description: |-
+                                TTL is a CEL expression evaluating to the maximum duration
+                                (google.protobuf.Duration) the reservation is held before it expires.
+                                When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+                                is used.
+                              minLength: 1
+                              type: string
+                          type: object
                         when:
                           description: |-
                             When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -211,6 +290,35 @@ spec:
                         - window
                         type: object
                       type: array
+                    reservation:
+                      description: |-
+                        Reservation configures token reservation for this limit. It only takes
+                        effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+                        an estimated token amount is reserved on request arrival and committed
+                        with the actual usage once the upstream responds. When omitted, defaults
+                        are generated (amount 0, meaning no capacity is reserved, and the route
+                        backendRequest timeout for ttl).
+                      properties:
+                        amount:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            Amount is either a literal integer number of tokens to reserve on request
+                            arrival, or a CEL expression evaluating to the number of tokens (uint).
+                            Defaults to 0 when omitted, which reserves no capacity: Limitador
+                            short-circuits amount-0 reservations, so this limit behaves like
+                            Optimistic unless amount is set explicitly to a non-zero estimate.
+                          x-kubernetes-int-or-string: true
+                        ttl:
+                          description: |-
+                            TTL is a CEL expression evaluating to the maximum duration
+                            (google.protobuf.Duration) the reservation is held before it expires.
+                            When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+                            is used.
+                          minLength: 1
+                          type: string
+                      type: object
                     when:
                       description: |-
                         When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -235,6 +343,31 @@ spec:
                   Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overridden by less specific policy overrides.
                   Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
+                  dataExtraction:
+                    description: |-
+                      DataExtraction configures how token usage data is extracted from requests and responses.
+                      If omitted, built-in defaults are used to extract total token usage from common LLM provider
+                      response shapes.
+                    properties:
+                      response:
+                        additionalProperties:
+                          description: |-
+                            JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+                            the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+                            may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+                            implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+                            ambiguity between JSON Pointer content and CEL/wasm string escaping.
+                          items:
+                            pattern: ^(/([^/~"\\]|~[01])*)+$
+                            type: string
+                          maxItems: 8
+                          minItems: 1
+                          type: array
+                        description: Response configures data extraction from the
+                          response body.
+                        maxProperties: 16
+                        type: object
+                    type: object
                   limits:
                     additionalProperties:
                       description: TokenLimit represents a complete token-based rate
@@ -281,6 +414,35 @@ spec:
                             - window
                             type: object
                           type: array
+                        reservation:
+                          description: |-
+                            Reservation configures token reservation for this limit. It only takes
+                            effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+                            an estimated token amount is reserved on request arrival and committed
+                            with the actual usage once the upstream responds. When omitted, defaults
+                            are generated (amount 0, meaning no capacity is reserved, and the route
+                            backendRequest timeout for ttl).
+                          properties:
+                            amount:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: |-
+                                Amount is either a literal integer number of tokens to reserve on request
+                                arrival, or a CEL expression evaluating to the number of tokens (uint).
+                                Defaults to 0 when omitted, which reserves no capacity: Limitador
+                                short-circuits amount-0 reservations, so this limit behaves like
+                                Optimistic unless amount is set explicitly to a non-zero estimate.
+                              x-kubernetes-int-or-string: true
+                            ttl:
+                              description: |-
+                                TTL is a CEL expression evaluating to the maximum duration
+                                (google.protobuf.Duration) the reservation is held before it expires.
+                                When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+                                is used.
+                              minLength: 1
+                              type: string
+                          type: object
                         when:
                           description: |-
                             When holds a list of "limit-level" `Predicate`s for token-based conditions
@@ -407,6 +569,11 @@ spec:
             - message: At least one spec.defaults.limits must be defined
               rule: 'has(self.defaults) ? has(self.defaults.limits) && size(self.defaults.limits)
                 > 0 : true'
+            - message: Implicit dataExtraction and explicit defaults are mutually
+                exclusive
+              rule: '!(has(self.defaults) && has(self.dataExtraction))'
+            - message: Implicit dataExtraction and overrides are mutually exclusive
+              rule: '!(has(self.overrides) && has(self.dataExtraction))'
           status:
             properties:
               conditions:

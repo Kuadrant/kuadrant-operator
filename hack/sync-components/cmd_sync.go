@@ -88,7 +88,13 @@ func syncOne(name string, c component, configPath string) syncResult {
 		return syncResult{Repo: c.Repo, OldRef: c.Ref, Status: "error"}
 	}
 
-	if sha == c.Ref {
+	// Check if chart directory exists before declaring up-to-date
+	chartExists := false
+	if stat, err := os.Stat(chartDir); err == nil && stat.IsDir() {
+		chartExists = true
+	}
+
+	if sha == c.Ref && chartExists {
 		fmt.Fprintf(os.Stderr, "Syncing %s from %s@%s\n", name, c.Repo, sha[:12])
 		fmt.Fprintf(os.Stderr, "  No changes (already at %s).\n", sha[:12])
 		return syncResult{Repo: c.Repo, OldRef: c.Ref, NewRef: sha, Changed: false, Status: "up-to-date"}
@@ -148,6 +154,19 @@ func syncOne(name string, c component, configPath string) syncResult {
 			os.Rename(backupDir, chartDir)
 		}
 		fmt.Fprintf(os.Stderr, "Error moving chart to %s: %v\n", chartDir, err)
+		return syncResult{Repo: c.Repo, OldRef: c.Ref, NewRef: sha, Status: "error"}
+	}
+
+	// Fix permissions on the chart directory (os.MkdirTemp creates with 0700).
+	// A failure here must not be treated as a warning: it would leave the
+	// installed chart directory inaccessible to non-root consumers (e.g. the
+	// container image's non-root runtime user) while still reporting success.
+	if err := os.Chmod(chartDir, 0o755); err != nil {
+		os.RemoveAll(chartDir)
+		if hasBackup {
+			os.Rename(backupDir, chartDir)
+		}
+		fmt.Fprintf(os.Stderr, "Error setting permissions on %s: %v\n", chartDir, err)
 		return syncResult{Repo: c.Repo, OldRef: c.Ref, NewRef: sha, Status: "error"}
 	}
 

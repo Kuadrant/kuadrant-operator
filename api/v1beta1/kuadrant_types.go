@@ -71,11 +71,13 @@ func (k *Kuadrant) IsMTLSAuthorinoEnabled() bool {
 	return k.Spec.MTLS.IsAuthorinoEnabled()
 }
 
-func (k *Kuadrant) IsDeveloperPortalEnabled() bool {
-	if k == nil || k.Spec.Components == nil || k.Spec.Components.DeveloperPortal == nil {
-		return false
+// GetTokenRateLimitingMode returns the effective cluster-wide TokenRateLimitPolicy
+// enforcement mode, defaulting to Reservation when unset.
+func (k *Kuadrant) GetTokenRateLimitingMode() TokenRateLimitingMode {
+	if k == nil || k.Spec.TokenRateLimiting == nil || k.Spec.TokenRateLimiting.Mode == "" {
+		return TokenRateLimitingModeReservation
 	}
-	return k.Spec.Components.DeveloperPortal.Enabled
+	return k.Spec.TokenRateLimiting.Mode
 }
 
 // GetOwnerReference returns the owner reference pointing to this Kuadrant CR,
@@ -104,8 +106,38 @@ type KuadrantSpec struct {
 	// gateway and the Kuadrant components.
 	MTLS *MTLS `json:"mtls,omitempty"`
 	// +optional
-	// Components configures optional Kuadrant components
+	// Components is a deprecated no-op, ignored by the operator and kept only for
+	// backwards compatibility. Removing it would break OLM CRD upgrade safety checks.
+	//
+	// Deprecated: ignored; kept only for backwards compatibility.
 	Components *Components `json:"components,omitempty"`
+
+	// +optional
+	// TokenRateLimiting configures cluster-wide behavior for TokenRateLimitPolicy.
+	TokenRateLimiting *TokenRateLimiting `json:"tokenRateLimiting,omitempty"`
+}
+
+// TokenRateLimitingMode selects how TokenRateLimitPolicy limits are enforced.
+// +kubebuilder:validation:Enum=Reservation;Optimistic
+type TokenRateLimitingMode string
+
+const (
+	// TokenRateLimitingModeReservation reserves an estimated token amount on
+	// request arrival and commits the actual usage on response, closing the
+	// check/report race window (see RFC 0021).
+	TokenRateLimitingModeReservation TokenRateLimitingMode = "Reservation"
+
+	// TokenRateLimitingModeOptimistic checks the limit (hits_addend=0) on
+	// request arrival and reports the actual usage on response.
+	TokenRateLimitingModeOptimistic TokenRateLimitingMode = "Optimistic"
+)
+
+// TokenRateLimiting configures cluster-wide behavior for TokenRateLimitPolicy.
+type TokenRateLimiting struct {
+	// Mode selects how TokenRateLimitPolicy limits are enforced across the cluster.
+	// +kubebuilder:default=Reservation
+	// +optional
+	Mode TokenRateLimitingMode `json:"mode,omitempty"`
 }
 
 // Observability configures telemetry and monitoring settings for Kuadrant components.
@@ -172,13 +204,23 @@ type LogLevel struct {
 	Error *string `json:"error,omitempty"`
 }
 
+// Components is a deprecated no-op, ignored by the operator and kept only for
+// backwards compatibility.
+//
+// Deprecated: ignored; kept only for backwards compatibility.
 type Components struct {
 	// +optional
-	// DeveloperPortal enables the developer portal integration including APIProduct and APIKeyRequest CRDs
+	// DeveloperPortal is a deprecated no-op; the developer portal is always enabled (GA).
+	//
+	// Deprecated: the developer portal is always enabled (GA); this field is ignored.
 	DeveloperPortal *DeveloperPortal `json:"developerPortal,omitempty"`
 }
 
+// DeveloperPortal is a deprecated no-op; the developer portal is always enabled (GA).
+//
+// Deprecated: the developer portal is always enabled (GA); this field is ignored.
 type DeveloperPortal struct {
+	// Deprecated: the developer portal is always enabled (GA); this field is ignored.
 	Enabled bool `json:"enabled,omitempty"`
 }
 

@@ -53,10 +53,12 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/cel/ext"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 )
 
 const defaultExtensionServicePort = 50052
 const defaultWarmupTimeout = 30 * time.Second
+const minReaperInterval = 1 * time.Second
 
 var ErrNoExtensionsFound = errors.New("no extensions found")
 
@@ -74,6 +76,7 @@ type Manager struct {
 	descriptorServer *grpc.Server
 	extensionServer  *grpc.Server
 	extensionPort    int
+	reaperStop       chan struct{}
 }
 
 type Extension interface {
@@ -146,6 +149,7 @@ func (m *Manager) Start() error {
 	}
 
 	m.beginWarmup()
+	m.startReaper()
 
 	if e := m.startExtensionServer(); e != nil {
 		m.logger.Error(e, "failed to start extension server")
@@ -171,6 +175,8 @@ func (m *Manager) Start() error {
 
 func (m *Manager) Stop() error {
 	var err error
+
+	m.stopReaper()
 
 	m.stopDescriptorServer()
 
@@ -269,6 +275,62 @@ func warmupTimeout(logger logr.Logger) time.Duration {
 		return defaultWarmupTimeout
 	}
 	return timeout
+}
+
+func (m *Manager) startReaper() {
+	ttl := sessionTTL(m.logger)
+	m.sessionStore.SetSessionTTL(ttl)
+	interval := reaperInterval(ttl)
+
+	m.reaperStop = make(chan struct{})
+	stop := m.reaperStop
+	ticker := time.NewTicker(interval)
+
+	m.logger.Info("starting session reaper", "ttl", ttl, "interval", interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if revoked := m.sessionStore.ReapStale(); len(revoked) > 0 {
+					m.logger.Info("reaped stale extension sessions", "identities", revoked)
+				}
+			}
+		}
+	}()
+}
+
+func (m *Manager) stopReaper() {
+	if m.reaperStop == nil {
+		return
+	}
+	close(m.reaperStop)
+	m.reaperStop = nil
+}
+
+func sessionTTL(logger logr.Logger) time.Duration {
+	value := env.GetString("EXTENSIONS_SESSION_TTL", "")
+	if value == "" {
+		return defaultSessionTTL
+	}
+	ttl, err := time.ParseDuration(value)
+	if err != nil || ttl <= 0 {
+		logger.Error(err, "invalid EXTENSIONS_SESSION_TTL, using default", "value", value, "default", defaultSessionTTL)
+		return defaultSessionTTL
+	}
+	return ttl
+}
+
+// reaperInterval sweeps at TTL/3 so at least two heartbeats are missed before a
+// session becomes reapable.
+func reaperInterval(ttl time.Duration) time.Duration {
+	interval := ttl / 3
+	if interval < minReaperInterval {
+		return minReaperInterval
+	}
+	return interval
 }
 
 func (m *Manager) startExtensionServer() error {
@@ -458,12 +520,40 @@ func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb
 	}, nil
 }
 
+func (s *extensionService) ReleaseSession(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
+	identity, ok := IdentityFromContext(ctx)
+	if !ok {
+		return nil, grpcstatus.Error(codes.Unauthenticated, "no session identity")
+	}
+	if s.sessionStore.RevokeByName(identity) {
+		s.logger.Info("session released", "identity", identity)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func handshakeRejected(reason string, rejection extpb.HandshakeRejection) *extpb.HandshakeResponse {
+	return &extpb.HandshakeResponse{
+		Accepted:  false,
+		Reason:    reason,
+		Version:   protocol.Version,
+		Rejection: rejection,
+	}
+}
+
 func (s *extensionService) Handshake(ctx context.Context, request *extpb.HandshakeRequest) (*extpb.HandshakeResponse, error) {
+	if err := protocol.Compatible(request.Version, protocol.Version); err != nil {
+		s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "version", request.Version, "reason", err.Error())
+		return handshakeRejected(err.Error(), extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION), nil
+	}
+
 	if request.PolicyKind == "" {
-		return &extpb.HandshakeResponse{
-			Accepted: false,
-			Reason:   "policy_kind is required",
-		}, nil
+		return handshakeRejected("policy_kind is required", extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST), nil
+	}
+
+	ownedIDs, err := ownedResourceIDs(request.PolicyKind, request.OwnedPolicies)
+	if err != nil {
+		s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
+		return handshakeRejected("invalid owned_policies", extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST), nil
 	}
 
 	identity, isBuiltin := s.sessionStore.matchBuiltin(request.Token)
@@ -472,36 +562,29 @@ func (s *extensionService) Handshake(ctx context.Context, request *extpb.Handsha
 		// extensions are admitted.
 		if !s.sessionStore.isWarmupComplete() {
 			s.logger.Info("handshake rejected during warmup", "policyKind", request.PolicyKind)
-			return &extpb.HandshakeResponse{
-				Accepted: false,
-				Reason:   "warmup in progress",
-			}, nil
+			return handshakeRejected("warmup in progress", extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE), nil
 		}
 
-		var err error
 		identity, err = s.authenticateStandalone(ctx, request.Token, request.PolicyKind)
 		if err != nil {
 			s.logger.Info("handshake rejected", "policyKind", request.PolicyKind, "reason", err.Error())
-			return &extpb.HandshakeResponse{
-				Accepted: false,
-				Reason:   "handshake failed",
-			}, nil
+			return handshakeRejected("handshake failed", extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED), nil
 		}
 	}
 
 	token, err := s.sessionStore.CreateSession(identity, request.PolicyKind)
 	if err != nil {
 		s.logger.Info("handshake rejected", "identity", identity, "policyKind", request.PolicyKind, "reason", err.Error())
-		return &extpb.HandshakeResponse{
-			Accepted: false,
-			Reason:   "handshake failed",
-		}, nil
+		return handshakeRejected("handshake failed", extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE), nil
 	}
+
+	s.pruneStalePolicies(request.PolicyKind, ownedIDs)
 
 	s.logger.Info("handshake accepted", "identity", identity, "version", request.Version, "policyKind", request.PolicyKind)
 	return &extpb.HandshakeResponse{
 		Accepted:     true,
 		SessionToken: token,
+		Version:      protocol.Version,
 	}, nil
 }
 
@@ -523,6 +606,43 @@ func (s *extensionService) authenticateStandalone(ctx context.Context, token []b
 	}
 
 	return user.Username, nil
+}
+
+func ownedResourceIDs(policyKind string, owned []*extpb.Metadata) ([]ResourceID, error) {
+	result := make([]ResourceID, 0, len(owned))
+	for i, entry := range owned {
+		if entry == nil {
+			return nil, fmt.Errorf("owned_policies[%d]: entry is nil", i)
+		}
+		if entry.Kind != "" && entry.Kind != policyKind {
+			return nil, fmt.Errorf("owned_policies[%d] (%s/%s): kind %q does not match policy_kind %q", i, entry.Namespace, entry.Name, entry.Kind, policyKind)
+		}
+		if entry.Name == "" {
+			return nil, fmt.Errorf("owned_policies[%d] (%s): name is empty", i, entry.Namespace)
+		}
+		result = append(result, ResourceID{
+			Kind:      policyKind,
+			Namespace: entry.Namespace,
+			Name:      entry.Name,
+		})
+	}
+	return result, nil
+}
+
+func (s *extensionService) pruneStalePolicies(policyKind string, owned []ResourceID) {
+	pruned, counts := s.registeredData.PruneToOwned(policyKind, owned)
+	if len(pruned) == 0 {
+		return
+	}
+
+	s.logger.Info("pruned stale policies", "policyKind", policyKind, "pruned", pruned, "mutators", counts.Mutators, "subscriptions", counts.Subscriptions, "upstreams", counts.Upstreams, "pipelineActions", counts.PipelineActions)
+
+	if (counts.Mutators > 0 || counts.Upstreams > 0 || counts.PipelineActions > 0) && s.changeNotifier != nil {
+		reason := fmt.Sprintf("pruned stale policies for kind %s (mutators: %d, upstreams: %d, pipeline actions: %d)", policyKind, counts.Mutators, counts.Upstreams, counts.PipelineActions)
+		if err := s.changeNotifier(reason); err != nil {
+			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
+		}
+	}
 }
 
 func (s *extensionService) GetServiceDescriptors(_ context.Context, request *extpb.GetServiceDescriptorsRequest) (*extpb.GetServiceDescriptorsResponse, error) {
@@ -596,8 +716,16 @@ func (s *extensionService) Subscribe(request *extpb.SubscribeRequest, stream grp
 	}
 
 	channel := BlockingDAG.newUpdateChannel()
+	defer BlockingDAG.removeUpdateChannel(channel)
+
 	for {
-		dag := <-channel
+		var dag StateAwareDAG
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case dag = <-channel:
+		}
+
 		opts := []cel.EnvOption{
 			kuadrant.CelExt(&dag),
 		}
@@ -752,19 +880,19 @@ func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPo
 		Name:      request.Policy.Metadata.Name,
 	}
 
-	clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions := s.registeredData.ClearPolicyData(policyID)
+	counts := s.registeredData.ClearPolicyData(policyID)
 
 	// Trigger notifier when mutators, upstreams, or pipeline actions are cleared
-	if (clearedMutators > 0 || clearedUpstreams > 0 || clearedPipelineActions > 0) && s.changeNotifier != nil {
-		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d, pipeline actions: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, clearedMutators, clearedUpstreams, clearedPipelineActions)
+	if (counts.Mutators > 0 || counts.Upstreams > 0 || counts.PipelineActions > 0) && s.changeNotifier != nil {
+		reason := fmt.Sprintf("data cleared for policy %s/%s (mutators: %d, upstreams: %d, pipeline actions: %d)", request.Policy.Metadata.Namespace, request.Policy.Metadata.Name, counts.Mutators, counts.Upstreams, counts.PipelineActions)
 		if err := s.changeNotifier(reason); err != nil {
 			s.logger.Error(err, "failed to trigger change notification", "reason", reason)
 		}
 	}
 
 	return &extpb.ClearPolicyResponse{
-		ClearedMutators:      int32(clearedMutators),      // #nosec G115
-		ClearedSubscriptions: int32(clearedSubscriptions), // #nosec G115
+		ClearedMutators:      int32(counts.Mutators),      // #nosec G115
+		ClearedSubscriptions: int32(counts.Subscriptions), // #nosec G115
 	}, nil
 }
 
@@ -1001,61 +1129,68 @@ type actionValidationCtx struct {
 	varToMethod map[string]string
 }
 
-type actionEntryValidator func(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error
-
-var actionEntryValidators = map[extpb.ActionType]actionEntryValidator{
-	extpb.ActionType_ACTION_TYPE_GRPC_METHOD: validateGRPCMethodEntry,
-	extpb.ActionType_ACTION_TYPE_DENY:        validateDenyEntry,
-	extpb.ActionType_ACTION_TYPE_FAIL:        validateFailEntry,
-	extpb.ActionType_ACTION_TYPE_ADD_HEADERS: validateAddHeadersEntry,
-}
-
-func validateGRPCMethodEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, vctx *actionValidationCtx) error {
-	if action.Method == "" {
-		return fmt.Errorf("actions[%d]: method must be specified for grpc_method actions", index)
+func validateGRPCEntry(grpc *extpb.GrpcAction, index int, vctx *actionValidationCtx) error {
+	if grpc.Method == "" {
+		return fmt.Errorf("actions[%d]: method must be specified for grpc actions", index)
 	}
-	if !vctx.store.HasUpstreamName(vctx.policyID, action.Method) {
-		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, action.Method)
+	if !vctx.store.HasUpstreamName(vctx.policyID, grpc.Method) {
+		return fmt.Errorf("actions[%d]: method %q is not a registered action method for this policy", index, grpc.Method)
 	}
-	if action.Var != "" && !varNameRegexp.MatchString(action.Var) {
-		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, action.Var)
+	if grpc.Var != "" && !varNameRegexp.MatchString(grpc.Var) {
+		return fmt.Errorf("actions[%d]: var %q must match [a-zA-Z_][a-zA-Z0-9_]*", index, grpc.Var)
 	}
-	entry.Method = action.Method
-	entry.Var = action.Var
-	if action.Var != "" {
-		vctx.varToMethod[action.Var] = action.Method
+	if grpc.Var != "" {
+		vctx.varToMethod[grpc.Var] = grpc.Method
 	}
 	return nil
 }
 
-func validateDenyEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if action.WithStatus != 0 {
-		if err := validateHTTPStatusCode(fmt.Sprintf("%d", action.WithStatus), fmt.Sprintf("actions[%d].with_status", index)); err != nil {
+func validateDenyEntry(deny *extpb.DenyAction, index int) error {
+	if deny.WithStatus != 0 {
+		if err := validateHTTPStatusCode(deny.WithStatus, fmt.Sprintf("actions[%d].with_status", index)); err != nil {
 			return err
 		}
 	}
-	entry.WithStatus = int(action.WithStatus)
-	entry.WithHeaders = action.WithHeaders
-	entry.WithBody = action.WithBody
+	if deny.WithHeaders != "" {
+		if err := validateCELExpression(deny.WithHeaders); err != nil {
+			return fmt.Errorf("actions[%d].with_headers: %w", index, err)
+		}
+	}
+	if deny.WithBody != "" {
+		if err := validateCELExpression(deny.WithBody); err != nil {
+			return fmt.Errorf("actions[%d].with_body: %w", index, err)
+		}
+	}
 	return nil
 }
 
-func validateFailEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if strings.TrimSpace(action.LogMessage) == "" {
+func validateFailEntry(fail *extpb.FailAction, index int) error {
+	if strings.TrimSpace(fail.LogMessage) == "" {
 		return fmt.Errorf("actions[%d]: log_message must be specified for fail actions", index)
 	}
-	entry.LogMessage = action.LogMessage
 	return nil
 }
 
-func validateAddHeadersEntry(action *extpb.ActionEntry, index int, entry *PipelineActionEntry, _ *actionValidationCtx) error {
-	if action.HeadersToAdd == "" {
+func validateAddHeadersEntry(addHeaders *extpb.AddHeadersAction, index int) error {
+	if addHeaders.HeadersToAdd == "" {
 		return fmt.Errorf("actions[%d]: headers_to_add must be specified for add_headers actions", index)
 	}
-	if err := validateCELExpression(action.HeadersToAdd); err != nil {
+	if err := validateCELExpression(addHeaders.HeadersToAdd); err != nil {
 		return fmt.Errorf("actions[%d].headers_to_add: %w", index, err)
 	}
-	entry.HeadersToAdd = action.HeadersToAdd
+	return nil
+}
+
+func validateStoreEntry(store *extpb.StoreAction, index int) error {
+	if store.Path == "" {
+		return fmt.Errorf("actions[%d]: path must be specified for store actions", index)
+	}
+	if store.Value == "" {
+		return fmt.Errorf("actions[%d]: value must be specified for store actions", index)
+	}
+	if err := validateCELExpression(store.Value); err != nil {
+		return fmt.Errorf("actions[%d].value: %w", index, err)
+	}
 	return nil
 }
 
@@ -1071,33 +1206,59 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 		if action == nil {
 			return nil, fmt.Errorf("actions[%d]: entry cannot be nil", i)
 		}
-		if action.ActionType == extpb.ActionType_ACTION_TYPE_UNSPECIFIED {
-			return nil, fmt.Errorf("actions[%d]: action_type must be specified", i)
-		}
-		if action.Phase != string(PipelinePhaseRequest) && action.Phase != string(PipelinePhaseResponse) {
-			return nil, fmt.Errorf("actions[%d]: phase must be %q or %q, got %q", i, PipelinePhaseRequest, PipelinePhaseResponse, action.Phase)
-		}
 		if action.Predicate != "" {
 			if err := validateCELExpression(action.Predicate); err != nil {
 				return nil, fmt.Errorf("actions[%d].predicate: %w", i, err)
 			}
 		}
 
-		entry := PipelineActionEntry{
-			ActionType: action.ActionType,
-			Predicate:  action.Predicate,
-			Phase:      action.Phase,
+		if _, err := phaseFromProto(action.Phase); err != nil {
+			return nil, fmt.Errorf("actions[%d]: phase must be specified", i)
 		}
 
-		validator, ok := actionEntryValidators[action.ActionType]
-		if !ok {
-			return nil, fmt.Errorf("actions[%d]: unknown action_type %s", i, action.ActionType)
-		}
-		if err := validator(action, i, &entry, &vctx); err != nil {
-			return nil, err
+		switch a := action.Action.(type) {
+		case *extpb.ActionEntry_Grpc:
+			if a == nil || a.Grpc == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateGRPCEntry(a.Grpc, i, &vctx); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Deny:
+			if a == nil || a.Deny == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateDenyEntry(a.Deny, i); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_AddHeaders:
+			if a == nil || a.AddHeaders == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateAddHeadersEntry(a.AddHeaders, i); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Fail:
+			if a == nil || a.Fail == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateFailEntry(a.Fail, i); err != nil {
+				return nil, err
+			}
+		case *extpb.ActionEntry_Store:
+			if a == nil || a.Store == nil {
+				return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+			}
+			if err := validateStoreEntry(a.Store, i); err != nil {
+				return nil, err
+			}
+		case nil:
+			return nil, fmt.Errorf("actions[%d]: action must be specified", i)
+		default:
+			return nil, fmt.Errorf("actions[%d]: unknown action type", i)
 		}
 
-		entries = append(entries, entry)
+		entries = append(entries, PipelineActionEntry{Entry: action})
 	}
 
 	if len(vctx.varToMethod) > 0 {
@@ -1109,24 +1270,16 @@ func (s *extensionService) validateActions(policyID ResourceID, actions []*extpb
 	return entries, nil
 }
 
-func validateHTTPStatusCode(code, field string) error {
-	if code == "" {
-		return fmt.Errorf("%s: must be specified", field)
-	}
-	n, err := strconv.Atoi(code)
-	if err != nil {
-		return fmt.Errorf("%s: %q is not a valid integer", field, code)
-	}
-	if n < 100 || n > 599 {
-		return fmt.Errorf("%s: must be between 100 and 599, got %d", field, n)
+func validateHTTPStatusCode(code int32, field string) error {
+	if code < 100 || code > 599 {
+		return fmt.Errorf("%s: must be between 100 and 599, got %d", field, code)
 	}
 	return nil
 }
 
 func (s *extensionService) validateCrossActionVars(policyID ResourceID, actions []*extpb.ActionEntry, varToMethod map[string]string) error {
 	for i, action := range actions {
-		exprs := collectCELExpressions(action)
-		for _, expr := range exprs {
+		for _, expr := range celExpressionsFromEntry(action) {
 			fieldAccesses, err := extractVarFieldAccesses(expr, varToMethod)
 			if err != nil {
 				return fmt.Errorf("actions[%d]: %w", i, err)
@@ -1157,17 +1310,6 @@ func (s *extensionService) validateCrossActionVars(policyID ResourceID, actions 
 		}
 	}
 	return nil
-}
-
-func collectCELExpressions(action *extpb.ActionEntry) []string {
-	var exprs []string
-	if action.Predicate != "" {
-		exprs = append(exprs, action.Predicate)
-	}
-	if action.HeadersToAdd != "" {
-		exprs = append(exprs, action.HeadersToAdd)
-	}
-	return exprs
 }
 
 // Creates a locator matching the definition in policy-machinery

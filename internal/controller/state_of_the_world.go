@@ -28,6 +28,7 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -139,12 +140,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
-		controller.WithRunnable("developer portal deployment watcher", controller.Watch(
-			&appsv1.Deployment{},
-			kuadrantv1beta1.DeploymentsResource,
-			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*appsv1.Deployment](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
-		)),
 		controller.WithRunnable("limitador deployment watcher", controller.Watch(
 			&appsv1.Deployment{},
 			kuadrantv1beta1.DeploymentsResource,
@@ -157,6 +152,48 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			// labels propagation pattern would be more reliable as the kuadrant operator would be owning these labels
 			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=limitador"),
 		)),
+		controller.WithRunnable("authorino deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByField[*appsv1.Deployment]("metadata.name=authorino"),
+		)),
+		controller.WithRunnable("kuadrant-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByLabel[*appsv1.Deployment]("app=kuadrant"),
+		)),
+		controller.WithRunnable("dns-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByLabel[*appsv1.Deployment]("control-plane=dns-operator-controller-manager"),
+		)),
+		controller.WithRunnable("authorino-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByField[*appsv1.Deployment]("metadata.name=authorino-operator"),
+		)),
+		controller.WithRunnable("limitador-operator deployment watcher", controller.Watch(
+			&appsv1.Deployment{},
+			kuadrantv1beta1.DeploymentsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*appsv1.Deployment]{}),
+			controller.FilterResourcesByField[*appsv1.Deployment]("metadata.name=limitador-operator-controller-manager"),
+		)),
+		controller.WithRunnable("networkPolicy watcher", controller.Watch(
+			&networkingv1.NetworkPolicy{},
+			kuadrantv1beta1.NetworkPolicyResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*networkingv1.NetworkPolicy]{}),
+			controller.FilterResourcesByLabel[*networkingv1.NetworkPolicy]("app.kubernetes.io/managed-by=kuadrant-operator"),
+		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
@@ -168,9 +205,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
 			kuadrantv1beta1.DeploymentGroupKind,
+			kuadrantv1beta1.NetworkPolicyGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
+			kuadrantv1beta1.LinkDeploymentToNetworkPolicy,
+			kuadrantv1beta1.LinkSubDeploymentsToKuadrantDeployment,
 		),
 	}
 
@@ -229,6 +269,7 @@ type BootOptionsBuilder struct {
 	isCertManagerInstalled           bool
 	isConsolePluginInstalled         bool
 	isClusterVersionInstalled        bool
+	consolePluginImageOverride       string
 	isDNSOperatorInstalled           bool
 	isLimitadorOperatorInstalled     bool
 	isAuthorinoOperatorInstalled     bool
@@ -489,8 +530,10 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		return nil, err
 	}
 
-	if !b.isConsolePluginInstalled || !b.isClusterVersionInstalled {
-		b.logger.Info("console plugin or openshift cluster version is not installed, skipping related watches and reconcilers")
+	b.consolePluginImageOverride = env.GetString(openshift.ConsolePluginImageOverrideEnvVar, "")
+
+	if !b.isConsolePluginInstalled {
+		b.logger.Info("console plugin API is not installed, skipping related watches and reconcilers")
 		return opts, nil
 	}
 
@@ -498,13 +541,19 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		controller.WithRunnable("consoleplugin watcher", controller.Watch(
 			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
-		controller.WithRunnable("cluster version watcher", controller.Watch(
+		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+		// Filter by name, not labels, so removing a managed label still triggers repair.
+		controller.WithRunnable("consoleplugin networkpolicy watcher", controller.Watch(
+			&networkingv1.NetworkPolicy{}, kuadrantv1beta1.NetworkPolicyResource, operatorNamespace,
+			controller.FilterResourcesByField[*networkingv1.NetworkPolicy]("metadata.name="+consoleplugin.NetworkPolicyName()))),
+	)
+	if b.isClusterVersionInstalled {
+		opts = append(opts, controller.WithRunnable("cluster version watcher", controller.Watch(
 			&configv1.ClusterVersion{},
 			openshift.ClusterVersionResource,
 			metav1.NamespaceAll,
-		)),
-		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
-	)
+		)), controller.WithObjectKinds(openshift.ClusterVersionGroupKind.GroupKind()))
+	}
 
 	return opts, nil
 }
@@ -601,6 +650,7 @@ func (b *BootOptionsBuilder) getLimitadorOperatorOptions() ([]controller.Control
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToLimitador,
 			kuadrantv1beta1.LinkLimitadorToDeployment,
+			kuadrantv1beta1.LinkLimitadorToNetworkPolicy,
 		),
 	)
 
@@ -644,6 +694,8 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() ([]controller.Control
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
+			kuadrantv1beta1.LinkAuthorinoToDeployment,
+			kuadrantv1beta1.LinkAuthorinoToNetworkPolicy,
 			authorino.LinkHTTPRouteRuleToAuthConfig,
 			authorino.LinkGRPCRouteRuleToAuthConfig,
 		),
@@ -811,14 +863,15 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
 			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
 			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
-			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
+			traceReconcileFunc("workflow.networkpolicy", NewNetworkPolicyReconciler(b.client).Subscription().Reconcile),
+			traceReconcileFunc("workflow.networkpolicyB", NewOperatorNetworkPolicyReconciler(b.client).Subscription().Reconcile),
 		},
 		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}
 
-	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {
+	if b.isConsolePluginInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile),
+			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace, b.consolePluginImageOverride).Subscription().Reconcile),
 		)
 	}
 

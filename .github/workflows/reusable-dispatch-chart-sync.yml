@@ -1,0 +1,64 @@
+# Reusable workflow for notifying kuadrant-operator when a component's chart changes.
+# Called by component repos to dispatch chart sync events.
+
+name: Reusable dispatch chart sync
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        required: true
+        type: string
+        description: Component name (e.g., dns-operator, limitador-operator)
+    secrets:
+      KUADRANT_DEV_PAT:
+        required: true
+        description: GitHub PAT for dispatching chart sync events
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve PR details
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.KUADRANT_DEV_PAT }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          PR_JSON=$(gh api "repos/$REPO/commits/$SHA/pulls" --jq '.[0] // empty')
+          if [ -n "$PR_JSON" ]; then
+            AUTHOR=$(echo "$PR_JSON" | jq -r '.user.login')
+            PR_URL=$(echo "$PR_JSON" | jq -r '.html_url')
+            PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
+            APPROVER=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate --slurp \
+              | jq -r 'flatten | [.[] | select(.state == "APPROVED")] | sort_by(.submitted_at) | last | .user.login // empty')
+          else
+            AUTHOR="$ACTOR"
+            PR_URL=""
+            APPROVER=""
+          fi
+          {
+            echo "author=$AUTHOR"
+            echo "pr-url=$PR_URL"
+            echo "approver=${APPROVER:-}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
+        with:
+          token: ${{ secrets.KUADRANT_DEV_PAT }}
+          repository: Kuadrant/kuadrant-operator
+          event-type: component-chart-sync
+          client-payload: >-
+            {
+              "component": ${{ toJSON(inputs.component) }},
+              "ref": ${{ toJSON(github.ref_name) }},
+              "actor": ${{ toJSON(steps.pr.outputs.author) }},
+              "commit-url": ${{ toJSON(format('https://github.com/{0}/commit/{1}', github.repository, github.sha)) }},
+              "pr-url": ${{ toJSON(steps.pr.outputs.pr-url) }},
+              "pr-approver": ${{ toJSON(steps.pr.outputs.approver) }}
+            }

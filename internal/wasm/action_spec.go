@@ -17,6 +17,31 @@ type ActionSpec struct {
 	Sources         []string
 	Bindings        []DataBinding
 	Execution       ExecutionMode
+
+	// Reservation carries Reserve/Commit-only parameters (RFC 0021). Unlike
+	// ratelimit.domain/hits_addend, these never need to be predicate-gated or
+	// merged across limits -- RateLimitReserveServiceName/RateLimitCommitServiceName
+	// are excluded from mergeableServices, so one ActionSpec always corresponds
+	// to exactly one limit -- so a typed field is used instead of the
+	// ConditionalData known-attr convention the mergeable rate-limit services use.
+	Reservation *ReservationSpec
+}
+
+// ReservationSpec carries per-limit reservation parameters for Reserve/Commit
+// actions (RFC 0021).
+type ReservationSpec struct {
+	// ID is a config-time per-limit identifier used to derive the filter-local
+	// store path for the reservation_id (see reservationStorePath).
+	ID string
+	// Amount is the CEL expression evaluating to the number of tokens to
+	// reserve on request arrival (uint).
+	Amount string
+	// TTL is the CEL expression evaluating to the reservation hold duration,
+	// or "" to leave it unset so Limitador applies its own default.
+	TTL string
+	// ActualAmount is the CEL expression evaluating to the actual tokens
+	// consumed, consumed by Commit (e.g. responseBodyJSON("/usage/total_tokens")).
+	ActualAmount string
 }
 
 type DataBinding struct {
@@ -60,13 +85,16 @@ const (
 	authResponseVar      = "auth_response"
 	rateLimitResponseVar = "ratelimit_response"
 	reportResponseVar    = "report_response"
+	reserveResponseVar   = "reserve_response"
+	commitResponseVar    = "commit_response"
 
 	AuthStorePath = "auth"
 )
 
 // IsGuard returns true if this spec produces a guard action (runs during request phase).
+// Report and Commit both run in the response phase, so they are not guards.
 func (s ActionSpec) IsGuard() bool {
-	return s.ServiceName != RateLimitReportServiceName
+	return s.ServiceName != RateLimitReportServiceName && s.ServiceName != RateLimitCommitServiceName
 }
 
 // ProducedStorePaths returns the store paths that this spec's onReply chain will produce.
@@ -88,6 +116,10 @@ func (s ActionSpec) Build() Action {
 		return s.buildRateLimit(rateLimitResponseVar, true, "ratelimit")
 	case RateLimitReportServiceName:
 		return s.buildRateLimit(reportResponseVar, false, "ratelimit_report")
+	case RateLimitReserveServiceName:
+		return s.buildReserve()
+	case RateLimitCommitServiceName:
+		return s.buildCommit()
 	default:
 		return NewFailAction("true", fmt.Sprintf("unknown service: %s", s.ServiceName)).
 			WithSources(s.Sources)
@@ -134,6 +166,17 @@ func BuildActions(specs []ActionSpec) []Action {
 				byDirection[ref.Direction][ref.Pointer] = entry
 			}
 		}
+		if spec.Reservation != nil {
+			for _, ref := range extractBodyRefs(spec.Reservation.ActualAmount) {
+				if byDirection[ref.Direction] == nil {
+					byDirection[ref.Direction] = make(map[string]refEntry)
+				}
+				entry := byDirection[ref.Direction][ref.Pointer]
+				entry.ref = ref
+				entry.sources = appendUnique(entry.sources, spec.Sources...)
+				byDirection[ref.Direction][ref.Pointer] = entry
+			}
+		}
 	}
 
 	if len(byDirection) == 0 {
@@ -165,12 +208,21 @@ func BuildActions(specs []ActionSpec) []Action {
 		// Build map expression: {"field1": bodyJSON("/path1"), "field2": bodyJSON("/path2")}
 		var mapEntries []string
 		var allSources []string
+		usedKeys := make(map[string]bool, len(pointers))
 		for _, pointer := range pointers {
 			entry := fields[pointer]
 			mapKey := entry.ref.FieldName
 			if leafCount[mapKey] > 1 {
 				mapKey = sanitizePointer(entry.ref.Pointer)
 			}
+			// sanitizePointer isn't guaranteed injective (e.g. "/a" and "/_/a" both
+			// sanitize to "a"), so disambiguate any residual collision deterministically
+			// rather than letting two distinct pointers silently share one store path.
+			base := mapKey
+			for n := 2; usedKeys[mapKey]; n++ {
+				mapKey = fmt.Sprintf("%s_%d", base, n)
+			}
+			usedKeys[mapKey] = true
 			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, mapKey, entry.ref.Original))
 			replacements[entry.ref.Original] = bodyRefStorePath(direction, mapKey)
 			allSources = appendUnique(allSources, entry.sources...)
@@ -241,6 +293,19 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 		newBindings[i] = DataBinding{Domain: b.Domain, Field: b.Field, Expression: newExpr}
 	}
 
+	newReservation := s.Reservation
+	if s.Reservation != nil {
+		newActualAmount := s.Reservation.ActualAmount
+		for original, storePath := range replacements {
+			newActualAmount = strings.ReplaceAll(newActualAmount, original, storePath)
+		}
+		if newActualAmount != s.Reservation.ActualAmount {
+			r := *s.Reservation
+			r.ActualAmount = newActualAmount
+			newReservation = &r
+		}
+	}
+
 	return ActionSpec{
 		ServiceName:     s.ServiceName,
 		Scope:           s.Scope,
@@ -249,6 +314,7 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 		Sources:         s.Sources,
 		Bindings:        newBindings,
 		Execution:       s.Execution,
+		Reservation:     newReservation,
 	}
 }
 
@@ -293,7 +359,7 @@ func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label strin
 
 	var onReply []Action
 	if isGuard {
-		onReply = buildRateLimitOnReply(responseVar)
+		onReply = buildRateLimitOnReply(responseVar, s.ServiceName == RateLimitCheckServiceName)
 	} else {
 		onReply = buildReportOnReply(responseVar)
 	}
@@ -305,7 +371,83 @@ func (s ActionSpec) buildRateLimit(responseVar string, isGuard bool, label strin
 		WithOnReply(onReply...)
 }
 
+// buildReserve materializes a Reserve action (RFC 0021): it reserves an estimated
+// token amount on request arrival (guard phase) and, on reply, stashes the
+// returned reservation_id at a per-limit filter-local store path for the paired
+// Commit action to read back.
+func (s ActionSpec) buildReserve() *GrpcAction {
+	var id string
+	if s.Reservation != nil {
+		id = s.Reservation.ID
+	}
+	request := buildReserveRequest(s.Scope, s.ConditionalData, s.Bindings, s.Reservation)
+	predicate := buildRateLimitPredicate(s.Predicates, s.ConditionalData)
+
+	return NewGrpcAction(predicate, reserveResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_reserve").
+		WithGuard(true).
+		WithExecution(s.Execution).
+		WithSources(s.Sources).
+		WithOnReply(buildReserveOnReply(reserveResponseVar, id)...)
+}
+
+// buildCommit materializes a Commit action (RFC 0021): on response it commits
+// the actual token usage against the reservation captured by the paired
+// Reserve action.
+//
+// There are two independent runtime facts: whether a reservation_id was
+// stored (a Reserve succeeded and held capacity) and whether the actual token
+// usage could be parsed from the upstream response. Commit is skipped
+// entirely only when neither is true (e.g. Reserve failed open on a gRPC
+// error/timeout AND the upstream response body doesn't carry a parseable
+// usage figure - a connection issue or a non-JSON error body) - there would
+// be nothing to release and nothing to report. Otherwise it always fires:
+//   - reservation held, usage parseable: normal commit.
+//   - reservation held, usage unparseable: commit with actual_amount 0, so
+//     the hold is still released without charging for an unknown amount.
+//   - no reservation, usage parseable: commit with an empty reservation_id,
+//     which Limitador treats like a plain Report (RFC 0021).
+func (s ActionSpec) buildCommit() *GrpcAction {
+	var id, rawActualAmount string
+	if s.Reservation != nil {
+		id = s.Reservation.ID
+		rawActualAmount = s.Reservation.ActualAmount
+	}
+	storePath := reservationStorePath(id)
+	// != null rather than has(): wasm-shim's dynamic kuadrant.* map inserts a
+	// null placeholder for any referenced-but-unstored leaf once a sibling
+	// path exists anywhere under the shared root, which makes has() report
+	// false positives for reservations that were never actually held.
+	hasReservation := fmt.Sprintf("%s != null", storePath)
+
+	amountKnown := "false"
+	if rawActualAmount != "" {
+		amountKnown = fmt.Sprintf("(%s) != null", rawActualAmount)
+	}
+
+	request := buildCommitRequest(s.Scope, s.ConditionalData, s.Bindings, storePath, hasReservation, rawActualAmount, amountKnown)
+	predicate := andPredicate(
+		buildRateLimitPredicate(s.Predicates, s.ConditionalData),
+		fmt.Sprintf("(%s) || (%s)", hasReservation, amountKnown),
+	)
+
+	return NewGrpcAction(predicate, commitResponseVar, s.ServiceName, request.ToCEL(), "ratelimit_commit").
+		WithGuard(false).
+		WithExecution(s.Execution).
+		WithSources(s.Sources).
+		WithOnReply(buildCommitOnReply(commitResponseVar)...)
+}
+
 // --- Predicate helpers ---
+
+func andPredicate(a, b string) string {
+	if a == "true" {
+		return b
+	}
+	if b == "true" {
+		return a
+	}
+	return fmt.Sprintf("(%s) && (%s)", a, b)
+}
 
 func buildActionPredicate(predicates []string) string {
 	return joinPredicates(predicates, "&&")
@@ -431,28 +573,74 @@ func referencesPendingPath(expr string, pendingPaths []string) bool {
 	return false
 }
 
-// bodyJSONPattern matches responseBodyJSON("...") and requestBodyJSON("...") with either quote style.
-var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(["']([^"']+)["']\)`)
+// bodyJSONPattern matches responseBodyJSON(...) and requestBodyJSON(...) calls, either with a single
+// quoted JSON pointer argument (e.g. responseBodyJSON("/usage/total_tokens")) or with an ordered list of
+// pointer candidates plus an optional type hint (e.g. responseBodyJSON(["/a", "/b"], "number")).
+// The list alternative only recognizes quoted elements (rather than stopping at the first "]") because
+// RFC 6901 reference tokens may legally contain "]".
+var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(\s*(\[\s*(?:"[^"]*"|'[^']*')(?:\s*,\s*(?:"[^"]*"|'[^']*'))*\s*\]|"[^"]*"|'[^']*')\s*(?:,\s*"([^"]*)")?\s*\)`)
+
+// pointerListItemPattern extracts individual quoted string literals from within a list literal argument.
+var pointerListItemPattern = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
 
 const (
 	responseBodyStorePath = "kuadrant.internal.response.body"
 	requestBodyStorePath  = "kuadrant.internal.request.body"
+
+	// reservationStorePathPrefix is the filter-local store-path namespace under
+	// which a Reserve action stashes the reservation_id returned by the ratelimit
+	// service, so its paired Commit action can read it back within the same
+	// request. Like the body paths, it stays filter-local (no host export needed).
+	// A per-limit segment is appended (see reservationStorePath) so concurrent
+	// reservations for different limits do not clobber one another.
+	reservationStorePathPrefix = "kuadrant.internal.tokenratelimit.reservation"
+	// pointerListKeySep separates ordered pointer candidates (plus trailing type hint) when building the
+	// canonical dedup/collision identity key for a list-form body ref.
+	pointerListKeySep = "\x1f"
 )
+
+// reservationStorePath returns the per-limit store path for a reservation id.
+// The id (a per-limit identifier shared by the paired Reserve and Commit specs)
+// is sanitized so it forms a single trailing path segment.
+func reservationStorePath(id string) string {
+	return reservationStorePathPrefix + "." + strings.ReplaceAll(id, ".", "_")
+}
 
 type bodyRef struct {
 	Original  string // the full matched call, e.g. responseBodyJSON("/usage/total_tokens")
 	Direction string // "response" or "request"
 	FieldName string // derived map key, e.g. "total_tokens"
-	Pointer   string // the JSON pointer, e.g. "/usage/total_tokens"
+	Pointer   string // identity key: the JSON pointer, or an ordered-list+type-hint canonical key
+}
+
+// identifierUnsafeChars matches any single character that is not safe within a bare CEL
+// identifier segment. Store paths and map-literal keys derived from a JSON Pointer are read
+// back via dot access (e.g. "kuadrant.internal.response.body.<segment>"), which CEL parses
+// with the same grammar as a plain identifier: an unescaped "-" is subtraction, "]" is a
+// syntax error, and a leading digit is illegal. RFC 6901 permits all of these in a pointer
+// token, so every derived segment must go through sanitizeIdentifier before being embedded
+// as CEL source.
+var identifierUnsafeChars = regexp.MustCompile(`[^A-Za-z0-9_]`)
+
+// sanitizeIdentifier rewrites s into a non-empty, CEL-identifier-safe string.
+func sanitizeIdentifier(s string) string {
+	sanitized := strings.Trim(identifierUnsafeChars.ReplaceAllString(s, "_"), "_")
+	if sanitized == "" {
+		return "_"
+	}
+	if sanitized[0] >= '0' && sanitized[0] <= '9' {
+		return "_" + sanitized
+	}
+	return sanitized
 }
 
 func bodyRefFieldName(jsonPointer string) string {
 	segments := strings.Split(strings.TrimPrefix(jsonPointer, "/"), "/")
-	return segments[len(segments)-1]
+	return sanitizeIdentifier(segments[len(segments)-1])
 }
 
-func sanitizePointer(jsonPointer string) string {
-	return strings.ReplaceAll(strings.TrimPrefix(jsonPointer, "/"), "/", "_")
+func sanitizePointer(pointer string) string {
+	return sanitizeIdentifier(strings.TrimPrefix(pointer, "/"))
 }
 
 func bodyRefStorePath(direction, fieldName string) string {
@@ -460,6 +648,21 @@ func bodyRefStorePath(direction, fieldName string) string {
 		return requestBodyStorePath + "." + fieldName
 	}
 	return responseBodyStorePath + "." + fieldName
+}
+
+// parsePointerList extracts the ordered quoted string literals from a list literal argument,
+// e.g. `["/a", "/b"]` -> ["/a", "/b"].
+func parsePointerList(listArg string) []string {
+	matches := pointerListItemPattern.FindAllStringSubmatch(listArg, -1)
+	pointers := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if strings.HasPrefix(m[0], `"`) {
+			pointers = append(pointers, m[1])
+		} else {
+			pointers = append(pointers, m[2])
+		}
+	}
+	return pointers
 }
 
 func extractBodyRefs(expr string) []bodyRef {
@@ -475,11 +678,28 @@ func extractBodyRefs(expr string) []bodyRef {
 			continue
 		}
 		seen[original] = true
+
+		arg, typeHint := m[2], m[3]
+
+		var fieldName, pointer string
+		if strings.HasPrefix(arg, "[") {
+			pointers := parsePointerList(arg)
+			if len(pointers) == 0 {
+				continue
+			}
+			fieldName = bodyRefFieldName(pointers[0])
+			pointer = strings.Join(pointers, pointerListKeySep) + pointerListKeySep + typeHint
+		} else {
+			p := strings.Trim(arg, `"'`)
+			fieldName = bodyRefFieldName(p)
+			pointer = p
+		}
+
 		refs = append(refs, bodyRef{
 			Original:  original,
 			Direction: m[1],
-			FieldName: bodyRefFieldName(m[2]),
-			Pointer:   m[2],
+			FieldName: fieldName,
+			Pointer:   pointer,
 		})
 	}
 	return refs
@@ -550,7 +770,7 @@ func buildAuthOnReply(name string) []Action {
 		).WithExportToHost(true),
 		NewHeadersAction(
 			fmt.Sprintf("has(%s.ok_response)", name),
-			"request",
+			HeaderTargetRequest,
 			fmt.Sprintf("%s.ok_response.headers", name),
 		),
 		NewFailAction(
@@ -578,6 +798,24 @@ func isRateLimitKnownAttr(data DataType) bool {
 		}
 	}
 	return false
+}
+
+// ReservationAmountCEL returns the CEL expression this spec carries for
+// reservation.amount (RFC 0021), wrapped in uint(), or "" if it carries none.
+func (s ActionSpec) ReservationAmountCEL() string {
+	if s.Reservation == nil || s.Reservation.Amount == "" {
+		return ""
+	}
+	return fmt.Sprintf("uint(%s)", s.Reservation.Amount)
+}
+
+// ReservationTTLCEL returns the CEL expression this spec carries for
+// reservation.ttl (RFC 0021), or "" if it carries none.
+func (s ActionSpec) ReservationTTLCEL() string {
+	if s.Reservation == nil {
+		return ""
+	}
+	return s.Reservation.TTL
 }
 
 func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string) string {
@@ -615,6 +853,17 @@ func buildRateLimitRequest(scope string, conditionalData []ConditionalData, bind
 		hitsAddend = "1u"
 	}
 
+	return RateLimitRequestCEL{
+		Domain:      domain,
+		HitsAddend:  hitsAddend,
+		Descriptors: collectDescriptors(conditionalData, bindings),
+	}
+}
+
+// collectDescriptors builds the descriptor list shared by the ratelimit, reserve
+// and commit requests: conditional-data descriptors (skipping known attrs) plus
+// a descriptor derived from bindings.
+func collectDescriptors(conditionalData []ConditionalData, bindings []DataBinding) []RateLimitDescriptorCEL {
 	var descriptors []RateLimitDescriptorCEL
 
 	if desc := conditionalDataToDescriptor(conditionalData); desc != nil {
@@ -625,10 +874,64 @@ func buildRateLimitRequest(scope string, conditionalData []ConditionalData, bind
 		descriptors = append(descriptors, *bindingDesc)
 	}
 
-	return RateLimitRequestCEL{
+	return descriptors
+}
+
+func buildReserveRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservation *ReservationSpec) ReserveRequestCEL {
+	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
+	if domain == "" {
+		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+	}
+
+	// amount is required by the message; the controller always emits it (with a
+	// repo-defined default when the policy omits it). The fallback here is purely
+	// defensive.
+	amount := "0u"
+	var ttl string
+	if reservation != nil {
+		if reservation.Amount != "" {
+			amount = fmt.Sprintf("uint(%s)", reservation.Amount)
+		}
+		// ttl is optional; leaving it empty omits the field so Limitador applies
+		// its own default.
+		ttl = reservation.TTL
+	}
+
+	return ReserveRequestCEL{
 		Domain:      domain,
-		HitsAddend:  hitsAddend,
-		Descriptors: descriptors,
+		Amount:      amount,
+		TTL:         ttl,
+		Descriptors: collectDescriptors(conditionalData, bindings),
+	}
+}
+
+// buildCommitRequest builds the CommitRequest CEL message. hasReservation and
+// amountKnown are the same CEL boolean expressions used by buildCommit to
+// decide whether to send Commit at all; rawActualAmount is the unwrapped
+// reservation.actual_amount expression (e.g. a responseBodyJSON(...) call, or
+// its hoisted store-path reference after BuildActions runs).
+func buildCommitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservationStorePath, hasReservation, rawActualAmount, amountKnown string) CommitRequestCEL {
+	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
+	if domain == "" {
+		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+	}
+
+	// Unparseable usage (connection issue, non-JSON/error body) still commits,
+	// releasing any held reservation without charging for an unknown amount.
+	actualAmount := "0u"
+	if rawActualAmount != "" {
+		actualAmount = fmt.Sprintf("(%s) ? uint(%s) : 0u", amountKnown, rawActualAmount)
+	}
+
+	// No reservation held (e.g. Reserve failed open) but usage is known: commit
+	// with an empty reservation_id, which Limitador treats like a plain Report.
+	reservationID := fmt.Sprintf(`(%s) ? %s : ""`, hasReservation, reservationStorePath)
+
+	return CommitRequestCEL{
+		Domain:        domain,
+		ReservationID: reservationID,
+		ActualAmount:  actualAmount,
+		Descriptors:   collectDescriptors(conditionalData, bindings),
 	}
 }
 
@@ -713,18 +1016,35 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 
 // --- RateLimit on_reply ---
 
-func buildRateLimitOnReply(name string) []Action {
+// tokenRateLimitDenyBody is an OpenAI-style JSON error, so OpenAI-compatible
+// clients (which expect a JSON error body, not plain text) can parse a
+// TokenRateLimitPolicy denial instead of failing to decode it.
+const tokenRateLimitDenyBody = `"{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"` //nolint:gosec
+
+// tokenRateLimitDenyContentTypeHeader pairs with tokenRateLimitDenyBody: without
+// an explicit content-type header, the DenyResponse defaults to none, and the
+// data plane serves the body as text/plain regardless of its actual content -
+// OpenAI-compatible clients then refuse to parse it as JSON.
+const tokenRateLimitDenyContentTypeHeader = `["content-type", "application/json"]` //nolint:gosec
+
+func buildRateLimitOnReply(name string, tokenBased bool) []Action {
+	denyBody := `"Too Many Requests\n"`
+	denyHeaders := fmt.Sprintf("%s.response_headers_to_add", name)
+	if tokenBased {
+		denyBody = tokenRateLimitDenyBody
+		denyHeaders = fmt.Sprintf("%s.response_headers_to_add + [%s]", name, tokenRateLimitDenyContentTypeHeader)
+	}
 	return []Action{
 		NewDenyAction(
 			fmt.Sprintf("%s.overall_code == 2", name),
 			fmt.Sprintf(
-				`DenyResponse{status: 429u, headers: %s.response_headers_to_add, body: "Too Many Requests\n"}`,
-				name,
+				`DenyResponse{status: 429u, headers: %s, body: %s}`,
+				denyHeaders, denyBody,
 			),
 		),
 		NewHeadersAction(
 			fmt.Sprintf("%s.overall_code == 1", name),
-			"response",
+			HeaderTargetResponse,
 			fmt.Sprintf("%s.response_headers_to_add", name),
 		),
 		NewFailAction(
@@ -739,6 +1059,44 @@ func buildReportOnReply(name string) []Action {
 		NewFailAction(
 			fmt.Sprintf("!has(%s.overall_code)", name),
 			"Rate limit report failed: invalid gRPC response",
+		).WithTerminal(false).WithGuard(false),
+	}
+}
+
+// --- Reserve/Commit on_reply ---
+
+// buildReserveOnReply handles the ReserveResponse in the request (guard) phase:
+//   - code OVER_LIMIT (2): deny the request with 429.
+//   - code OK (1) with a reservation_id: stash the id at the per-limit store path
+//     so the paired Commit can read it back. A missing reservation_id (e.g.
+//     failed-open) leaves the path unset; Commit still fires (RFC 0021), just
+//     with an empty reservation_id, degrading to Report-style accounting.
+//   - any other code: fail (invalid/unknown response).
+func buildReserveOnReply(name, id string) []Action {
+	return []Action{
+		NewDenyAction(
+			fmt.Sprintf("%s.code == 2", name),
+			fmt.Sprintf(`DenyResponse{status: 429u, headers: [%s], body: %s}`, tokenRateLimitDenyContentTypeHeader, tokenRateLimitDenyBody),
+		),
+		NewStoreAction(
+			fmt.Sprintf("%s.code == 1 && has(%s.reservation_id)", name, name),
+			reservationStorePath(id),
+			fmt.Sprintf("%s.reservation_id", name),
+		),
+		NewFailAction(
+			fmt.Sprintf("%s.code != 1 && %s.code != 2", name, name),
+			fmt.Sprintf("Unknown reserve response code from %s", name),
+		),
+	}
+}
+
+// buildCommitOnReply handles the CommitResponse in the response phase. There is
+// nothing to enforce on a commit; a malformed response is a non-terminal failure.
+func buildCommitOnReply(name string) []Action {
+	return []Action{
+		NewFailAction(
+			fmt.Sprintf("!has(%s.reservation_released)", name),
+			"Reserve commit failed: invalid gRPC response",
 		).WithTerminal(false).WithGuard(false),
 	}
 }

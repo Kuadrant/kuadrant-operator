@@ -248,6 +248,138 @@ func extensionName(i int) string {
 	return "ext-" + string(rune('a'+i))
 }
 
+// fakeClock is a controllable time source for session-liveness tests.
+type fakeClock struct {
+	t time.Time
+}
+
+func (c *fakeClock) now() time.Time { return c.t }
+
+func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+func newClockedSessionStore(ttl time.Duration) (*SessionStore, *fakeClock) {
+	store := newTestSessionStore()
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	store.now = clock.now
+	store.SetSessionTTL(ttl)
+	return store, clock
+}
+
+func TestSessionStore_Touch_KeepsSessionFresh(t *testing.T) {
+	store, clock := newClockedSessionStore(45 * time.Second)
+
+	token, err := store.CreateSession("test-extension", "TestPolicy")
+	if err != nil {
+		t.Fatalf("expected session creation to succeed, got: %v", err)
+	}
+
+	clock.advance(40 * time.Second)
+	store.Touch(token)
+	clock.advance(40 * time.Second)
+
+	if store.isStaleLocked(store.sessions[token]) {
+		t.Fatal("expected session to be fresh after Touch within TTL")
+	}
+}
+
+func TestSessionStore_Touch_UnknownTokenIgnored(t *testing.T) {
+	store, _ := newClockedSessionStore(45 * time.Second)
+
+	store.Touch("nonexistent-token")
+
+	if _, ok := store.sessions["nonexistent-token"]; ok {
+		t.Fatal("expected Touch to ignore an unknown token")
+	}
+}
+
+func TestSessionStore_ReapStale(t *testing.T) {
+	store, clock := newClockedSessionStore(45 * time.Second)
+
+	staleToken, _ := store.CreateSession("stale-extension", "StalePolicy")
+	freshToken, _ := store.CreateSession("fresh-extension", "FreshPolicy")
+
+	clock.advance(46 * time.Second)
+	store.Touch(freshToken)
+
+	revoked := store.ReapStale()
+
+	if len(revoked) != 1 || revoked[0] != "stale-extension" {
+		t.Fatalf("expected only stale-extension to be reaped, got: %v", revoked)
+	}
+	if _, ok := store.ValidateSession(staleToken); ok {
+		t.Fatal("expected stale session to be revoked")
+	}
+	if _, ok := store.ValidateSession(freshToken); !ok {
+		t.Fatal("expected fresh session to survive reaping")
+	}
+}
+
+func TestSessionStore_CreateSession_SupersedesStaleSameIdentity(t *testing.T) {
+	store, clock := newClockedSessionStore(45 * time.Second)
+
+	oldToken, err := store.CreateSession("test-extension", "TestPolicy")
+	if err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
+	}
+
+	clock.advance(46 * time.Second)
+
+	newToken, err := store.CreateSession("test-extension", "TestPolicy")
+	if err != nil {
+		t.Fatalf("expected handshake to supersede a stale session, got: %v", err)
+	}
+	if newToken == oldToken {
+		t.Fatal("expected a fresh session token after superseding")
+	}
+	if _, ok := store.ValidateSession(oldToken); ok {
+		t.Fatal("expected the stale session token to be invalid")
+	}
+}
+
+func TestSessionStore_CreateSession_RejectsFreshSameIdentity(t *testing.T) {
+	store, clock := newClockedSessionStore(45 * time.Second)
+
+	if _, err := store.CreateSession("test-extension", "TestPolicy"); err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
+	}
+
+	clock.advance(44 * time.Second)
+
+	_, err := store.CreateSession("test-extension", "TestPolicy")
+	if !errors.Is(err, ErrAlreadyConnected) {
+		t.Fatalf("expected ErrAlreadyConnected for a fresh session, got: %v", err)
+	}
+}
+
+func TestSessionStore_CreateSession_SupersedesStalePolicyKindOwner(t *testing.T) {
+	store, clock := newClockedSessionStore(45 * time.Second)
+
+	if _, err := store.CreateSession("extension-a", "SharedPolicy"); err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
+	}
+
+	clock.advance(46 * time.Second)
+
+	if _, err := store.CreateSession("extension-b", "SharedPolicy"); err != nil {
+		t.Fatalf("expected a new owner to supersede a stale policy-kind claim, got: %v", err)
+	}
+}
+
+func TestSessionStore_CreateSession_RejectsFreshPolicyKindOwner(t *testing.T) {
+	store, clock := newClockedSessionStore(45 * time.Second)
+
+	if _, err := store.CreateSession("extension-a", "SharedPolicy"); err != nil {
+		t.Fatalf("expected first session creation to succeed, got: %v", err)
+	}
+
+	clock.advance(44 * time.Second)
+
+	_, err := store.CreateSession("extension-b", "SharedPolicy")
+	if !errors.Is(err, ErrPolicyKindTaken) {
+		t.Fatalf("expected ErrPolicyKindTaken for a fresh owner, got: %v", err)
+	}
+}
+
 func TestSessionStore_Warmup_OpenByDefault(t *testing.T) {
 	store := newTestSessionStore()
 

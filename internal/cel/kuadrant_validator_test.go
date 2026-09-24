@@ -94,11 +94,9 @@ func TestValidateTokenRateLimitGuardRejectsResponseBodyPredicate(t *testing.T) {
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitCheckServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Predicates: []string{`responseBodyJSON("/object") != "error"`},
-			},
-		},
+		ConditionalData: []wasm.ConditionalData{{
+			Predicates: []string{`responseBodyJSON("/object") != "error"`},
+		}},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
@@ -114,11 +112,9 @@ func TestValidateTokenRateLimitGuardAllowsRequestBodyPredicate(t *testing.T) {
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitCheckServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Predicates: []string{`requestBodyJSON("/model") == "gpt-4"`},
-			},
-		},
+		ConditionalData: []wasm.ConditionalData{{
+			Predicates: []string{`requestBodyJSON("/model") == "gpt-4"`},
+		}},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
@@ -134,11 +130,9 @@ func TestValidateTokenRateLimitReportAllowsResponseBodyPredicate(t *testing.T) {
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitReportServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Predicates: []string{`responseBodyJSON("/object") != "error"`},
-			},
-		},
+		ConditionalData: []wasm.ConditionalData{{
+			Predicates: []string{`responseBodyJSON("/object") != "error"`},
+		}},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
@@ -154,11 +148,9 @@ func TestValidateTokenRateLimitGuardDoesNotMatchFunctionNameInStringLiteral(t *t
 	wasmAction := wasm.ActionSpec{
 		ServiceName: wasm.RateLimitCheckServiceName,
 		Scope:       "scope",
-		ConditionalData: []wasm.ConditionalData{
-			{
-				Predicates: []string{`"responseBodyJSON('/object')" == "responseBodyJSON('/object')"`},
-			},
-		},
+		ConditionalData: []wasm.ConditionalData{{
+			Predicates: []string{`"responseBodyJSON('/object')" == "responseBodyJSON('/object')"`},
+		}},
 	}
 	builder := NewRootValidatorBuilder()
 	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
@@ -168,6 +160,63 @@ func TestValidateTokenRateLimitGuardDoesNotMatchFunctionNameInStringLiteral(t *t
 	}
 
 	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
+func TestValidateWasmActionReservationAmountInvalid(t *testing.T) {
+	// reservation.amount is always wrapped in uint(...) before it reaches
+	// ValidateWasmActionSpec (see ActionSpec.ReservationAmountCEL), so a
+	// malformed user expression surfaces as a CEL type-check error rather
+	// than the output-type guard.
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       "scope",
+		Reservation: &wasm.ReservationSpec{Amount: "duration('1s')"},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "found no matching overload")
+}
+
+func TestValidateWasmActionReservationTTLInvalidType(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       "scope",
+		Reservation: &wasm.ReservationSpec{TTL: "'30s'"},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.ErrorContains(t, ValidateWasmActionSpec(wasmAction, validator), "reservation ttl expression must evaluate to duration")
+}
+
+func TestValidateWasmActionReservationValid(t *testing.T) {
+	wasmAction := wasm.ActionSpec{
+		ServiceName: wasm.RateLimitReserveServiceName,
+		Scope:       "scope",
+		Reservation: &wasm.ReservationSpec{Amount: "5000", TTL: "duration('30s')"},
+	}
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, "tokenratelimit", cel.AnyType)
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
+}
+
+func TestPolicyKindFromWasmServiceName_ReserveAndCommit(t *testing.T) {
+	assert.Equal(t, policyKindFromWasmServiceName(wasm.RateLimitReserveServiceName), TokenRateLimitPolicyKind)
+	assert.Equal(t, policyKindFromWasmServiceName(wasm.RateLimitCommitServiceName), TokenRateLimitPolicyKind)
 }
 
 func TestNewIssue(t *testing.T) {

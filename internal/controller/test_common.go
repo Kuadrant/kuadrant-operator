@@ -25,6 +25,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -43,6 +44,7 @@ import (
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -60,9 +62,34 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
-func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
+func waitForControlPlaneReady(s *runtime.Scheme, cfg *rest.Config) {
+	ctx := context.Background()
+	By("waiting for KuadrantControlPlane to be ready")
+	waitClient, err := client.New(cfg, client.Options{Scheme: s})
+	Expect(err).ToNot(HaveOccurred())
+	Eventually(func(g Gomega) {
+		cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+		g.Expect(waitClient.Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+		g.Expect(cp.Status.ObservedGeneration).To(BeNumerically(">", 0))
+		cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1alpha1.ControlPlaneConditionReady)
+		g.Expect(cond).ToNot(BeNil())
+		g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+	}).WithTimeout(time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+}
+
+func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config, waitControlPlaneReady bool) {
 	ctx := context.Background()
 	logger := log.Log
+
+	// USE_EXISTING_OPERATOR=true skips in-process manager startup and uses the existing
+	// cluster installation instead. Useful for testing against a live cluster.
+	if os.Getenv("USE_EXISTING_OPERATOR") == "true" {
+		By("skipping in-process operator setup, using existing cluster installation")
+		if waitControlPlaneReady {
+			waitForControlPlaneReady(s, cfg)
+		}
+		return
+	}
 
 	operatorNamespace := "kuadrant-system"
 
@@ -75,6 +102,7 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		Scheme:                 s,
 		HealthProbeBindAddress: "0",
 		Metrics:                metricsserver.Options{BindAddress: "0"},
+		Logger:                 logger,
 	})
 	Expect(err).ToNot(HaveOccurred())
 
@@ -97,17 +125,9 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		Expect(err).ToNot(HaveOccurred())
 	}()
 
-	// Wait for control plane to be ready before tests start.
-	By("waiting for KuadrantControlPlane to be ready")
-	waitClient, err := client.New(cfg, client.Options{Scheme: s})
-	Expect(err).ToNot(HaveOccurred())
-	Eventually(func(g Gomega) {
-		cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-		g.Expect(waitClient.Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
-		g.Expect(cp.Status.ObservedGeneration).To(BeNumerically(">", 0))
-		cond := meta.FindStatusCondition(cp.Status.Conditions, kuadrantv1alpha1.ControlPlaneConditionReady)
-		g.Expect(cond).ToNot(BeNil())
-	}).WithTimeout(2 * time.Minute).WithPolling(2 * time.Second).Should(Succeed())
+	if waitControlPlaneReady {
+		waitForControlPlaneReady(s, cfg)
+	}
 }
 
 // SharedConfig contains minimum cluster connection config that can be safely marshalled as rest.Config is unsafe to marshall

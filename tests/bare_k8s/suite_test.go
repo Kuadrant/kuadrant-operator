@@ -67,7 +67,9 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	controllers.SetupKuadrantOperatorForTest(controllers.BootstrapScheme(), cfg)
+	// Skip KCP readiness check on bare-k8s: mcp-gateway requires GatewayAPI CRDs to start.
+	// Bare-k8s has no gateway provider installed, so waiting for Ready would timeout.
+	controllers.SetupKuadrantOperatorForTest(controllers.BootstrapScheme(), cfg, false)
 
 	data := controllers.MarshalConfig(cfg)
 

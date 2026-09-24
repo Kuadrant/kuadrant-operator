@@ -13,7 +13,21 @@
 |-----------|-----------------------------------|:------------:|--------------------------------------|
 | `observability`    | [Observability](#observability)     | No | Kuadrant observability configuration. |
 | `mtls`  | [mTLS](#mtls) |      No      | Two way authentication between kuadrant components. |
-| `components`  | [Components](#components) |      No      | Optional Kuadrant components configuration. |
+| `tokenRateLimiting` | [TokenRateLimiting](#tokenratelimiting) | No | Cluster-wide behavior for TokenRateLimitPolicy enforcement. |
+| `components`  | [Components](#components) |      No      | **Deprecated:** ignored. Kept only for backwards compatibility. |
+
+#### TokenRateLimiting
+
+Configures cluster-wide behavior for every `TokenRateLimitPolicy` in the cluster.
+
+| **Field** | **Type** | **Required** | **Description**                      |
+|-----------|----------|:------------:|--------------------------------------|
+| `mode`    | String   | No | Enforcement mode for token limits. One of `Reservation` (default) or `Optimistic`. |
+
+- **`Reservation`** (default): On request arrival the gateway *reserves* an estimated token amount from Limitador and, once the upstream responds, *commits* the actual usage (releasing the difference). This closes the race window that exists between checking and reporting under concurrency. See [RFC 0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md). Reservation behavior per limit is tuned with [`spec.limits.<name>.reservation`](tokenratelimitpolicy.md#reservation) on the `TokenRateLimitPolicy`. **The reserved amount defaults to `0` (no capacity held) when not set explicitly** — this makes Reservation mode behave like Optimistic for policies that don't opt in, so upgrading is behavior-neutral; see [`reservation`](tokenratelimitpolicy.md#reservation) for details.
+- **`Optimistic`**: On request arrival the gateway checks the limit with `hits_addend=0` and, once the upstream responds, reports the actual usage. Simpler, but two concurrent requests can both pass the check before either reports, so the limit can be briefly overshot.
+
+The mode is cluster-wide: it is not settable per policy. When `spec.tokenRateLimiting` is omitted, `Reservation` is used.
 
 #### mTLS
 
@@ -94,15 +108,19 @@ Configures distributed tracing integration for request flows. It enables tracing
 
 #### Components
 
+> **Deprecated:** This section is kept only for backwards compatibility and is ignored by the operator. The developer portal is now enabled by default (GA) and cannot be turned off.
+
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `developerPortal`    | [DeveloperPortal](#developerportal)     |  No | Developer portal integration configuration. |
+| `developerPortal`    | [DeveloperPortal](#developerportal)     |  No | **Deprecated:** ignored no-op, kept only for backwards compatibility. |
 
 ##### DeveloperPortal
 
+> **Deprecated:** This field is ignored. The developer portal (including the APIProduct and APIKeyRequest CRDs) is always enabled as of GA. The field is retained only for backwards compatibility and has no effect regardless of its value.
+
 | **Field** | **Type**                          | **Required** | **Description**                      |
 |-----------|-----------------------------------|:------------:|--------------------------------------|
-| `enabled`    | Boolean     |  No | Enable the developer portal integration including APIProduct and APIKeyRequest CRDs. Default: `false` |
+| `enabled`    | Boolean     |  No | **Deprecated:** ignored. The developer portal is always enabled; setting this to `true` or `false` has no effect. |
 
 ### KuadrantStatus
 

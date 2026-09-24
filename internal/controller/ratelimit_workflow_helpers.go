@@ -225,6 +225,19 @@ func TokenLimitNameToLimitadorIdentifier(trlpKey k8stypes.NamespacedName, unique
 	return identifier
 }
 
+// ResponseBodyJSONTotalTokensCEL builds the CEL call used to extract total token usage from the response
+// body: an ordered list of JSON Pointer candidates plus a "number" type hint, so the wasm data plane skips
+// a present-but-non-numeric candidate and falls through to the next one. Exported so integration tests
+// can derive the expected CEL for TokenRateLimitPolicy's built-in defaults without duplicating the
+// quoting logic (see tests/istio and tests/envoygateway).
+func ResponseBodyJSONTotalTokensCEL(totalTokensPointers []string) string {
+	quoted := make([]string, len(totalTokensPointers))
+	for i, pointer := range totalTokensPointers {
+		quoted[i] = fmt.Sprintf("%q", pointer)
+	}
+	return fmt.Sprintf(`responseBodyJSON([%s], "number")`, strings.Join(quoted, ", "))
+}
+
 const (
 	// defaultReservationAmount is the flat number of tokens reserved on request
 	// arrival when a TokenLimit does not specify spec...reservation.amount. The
@@ -241,10 +254,6 @@ const (
 	// describes requires setting reservation.amount to a real, non-zero
 	// estimate of tokens per request.
 	defaultReservationAmount = "0"
-
-	// tokenUsageBodyRef is the response-body reference resolving to the number of
-	// tokens actually consumed by the upstream (OpenAI-compatible usage schema).
-	tokenUsageBodyRef = `responseBodyJSON("/usage/total_tokens")`
 )
 
 // wasmActionSpecsFromTokenLimit builds the wasm action specs for a single token
@@ -258,7 +267,12 @@ const (
 // timeout) applied as the reservation TTL when the limit does not set its own; it
 // may be empty (leaving ttl unset so Limitador defaults it) and is ignored
 // outside Reservation mode.
-func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates, mode kuadrantv1beta1.TokenRateLimitingMode, defaultTTL string) []wasm.ActionSpec {
+//
+// totalTokensPointers is the effective, resolved ordered list of JSON Pointer
+// candidates (RFC 0024 dataExtraction, defaulted by the caller) used to extract
+// actual token usage from the response body -- shared by both modes' response-phase
+// action (Report's hits_addend, Commit's actual_amount).
+func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, topLevelPredicates kuadrantv1.WhenPredicates, mode kuadrantv1beta1.TokenRateLimitingMode, defaultTTL string, totalTokensPointers []string) []wasm.ActionSpec {
 	predicates := make([]string, 0, len(topLevelPredicates)+len(tokenLimit.When))
 	for _, pred := range topLevelPredicates {
 		predicates = append(predicates, pred.Predicate)
@@ -290,14 +304,14 @@ func wasmActionSpecsFromTokenLimit(tokenLimit *kuadrantv1alpha1.TokenLimit, limi
 	}
 
 	if mode == kuadrantv1beta1.TokenRateLimitingModeReservation {
-		return tokenReservationSpecs(tokenLimit, limitIdentifier, scope, sourcePolicyLocator, predicates, commonData, defaultTTL)
+		return tokenReservationSpecs(tokenLimit, limitIdentifier, scope, sourcePolicyLocator, predicates, commonData, defaultTTL, totalTokensPointers)
 	}
-	return tokenCheckReportSpecs(scope, sourcePolicyLocator, predicates, commonData)
+	return tokenCheckReportSpecs(scope, sourcePolicyLocator, predicates, commonData, totalTokensPointers)
 }
 
 // tokenCheckReportSpecs builds the request-phase check (hits_addend=0) and
 // response-phase report (hits_addend=actual usage) specs for Optimistic mode.
-func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType) []wasm.ActionSpec {
+func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType, totalTokensPointers []string) []wasm.ActionSpec {
 	// Independent copies because each phase carries a different hits_addend.
 	requestPhaseData := make([]wasm.DataType, 0, len(commonData)+1)
 	requestPhaseData = append(requestPhaseData, commonData...)
@@ -325,7 +339,7 @@ func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predic
 		Value: &wasm.Expression{
 			ExpressionItem: wasm.ExpressionItem{
 				Key:   "ratelimit.hits_addend",
-				Value: tokenUsageBodyRef,
+				Value: ResponseBodyJSONTotalTokensCEL(totalTokensPointers),
 			},
 		},
 	})
@@ -350,7 +364,7 @@ func tokenCheckReportSpecs(scope ActionScope, sourcePolicyLocator string, predic
 // amount is required and defaults to defaultReservationAmount when the policy
 // omits it. ttl is optional: the policy value wins, else the route backendRequest
 // timeout (defaultTTL), else it is left unset for Limitador to default.
-func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType, defaultTTL string) []wasm.ActionSpec {
+func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentifier string, scope ActionScope, sourcePolicyLocator string, predicates []string, commonData []wasm.DataType, defaultTTL string, totalTokensPointers []string) []wasm.ActionSpec {
 	amount := defaultReservationAmount
 	ttl := ""
 	if defaultTTL != "" {
@@ -392,7 +406,7 @@ func tokenReservationSpecs(tokenLimit *kuadrantv1alpha1.TokenLimit, limitIdentif
 		},
 		Reservation: &wasm.ReservationSpec{
 			ID:           limitIdentifier,
-			ActualAmount: tokenUsageBodyRef,
+			ActualAmount: ResponseBodyJSONTotalTokensCEL(totalTokensPointers),
 		},
 	}
 
@@ -436,19 +450,29 @@ func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLim
 		return strings.Compare(a.Key, b.Key)
 	})
 
-	topLevelRules, limitRules := lo.FilterReject(rulesEntries,
+	specialRules, limitRules := lo.FilterReject(rulesEntries,
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
-			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates
+			return r.Key == kuadrantv1.RulesKeyTopLevelPredicates || r.Key == kuadrantv1alpha1.RulesKeyDataExtraction
 		},
 	)
 
 	var topLevelWhenPredicates kuadrantv1.WhenPredicates
-	if len(topLevelRules) > 0 {
-		if len(topLevelRules) > 1 {
-			panic("token rate limit policy with multiple top level 'when' predicate lists")
+	var dataExtraction *kuadrantv1alpha1.DataExtraction
+	for _, r := range specialRules {
+		switch r.Key {
+		case kuadrantv1.RulesKeyTopLevelPredicates:
+			if topLevelWhenPredicates != nil {
+				panic("token rate limit policy with multiple top level 'when' predicate lists")
+			}
+			topLevelWhenPredicates = r.Value.GetSpec().(kuadrantv1.WhenPredicates)
+		case kuadrantv1alpha1.RulesKeyDataExtraction:
+			if dataExtraction != nil {
+				panic("token rate limit policy with multiple top level 'dataExtraction' rules")
+			}
+			dataExtraction = r.Value.GetSpec().(*kuadrantv1alpha1.DataExtraction)
 		}
-		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1.WhenPredicates)
 	}
+	totalTokensPointers := dataExtraction.ResponseTotalTokensPointers()
 
 	var allSpecs []wasm.ActionSpec
 	for _, r := range limitRules {
@@ -466,7 +490,7 @@ func buildWasmActionSpecsForTokenRateLimit(effectivePolicy EffectiveTokenRateLim
 		sourcePolicyLocator := source.GetLocator()
 
 		// TokenRateLimitPolicy generates multiple actions per limit (request + response phase)
-		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates, mode, reservationDefaultTTL)
+		tokenSpecs := wasmActionSpecsFromTokenLimit(limitSpec, limitIdentifier, scope, sourcePolicyLocator, topLevelWhenPredicates, mode, reservationDefaultTTL, totalTokensPointers)
 		allSpecs = append(allSpecs, tokenSpecs...)
 	}
 

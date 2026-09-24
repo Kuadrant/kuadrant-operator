@@ -273,6 +273,114 @@ func TestTokenRateLimitPolicy_Proper(t *testing.T) {
 	}
 }
 
+func TestDataExtraction_ResponseTotalTokensPointers(t *testing.T) {
+	tests := []struct {
+		name     string
+		d        *DataExtraction
+		expected []string
+	}{
+		{
+			name:     "nil receiver falls back to defaults",
+			d:        nil,
+			expected: DefaultTotalTokensPointers,
+		},
+		{
+			name:     "nil response falls back to defaults",
+			d:        &DataExtraction{},
+			expected: DefaultTotalTokensPointers,
+		},
+		{
+			name:     "empty totalTokens falls back to defaults",
+			d:        &DataExtraction{Response: ResponseDataExtraction{}},
+			expected: DefaultTotalTokensPointers,
+		},
+		{
+			name: "explicit totalTokens overrides defaults",
+			d: &DataExtraction{Response: ResponseDataExtraction{
+				ResponseDataExtractionKeyTotalTokens: {"/custom/pointer"},
+			}},
+			expected: []string{"/custom/pointer"},
+		},
+		{
+			name: "unrelated key falls back to defaults",
+			d: &DataExtraction{Response: ResponseDataExtraction{
+				"promptTokens": {"/usage/prompt_tokens"},
+			}},
+			expected: DefaultTotalTokensPointers,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.d.ResponseTotalTokensPointers()
+			if len(got) != len(tt.expected) {
+				t.Fatalf("got %v, want %v", got, tt.expected)
+			}
+			for i := range got {
+				if got[i] != tt.expected[i] {
+					t.Errorf("got[%d] = %q, want %q", i, got[i], tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestTokenRateLimitPolicy_Rules_DataExtraction(t *testing.T) {
+	policy := &TokenRateLimitPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "trlp", Namespace: "ns"},
+		Spec: TokenRateLimitPolicySpec{
+			TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+				Limits: map[string]TokenLimit{"test": {}},
+				DataExtraction: &DataExtraction{
+					Response: ResponseDataExtraction{ResponseDataExtractionKeyTotalTokens: {"/usage/total_tokens"}},
+				},
+			},
+		},
+	}
+
+	rules := policy.Rules()
+	rule, ok := rules[RulesKeyDataExtraction]
+	if !ok {
+		t.Fatalf("expected rules to contain %q", RulesKeyDataExtraction)
+	}
+	dataExtraction, ok := rule.GetSpec().(*DataExtraction)
+	if !ok {
+		t.Fatalf("expected rule spec to be *DataExtraction, got %T", rule.GetSpec())
+	}
+	totalTokens := dataExtraction.Response[ResponseDataExtractionKeyTotalTokens]
+	if len(totalTokens) != 1 || totalTokens[0] != "/usage/total_tokens" {
+		t.Errorf("unexpected TotalTokens: %v", totalTokens)
+	}
+
+	// round-trip through SetRules
+	roundTripped := &TokenRateLimitPolicy{}
+	roundTripped.SetRules(rules)
+	if roundTripped.Spec.Proper().DataExtraction == nil {
+		t.Fatal("expected DataExtraction to be set after SetRules")
+	}
+	if got := roundTripped.Spec.Proper().DataExtraction.ResponseTotalTokensPointers(); len(got) != 1 || got[0] != "/usage/total_tokens" {
+		t.Errorf("unexpected TotalTokens after round-trip: %v", got)
+	}
+	if _, ok := roundTripped.Spec.Proper().Limits["test"]; !ok {
+		t.Error("expected limits to survive round-trip")
+	}
+}
+
+func TestTokenRateLimitPolicy_Rules_NoDataExtraction(t *testing.T) {
+	policy := &TokenRateLimitPolicy{
+		Spec: TokenRateLimitPolicySpec{
+			TokenRateLimitPolicySpecProper: TokenRateLimitPolicySpecProper{
+				Limits: map[string]TokenLimit{"test": {}},
+			},
+		},
+	}
+
+	rules := policy.Rules()
+	if _, ok := rules[RulesKeyDataExtraction]; ok {
+		t.Error("did not expect a dataExtraction rule when unset")
+	}
+}
+
 func TestTokenLimit_CountersAsStringList(t *testing.T) {
 	tests := []struct {
 		name     string

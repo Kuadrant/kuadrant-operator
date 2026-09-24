@@ -16,19 +16,19 @@ Kuadrant's Token Rate Limit implementation extends the Envoy [Rate Limit Service
 
 1. On incoming request, the gateway evaluates matching rules and predicates from TokenRateLimitPolicy resources
 2. If the request matches, the gateway prepares rate limit descriptors and monitors the response
-3. After receiving the response, the gateway extracts `usage.total_tokens` from the response body
+3. After receiving the response, the gateway extracts total token usage from the response body by trying an ordered list of JSON Pointer candidates until one resolves (see [Data Extraction](../reference/tokenratelimitpolicy.md#dataextraction))
 4. The gateway sends a [RateLimitRequest](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto#service-ratelimit-v3-ratelimitrequest) to Limitador with the actual token count as `hits_addend`
 5. Limitador tracks the cumulative token usage and responds with either `OK` or `OVER_LIMIT`
 
 This approach ensures accurate usage-based rate limiting where limits are enforced based on actual AI/LLM token consumption rather than simple request counts.
 
-**Important**: TokenRateLimitPolicy supports both non-streaming and streaming OpenAI-style API responses. For streaming, the request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event. Only OpenAI-style completions responses are supported today — this includes `/v1/chat/completions` and `/v1/completions`, and any backend implementing the OpenAI-compatible API such as vLLM and kServe. Other provider formats (e.g. Anthropic, Google Gemini) are not yet parsed; see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864).
+**Important**: TokenRateLimitPolicy supports both non-streaming and streaming API responses. Out of the box, the built-in candidate list covers OpenAI, Azure OpenAI, OpenAI-compatible servers (vLLM, kServe, Ollama, etc.), the OpenAI Responses API (streaming and non-streaming), Google Gemini, and AWS Bedrock Converse API (non-streaming) response shapes. `spec.dataExtraction.response.totalTokens` lets you customize or extend this list for other providers — see the [API reference](../reference/tokenratelimitpolicy.md#dataextraction). For streaming requests, many providers only include token usage in the final stream event when the client explicitly opts in — for example, OpenAI requires `"stream_options": { "include_usage": true }` in the request body; check your provider's documentation for the equivalent header or field.
 
 ### Enforcement modes
 
 Because the real token cost of a request is only known *after* the upstream responds, the gateway has to decide what to do on the way in. This is controlled cluster-wide by the Kuadrant CR field `spec.tokenRateLimiting.mode`, which applies to every TokenRateLimitPolicy in the cluster:
 
-- **`Reservation`** (default): On request arrival the gateway *reserves* an estimated token amount from Limitador. If the reservation would exceed the limit, the request is rejected with `429` before it ever reaches the upstream. Once the upstream responds, the gateway *commits* the actual `usage.total_tokens` and releases the unused portion of the reservation. This closes the race window where many concurrent requests could each pass a zero-cost check before any of them reports usage. The reservation is designed per RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md), and the reserved amount / hold time are tuned per limit with [`reservation`](../reference/tokenratelimitpolicy.md#reservation).
+- **`Reservation`** (default): On request arrival the gateway *reserves* an estimated token amount from Limitador. If the reservation would exceed the limit, the request is rejected with `429` before it ever reaches the upstream. Once the upstream responds, the gateway *commits* the actual token usage — resolved via [`dataExtraction`](../reference/tokenratelimitpolicy.md#dataextraction) — and releases the unused portion of the reservation. This closes the race window where many concurrent requests could each pass a zero-cost check before any of them reports usage. The reservation is designed per RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md), and the reserved amount / hold time are tuned per limit with [`reservation`](../reference/tokenratelimitpolicy.md#reservation).
 
   Reservation still allows some overshoot, independently of the race above: Limitador caps every `Reserve` call to at most `spec.reservations.maxFraction` of a limit's `max_value` (a Limitador CR field, default `0.5`). So no single reservation can ever claim the whole limit — it takes at least `1/maxFraction` requests' worth of held reservations (2, by default) before Limitador itself starts rejecting on capacity. Because each of those holds is only an estimate of real usage, actual consumption can land above what was reserved, so the achievable overshoot scales with the number of concurrent holders allowed under `maxFraction`. A lower `maxFraction` permits more concurrent in-flight requests before capacity-rejects kick in but widens that overshoot window; a higher `maxFraction` tightens the bound at the cost of concurrency headroom.
 
@@ -92,9 +92,9 @@ Check out the [API reference](../reference/tokenratelimitpolicy.md) for a full s
 
 TokenRateLimitPolicy automatically extracts token usage from AI/LLM responses without requiring any additional configuration:
 
-- **Zero configuration**: Works out-of-the-box with OpenAI-compatible APIs
-- **Response parsing**: Automatically extracts `usage.total_tokens` from response bodies
-- **Provider scope**: Supports any backend returning that field, e.g. OpenAI `/v1/chat/completions` and `/v1/completions`, and OpenAI-compatible backends like vLLM, kServe, Ollama, Azure OpenAI, and Gemini's OpenAI-compat endpoint. Anthropic and Gemini's native response formats aren't supported yet — see [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864)
+- **Zero configuration**: Works out-of-the-box with multiple LLM provider response shapes
+- **Response parsing**: Tries an ordered list of JSON Pointer candidates against the response body until one resolves to a numeric value (see [Data Extraction](../reference/tokenratelimitpolicy.md#dataextraction))
+- **Provider scope**: The built-in defaults cover OpenAI, Azure OpenAI, OpenAI-compatible backends (vLLM, kServe, Ollama, etc.), the OpenAI Responses API, Google Gemini, and AWS Bedrock Converse API. `spec.dataExtraction.response.totalTokens` lets you configure custom pointers for other providers
 - **Accurate accounting**: Tracks actual token consumption, not estimates
 - **Silent pass-through on failure**: If token parsing fails (missing `usage.total_tokens` in the response), the report phase fails silently and no tokens are counted. The default `failureMode: allow` means requests succeed but rate limiting is not applied. Set `RATELIMIT_REPORT_SERVICE_FAILURE_MODE=deny` to reject requests when usage cannot be extracted
 

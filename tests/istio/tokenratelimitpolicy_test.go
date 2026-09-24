@@ -92,6 +92,10 @@ func extractWasmConfigFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyF
 	return &wasmConfig, nil
 }
 
+// defaultTotalTokensCEL mirrors the CEL expression the operator generates by default (see
+// api/v1alpha1.DefaultTotalTokensPointers) when a TokenRateLimitPolicy doesn't override dataExtraction.
+var defaultTotalTokensCEL = controllers.ResponseBodyJSONTotalTokensCEL(kuadrantv1alpha1.DefaultTotalTokensPointers)
+
 var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
@@ -212,7 +216,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						},
 					},
 				},
-				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: defaultTotalTokensCEL},
 			},
 		})
 
@@ -279,7 +283,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 						},
 					},
 				},
-				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: `responseBodyJSON("/usage/total_tokens")`},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: defaultTotalTokensCEL},
 			},
 		})
 
@@ -358,10 +362,81 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 					{
 						Data: []wasm.DataType{
 							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
-							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "ratelimit.hits_addend", Value: `responseBodyJSON("/usage/total_tokens")`}}},
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: "ratelimit.hits_addend", Value: defaultTotalTokensCEL}}},
 						},
 					},
 				},
+			},
+		})
+
+		Expect(actionSet.Actions).To(HaveLen(len(expectedActions)))
+		for i, expected := range expectedActions {
+			Expect(actionSet.Actions[i].EqualTo(expected)).To(BeTrue())
+		}
+	}, testTimeOut)
+
+	It("Custom dataExtraction.response.totalTokens overrides the defaults", func(ctx SpecContext) {
+		httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
+		err := testClient().Create(ctx, httpRoute)
+		Expect(err).ToNot(HaveOccurred())
+		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+		customPointers := []string{"/custom/pointer"}
+		trlp := buildTRLP()
+		trlp.Spec.DataExtraction = &kuadrantv1alpha1.DataExtraction{
+			Response: kuadrantv1alpha1.ResponseDataExtraction{
+				kuadrantv1alpha1.ResponseDataExtractionKeyTotalTokens: customPointers,
+			},
+		}
+		err = testClient().Create(ctx, trlp)
+		Expect(err).ToNot(HaveOccurred())
+
+		trlpKey := client.ObjectKeyFromObject(trlp)
+		Eventually(tests.TokenRateLimitPolicyIsAccepted(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+		Eventually(tests.TokenRateLimitPolicyIsEnforced(ctx, testClient(), trlpKey)).WithContext(ctx).Should(BeTrue())
+
+		envoyFilterKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
+		Eventually(tests.EnvoyFilterIsAvailable(ctx, testClient(), envoyFilterKey)).WithContext(ctx).Should(BeTrue())
+		existingEnvoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{}
+		err = testClient().Get(ctx, envoyFilterKey, existingEnvoyFilter)
+		Expect(err).ToNot(HaveOccurred())
+		existingWASMConfig, err := extractWasmConfigFromEnvoyFilter(existingEnvoyFilter)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(existingWASMConfig.ActionSets).To(HaveLen(1))
+		actionSet := existingWASMConfig.ActionSets[0]
+
+		limitIdentifier := controllers.TokenLimitNameToLimitadorIdentifier(trlpKey, "l1")
+		scope := string(controllers.LimitsNamespaceFromRoute(httpRoute).ToActionScope())
+		source := "tokenratelimitpolicy.kuadrant.io:" + trlpKey.String()
+		customTotalTokensCEL := controllers.ResponseBodyJSONTotalTokensCEL(customPointers)
+
+		expectedActions := wasm.BuildActions([]wasm.ActionSpec{
+			{
+				ServiceName: wasm.RateLimitReserveServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+						},
+					},
+				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, Amount: "0"},
+			},
+			{
+				ServiceName: wasm.RateLimitCommitServiceName,
+				Scope:       scope,
+				Sources:     []string{source},
+				ConditionalData: []wasm.ConditionalData{
+					{
+						Data: []wasm.DataType{
+							{Value: &wasm.Expression{ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"}}},
+						},
+					},
+				},
+				Reservation: &wasm.ReservationSpec{ID: limitIdentifier, ActualAmount: customTotalTokensCEL},
 			},
 		})
 

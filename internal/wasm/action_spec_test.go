@@ -4,6 +4,8 @@ package wasm
 
 import (
 	"fmt"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -789,6 +791,9 @@ func TestBodyRefFieldName(t *testing.T) {
 		{"/model", "model"},
 		{"/a/b/c", "c"},
 		{"single", "single"},
+		{"/usage/total-tokens", "total_tokens"},
+		{"/usage/weird]key", "weird_key"},
+		{"/2024", "_2024"},
 	}
 	for _, tc := range tests {
 		got := bodyRefFieldName(tc.pointer)
@@ -806,6 +811,7 @@ func TestSanitizePointer(t *testing.T) {
 		{"/usage/total_tokens", "usage_total_tokens"},
 		{"/model", "model"},
 		{"/a/b/c", "a_b_c"},
+		{"/a/b" + pointerListKeySep + "/c/d" + pointerListKeySep + "number", "a_b__c_d_number"},
 	}
 	for _, tc := range tests {
 		got := sanitizePointer(tc.pointer)
@@ -863,6 +869,79 @@ func TestExtractBodyRefs(t *testing.T) {
 		refs := extractBodyRefs(`responseBodyJSON("/model") + responseBodyJSON("/model")`)
 		if len(refs) != 1 {
 			t.Errorf("expected 1 deduplicated ref, got %d", len(refs))
+		}
+	})
+
+	t.Run("list of candidates with type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].Direction != "response" {
+			t.Errorf("direction = %q, want %q", refs[0].Direction, "response")
+		}
+		if refs[0].FieldName != "total_tokens" {
+			t.Errorf("fieldName = %q, want %q (leaf of first candidate)", refs[0].FieldName, "total_tokens")
+		}
+		expectedPointer := "/usage/total_tokens" + pointerListKeySep + "/usageMetadata/totalTokenCount" + pointerListKeySep + "number"
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
+
+	t.Run("list of candidates without type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/a", "/b"])`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		expectedPointer := "/a" + pointerListKeySep + "/b" + pointerListKeySep
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
+
+	t.Run("single-candidate list with type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`requestBodyJSON(['/prompt'], "string")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].Direction != "request" {
+			t.Errorf("direction = %q, want %q", refs[0].Direction, "request")
+		}
+		if refs[0].FieldName != "prompt" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "prompt")
+		}
+	})
+
+	t.Run("distinguishes lists differing only in order", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/a", "/b"], "number") + responseBodyJSON(["/b", "/a"], "number")`)
+		if len(refs) != 2 {
+			t.Fatalf("expected 2 distinct refs (order matters), got %d", len(refs))
+		}
+	})
+
+	t.Run("list candidate containing a literal ']'", func(t *testing.T) {
+		// RFC 6901 reference tokens may legally contain "]", so the list matcher must not
+		// terminate at the first "]" it sees. FieldName is sanitized to "a_b" (rather than
+		// truncated to "a") to prove the full pointer "/usage/a]b" was captured before the
+		// CEL-identifier-safe substitution was applied.
+		refs := extractBodyRefs(`responseBodyJSON(["/usage/a]b"], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].FieldName != "a_b" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "a_b")
+		}
+	})
+
+	t.Run("single-quoted candidate containing a literal ']'", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(['/usage/a]b', '/other'], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		expectedPointer := "/usage/a]b" + pointerListKeySep + "/other" + pointerListKeySep + "number"
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
 		}
 	})
 }
@@ -1039,6 +1118,60 @@ func TestBuildActions_ReservationActualAmount(t *testing.T) {
 	}
 }
 
+func TestBuildActions_ListBodyRef(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitCheckServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{Key: "ratelimit.hits_addend", Value: "0"}}},
+				},
+			}},
+		},
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "ratelimit.hits_addend",
+						Value: `responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")`,
+					}}},
+				},
+			}},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected 3 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	expectedValue := `{"total_tokens": responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")}`
+	if store.Value != expectedValue {
+		t.Errorf("store value = %q, want %q", store.Value, expectedValue)
+	}
+
+	reportGrpc, ok := actions[2].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[2] type = %s, want grpc", actions[2].ActionType())
+	}
+	if strings.Contains(reportGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("report message should not contain responseBodyJSON after replacement")
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(reportGrpc.MessageBuilder, "uint("+expectedStorePath+")") {
+		t.Errorf("report message should reference store path for total_tokens, got:\n%s", reportGrpc.MessageBuilder)
+	}
+}
+
 func TestBuildActions_MergedBodyRefs(t *testing.T) {
 	specs := []ActionSpec{
 		{
@@ -1145,6 +1278,111 @@ func TestBuildActions_CollidingLeafFieldNames(t *testing.T) {
 	}
 	if !strings.Contains(grpc.MessageBuilder, "kuadrant.internal.response.body.metadata_total_tokens") {
 		t.Errorf("grpc message should reference store path for metadata_total_tokens, got:\n%s", grpc.MessageBuilder)
+	}
+}
+
+func TestBuildActions_SanitizedKeyCollision(t *testing.T) {
+	// "/a" and "/_/a" both have leaf field name "a" (triggering the sanitized-pointer
+	// fallback), and sanitizePointer itself maps both to "a" (folding "_" the same way
+	// it folds "/"). Without disambiguation, one of the two extracted values would
+	// silently share the other's store path and be lost.
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "field1",
+						Value: `responseBodyJSON("/a")`,
+					}}},
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "field2",
+						Value: `responseBodyJSON("/_/a")`,
+					}}},
+				},
+			}},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+
+	// Sorted pointer order ("/_/a" < "/a") claims "a" first; "/a" must be
+	// disambiguated to a distinct key rather than colliding on "a" too.
+	if !strings.Contains(store.Value, `"a": responseBodyJSON("/_/a")`) {
+		t.Errorf("store value should contain \"a\" mapped to /_/a, got: %s", store.Value)
+	}
+	if !strings.Contains(store.Value, `"a_2": responseBodyJSON("/a")`) {
+		t.Errorf("store value should contain a disambiguated key for /a, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if strings.Contains(grpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("grpc message should not contain responseBodyJSON after replacement")
+	}
+	storePathPattern := regexp.MustCompile(`kuadrant\.internal\.response\.body\.[A-Za-z0-9_]+`)
+	gotPaths := make(map[string]bool)
+	for _, p := range storePathPattern.FindAllString(grpc.MessageBuilder, -1) {
+		gotPaths[p] = true
+	}
+	wantPaths := map[string]bool{
+		"kuadrant.internal.response.body.a":   true,
+		"kuadrant.internal.response.body.a_2": true,
+	}
+	if !reflect.DeepEqual(gotPaths, wantPaths) {
+		t.Errorf("grpc message store paths = %v, want %v (message:\n%s)", gotPaths, wantPaths, grpc.MessageBuilder)
+	}
+}
+
+// TestBuildActions_PunctuationInPointer guards against a regression where a JSON Pointer's
+// last segment contains characters that are legal in RFC 6901 (e.g. "-") but unsafe in the
+// generated CEL dot-access store path (e.g. "kuadrant.internal.response.body.total-tokens",
+// where CEL parses "-" as subtraction rather than part of an identifier). Such a pointer is
+// accepted by ResponseDataExtraction's CRD validation, so BuildActions must sanitize it.
+func TestBuildActions_PunctuationInPointer(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitCommitServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{
+				ID:           "limit-a",
+				ActualAmount: `responseBodyJSON(["/usage/total-tokens"], "number")`,
+			},
+		},
+	}
+	actions := BuildActions(specs)
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	if !strings.Contains(store.Value, `"total_tokens":`) {
+		t.Errorf("store value should use a sanitized key, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(grpc.MessageBuilder, expectedStorePath) {
+		t.Errorf("commit message should reference sanitized store path %q, got:\n%s", expectedStorePath, grpc.MessageBuilder)
+	}
+	if strings.Contains(grpc.MessageBuilder, "total-tokens") {
+		t.Errorf("commit message must not contain the unsanitized punctuation-bearing key, got:\n%s", grpc.MessageBuilder)
 	}
 }
 

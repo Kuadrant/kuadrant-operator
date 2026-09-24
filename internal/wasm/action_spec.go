@@ -208,12 +208,21 @@ func BuildActions(specs []ActionSpec) []Action {
 		// Build map expression: {"field1": bodyJSON("/path1"), "field2": bodyJSON("/path2")}
 		var mapEntries []string
 		var allSources []string
+		usedKeys := make(map[string]bool, len(pointers))
 		for _, pointer := range pointers {
 			entry := fields[pointer]
 			mapKey := entry.ref.FieldName
 			if leafCount[mapKey] > 1 {
 				mapKey = sanitizePointer(entry.ref.Pointer)
 			}
+			// sanitizePointer isn't guaranteed injective (e.g. "/a" and "/_/a" both
+			// sanitize to "a"), so disambiguate any residual collision deterministically
+			// rather than letting two distinct pointers silently share one store path.
+			base := mapKey
+			for n := 2; usedKeys[mapKey]; n++ {
+				mapKey = fmt.Sprintf("%s_%d", base, n)
+			}
+			usedKeys[mapKey] = true
 			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, mapKey, entry.ref.Original))
 			replacements[entry.ref.Original] = bodyRefStorePath(direction, mapKey)
 			allSources = appendUnique(allSources, entry.sources...)
@@ -564,8 +573,15 @@ func referencesPendingPath(expr string, pendingPaths []string) bool {
 	return false
 }
 
-// bodyJSONPattern matches responseBodyJSON("...") and requestBodyJSON("...") with either quote style.
-var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(["']([^"']+)["']\)`)
+// bodyJSONPattern matches responseBodyJSON(...) and requestBodyJSON(...) calls, either with a single
+// quoted JSON pointer argument (e.g. responseBodyJSON("/usage/total_tokens")) or with an ordered list of
+// pointer candidates plus an optional type hint (e.g. responseBodyJSON(["/a", "/b"], "number")).
+// The list alternative only recognizes quoted elements (rather than stopping at the first "]") because
+// RFC 6901 reference tokens may legally contain "]".
+var bodyJSONPattern = regexp.MustCompile(`(response|request)BodyJSON\(\s*(\[\s*(?:"[^"]*"|'[^']*')(?:\s*,\s*(?:"[^"]*"|'[^']*'))*\s*\]|"[^"]*"|'[^']*')\s*(?:,\s*"([^"]*)")?\s*\)`)
+
+// pointerListItemPattern extracts individual quoted string literals from within a list literal argument.
+var pointerListItemPattern = regexp.MustCompile(`"([^"]*)"|'([^']*)'`)
 
 const (
 	responseBodyStorePath = "kuadrant.internal.response.body"
@@ -578,6 +594,9 @@ const (
 	// A per-limit segment is appended (see reservationStorePath) so concurrent
 	// reservations for different limits do not clobber one another.
 	reservationStorePathPrefix = "kuadrant.internal.tokenratelimit.reservation"
+	// pointerListKeySep separates ordered pointer candidates (plus trailing type hint) when building the
+	// canonical dedup/collision identity key for a list-form body ref.
+	pointerListKeySep = "\x1f"
 )
 
 // reservationStorePath returns the per-limit store path for a reservation id.
@@ -591,16 +610,37 @@ type bodyRef struct {
 	Original  string // the full matched call, e.g. responseBodyJSON("/usage/total_tokens")
 	Direction string // "response" or "request"
 	FieldName string // derived map key, e.g. "total_tokens"
-	Pointer   string // the JSON pointer, e.g. "/usage/total_tokens"
+	Pointer   string // identity key: the JSON pointer, or an ordered-list+type-hint canonical key
+}
+
+// identifierUnsafeChars matches any single character that is not safe within a bare CEL
+// identifier segment. Store paths and map-literal keys derived from a JSON Pointer are read
+// back via dot access (e.g. "kuadrant.internal.response.body.<segment>"), which CEL parses
+// with the same grammar as a plain identifier: an unescaped "-" is subtraction, "]" is a
+// syntax error, and a leading digit is illegal. RFC 6901 permits all of these in a pointer
+// token, so every derived segment must go through sanitizeIdentifier before being embedded
+// as CEL source.
+var identifierUnsafeChars = regexp.MustCompile(`[^A-Za-z0-9_]`)
+
+// sanitizeIdentifier rewrites s into a non-empty, CEL-identifier-safe string.
+func sanitizeIdentifier(s string) string {
+	sanitized := strings.Trim(identifierUnsafeChars.ReplaceAllString(s, "_"), "_")
+	if sanitized == "" {
+		return "_"
+	}
+	if sanitized[0] >= '0' && sanitized[0] <= '9' {
+		return "_" + sanitized
+	}
+	return sanitized
 }
 
 func bodyRefFieldName(jsonPointer string) string {
 	segments := strings.Split(strings.TrimPrefix(jsonPointer, "/"), "/")
-	return segments[len(segments)-1]
+	return sanitizeIdentifier(segments[len(segments)-1])
 }
 
-func sanitizePointer(jsonPointer string) string {
-	return strings.ReplaceAll(strings.TrimPrefix(jsonPointer, "/"), "/", "_")
+func sanitizePointer(pointer string) string {
+	return sanitizeIdentifier(strings.TrimPrefix(pointer, "/"))
 }
 
 func bodyRefStorePath(direction, fieldName string) string {
@@ -608,6 +648,21 @@ func bodyRefStorePath(direction, fieldName string) string {
 		return requestBodyStorePath + "." + fieldName
 	}
 	return responseBodyStorePath + "." + fieldName
+}
+
+// parsePointerList extracts the ordered quoted string literals from a list literal argument,
+// e.g. `["/a", "/b"]` -> ["/a", "/b"].
+func parsePointerList(listArg string) []string {
+	matches := pointerListItemPattern.FindAllStringSubmatch(listArg, -1)
+	pointers := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if strings.HasPrefix(m[0], `"`) {
+			pointers = append(pointers, m[1])
+		} else {
+			pointers = append(pointers, m[2])
+		}
+	}
+	return pointers
 }
 
 func extractBodyRefs(expr string) []bodyRef {
@@ -623,11 +678,28 @@ func extractBodyRefs(expr string) []bodyRef {
 			continue
 		}
 		seen[original] = true
+
+		arg, typeHint := m[2], m[3]
+
+		var fieldName, pointer string
+		if strings.HasPrefix(arg, "[") {
+			pointers := parsePointerList(arg)
+			if len(pointers) == 0 {
+				continue
+			}
+			fieldName = bodyRefFieldName(pointers[0])
+			pointer = strings.Join(pointers, pointerListKeySep) + pointerListKeySep + typeHint
+		} else {
+			p := strings.Trim(arg, `"'`)
+			fieldName = bodyRefFieldName(p)
+			pointer = p
+		}
+
 		refs = append(refs, bodyRef{
 			Original:  original,
 			Direction: m[1],
-			FieldName: bodyRefFieldName(m[2]),
-			Pointer:   m[2],
+			FieldName: fieldName,
+			Pointer:   pointer,
 		})
 	}
 	return refs

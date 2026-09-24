@@ -186,12 +186,22 @@ jobs:
           target = tuple(map(int, os.environ["TARGET"].split("-")[0].split(".")))
           versions = [tuple(map(int, match.groups())) for line in open("/tmp/kuadrant-releases")
                       if (match := re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", line.strip()))]
-          print(".".join(map(str, max(version for version in versions if version < target))))
+          previous = [version for version in versions if version < target]
+          if not previous:
+              raise SystemExit(f"No stable release precedes {os.environ['TARGET']}")
+          print(".".join(map(str, max(previous))))
           PYTHON
             )
           fi
           start=${START_VERSION#v}
-          [[ "$start" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$start" != "$target" ]]
+          [[ "$start" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          START="$start" TARGET="$target" python3 - <<'PYTHON'
+          import os
+          start = tuple(map(int, os.environ["START"].split(".")))
+          target = tuple(map(int, os.environ["TARGET"].split("-")[0].split(".")))
+          if start >= target:
+              raise SystemExit(f"Start version {os.environ['START']} must precede target {os.environ['TARGET']}")
+          PYTHON
           catalog_img=$(make -s print-catalog-image VERSION="$target")
           {
             echo "KUADRANT_START_VERSION=$start"

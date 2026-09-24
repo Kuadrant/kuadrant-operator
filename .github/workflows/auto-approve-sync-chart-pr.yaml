@@ -3,12 +3,13 @@
 #   - Originates from the same repo (not a fork)
 #   - Head branch matches the sync/* naming convention
 #   - Author is kuadrant-dev
+#   - Last update actor is kuadrant-dev
 #   - Title starts with chore(deps)
 
 name: Sync Chart auto-approve
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize]
     branches:
       - main
@@ -54,5 +55,8 @@ jobs:
             echo "Current:  $CURRENT_SHA" >&2
             exit 1
           fi
-          gh pr review "$PR_NUMBER" --approve --repo "$REPO" \
-            --body "Auto-approved: automated chart sync PR."
+          gh api repos/"$REPO"/pulls/"$PR_NUMBER"/reviews \
+            -X POST \
+            -f event=APPROVE \
+            -f body='Auto-approved: automated chart sync PR.' \
+            -f commit_id="$EVENT_SHA"

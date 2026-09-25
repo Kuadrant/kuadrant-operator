@@ -239,6 +239,10 @@ kubectl get deployment -n "${NAMESPACE}" --no-headers 2>/dev/null || echo "  (no
 echo "KuadrantControlPlane:"
 kubectl get kuadrantcontrolplane --no-headers 2>/dev/null || echo "  (none)"
 
+echo ""
+echo "=== KuadrantControlPlane Status ==="
+kubectl get kcp/default -o json | jq -r '(.status.conditions[] | select(.type=="Ready") | if .status=="True" then "Status: Healthy" else "Status: Not healthy" end),"",(.status.components[] | "\(.name) (v\(.chartVersion)):\n  \([.images[].image] | join("\n  "))")' 2>/dev/null || echo "  (not available)"
+
 # ── Resource diff (informational) ────────────────────────────────────
 
 echo ""

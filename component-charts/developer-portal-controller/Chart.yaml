@@ -3,8 +3,8 @@ name: developer-portal-controller
 description: Kubernetes controller reconciling Kuadrant developer portal resources (APIProduct, APIKey, APIKeyRequest, APIKeyApproval).
 type: application
 # 0.0.0 on main; release branches stamp the released version
-version: 0.0.0
-appVersion: 0.0.0
+version: 0.3.0
+appVersion: 0.3.0
 home: https://kuadrant.io
 sources:
   - https://github.com/Kuadrant/developer-portal-controller

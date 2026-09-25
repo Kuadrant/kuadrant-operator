@@ -101,6 +101,11 @@ jobs:
           kubectl rollout restart deployment/dns-operator-controller-manager -n kuadrant-system
           kubectl rollout status deployment/dns-operator-controller-manager -n kuadrant-system --timeout=120s
 
+      - name: Delete Kuadrant CR to reset operator state
+        run: |
+          kubectl delete kuadrant kuadrant -n kuadrant-system --ignore-not-found=true
+          sleep 5
+
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true
 
@@ -166,6 +171,11 @@ jobs:
         run: |
           kubectl rollout restart deployment/dns-operator-controller-manager -n kuadrant-system
           kubectl rollout status deployment/dns-operator-controller-manager -n kuadrant-system --timeout=120s
+
+      - name: Delete Kuadrant CR to reset operator state
+        run: |
+          kubectl delete kuadrant kuadrant -n kuadrant-system --ignore-not-found=true
+          sleep 5
 
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true

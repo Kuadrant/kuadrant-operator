@@ -168,9 +168,13 @@ var _ = Describe("limitador cluster controller", func() {
 
 			Expect(existingPatchValue).To(Equal(
 				map[string]any{
-					"name":                   kuadrant.KuadrantRateLimitClusterName,
-					"type":                   "STRICT_DNS",
-					"connect_timeout":        "1s",
+					"name":            kuadrant.KuadrantRateLimitClusterName,
+					"type":            "STRICT_DNS",
+					"connect_timeout": "1s",
+					"outlier_detection": map[string]any{
+						"enforcing_consecutive_gateway_failure": float64(100),
+						"max_ejection_percent":                  float64(100),
+					},
 					"lb_policy":              "ROUND_ROBIN",
 					"http2_protocol_options": map[string]any{},
 					"load_assignment": map[string]any{

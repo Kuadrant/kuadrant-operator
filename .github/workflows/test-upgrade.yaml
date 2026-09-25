@@ -92,6 +92,9 @@ jobs:
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/kuadrant-operator-catalog:v${{ env.FROM_VERSION }} \
             ${{ inputs.olmFromChannel }}
 
+      - name: Run integration tests against upgraded cluster
+        run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true
+
   helm-upgrade-test:
     runs-on: ubuntu-latest
     name: Helm Upgrade Test
@@ -145,3 +148,6 @@ jobs:
           ./hack/test-helm-upgrade.sh \
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }} \
             ${{ env.FROM_VERSION }}
+
+      - name: Run integration tests against upgraded cluster
+        run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true

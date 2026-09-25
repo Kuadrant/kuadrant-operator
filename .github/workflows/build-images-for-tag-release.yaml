@@ -180,7 +180,7 @@ jobs:
         run: |
           echo "Image = ${{ steps.build-image.outputs.image }}"
           echo "Tags = ${{ steps.build-image.outputs.tags }}"
-          echo "Bundle IMG = ${{ steps.parsed-operator-bundle.outputs.image }}"
+          echo "Bundle IMG = ${{ steps.catalog-variables.outputs.bundleImg }}"
 
       - name: Push Image
         if: github.repository_owner == 'kuadrant'
@@ -207,3 +207,11 @@ jobs:
       - name: Verify catalog and bundle tags match
         if: ${{ needs.build-bundle.outputs.build-tags != needs.build-catalog.outputs.build-tags }}
         run: exit 1
+
+  test-upgrade:
+    name: Test published OLM images
+    needs: [verify-builds]
+    if: github.repository_owner == 'kuadrant'
+    uses: ./.github/workflows/test-upgrade.yaml
+    with:
+      kuadrantVersion: ${{ github.ref_name }}

@@ -794,6 +794,7 @@ func TestBodyRefFieldName(t *testing.T) {
 		{"/usage/total-tokens", "total_tokens"},
 		{"/usage/weird]key", "weird_key"},
 		{"/2024", "_2024"},
+		{"/usage/2tokens", "_2tokens"},
 	}
 	for _, tc := range tests {
 		got := bodyRefFieldName(tc.pointer)
@@ -812,6 +813,7 @@ func TestSanitizePointer(t *testing.T) {
 		{"/model", "model"},
 		{"/a/b/c", "a_b_c"},
 		{"/a/b" + pointerListKeySep + "/c/d" + pointerListKeySep + "number", "a_b__c_d_number"},
+		{"/2tokens", "_2tokens"},
 	}
 	for _, tc := range tests {
 		got := sanitizePointer(tc.pointer)

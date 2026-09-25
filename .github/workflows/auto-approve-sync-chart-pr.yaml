@@ -1,0 +1,62 @@
+# Automatically approves chart sync PRs created by the kuadrant-dev bot.
+# Guards ensure only PRs matching all of the following are approved:
+#   - Originates from the same repo (not a fork)
+#   - Head branch matches the sync/* naming convention
+#   - Author is kuadrant-dev
+#   - Last update actor is kuadrant-dev
+#   - Title starts with chore(deps)
+
+name: Sync Chart auto-approve
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+      - 'release-*'
+
+concurrency:
+  group: auto-approve-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'sync/') &&
+      github.actor == 'kuadrant-dev' &&
+      github.event.pull_request.user.login == 'kuadrant-dev' &&
+      startsWith(github.event.pull_request.title, 'chore(deps)')
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Generate approver token
+        id: token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # ratchet:actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.SYNC_APPROVER_APP_ID }}
+          private-key: ${{ secrets.SYNC_APPROVER_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+
+      - name: Approve PR
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          EVENT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          CURRENT_SHA=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+          if [ "$CURRENT_SHA" != "$EVENT_SHA" ]; then
+            echo "PR head SHA has changed since this workflow was triggered — refusing approval." >&2
+            echo "Expected: $EVENT_SHA" >&2
+            echo "Current:  $CURRENT_SHA" >&2
+            exit 1
+          fi
+          gh api repos/"$REPO"/pulls/"$PR_NUMBER"/reviews \
+            -X POST \
+            -f event=APPROVE \
+            -f body='Auto-approved: automated chart sync PR.' \
+            -f commit_id="$EVENT_SHA"

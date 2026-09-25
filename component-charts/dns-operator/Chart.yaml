@@ -12,8 +12,8 @@ sources:
 kubeVersion: ">=1.19.0-0"
 type: application
 # The version will be properly set when the chart is released matching the operator version
-version: "0.0.0"
-appVersion: "0.0.0"
+version: "0.18.0"
+appVersion: "0.18.0"
 maintainers:
   - email: mnairn@redhat.com
     name: Michael Nairn

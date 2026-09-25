@@ -16138,34 +16138,34 @@ spec:
         - name: EXTENSIONS_SERVICE_PORT
           value: "50052"
         - name: RELATED_IMAGE_WASMSHIM
-          value: quay.io/kuadrant/wasm-shim:latest
+          value: quay.io/kuadrant/wasm-shim:v0.15.0
         - name: RELATED_IMAGE_DEVELOPERPORTAL
-          value: quay.io/kuadrant/developer-portal-controller:latest
+          value: quay.io/kuadrant/developer-portal-controller:v0.3.0
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-          value: quay.io/kuadrant/console-plugin:latest
+          value: quay.io/kuadrant/console-plugin:v0.7.0
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_SDK1
           value: quay.io/kuadrant/console-plugin:v0.6.0
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
           value: quay.io/kuadrant/console-plugin:v0.1.5-2
         - name: RELATED_IMAGE_DNS_OPERATOR
-          value: quay.io/kuadrant/dns-operator:latest
+          value: quay.io/kuadrant/dns-operator:v0.18.0
         - name: RELATED_IMAGE_MCP_GATEWAY
-          value: ghcr.io/kuadrant/mcp-controller:latest
+          value: ghcr.io/kuadrant/mcp-controller:v1.0.1
         - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
-          value: ghcr.io/kuadrant/mcp-gateway:latest
+          value: ghcr.io/kuadrant/mcp-gateway:v1.0.1
         - name: RELATED_IMAGE_AUTHORINO_OPERATOR
-          value: quay.io/kuadrant/authorino-operator:latest
+          value: quay.io/kuadrant/authorino-operator:v0.27.0
         - name: RELATED_IMAGE_LIMITADOR_OPERATOR
-          value: quay.io/kuadrant/limitador-operator:latest
+          value: quay.io/kuadrant/limitador-operator:v0.19.0
         - name: RELATED_IMAGE_AUTHORINO
-          value: quay.io/kuadrant/authorino:latest
+          value: quay.io/kuadrant/authorino:v0.28.0
         - name: RELATED_IMAGE_LIMITADOR
-          value: quay.io/kuadrant/limitador:latest
+          value: quay.io/kuadrant/limitador:v2.5.0
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/kuadrant/kuadrant-operator:latest
+        image: quay.io/kuadrant/kuadrant-operator:v1.6.0-rc1
         livenessProbe:
           httpGet:
             path: /healthz

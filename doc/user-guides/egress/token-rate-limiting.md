@@ -1,4 +1,4 @@
-# Token Rate Limiting on Egress
+# Token rate limiting on egress
 
 This guide walks through applying TokenRateLimitPolicy (TRLP) to an Istio egress gateway to control AI token consumption for outbound LLM API calls. It covers global token limits, per-workload budgets using workload identity, and per-tier quotas.
 
@@ -61,7 +61,7 @@ The setup deploys [llm-d-inference-sim](https://github.com/llm-d/llm-d-inference
 
 TokenRateLimitPolicy extracts `usage.total_tokens` from this response automatically. In production, replace the ServiceEntry with your actual AI provider endpoint (for example, `api.openai.com`) and add a DestinationRule for TLS origination.
 
-## Basic Token Rate Limiting
+## Basic token rate limiting
 
 Apply a global token limit on all egress traffic to the AI mock:
 
@@ -96,7 +96,7 @@ kubectl wait --timeout=60s tokenratelimitpolicy/ai-token-limit -n gateway-system
     --for=jsonpath='{.status.conditions[?(@.type=="Enforced")].status}'=True
 ```
 
-### Test token counting
+### Testing token counting
 
 Send a chat completion request:
 
@@ -144,11 +144,11 @@ Clean up before the next section:
 kubectl delete tokenratelimitpolicy ai-token-limit -n gateway-system
 ```
 
-## Per-Workload Token Limiting
+## Per-workload token limiting
 
 To give each workload its own token budget, combine TRLP with workload identity via AuthPolicy. This uses the same [kubernetesTokenReview](egress-gateway.md#workload-identity) pattern as RateLimitPolicy on egress.
 
-### Step 1: Apply workload identity
+### Applying workload identity
 
 ```sh
 kubectl apply -f - <<'EOF'
@@ -188,7 +188,7 @@ The `response.success.filters.identity` block exposes the authenticated username
 
 Workloads must include their SA token in requests. Requests without a valid token are rejected (401). Workloads from unauthorized namespaces are rejected (403).
 
-### Step 2: Apply per-workload token limits
+### Applying per-workload token limits
 
 ```sh
 kubectl apply -f - <<'EOF'
@@ -214,7 +214,7 @@ EOF
 
 Each ServiceAccount now gets an independent 100 tokens/minute budget.
 
-### Verify per-workload limits
+### Verifying per-workload limits
 
 Exhaust the test-client budget and confirm that team-gold is unaffected:
 
@@ -265,7 +265,7 @@ Clean up before the next section:
 kubectl delete tokenratelimitpolicy ai-per-workload -n gateway-system
 ```
 
-## Per-Tier Token Limiting
+## Per-tier token limiting
 
 For differentiated quotas (for example, free versus gold tiers), use `when` predicates to match workload identity patterns alongside per-identity counters.
 
@@ -306,7 +306,7 @@ EOF
 - `test-client` (using the `default` SA) gets 100 tokens/minute
 - `team-gold` (using the `team-gold` SA) gets 500 tokens/minute
 
-### Verify tier-based limits
+### Verifying tier-based limits
 
 ```sh
 # Exhaust the default tier (100 tokens, ~10 tokens/request)
@@ -349,7 +349,7 @@ echo "gold-tier request: HTTP $CODE"
 
 The default tier hits its limit, but the gold tier still has remaining budget.
 
-## Streaming Responses
+## Streaming responses
 
 TRLP supports streaming OpenAI-style responses. The request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event:
 
@@ -374,21 +374,21 @@ The final SSE event contains the usage data. Because the counter is updated only
 
 If `stream_options.include_usage` is omitted when `stream: true`, token usage cannot be extracted. Depending on the wasm-shim failure mode, the request may be allowed without counting or rejected.
 
-## Considerations
+## Deployment considerations
 
-### TLS Origination and Response Body Access
+### TLS origination and response body access
 
 When using a real external AI API (for example, OpenAI), the egress gateway terminates internal mTLS and originates a new TLS connection to the provider. The response body passes through the gateway unencrypted on the internal side, so token extraction from the response body works normally. The mock used in this guide skips TLS origination for simplicity.
 
-### Concurrent Request Race Condition
+### Concurrent request race condition
 
 The current TRLP implementation uses a two-phase protocol: the gateway checks limits before forwarding the request (without consuming tokens), then reports actual usage after receiving the response. Between these two phases, concurrent in-flight requests can race past the limit because nothing holds capacity during model processing. For most use cases this is acceptable because LLM responses are slow enough that burst patterns are uncommon. For strict enforcement under high concurrency, see [Token Limit Reservations](#token-limit-reservations-coming-soon) below.
 
-### Supported Response Formats
+### Supported response formats
 
 Token extraction works with any back end returning an OpenAI-compatible response body with `usage.total_tokens`. This includes OpenAI, vLLM, kServe, Ollama, Azure OpenAI, and the Gemini OpenAI-compat endpoint. Anthropic and Gemini native formats are not yet supported. See [#1864](https://github.com/Kuadrant/kuadrant-operator/issues/1864) for tracking.
 
-### Missing Token Usage in Responses
+### Missing token usage in responses
 
 If the external API does not include `usage.total_tokens` in the response body, or if the field cannot be parsed, the token report phase fails silently and no tokens are counted. Because both the check and report services default to `failureMode: allow`, the request succeeds but the counter is never incremented. This means TRLP effectively becomes a no-op: no rate limiting is applied.
 
@@ -396,17 +396,17 @@ To reject requests when token extraction fails, set the `RATELIMIT_REPORT_SERVIC
 
 Verify that your AI provider returns `usage.total_tokens` in every response before relying on TRLP for enforcement. For streaming, verify that `stream_options.include_usage` is set to `true` in requests.
 
-### Istio Only
+### Istio-only support
 
 Egress gateway support targets Istio as the Gateway API provider. Envoy Gateway is not supported for egress at this time.
 
-## Token Limit Reservations (Coming Soon)
+## Token limit reservations (coming soon)
 
 > This section describes a planned enhancement. The code does not exist yet. See [architecture#190](https://github.com/Kuadrant/architecture/pull/190) for the full RFC.
 
 The current two-phase flow (check then report) has a known race condition: concurrent in-flight requests all pass the check phase before any of them report usage, allowing cumulative consumption to exceed the configured limit. Token limit reservations close this gap by holding estimated capacity at request time.
 
-### How It Will Work
+### How it will work
 
 When a request arrives, the gateway will reserve an estimated token amount against the limit. If remaining capacity (accounting for all outstanding reservations) is insufficient, the request is rejected immediately. After the model responds, the actual usage is committed and the reservation is released.
 
@@ -416,7 +416,7 @@ Request arrives → Reserve(estimated amount, TTL) → Forward to model → Comm
 
 If the model call fails or times out, the reservation expires on its own TTL. No cleanup call is needed.
 
-### Policy Changes
+### Policy changes
 
 A new optional `reservation` block on each limit will allow configuring the estimated amount and hold duration:
 
@@ -449,7 +449,7 @@ spec:
 
 Policies that omit the `reservation` block automatically get safe defaults. No changes are required to existing TRLP resources.
 
-### Cluster-Wide Mode Switch
+### Cluster-wide mode switch
 
 The Kuadrant CR will gain a `tokenRateLimiting.mode` field to control the behavior cluster-wide:
 

@@ -1,4 +1,4 @@
-# Egress Gateway Setup and Policies
+# Egress gateway setup and policies
 
 This guide covers setting up an Istio egress gateway with Kuadrant and applying rate limiting, workload identity, and authentication policies to outbound traffic.
 
@@ -27,11 +27,11 @@ export EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n gateway-system \
     -o jsonpath='{.status.addresses[0].value}')
 ```
 
-## Egress Gateway Resources
+## Egress gateway resources
 
 The setup script deployed the following resources.
 
-### Gateway
+### Egress gateway definition
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -52,7 +52,7 @@ spec:
           from: All
 ```
 
-### ServiceEntry
+### External service registration
 
 Registers the external service in Istio's service registry, making the hostname routable:
 
@@ -73,7 +73,7 @@ spec:
   resolution: DNS
 ```
 
-### DestinationRule
+### TLS origination configuration
 
 Configures TLS origination - the gateway establishes TLS to the external service:
 
@@ -91,7 +91,7 @@ spec:
       sni: httpbin.org
 ```
 
-### HTTPRoute
+### Routing to the external service
 
 Routes traffic matching the external hostname through the gateway to the external service:
 
@@ -121,11 +121,11 @@ spec:
 
 The `Hostname` backend is provided by the ServiceEntry. The `URLRewrite` filter ensures the correct `Host` header reaches the external service.
 
-## Rate Limiting
+## Rate limiting
 
 RateLimitPolicy works on egress using the same attachment model as ingress - the same `targetRef`, the same Limitador limits, the same WasmPlugin enforcement. One caveat: `source.address` cannot be used as a counter expression because it includes the ephemeral port, giving each connection its own bucket. Use [workload identity](#workload-identity) with `auth.identity.username` for per-workload limiting instead.
 
-### Basic Egress Rate Limiting
+### Basic egress rate limiting
 
 A simple rate limit on all egress traffic through a route:
 
@@ -160,7 +160,7 @@ kubectl exec test-client -n egress-test -- \
 # 200 (until limit reached, then 429)
 ```
 
-### Other Rate Limiting Patterns
+### Other rate limiting patterns
 
 Standard RateLimitPolicy patterns (per-route, gateway-level, conditional with `when` predicates, defaults/overrides) all work on egress. For other configurations, see:
 
@@ -171,7 +171,7 @@ Standard RateLimitPolicy patterns (per-route, gateway-level, conditional with `w
 | Per-identity with API keys | [Authenticated RL for App Developers](../ratelimiting/authenticated-rl-for-app-developers.md) |
 | Per-identity with JWT + K8s RBAC | [Authenticated RL with JWTs and K8s AuthNZ](../ratelimiting/authenticated-rl-with-jwt-and-k8s-authnz.md) |
 
-## Workload Identity
+## Workload identity
 
 In egress, the clients are internal workloads. To identify which workload is making a request, use Kubernetes [TokenReview](https://kubernetes.io/docs/reference/kubernetes-api/authentication-resources/token-review-v1/) via AuthPolicy. By default, every pod has a ServiceAccount token mounted automatically - no API keys to distribute.
 
@@ -251,7 +251,7 @@ curl -s -o /dev/null -w "%{http_code}" -H "Host: httpbin.org" \
 kubectl delete pod bad-client -n default
 ```
 
-### Per-Workload Rate Limiting
+### Per-workload rate limiting
 
 With workload identity established, you can give each workload its own rate limit bucket by adding an RLP that uses the SA username as a counter:
 
@@ -300,7 +300,7 @@ The resolved identity contains:
 
 > **Note:** AuthPolicy selectors and RateLimitPolicy expressions resolve identity paths differently. AuthPolicy uses the full TokenReview structure (`auth.identity.user.username`), while RLP counter expressions use a flattened representation (`auth.identity.username`). This is by design - the two are evaluated by different engines (Authorino vs. wasm-shim).
 
-## Credential Injection
+## Credential injection
 
 Beyond the access control pattern above, the primary egress use case for AuthPolicy is **credential injection** - fetching external API credentials from a secret store (e.g., Vault) and injecting them into outbound requests.
 
@@ -309,17 +309,17 @@ See the [Credential Injection](credential-injection.md) guide for a full walkthr
 - Per-identity credential paths (`secret/egress/<namespace>/<sa-name>`)
 - Two-layer security model (TokenReview + Vault authorization)
 
-## Considerations
+## Deployment considerations
 
 ### ClusterIP vs LoadBalancer
 
 The Gateway example above uses the `networking.istio.io/service-type: ClusterIP` annotation because egress traffic originates inside the cluster - no external IP is needed. If you need workloads in other clusters to reach this egress gateway, use `LoadBalancer` instead.
 
-### Application Must Send HTTP
+### Application must send HTTP
 
 For Kuadrant policies to inspect request headers and apply rate limiting, the application must send plain HTTP to the egress gateway. The DestinationRule handles TLS origination to the external service. If the application sends HTTPS, the gateway cannot inspect the encrypted traffic.
 
-### Resource Ownership
+### Resource ownership
 
 | Resource | Managed by | Purpose |
 |----------|-----------|---------|
@@ -331,12 +331,12 @@ For Kuadrant policies to inspect request headers and apply rate limiting, the ap
 | WasmPlugin, EnvoyFilter | Kuadrant (auto-generated) | Policy enforcement in the data plane |
 | AuthConfig, Limitador Limits | Kuadrant (auto-generated) | Policy decisions consumed by Authorino and Limitador |
 
-### Limitations
+### Current limitations
 
 - **Istio only** - Egress gateway support targets Istio as the Gateway API provider. Envoy Gateway is not supported for egress at this time.
 - **ServiceEntry and DestinationRule are user-managed** - Kuadrant does not create or manage these Istio resources.
 
-## Next Steps
+## Next steps
 
 - [Token Rate Limiting](token-rate-limiting.md) - apply token-based rate limits to outbound AI/LLM API calls
 - [Observability](observability.md) - monitor egress traffic with Prometheus metrics, access logs, and distributed tracing

@@ -157,8 +157,6 @@ spec:
       enabled: true
 EOF
 
-echo "Waiting for Kuadrant to be ready..."
-kubectl wait --timeout=300s --for=condition=Ready kuadrant kuadrant -n "${NAMESPACE}"
 echo "Initial install complete ✅"
 
 echo ""

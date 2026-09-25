@@ -109,6 +109,30 @@ jobs:
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true
 
+      - name: Job summary
+        if: always()
+        env:
+          FROM_VERSION: ${{ env.FROM_VERSION }}
+          TO_VERSION: ${{ inputs.olmUpgradeBundleImg }}
+          TEST_OUTCOME: ${{ job.status }}
+        run: |
+          {
+            echo "## OLM Upgrade Test: $FROM_VERSION → $TO_VERSION"
+            echo ""
+            if [ "$TEST_OUTCOME" = "success" ]; then
+              echo "✅ **Upgrade test passed**"
+            else
+              echo "❌ **Upgrade test failed**"
+            fi
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **From version** | \`$FROM_VERSION\` |"
+            echo "| **To version** | \`$TO_VERSION\` |"
+            echo "| **Test outcome** | $TEST_OUTCOME |"
+            echo "| **Gateway provider** | istio |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   helm-upgrade-test:
     runs-on: ubuntu-latest
     name: Helm Upgrade Test
@@ -179,3 +203,27 @@ jobs:
 
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true
+
+      - name: Job summary
+        if: always()
+        env:
+          FROM_VERSION: ${{ env.FROM_VERSION }}
+          TO_VERSION: ${{ inputs.helmUpgradeOperatorImg }}
+          TEST_OUTCOME: ${{ job.status }}
+        run: |
+          {
+            echo "## Helm Upgrade Test: $FROM_VERSION → $TO_VERSION"
+            echo ""
+            if [ "$TEST_OUTCOME" = "success" ]; then
+              echo "✅ **Upgrade test passed**"
+            else
+              echo "❌ **Upgrade test failed**"
+            fi
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **From version** | \`$FROM_VERSION\` |"
+            echo "| **To version** | \`$TO_VERSION\` |"
+            echo "| **Test outcome** | $TEST_OUTCOME |"
+            echo "| **Gateway provider** | istio |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -92,6 +92,15 @@ jobs:
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/kuadrant-operator-catalog:v${{ env.FROM_VERSION }} \
             ${{ inputs.olmFromChannel }}
 
+      - name: Apply DNS operator dev config
+        run: |
+          kubectl patch configmap dns-operator-controller-env -n kuadrant-system --type merge -p '{"data":{"PROVIDER":"aws,azure,google,endpoint,coredns,inmemory"}}'
+
+      - name: Restart DNS operator controller
+        run: |
+          kubectl rollout restart deployment/dns-operator-controller-manager -n kuadrant-system
+          kubectl rollout status deployment/dns-operator-controller-manager -n kuadrant-system --timeout=120s
+
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true
 
@@ -148,6 +157,15 @@ jobs:
           ./hack/test-helm-upgrade.sh \
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }} \
             ${{ env.FROM_VERSION }}
+
+      - name: Apply DNS operator dev config
+        run: |
+          kubectl patch configmap dns-operator-controller-env -n kuadrant-system --type merge -p '{"data":{"PROVIDER":"aws,azure,google,endpoint,coredns,inmemory"}}'
+
+      - name: Restart DNS operator controller
+        run: |
+          kubectl rollout restart deployment/dns-operator-controller-manager -n kuadrant-system
+          kubectl rollout status deployment/dns-operator-controller-manager -n kuadrant-system --timeout=120s
 
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true

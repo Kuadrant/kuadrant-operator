@@ -9,6 +9,16 @@
 
 ## TelemetryPolicySpec
 
+Custom logging is disabled by default. To enable `logging.default.fields`, set
+`AUTHORINO_ENABLE_LOGGING_FIELDS` to a true boolean value on the Kuadrant
+Operator container. The operator sets `spec.enableLoggingFields: true` on the
+managed Authorino CR when enabled; unset, false, or invalid values leave that
+field unchanged so an administrator-managed value is preserved. Restart the
+operator after changing its environment. Creating a TelemetryPolicy alone does
+not enable custom logging.
+This requires an Authorino and Authorino Operator version supporting custom
+logging fields; their dependency and component-chart updates are managed separately.
+
 | **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                             |
 |-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `targetRef` | [LocalPolicyTargetReferenceWithSectionName](#localpolicytargetreferencewithsectionname) | Yes          | Reference to a Kubernetes resource that the policy attaches to. For more [info](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname)                                                                                                                              |

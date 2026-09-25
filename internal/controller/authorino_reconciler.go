@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -117,6 +118,10 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			}
 		}
 
+		if err := configureAuthorinoLoggingFields(unstructuredAuthorino); err != nil {
+			return err
+		}
+
 		// Only force ownership if tracing field is available for ownership
 		force := clusterAuthorino.Spec.Tracing.Endpoint == ""
 
@@ -200,6 +205,10 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	logger.V(1).Info("creating authorino resource", "status", "processing")
+	if err := configureAuthorinoLoggingFields(unstructuredAuthorino); err != nil {
+		return err
+	}
+
 	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
 		if apiErrors.IsAlreadyExists(err) {
@@ -230,6 +239,16 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	return nil
+}
+
+// configureAuthorinoLoggingFields uses the unstructured representation until the
+// independently managed authorino-operator dependency revision is updated.
+func configureAuthorinoLoggingFields(authorino *unstructured.Unstructured) error {
+	enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false)
+	if !enabled {
+		return nil
+	}
+	return unstructured.SetNestedField(authorino.Object, true, "spec", "enableLoggingFields")
 }
 
 func buildTLSPatch(existing authorinoopapi.Tls, minVersion string, cipherSuites []string) authorinoopapi.Tls {

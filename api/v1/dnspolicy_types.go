@@ -227,9 +227,6 @@ type DNSPolicyList struct {
 	Items           []DNSPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&DNSPolicy{}, &DNSPolicyList{})
-}
 
 //API Helpers
 

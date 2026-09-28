@@ -533,7 +533,13 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", Labels{"bare
 			}).WithContext(ctx).Should(Succeed())
 		}, tlsTestTimeOut)
 
-		It("Propagates OpenShift APIServer TLS profile to Authorino", func(ctx SpecContext) {
+		It("Propagates OpenShift APIServer TLS profile to Authorino", Label("openshift"), func(ctx SpecContext) {
+			installed, err := openshift.IsOpenShiftServerConfigInstalled(testClient().RESTMapper())
+			Expect(err).ToNot(HaveOccurred())
+			if !installed {
+				Skip("OpenShift APIServer API not available, skipping OpenShift-specific test")
+			}
+
 			By("Waiting for Authorino to be created with TLS disabled")
 			Eventually(func(g Gomega) {
 				authorino := &authorinoopapi.Authorino{}

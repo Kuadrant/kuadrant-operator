@@ -157,7 +157,7 @@ jobs:
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: true
           base: ${{ env.BASE_BRANCH }}
-          branch: release-${{ github.event.inputs.kuadrantOperatorVersion }}
+          branch: pre-release-${{ github.event.inputs.kuadrantOperatorVersion }}
           delete-branch: true
           title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
           body: |

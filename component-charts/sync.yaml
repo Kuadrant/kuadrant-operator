@@ -15,28 +15,28 @@ components:
     chart-path: charts/dns-operator
     tracked-branch: main
     ref: 145ce32587cff570791cb81c24b58d625f29fb65
-    auto-merge: false
+    auto-merge: true
   authorino-operator:
     repo: Kuadrant/authorino-operator
     chart-path: charts/authorino-operator
     tracked-branch: main
     ref: 60e659dcd2eff59e2d68644a30e0393ee56ac2dc
-    auto-merge: false
+    auto-merge: true
   limitador-operator:
     repo: Kuadrant/limitador-operator
     chart-path: charts/limitador-operator
     tracked-branch: main
     ref: 8e70841849347e243046bf46313064e8f0f1b76b
-    auto-merge: false
+    auto-merge: true
   mcp-gateway:
     repo: Kuadrant/mcp-gateway
     chart-path: charts/mcp-gateway
     tracked-branch: main
     ref: eb170204ba989b2668f23c8ff9b94116a18b66ce
-    auto-merge: false
+    auto-merge: true
   developer-portal-controller:
     repo: Kuadrant/developer-portal-controller
     chart-path: charts/developer-portal-controller
     tracked-branch: main
     ref: a11230e6e23490b08808194e6bd250f0911cc125
-    auto-merge: false
+    auto-merge: true

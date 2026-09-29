@@ -199,11 +199,10 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gatew
 			[]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"test1_time"}}`), headers)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status).To(Equal(http.StatusForbidden))
-		var denial struct {
-			Error string `json:"error"`
-		}
-		Expect(json.Unmarshal([]byte(body), &denial)).To(Succeed())
-		Expect(denial.Error).To(Equal("Forbidden"))
+		// Lazy backend initialization wraps the upstream AuthPolicy JSON in a
+		// router error response, so assert the denial contract rather than decoding
+		// the outer body as JSON.
+		Expect(body).To(ContainSubstring("MCP Tool Access denied: Insufficient permissions for this tool."))
 	})
 
 	It("filters prompts/list by roles in a valid JWT", func(ctx SpecContext) {

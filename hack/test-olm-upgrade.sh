@@ -172,6 +172,16 @@ echo "=== Waiting for deployments to be ready ==="
 kubectl -n "${NAMESPACE}" wait --timeout=300s --for=condition=Available deployments --all
 
 echo ""
+echo "=== Capturing baseline memory profile ==="
+mkdir -p pprof-data
+kubectl port-forward -n "${NAMESPACE}" deployment/kuadrant-operator-controller-manager 6060:6060 &
+PF_PID=$!
+sleep 2
+curl -s http://localhost:6060/debug/pprof/heap > pprof-data/heap-baseline.pb.gz 2>/dev/null || true
+curl -s http://localhost:6060/debug/pprof/goroutine > pprof-data/goroutines-baseline.txt 2>/dev/null || true
+kill $PF_PID 2>/dev/null || true
+
+echo ""
 echo "=== Capturing baseline state (before upgrade) ==="
 BASELINE_DIR="$(pwd)/tmp/olm-upgrade-baseline"
 rm -rf "${BASELINE_DIR}"

@@ -112,6 +112,33 @@ jobs:
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true INTEGRATION_TEST_PACKAGES="tests/common/... tests/controlplane/... tests/istio/..." INTEGRATION_TESTS_EXTRA_ARGS="--label-filter='!(destructive||observability||in-process-only)'"
 
+      - name: Capture final memory profile (OLM)
+        if: always()
+        run: |
+          set +e
+          echo "Capturing final heap profile..."
+          kubectl port-forward -n kuadrant-system deployment/kuadrant-operator-controller-manager 6060:6060 &
+          PF_PID=$!
+          sleep 2
+          curl -s http://localhost:6060/debug/pprof/heap > pprof-data/heap-after-upgrade.pb.gz 2>/dev/null || true
+          curl -s http://localhost:6060/debug/pprof/goroutine > pprof-data/goroutines-after-upgrade.txt 2>/dev/null || true
+          kill $PF_PID 2>/dev/null || true
+
+          # Generate diff and visualizations
+          if [ -f pprof-data/heap-baseline.pb.gz ] && [ -f pprof-data/heap-after-upgrade.pb.gz ]; then
+            go tool pprof -text -base=pprof-data/heap-baseline.pb.gz pprof-data/heap-after-upgrade.pb.gz > pprof-data/heap-diff.txt 2>/dev/null || true
+            go tool pprof -text -nodecount=20 pprof-data/heap-after-upgrade.pb.gz > pprof-data/heap-final.txt 2>/dev/null || true
+            go tool pprof -svg pprof-data/heap-after-upgrade.pb.gz > pprof-data/heap-final.svg 2>/dev/null || true
+          fi
+
+      - name: Upload pprof artifacts (OLM)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pprof-profiles-olm
+          path: pprof-data/
+          retention-days: 7
+
       - name: Job summary
         if: always()
         env:
@@ -137,6 +164,23 @@ jobs:
             echo ""
             echo "### Components (Post-Upgrade)"
             kubectl get kcp/default -o json | jq -r '(.status.components[] | "- **\(.name)** (v\(.chartVersion))\n  - \([.images[].image] | join("\n  - "))")' 2>/dev/null || echo "Not available"
+            echo ""
+            if [ -f pprof-data/heap-diff.txt ]; then
+              echo "### Memory Growth (Diff)"
+              echo "\`\`\`"
+              head -15 pprof-data/heap-diff.txt
+              echo "\`\`\`"
+            fi
+            if [ -f pprof-data/goroutines-baseline.txt ] && [ -f pprof-data/goroutines-after-upgrade.txt ]; then
+              echo ""
+              echo "### Goroutines"
+              echo "| | Count |"
+              echo "|---|---|"
+              BASELINE_GOROUTINES=$(head -1 pprof-data/goroutines-baseline.txt | grep -oE '[0-9]+' | head -1)
+              AFTER_GOROUTINES=$(head -1 pprof-data/goroutines-after-upgrade.txt | grep -oE '[0-9]+' | head -1)
+              echo "| Baseline | $BASELINE_GOROUTINES |"
+              echo "| After Upgrade | $AFTER_GOROUTINES |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   helm-upgrade-test:
@@ -212,6 +256,33 @@ jobs:
       - name: Run integration tests against upgraded cluster
         run: make test-integration GATEWAYAPI_PROVIDER=istio USE_EXISTING_OPERATOR=true INTEGRATION_TEST_PACKAGES="tests/common/... tests/controlplane/... tests/istio/..." INTEGRATION_TESTS_EXTRA_ARGS="--label-filter='!(destructive||observability||in-process-only)'"
 
+      - name: Capture final memory profile (Helm)
+        if: always()
+        run: |
+          set +e
+          echo "Capturing final heap profile..."
+          kubectl port-forward -n kuadrant-system deployment/kuadrant-operator-controller-manager 6060:6060 &
+          PF_PID=$!
+          sleep 2
+          curl -s http://localhost:6060/debug/pprof/heap > pprof-data/heap-after-upgrade.pb.gz 2>/dev/null || true
+          curl -s http://localhost:6060/debug/pprof/goroutine > pprof-data/goroutines-after-upgrade.txt 2>/dev/null || true
+          kill $PF_PID 2>/dev/null || true
+
+          # Generate diff and visualizations
+          if [ -f pprof-data/heap-baseline.pb.gz ] && [ -f pprof-data/heap-after-upgrade.pb.gz ]; then
+            go tool pprof -text -base=pprof-data/heap-baseline.pb.gz pprof-data/heap-after-upgrade.pb.gz > pprof-data/heap-diff.txt 2>/dev/null || true
+            go tool pprof -text -nodecount=20 pprof-data/heap-after-upgrade.pb.gz > pprof-data/heap-final.txt 2>/dev/null || true
+            go tool pprof -svg pprof-data/heap-after-upgrade.pb.gz > pprof-data/heap-final.svg 2>/dev/null || true
+          fi
+
+      - name: Upload pprof artifacts (Helm)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pprof-profiles-helm
+          path: pprof-data/
+          retention-days: 7
+
       - name: Job summary
         if: always()
         env:
@@ -237,4 +308,21 @@ jobs:
             echo ""
             echo "### Components (Post-Upgrade)"
             kubectl get kcp/default -o json | jq -r '(.status.components[] | "- **\(.name)** (v\(.chartVersion))\n  - \([.images[].image] | join("\n  - "))")' 2>/dev/null || echo "Not available"
+            echo ""
+            if [ -f pprof-data/heap-diff.txt ]; then
+              echo "### Memory Growth (Diff)"
+              echo "\`\`\`"
+              head -15 pprof-data/heap-diff.txt
+              echo "\`\`\`"
+            fi
+            if [ -f pprof-data/goroutines-baseline.txt ] && [ -f pprof-data/goroutines-after-upgrade.txt ]; then
+              echo ""
+              echo "### Goroutines"
+              echo "| | Count |"
+              echo "|---|---|"
+              BASELINE_GOROUTINES=$(head -1 pprof-data/goroutines-baseline.txt | grep -oE '[0-9]+' | head -1)
+              AFTER_GOROUTINES=$(head -1 pprof-data/goroutines-after-upgrade.txt | grep -oE '[0-9]+' | head -1)
+              echo "| Baseline | $BASELINE_GOROUTINES |"
+              echo "| After Upgrade | $AFTER_GOROUTINES |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

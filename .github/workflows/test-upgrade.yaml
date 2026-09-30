@@ -77,8 +77,11 @@ jobs:
           registry: ${{ env.IMG_REGISTRY_HOST }}
 
       - name: Print versions
+        env:
+          FROM_VERSION: ${{ env.FROM_VERSION }}
+          UPGRADE_BUNDLE_IMG: ${{ inputs.olmUpgradeBundleImg }}
         run: |
-          echo "Installing v${{ env.FROM_VERSION }}, upgrading to: ${{ inputs.olmUpgradeBundleImg }}"
+          echo "Installing v${FROM_VERSION}, upgrading to: ${UPGRADE_BUNDLE_IMG}"
 
       - name: Run OLM upgrade test
         env:
@@ -176,8 +179,11 @@ jobs:
           registry: ${{ env.IMG_REGISTRY_HOST }}
 
       - name: Print versions
+        env:
+          FROM_VERSION: ${{ env.FROM_VERSION }}
+          UPGRADE_OPERATOR_IMG: ${{ inputs.helmUpgradeOperatorImg }}
         run: |
-          echo "Installing v${{ env.FROM_VERSION }}, upgrading to: ${{ inputs.helmUpgradeOperatorImg }}"
+          echo "Installing v${FROM_VERSION}, upgrading to: ${UPGRADE_OPERATOR_IMG}"
 
       - name: Run Helm upgrade test
         env:

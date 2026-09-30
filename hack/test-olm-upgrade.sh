@@ -19,7 +19,7 @@
 #                   For local development, avoid quay.io/kuadrant — use a personal or test registry.
 #                   CI jobs may use quay.io/kuadrant with auto-expiry labels for cleanup.
 #   from-catalog:   Published release catalog to upgrade FROM (default: quay.io/kuadrant/kuadrant-operator-catalog:v1.5.3)
-#   from-channel:   OLM channel for the from version (default: preview)
+#   from-channel:   OLM channel for the from version (default: stable)
 #
 # Env vars:
 #   UPGRADE_BUNDLE_IMG=<image>  Skip building operator and bundle; use this
@@ -294,6 +294,12 @@ for i in $(seq 1 60); do
     sleep 5
 done
 
+if [ "${KCP_READY}" != "True" ]; then
+    echo "FAIL: KuadrantControlPlane did not become ready within timeout"
+    kubectl get kuadrantcontrolplane default -o yaml 2>/dev/null || true
+    exit 1
+fi
+
 echo ""
 echo "=== Final state ==="
 echo "CSVs:"
@@ -327,7 +333,7 @@ kubectl get configmap -n "${NAMESPACE}" -o yaml > "${AFTER_DIR}/configmaps.yaml"
 kubectl get service -n "${NAMESPACE}" -o yaml > "${AFTER_DIR}/services.yaml" 2>/dev/null || true
 
 CHANGED=""
-for resource in csvs subscriptions deployments clusterroles clusterrolebindings serviceaccounts crds configmaps services; do
+for resource in csvs subscriptions deployments clusterroles serviceaccounts crds configmaps services; do
     if ! diff -q "${BASELINE_DIR}/${resource}.yaml" "${AFTER_DIR}/${resource}.yaml" &>/dev/null; then
         CHANGED="${CHANGED} ${resource}"
     fi

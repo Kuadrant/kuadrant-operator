@@ -156,8 +156,6 @@ ${HELM} upgrade kuadrant charts/kuadrant-operator \
     --timeout 5m0s \
     --namespace "${NAMESPACE}"
 
-echo ""
-
 # ── Phase 4: KuadrantControlPlane readiness ──────────────────────────
 
 echo ""
@@ -170,6 +168,12 @@ for i in $(seq 1 60); do
     echo "  Waiting... (Ready=${KCP_READY:-pending})"
     sleep 5
 done
+
+if [ "${KCP_READY}" != "True" ]; then
+    echo "FAIL: KuadrantControlPlane/default did not become ready"
+    kubectl get kuadrantcontrolplane default -o yaml 2>/dev/null || true
+    exit 1
+fi
 
 echo ""
 echo "=== Final state ==="
@@ -190,7 +194,7 @@ kubectl get kcp/default -o json | jq -r '(.status.conditions[] | select(.type=="
 
 echo ""
 echo "=== Resource changes (before → after upgrade) ==="
-AFTER_DIR="$(pwd)/tmp/olm-upgrade-after"
+AFTER_DIR="$(pwd)/tmp/helm-upgrade-after"
 rm -rf "${AFTER_DIR}"
 mkdir -p "${AFTER_DIR}"
 
@@ -204,7 +208,7 @@ kubectl get configmap -n "${NAMESPACE}" -o yaml > "${AFTER_DIR}/configmaps.yaml"
 kubectl get service -n "${NAMESPACE}" -o yaml > "${AFTER_DIR}/services.yaml" 2>/dev/null || true
 
 CHANGED=""
-for resource in deployments clusterroles clusterrolebindings serviceaccounts crds configmaps services; do
+for resource in deployments clusterroles serviceaccounts crds configmaps services; do
     if ! diff -q "${BASELINE_DIR}/${resource}.yaml" "${AFTER_DIR}/${resource}.yaml" &>/dev/null; then
         CHANGED="${CHANGED} ${resource}"
     fi
@@ -218,7 +222,7 @@ if [ -n "${CHANGED}" ]; then
         echo "  diff ${BASELINE_DIR}/${resource}.yaml ${AFTER_DIR}/${resource}.yaml"
     done
 else
-    echo "No resource changes detected (unexpected — CSVs should have changed at minimum)"
+    echo "No resource changes detected (unexpected — operator deployment should have changed at minimum)"
 fi
 
 # ── Phase 5: Upgrade complete ────────────────────────────────────

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package kuadrant.v1;
+
+option go_package = "/v1";
+
+// PluginConfigService allows wasm components to fetch the full wasm plugin
+// configuration (ActionSets) for a gateway, instead of having it embedded
+// inline in the EnvoyFilter/WasmPlugin resource.
+service PluginConfigService {
+  rpc GetPluginConfig(GetPluginConfigRequest) returns (GetPluginConfigResponse) {}
+}
+
+message GetPluginConfigRequest {
+  string gateway = 1;
+}
+
+message GetPluginConfigResponse {
+  bytes config_json = 1;
+  string sha256 = 2;
+}

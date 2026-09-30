@@ -16,6 +16,18 @@ type Config struct {
 	ActionSets        []ActionSet        `json:"actionSets"`
 	Observability     *Observability     `json:"observability,omitempty"`
 	DescriptorService string             `json:"descriptorService,omitempty"`
+	// RemoteConfig, when set, tells the wasm module to fetch the real
+	// ActionSets/Services from the operator's PluginConfigService instead of
+	// relying on the (empty) inline config. Used by the bootstrap-only
+	// EnvoyFilter config to keep the inline payload constant-size regardless
+	// of policy count.
+	RemoteConfig *RemoteConfigRef `json:"remoteConfig,omitempty"`
+}
+
+// RemoteConfigRef points the wasm module at the gateway whose full config it
+// should fetch via PluginConfigService.GetPluginConfig.
+type RemoteConfigRef struct {
+	Gateway string `json:"gateway"`
 }
 
 func (c *Config) ToStruct() (*_struct.Struct, error) {

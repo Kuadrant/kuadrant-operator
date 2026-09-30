@@ -1,0 +1,225 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-sim-route
+  namespace: llm
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: kuadrant-ingressgateway
+      namespace: gateway-system
+  rules:
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/completions
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /llm/llm-sim/v1/completions
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/chat/completions
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /llm/llm-sim/v1/chat/completions
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/responses
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /llm/llm-sim/v1/responses
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/messages
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /llm/llm-sim/v1/messages
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      matches:
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/completions
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/completions/
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/chat/completions
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/chat/completions/
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/responses
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/responses/
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/messages
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: Exact
+            value: /v1/messages/
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/completions
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /publishers/llm/models/test/llm-sim/v1/completions
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/chat/completions
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /publishers/llm/models/test/llm-sim/v1/chat/completions
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/responses
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /publishers/llm/models/test/llm-sim/v1/responses
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /v1/messages
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /publishers/llm/models/test/llm-sim/v1/messages
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /publishers/llm/models/test/llm-sim
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              replacePrefixMatch: /
+              type: ReplacePrefixMatch
+      matches:
+        - path:
+            type: PathPrefix
+            value: /llm/llm-sim
+    - backendRefs:
+        - name: llm-sim
+          port: 80
+          weight: 1
+      matches:
+        - headers:
+            - name: X-Gateway-Model-Name
+              type: Exact
+              value: publishers/llm/models/test/llm-sim
+          path:
+            type: PathPrefix
+            value: /

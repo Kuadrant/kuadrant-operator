@@ -1,0 +1,19 @@
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: llm-sim-trlp
+  namespace: llm
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: llm-sim-route
+  limits:
+    rl-test001:
+      counters:
+        - expression: request.headers["x-test-user"]
+      rates:
+        - limit: 200
+          window: 1m
+      when:
+        - predicate: "!request.path.endsWith('/v1/models')"

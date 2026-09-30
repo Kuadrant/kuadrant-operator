@@ -218,6 +218,13 @@ func (m *Manager) startDescriptorServer() error {
 		return fmt.Errorf("service does not implement DescriptorServiceServer")
 	}
 
+	if svc, ok := m.service.(extpb.PluginConfigServiceServer); ok {
+		extpb.RegisterPluginConfigServiceServer(server, svc)
+	} else {
+		lis.Close()
+		return fmt.Errorf("service does not implement PluginConfigServiceServer")
+	}
+
 	m.descriptorServer = server
 
 	go func() {
@@ -512,6 +519,7 @@ type extensionService struct {
 	logger            logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 	extpb.UnimplementedDescriptorServiceServer
+	extpb.UnimplementedPluginConfigServiceServer
 }
 
 func (s *extensionService) Ping(_ context.Context, _ *extpb.PingRequest) (*extpb.PongResponse, error) {
@@ -687,6 +695,27 @@ func (s *extensionService) GetServiceDescriptors(_ context.Context, request *ext
 
 	return &extpb.GetServiceDescriptorsResponse{
 		Descriptors: descriptors,
+	}, nil
+}
+
+// GetPluginConfig serves the full wasm plugin configuration (ActionSets) for
+// a gateway, computed by the most recent IstioExtensionReconciler reconcile
+// cycle and cached in internal/wasm (see wasm.SetConfig/GetConfig). This is
+// what lets the EnvoyFilter carry only a small bootstrap payload instead of
+// the full config inline.
+func (s *extensionService) GetPluginConfig(_ context.Context, request *extpb.GetPluginConfigRequest) (*extpb.GetPluginConfigResponse, error) {
+	if request == nil || request.Gateway == "" {
+		return nil, errors.New("gateway must be specified")
+	}
+
+	cached, found := wasm.GetConfig(request.Gateway)
+	if !found {
+		return nil, fmt.Errorf("no wasm config found for gateway %q", request.Gateway)
+	}
+
+	return &extpb.GetPluginConfigResponse{
+		ConfigJson: cached.ConfigJSON,
+		Sha256:     cached.SHA256,
 	}, nil
 }
 

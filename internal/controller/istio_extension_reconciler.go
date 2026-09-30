@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -116,7 +117,28 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			wasmConfig.Services = lo.Assign(wasmConfig.Services, serviceBuilder.Build())
 		}
 
-		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
+		hasPolicies := len(wasmConfig.ActionSets) > 0
+
+		// Cache the fully computed config so PluginConfigService can serve it
+		// on demand, and replace the inline EnvoyFilter payload with a small
+		// bootstrap-only config pointing the wasm module at it. This keeps
+		// the EnvoyFilter constant-size regardless of policy/ActionSet count.
+		envoyFilterWasmConfig := wasmConfig
+		if hasPolicies {
+			if fullJSON, err := json.Marshal(&wasmConfig); err != nil {
+				logger.Error(err, "failed to marshal wasm config for remote-config store", "gateway", gatewayKey.String())
+			} else {
+				wasm.SetConfig(gateway.GetLocator(), fullJSON)
+			}
+			envoyFilterWasmConfig = wasm.Config{
+				Services:          map[string]wasm.Service{},
+				ActionSets:        []wasm.ActionSet{},
+				DescriptorService: wasm.DescriptorServiceClusterName,
+				RemoteConfig:      &wasm.RemoteConfigRef{Gateway: gateway.GetLocator()},
+			}
+		}
+
+		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, envoyFilterWasmConfig, hasPolicies, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
@@ -649,11 +671,13 @@ func specsHaveAuthAccess(specs []wasm.ActionSpec) bool {
 	return false
 }
 
-// buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
-func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+// buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config.
+// hasPolicies indicates whether any policy applies to this gateway (i.e. whether a wasm filter is needed at all) -
+// independent of whether wasmConfig itself is the full config or a bootstrap-only stand-in for it (see RemoteConfig).
+func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, hasPolicies bool, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
 	var configPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
 
-	if len(wasmConfig.ActionSets) > 0 {
+	if hasPolicies {
 		pluginConfigStruct, err := wasmConfig.ToStruct()
 		if err == nil {
 			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
@@ -667,6 +691,32 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		})
 		if err == nil {
 			configPatches = append(configPatches, clusterPatches...)
+		}
+
+		// The wasm.DescriptorServiceClusterName cluster ("kuadrant-operator-grpc")
+		// is normally only wired in by reconcileUpstreamClusters when OOP
+		// extensions have registered upstreams (see
+		// buildUpstreamEnvoyFilter) - it is NOT present for a plain
+		// TRLP/RLP-only gateway (confirmed empirically: missing from Envoy's
+		// config in that case, causing the remote-config gRPC dispatch to
+		// fail). RemoteConfig needs it unconditionally, so add it here too.
+		// Content is identical to the other call site if both happen to
+		// apply to the same workload, so this should be a harmless
+		// duplicate rather than a conflict, but that hasn't been verified
+		// against a scenario where both fire.
+		if wasmConfig.RemoteConfig != nil {
+			operatorNamespace := env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+			descriptorServiceHost := fmt.Sprintf("%s.%s.svc.cluster.local", wasm.DescriptorServiceClusterName, operatorNamespace)
+			descriptorServicePort, portErr := env.GetInt("EXTENSIONS_DESCRIPTOR_SERVICE_PORT", 50051)
+			if portErr != nil {
+				descriptorServicePort = 50051
+			}
+			descriptorClusterPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(descriptorServiceHost, descriptorServicePort, false, func(h string, p int, _ bool) map[string]any {
+				return buildClusterPatch(wasm.DescriptorServiceClusterName, h, p, false)
+			})
+			if err == nil {
+				configPatches = append(configPatches, descriptorClusterPatches...)
+			}
 		}
 	}
 
@@ -700,7 +750,7 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		},
 	}
 
-	if len(wasmConfig.ActionSets) == 0 {
+	if !hasPolicies {
 		utils.TagObjectToDelete(envoyFilter)
 	}
 

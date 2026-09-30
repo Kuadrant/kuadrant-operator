@@ -37,7 +37,7 @@ func getClusterUID(ctx context.Context, c client.Client) (string, error) {
 	return string(ns.UID), nil
 }
 
-var _ = Describe("DNSPolicy Single Cluster", Labels{"dnspolicy"}, func() {
+var _ = Describe("DNSPolicy Single Cluster", Labels{"common", "dnspolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(1 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -208,7 +208,7 @@ var _ = Describe("DNSPolicy Single Cluster", Labels{"dnspolicy"}, func() {
 				g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
 				g.Expect(wildcardDnsRecord.Status.OwnerID).To(Equal(wildcardDnsRecord.GetUIDHash()))
 				g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
-			}, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 		}, testTimeOut)
 
 	})

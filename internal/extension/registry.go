@@ -32,6 +32,7 @@ import (
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -375,19 +376,20 @@ const (
 	PipelinePhaseResponse PipelinePhase = "response"
 )
 
-// PipelineActionEntry represents a single stored pipeline action.
+func phaseFromProto(p extpb.Phase) (PipelinePhase, error) {
+	switch p {
+	case extpb.Phase_PHASE_REQUEST:
+		return PipelinePhaseRequest, nil
+	case extpb.Phase_PHASE_RESPONSE:
+		return PipelinePhaseResponse, nil
+	default:
+		return "", fmt.Errorf("invalid phase: %v", p)
+	}
+}
+
 type PipelineActionEntry struct {
-	Index        int
-	ActionType   extpb.ActionType
-	Predicate    string
-	Phase        string // "request" or "response"
-	Method       string // registered action method name (grpc_method)
-	Var          string // variable name for gRPC response (grpc_method)
-	WithStatus   int    // HTTP status code (deny); 0 means unset
-	WithHeaders  string // CEL expression — array of [name, value] pairs (deny)
-	WithBody     string // response body string (deny)
-	HeadersToAdd string // CEL expression for headers (add_headers)
-	LogMessage   string // error message to log (fail)
+	Index int
+	Entry *extpb.ActionEntry
 }
 
 // pipelineKey identifies a set of actions for a specific policy and phase.
@@ -748,9 +750,12 @@ func (r *RegisteredDataStore) AppendPipelineActions(policy ResourceID, phase Pip
 	key := pipelineKey{Policy: policy, Phase: phase}
 	startIndex := r.pipelineCounters[key]
 
-	for i := range actions {
-		actions[i].Index = startIndex + i
-		r.pipelineActions[key] = append(r.pipelineActions[key], actions[i])
+	for i, action := range actions {
+		cloned := PipelineActionEntry{
+			Index: startIndex + i,
+			Entry: proto.Clone(action.Entry).(*extpb.ActionEntry),
+		}
+		r.pipelineActions[key] = append(r.pipelineActions[key], cloned)
 	}
 	r.pipelineCounters[key] = startIndex + len(actions)
 
@@ -769,7 +774,12 @@ func (r *RegisteredDataStore) GetPipelineActions(policy ResourceID, phase Pipeli
 	}
 
 	result := make([]PipelineActionEntry, len(actions))
-	copy(result, actions)
+	for i, action := range actions {
+		result[i] = PipelineActionEntry{
+			Index: action.Index,
+			Entry: proto.Clone(action.Entry).(*extpb.ActionEntry),
+		}
+	}
 	return result
 }
 
@@ -789,8 +799,11 @@ func (r *RegisteredDataStore) ClearPipelinePhase(policy ResourceID, phase Pipeli
 // Returns an error if any entry has an invalid phase.
 func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries []PipelineActionEntry) error {
 	for i, entry := range entries {
-		if entry.Phase != string(PipelinePhaseRequest) && entry.Phase != string(PipelinePhaseResponse) {
-			return fmt.Errorf("entries[%d]: invalid phase %q, must be %q or %q", i, entry.Phase, PipelinePhaseRequest, PipelinePhaseResponse)
+		if entry.Entry == nil {
+			return fmt.Errorf("entries[%d]: Entry cannot be nil", i)
+		}
+		if _, err := phaseFromProto(entry.Entry.Phase); err != nil {
+			return fmt.Errorf("entries[%d]: %w", i, err)
 		}
 	}
 
@@ -805,7 +818,7 @@ func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries 
 
 	grouped := map[PipelinePhase][]PipelineActionEntry{}
 	for _, entry := range entries {
-		phase := PipelinePhase(entry.Phase)
+		phase, _ := phaseFromProto(entry.Entry.Phase)
 		grouped[phase] = append(grouped[phase], entry)
 	}
 
@@ -920,7 +933,11 @@ func pipelineTargetRefsMatch(storedRefs []TargetRef, targetRefs []machinery.Poli
 	return false
 }
 
-func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutators int, clearedSubscriptions int, clearedUpstreams int, clearedPipelineActions int) {
+func (r *RegisteredDataStore) ClearPolicyData(policies ...ResourceID) PruneCounts {
+	if len(policies) == 0 {
+		return PruneCounts{}
+	}
+
 	r.dataMutex.Lock()
 	r.subsMutex.Lock()
 	r.upstreamsMutex.Lock()
@@ -930,36 +947,49 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 	defer r.upstreamsMutex.Unlock()
 	defer r.pipelineMutex.Unlock()
 
-	// clear data providers
-	for key := range r.dataProviders {
-		if key.Policy == policy {
-			delete(r.dataProviders, key)
-			clearedMutators++
-		}
-	}
-
-	// clear subscriptions
-	for key := range r.subscriptions {
-		if key.Policy == policy {
-			delete(r.subscriptions, key)
-			clearedSubscriptions++
-		}
-	}
-
-	// Collect upstreams to check for cache cleanup
+	var counts PruneCounts
 	var upstreamsToCheck []RegisteredUpstreamEntry
-	for key, entry := range r.registeredUpstreams {
-		if key.Policy == policy {
-			upstreamsToCheck = append(upstreamsToCheck, entry)
-		}
-	}
 
-	// clear registered upstreams
-	for key := range r.registeredUpstreams {
-		if key.Policy == policy {
-			delete(r.registeredUpstreams, key)
-			clearedUpstreams++
+	for _, policy := range policies {
+		// clear data providers
+		for key := range r.dataProviders {
+			if key.Policy == policy {
+				delete(r.dataProviders, key)
+				counts.Mutators++
+			}
 		}
+
+		// clear subscriptions
+		for key := range r.subscriptions {
+			if key.Policy == policy {
+				delete(r.subscriptions, key)
+				counts.Subscriptions++
+			}
+		}
+
+		// Collect upstreams to check for cache cleanup
+		for key, entry := range r.registeredUpstreams {
+			if key.Policy == policy {
+				upstreamsToCheck = append(upstreamsToCheck, entry)
+			}
+		}
+
+		// clear registered upstreams
+		for key := range r.registeredUpstreams {
+			if key.Policy == policy {
+				delete(r.registeredUpstreams, key)
+				counts.Upstreams++
+			}
+		}
+
+		// clear pipeline actions and target refs
+		for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+			key := pipelineKey{Policy: policy, Phase: phase}
+			counts.PipelineActions += len(r.pipelineActions[key])
+			delete(r.pipelineActions, key)
+			delete(r.pipelineCounters, key)
+		}
+		delete(r.pipelineTargetRefs, policy)
 	}
 
 	// Clean up proto cache for upstreams that are no longer referenced
@@ -981,16 +1011,80 @@ func (r *RegisteredDataStore) ClearPolicyData(policy ResourceID) (clearedMutator
 		}
 	}
 
-	// clear pipeline actions and target refs (lock already held)
-	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
-		key := pipelineKey{Policy: policy, Phase: phase}
-		clearedPipelineActions += len(r.pipelineActions[key])
-		delete(r.pipelineActions, key)
-		delete(r.pipelineCounters, key)
-	}
-	delete(r.pipelineTargetRefs, policy)
+	return counts
+}
 
-	return clearedMutators, clearedSubscriptions, clearedUpstreams, clearedPipelineActions
+func (r *RegisteredDataStore) PolicyIDsForKind(kind string) []ResourceID {
+	r.dataMutex.RLock()
+	r.subsMutex.RLock()
+	r.upstreamsMutex.RLock()
+	r.pipelineMutex.RLock()
+	defer r.dataMutex.RUnlock()
+	defer r.subsMutex.RUnlock()
+	defer r.upstreamsMutex.RUnlock()
+	defer r.pipelineMutex.RUnlock()
+
+	seen := make(map[ResourceID]struct{})
+
+	for key := range r.dataProviders {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for key := range r.subscriptions {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for key := range r.registeredUpstreams {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for key := range r.pipelineActions {
+		if key.Policy.Kind == kind {
+			seen[key.Policy] = struct{}{}
+		}
+	}
+
+	for id := range r.pipelineTargetRefs {
+		if id.Kind == kind {
+			seen[id] = struct{}{}
+		}
+	}
+
+	result := make([]ResourceID, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+
+	return result
+}
+
+type PruneCounts struct {
+	Mutators        int
+	Subscriptions   int
+	Upstreams       int
+	PipelineActions int
+}
+
+func (r *RegisteredDataStore) PruneToOwned(kind string, owned []ResourceID) ([]ResourceID, PruneCounts) {
+	ownedSet := make(map[ResourceID]struct{}, len(owned))
+	for _, id := range owned {
+		ownedSet[id] = struct{}{}
+	}
+
+	var stale []ResourceID
+	for _, id := range r.PolicyIDsForKind(kind) {
+		if _, isOwned := ownedSet[id]; !isOwned {
+			stale = append(stale, id)
+		}
+	}
+
+	return stale, r.ClearPolicyData(stale...)
 }
 
 func (r *RegisteredDataStore) GetPolicySubscriptions(policy ResourceID) []SubscriptionKey {
@@ -1147,10 +1241,13 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
 		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
 
-		pipelineActions := translatePipelineToActions(
+		pipelineActions, err := translatePipelineToActions(
 			requestEntries, responseEntries,
 			methods, upstreamByMethod[policyID], sources,
 		)
+		if err != nil {
+			return fmt.Errorf("policy %s: %w", policyLocator, err)
+		}
 		if len(pipelineActions) == 0 {
 			continue
 		}
@@ -1175,119 +1272,154 @@ func predicateOrTrue(predicate string) string {
 	return predicate
 }
 
+func celExpressionsFromEntry(entry *extpb.ActionEntry) []string {
+	var exprs []string
+	if entry.Predicate != "" {
+		exprs = append(exprs, entry.Predicate)
+	}
+	if deny := entry.GetDeny(); deny != nil {
+		if deny.WithHeaders != "" {
+			exprs = append(exprs, deny.WithHeaders)
+		}
+		if deny.WithBody != "" {
+			exprs = append(exprs, deny.WithBody)
+		}
+	}
+	if addHeaders := entry.GetAddHeaders(); addHeaders != nil {
+		if addHeaders.HeadersToAdd != "" {
+			exprs = append(exprs, addHeaders.HeadersToAdd)
+		}
+	}
+	if store := entry.GetStore(); store != nil {
+		if store.Value != "" {
+			exprs = append(exprs, store.Value)
+		}
+	}
+	return exprs
+}
+
 func translatePipelineToActions(
 	requestEntries, responseEntries []PipelineActionEntry,
 	methods map[string]string,
 	upstreamByMethod map[string]RegisteredUpstreamEntry,
 	sources []string,
-) []wasm.Action {
-	varToMethod := make(map[string]string)
-	for _, e := range requestEntries {
-		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
-			varToMethod[e.Var] = e.Method
-		}
-	}
-	for _, e := range responseEntries {
-		if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD && e.Var != "" {
-			varToMethod[e.Var] = e.Method
-		}
+) ([]wasm.Action, error) {
+	type varProducer struct {
+		method  string
+		pattern *regexp.Regexp
 	}
 
-	varPatterns := make(map[string]*regexp.Regexp, len(varToMethod))
-	for varName := range varToMethod {
-		varPatterns[varName] = regexp.MustCompile(`\b` + regexp.QuoteMeta(varName) + `\b`)
+	var producers []varProducer
+	collectProducers := func(entries []PipelineActionEntry) {
+		for _, e := range entries {
+			if grpc := e.Entry.GetGrpc(); grpc != nil && grpc.GetVar() != "" {
+				producers = append(producers, varProducer{
+					method:  grpc.GetMethod(),
+					pattern: regexp.MustCompile(`\b` + regexp.QuoteMeta(grpc.GetVar()) + `\b`),
+				})
+			}
+		}
+	}
+	collectProducers(requestEntries)
+	collectProducers(responseEntries)
+
+	producerFor := func(e PipelineActionEntry) (varProducer, bool) {
+		return lo.Find(producers, func(p varProducer) bool {
+			return entryMatchesVar(e, p.pattern)
+		})
 	}
 
 	grpcOnReply := make(map[string][]wasm.Action)
 
-	classifyAndConvert := func(entries []PipelineActionEntry, phase string) {
+	classifyAndConvert := func(entries []PipelineActionEntry) error {
 		for _, e := range entries {
-			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
+			if e.Entry.GetGrpc() != nil {
 				continue
 			}
-			ta := entryToAction(e, sources, phase)
-			for varName, methodName := range varToMethod {
-				if entryMatchesVar(e, varPatterns[varName]) {
-					grpcOnReply[methodName] = append(grpcOnReply[methodName], ta)
-					break
-				}
+			ta, err := entryToAction(e, sources)
+			if err != nil {
+				return err
+			}
+			if p, ok := producerFor(e); ok {
+				grpcOnReply[p.method] = append(grpcOnReply[p.method], ta)
 			}
 		}
+		return nil
 	}
-	classifyAndConvert(requestEntries, string(PipelinePhaseRequest))
-	classifyAndConvert(responseEntries, string(PipelinePhaseResponse))
+	if err := classifyAndConvert(requestEntries); err != nil {
+		return nil, err
+	}
+	if err := classifyAndConvert(responseEntries); err != nil {
+		return nil, err
+	}
 
 	var result []wasm.Action
 	emittedGRPC := make(map[string]bool)
 
-	emit := func(entries []PipelineActionEntry, phase string) {
+	emit := func(entries []PipelineActionEntry) error {
 		for _, e := range entries {
-			if e.ActionType == extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
-				if emittedGRPC[e.Method] {
+			if grpc := e.Entry.GetGrpc(); grpc != nil {
+				method := grpc.GetMethod()
+				if emittedGRPC[method] {
 					continue
 				}
-				emittedGRPC[e.Method] = true
+				emittedGRPC[method] = true
 				ta := grpcToAction(e, methods, upstreamByMethod, sources)
-				ta.WithOnReply(grpcOnReply[e.Method]...)
+				ta.WithOnReply(grpcOnReply[method]...)
 				result = append(result, ta)
 				continue
 			}
-			isVarDependent := false
-			for varName := range varToMethod {
-				if entryMatchesVar(e, varPatterns[varName]) {
-					isVarDependent = true
-					break
+			if _, ok := producerFor(e); !ok {
+				ta, err := entryToAction(e, sources)
+				if err != nil {
+					return err
 				}
-			}
-			if !isVarDependent {
-				result = append(result, entryToAction(e, sources, phase))
+				result = append(result, ta)
 			}
 		}
+		return nil
 	}
-	emit(requestEntries, string(PipelinePhaseRequest))
-	emit(responseEntries, string(PipelinePhaseResponse))
+	if err := emit(requestEntries); err != nil {
+		return nil, err
+	}
+	if err := emit(responseEntries); err != nil {
+		return nil, err
+	}
 
-	return result
+	return result, nil
 }
 
 func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {
-	if entry.Predicate != "" && pattern.MatchString(entry.Predicate) {
-		return true
-	}
-	if entry.HeadersToAdd != "" && pattern.MatchString(entry.HeadersToAdd) {
-		return true
-	}
-	if entry.WithHeaders != "" && pattern.MatchString(entry.WithHeaders) {
-		return true
-	}
-	if entry.LogMessage != "" && pattern.MatchString(entry.LogMessage) {
-		return true
-	}
-	if entry.WithBody != "" && pattern.MatchString(entry.WithBody) {
-		return true
-	}
-	return false
+	return slices.ContainsFunc(celExpressionsFromEntry(entry.Entry), pattern.MatchString)
 }
 
-func entryToAction(entry PipelineActionEntry, sources []string, phase string) wasm.Action {
-	predicate := predicateOrTrue(entry.Predicate)
-	switch entry.ActionType {
-	case extpb.ActionType_ACTION_TYPE_DENY:
-		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(entry.WithStatus, entry.WithHeaders, entry.WithBody)).
-			WithSources(sources)
-	case extpb.ActionType_ACTION_TYPE_ADD_HEADERS:
-		target := ""
-		if phase == string(PipelinePhaseResponse) {
-			target = "response"
+func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, error) {
+	predicate := predicateOrTrue(entry.Entry.Predicate)
+	switch a := entry.Entry.Action.(type) {
+	case *extpb.ActionEntry_Deny:
+		return wasm.NewDenyAction(predicate, buildDenyResponseExpr(int(a.Deny.WithStatus), a.Deny.WithHeaders, a.Deny.WithBody)).
+			WithSources(sources), nil
+	case *extpb.ActionEntry_AddHeaders:
+		var target wasm.HeaderTarget
+		switch entry.Entry.Phase {
+		case extpb.Phase_PHASE_REQUEST:
+			target = wasm.HeaderTargetRequest
+		case extpb.Phase_PHASE_RESPONSE:
+			target = wasm.HeaderTargetResponse
+		default:
+			return nil, fmt.Errorf("actions[%d]: add_headers has invalid phase %v", entry.Index, entry.Entry.Phase)
 		}
-		return wasm.NewHeadersAction(predicate, target, entry.HeadersToAdd).
-			WithSources(sources)
-	case extpb.ActionType_ACTION_TYPE_FAIL:
-		return wasm.NewFailAction(predicate, entry.LogMessage).
-			WithSources(sources)
+		return wasm.NewHeadersAction(predicate, target, a.AddHeaders.HeadersToAdd).
+			WithSources(sources), nil
+	case *extpb.ActionEntry_Fail:
+		return wasm.NewFailAction(predicate, a.Fail.LogMessage).
+			WithSources(sources), nil
+	case *extpb.ActionEntry_Store:
+		return wasm.NewStoreAction(predicate, a.Store.Path, a.Store.Value).
+			WithExportToHost(a.Store.ExportToHost).
+			WithSources(sources), nil
 	default:
-		return wasm.NewFailAction(predicate, "unknown action type").
-			WithSources(sources)
+		return nil, fmt.Errorf("actions[%d]: unknown action type %T", entry.Index, entry.Entry.Action)
 	}
 }
 
@@ -1309,11 +1441,12 @@ func buildDenyResponseExpr(status int, headers, body string) string {
 }
 
 func grpcToAction(entry PipelineActionEntry, methods map[string]string, upstreamByMethod map[string]RegisteredUpstreamEntry, sources []string) *wasm.GrpcAction {
+	grpc := entry.Entry.GetGrpc()
 	mb := ""
-	if upstream, ok := upstreamByMethod[entry.Method]; ok {
+	if upstream, ok := upstreamByMethod[grpc.GetMethod()]; ok {
 		mb = upstream.MessageTemplate
 	}
-	return wasm.NewGrpcAction(predicateOrTrue(entry.Predicate), entry.Var, methods[entry.Method], mb, "").
+	return wasm.NewGrpcAction(predicateOrTrue(entry.Entry.Predicate), grpc.GetVar(), methods[grpc.GetMethod()], mb, "").
 		WithSources(sources)
 }
 

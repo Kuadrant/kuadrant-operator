@@ -10,7 +10,8 @@ helm-build: kustomize manifests set-related-images ## Build the helm chart from 
 	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Build the helm chart templates from kustomize manifests
-	$(KUSTOMIZE) build config/helm > $(CHART_DIRECTORY)/templates/manifests.yaml
+	# LoadRestrictionsNone: config/helm/developer-portal-crds reads CRDs from component-charts/
+	$(KUSTOMIZE) build --load-restrictor LoadRestrictionsNone config/helm > $(CHART_DIRECTORY)/templates/manifests.yaml
 	# Set the helm chart version and dependencies versions
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.version = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml
 	V="$(BUNDLE_VERSION)" $(YQ) -i e '.appVersion = strenv(V)' $(CHART_DIRECTORY)/Chart.yaml

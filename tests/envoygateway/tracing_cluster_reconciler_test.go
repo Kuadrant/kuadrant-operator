@@ -25,7 +25,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("tracing cluster controller", Serial, func() {
+var _ = Describe("tracing cluster controller", Serial, Labels{"envoygateway", "authpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

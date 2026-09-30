@@ -140,12 +140,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
-		controller.WithRunnable("developer portal deployment watcher", controller.Watch(
-			&appsv1.Deployment{},
-			kuadrantv1beta1.DeploymentsResource,
-			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*appsv1.Deployment](fmt.Sprintf("%s=true", kuadrant.DeveloperPortalLabel)),
-		)),
 		controller.WithRunnable("limitador deployment watcher", controller.Watch(
 			&appsv1.Deployment{},
 			kuadrantv1beta1.DeploymentsResource,
@@ -275,6 +269,7 @@ type BootOptionsBuilder struct {
 	isCertManagerInstalled           bool
 	isConsolePluginInstalled         bool
 	isClusterVersionInstalled        bool
+	consolePluginImageOverride       string
 	isDNSOperatorInstalled           bool
 	isLimitadorOperatorInstalled     bool
 	isAuthorinoOperatorInstalled     bool
@@ -535,8 +530,10 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		return nil, err
 	}
 
-	if !b.isConsolePluginInstalled || !b.isClusterVersionInstalled {
-		b.logger.Info("console plugin or openshift cluster version is not installed, skipping related watches and reconcilers")
+	b.consolePluginImageOverride = env.GetString(openshift.ConsolePluginImageOverrideEnvVar, "")
+
+	if !b.isConsolePluginInstalled {
+		b.logger.Info("console plugin API is not installed, skipping related watches and reconcilers")
 		return opts, nil
 	}
 
@@ -544,13 +541,19 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		controller.WithRunnable("consoleplugin watcher", controller.Watch(
 			&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
-		controller.WithRunnable("cluster version watcher", controller.Watch(
+		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+		// Filter by name, not labels, so removing a managed label still triggers repair.
+		controller.WithRunnable("consoleplugin networkpolicy watcher", controller.Watch(
+			&networkingv1.NetworkPolicy{}, kuadrantv1beta1.NetworkPolicyResource, operatorNamespace,
+			controller.FilterResourcesByField[*networkingv1.NetworkPolicy]("metadata.name="+consoleplugin.NetworkPolicyName()))),
+	)
+	if b.isClusterVersionInstalled {
+		opts = append(opts, controller.WithRunnable("cluster version watcher", controller.Watch(
 			&configv1.ClusterVersion{},
 			openshift.ClusterVersionResource,
 			metav1.NamespaceAll,
-		)),
-		controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind(), openshift.ClusterVersionGroupKind.GroupKind()),
-	)
+		)), controller.WithObjectKinds(openshift.ClusterVersionGroupKind.GroupKind()))
+	}
 
 	return opts, nil
 }
@@ -860,16 +863,15 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			traceReconcileFunc("workflow.tls", NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run),
 			traceReconcileFunc("workflow.data_plane_policies", NewDataPlanePoliciesWorkflow(b.manager, b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run),
 			traceReconcileFunc("workflow.observability", NewObservabilityReconciler(b.client, b.manager, operatorNamespace).Subscription().Reconcile),
-			traceReconcileFunc("workflow.developer_portal", NewDeveloperPortalReconciler(b.manager).Subscription().Reconcile),
 			traceReconcileFunc("workflow.networkpolicy", NewNetworkPolicyReconciler(b.client).Subscription().Reconcile),
 			traceReconcileFunc("workflow.networkpolicyB", NewOperatorNetworkPolicyReconciler(b.client).Subscription().Reconcile),
 		},
 		Postcondition: traceReconcileFunc("workflow.finalize", b.finalStepsWorkflow().Run),
 	}
 
-	if b.isConsolePluginInstalled && b.isClusterVersionInstalled {
+	if b.isConsolePluginInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile),
+			traceReconcileFunc("workflow.console_plugin", NewConsolePluginReconciler(b.manager, operatorNamespace, b.consolePluginImageOverride).Subscription().Reconcile),
 		)
 	}
 

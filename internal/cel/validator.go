@@ -25,8 +25,8 @@ type binding struct {
 }
 
 type funcBinding struct {
-	name    string
-	funcOpt cel.FunctionOpt
+	name     string
+	funcOpts []cel.FunctionOpt
 }
 
 func NewValidatorBuilder() *ValidatorBuilder {
@@ -44,10 +44,10 @@ func (b *ValidatorBuilder) AddBinding(name string, t *cel.Type) *ValidatorBuilde
 	return b
 }
 
-func (b *ValidatorBuilder) AddFunction(name string, funcOpt cel.FunctionOpt) *ValidatorBuilder {
+func (b *ValidatorBuilder) AddFunction(name string, funcOpts ...cel.FunctionOpt) *ValidatorBuilder {
 	b.baseFunctions[name] = funcBinding{
-		name:    name,
-		funcOpt: funcOpt,
+		name:     name,
+		funcOpts: funcOpts,
 	}
 	return b
 }
@@ -102,7 +102,7 @@ func (b *ValidatorBuilder) Build() (*Validator, error) {
 		}
 
 		for _, binding := range b.baseFunctions {
-			opts = append(opts, cel.Function(binding.name, binding.funcOpt))
+			opts = append(opts, cel.Function(binding.name, binding.funcOpts...))
 		}
 
 		for _, p := range b.policies {

@@ -179,3 +179,11 @@ kubectl delete dnsrecord.kuadrant.io <gateway-name>-<listener-name> -n <dns poli
 ```
 
 Removing this resource will remove all of the associated DNS records in the DNS provider and while the health check is failing, the dns operator will not re-publish these records. 
+
+## Health Checks and DNS Failover Groups
+
+When using [DNS failover via groups](../../overviews/dns.md#dns-failover-via-groups), health checks continue to operate independently of group state. Health check probes run regardless of whether a DNSRecord's group is active or inactive, and the `Healthy` condition on the DNSRecord reflects the actual reachability of the endpoint.
+
+During a failover scenario, health checks provide visibility into whether the standby group's endpoints are healthy before you switch traffic to them. After removing a failed group from the active groups, the health check status on the remaining active group's records confirms that the failover target is serving traffic correctly.
+
+The `SubResourcesHealthy` condition on the DNSPolicy aggregates health across all its DNSRecords, including during group transitions.

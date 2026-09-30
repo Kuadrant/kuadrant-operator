@@ -138,7 +138,7 @@ func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) er
 	crdGVR := apiextv1.SchemeGroupVersion.WithResource("customresourcedefinitions")
 
 	for _, name := range crdNames {
-		a.logger.Info("waiting for CRD to be established", "crd", name)
+		a.logger.V(1).Info("waiting for CRD to be established", "crd", name)
 		err := wait.PollUntilContextTimeout(ctx, crdWaitInterval, crdWaitTimeout, true,
 			func(ctx context.Context) (bool, error) {
 				obj, getErr := a.client.Resource(crdGVR).Get(ctx, name, metav1.GetOptions{})
@@ -151,7 +151,7 @@ func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) er
 		if err != nil {
 			return fmt.Errorf("CRD %s not established within %s: %w", name, crdWaitTimeout, err)
 		}
-		a.logger.Info("CRD established", "crd", name)
+		a.logger.V(1).Info("CRD established", "crd", name)
 	}
 	return nil
 }

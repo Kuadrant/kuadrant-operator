@@ -107,6 +107,8 @@ jobs:
             git push --set-upstream origin "$base_branch"
           fi
 
+      - name: Install crane
+        uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1
       - name: Prepare release
         id: prepare-release
         run: |
@@ -155,7 +157,7 @@ jobs:
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: true
           base: ${{ env.BASE_BRANCH }}
-          branch: release-${{ github.event.inputs.kuadrantOperatorVersion }}
+          branch: pre-release-${{ github.event.inputs.kuadrantOperatorVersion }}
           delete-branch: true
           title: '[Release] Kuadrant Operator v${{ github.event.inputs.kuadrantOperatorVersion }}'
           body: |

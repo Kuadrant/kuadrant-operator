@@ -31,7 +31,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("wasm controller", func() {
+var _ = Describe("wasm controller", Labels{"envoygateway", "ratelimitpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -207,6 +207,22 @@ var _ = Describe("wasm controller", func() {
 						Timeout:     ptr.To(wasm.RatelimitReportServiceTimeout()),
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
+					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
 					},
 				},
 				ActionSets: []wasm.ActionSet{
@@ -400,6 +416,22 @@ var _ = Describe("wasm controller", func() {
 						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
 						GrpcMethod:  ptr.To(wasm.RateLimitReportGrpcMethod),
 					},
+					wasm.RateLimitReserveServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitReserveServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitReserveServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitReserveGrpcMethod),
+					},
+					wasm.RateLimitCommitServiceName: {
+						Type:        wasm.DynamicServiceType,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+						FailureMode: wasm.RatelimitCommitServiceFailureMode(&logger),
+						Timeout:     ptr.To(wasm.RatelimitCommitServiceTimeout()),
+						GrpcService: ptr.To(wasm.KuadrantRateLimitGrpcService),
+						GrpcMethod:  ptr.To(wasm.RateLimitCommitGrpcMethod),
+					},
 				},
 				ActionSets: []wasm.ActionSet{
 					{
@@ -475,7 +507,7 @@ var _ = Describe("wasm controller", func() {
 	})
 
 	Context("Source Policy Locators", func() {
-		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with merge strategy", func(ctx SpecContext) {
+		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with merge strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			routeName := "test-route"
 			gwAuthPolicyName := "gw-auth"
 			routeAuthPolicyName := "route-auth"
@@ -608,7 +640,7 @@ var _ = Describe("wasm controller", func() {
 
 		}, testTimeOut)
 
-		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with atomic strategy", func(ctx SpecContext) {
+		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with atomic strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			routeName := "test-route"
 			gwAuthPolicyName := "gw-auth"
 			routeAuthPolicyName := "route-auth"
@@ -739,7 +771,7 @@ var _ = Describe("wasm controller", func() {
 
 		}, testTimeOut)
 
-		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with overrides and atomic strategy", func(ctx SpecContext) {
+		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with overrides and atomic strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			routeName := "test-route"
 			gwAuthPolicyName := "gw-auth"
 			routeAuthPolicyName := "route-auth"
@@ -869,7 +901,7 @@ var _ = Describe("wasm controller", func() {
 
 		}, testTimeOut)
 
-		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with overrides and merge strategy", func(ctx SpecContext) {
+		It("EnvoyExtensionPolicy config includes source policy locators for AuthPolicy with overrides and merge strategy", Labels{"authpolicy"}, func(ctx SpecContext) {
 			routeName := "test-route"
 			gwAuthPolicyName := "gw-auth"
 			routeAuthPolicyName := "route-auth"

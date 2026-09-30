@@ -30,7 +30,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("AuthPolicy controller (GRPCRoute)", Labels{"authpolicy"}, func() {
+var _ = Describe("AuthPolicy controller (GRPCRoute)", Labels{"common", "authpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

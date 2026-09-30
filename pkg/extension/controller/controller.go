@@ -2,10 +2,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -14,12 +16,16 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlruntimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	ctrlruntimectrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,6 +34,7 @@ import (
 
 	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
@@ -89,6 +96,22 @@ type ExtensionController struct {
 	*basereconciler.BaseReconciler // TODO(didierofrivia): Next iteration, use policy machinery
 }
 
+type informerCache interface {
+	GetInformer(ctx context.Context, obj client.Object, opts ...ctrlruntimecache.InformerGetOption) (ctrlruntimecache.Informer, error)
+	WaitForCacheSync(ctx context.Context) bool
+	List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error
+}
+
+func awaitCacheSync(ctx context.Context, cache informerCache, forType client.Object) error {
+	if _, err := cache.GetInformer(ctx, forType); err != nil {
+		return fmt.Errorf("failed to register informer for %T: %w", forType, err)
+	}
+	if !cache.WaitForCacheSync(ctx) {
+		return fmt.Errorf("cache sync did not complete: %w", ctx.Err())
+	}
+	return nil
+}
+
 // Start runs the controller manager and a background session supervisor. The
 // manager (and its health probes) must come up regardless of session state, so
 // a successful handshake is deliberately not a precondition for starting it.
@@ -102,8 +125,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 
 	// test path: supervise runs blocking in the foreground
 	if ec.manager == nil {
-		ec.superviseSession(ctx, reconcileChan)
-		return nil
+		return ec.superviseSession(ctx, reconcileChan)
 	}
 
 	ctrl, err := ctrlruntimectrl.New(ec.config.Name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
@@ -116,33 +138,60 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 		}
 	}
 
+	managerCtx, stopManager := context.WithCancel(ctx)
+	defer stopManager()
 	sessionCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	supervisorDone := make(chan struct{})
+	var sessionErr error
 	go func() {
 		defer close(supervisorDone)
-		ec.superviseSession(sessionCtx, reconcileChan)
+		sessionErr = ec.superviseSession(sessionCtx, reconcileChan)
+		if sessionErr != nil {
+			stopManager()
+		}
 	}()
 
-	err = ec.manager.Start(ctx)
+	err = ec.manager.Start(managerCtx)
 	cancel()
 	<-supervisorDone
+	if sessionErr != nil {
+		return sessionErr
+	}
 	if err != nil {
 		return fmt.Errorf("error starting manager: %w", err)
 	}
 	return nil
 }
 
-func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) error {
 	defer ec.shutdown()
+	if ec.manager != nil {
+		if err := awaitCacheSync(ctx, ec.manager.GetCache(), ec.config.ForType); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			ec.logger.Error(err, "not handshaking")
+			return err
+		}
+	}
 	for {
-		if err := ec.handshakeWithBackoff(ctx); err != nil {
-			return
+		owned, err := ec.handshakeWithBackoff(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
 		}
-		ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind)
+		operatorVersion := ec.extensionClient.peerVersion
+		ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind, "protocolVersion", protocol.Version, "operatorProtocolVersion", operatorVersion)
+		if operatorVersion != "" && operatorVersion != protocol.Version {
+			ec.logger.Info("extension and operator protocol versions differ but remain compatible", "extension", protocol.Version, "operator", operatorVersion)
+		}
 		if ctx.Err() != nil {
-			return
+			return nil
 		}
+		ec.replayOwnedPolicies(ctx, owned, reconcileChan)
 
 		streamCtx, cancel := context.WithCancel(ctx)
 		go ec.heartbeat(streamCtx, cancel)
@@ -150,24 +199,29 @@ func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileCh
 		cancel()
 
 		if ctx.Err() != nil {
-			return
+			return nil
 		}
 	}
 }
 
-func (ec *ExtensionController) handshakeWithBackoff(ctx context.Context) error {
+func (ec *ExtensionController) handshakeWithBackoff(ctx context.Context) ([]*extpb.Metadata, error) {
 	backoff := ec.newReconnectBackoff()
 	for {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
-		err := ec.attemptHandshake(ctx)
+		owned, err := ec.attemptHandshake(ctx)
 		if err == nil {
-			return nil
+			return owned, nil
+		}
+		var rejected *handshakeRejectedError
+		if errors.As(err, &rejected) && rejected.terminal() {
+			ec.logger.Error(err, "handshake permanently rejected, not retrying", "extension", ec.config.Name, "rejection", rejected.rejection.String(), "extension.protocolVersion", protocol.Version, "operator.protocolVersion", ec.extensionClient.peerVersion)
+			return nil, err
 		}
 		ec.logger.Error(err, "handshake attempt failed, retrying")
 		if !waitBackoff(ctx, &backoff) {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
 	}
 }
@@ -181,17 +235,79 @@ func waitBackoff(ctx context.Context, backoff *wait.Backoff) bool {
 	}
 }
 
-func (ec *ExtensionController) attemptHandshake(ctx context.Context) error {
+func (ec *ExtensionController) replayOwnedPolicies(ctx context.Context, owned []*extpb.Metadata, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+	if len(owned) == 0 {
+		return
+	}
+	ec.logger.Info("replaying owned policies", "policyKind", ec.config.PolicyKind, "count", len(owned))
+	for _, policy := range owned {
+		trigger := &unstructured.Unstructured{}
+		trigger.SetName(policy.Name)
+		trigger.SetNamespace(policy.Namespace)
+		trigger.SetKind(ec.config.PolicyKind)
+		select {
+		case reconcileChan <- ctrlruntimeevent.GenericEvent{Object: trigger}:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func listOwnedPolicies(ctx context.Context, cache informerCache, forType client.Object, scheme *runtime.Scheme) ([]*extpb.Metadata, error) {
+	gvk, err := apiutil.GVKForObject(forType, scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve GVK for %T: %w", forType, err)
+	}
+	listGVK := gvk
+	listGVK.Kind += "List"
+	obj, err := scheme.New(listGVK)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve list type %s: %w", listGVK, err)
+	}
+	list, ok := obj.(client.ObjectList)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a client.ObjectList", listGVK)
+	}
+	if err := cache.List(ctx, list); err != nil {
+		return nil, fmt.Errorf("failed to list %s: %w", listGVK.Kind, err)
+	}
+
+	var owned []*extpb.Metadata
+	if err := apimeta.EachListItem(list, func(o runtime.Object) error {
+		accessor, err := apimeta.Accessor(o)
+		if err != nil {
+			return err
+		}
+		owned = append(owned, &extpb.Metadata{
+			Group:     gvk.Group,
+			Namespace: accessor.GetNamespace(),
+			Name:      accessor.GetName(),
+		})
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to read %s items: %w", listGVK.Kind, err)
+	}
+	return owned, nil
+}
+
+func (ec *ExtensionController) attemptHandshake(ctx context.Context) ([]*extpb.Metadata, error) {
 	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 	token, err := ec.tokenSource(handshakeCtx)
 	if err != nil {
-		return fmt.Errorf("failed to obtain handshake credential: %w", err)
+		return nil, fmt.Errorf("failed to obtain handshake credential: %w", err)
 	}
-	if err := ec.extensionClient.handshake(handshakeCtx, token, ec.config.PolicyKind); err != nil {
-		return fmt.Errorf("extension handshake failed: %w", err)
+	var owned []*extpb.Metadata
+	if ec.manager != nil {
+		owned, err = listOwnedPolicies(handshakeCtx, ec.manager.GetCache(), ec.config.ForType, ec.manager.GetScheme())
+		if err != nil {
+			return nil, fmt.Errorf("failed to enumerate owned policies: %w", err)
+		}
 	}
-	return nil
+	if err := ec.extensionClient.handshake(handshakeCtx, token, ec.config.PolicyKind, owned); err != nil {
+		return nil, fmt.Errorf("extension handshake failed: %w", err)
+	}
+	return owned, nil
 }
 
 // streamSession rides out transient Unavailable errors on the same session, and
@@ -317,7 +433,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	// Ensure finalizer exists for both create and updates
 	if eventType == EventTypeCreate || eventType == EventTypeUpdate {
 		if err := ec.ensureFinalizer(ctx, request); err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{RequeueAfter: time.Second}, err
@@ -332,7 +448,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	if err := ec.cleanupFinalizer(ctx, request); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{RequeueAfter: time.Second}, err
@@ -518,16 +634,9 @@ func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipe
 	}
 }
 
-type pipelinePhase = string
-
-const (
-	phaseRequest  pipelinePhase = "request"
-	phaseResponse pipelinePhase = "response"
-)
-
 type pipelineEntry struct {
 	action exttypes.Action
-	phase  pipelinePhase
+	phase  extpb.Phase
 }
 
 // PipelineImpl implements Pipeline by accumulating actions locally with
@@ -541,21 +650,21 @@ type PipelineImpl struct {
 
 func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
 	for _, entry := range p.actions {
-		if entry.phase == phaseResponse {
+		if entry.phase == extpb.Phase_PHASE_RESPONSE {
 			return fmt.Errorf("cannot add request actions after response actions have been added")
 		}
 	}
-	return p.validateAndAppend(phaseRequest, actions)
+	return p.validateAndAppend(extpb.Phase_PHASE_REQUEST, actions)
 }
 
 func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
-	return p.validateAndAppend(phaseResponse, actions)
+	return p.validateAndAppend(extpb.Phase_PHASE_RESPONSE, actions)
 }
 
-func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action) error {
+func (p *PipelineImpl) validateAndAppend(phase extpb.Phase, actions []exttypes.Action) error {
 	batchVars := make(map[string]bool)
 	for _, action := range actions {
-		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {
 			batchVars[grpc.Var] = true
 		}
 	}
@@ -576,34 +685,30 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 	}
 
 	for _, action := range actions {
-		if _, ok := action.(exttypes.FailAction); ok {
-			refsVar := false
-			for _, expr := range action.CelExpressions() {
-				for _, pattern := range varPatterns {
-					if pattern.MatchString(expr) {
-						refsVar = true
-						break
-					}
-				}
-				if refsVar {
-					break
-				}
-			}
-			if !refsVar {
-				return fmt.Errorf("fail action must reference a gRPC response variable")
-			}
-		}
-
 		exprs := action.CelExpressions()
-		for _, expr := range exprs {
-			for varName, pattern := range varPatterns {
-				if !localPopulated[varName] && pattern.MatchString(expr) {
-					return fmt.Errorf("action references variable %q before it is populated", varName)
-				}
+		referenced := make([]string, 0, len(varPatterns))
+		for varName, pattern := range varPatterns {
+			if slices.ContainsFunc(exprs, pattern.MatchString) {
+				referenced = append(referenced, varName)
+			}
+		}
+		slices.Sort(referenced)
+
+		if _, ok := action.(exttypes.FailAction); ok && len(referenced) == 0 {
+			return fmt.Errorf("fail action must reference a gRPC response variable")
+		}
+
+		for _, varName := range referenced {
+			if !localPopulated[varName] {
+				return fmt.Errorf("action references variable %q before it is populated", varName)
 			}
 		}
 
-		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+		if len(referenced) > 1 {
+			return fmt.Errorf("action references variables %q from separate gRPC actions; a response variable is only in scope within its own reply hook", referenced)
+		}
+
+		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {
 			if localPopulated[grpc.Var] {
 				return fmt.Errorf("duplicate variable name %q", grpc.Var)
 			}

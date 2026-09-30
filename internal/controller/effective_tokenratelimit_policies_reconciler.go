@@ -69,15 +69,12 @@ func (r *EffectiveTokenRateLimitPolicyReconciler) calculateEffectivePolicies(ctx
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gatewayClass, httpRouteRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
 			for i := range paths {
-				policiesInPath := kuadrantv1.PoliciesInPath(paths[i], isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-
 				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1alpha1.TokenRateLimitPolicy](paths[i], isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])
 
-					// Collect all source policy locators that contributed to this effective policy
-					sourceLocators := lo.Map(policiesInPath, func(p machinery.Policy, _ int) string {
-						return p.GetLocator()
-					})
+					// Extract source policy locators from the effective policy rules
+					// This ensures only policies that actually contributed are tracked, excluding overridden ones
+					sourceLocators := kuadrantv1.SourcePoliciesFromEffectivePolicy(*effectivePolicy)
 
 					effectivePolicies[pathID] = EffectiveTokenRateLimitPolicy{
 						Path:           paths[i],

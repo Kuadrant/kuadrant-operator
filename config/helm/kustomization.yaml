@@ -10,7 +10,7 @@ labels:
 
 resources:
 - ../default
-- developer-portal
+- developer-portal-crds
 
 patches:
 - patch: |-

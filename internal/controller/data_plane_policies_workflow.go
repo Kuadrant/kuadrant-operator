@@ -214,7 +214,8 @@ func mergeAndVerifySpecs(ctx context.Context, specs []wasm.ActionSpec) ([]wasm.A
 		last := &result[len(result)-1]
 
 		if last.Scope == current.Scope &&
-			last.ServiceName == current.ServiceName && last.ServiceName != wasm.AuthServiceName {
+			last.ServiceName == current.ServiceName &&
+			wasm.IsMergeableService(last.ServiceName) {
 			last.ConditionalData = append(last.ConditionalData, current.ConditionalData...)
 			// Merge source policy locators - deduplicate them
 			last.Sources = lo.Uniq(append(last.Sources, current.Sources...))

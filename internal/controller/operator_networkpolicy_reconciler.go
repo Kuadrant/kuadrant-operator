@@ -349,7 +349,7 @@ func setOwnerRef(policy, existingPolicy *networkingv1.NetworkPolicy, deployment 
 		Kind:               deployment.Kind,
 		Name:               deployment.GetName(),
 		UID:                deployment.GetUID(),
-		BlockOwnerDeletion: new(true),
+		BlockOwnerDeletion: new(false),
 		Controller:         new(true),
 	}
 

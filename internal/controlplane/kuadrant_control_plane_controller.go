@@ -29,15 +29,15 @@ const requeueInterval = 5 * time.Minute
 
 // Component deployer RBAC — CRD management
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=create;list;watch
-//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=dnsrecords.kuadrant.io;dnshealthcheckprobes.kuadrant.io;mcpgatewayextensions.mcp.kuadrant.io;mcpserverregistrations.mcp.kuadrant.io;mcpvirtualservers.mcp.kuadrant.io;authconfigs.authorino.kuadrant.io;authorinos.operator.authorino.kuadrant.io;limitadors.limitador.kuadrant.io,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=dnsrecords.kuadrant.io;dnshealthcheckprobes.kuadrant.io;mcpgatewayextensions.mcp.kuadrant.io;mcpserverregistrations.mcp.kuadrant.io;mcpvirtualservers.mcp.kuadrant.io;authconfigs.authorino.kuadrant.io;authorinos.operator.authorino.kuadrant.io;limitadors.limitador.kuadrant.io;apiproducts.devportal.kuadrant.io;apikeys.devportal.kuadrant.io;apikeyrequests.devportal.kuadrant.io;apikeyapprovals.devportal.kuadrant.io,verbs=get;list;watch;update;patch
 
 // Component deployer RBAC — ClusterRole management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller;authorino-manager-role;authorino-operator-manager;authorino-manager-k8s-auth-role;authorino-operator;authorino-authconfig-editor-role;authorino-authconfig-viewer-role;limitador-operator-manager-role;limitador-operator-controller-manager,verbs=delete;get;update;patch;bind;escalate
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller;authorino-manager-role;authorino-operator-manager;authorino-manager-k8s-auth-role;authorino-operator;authorino-authconfig-editor-role;authorino-authconfig-viewer-role;limitador-operator-manager-role;limitador-operator-controller-manager;developer-portal-controller-manager-role,verbs=delete;get;update;patch;bind;escalate
 
 // Component deployer RBAC — ClusterRoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dns-operator-manager-rolebinding;dns-operator-remote-cluster-rolebinding;mcp-gateway-controller;authorino-operator-manager;limitador-operator-manager-rolebinding,verbs=delete;get;update;patch
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,resourceNames=dns-operator-manager-rolebinding;dns-operator-remote-cluster-rolebinding;mcp-gateway-controller;authorino-operator-manager;limitador-operator-manager-rolebinding;developer-portal-controller-manager-rolebinding,verbs=delete;get;update;patch
 
 // Component deployer RBAC — namespace-scoped Role and RoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=create;delete;get;list;watch;update;patch
@@ -63,7 +63,7 @@ func NewReconciler(c client.Client, deployer *Deployer, recorder events.EventRec
 		Client:   c,
 		deployer: deployer,
 		recorder: recorder,
-		logger:   logger.WithName("controlplane"),
+		logger:   logger.WithName("reconciler"),
 	}
 }
 
@@ -282,8 +282,10 @@ func (r *Reconciler) emitComponentVersionEvents(cp *kuadrantv1alpha1.KuadrantCon
 		oldVersion, existed := previousVersions[cs.Name]
 		switch {
 		case !existed || oldVersion == "":
+			r.logger.Info("component installed", "component", cs.Name, "version", cs.ChartVersion)
 			r.recorder.Eventf(cp, componentReference(cs.Name), corev1.EventTypeNormal, "ComponentInstalled", "ComponentDeploy", "component %s installed at version %s", cs.Name, cs.ChartVersion)
 		case oldVersion != cs.ChartVersion:
+			r.logger.Info("component upgraded", "component", cs.Name, "from", oldVersion, "to", cs.ChartVersion)
 			r.recorder.Eventf(cp, componentReference(cs.Name), corev1.EventTypeNormal, "ComponentVersionChanged", "ComponentDeploy", "component %s updated from %s to %s", cs.Name, oldVersion, cs.ChartVersion)
 		}
 	}

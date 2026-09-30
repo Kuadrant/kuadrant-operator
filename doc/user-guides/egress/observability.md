@@ -57,7 +57,7 @@ The same labels appear on egress metrics as on ingress, but their values differ 
 | `response_flags` | Envoy response flags | Key for diagnosing egress failures |
 | `connection_security_policy` | `unknown` | Security policy of incoming connection (workload to gateway) |
 
-**Understanding `source_workload`:** On the egress gateway, `source_workload` identifies the gateway itself, not the workload that initiated the request. To attribute egress traffic to specific workloads, use [workload identity via AuthPolicy](egress-gateway.md#workload-identity) and correlate using access logs or traces.
+**Understanding `source_workload`:** On the egress gateway, `source_workload` identifies the gateway itself, not the workload that initiated the request. To attribute egress traffic to specific workloads, use [workload identity via AuthPolicy](egress-gateway.md#workload-identity) and correlate using access logs or traces. Alternatively, if the route is rate limited, [TelemetryPolicy](#custom-metric-labels-with-telemetrypolicy) can record the calling workload directly as a label on the Kuadrant data plane metrics.
 
 ### Querying Egress Metrics
 
@@ -144,6 +144,219 @@ sum(rate(istio_requests_total{
 For Kubernetes queries (kubectl, log filtering), use the pod label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`.
 
 For PromQL queries, filter by `source_workload="kuadrant-egressgateway-istio"` to isolate egress traffic from ingress traffic on the same Prometheus instance. This is the Istio proxy workload name, which appears as a label on all `istio_*` metrics.
+
+## Custom Metric Labels with TelemetryPolicy
+
+The `istio_*` metrics above cannot tell you which workload made an outbound call: on an egress gateway, `source_workload` is always the gateway itself. [TelemetryPolicy](../../overviews/telemetrypolicy.md) closes that gap by adding custom labels, derived from CEL expressions, to the metrics Kuadrant's own data plane emits. The policy itself has no egress-specific fields, so a policy written for an egress gateway looks identical to one written for an ingress gateway.
+
+### Which Metrics Get Labeled
+
+TelemetryPolicy labels the metrics Kuadrant's own components emit; it does not touch the `istio_*` metrics. Two components consume the labels.
+
+The **Limitador** counters carry the complete label set:
+
+| Metric | Description |
+|--------|-------------|
+| `authorized_calls` | Requests allowed by a rate limit check |
+| `limited_calls` | Requests rejected by a rate limit check |
+| `authorized_hits` | Hits counted against a limit (for TokenRateLimitPolicy, token consumption) |
+| `report_calls` | Calls to the Limitador `Report` method, which TokenRateLimitPolicy uses to report token usage after the response |
+
+Each series also carries Limitador's own `limitador_namespace` label, which identifies the targeted route (for example, `gateway-system/ai-mock-external`). For the full set of Limitador counters and their built-in labels, see the [Limitador metrics guide](../observability/limitador-metrics.md).
+
+**Authorino** receives the same labels on any route that carries an AuthPolicy, and applies them to its own per-AuthConfig metrics, which it serves on `/server-metrics` rather than `/metrics`:
+
+| Metric | Labels applied |
+|--------|----------------|
+| `auth_server_authconfig_total` | All labels except those derived from `auth.*` |
+| `auth_server_authconfig_response_status` | All labels except those derived from `auth.*` |
+| `auth_server_authconfig_duration_seconds` | All labels except those derived from `auth.*` |
+| `auth_server_evaluator_*` | All labels except those derived from `auth.*` |
+
+The `auth_server_evaluator_*` metrics are only exported for evaluators that set `metrics: true`, or when Authorino runs with deep metrics enabled.
+
+An `auth.*` label reaches Limitador but never Authorino, because the two resolve the expression against differently shaped data. The wasm-shim resolves Limitador's copy against the flattened dynamic metadata an AuthPolicy exports, where a TokenReview identity is `auth.identity.username`. Authorino resolves its own copy against its internal authorization JSON, where the same identity is `auth.identity.user.username`. The expression this guide uses is the one Limitador needs, so Authorino cannot resolve it and logs a `failed to evaluate CEL expression` error for every request. Those errors are expected and have no bearing on the Limitador labels.
+
+Writing the label the way Authorino expects is not a workaround. The wasm-shim then cannot resolve it, and a single unresolvable attribute discards the whole descriptor, so the route stops producing Limitador metrics entirely while still returning 200 (see [Known Limitations](#known-limitations)). Write `auth.*` labels for Limitador and treat their absence from the Authorino metrics as expected.
+
+For the labels Authorino does apply, a single metric can hold series with different label sets: Authorino allocates one counter per distinct label combination and never reaps them, so every edit to the TelemetryPolicy leaves the earlier series behind. Aggregate with an explicit `sum by (...)` rather than summing the metric as a whole, and note that a high-cardinality expression is paid for twice, in Limitador and in Authorino.
+
+Adding a TelemetryPolicy does not change `istio_requests_total` in any way.
+
+### Requirements for Emitting Labels
+
+Neither of the following requirements is specific to egress, but both are commonly missed when the target is an egress gateway:
+
+1. **A rate limit policy must be in effect on the route.** Custom labels are attached to the descriptor the wasm-shim sends to Limitador, so a route with no `RateLimitPolicy` or `TokenRateLimitPolicy` produces no Limitador metrics and therefore no labels. A TelemetryPolicy attached to a gateway whose routes are not rate limited is accepted and enforced, but emits nothing.
+2. **`targetRef` must be a Gateway.** The API rejects any other kind, so a TelemetryPolicy cannot be scoped to an individual HTTPRoute. Labels apply to every rate limited route on the gateway.
+
+A label that references `auth.identity.*` adds a third requirement. Besides an [AuthPolicy](egress-gateway.md#workload-identity) establishing workload identity, the rate limit policy on the route must itself reference `auth.*`, typically through a counter:
+
+```yaml
+limits:
+  per-workload:
+    rates:
+      - limit: 100
+        window: 1m
+    counters:
+      - expression: auth.identity.username
+```
+
+Kuadrant runs the rate limit check *before* authentication whenever the rate limit policy has no need for an identity, and a label cannot reference an identity that has not been resolved yet. Under that ordering the `auth.*` label is dropped from the Limitador descriptor with no error and no change in policy status: the other labels keep working, so the symptom is a single missing label rather than missing metrics.
+
+The examples below use the resources from the [Egress Gateway Setup](egress-gateway.md) guide, plus an AI service route that carries both an AuthPolicy and a TokenRateLimitPolicy counting tokens per `auth.identity.username`:
+
+| Resource | Value |
+|----------|-------|
+| Route | `ai-mock-external` |
+| External service | `api.ai-mock.local` |
+| Calling workload | `team-gold` service account in `egress-test` |
+
+### Attributing Egress Traffic to the Calling Workload
+
+Attach a TelemetryPolicy to the egress gateway, labeling each metric with the authenticated identity of the calling workload and the external destination:
+
+```sh
+kubectl apply -f - <<'EOF'
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: TelemetryPolicy
+metadata:
+  name: egress-telemetry
+  namespace: gateway-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-egressgateway
+  metrics:
+    default:
+      labels:
+        workload: auth.identity.username
+        destination: request.host
+        source_ip: source.address.substring(0, source.address.lastIndexOf(":")).replace("[", "").replace("]", "")
+EOF
+```
+
+Confirm the policy was accepted and enforced:
+
+```sh
+kubectl get telemetrypolicy egress-telemetry -n gateway-system \
+    -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'
+```
+
+Expected output:
+
+```text
+Accepted=True
+Enforced=True
+```
+
+Send some authenticated traffic through the egress gateway, then read the Limitador metrics. The `kuadrant-limitador` NetworkPolicy only admits traffic to Limitador from namespaces that contain a Gateway, so port-forward to it rather than calling the service from the workload namespace:
+
+```sh
+kubectl port-forward -n kuadrant-system svc/limitador-limitador 8080:8080 >/dev/null 2>&1 &
+```
+
+```sh
+curl -sS --max-time 15 http://localhost:8080/metrics | grep -v '^#' | grep authorized_calls
+```
+
+Expected output:
+
+```text
+authorized_calls{destination="api.ai-mock.local",source_ip="10.244.0.25",workload="system:serviceaccount:egress-test:team-gold",limitador_namespace="gateway-system/ai-mock-external"} 2
+```
+
+The `workload` label now identifies the service account that originated the outbound request.
+
+The same labels appear on `limited_calls` when a workload exceeds its limit, so you can see exactly who is being throttled and on which destination:
+
+```text
+limited_calls{source_ip="10.244.0.24",workload="system:serviceaccount:egress-test:default",destination="api.ai-mock.local",limitador_namespace="gateway-system/ai-mock-external"} 12
+```
+
+### CEL Attributes Available on Egress
+
+Each label is attached to both the rate limit check descriptor and the report descriptor. The check runs in the **request** phase, before the external service responds, so every expression must resolve at that point. This is the single most important constraint on egress: response attributes are not available, even for labels that only appear on `report_calls`.
+
+| Expression | Available | Example value |
+|------------|-----------|---------------|
+| `auth.identity.username` | Yes, with an AuthPolicy and an auth-aware rate limit policy (see [requirements](#requirements-for-emitting-labels)) | `system:serviceaccount:egress-test:team-gold` |
+| `request.host` | Yes | `api.ai-mock.local` |
+| `request.path` | Yes | `/v1/chat/completions` |
+| `request.method` | Yes | `POST` |
+| `request.scheme` | Yes | `http` |
+| `source.address` | Yes | `10.244.0.25:54146`, includes the port (see [cardinality](#label-cardinality)) |
+| A literal, for example `"egress"` | Yes | `egress` |
+| `response.code` | **No** | Breaks the metrics for the route, see [known limitations](#known-limitations) |
+
+Note that `request.scheme` describes the workload-to-gateway leg, not the gateway-to-external-service leg. A workload calling the gateway over plain HTTP reports `http` even when the gateway originates TLS to the external service.
+
+To label by response status, use the `istio_requests_total` metric and its `response_code` label instead, as shown in [PromQL examples](#promql-examples).
+
+### Label Cardinality
+
+Every distinct combination of label values creates a new Prometheus time series, so a high-cardinality expression on a busy egress gateway is expensive.
+
+`source.address` is the common trap: it includes the ephemeral source port, so **every connection produces a new series**. The same caveat applies when using it as a [rate limit counter](egress-gateway.md#rate-limiting).
+
+Envoy renders the address as `10.244.0.24:54146` for IPv4 and `[2001:db8:85a3::8a2e:370:7334]:41235` for IPv6, so strip everything after the last colon rather than splitting on the first one:
+
+```yaml
+source_ip: source.address.substring(0, source.address.lastIndexOf(":")).replace("[", "").replace("]", "")
+```
+
+`lastIndexOf` finds the colon that precedes the port, so the colons inside an IPv6 address are left alone, and the two `replace` calls remove the brackets Envoy puts around it. The expression is plain string manipulation, so the address is passed through unchanged: the examples above yield `10.244.0.24` and `2001:db8:85a3::8a2e:370:7334`. Avoid `source.address.split(":")[0]`: it works for IPv4 but truncates an IPv6 address to `[2001`.
+
+Prefer bounded dimensions such as the workload identity, the destination host, or the request method. Avoid `request.path` unless the path set is small and known; on an API with per-resource paths the series count grows without limit.
+
+### PromQL with Custom Labels
+
+After the labels exist, egress traffic can be broken down by workload and destination.
+
+**Request rate by calling workload:**
+
+```promql
+sum(rate(authorized_calls[5m])) by (workload)
+```
+
+**Rate limited requests by workload and destination:**
+
+```promql
+sum(rate(limited_calls[5m])) by (workload, destination)
+```
+
+**Token consumption per workload (with TokenRateLimitPolicy):**
+
+```promql
+sum(rate(authorized_hits[5m])) by (workload)
+```
+
+**Which workloads are calling which external services:**
+
+```promql
+sum(rate(authorized_calls[5m])) by (workload, destination)
+```
+
+### Known Limitations
+
+**A label expression referencing an unavailable attribute silently stops the metrics.** An expression such as `response.code` is not dropped. Evaluating the Limitador descriptor fails, the gateway logs the following for every request, and no metrics are recorded for the affected route:
+
+```text
+Failed to evaluate message builder: CelError::Resolve { UndeclaredReference("response") }
+```
+
+Whether the request itself still succeeds depends on the failure mode of the services on the route. The rate limit services default to `failureMode: allow`, so a route carrying only a `RateLimitPolicy` keeps returning 200 while quietly losing its metrics. A route that also carries an AuthPolicy, which defaults to `failureMode: deny`, can instead fail with HTTP 500. Routes with no rate limit policy build no descriptor and are unaffected either way.
+
+The policy still reports `Accepted=True` and `Enforced=True`, so check both traffic and metrics after applying a new label. Tracked in [#2242](https://github.com/Kuadrant/kuadrant-operator/issues/2242).
+
+**Removing or renaming a label in the spec does not remove it.** Editing a TelemetryPolicy leaves the old binding in the generated configuration, so editing cannot undo a bad label. Bindings accumulate across every edit, and because a single failing expression discards the whole descriptor, one stale label is enough to stop all the metrics for the route. Delete the policy and reapply it instead:
+
+```sh
+kubectl delete telemetrypolicy egress-telemetry -n gateway-system
+```
+
+Then reapply the policy as shown in [Attributing Egress Traffic to the Calling Workload](#attributing-egress-traffic-to-the-calling-workload). Tracked in [#2243](https://github.com/Kuadrant/kuadrant-operator/issues/2243).
 
 ## Access Logging
 
@@ -367,7 +580,7 @@ A recommended JSON format for egress includes these egress-relevant fields:
 
 Distributed tracing shows the complete request flow through the egress gateway, including policy evaluation by the wasm-shim, authentication checks in Authorino, and rate limit checks in Limitador. This section covers egress-specific tracing behavior. For general tracing setup, see the [tracing guide](../../observability/tracing.md).
 
-### Prerequisites
+### Tracing Prerequisites
 
 In addition to the [general prerequisites](#prerequisites), tracing requires two layers of configuration that work together:
 
@@ -574,7 +787,7 @@ If Prometheus uses annotation-based discovery, verify that the pod has `promethe
 
 ## Next Steps
 
-- [TelemetryPolicy](../../overviews/telemetrypolicy.md): add custom metric labels to egress traffic via CEL expressions
+- [TelemetryPolicy](../../overviews/telemetrypolicy.md): the full policy API behind the [custom metric labels](#custom-metric-labels-with-telemetrypolicy) described above
 - [TokenRateLimitPolicy](../../overviews/rate-limiting.md): cap AI inference costs by token consumption per workload
 
 ## References
@@ -586,5 +799,8 @@ If Prometheus uses annotation-based discovery, verify that the pod has `promethe
 - [Envoy Access Log Format](https://www.envoyproxy.io/docs/envoy/latest/configuration/observability/access_log/usage#format-strings)
 - [Kuadrant Observability Stack](../../observability/README.md)
 - [Kuadrant Metrics Reference](../../observability/metrics.md)
+- [Limitador Metrics User Guide](../observability/limitador-metrics.md)
+- [TelemetryPolicy CRD Reference](../../reference/telemetrypolicy.md)
+- [Token Metrics User Guide](../observability/token-metrics.md)
 - [Envoy Access Logs and Request Correlation](../../observability/envoy-access-logs.md)
 - [Envoy Wasm Trace Context Limitation](https://github.com/envoyproxy/envoy/issues/22028)

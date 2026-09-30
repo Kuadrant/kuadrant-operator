@@ -257,6 +257,26 @@ func (e ErrSystemResource) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonMissingResource
 }
 
+func NewErrReservationsDisabled(kind string) ErrReservationsDisabled {
+	return ErrReservationsDisabled{
+		Kind: kind,
+	}
+}
+
+var _ PolicyError = ErrReservationsDisabled{}
+
+type ErrReservationsDisabled struct {
+	Kind string
+}
+
+func (e ErrReservationsDisabled) Error() string {
+	return fmt.Sprintf("%s cannot be enforced: Kuadrant spec.tokenRateLimiting.mode is Reservation, but Limitador has reservations disabled (spec.reservations.enabled=false)", e.Kind)
+}
+
+func (e ErrReservationsDisabled) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonReservationsDisabled
+}
+
 type ErrCelValidation struct {
 	issues []error
 }

@@ -20,7 +20,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 )
 
-var _ = Describe("Observabiltity monitors for envoy gateway", func() {
+var _ = Describe("Observabiltity monitors for envoy gateway", Labels{"envoygateway"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

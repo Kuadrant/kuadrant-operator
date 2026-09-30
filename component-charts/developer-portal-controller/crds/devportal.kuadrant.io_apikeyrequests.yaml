@@ -1,23 +1,23 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  creationTimestamp: null
-  name: apikeyapprovals.devportal.kuadrant.io
+  name: apikeyrequests.devportal.kuadrant.io
 spec:
   group: devportal.kuadrant.io
   names:
-    kind: APIKeyApproval
-    listKind: APIKeyApprovalList
-    plural: apikeyapprovals
-    singular: apikeyapproval
+    kind: APIKeyRequest
+    listKind: APIKeyRequestList
+    plural: apikeyrequests
+    singular: apikeyrequest
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: APIKeyApproval is the Schema for the apikeyapprovals API.
+        description: APIKeyRequest is the Schema for the apikeyrequests API.
         properties:
           apiVersion:
             description: |-
@@ -37,46 +37,68 @@ spec:
           metadata:
             type: object
           spec:
-            description: APIKeyApprovalSpec defines the desired state of APIKeyApproval.
+            description: APIKeyRequestSpec defines the desired state of APIKeyRequest.
             properties:
-              apiKeyRequestRef:
-                description: Reference to the APIKeyRequest
+              apiKeyRef:
+                description: Reference to the APIKey this APIKeyRequest belongs to.
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+              apiProductRef:
+                description: Reference to the APIProduct this APIKeyRequest belongs
+                  to.
                 properties:
                   name:
                     type: string
                 required:
                 - name
                 type: object
-              approved:
-                description: Approved indicates whether the API key request is approved
-                type: boolean
-              message:
-                description: Message provides additional context about the approval
-                  or denial
-                type: string
-              reason:
-                description: Reason for the approval or denial decision
-                type: string
-              reviewedAt:
-                description: ReviewedAt is the timestamp when the request was reviewed
+              expiresAt:
+                description: ExpiresAt is the expiration time requested by the consumer
                 format: date-time
                 type: string
-              reviewedBy:
-                description: ReviewedBy contains the identifier of the person who
-                  reviewed the request
+              planTier:
+                description: PlanTier is the tier of the plan (e.g., "premium", "basic",
+                  "enterprise")
+                type: string
+              requestedBy:
+                description: RequestedBy contains information about who requested
+                  the API key
+                properties:
+                  email:
+                    description: Email is the email address of the user
+                    pattern: ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+                    type: string
+                  userId:
+                    description: UserID is the identifier of the user requesting the
+                      API key
+                    type: string
+                required:
+                - email
+                - userId
+                type: object
+              useCase:
+                description: UseCase describes how the API key will be used
                 type: string
             required:
-            - apiKeyRequestRef
-            - approved
-            - reviewedAt
-            - reviewedBy
+            - apiKeyRef
+            - apiProductRef
+            - planTier
+            - requestedBy
+            - useCase
             type: object
           status:
-            description: APIKeyApprovalStatus defines the observed state of APIKeyApproval.
+            description: APIKeyRequestStatus defines the observed state of APIKeyRequest.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
-                  of the APIKeyApproval's state
+                  of the APIKeyRequest's state
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -132,20 +154,9 @@ spec:
                   - type
                   type: object
                 type: array
-              observedGeneration:
-                description: ObservedGeneration reflects the generation of the most
-                  recently observed spec.
-                format: int64
-                type: integer
             type: object
         type: object
     served: true
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
-  storedVersions: null

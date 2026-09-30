@@ -125,6 +125,10 @@ make test-istio-env-integration INTEGRATION_TESTS_EXTRA_ARGS="--label-filter='is
 | `tokenratelimitpolicy` | Tests for TokenRateLimitPolicy controller logic and functionality. |
 | `discoverability` | Tests for policy discoverability mechanisms. |
 | `openshift` | Tests that require OpenShift-specific APIs. These self-skip at runtime when the cluster does not have them, so no filtering is needed on Kind; the label is only there if you want to explicitly focus or exclude them. |
+| `extensions` | Tests for the extensions system (out-of-process gRPC extensions). |
+| `in-process-only` | Tests that require the operator controller to be running in-process with the test framework (incompatible with `USE_EXISTING_OPERATOR=true`). |
+| `observability` | Tests for observability monitoring and metrics collection. |
+| `destructive` | Tests that delete or recreate cluster resources. Must be skipped when running against an existing cluster to avoid destabilising it (use `--label-filter='!destructive'` in CI). |
 
 ### Testing Against Existing Cluster
 

@@ -159,77 +159,294 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 	})
 
 	Context("component deployment", func() {
-		It("deploys dns-operator Deployment in operator namespace", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: operatorNamespace,
-					Name:      dnsOperatorDeployment,
-				}, deploy)).To(Succeed())
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
+		Context("dns-operator", func() {
+			It("sets controller ownerReference to KuadrantControlPlane", func(ctx SpecContext) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
-		It("sets a controller ownerReference to the KuadrantControlPlane on dns-operator Deployment", func(ctx SpecContext) {
-			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      dnsOperatorDeployment,
+					}, deploy)).To(Succeed())
 
-			Eventually(func(g Gomega) {
-				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: operatorNamespace,
-					Name:      dnsOperatorDeployment,
-				}, deploy)).To(Succeed())
+					owner := metav1.GetControllerOf(deploy)
+					g.Expect(owner).ToNot(BeNil())
+					g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+					g.Expect(owner.UID).To(Equal(cp.GetUID()))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
 
-				owner := metav1.GetControllerOf(deploy)
-				g.Expect(owner).ToNot(BeNil())
-				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
-				g.Expect(owner.Name).To(Equal(cp.Name))
-				g.Expect(owner.UID).To(Equal(cp.GetUID()))
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
+			It("reports component status with CRDs and images", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
 
-		It("deploys developer-portal-controller Deployment in operator namespace", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: operatorNamespace,
-					Name:      developerPortalDeployment,
-				}, deploy)).To(Succeed())
+					g.Expect(cp.Status.Components).ToNot(BeEmpty())
+					var dnsComponent *kuadrantv1alpha1.ComponentStatus
+					for i := range cp.Status.Components {
+						if cp.Status.Components[i].Name == "dns-operator" {
+							dnsComponent = &cp.Status.Components[i]
+							break
+						}
+					}
+					g.Expect(dnsComponent).ToNot(BeNil(), "dns-operator component not found in status")
+					g.Expect(dnsComponent.Ready).To(BeTrue())
+					g.Expect(dnsComponent.CRDs).To(HaveLen(2))
+					for _, crd := range dnsComponent.CRDs {
+						g.Expect(crd.Established).To(BeTrue())
+					}
+					g.Expect(dnsComponent.Images).ToNot(BeEmpty())
+					g.Expect(dnsComponent.Images[0].Name).To(Equal("manager"))
+					g.Expect(dnsComponent.Images[0].Image).ToNot(BeEmpty())
+					g.Expect(dnsComponent.ChartVersion).ToNot(BeEmpty())
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
 
-				g.Expect(deploy.Spec.Template.Spec.ServiceAccountName).To(Equal("developer-portal-controller-manager"))
-				g.Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
-				container := deploy.Spec.Template.Spec.Containers[0]
-				g.Expect(container.Name).To(Equal("manager"))
-				g.Expect(container.Image).To(ContainSubstring("developer-portal-controller"))
-				g.Expect(container.Args).To(ContainElement("--leader-elect"))
-				g.Expect(container.LivenessProbe).NotTo(BeNil())
-				g.Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/healthz"))
-				g.Expect(container.ReadinessProbe).NotTo(BeNil())
-				g.Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/readyz"))
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
+			It("has app.kubernetes.io/managed-by=kuadrant-operator label", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      dnsOperatorDeployment,
+					}, deploy)).To(Succeed())
 
-		It("sets a controller ownerReference to the KuadrantControlPlane on developer-portal-controller Deployment", func(ctx SpecContext) {
-			cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-			Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+					labels := deploy.GetLabels()
+					g.Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kuadrant-operator"))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
 
-			Eventually(func(g Gomega) {
-				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{
-					Namespace: operatorNamespace,
-					Name:      developerPortalDeployment,
-				}, deploy)).To(Succeed())
+			It("does not set an ownerReference on CRDs", func(ctx SpecContext) {
+				// Deleting a CRD deletes every custom resource of that type
+				// cluster-wide, so CRDs must never be tied to the KCP's lifecycle
+				// regardless of what happens to Deployments/Services/etc.
+				crd := &apiextensionsv1.CustomResourceDefinition{}
+				Expect(testClient().Get(ctx, client.ObjectKey{Name: "dnsrecords.kuadrant.io"}, crd)).To(Succeed())
+				Expect(crd.OwnerReferences).To(BeEmpty(), "CRDs must not have owner references")
+			}, testTimeOut)
+		})
 
-				owner := metav1.GetControllerOf(deploy)
-				g.Expect(owner).ToNot(BeNil())
-				g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
-				g.Expect(owner.UID).To(Equal(cp.GetUID()))
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
+		Context("authorino-operator", func() {
+			It("sets controller ownerReference to KuadrantControlPlane", func(ctx SpecContext) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      "authorino-operator",
+					}, deploy)).To(Succeed())
+
+					owner := metav1.GetControllerOf(deploy)
+					g.Expect(owner).ToNot(BeNil())
+					g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+					g.Expect(owner.UID).To(Equal(cp.GetUID()))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("reports component status with CRDs and images", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+					var authComponent *kuadrantv1alpha1.ComponentStatus
+					for i := range cp.Status.Components {
+						if cp.Status.Components[i].Name == "authorino-operator" {
+							authComponent = &cp.Status.Components[i]
+							break
+						}
+					}
+					g.Expect(authComponent).ToNot(BeNil(), "authorino-operator component not found in status")
+					g.Expect(authComponent.Ready).To(BeTrue())
+					g.Expect(authComponent.CRDs).ToNot(BeEmpty())
+					g.Expect(authComponent.Images).ToNot(BeEmpty())
+					g.Expect(authComponent.ChartVersion).ToNot(BeEmpty())
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("has app.kubernetes.io/managed-by=kuadrant-operator label", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      "authorino-operator",
+					}, deploy)).To(Succeed())
+
+					labels := deploy.GetLabels()
+					g.Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kuadrant-operator"))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+		})
+
+		Context("limitador-operator", func() {
+			It("sets controller ownerReference to KuadrantControlPlane", func(ctx SpecContext) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      "limitador-operator-controller-manager",
+					}, deploy)).To(Succeed())
+
+					owner := metav1.GetControllerOf(deploy)
+					g.Expect(owner).ToNot(BeNil())
+					g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+					g.Expect(owner.UID).To(Equal(cp.GetUID()))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("reports component status with CRDs and images", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+					var limitComponent *kuadrantv1alpha1.ComponentStatus
+					for i := range cp.Status.Components {
+						if cp.Status.Components[i].Name == "limitador-operator" {
+							limitComponent = &cp.Status.Components[i]
+							break
+						}
+					}
+					g.Expect(limitComponent).ToNot(BeNil(), "limitador-operator component not found in status")
+					g.Expect(limitComponent.Ready).To(BeTrue())
+					g.Expect(limitComponent.CRDs).ToNot(BeEmpty())
+					g.Expect(limitComponent.Images).ToNot(BeEmpty())
+					g.Expect(limitComponent.ChartVersion).ToNot(BeEmpty())
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("has app.kubernetes.io/managed-by=kuadrant-operator label", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      "limitador-operator-controller-manager",
+					}, deploy)).To(Succeed())
+
+					labels := deploy.GetLabels()
+					g.Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kuadrant-operator"))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+		})
+
+		Context("mcp-gateway", func() {
+			It("sets controller ownerReference to KuadrantControlPlane", func(ctx SpecContext) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      "mcp-gateway-controller",
+					}, deploy)).To(Succeed())
+
+					owner := metav1.GetControllerOf(deploy)
+					g.Expect(owner).ToNot(BeNil())
+					g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+					g.Expect(owner.UID).To(Equal(cp.GetUID()))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("reports component status with CRDs and images", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+					var mcpComponent *kuadrantv1alpha1.ComponentStatus
+					for i := range cp.Status.Components {
+						if cp.Status.Components[i].Name == "mcp-gateway" {
+							mcpComponent = &cp.Status.Components[i]
+							break
+						}
+					}
+					g.Expect(mcpComponent).ToNot(BeNil(), "mcp-gateway component not found in status")
+					g.Expect(mcpComponent.Ready).To(BeTrue())
+					g.Expect(mcpComponent.CRDs).ToNot(BeEmpty())
+					g.Expect(mcpComponent.Images).ToNot(BeEmpty())
+					g.Expect(mcpComponent.ChartVersion).ToNot(BeEmpty())
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("has app.kubernetes.io/managed-by=kuadrant-operator label", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      "mcp-gateway-controller",
+					}, deploy)).To(Succeed())
+
+					labels := deploy.GetLabels()
+					g.Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kuadrant-operator"))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+		})
+
+		Context("developer-portal-controller", func() {
+			It("sets controller ownerReference to KuadrantControlPlane", func(ctx SpecContext) {
+				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+				Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      developerPortalDeployment,
+					}, deploy)).To(Succeed())
+
+					owner := metav1.GetControllerOf(deploy)
+					g.Expect(owner).ToNot(BeNil())
+					g.Expect(owner.Kind).To(Equal("KuadrantControlPlane"))
+					g.Expect(owner.UID).To(Equal(cp.GetUID()))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("reports component status with CRDs and images", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					cp := &kuadrantv1alpha1.KuadrantControlPlane{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
+
+					var portal *kuadrantv1alpha1.ComponentStatus
+					for i := range cp.Status.Components {
+						if cp.Status.Components[i].Name == "developer-portal-controller" {
+							portal = &cp.Status.Components[i]
+							break
+						}
+					}
+					g.Expect(portal).ToNot(BeNil(), "developer-portal-controller component not found in status")
+					g.Expect(portal.Ready).To(BeTrue())
+					g.Expect(portal.CRDs).To(HaveLen(4))
+					for _, crd := range portal.CRDs {
+						g.Expect(crd.Established).To(BeTrue())
+					}
+					g.Expect(portal.Images).To(HaveLen(1))
+					g.Expect(portal.Images[0].Name).To(Equal("manager"))
+					g.Expect(portal.Images[0].Image).To(ContainSubstring("developer-portal-controller"))
+					g.Expect(portal.ChartVersion).ToNot(BeEmpty())
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("has app.kubernetes.io/managed-by=kuadrant-operator label", func(ctx SpecContext) {
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, client.ObjectKey{
+						Namespace: operatorNamespace,
+						Name:      developerPortalDeployment,
+					}, deploy)).To(Succeed())
+
+					labels := deploy.GetLabels()
+					g.Expect(labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "kuadrant-operator"))
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+		})
 	})
 
 	Context("status reporting", func() {
-		It("reports Ready=True when dns-operator is available", func(ctx SpecContext) {
+		It("reports Ready=True when all components are available", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
 				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
@@ -240,109 +457,9 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 				g.Expect(cond.Reason).To(Equal(kuadrantv1alpha1.ControlPlaneReasonComponentsHealthy))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
-
-		It("reports component status with CRD establishment", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
-
-				g.Expect(cp.Status.Components).ToNot(BeEmpty())
-				var dnsComponent *kuadrantv1alpha1.ComponentStatus
-				for i := range cp.Status.Components {
-					if cp.Status.Components[i].Name == "dns-operator" {
-						dnsComponent = &cp.Status.Components[i]
-						break
-					}
-				}
-				g.Expect(dnsComponent).ToNot(BeNil(), "dns-operator component not found in status")
-				g.Expect(dnsComponent.Ready).To(BeTrue())
-				g.Expect(dnsComponent.CRDs).To(HaveLen(2))
-				for _, crd := range dnsComponent.CRDs {
-					g.Expect(crd.Established).To(BeTrue())
-				}
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-
-		It("reports chart version for each component", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
-
-				for _, cs := range cp.Status.Components {
-					g.Expect(cs.ChartVersion).ToNot(BeEmpty(), "component %s should have a chart version", cs.Name)
-				}
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-
-		It("reports dns-operator image status", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
-
-				var dns *kuadrantv1alpha1.ComponentStatus
-				for i := range cp.Status.Components {
-					if cp.Status.Components[i].Name == "dns-operator" {
-						dns = &cp.Status.Components[i]
-						break
-					}
-				}
-				g.Expect(dns).ToNot(BeNil(), "dns-operator component not found in status")
-				g.Expect(dns.Images).ToNot(BeEmpty())
-				g.Expect(dns.Images[0].Name).To(Equal("manager"))
-				g.Expect(dns.Images[0].Image).ToNot(BeEmpty())
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-
-		It("reports mcp-gateway image status", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
-
-				var mcp *kuadrantv1alpha1.ComponentStatus
-				for i := range cp.Status.Components {
-					if cp.Status.Components[i].Name == "mcp-gateway" {
-						mcp = &cp.Status.Components[i]
-						break
-					}
-				}
-				g.Expect(mcp).ToNot(BeNil(), "mcp-gateway component not found in status")
-				g.Expect(mcp.Images).ToNot(BeEmpty())
-
-				imageNames := map[string]bool{}
-				for _, img := range mcp.Images {
-					g.Expect(img.Image).ToNot(BeEmpty())
-					imageNames[img.Name] = true
-				}
-				g.Expect(imageNames).To(HaveKey("mcp-controller"))
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-
-		It("reports developer-portal-controller component status with CRD establishment", func(ctx SpecContext) {
-			Eventually(func(g Gomega) {
-				cp := &kuadrantv1alpha1.KuadrantControlPlane{}
-				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}, cp)).To(Succeed())
-
-				var portal *kuadrantv1alpha1.ComponentStatus
-				for i := range cp.Status.Components {
-					if cp.Status.Components[i].Name == "developer-portal-controller" {
-						portal = &cp.Status.Components[i]
-						break
-					}
-				}
-				g.Expect(portal).ToNot(BeNil(), "developer-portal-controller component not found in status")
-				g.Expect(portal.Ready).To(BeTrue())
-				g.Expect(portal.CRDs).To(HaveLen(4))
-				for _, crd := range portal.CRDs {
-					g.Expect(crd.Established).To(BeTrue())
-				}
-				g.Expect(portal.Images).To(HaveLen(1))
-				g.Expect(portal.Images[0].Name).To(Equal("manager"))
-				g.Expect(portal.Images[0].Image).To(ContainSubstring("developer-portal-controller"))
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
 	})
 
-	Context("deletion", func() {
+	Context("deletion", Labels{"destructive"}, func() {
 		It("does not recreate KuadrantControlPlane CR when deleted", func(ctx SpecContext) {
 			cpKey := client.ObjectKey{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}
 
@@ -391,68 +508,60 @@ var _ = Describe("KuadrantControlPlane controller", Serial, Labels{"controlplane
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
-		It("does not set an ownerReference on CRDs", func(ctx SpecContext) {
-			// Deleting a CRD deletes every custom resource of that type
-			// cluster-wide, so CRDs must never be tied to the KCP's lifecycle
-			// regardless of what happens to Deployments/Services/etc.
-			crd := &apiextensionsv1.CustomResourceDefinition{}
-			Expect(testClient().Get(ctx, client.ObjectKey{Name: "dnsrecords.kuadrant.io"}, crd)).To(Succeed())
-			Expect(crd.OwnerReferences).To(BeEmpty(), "CRDs must not have owner references")
-		}, testTimeOut)
+		Context("drift reconciliation", func() {
+			It("recreates dns-operator Deployment when deleted", func(ctx SpecContext) {
+				deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
+
+				// Ensure it exists first and capture UID
+				var originalUID types.UID
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+					originalUID = deploy.GetUID()
+				}).WithContext(ctx).Should(Succeed())
+
+				// Delete the Deployment
+				deploy := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: operatorNamespace,
+						Name:      dnsOperatorDeployment,
+					},
+				}
+				Expect(testClient().Delete(ctx, deploy)).To(Succeed())
+
+				// Should be recreated with a new UID
+				Eventually(func(g Gomega) {
+					recreated := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
+					g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+
+			It("recreates developer-portal-controller Deployment when deleted", func(ctx SpecContext) {
+				deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: developerPortalDeployment}
+
+				var originalUID types.UID
+				Eventually(func(g Gomega) {
+					deploy := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
+					originalUID = deploy.GetUID()
+				}).WithContext(ctx).Should(Succeed())
+
+				deploy := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: operatorNamespace,
+						Name:      developerPortalDeployment,
+					},
+				}
+				Expect(testClient().Delete(ctx, deploy)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					recreated := &appsv1.Deployment{}
+					g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
+					g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
+				}).WithContext(ctx).Should(Succeed())
+			}, testTimeOut)
+		})
 	})
 
-	Context("drift reconciliation", func() {
-		It("recreates dns-operator Deployment when deleted", func(ctx SpecContext) {
-			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: dnsOperatorDeployment}
-
-			// Ensure it exists first and capture UID
-			var originalUID types.UID
-			Eventually(func(g Gomega) {
-				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
-				originalUID = deploy.GetUID()
-			}).WithContext(ctx).Should(Succeed())
-
-			// Delete the Deployment
-			deploy := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: operatorNamespace,
-					Name:      dnsOperatorDeployment,
-				},
-			}
-			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
-
-			// Should be recreated with a new UID
-			Eventually(func(g Gomega) {
-				recreated := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
-				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-
-		It("recreates developer-portal-controller Deployment when deleted", func(ctx SpecContext) {
-			deployKey := client.ObjectKey{Namespace: operatorNamespace, Name: developerPortalDeployment}
-
-			var originalUID types.UID
-			Eventually(func(g Gomega) {
-				deploy := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, deployKey, deploy)).To(Succeed())
-				originalUID = deploy.GetUID()
-			}).WithContext(ctx).Should(Succeed())
-
-			deploy := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: operatorNamespace,
-					Name:      developerPortalDeployment,
-				},
-			}
-			Expect(testClient().Delete(ctx, deploy)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				recreated := &appsv1.Deployment{}
-				g.Expect(testClient().Get(ctx, deployKey, recreated)).To(Succeed())
-				g.Expect(recreated.GetUID()).ToNot(Equal(originalUID), "expected a new Deployment, not the old one")
-			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-	})
 })

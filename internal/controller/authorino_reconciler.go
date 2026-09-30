@@ -102,6 +102,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				Insecure: kobj.Spec.Observability.Tracing.Insecure,
 			}
 		}
+		if enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false); enabled {
+			patch.Spec.EnableLoggingFields = true
+		}
 
 		unstructuredAuthorino, err := controller.Destruct(patch)
 		if err != nil {
@@ -116,10 +119,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			if err := unstructured.SetNestedField(unstructuredAuthorino.Object, kobj.Spec.Observability.Tracing.Insecure, "spec", "tracing", "insecure"); err != nil {
 				return err
 			}
-		}
-
-		if err := configureAuthorinoLoggingFields(unstructuredAuthorino); err != nil {
-			return err
 		}
 
 		// Only force ownership if tracing field is available for ownership
@@ -195,6 +194,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			Insecure: kobj.Spec.Observability.Tracing.Insecure,
 		}
 	}
+	if enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false); enabled {
+		authorino.Spec.EnableLoggingFields = true
+	}
 
 	unstructuredAuthorino, err := controller.Destruct(authorino)
 	if err != nil {
@@ -205,9 +207,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	logger.V(1).Info("creating authorino resource", "status", "processing")
-	if err := configureAuthorinoLoggingFields(unstructuredAuthorino); err != nil {
-		return err
-	}
 
 	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
@@ -239,16 +238,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	return nil
-}
-
-// configureAuthorinoLoggingFields uses the unstructured representation until the
-// independently managed authorino-operator dependency revision is updated.
-func configureAuthorinoLoggingFields(authorino *unstructured.Unstructured) error {
-	enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false)
-	if !enabled {
-		return nil
-	}
-	return unstructured.SetNestedField(authorino.Object, true, "spec", "enableLoggingFields")
 }
 
 func buildTLSPatch(existing authorinoopapi.Tls, minVersion string, cipherSuites []string) authorinoopapi.Tls {

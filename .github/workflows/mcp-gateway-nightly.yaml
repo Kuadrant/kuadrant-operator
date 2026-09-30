@@ -622,15 +622,31 @@ jobs:
           test -s mcp-gateway/out/certs/ca.crt
           (cd mcp-gateway && ./utils/patch-authorino-to-keycloak.sh kuadrant-system)
 
-          for policy in mcp-auth-policy mcps-auth-policy; do
-            policy_namespace=kuadrant-system
-            if [[ "$policy" == "mcps-auth-policy" ]]; then
-              policy_namespace=gateway-system
+          kubectl wait --for=condition=Accepted \
+            authpolicy/mcp-auth-policy -n kuadrant-system --timeout=5m
+          kubectl wait --for=condition=Accepted \
+            authpolicy/mcps-auth-policy -n gateway-system --timeout=5m
+          kubectl wait --for=condition=Enforced \
+            authpolicy/mcp-auth-policy -n kuadrant-system --timeout=5m
+
+          for attempt in $(seq 1 150); do
+            if kubectl get authpolicy/mcps-auth-policy -n gateway-system -o json \
+              | jq -e '
+                any(.status.conditions[]?;
+                  .type == "Enforced" and
+                  .status == "False" and
+                  .reason == "Overridden" and
+                  (.message | contains("mcp-auth-policy"))
+                )
+              ' >/dev/null; then
+              break
             fi
-            kubectl wait --for=condition=Accepted \
-              "authpolicy/$policy" -n "$policy_namespace" --timeout=5m
-            kubectl wait --for=condition=Enforced \
-              "authpolicy/$policy" -n "$policy_namespace" --timeout=5m
+            if (( attempt == 150 )); then
+              echo "Timed out waiting for mcps-auth-policy to be overridden by mcp-auth-policy" >&2
+              kubectl get authpolicy/mcps-auth-policy -n gateway-system -o yaml
+              exit 1
+            fi
+            sleep 2
           done
 
       - name: Run operator MCP AuthPolicy E2E

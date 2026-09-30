@@ -14124,6 +14124,9 @@ spec:
             required:
             - targetRef
             type: object
+            x-kubernetes-validations:
+            - message: At least one of spec.metrics or spec.logging must be defined
+              rule: has(self.metrics) || has(self.logging)
           status:
             description: TelemetryPolicyStatus defines the observed state of TelemetryPolicy
             properties:

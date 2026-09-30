@@ -39,6 +39,7 @@ type TelemetryPolicy struct {
 	Status TelemetryPolicyStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.metrics) || has(self.logging)",message="At least one of spec.metrics or spec.logging must be defined"
 type TelemetryPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"

@@ -120,6 +120,3 @@ type TelemetryPolicyList struct {
 	Items           []TelemetryPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&TelemetryPolicy{}, &TelemetryPolicyList{})
-}

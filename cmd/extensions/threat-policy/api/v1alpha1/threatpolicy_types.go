@@ -105,6 +105,3 @@ type ThreatPolicyList struct {
 	Items           []ThreatPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&ThreatPolicy{}, &ThreatPolicyList{})
-}

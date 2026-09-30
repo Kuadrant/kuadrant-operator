@@ -108,6 +108,3 @@ type KuadrantControlPlaneList struct {
 	Items           []KuadrantControlPlane `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&KuadrantControlPlane{}, &KuadrantControlPlaneList{})
-}

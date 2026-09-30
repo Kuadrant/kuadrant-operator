@@ -399,6 +399,3 @@ type TokenRateLimitPolicyList struct {
 	Items           []TokenRateLimitPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&TokenRateLimitPolicy{}, &TokenRateLimitPolicyList{})
-}

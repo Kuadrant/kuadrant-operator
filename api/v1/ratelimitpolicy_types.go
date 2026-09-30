@@ -335,6 +335,3 @@ type RateLimitPolicyList struct {
 	Items           []RateLimitPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&RateLimitPolicy{}, &RateLimitPolicyList{})
-}

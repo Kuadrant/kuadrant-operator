@@ -4,17 +4,22 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func newUnstructured(kind, name string) *unstructured.Unstructured {
@@ -259,6 +264,138 @@ func TestApplyResources_OwnerReference(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsImmutableFieldError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "immutable selector on a Deployment",
+			err:  immutableSelectorError("limitador-operator-controller-manager"),
+			want: true,
+		},
+		{
+			name: "invalid for some other reason",
+			err: apierrors.NewInvalid(
+				schema.GroupKind{Group: "apps", Kind: "Deployment"},
+				"limitador-operator-controller-manager",
+				field.ErrorList{field.Required(field.NewPath("spec", "template", "spec", "containers"), "is required")},
+			),
+			want: false,
+		},
+		{
+			name: "forbidden by RBAC",
+			err: apierrors.NewForbidden(
+				schema.GroupResource{Group: "apps", Resource: "deployments"},
+				"limitador-operator-controller-manager",
+				errors.New(`deployments.apps "limitador-operator-controller-manager" is forbidden: User "system:serviceaccount:kuadrant-system:kuadrant-operator-controller-manager" cannot patch resource`),
+			),
+			want: false,
+		},
+		{
+			name: "conflict",
+			err:  apierrors.NewConflict(schema.GroupResource{Group: "apps", Resource: "deployments"}, "x", nil),
+			want: false,
+		},
+		{
+			name: "not found",
+			err:  apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "x"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isImmutableFieldError(tt.err); got != tt.want {
+				t.Errorf("isImmutableFieldError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplyResource_DeleteOnImmutableField(t *testing.T) {
+	tests := []struct {
+		name        string
+		object      *unstructured.Unstructured
+		applyErr    error
+		wantDeletes int
+	}{
+		{
+			name:        "deletes a Deployment rejected for an immutable field",
+			object:      deploymentWithImage("limitador-operator-controller-manager", "limitador-operator:v1"),
+			applyErr:    immutableSelectorError("limitador-operator-controller-manager"),
+			wantDeletes: 1,
+		},
+		{
+			name:   "leaves a Deployment alone for other invalid errors",
+			object: deploymentWithImage("limitador-operator-controller-manager", "limitador-operator:v1"),
+			applyErr: apierrors.NewInvalid(
+				schema.GroupKind{Group: "apps", Kind: "Deployment"},
+				"limitador-operator-controller-manager",
+				field.ErrorList{field.Required(field.NewPath("spec", "template", "spec", "containers"), "is required")},
+			),
+			wantDeletes: 0,
+		},
+		{
+			name:        "never deletes a kind outside the allowlist",
+			object:      newUnstructured("Service", "limitador-operator-metrics"),
+			applyErr:    immutableSelectorError("limitador-operator-metrics"),
+			wantDeletes: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = corev1.AddToScheme(scheme)
+			_ = appsv1.AddToScheme(scheme)
+
+			client := dynamicfake.NewSimpleDynamicClient(scheme)
+
+			var applies, deletes int
+			// Apply goes out as a patch with types.ApplyPatchType.
+			client.PrependReactor("patch", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				applies++
+				return true, nil, tt.applyErr
+			})
+			client.PrependReactor("delete", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				deletes++
+				return true, nil, nil
+			})
+
+			applier := &ResourceApplier{
+				client:    client,
+				mapper:    testrestmapper.TestOnlyStaticRESTMapper(scheme),
+				logger:    logr.Discard(),
+				namespace: "kuadrant-system",
+			}
+
+			// Always an error: either the apply failed outright, or the
+			// object was deleted and the error is what requeues the recreate.
+			if err := applier.applyResource(context.Background(), tt.object, nil); err == nil {
+				t.Fatal("applyResource() error = nil, want an error")
+			}
+			if applies != 1 {
+				t.Errorf("applies = %d, want 1 (no inline retry)", applies)
+			}
+			if deletes != tt.wantDeletes {
+				t.Errorf("deletes = %d, want %d", deletes, tt.wantDeletes)
+			}
+		})
+	}
+}
+
+func immutableSelectorError(name string) error {
+	return apierrors.NewInvalid(
+		schema.GroupKind{Group: "apps", Kind: "Deployment"},
+		name,
+		field.ErrorList{
+			field.Invalid(field.NewPath("spec", "selector"), "control-plane=controller-manager", "field is immutable"),
+		},
+	)
 }
 
 func TestPatchContainerEnvVars(t *testing.T) {

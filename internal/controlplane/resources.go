@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -23,6 +25,11 @@ const (
 	crdWaitTimeout  = 30 * time.Second
 	crdWaitInterval = 1 * time.Second
 )
+
+// list of all kinds that are allowed to re-create
+var recreatableKinds = map[string]struct{}{
+	"Deployment": {},
+}
 
 var installOrder = map[string]int{
 	"Namespace":                0,
@@ -85,6 +92,7 @@ func kindOrder(kind string) int {
 // ApplyResources applies each object via server-side apply. If ownerRef is
 // non-nil, it's set on every object first, so deleting the owner (the
 // KuadrantControlPlane CR) cascade-deletes everything the deployer applied.
+// If changing immutable field and object is in allowlist, the object will be deleted and created again
 func (a *ResourceApplier) ApplyResources(ctx context.Context, objects []*unstructured.Unstructured, ownerRef *metav1.OwnerReference) error {
 	for _, obj := range objects {
 		if err := a.applyResource(ctx, obj, ownerRef); err != nil {
@@ -127,11 +135,40 @@ func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.U
 		FieldManager: fieldManager,
 		Force:        true,
 	})
-	if err != nil {
+	if err == nil {
+		return nil
+	}
+
+	if !isImmutableFieldError(err) || !isRecreatable(obj) {
 		return fmt.Errorf("applying %s %s: %w", obj.GetKind(), obj.GetName(), err)
 	}
 
-	return nil
+	a.logger.Info("deleting resource due to immutable field conflict",
+		"kind", obj.GetKind(),
+		"name", obj.GetName(),
+		"namespace", obj.GetNamespace(),
+		"error", err.Error(),
+	)
+
+	// deleting object which will be automatically recreated in the next reconcile cycle
+	if delErr := rc.Delete(ctx, obj.GetName(), metav1.DeleteOptions{}); delErr != nil && !apierrors.IsNotFound(delErr) {
+		return fmt.Errorf("deleting %s %s after immutable field conflict: %w", obj.GetKind(), obj.GetName(), delErr)
+	}
+
+	// Returning the error is what recreates the object: the reconciler
+	// requeues on it, and the next apply finds nothing to conflict with.
+	return fmt.Errorf("deleted %s %s to resolve immutable field conflict, recreating on requeue: %w",
+		obj.GetKind(), obj.GetName(), err)
+}
+
+func isRecreatable(obj *unstructured.Unstructured) bool {
+	_, ok := recreatableKinds[obj.GetKind()]
+	return ok
+}
+
+// Checks if error on object is caused by immutable field change
+func isImmutableFieldError(err error) bool {
+	return apierrors.IsInvalid(err) && strings.Contains(err.Error(), "immutable")
 }
 
 func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) error {

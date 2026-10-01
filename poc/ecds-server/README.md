@@ -69,12 +69,13 @@ hand-rolled inside wasm-shim; wasm-shim needs **zero code changes**.
   `*envoy/config/core/v3.TypedExtensionConfig{Name, TypedConfig *anypb.Any}`,
   keyed by `Name`, which **must equal** the `HttpFilter.Name` Envoy
   references in its listener config.
-- **Node keying is the one real design decision.** `NodeHash` is a
-  pluggable `interface{ ID(*core.Node) string }`; the default `IDHash` keys
-  by `node.GetId()`, which for Istio-managed proxies is per-pod, not
-  per-Gateway. This PoC uses a single **fixed `NodeHash`** (every connected
-  Envoy gets the same snapshot) - correct for a single-test-gateway PoC,
-  explicitly wrong for multi-gateway production use. See Scope below.
+- **Node keying is the one real design decision - resolved, not just scoped
+  out.** `NodeHash` is a pluggable `interface{ ID(*core.Node) string }`; the
+  default `IDHash` keys by `node.GetId()`, which for Istio-managed proxies is
+  per-pod, not per-Gateway. Initially implemented as a single fixed key
+  (every connected Envoy gets the same snapshot) for the first pass, then
+  replaced with real per-Gateway keying once multi-gateway correctness came
+  up - see "Per-gateway keying" below for how.
 - **Import gotcha**: `envoy/extensions/filters/http/wasm/v3` and
   `envoy/extensions/wasm/v3` both declare `package wasmv3` - one must be
   import-aliased (`httpwasmv3` in `internal/istio/utils.go`).
@@ -107,11 +108,8 @@ hand-rolled inside wasm-shim; wasm-shim needs **zero code changes**.
 
 - **Istio only** - same reasoning as the sibling PoC (Envoy Gateway's wasm
   delivery is structurally different).
-- **Single fixed `NodeHash` key** (one global ECDS snapshot, not per-Gateway).
-  Correct for a single-test-gateway PoC, wrong for multi-gateway production
-  use - documented limitation, not silently swept under the rug. Production
-  use would key by something Gateway-identifying derived from
-  `node.Metadata`/`node.Cluster` instead.
+- **Per-Gateway `NodeHash` keying** - no longer scoped out; implemented and
+  confirmed live. See "Per-gateway keying" below.
 - **SOTW, not Delta xDS; `ads=false`** - simplest correct model, no
   cross-type (LDS/CDS/RDS) consistency needed since only one resource type
   is served.
@@ -136,15 +134,19 @@ hand-rolled inside wasm-shim; wasm-shim needs **zero code changes**.
 
 ### New package: `internal/ecds/`
 
-- **`internal/ecds/store.go`**: `fixedNodeHash` (constant node key
-  `"kuadrant-ecds"` for every connected Envoy), `Store` wrapping a
-  `cachev3.SnapshotCache`, and `Push(ctx, name string, typedConfig *anypb.Any) error`
+- **`internal/ecds/store.go`**: `gatewayNodeHash` (derives a per-Gateway
+  cache key from the connecting Envoy's self-reported `Node` - see
+  "Per-gateway keying" below), `GatewayNodeKey(namespace, name string) string`
+  (the shared key format both the hash and `Push` callers use),
+  `Store` wrapping a `cachev3.SnapshotCache`, and
+  `Push(ctx context.Context, nodeKey, name string, typedConfig *anypb.Any) error`
   - builds a `*corev3.TypedExtensionConfig{Name, TypedConfig}`, computes a
   sha256-of-marshaled-proto version string (so redundant pushes are
   naturally deduped by the snapshot cache's own version comparison), and
-  calls `SetSnapshot`. Note: `SetSnapshot` replaces the *entire* per-type
-  resource set for the node, not just the named resource - fine here since
-  this PoC only ever serves one named resource
+  calls `SetSnapshot` for that specific Gateway's node key only - other
+  Gateways' snapshots are untouched. Note: `SetSnapshot` replaces the
+  *entire* per-type resource set for the node, not just the named resource -
+  fine here since this PoC only ever serves one named resource per Gateway
   (`kuadrant-wasm-shim-ecds`).
 - **`internal/ecds/server.go`**: `Server` wraps a `Store`, exposes
   `Store()`, and implements `controller.Runnable` (`Run(stopCh)`,
@@ -224,16 +226,19 @@ hand-rolled inside wasm-shim; wasm-shim needs **zero code changes**.
   > 0`:
   1. Builds the real wasm filter `*anypb.Any` via `BuildWasmExtensionConfigAny`
      using the **real** `wasmConfig`, and pushes it to `ECDSStore` under
-     `kuadrant-wasm-shim-ecds` - this is the direct operator-side equivalent
-     of the sibling PoC's `wasm.SetConfig` call site.
+     `ecds.GatewayNodeKey(gateway.GetNamespace(), gateway.GetName())` +
+     resource name `kuadrant-wasm-shim-ecds` - this is the direct
+     operator-side equivalent of the sibling PoC's `wasm.SetConfig` call
+     site, now correctly scoped to the one Gateway this reconcile iteration
+     is for (see "Per-gateway keying" below).
   2. Builds the HTTP_FILTER patch via `BuildEnvoyFilterWasmECDSPatch`
      instead of `BuildEnvoyFilterWasmPatch`.
   3. Keeps the existing wasm-binary-server CLUSTER patch
      (`kuadrant-operator-wasm`) unchanged.
-  4. Adds a new CLUSTER patch for `kuadrant-ecds`, using the same
-     `BuildEnvoyFilterClusterPatch`/`buildClusterPatch` helpers as every
-     other gRPC cluster patch in this codebase (HTTP/2 always enabled via
-     `buildClusterPatch`, same as `kuadrant-operator-grpc`).
+  4. Deliberately does **not** add a dynamic CLUSTER patch for
+     `kuadrant-ecds` - see "Resolved: static cluster provisioned via
+     `Gateway.spec.infrastructure.parametersRef`" below for why (Envoy
+     rejects an ECDS cluster added via CDS).
 
 ### Deployment plumbing: `config/manager/`
 
@@ -251,6 +256,71 @@ image unmodified for this PoC's local-cluster testing - `on_configure`
 doesn't know or care how Envoy obtained the config bytes, so nothing here
 needed to change. This is itself a thing to verify, not assume - see
 "Live-cluster findings".
+
+## Per-gateway keying
+
+The initial pass used a single fixed `NodeHash` (every connected Envoy
+mapped to the same cache key), explicitly documented as correct only for a
+single-test-gateway PoC. This was resolved by inspecting what `Node`
+identity Istio-managed Gateway API proxies actually self-report over xDS,
+rather than guessing.
+
+**How it was found**: a temporary `StreamRequestFunc` callback was added to
+`internal/ecds/server.go` to log the full `Node` proto (via `protojson`) the
+first time a stream sent one, then the gateway pod was restarted to force a
+fresh ECDS connection. The logged `Node.metadata` for the test gateway
+contained (among many other `ISTIO_META_*`-sourced fields):
+
+```json
+{
+  "NAMESPACE": "gateway-system",
+  "LABELS": {
+    "gateway.networking.k8s.io/gateway-name": "kuadrant-ingressgateway",
+    "gateway.networking.k8s.io/gateway-class-name": "istio",
+    "istio": "ingressgateway",
+    ...
+  },
+  ...
+}
+```
+
+`node.metadata.NAMESPACE` and `node.metadata.LABELS[gateway.networking.k8s.io/gateway-name]`
+exactly match `gateway.GetNamespace()`/`gateway.GetName()` - sourced from the
+pod's own labels via Istio's `istio-podinfo` downward-API volume and
+`ISTIO_META_*` env vars (not anything this operator adds), confirmed present
+on every Gateway API-managed gateway pod regardless of this PoC.
+
+**Implementation** (`internal/ecds/store.go`):
+
+- `GatewayNodeKey(namespace, name string) string` - the single shared key
+  format (`"<namespace>/<name>"`) both the push side and the hash side must
+  agree on.
+- `gatewayNodeHash.ID(node *corev3.Node) string` - reads
+  `node.Metadata.Fields["NAMESPACE"]` and
+  `node.Metadata.Fields["LABELS"].GetStructValue().Fields[gatewayNameLabel]`,
+  returning `""` (an invalid/unmatchable key) if either is missing rather
+  than guessing or falling back to a shared key - a gateway whose identity
+  can't be determined gets no snapshot at all, rather than silently sharing
+  one with an unrelated gateway.
+- `Store.Push` gained a `nodeKey` parameter; the reconciler computes it via
+  `ecds.GatewayNodeKey(gateway.GetNamespace(), gateway.GetName())` right
+  before pushing, so each Gateway's config lands only in its own snapshot.
+- Covered by unit tests (`internal/ecds/store_test.go`): `gatewayNodeHash`
+  behavior across missing-field cases and the real metadata shape above, plus
+  a `Store.Push` test confirming two different Gateways' pushes don't
+  clobber or leak into each other's snapshots.
+
+**Confirmed live**: rebuilt and redeployed with per-gateway keying, restarted
+the gateway pod to force a fresh connection under the new `NodeHash`, and
+confirmed via `/config_dump`'s `EcdsConfigDump` that the gateway still
+correctly received its own real wasm config (not the `default_config`
+stand-in) keyed by `gateway-system/kuadrant-ingressgateway` - and that real
+traffic through the gateway still returned `200`. Only one gateway exists in
+this test cluster, so this confirms the *mechanism* resolves the documented
+single-key correctly, not yet a true multi-gateway isolation test (that
+would need a second Gateway + TRLP to prove two different snapshots exist
+simultaneously without cross-talk) - the unit test above covers that
+isolation property at the `Store` level instead.
 
 ## Build/test status
 
@@ -543,11 +613,10 @@ kuadrant-operator#2051:
   the now-static cluster of the same name). Restoring proper automation
   means replacing that comment with code that knows whether the static
   cluster has been provisioned yet.
-- No dedicated unit tests for `internal/ecds` yet (`Store.Push`,
-  `fixedNodeHash`) - relied on `go build`/`go vet`/full-suite pass plus the
-  live-cluster verification above for this first pass.
-- Per-Gateway `NodeHash` keying (currently a single fixed key) - needed
-  before this could handle more than one test gateway.
+- A true multi-gateway live test (two Gateways + two TRLPs, confirming no
+  cross-talk end-to-end, not just at the `Store` unit-test level) hasn't been
+  run - only one gateway exists in the test cluster so far. See "Per-gateway
+  keying" above.
 - Warming (`apply_default_config_without_warming`) characterization -
   explicitly scoped out of this pass (see Scope); now more reachable than
   before since the gateway actually comes up, but still not investigated.

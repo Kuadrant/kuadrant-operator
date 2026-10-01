@@ -667,7 +667,8 @@ func buildIstioEnvoyFilterForGateway(ctx context.Context, gateway *machinery.Gat
 		if err == nil {
 			if wasmFilterAny, buildErr := kuadrantistio.BuildWasmExtensionConfigAny(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct); buildErr == nil {
 				if ECDSStore != nil {
-					if pushErr := ECDSStore.Push(ctx, ecdsWasmFilterResourceName, wasmFilterAny); pushErr != nil {
+					gatewayNodeKey := ecds.GatewayNodeKey(gateway.GetNamespace(), gateway.GetName())
+					if pushErr := ECDSStore.Push(ctx, gatewayNodeKey, ecdsWasmFilterResourceName, wasmFilterAny); pushErr != nil {
 						logger.Error(pushErr, "failed to push wasm plugin config to ECDS store", "gateway", gateway.GetLocator())
 					}
 				}

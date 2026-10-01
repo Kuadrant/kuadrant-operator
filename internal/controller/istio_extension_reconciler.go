@@ -27,6 +27,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	celvalidator "github.com/kuadrant/kuadrant-operator/internal/cel"
+	"github.com/kuadrant/kuadrant-operator/internal/ecds"
 	"github.com/kuadrant/kuadrant-operator/internal/extension"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
@@ -74,6 +75,12 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	}
 	wasmURL := fmt.Sprintf("http://%s:%d/plugin.wasm", wasmServerHost, wasmServerPort)
 
+	ecdsServerHost := fmt.Sprintf("kuadrant-operator-ecds.%s.svc.cluster.local", operatorNamespace)
+	ecdsServerPort, ecdsPortErr := env.GetInt("ECDS_SERVICE_PORT", ecds.DefaultECDSServerPort)
+	if ecdsPortErr != nil {
+		ecdsServerPort = ecds.DefaultECDSServerPort
+	}
+
 	logger.V(1).Info("building istio extension", "wasm url", wasmURL)
 	defer logger.V(1).Info("finished building istio extension")
 
@@ -116,7 +123,7 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			wasmConfig.Services = lo.Assign(wasmConfig.Services, serviceBuilder.Build())
 		}
 
-		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
+		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(ctx, gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, ecdsServerHost, ecdsServerPort, WasmFileSHA256, logger)
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
@@ -650,13 +657,31 @@ func specsHaveAuthAccess(specs []wasm.ActionSpec) bool {
 }
 
 // buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
-func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+const ecdsWasmFilterResourceName = "kuadrant-wasm-shim-ecds"
+
+func buildIstioEnvoyFilterForGateway(ctx context.Context, gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, ecdsServerHost string, ecdsServerPort int, imageSHA string, logger logr.Logger) *istioclientgonetworkingv1alpha3.EnvoyFilter {
 	var configPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
 
 	if len(wasmConfig.ActionSets) > 0 {
 		pluginConfigStruct, err := wasmConfig.ToStruct()
 		if err == nil {
-			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
+			if wasmFilterAny, buildErr := kuadrantistio.BuildWasmExtensionConfigAny(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct); buildErr == nil {
+				if ECDSStore != nil {
+					if pushErr := ECDSStore.Push(ctx, ecdsWasmFilterResourceName, wasmFilterAny); pushErr != nil {
+						logger.Error(pushErr, "failed to push wasm plugin config to ECDS store", "gateway", gateway.GetLocator())
+					}
+				}
+			} else {
+				logger.Error(buildErr, "failed to build wasm extension config for ECDS", "gateway", gateway.GetLocator())
+			}
+		}
+
+		// default_config served to Envoy before any real config has been pushed to the
+		// ECDS store, or if the ECDS server is unreachable - same empty bootstrap stand-in
+		// used by the poc-extensions-endpoint PoC.
+		defaultWasmFilterConfig, err := kuadrantistio.BuildDefaultWasmFilterConfig(wasmURL, imageSHA, WasmServerClusterName)
+		if err == nil {
+			patches, err := kuadrantistio.BuildEnvoyFilterWasmECDSPatch(ecdsWasmFilterResourceName, ecds.ServerClusterName, defaultWasmFilterConfig)
 			if err == nil {
 				configPatches = patches
 			}
@@ -668,6 +693,16 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		if err == nil {
 			configPatches = append(configPatches, clusterPatches...)
 		}
+
+		// Deliberately NOT adding a dynamic CLUSTER patch for kuadrant-ecds here: Envoy
+		// rejects an ECDS ApiConfigSource whose cluster was added via CDS (confirmed live,
+		// see poc/ecds-server/README.md "Live-cluster findings"). The kuadrant-ecds cluster
+		// must instead be a STATIC bootstrap cluster, provisioned today by hand via
+		// Gateway.spec.infrastructure.parametersRef (poc/ecds-server/manifests/
+		// 06-gateway-parametersref-patch.sh) - not yet automated by this operator. See the
+		// README's "Open follow-ups" for what full automation of this would look like.
+		_ = ecdsServerHost
+		_ = ecdsServerPort
 	}
 
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{

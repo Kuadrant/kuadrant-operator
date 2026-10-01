@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/internal/ecds"
 )
 
 const (
@@ -247,6 +248,12 @@ func kuadrantOperatorPolicy(logger logr.Logger, deployment *appsv1.Deployment, t
 		wasmPort = 8082
 	}
 
+	ecdsPort, err := getManagerPortValue("ecds", deployment)
+	if err != nil {
+		errs = append(errs, err)
+		ecdsPort = ecds.DefaultECDSServerPort
+	}
+
 	ingress := []networkingv1.NetworkPolicyIngressRule{
 		ingressRule([]networkingv1.NetworkPolicyPeer{}, metricsPort),
 	}
@@ -254,6 +261,7 @@ func kuadrantOperatorPolicy(logger logr.Logger, deployment *appsv1.Deployment, t
 	if len(fromNamespaces) > 0 {
 		ingress = append(ingress, ingressRule(fromNamespaces, gRPCport))
 		ingress = append(ingress, ingressRule(fromNamespaces, wasmPort))
+		ingress = append(ingress, ingressRule(fromNamespaces, ecdsPort))
 	}
 
 	desiredPolicy := &networkingv1.NetworkPolicy{

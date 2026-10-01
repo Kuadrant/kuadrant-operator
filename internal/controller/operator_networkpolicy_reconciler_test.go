@@ -353,6 +353,7 @@ func TestProcessDeployment(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 
@@ -574,6 +575,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 
@@ -594,6 +596,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 
@@ -612,7 +615,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 
 		resp, err := kuadrantOperatorPolicy(logger, deployment, topology)
 		assert.NilError(t, err)
-		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress, 3), "should have 3 ingress rules with gateways")
+		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress, 4), "should have 4 ingress rules with gateways")
 
 		// metrics - no peers
 		assert.DeepEqual(t, resp.Policy.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8080)))
@@ -627,6 +630,10 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 		// wasm - gateway peers
 		assert.DeepEqual(t, resp.Policy.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(8082)))
 		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress[2].From, 1), "wasm should have gateway peer")
+
+		// ecds - gateway peers
+		assert.DeepEqual(t, resp.Policy.Spec.Ingress[3].Ports[0].Port, new(intstr.FromInt(50053)))
+		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress[3].From, 1), "ecds should have gateway peer")
 	})
 
 	t.Run("uses default ports when container ports missing", func(t *testing.T) {
@@ -651,12 +658,13 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 		resp, err := kuadrantOperatorPolicy(logger, deployment, topology)
 		assert.Assert(t, err != nil, "should return errors for missing ports")
 		assert.Assert(t, resp.Policy != nil)
-		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress, 3))
+		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress, 4))
 
-		// defaults: metrics=8080, grpc=50051, wasm=8082
+		// defaults: metrics=8080, grpc=50051, wasm=8082, ecds=50053
 		assert.DeepEqual(t, resp.Policy.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8080)))
 		assert.DeepEqual(t, resp.Policy.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(50051)))
 		assert.DeepEqual(t, resp.Policy.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(8082)))
+		assert.DeepEqual(t, resp.Policy.Spec.Ingress[3].Ports[0].Port, new(intstr.FromInt(50053)))
 	})
 
 	t.Run("multiple gateways different namespaces", func(t *testing.T) {
@@ -666,6 +674,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 
@@ -683,9 +692,10 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 		resp, err := kuadrantOperatorPolicy(logger, deployment, topology)
 		assert.NilError(t, err)
 
-		// grpc and wasm rules should both have 2 peers
+		// grpc, wasm, and ecds rules should all have 2 peers
 		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress[1].From, 2), "grpc should have 2 gateway peers")
 		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress[2].From, 2), "wasm should have 2 gateway peers")
+		assert.Assert(t, is.Len(resp.Policy.Spec.Ingress[3].From, 2), "ecds should have 2 gateway peers")
 	})
 
 	t.Run("sets common labels", func(t *testing.T) {
@@ -695,6 +705,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 
@@ -716,6 +727,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 
@@ -733,6 +745,7 @@ func TestKuadrantOperatorPolicy(t *testing.T) {
 				{Name: "metrics", ContainerPort: 8080},
 				{Name: "grpc", ContainerPort: 50051},
 				{Name: "wasm", ContainerPort: 8082},
+				{Name: "ecds", ContainerPort: 50053},
 			},
 		)
 

@@ -3,11 +3,13 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/policy-machinery/machinery"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -57,13 +59,18 @@ func extractImagePullSecretFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.E
 		return ""
 	}
 
-	// Navigate: typed_config -> value -> config -> vm_config -> code -> remote -> image_pull_secret
-	typedConfig, ok := filterConfig["typed_config"].(map[string]any)
+	// Navigate: config_discovery -> default_config -> value -> config -> vm_config -> code -> remote -> image_pull_secret
+	configDiscovery, ok := filterConfig["config_discovery"].(map[string]any)
 	if !ok {
 		return ""
 	}
 
-	value, ok := typedConfig["value"].(map[string]any)
+	defaultConfig, ok := configDiscovery["default_config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	value, ok := defaultConfig["value"].(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -117,13 +124,18 @@ func extractImageURLFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyFil
 		return ""
 	}
 
-	// Navigate: typed_config -> value -> config -> vm_config -> code -> remote -> http_uri -> uri
-	typedConfig, ok := filterConfig["typed_config"].(map[string]any)
+	// Navigate: config_discovery -> default_config -> value -> config -> vm_config -> code -> remote -> http_uri -> uri
+	configDiscovery, ok := filterConfig["config_discovery"].(map[string]any)
 	if !ok {
 		return ""
 	}
 
-	value, ok := typedConfig["value"].(map[string]any)
+	defaultConfig, ok := configDiscovery["default_config"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	value, ok := defaultConfig["value"].(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -165,7 +177,7 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 	wasmURL := "http://kuadrant-operator-wasm.kuadrant-system.svc.cluster.local:8082/plugin.wasm"
 
 	t.Run("ensure wasm URL is set in envoyfilter", func(t *testing.T) {
-		envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
+		envoyFilter := buildIstioEnvoyFilterForGateway(context.Background(), testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "kuadrant-operator-ecds.kuadrant-system.svc.cluster.local", 50053, "", logr.Discard())
 		if envoyFilter == nil {
 			t.Fatalf("Expected an envoyfilter")
 		}

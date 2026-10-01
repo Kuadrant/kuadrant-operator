@@ -4,6 +4,7 @@ resources:
 - grpc_service.yaml
 - extensions_service.yaml
 - wasm_service.yaml
+- ecds_service.yaml
 
 generatorOptions:
   disableNameSuffixHash: true

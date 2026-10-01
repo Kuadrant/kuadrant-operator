@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"maps"
 
+	httpwasmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/wasm/v3"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
@@ -152,6 +155,114 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 
 	return map[string]any{
 		"config": config,
+	}, nil
+}
+
+// BuildWasmExtensionConfigAny builds the real envoy.extensions.filters.http.wasm.v3.Wasm
+// proto (wrapped in an Any) for the full wasm plugin config, for pushing to the ECDS
+// server. It reuses buildWasmFilterConfig's JSON shape - which is already written in a
+// form compatible with protojson's Any/enum conventions (e.g. "failure_policy":
+// "FAIL_RELOAD", "configuration": {"@type": ..., "value": ...}) - and parses it directly
+// into the generated proto type, rather than hand-building the proto struct field by field.
+func BuildWasmExtensionConfigAny(wasmURL, imagePullSecret, imageSHA, clusterName string, pluginConfig *structpb.Struct) (*anypb.Any, error) {
+	wasmFilterConfig, err := buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName, pluginConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	configJSON, err := json.Marshal(wasmFilterConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal wasm filter config: %w", err)
+	}
+
+	wasmFilter := &httpwasmv3.Wasm{}
+	if err := protojson.Unmarshal(configJSON, wasmFilter); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal wasm filter config into proto: %w", err)
+	}
+
+	return anypb.New(wasmFilter)
+}
+
+// BuildDefaultWasmFilterConfig builds the empty bootstrap-style wasm filter config
+// ({"services": {}, "actionSets": []}) used as the ECDS default_config - served to
+// Envoy before any real config has been pushed to the ECDS store, or if the ECDS
+// server is unreachable. Matches the same bootstrap stand-in used by the
+// poc-extensions-endpoint PoC, so bootstrap/fail-open behavior is directly comparable
+// between the two PoCs.
+func BuildDefaultWasmFilterConfig(wasmURL, imageSHA, clusterName string) (map[string]any, error) {
+	emptyConfig, err := structpb.NewStruct(map[string]any{
+		"services":   map[string]any{},
+		"actionSets": []any{},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build empty plugin config: %w", err)
+	}
+
+	return buildWasmFilterConfig(wasmURL, "", imageSHA, clusterName, emptyConfig)
+}
+
+// BuildEnvoyFilterWasmECDSPatch returns an envoy config patch that adds a wasm HTTP
+// filter sourced via ExtensionConfigDiscoveryService (ECDS) rather than an inline
+// typed_config - the filter's actual PluginConfig is pushed out-of-band to the ECDS
+// server (see BuildWasmExtensionConfigAny) and fetched by Envoy's own xDS client,
+// keeping this EnvoyFilter patch itself small and constant-size regardless of policy
+// size. defaultWasmFilterConfig is used as the ECDS default_config (served to Envoy
+// before any real config has been pushed, or if the ECDS server is unreachable),
+// matching the same empty bootstrap-style stand-in ({"services": {}, "actionSets": []})
+// used by the poc-extensions-endpoint PoC, to keep bootstrap/fail-open behavior directly
+// comparable between the two PoCs.
+func BuildEnvoyFilterWasmECDSPatch(resourceName, ecdsClusterName string, defaultWasmFilterConfig map[string]any) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+	patchValue := map[string]any{
+		"name": resourceName,
+		"config_discovery": map[string]any{
+			"config_source": map[string]any{
+				"resource_api_version": "V3",
+				"api_config_source": map[string]any{
+					"api_type":              "GRPC",
+					"transport_api_version": "V3",
+					"grpc_services": []map[string]any{
+						{"envoy_grpc": map[string]any{"cluster_name": ecdsClusterName}},
+					},
+				},
+			},
+			"default_config": map[string]any{
+				"@type":    "type.googleapis.com/udpa.type.v1.TypedStruct",
+				"type_url": "type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm",
+				"value":    defaultWasmFilterConfig,
+			},
+			"type_urls": []string{"type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm"},
+		},
+	}
+
+	patchRaw, _ := json.Marshal(map[string]any{
+		"operation": "INSERT_BEFORE",
+		"value":     patchValue,
+	})
+	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
+	if err := patch.UnmarshalJSON(patchRaw); err != nil {
+		return nil, err
+	}
+
+	return []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+		{
+			ApplyTo: istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+			Match: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
+				Context: istioapinetworkingv1alpha3.EnvoyFilter_GATEWAY,
+				ObjectTypes: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
+					Listener: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch{
+						FilterChain: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
+							Filter: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
+								Name: "envoy.filters.network.http_connection_manager",
+								SubFilter: &istioapinetworkingv1alpha3.EnvoyFilter_ListenerMatch_SubFilterMatch{
+									Name: "envoy.filters.http.router",
+								},
+							},
+						},
+					},
+				},
+			},
+			Patch: patch,
+		},
 	}, nil
 }
 

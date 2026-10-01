@@ -82,6 +82,9 @@ spec:
             - name: wasm
               containerPort: 8082
               protocol: TCP
+            - name: ecds
+              containerPort: 50053
+              protocol: TCP
           livenessProbe:
             httpGet:
               path: /healthz

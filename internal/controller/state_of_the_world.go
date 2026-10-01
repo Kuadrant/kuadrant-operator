@@ -488,6 +488,7 @@ func (b *BootOptionsBuilder) getIstioOptions() ([]controller.ControllerOption, e
 			istio.LinkKuadrantToPeerAuthentication,
 		),
 		controller.WithRunnable("wasm server", wasmServerRunnable(b.logger)),
+		controller.WithRunnable("ecds server", ecdsServerRunnable(b.logger)),
 	)
 
 	return opts, nil

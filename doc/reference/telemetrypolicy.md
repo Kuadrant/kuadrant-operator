@@ -9,15 +9,11 @@
 
 ## TelemetryPolicySpec
 
-Custom logging is disabled by default. To enable `logging.default.fields`, set
-`AUTHORINO_ENABLE_LOGGING_FIELDS` to a true boolean value on the Kuadrant
-Operator container. The operator sets `spec.enableLoggingFields: true` on the
-managed Authorino CR when enabled; unset, false, or invalid values leave that
-field unchanged so an administrator-managed value is preserved. Restart the
-operator after changing its environment. Creating a TelemetryPolicy alone does
-not enable custom logging.
-This requires an Authorino and Authorino Operator version supporting custom
-logging fields.
+Custom logging is disabled by default. To enable `logging.default.fields`, an
+administrator must set `spec.enableLoggingFields: true` on the Authorino CR.
+Creating a TelemetryPolicy alone does not enable custom logging, and logging
+fields apply only to routes with an AuthPolicy. This requires an Authorino and
+Authorino Operator version supporting custom logging fields.
 
 | **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                             |
 |-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

@@ -1571,6 +1571,43 @@ func TestAttachBindings_NoAuth(t *testing.T) {
 	}
 }
 
+func TestAttachBindings_LoggingFieldsOnlyAttachToAuth(t *testing.T) {
+	specs := []ActionSpec{
+		{ServiceName: RateLimitServiceName, Scope: "pre-auth-rl"},
+		{ServiceName: AuthServiceName, Scope: "auth"},
+		{ServiceName: RateLimitCheckServiceName, Scope: "post-auth-rl"},
+	}
+	bindings := []DataBinding{
+		{Domain: "metrics.labels", Field: "model", Expression: "request.host"},
+		{Domain: "logging.fields", Field: "client_identity", Expression: "auth.identity.sub"},
+	}
+
+	AttachBindings(specs, bindings)
+
+	if len(specs[0].Bindings) != 1 || specs[0].Bindings[0].Domain != "metrics.labels" {
+		t.Errorf("pre-auth rate limit bindings = %#v, want only metrics binding", specs[0].Bindings)
+	}
+	if len(specs[1].Bindings) != 2 {
+		t.Errorf("auth bindings = %#v, want metrics and logging bindings", specs[1].Bindings)
+	}
+	if len(specs[2].Bindings) != 1 || specs[2].Bindings[0].Domain != "metrics.labels" {
+		t.Errorf("post-auth rate limit bindings = %#v, want only metrics binding", specs[2].Bindings)
+	}
+}
+
+func TestAttachBindings_LoggingFieldsWithoutAuth(t *testing.T) {
+	specs := []ActionSpec{{ServiceName: RateLimitServiceName, Scope: "rl"}}
+	bindings := []DataBinding{
+		{Domain: "logging.fields", Field: "request_path", Expression: "request.path"},
+	}
+
+	AttachBindings(specs, bindings)
+
+	if len(specs[0].Bindings) != 0 {
+		t.Errorf("rate limit bindings = %#v, want no logging bindings", specs[0].Bindings)
+	}
+}
+
 func TestAttachBindings_NoBindings(t *testing.T) {
 	specs := []ActionSpec{
 		{ServiceName: AuthServiceName, Scope: "my-auth"},

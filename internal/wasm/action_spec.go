@@ -514,8 +514,11 @@ func isResponsePhaseExpression(expr string) bool {
 		strings.Contains(expr, requestBodyStorePath)
 }
 
+const loggingFieldsDomain = "logging.fields"
+
 // AttachBindings walks specs in pipeline order and attaches only bindings whose
-// dependencies are satisfied at each position. Two checks are applied:
+// dependencies are satisfied at each position. Three checks are applied:
+//   - Consumer compatibility: logging field bindings are consumed only by Authorino.
 //   - Store-path availability: specs declare produced store paths via
 //     ProducedStorePaths(); bindings referencing a path not yet produced are excluded.
 //   - Response-phase access: guard specs (request phase) cannot evaluate
@@ -543,16 +546,16 @@ func AttachBindings(specs []ActionSpec, bindings []DataBinding) {
 		}
 
 		specs[i].Bindings = append(specs[i].Bindings,
-			availableBindings(bindings, pending, specs[i].IsGuard())...)
+			availableBindings(bindings, pending, specs[i].IsGuard(), specs[i].ServiceName)...)
 	}
 }
 
-func availableBindings(bindings []DataBinding, pendingPaths []string, guard bool) []DataBinding {
-	if len(pendingPaths) == 0 && !guard {
-		return bindings
-	}
+func availableBindings(bindings []DataBinding, pendingPaths []string, guard bool, serviceName string) []DataBinding {
 	var filtered []DataBinding
 	for _, b := range bindings {
+		if b.Domain == loggingFieldsDomain && serviceName != AuthServiceName {
+			continue
+		}
 		if referencesPendingPath(b.Expression, pendingPaths) {
 			continue
 		}

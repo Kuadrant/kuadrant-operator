@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -102,10 +101,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				Insecure: kobj.Spec.Observability.Tracing.Insecure,
 			}
 		}
-		if enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false); enabled {
-			patch.Spec.EnableLoggingFields = true
-		}
-
 		unstructuredAuthorino, err := controller.Destruct(patch)
 		if err != nil {
 			span.RecordError(err)
@@ -194,10 +189,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			Insecure: kobj.Spec.Observability.Tracing.Insecure,
 		}
 	}
-	if enabled, _ := env.GetBool("AUTHORINO_ENABLE_LOGGING_FIELDS", false); enabled {
-		authorino.Spec.EnableLoggingFields = true
-	}
-
 	unstructuredAuthorino, err := controller.Destruct(authorino)
 	if err != nil {
 		span.RecordError(err)

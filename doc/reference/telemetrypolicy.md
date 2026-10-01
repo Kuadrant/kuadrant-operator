@@ -9,10 +9,17 @@
 
 ## TelemetryPolicySpec
 
+Custom logging is disabled by default. To enable `logging.default.fields`, an
+administrator must set `spec.enableLoggingFields: true` on the Authorino CR.
+Creating a TelemetryPolicy alone does not enable custom logging, and logging
+fields apply only to routes with an AuthPolicy. This requires an Authorino and
+Authorino Operator version supporting custom logging fields.
+
 | **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                             |
 |-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `targetRef` | [LocalPolicyTargetReferenceWithSectionName](#localpolicytargetreferencewithsectionname) | Yes          | Reference to a Kubernetes resource that the policy attaches to. For more [info](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname)                                                                                                                              |
-| `metrics`   | [MetricsSpec](#metricsspec) | Yes | Metrics holds the telemetry metrics configuration |
+| `metrics`   | [MetricsSpec](#metricsspec) | No | Metrics holds the telemetry metrics configuration. At least one of `metrics` or `logging` must be defined. |
+| `logging`   | [LoggingSpec](#loggingspec) | No | Logging holds the custom authorization decision logging configuration. At least one of `metrics` or `logging` must be defined. |
 
 ### LocalPolicyTargetReferenceWithSectionName
 | **Field**       | **Type**                                | **Required** | **Description**                                            |
@@ -41,6 +48,16 @@
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions |
+
+### LoggingSpec
+| Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
+|-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `default` | [LoggingConfig](#loggingconfig)  | Yes | Default logging configuration that applies to all requests |
+
+### LoggingConfig
+| Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
+|-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions |
 
 ### TelemetryPolicyStatus
 

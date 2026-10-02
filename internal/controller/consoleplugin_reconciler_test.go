@@ -110,14 +110,16 @@ func TestConsolePluginReconciler(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := NewConsolePluginReconciler(manager, TestNamespace, "")
+	reconciler := NewConsolePluginReconciler(manager, TestNamespace, consoleplugin.Image{})
 	assert.Assert(t, reconciler != nil)
 
 	t.Run("Subscription", func(subT *testing.T) {
 		subscription := reconciler.Subscription()
 		assert.Assert(subT, subscription != nil)
 		events := subscription.Events
-		assert.Assert(subT, is.Len(events, 4))
+		assert.Assert(subT, is.Len(events, 5))
+		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ClusterVersionGroupKind.GroupKind()))
+		events = events[1:]
 		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ConsolePluginGVK.GroupKind()))
 		assert.DeepEqual(subT, events[1].Kind, ptr.To(ConfigMapGroupKind))
 		assert.DeepEqual(subT, events[1].ObjectName, TopologyConfigMapName)
@@ -202,8 +204,14 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Containers, 1))
 		assert.Assert(subT, deployment.Spec.Template.Spec.Containers[0].Image == ConsolePluginImageURL)
 		assert.Equal(subT, deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy, corev1.PullAlways)
-		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 1))
-		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Volumes, 1))
+		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Containers[0].VolumeMounts, 2))
+		assert.Assert(subT, is.Len(deployment.Spec.Template.Spec.Volumes, 2))
+		configMap := &corev1.ConfigMap{}
+		assert.NilError(subT, manager.GetClient().Get(context.TODO(), client.ObjectKey{
+			Name: "kuadrant-console-nginx-conf", Namespace: TestNamespace,
+		}, configMap))
+		assert.Assert(subT, is.Contains(configMap.Data["nginx.conf"], "listen              9443 ssl;"))
+		assert.Assert(subT, is.Contains(configMap.Data["nginx.conf"], "ssl_certificate     /var/serving-cert/tls.crt;"))
 	})
 
 	t.Run("Delete deployment", func(subT *testing.T) {
@@ -226,11 +234,7 @@ func TestConsolePluginReconciler(t *testing.T) {
 		assert.Assert(subT, consolePlugin.Spec.Backend.Service != nil)
 		assert.Assert(subT, consolePlugin.Spec.Backend.Service.Name == consoleplugin.ServiceName())
 		assert.Assert(subT, consolePlugin.Spec.Backend.Service.Namespace == TestNamespace)
-		assert.Assert(subT, is.Len(consolePlugin.Spec.Proxy, 1))
-		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Alias == "backend")
-		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Authorization == consolev1.UserToken)
-		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Endpoint.Service != nil)
-		assert.Assert(subT, consolePlugin.Spec.Proxy[0].Endpoint.Service.Name == consoleplugin.ServiceName())
+		assert.Assert(subT, is.Len(consolePlugin.Spec.Proxy, 0))
 	})
 
 	t.Run("Delete consoleplugin", func(subT *testing.T) {
@@ -261,7 +265,7 @@ func TestConsolePluginReconcilerWithDevelopmentImageOverride(t *testing.T) {
 		WithClient(fake.NewClientBuilder().WithScheme(scheme).WithObjects(legacyConfigMap).Build()).
 		WithScheme(scheme).
 		Build()
-	reconciler := NewConsolePluginReconciler(manager, TestNamespace, imageOverride)
+	reconciler := NewConsolePluginReconciler(manager, TestNamespace, consoleplugin.Image{URL: imageOverride, Runtime: consoleplugin.RuntimeGo})
 
 	topologyConfigMap := &controller.RuntimeObject{
 		Object: &corev1.ConfigMap{
@@ -286,7 +290,7 @@ func TestConsolePluginReconcilerWithDevelopmentImageOverride(t *testing.T) {
 	consolePlugin := &consolev1.ConsolePlugin{}
 	assert.NilError(t, manager.GetClient().Get(context.TODO(), client.ObjectKey{Name: consoleplugin.Name()}, consolePlugin))
 	err = manager.GetClient().Get(context.TODO(), client.ObjectKeyFromObject(legacyConfigMap), &corev1.ConfigMap{})
-	assert.Assert(t, apierrors.IsNotFound(err))
+	assert.NilError(t, err)
 	policy := &networkingv1.NetworkPolicy{}
 	assert.NilError(t, manager.GetClient().Get(context.TODO(), client.ObjectKey{Name: consoleplugin.NetworkPolicyName(), Namespace: TestNamespace}, policy))
 	assert.DeepEqual(t, policy.Spec, consoleplugin.NetworkPolicy(TestNamespace).Spec)

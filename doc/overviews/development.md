@@ -196,7 +196,7 @@ The `make bundle` target accepts the following variables:
 | `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL       | `quay.io/kuadrant/dns-operator-bundle:latest`       | `DNS_OPERATOR_BUNDLE_IMG` var could be used to build this, defaults to _latest_ if not provided    |
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `quay.io/kuadrant/wasm-shim:latest`                 | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
 | `RELATED_IMAGE_DEVELOPERPORTAL` | Developer portal controller image URL | `quay.io/kuadrant/developer-portal-controller:latest` | `DEVELOPERPORTAL_VERSION` var could be used to build this, defaults to _latest_ if not provided |
-| `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST` | Console plugin image URL (PatternFly 6) | `quay.io/kuadrant/console-plugin:latest` | `CONSOLEPLUGIN_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST` | Console plugin image URL (OpenShift 4.22+, Go server) | `quay.io/kuadrant/console-plugin:latest` | `CONSOLEPLUGIN_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1` | Console plugin image URL (OpenShift 4.20–4.21) | `quay.io/kuadrant/console-plugin:v0.6.0` | |
 | `RELATED_IMAGE_CONSOLE_PLUGIN_PF5` | Console plugin image URL (PatternFly 5) | `quay.io/kuadrant/console-plugin:v0.1.5-2` | |
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`                                             |                                                                                                               |
@@ -204,14 +204,16 @@ The `make bundle` target accepts the following variables:
 
 *Note:* The console plugin image is configured via three `RELATED_IMAGE` environment variables based on OpenShift version:
 
-- `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST`: Used for OpenShift versions >= 4.22
-- `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1`: Used for OpenShift versions 4.20–4.21
-- `RELATED_IMAGE_CONSOLE_PLUGIN_PF5`: Used for OpenShift versions < 4.20 (PatternFly 5 compatible)
+- `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST`: Used for OpenShift versions >= 4.22 (Go server)
+- `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1`: Used for OpenShift versions 4.20–4.21 (nginx)
+- `RELATED_IMAGE_CONSOLE_PLUGIN_PF5`: Used for OpenShift versions < 4.20 (nginx, PatternFly 5 compatible)
 
 The operator automatically selects the appropriate image based on the detected OpenShift cluster version.
 `CONSOLE_PLUGIN_IMAGE_OVERRIDE` explicitly selects a development image, uses
 `IfNotPresent`, and permits deployment without a ClusterVersion resource when
-the ConsolePlugin API is installed.
+the ConsolePlugin API is installed. For nginx image overrides, also set
+`CONSOLE_PLUGIN_RUNTIME_OVERRIDE=nginx`; the default is `go`. This setting
+applies only to `CONSOLE_PLUGIN_IMAGE_OVERRIDE`.
 
 ### Console plugin network access
 

@@ -11,7 +11,7 @@ import (
 )
 
 func TestDeploymentConfigMutatorUpgradesNginxDeployment(t *testing.T) {
-	desired := Deployment("test-namespace", "example.test/plugin:new", "topology")
+	desired := Deployment("test-namespace", Image{URL: "example.test/plugin:new", Runtime: RuntimeGo}, "topology")
 	desired.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
 	existing := desired.DeepCopy()
 	existing.Spec.Template.Spec.Containers[0].Ports[0].Name = ""

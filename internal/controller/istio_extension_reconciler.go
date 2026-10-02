@@ -750,6 +750,12 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		},
 	}
 
+	// Deliberately checks hasPolicies, not wasmConfig.ActionSets: wasmConfig is now
+	// a bootstrap stand-in (always empty ActionSets) when RemoteConfig is set, so
+	// re-deriving "does this gateway need a wasm filter" from its content would
+	// delete the EnvoyFilter on every reconcile. hasPolicies is computed from the
+	// real config before it's replaced by the stand-in - no equivalent bug exists
+	// in mainline, where wasmConfig is always the real, full config.
 	if !hasPolicies {
 		utils.TagObjectToDelete(envoyFilter)
 	}

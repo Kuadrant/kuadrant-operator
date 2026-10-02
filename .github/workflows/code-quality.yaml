@@ -106,7 +106,15 @@ jobs:
         run: make verify-go-mod
       - name: Verify manifests
         if: ${{ !cancelled() }}
-        run: make verify-manifests
+        # verify-bundle and verify-helm-charts are intentionally excluded here: they
+        # regenerate with Makefile defaults (VERSION=0.0.0, *_VERSION=latest), which only
+        # matches the committed bundle/chart on main. On release branches, release.yaml
+        # pins real versions, so those checks would always fail regardless of the PR's
+        # content. The "Validate release data" step below (verify-prepare-release) is
+        # release.yaml-aware and is the correct check for bundle/chart consistency there.
+        run: |
+          make verify-controller-manifests
+          make verify-extensions-manifests
       - name: Install crane
         if: ${{ !cancelled() }}
         uses: imjasonh/setup-crane@5146f708a817ea23476677995bf2133943b9be0b # ratchet:imjasonh/setup-crane@v0.1

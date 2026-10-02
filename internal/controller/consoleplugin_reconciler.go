@@ -32,10 +32,10 @@ type ConsolePluginReconciler struct {
 	*reconcilers.BaseReconciler
 
 	namespace     string
-	imageOverride string
+	imageOverride consoleplugin.Image
 }
 
-func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace, imageOverride string) *ConsolePluginReconciler {
+func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string, imageOverride consoleplugin.Image) *ConsolePluginReconciler {
 	return &ConsolePluginReconciler{
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(),
@@ -51,6 +51,7 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Run,
 		Events: []controller.ResourceEventMatcher{
+			{Kind: ptr.To(openshift.ClusterVersionGroupKind.GroupKind()), ObjectName: "version"},
 			{Kind: ptr.To(openshift.ConsolePluginGVK.GroupKind())},
 			{
 				Kind:            ptr.To(ConfigMapGroupKind),
@@ -90,7 +91,20 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	})
 
 	clusterVersionExists := len(clusterVersions) > 0
-	consolePluginSupported := clusterVersionExists || r.imageOverride != ""
+	consolePluginSupported := clusterVersionExists || r.imageOverride.URL != ""
+
+	// Resolve the image and serving configuration before changing resources.
+	var image consoleplugin.Image
+	var err error
+	if topologyExists && r.imageOverride.URL != "" {
+		image = r.imageOverride
+	} else if topologyExists && clusterVersionExists {
+		clusterVersion := clusterVersions[0].(*controller.RuntimeObject).Object.(*configv1.ClusterVersion)
+		image, err = openshift.GetConsolePluginImageForVersion(clusterVersion)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Apply ingress protection before starting the backend. The topology
 	// ConfigMap anchors the plugin's lifecycle, including garbage collection.
@@ -103,7 +117,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 			return err
 		}
 	}
-	_, err := r.ReconcileResource(ctx, &networkingv1.NetworkPolicy{}, networkPolicy,
+	_, err = r.ReconcileResource(ctx, &networkingv1.NetworkPolicy{}, networkPolicy,
 		reconcilers.Mutator[*networkingv1.NetworkPolicy](consoleplugin.NetworkPolicyMutator))
 	if err != nil {
 		logger.Error(err, "reconciling network policy")
@@ -121,22 +135,23 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 		return err
 	}
 
-	// Deployment
-	var consolePluginImageURL string
-	if topologyExists && r.imageOverride != "" {
-		consolePluginImageURL = r.imageOverride
-	} else if topologyExists && clusterVersionExists {
-		clusterVersion := clusterVersions[0].(*controller.RuntimeObject).Object.(*configv1.ClusterVersion)
-
-		consolePluginImageURL, err = openshift.GetConsolePluginImageForVersion(clusterVersion)
+	// Create nginx configuration before any pod can reference it. Retain an
+	// existing ConfigMap for Go deployments: old pods may still need it during
+	// a rolling update. It is removed when the plugin is removed.
+	if !topologyExists || !consolePluginSupported || image.Runtime == consoleplugin.RuntimeNginx {
+		configMap := consoleplugin.LegacyNginxConfigMap(r.namespace)
+		if !topologyExists || !consolePluginSupported {
+			utils.TagObjectToDelete(configMap)
+		}
+		_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, configMap, reconcilers.CreateOnlyMutator)
 		if err != nil {
-			logger.Error(err, "failed to get console plugin image for OpenShift version")
 			return err
 		}
 	}
 
-	deployment := consoleplugin.Deployment(r.namespace, consolePluginImageURL, TopologyConfigMapName)
-	if r.imageOverride != "" {
+	// Deployment
+	deployment := consoleplugin.Deployment(r.namespace, image, TopologyConfigMapName)
+	if r.imageOverride.URL != "" {
 		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
 	}
 	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0, 2)
@@ -151,18 +166,8 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 		return err
 	}
 
-	// Remove the nginx configuration left behind by older Console plugin
-	// deployments. The combined asset server/backend no longer mounts it.
-	legacyNginxConfigMap := consoleplugin.LegacyNginxConfigMap(r.namespace)
-	utils.TagObjectToDelete(legacyNginxConfigMap)
-	_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, legacyNginxConfigMap, reconcilers.CreateOnlyMutator)
-	if err != nil {
-		logger.Error(err, "deleting legacy nginx configmap")
-		return err
-	}
-
 	// ConsolePlugin
-	consolePlugin := consoleplugin.ConsolePlugin(r.namespace)
+	consolePlugin := consoleplugin.ConsolePlugin(r.namespace, image.Runtime)
 	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(consolePlugin)
 	}

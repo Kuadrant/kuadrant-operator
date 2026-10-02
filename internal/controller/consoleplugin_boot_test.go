@@ -37,6 +37,7 @@ type consolePluginBootManager struct {
 func (m consolePluginBootManager) GetRESTMapper() meta.RESTMapper { return m.mapper }
 
 func TestConsolePluginBootCleansUpRemovedImageOverride(t *testing.T) {
+	t.Setenv(openshift.ConsolePluginRuntimeOverrideEnvVar, "nginx")
 	scheme := runtime.NewScheme()
 	assert.NilError(t, corev1.AddToScheme(scheme))
 	assert.NilError(t, appsv1.AddToScheme(scheme))
@@ -62,13 +63,14 @@ func TestConsolePluginBootCleansUpRemovedImageOverride(t *testing.T) {
 	assert.NilError(t, manager.GetClient().Create(context.Background(), topologyConfigMap.DeepCopy()))
 	events := []controller.ResourceEvent{{
 		Kind: openshift.ConsolePluginGVK.GroupKind(), EventType: controller.CreateEvent,
-		NewObject: consoleplugin.ConsolePlugin(operatorNamespace),
+		NewObject: consoleplugin.ConsolePlugin(operatorNamespace, consoleplugin.RuntimeGo),
 	}}
 	resources := []client.Object{
 		consoleplugin.Service(operatorNamespace),
-		consoleplugin.Deployment(operatorNamespace, "", TopologyConfigMapName),
-		consoleplugin.ConsolePlugin(operatorNamespace),
+		consoleplugin.Deployment(operatorNamespace, consoleplugin.Image{}, TopologyConfigMapName),
+		consoleplugin.ConsolePlugin(operatorNamespace, consoleplugin.RuntimeGo),
 		consoleplugin.NetworkPolicy(operatorNamespace),
+		consoleplugin.LegacyNginxConfigMap(operatorNamespace),
 	}
 
 	for _, imageOverride := range []string{"localhost/kuadrant/console-plugin:dev", ""} {
@@ -88,6 +90,9 @@ func TestConsolePluginBootCleansUpRemovedImageOverride(t *testing.T) {
 				assert.Assert(t, apierrors.IsNotFound(err), "%T should be deleted after removing the override", resource)
 			} else {
 				assert.NilError(t, err)
+				if deployment, ok := resource.(*appsv1.Deployment); ok {
+					assert.Equal(t, len(deployment.Spec.Template.Spec.Volumes), 2)
+				}
 			}
 		}
 	}

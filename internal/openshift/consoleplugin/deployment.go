@@ -29,18 +29,25 @@ func DeploymentSelector() *metav1.LabelSelector {
 	}
 }
 
-func DeploymentVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func DeploymentVolumeMounts(runtime Runtime) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
 		{
 			Name:      "plugin-serving-cert",
 			ReadOnly:  true,
 			MountPath: "/var/serving-cert",
 		},
 	}
+	if runtime == RuntimeNginx {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name: "nginx-conf", ReadOnly: true,
+			MountPath: "/etc/nginx/nginx.conf", SubPath: "nginx.conf",
+		})
+	}
+	return mounts
 }
 
-func DeploymentVolumes() []corev1.Volume {
-	return []corev1.Volume{
+func DeploymentVolumes(runtime Runtime) []corev1.Volume {
+	volumes := []corev1.Volume{
 		{
 			Name: "plugin-serving-cert",
 			VolumeSource: corev1.VolumeSource{
@@ -51,6 +58,16 @@ func DeploymentVolumes() []corev1.Volume {
 			},
 		},
 	}
+	if runtime == RuntimeNginx {
+		volumes = append(volumes, corev1.Volume{
+			Name: "nginx-conf",
+			VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: legacyNginxConfigMapName},
+				DefaultMode:          ptr.To(int32(420)),
+			}},
+		})
+	}
+	return volumes
 }
 
 func DeploymentLabels(namespace string) map[string]string {
@@ -63,7 +80,7 @@ func DeploymentLabels(namespace string) map[string]string {
 	return result
 }
 
-func Deployment(ns, image, topologyName string) *appsv1.Deployment {
+func Deployment(ns string, image Image, topologyName string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -82,7 +99,7 @@ func Deployment(ns, image, topologyName string) *appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:  KuadrantConsoleName,
-							Image: image,
+							Image: image.URL,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "https",
@@ -91,20 +108,29 @@ func Deployment(ns, image, topologyName string) *appsv1.Deployment {
 								},
 							},
 							ImagePullPolicy: corev1.PullAlways,
-							VolumeMounts:    DeploymentVolumeMounts(),
-							Env: []corev1.EnvVar{
-								{Name: "TOPOLOGY_CONFIGMAP_NAME", Value: topologyName},
-								{Name: "TOPOLOGY_CONFIGMAP_NAMESPACE", Value: ns},
-								{Name: "TLS_CERTIFICATE_FILE", Value: "/var/serving-cert/tls.crt"},
-								{Name: "TLS_KEY_FILE", Value: "/var/serving-cert/tls.key"},
-							},
+							VolumeMounts:    DeploymentVolumeMounts(image.Runtime),
+							Env:             deploymentEnvironment(ns, topologyName, image.Runtime),
 						},
 					},
-					Volumes:       DeploymentVolumes(),
+					Volumes:       DeploymentVolumes(image.Runtime),
 					RestartPolicy: corev1.RestartPolicyAlways,
 					DNSPolicy:     corev1.DNSClusterFirst,
 				},
 			},
 		},
 	}
+}
+
+func deploymentEnvironment(namespace, topologyName string, runtime Runtime) []corev1.EnvVar {
+	variables := []corev1.EnvVar{
+		{Name: "TOPOLOGY_CONFIGMAP_NAME", Value: topologyName},
+		{Name: "TOPOLOGY_CONFIGMAP_NAMESPACE", Value: namespace},
+	}
+	if runtime == RuntimeGo {
+		variables = append(variables,
+			corev1.EnvVar{Name: "TLS_CERTIFICATE_FILE", Value: "/var/serving-cert/tls.crt"},
+			corev1.EnvVar{Name: "TLS_KEY_FILE", Value: "/var/serving-cert/tls.key"},
+		)
+	}
+	return variables
 }

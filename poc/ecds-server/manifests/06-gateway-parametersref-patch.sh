@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Manual, one-time, per-gateway step used to prototype the
 # Gateway.spec.infrastructure.parametersRef approach described in
-# poc/ecds-server/README.md ("Comparison with poc-extensions-endpoint").
+# poc/ecds-server/README.md ("Researching and confirming the fix").
 # Not automated by the operator yet - see the README's "Open follow-ups".
 set -euo pipefail
 

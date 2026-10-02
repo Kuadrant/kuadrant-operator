@@ -2,6 +2,7 @@ package consoleplugin
 
 import (
 	"reflect"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,6 +46,18 @@ func DeploymentConfigMutator(desired, existing *appsv1.Deployment) bool {
 
 func mergeOwnedEnvironment(container *corev1.Container, desired []corev1.EnvVar) bool {
 	updated := false
+	// A switch back to nginx must remove the Go server's TLS settings while
+	// retaining environment variables supplied by administrators.
+	container.Env = slices.DeleteFunc(container.Env, func(variable corev1.EnvVar) bool {
+		if variable.Name != "TLS_CERTIFICATE_FILE" && variable.Name != "TLS_KEY_FILE" {
+			return false
+		}
+		remove := !slices.ContainsFunc(desired, func(wanted corev1.EnvVar) bool {
+			return wanted.Name == variable.Name
+		})
+		updated = updated || remove
+		return remove
+	})
 	for _, desiredVariable := range desired {
 		found := false
 		for index := range container.Env {

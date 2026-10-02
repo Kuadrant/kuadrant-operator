@@ -14007,8 +14007,8 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
-          through the use of dynamically evaluated CEL expressions.
+          TelemetryPolicy enables custom metric labelling and log field enrichment for
+          Kuadrant data plane resources through the use of dynamically evaluated CEL expressions.
         properties:
           apiVersion:
             description: |-
@@ -14029,6 +14029,31 @@ spec:
             type: object
           spec:
             properties:
+              logging:
+                description: Logging holds the telemetry logging configuration
+                properties:
+                  default:
+                    description: Default logging configuration that applies to all
+                      requests
+                    properties:
+                      fields:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Fields to add to auth decision log records, where keys are field names and values are
+                          CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
+                          Only fields whose CEL expressions resolve successfully will be included.
+                        minProperties: 1
+                        type: object
+                        x-kubernetes-validations:
+                        - message: field names must not contain periods
+                          rule: self.all(k, !k.contains('.'))
+                    required:
+                    - fields
+                    type: object
+                required:
+                - default
+                type: object
               metrics:
                 description: Metrics holds the telemetry metrics configuration
                 properties:
@@ -14097,9 +14122,11 @@ spec:
                 - message: Invalid targetRef.kind. The only supported value is 'Gateway'
                   rule: self.kind == 'Gateway'
             required:
-            - metrics
             - targetRef
             type: object
+            x-kubernetes-validations:
+            - message: At least one of spec.metrics or spec.logging must be defined
+              rule: has(self.metrics) || has(self.logging)
           status:
             description: TelemetryPolicyStatus defines the observed state of TelemetryPolicy
             properties:
@@ -16165,7 +16192,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/kuadrant/kuadrant-operator:v1.6.0-rc1
+        image: quay.io/kuadrant/kuadrant-operator:v1.6.0-rc2
         livenessProbe:
           httpGet:
             path: /healthz
@@ -16194,10 +16221,10 @@ spec:
         resources:
           limits:
             cpu: 200m
-            memory: 300Mi
+            memory: 500Mi
           requests:
             cpu: 200m
-            memory: 200Mi
+            memory: 350Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:

@@ -832,10 +832,10 @@ spec:
                 resources:
                   limits:
                     cpu: 200m
-                    memory: 300Mi
+                    memory: 500Mi
                   requests:
                     cpu: 200m
-                    memory: 200Mi
+                    memory: 350Mi
                 securityContext:
                   allowPrivilegeEscalation: false
                   capabilities:

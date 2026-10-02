@@ -1,8 +1,31 @@
-# Profiling
+# Collect runtime profiles
 
-All Go-based Kuadrant components support runtime profiling via Go's built-in [pprof](https://pkg.go.dev/net/http/pprof) tooling. This uses controller-runtime's `PprofBindAddress` option, enabled by default on port `8084`.
+Go-based Kuadrant components support runtime profiling via Go's built-in [pprof](https://pkg.go.dev/net/http/pprof) tooling. The listener must be enabled before you can collect profiles; its default depends on the component and version.
 
 Profiling is useful for diagnosing performance issues such as slow reconciliation, high CPU usage, or excessive memory allocation at scale.
+
+## Before you start
+
+You need `kubectl` access to the component's namespace, permission to port-forward to its pods, and Go installed locally. Install Graphviz to use the graphical views in `go tool pprof`.
+
+Check the deployed image and arguments before profiling. For example, for Authorino:
+
+```bash
+kubectl get deployment authorino -n kuadrant-system -o yaml
+```
+
+Check that image version's `--help` output or documentation for the default `--pprof-bind-address`. An omitted flag does not guarantee a listener on `8084`: Authorino versions can disable profiling by default.
+
+To enable profiling on port `8084`, set `--pprof-bind-address=:8084` in the component's startup arguments. For a Deployment you manage directly, edit its manifest and add or update this argument in the relevant container's `args`, preserving its other arguments. For example:
+
+```bash
+kubectl edit deployment authorino -n kuadrant-system
+kubectl rollout status deployment/authorino -n kuadrant-system
+```
+
+For operator-managed Deployments, configure the owning operator instead of editing the generated Deployment: reconciliation can revert direct changes. The Authorino custom resource currently has no profiling setting. If its deployed version disables the listener, this guide cannot enable it through that resource; use a separately managed diagnostic deployment or wait for operator configuration support.
+
+Keep the profiling endpoint private and enable it only while diagnosing a problem. Setting `--pprof-bind-address=""` disables it. Network access rules do not enable a disabled listener.
 
 ## Connecting to a component
 
@@ -36,7 +59,7 @@ To profile multiple components simultaneously, use different local ports (e.g., 
 Captures a CPU profile for a specified duration (default 30 seconds):
 
 ```bash
-go tool pprof http://localhost:8084/debug/pprof/profile?seconds=30
+go tool pprof "http://localhost:8084/debug/pprof/profile?seconds=30"
 ```
 
 ### Heap profile
@@ -52,7 +75,7 @@ go tool pprof http://localhost:8084/debug/pprof/heap
 Lists all goroutines and their stack traces, useful for diagnosing stuck reconciliation:
 
 ```bash
-curl http://localhost:8084/debug/pprof/goroutine?debug=2
+curl "http://localhost:8084/debug/pprof/goroutine?debug=2"
 ```
 
 ## Analysing profiles
@@ -62,7 +85,7 @@ curl http://localhost:8084/debug/pprof/goroutine?debug=2
 The most useful way to view profiles — opens a browser with flame graphs, call graphs, and source annotation:
 
 ```bash
-go tool pprof -http=:8080 http://localhost:8084/debug/pprof/profile?seconds=30
+go tool pprof -http=:8080 "http://localhost:8084/debug/pprof/profile?seconds=30"
 ```
 
 ### Save and view later
@@ -93,17 +116,3 @@ go tool pprof -top cpu.prof              # top functions by flat CPU
 go tool pprof -top -cum cpu.prof         # top functions by cumulative CPU
 go tool pprof -top heap.prof             # top memory allocators
 ```
-
-## Configuration
-
-Each component accepts a `--pprof-bind-address` flag:
-
-| Component | Flag | Default |
-|---|---|---|
-| kuadrant-operator | `--pprof-bind-address` | `:8084` |
-| authorino | `--pprof-bind-address` | `:8084` |
-| authorino-operator | `--pprof-bind-address` | `:8084` |
-| limitador-operator | `--pprof-bind-address` | `:8084` |
-| dns-operator | `--pprof-bind-address` | `:8084` |
-
-Set to an empty string to disable: `--pprof-bind-address=""`.

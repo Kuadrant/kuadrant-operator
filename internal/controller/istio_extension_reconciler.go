@@ -471,6 +471,11 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		parsed, pathErr := kuadrantpolicymachinery.ParseTopologyPath(path)
 		if pathErr != nil {
 			logger.V(1).Info("skipping path - failed to parse", "pathID", pathID, "error", pathErr)
+			_, pathSpan := tracer.Start(ctx, "wasm.BuildConfigForPath")
+			pathSpan.SetAttributes(attribute.String("path_id", pathID))
+			pathSpan.RecordError(pathErr)
+			pathSpan.SetStatus(codes.Error, "failed to parse topology path")
+			pathSpan.End()
 			continue
 		}
 
@@ -504,7 +509,14 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 
 		// rate limit
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
-			rlSpecs := buildWasmActionSpecsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			rlSpecs, err := buildWasmActionSpecsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+			if err != nil {
+				logger.Error(err, "failed to build rate limit action specs", "pathID", pathID)
+				pathSpan.RecordError(err)
+				pathSpan.SetStatus(codes.Error, "failed to build rate limit action specs")
+				pathSpan.End()
+				continue
+			}
 			if specsHaveAuthAccess(rlSpecs) {
 				specs = append(specs, rlSpecs...)
 			} else {
@@ -520,7 +532,14 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		}
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
+			trlSpecs, err := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
+			if err != nil {
+				logger.Error(err, "failed to build token rate limit action specs", "pathID", pathID)
+				pathSpan.RecordError(err)
+				pathSpan.SetStatus(codes.Error, "failed to build token rate limit action specs")
+				pathSpan.End()
+				continue
+			}
 			if specsHaveAuthAccess(trlSpecs) {
 				specs = append(specs, trlSpecs...)
 			} else {

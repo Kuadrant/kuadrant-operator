@@ -14,264 +14,12 @@ ifeq (podman,$(CONTAINER_ENGINE))
 	CONTAINER_ENGINE_EXTRA_FLAGS ?= --load
 endif
 
-# VERSION defines the project version for the bundle.
-# Update this value when you upgrade the version of your project.
-# To re-generate a bundle for another specific version without changing the standard setup, you can:
-# - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
-# - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.0
-
-# CHANNEL define the catalog channel used in the catalog.
-# - use the CHANNEL as arg of the catalog target (e.g make catalog CHANNEL=stable)
-# - use environment variables to overwrite this value (e.g export CHANNEL="stable")
-CHANNEL ?= alpha
-
-# CHANNELS define the bundle channels used in the bundle.
-# Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
-# To re-generate a bundle for other specific channels without changing the standard setup, you can:
-# - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
-# - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
-CHANNELS ?= alpha
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-
-# DEFAULT_CHANNEL defines the default channel used in the bundle.
-# Add a new line here if you would like to change its default config. (E.g DEFAULT_CHANNEL = "stable")
-# To re-generate a bundle for any other default channel without changing the default setup, you can:
-# - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
-# - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
-DEFAULT_CHANNEL ?= alpha
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
-
-# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
-# You can enable this value if you would like to use SHA Based Digests
-# To enable set flag to true
-USE_IMAGE_DIGESTS ?= false
-
-# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
-BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
-ifeq ($(USE_IMAGE_DIGESTS), true)
-	BUNDLE_GEN_FLAGS += --use-image-digests
-endif
-
-DEFAULT_IMAGE_TAG = latest
-
-# Semantic versioning (i.e. Major.Minor.Patch)
-is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
-
-# BUNDLE_VERSION defines the version for the kuadrant-operator bundle.
-# If the version is not semantic, will use the default one
-bundle_is_semantic := $(call is_semantic_version,$(VERSION))
-ifeq (0.0.0,$(VERSION))
-BUNDLE_VERSION = $(VERSION)
-IMAGE_TAG = latest
-else ifeq ($(bundle_is_semantic),true)
-BUNDLE_VERSION = $(VERSION)
-IMAGE_TAG = v$(VERSION)
-else
-BUNDLE_VERSION = 0.0.0
-IMAGE_TAG ?= $(DEFAULT_IMAGE_TAG)
-endif
-
-# BUNDLE_IMG defines the image:tag used for the bundle.
-# You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(IMAGE_TAG)
-
-# Address of the container registry
-REGISTRY = quay.io
-
-# Organization in container registry
-ORG ?= kuadrant
-
-# Repo in the container registry
-DEFAULT_REPO = kuadrant-operator
-REPO ?= $(DEFAULT_REPO)
-
-# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
-# This variable is used to construct full image tags for bundle and catalog images.
-#
-# For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
-# quay.io/kuadrant/kuadrant-operator-bundle:$VERSION and quay.io/kuadrant/kuadrant-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= $(REGISTRY)/$(ORG)/kuadrant-operator
-
-# kubebuilder-tools still doesn't support darwin/arm64. This is a workaround (https://github.com/kubernetes-sigs/controller-runtime/issues/1657)
-ARCH_PARAM =
-ifeq ($(shell uname -sm),Darwin arm64)
-	ARCH_PARAM = --arch=amd64
-endif
-
-# Image URL to use all building/pushing image targets
-IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
-
-# Directories containing unit & integration test packages
-UNIT_DIRS := ./pkg/... ./api/... ./internal/... ./hack/sync-components...
-
-# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
-ifeq (,$(shell go env GOBIN))
-GOBIN=$(shell go env GOPATH)/bin
-else
-GOBIN=$(shell go env GOBIN)
-endif
+##@ Tools
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
-
-# Kuadrant Namespace
-KUADRANT_NAMESPACE ?= kuadrant-system
-OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
-
-# Kuadrant Service Account
-KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
-
-#Kuadrant Extensions
-WITH_EXTENSIONS ?= true
-EXTRA_EXTENSIONS ?=
-EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
-
-# Kuadrant component versions
-## authorino
-AUTHORINO_OPERATOR_VERSION ?= latest
-authorino_operator_version_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
-
-ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
-RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:latest
-else ifeq (true,$(authorino_operator_version_is_semantic))
-RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:v$(AUTHORINO_OPERATOR_VERSION)
-else
-RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:$(AUTHORINO_OPERATOR_VERSION)
-endif
-
-## authorino (operand image authorino-operator deploys -- see RelatedImageEnvVars
-## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
-## needs its own copy of this rather than relying on the chart's default)
-AUTHORINO_VERSION ?= latest
-authorino_version_is_semantic := $(call is_semantic_version,$(AUTHORINO_VERSION))
-
-ifeq (latest,$(AUTHORINO_VERSION))
-RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:latest
-else ifeq (true,$(authorino_version_is_semantic))
-RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:v$(AUTHORINO_VERSION)
-else
-RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:$(AUTHORINO_VERSION)
-endif
-
-## limitador
-LIMITADOR_OPERATOR_VERSION ?= latest
-limitador_operator_version_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
-
-ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
-RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:latest
-else ifeq (true,$(limitador_operator_version_is_semantic))
-RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:v$(LIMITADOR_OPERATOR_VERSION)
-else
-RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:$(LIMITADOR_OPERATOR_VERSION)
-endif
-
-## limitador (operand image limitador-operator deploys -- see RelatedImageEnvVars
-## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
-## needs its own copy of this rather than relying on the chart's default)
-LIMITADOR_VERSION ?= latest
-limitador_version_is_semantic := $(call is_semantic_version,$(LIMITADOR_VERSION))
-
-ifeq (latest,$(LIMITADOR_VERSION))
-RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:latest
-else ifeq (true,$(limitador_version_is_semantic))
-RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:v$(LIMITADOR_VERSION)
-else
-RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:$(LIMITADOR_VERSION)
-endif
-
-## dns
-DNS_OPERATOR_VERSION ?= latest
-dns_operator_version_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
-
-ifeq (latest,$(DNS_OPERATOR_VERSION))
-RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:latest
-else ifeq (true,$(dns_operator_version_is_semantic))
-RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:v$(DNS_OPERATOR_VERSION)
-else
-RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(DNS_OPERATOR_VERSION)
-endif
-
-## mcp-gateway
-MCP_GATEWAY_VERSION ?= latest
-mcp_gateway_version_is_semantic := $(call is_semantic_version,$(MCP_GATEWAY_VERSION))
-
-ifeq (latest,$(MCP_GATEWAY_VERSION))
-RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:latest
-RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:latest
-else ifeq (true,$(mcp_gateway_version_is_semantic))
-RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:v$(MCP_GATEWAY_VERSION)
-RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:v$(MCP_GATEWAY_VERSION)
-else
-RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:$(MCP_GATEWAY_VERSION)
-RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:$(MCP_GATEWAY_VERSION)
-endif
-
-## wasm-shim
-WASM_SHIM_VERSION ?= latest
-shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
-
-ifeq (true,$(shim_version_is_semantic))
-RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
-else
-RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
-endif
-
-## developer-portal-controller
-DEVELOPERPORTAL_VERSION ?= latest
-developerportal_version_is_semantic := $(call is_semantic_version,$(DEVELOPERPORTAL_VERSION))
-
-ifeq (latest,$(DEVELOPERPORTAL_VERSION))
-RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:latest
-else ifeq (true,$(developerportal_version_is_semantic))
-RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:v$(DEVELOPERPORTAL_VERSION)
-else
-RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(DEVELOPERPORTAL_VERSION)
-endif
-
-## console-plugin
-CONSOLEPLUGIN_VERSION ?= latest
-consoleplugin_version_is_semantic := $(call is_semantic_version,$(CONSOLEPLUGIN_VERSION))
-
-ifeq (latest,$(CONSOLEPLUGIN_VERSION))
-RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:latest
-else ifeq (true,$(consoleplugin_version_is_semantic))
-RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:v$(CONSOLEPLUGIN_VERSION)
-else
-RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(CONSOLEPLUGIN_VERSION)
-endif
-
-RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 ?= quay.io/kuadrant/console-plugin:v0.6.0
-RELATED_IMAGE_CONSOLE_PLUGIN_PF5 ?= quay.io/kuadrant/console-plugin:v0.1.5-2
-
-## gatewayapi-provider
-GATEWAYAPI_PROVIDER ?= istio
-
-EXTENSIONS_DIR ?= /extensions
-EXTENSIONS_IMG ?= quay.io/kuadrant/extensions:dev
-
-all: build
-
-##@ General
-
-# The help target prints out all targets with their descriptions organized
-# beneath their categories. The categories are represented by '##@' and the
-# target descriptions by '##'. The awk commands is responsible for reading the
-# entire set of makefiles included in this invocation, looking for lines of the
-# file as xyz: ## something, and then pretty-format the target and help. Then,
-# if there's a line with ##@ something, that gets pretty-printed as a category.
-# More info on the usage of ANSI control characters for terminal formatting:
-# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
-# More info on the awk command:
-# http://linuxcommand.org/lc3_adv_awk.php
-
-help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-
-##@ Tools
 
 ## Tool Binaries
 OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
@@ -365,6 +113,174 @@ ratchet: $(RATCHET_V_BINARY) ## Download ratchet locally if necessary.
 $(RATCHET_V_BINARY): $(LOCALBIN)
 	$(call go-install-tool,$(RATCHET),github.com/sethvargo/ratchet,$(RATCHET_VERSION))
 
+# Auto-install yq if missing; output goes to stderr so it never pollutes variable values.
+ensure_yq = $(if $(wildcard $(YQ)),,$(shell $(MAKE) --no-print-directory yq >&2))
+
+# Read a dependency version from release.yaml; maps 0.0.0 to "latest".
+release_version = $(ensure_yq)$(shell v=$$($(YQ) '$(1)' release.yaml); if [ "$$v" = "0.0.0" ]; then echo latest; else echo "$$v"; fi)
+
+# Semantic versioning (i.e. Major.Minor.Patch)
+is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
+
+# Resolve an image tag: semantic version → v<ver>, else use as-is.
+versioned_tag = $(if $(filter true,$(call is_semantic_version,$(1))),v$(1),$(1))
+
+# VERSION defines the project version for the bundle.
+# Reads from release.yaml by default; can be overridden via arg or env var.
+VERSION ?= $(ensure_yq)$(shell $(YQ) '.kuadrant-operator.version' release.yaml)
+
+# CHANNEL define the catalog channel used in the catalog.
+# Reads from release.yaml by default; can be overridden via arg or env var.
+CHANNEL ?= $(ensure_yq)$(shell $(YQ) '.olm.default-channel' release.yaml)
+
+# CHANNELS define the bundle channels used in the bundle.
+# Reads from release.yaml by default; can be overridden via arg or env var.
+CHANNELS ?= $(ensure_yq)$(shell $(YQ) '.olm.channels | join(",")' release.yaml)
+BUNDLE_CHANNELS = --channels=$(CHANNELS)
+
+# DEFAULT_CHANNEL defines the default channel used in the bundle.
+# Reads from release.yaml by default; can be overridden via arg or env var.
+DEFAULT_CHANNEL ?= $(ensure_yq)$(shell $(YQ) '.olm.default-channel' release.yaml)
+BUNDLE_DEFAULT_CHANNEL = --default-channel=$(DEFAULT_CHANNEL)
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
+# USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
+# You can enable this value if you would like to use SHA Based Digests
+# To enable set flag to true
+USE_IMAGE_DIGESTS ?= false
+
+DEFAULT_IMAGE_TAG = latest
+
+# Resolve image tag from VERSION: 0.0.0 → latest, semantic → v<ver>, else default.
+IMAGE_TAG ?= $(if $(filter 0.0.0,$(VERSION)),latest,$(if $(filter true,$(call is_semantic_version,$(VERSION))),v$(VERSION),$(DEFAULT_IMAGE_TAG)))
+
+# BUNDLE_VERSION: use VERSION when semantic, else 0.0.0.
+BUNDLE_VERSION = $(if $(filter true,$(call is_semantic_version,$(VERSION))),$(VERSION),0.0.0)
+
+# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
+BUNDLE_GEN_FLAGS = -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) $(if $(filter true,$(USE_IMAGE_DIGESTS)),--use-image-digests)
+
+# BUNDLE_IMG defines the image:tag used for the bundle.
+# You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(IMAGE_TAG)
+
+# Address of the container registry
+REGISTRY = quay.io
+
+# Organization in container registry
+ORG ?= kuadrant
+
+# Repo in the container registry
+DEFAULT_REPO = kuadrant-operator
+REPO ?= $(DEFAULT_REPO)
+
+# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
+# This variable is used to construct full image tags for bundle and catalog images.
+#
+# For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
+# quay.io/kuadrant/kuadrant-operator-bundle:$VERSION and quay.io/kuadrant/kuadrant-operator-catalog:$VERSION.
+IMAGE_TAG_BASE ?= $(REGISTRY)/$(ORG)/kuadrant-operator
+
+# kubebuilder-tools still doesn't support darwin/arm64. This is a workaround (https://github.com/kubernetes-sigs/controller-runtime/issues/1657)
+ARCH_PARAM =
+ifeq ($(shell uname -sm),Darwin arm64)
+	ARCH_PARAM = --arch=amd64
+endif
+
+# Image URL to use all building/pushing image targets
+IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
+
+# Directories containing unit & integration test packages
+UNIT_DIRS := ./pkg/... ./api/... ./internal/... ./hack/sync-components...
+
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
+
+# Kuadrant Namespace
+KUADRANT_NAMESPACE ?= kuadrant-system
+OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
+
+# Kuadrant Service Account
+KUADRANT_SA_NAME ?= kuadrant-operator-controller-manager
+
+#Kuadrant Extensions
+WITH_EXTENSIONS ?= true
+EXTRA_EXTENSIONS ?=
+EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
+
+# Kuadrant component versions
+## authorino
+AUTHORINO_OPERATOR_VERSION ?= $(call release_version,.dependencies.authorino-operator)
+RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:$(call versioned_tag,$(AUTHORINO_OPERATOR_VERSION))
+
+## authorino (operand image authorino-operator deploys -- see RelatedImageEnvVars
+## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
+## needs its own copy of this rather than relying on the chart's default)
+AUTHORINO_VERSION ?= $(call release_version,.dependencies.authorino)
+RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:$(call versioned_tag,$(AUTHORINO_VERSION))
+
+## limitador
+LIMITADOR_OPERATOR_VERSION ?= $(call release_version,.dependencies.limitador-operator)
+RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:$(call versioned_tag,$(LIMITADOR_OPERATOR_VERSION))
+
+## limitador (operand image limitador-operator deploys -- see RelatedImageEnvVars
+## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
+## needs its own copy of this rather than relying on the chart's default)
+LIMITADOR_VERSION ?= $(call release_version,.dependencies.limitador)
+RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:$(call versioned_tag,$(LIMITADOR_VERSION))
+
+## dns
+DNS_OPERATOR_VERSION ?= $(call release_version,.dependencies.dns-operator)
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(call versioned_tag,$(DNS_OPERATOR_VERSION))
+
+## mcp-gateway
+MCP_GATEWAY_VERSION ?= $(call release_version,.dependencies.mcp-gateway)
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:$(call versioned_tag,$(MCP_GATEWAY_VERSION))
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:$(call versioned_tag,$(MCP_GATEWAY_VERSION))
+
+## wasm-shim
+WASM_SHIM_VERSION ?= $(call release_version,.dependencies.wasm-shim)
+RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-shim:$(call versioned_tag,$(WASM_SHIM_VERSION))
+
+## developer-portal-controller
+DEVELOPERPORTAL_VERSION ?= $(call release_version,.dependencies.developer-portal-controller)
+RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(call versioned_tag,$(DEVELOPERPORTAL_VERSION))
+
+## console-plugin
+CONSOLEPLUGIN_VERSION ?= $(call release_version,.dependencies.console-plugin)
+RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(call versioned_tag,$(CONSOLEPLUGIN_VERSION))
+
+RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 ?= quay.io/kuadrant/console-plugin:v0.6.0
+RELATED_IMAGE_CONSOLE_PLUGIN_PF5 ?= quay.io/kuadrant/console-plugin:v0.1.5-2
+
+## gatewayapi-provider
+GATEWAYAPI_PROVIDER ?= istio
+
+EXTENSIONS_DIR ?= /extensions
+EXTENSIONS_IMG ?= quay.io/kuadrant/extensions:dev
+
+all: build
+
+##@ General
+
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk commands is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info on the usage of ANSI control characters for terminal formatting:
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info on the awk command:
+# http://linuxcommand.org/lc3_adv_awk.php
+
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
 ##@ Development
 define update-csv-config
 	V="$1" \
@@ -451,18 +367,18 @@ $(WASM_BIN): ## Fetch and extract the wasm-shim binary from the OCI image.
 define LOCAL_RUN_ENV
 $(1): export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 $(1): export CHARTS_PATH := $(PROJECT_PATH)/component-charts
-$(1): export RELATED_IMAGE_AUTHORINO_OPERATOR := $(RELATED_IMAGE_AUTHORINO_OPERATOR)
-$(1): export RELATED_IMAGE_LIMITADOR_OPERATOR := $(RELATED_IMAGE_LIMITADOR_OPERATOR)
-$(1): export RELATED_IMAGE_AUTHORINO := $(RELATED_IMAGE_AUTHORINO)
-$(1): export RELATED_IMAGE_LIMITADOR := $(RELATED_IMAGE_LIMITADOR)
-$(1): export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
-$(1): export RELATED_IMAGE_MCP_GATEWAY := $(RELATED_IMAGE_MCP_GATEWAY)
-$(1): export RELATED_IMAGE_MCP_GATEWAY_BROKER := $(RELATED_IMAGE_MCP_GATEWAY_BROKER)
-$(1): export RELATED_IMAGE_WASMSHIM := $(RELATED_IMAGE_WASMSHIM)
-$(1): export RELATED_IMAGE_DEVELOPERPORTAL := $(RELATED_IMAGE_DEVELOPERPORTAL)
-$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_LATEST := $(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)
-$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 := $(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)
-$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_PF5 := $(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)
+$(1): export RELATED_IMAGE_AUTHORINO_OPERATOR = $$$$(RELATED_IMAGE_AUTHORINO_OPERATOR)
+$(1): export RELATED_IMAGE_LIMITADOR_OPERATOR = $$$$(RELATED_IMAGE_LIMITADOR_OPERATOR)
+$(1): export RELATED_IMAGE_AUTHORINO = $$$$(RELATED_IMAGE_AUTHORINO)
+$(1): export RELATED_IMAGE_LIMITADOR = $$$$(RELATED_IMAGE_LIMITADOR)
+$(1): export RELATED_IMAGE_DNS_OPERATOR = $$$$(RELATED_IMAGE_DNS_OPERATOR)
+$(1): export RELATED_IMAGE_MCP_GATEWAY = $$$$(RELATED_IMAGE_MCP_GATEWAY)
+$(1): export RELATED_IMAGE_MCP_GATEWAY_BROKER = $$$$(RELATED_IMAGE_MCP_GATEWAY_BROKER)
+$(1): export RELATED_IMAGE_WASMSHIM = $$$$(RELATED_IMAGE_WASMSHIM)
+$(1): export RELATED_IMAGE_DEVELOPERPORTAL = $$$$(RELATED_IMAGE_DEVELOPERPORTAL)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_LATEST = $$$$(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 = $$$$(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_PF5 = $$$$(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)
 endef
 $(foreach t,run test-bare-k8s-integration test-controlplane-integration test-gatewayapi-env-integration test-istio-env-integration test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
 

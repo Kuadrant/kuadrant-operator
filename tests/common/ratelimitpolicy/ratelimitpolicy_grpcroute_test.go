@@ -149,7 +149,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"common", "rat
 				}
 				limitsNamespace := limitsNamespaceForGRPCRoute(grpcRoute)
 				limitKey := limitKeyForGRPCPath(client.ObjectKeyFromObject(policy), "l1")
-				return limitadorLimitsContain(*limitador, limitsNamespace, limitKey)
+				return limitadorLimitsContain(limitador, limitsNamespace, limitKey)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -178,7 +178,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"common", "rat
 				}
 				limitsNamespace := limitsNamespaceForGRPCRoute(grpcRoute)
 				limitKey := limitKeyForGRPCPath(client.ObjectKeyFromObject(policy), "l1")
-				return limitadorLimitsContain(*limitador, limitsNamespace, limitKey)
+				return limitadorLimitsContain(limitador, limitsNamespace, limitKey)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -234,12 +234,12 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"common", "rat
 				// Route policy limit for grpcRoute
 				routeLimitsNamespace := limitsNamespaceForGRPCRoute(grpcRoute)
 				routeLimitKey := limitKeyForGRPCPath(client.ObjectKeyFromObject(routePolicy), "l1")
-				hasRouteLimit := limitadorLimitsContain(*limitador, routeLimitsNamespace, routeLimitKey)
+				hasRouteLimit := limitadorLimitsContain(limitador, routeLimitsNamespace, routeLimitKey)
 
 				// Gateway policy limit for policyless route
 				gwLimitsNamespace := limitsNamespaceForGRPCRoute(otherRoute)
 				gwLimitKey := limitKeyForGRPCPath(client.ObjectKeyFromObject(gwPolicy), "gw-limit")
-				hasGWLimit := limitadorLimitsContain(*limitador, gwLimitsNamespace, gwLimitKey)
+				hasGWLimit := limitadorLimitsContain(limitador, gwLimitsNamespace, gwLimitKey)
 
 				return hasRouteLimit && hasGWLimit
 			}).WithContext(ctx).Should(BeTrue())
@@ -267,7 +267,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"common", "rat
 				}
 				limitsNamespace := limitsNamespaceForGRPCRoute(grpcRoute)
 				limitKey := limitKeyForGRPCPath(client.ObjectKeyFromObject(policy), "l1")
-				return limitadorLimitsContain(*limitador, limitsNamespace, limitKey)
+				return limitadorLimitsContain(limitador, limitsNamespace, limitKey)
 			}).WithContext(ctx).Should(BeTrue())
 
 			// delete policy
@@ -282,7 +282,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"common", "rat
 				}
 				limitsNamespace := limitsNamespaceForGRPCRoute(grpcRoute)
 				limitKey := limitKeyForGRPCPath(client.ObjectKeyFromObject(policy), "l1")
-				return !limitadorLimitsContain(*limitador, limitsNamespace, limitKey)
+				return !limitadorLimitsContain(limitador, limitsNamespace, limitKey)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
@@ -290,7 +290,7 @@ var _ = Describe("RateLimitPolicy controller (GRPCRoute)", Labels{"common", "rat
 })
 
 // limitadorLimitsContain checks if limitador contains a limit with the given namespace and identifier
-func limitadorLimitsContain(limitador limitadorv1alpha1.Limitador, namespace, identifier string) bool {
+func limitadorLimitsContain(limitador *limitadorv1alpha1.Limitador, namespace, identifier string) bool {
 	expected := fmt.Sprintf(`descriptors[0]["%s"] == "1"`, identifier)
 	for _, limit := range limitador.Spec.Limits {
 		if limit.Namespace != namespace {

@@ -32,7 +32,7 @@ CHANNEL ?= alpha
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
 CHANNELS ?= alpha
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
+BUNDLE_CHANNELS = --channels=$(CHANNELS)
 
 # DEFAULT_CHANNEL defines the default channel used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g DEFAULT_CHANNEL = "stable")
@@ -40,7 +40,7 @@ BUNDLE_CHANNELS := --channels=$(CHANNELS)
 # - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
 # - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
 DEFAULT_CHANNEL ?= alpha
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+BUNDLE_DEFAULT_CHANNEL = $(if $(filter null,$(DEFAULT_CHANNEL)),,--default-channel=$(DEFAULT_CHANNEL))
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # USE_IMAGE_DIGESTS defines if images are resolved via tags or digests
@@ -59,19 +59,16 @@ DEFAULT_IMAGE_TAG = latest
 # Semantic versioning (i.e. Major.Minor.Patch)
 is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
 
+# Keep version-derived values recursive so target-specific release.yaml defaults
+# are respected by bundle and helm-build while explicit overrides keep working.
+bundle_version = $(if $(filter 0.0.0,$(1)),$(1),$(if $(filter true,$(call is_semantic_version,$(1))),$(1),0.0.0))
+version_image_tag = $(if $(filter 0.0.0,$(1)),latest,$(if $(filter true,$(call is_semantic_version,$(1))),v$(1),$(DEFAULT_IMAGE_TAG)))
+component_image_tag = $(if $(filter latest,$(1)),latest,$(if $(filter true,$(call is_semantic_version,$(1))),v$(1),$(1)))
+
 # BUNDLE_VERSION defines the version for the kuadrant-operator bundle.
-# If the version is not semantic, will use the default one
-bundle_is_semantic := $(call is_semantic_version,$(VERSION))
-ifeq (0.0.0,$(VERSION))
-BUNDLE_VERSION = $(VERSION)
-IMAGE_TAG = latest
-else ifeq ($(bundle_is_semantic),true)
-BUNDLE_VERSION = $(VERSION)
-IMAGE_TAG = v$(VERSION)
-else
-BUNDLE_VERSION = 0.0.0
-IMAGE_TAG ?= $(DEFAULT_IMAGE_TAG)
-endif
+# If the version is not semantic, use the default one.
+BUNDLE_VERSION = $(call bundle_version,$(VERSION))
+IMAGE_TAG ?= $(call version_image_tag,$(VERSION))
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -133,116 +130,44 @@ EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 # Kuadrant component versions
 ## authorino
 AUTHORINO_OPERATOR_VERSION ?= latest
-authorino_operator_version_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
-
-ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
-RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:latest
-else ifeq (true,$(authorino_operator_version_is_semantic))
-RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:v$(AUTHORINO_OPERATOR_VERSION)
-else
-RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:$(AUTHORINO_OPERATOR_VERSION)
-endif
+RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:$(call component_image_tag,$(AUTHORINO_OPERATOR_VERSION))
 
 ## authorino (operand image authorino-operator deploys -- see RelatedImageEnvVars
 ## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
 ## needs its own copy of this rather than relying on the chart's default)
 AUTHORINO_VERSION ?= latest
-authorino_version_is_semantic := $(call is_semantic_version,$(AUTHORINO_VERSION))
-
-ifeq (latest,$(AUTHORINO_VERSION))
-RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:latest
-else ifeq (true,$(authorino_version_is_semantic))
-RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:v$(AUTHORINO_VERSION)
-else
-RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:$(AUTHORINO_VERSION)
-endif
+RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:$(call component_image_tag,$(AUTHORINO_VERSION))
 
 ## limitador
 LIMITADOR_OPERATOR_VERSION ?= latest
-limitador_operator_version_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
-
-ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
-RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:latest
-else ifeq (true,$(limitador_operator_version_is_semantic))
-RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:v$(LIMITADOR_OPERATOR_VERSION)
-else
-RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:$(LIMITADOR_OPERATOR_VERSION)
-endif
+RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:$(call component_image_tag,$(LIMITADOR_OPERATOR_VERSION))
 
 ## limitador (operand image limitador-operator deploys -- see RelatedImageEnvVars
 ## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
 ## needs its own copy of this rather than relying on the chart's default)
 LIMITADOR_VERSION ?= latest
-limitador_version_is_semantic := $(call is_semantic_version,$(LIMITADOR_VERSION))
-
-ifeq (latest,$(LIMITADOR_VERSION))
-RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:latest
-else ifeq (true,$(limitador_version_is_semantic))
-RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:v$(LIMITADOR_VERSION)
-else
-RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:$(LIMITADOR_VERSION)
-endif
+RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:$(call component_image_tag,$(LIMITADOR_VERSION))
 
 ## dns
 DNS_OPERATOR_VERSION ?= latest
-dns_operator_version_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
-
-ifeq (latest,$(DNS_OPERATOR_VERSION))
-RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:latest
-else ifeq (true,$(dns_operator_version_is_semantic))
-RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:v$(DNS_OPERATOR_VERSION)
-else
-RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(DNS_OPERATOR_VERSION)
-endif
+RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(call component_image_tag,$(DNS_OPERATOR_VERSION))
 
 ## mcp-gateway
 MCP_GATEWAY_VERSION ?= latest
-mcp_gateway_version_is_semantic := $(call is_semantic_version,$(MCP_GATEWAY_VERSION))
-
-ifeq (latest,$(MCP_GATEWAY_VERSION))
-RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:latest
-RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:latest
-else ifeq (true,$(mcp_gateway_version_is_semantic))
-RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:v$(MCP_GATEWAY_VERSION)
-RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:v$(MCP_GATEWAY_VERSION)
-else
-RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:$(MCP_GATEWAY_VERSION)
-RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:$(MCP_GATEWAY_VERSION)
-endif
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:$(call component_image_tag,$(MCP_GATEWAY_VERSION))
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:$(call component_image_tag,$(MCP_GATEWAY_VERSION))
 
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
-shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
-
-ifeq (true,$(shim_version_is_semantic))
-RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
-else
-RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
-endif
+RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-shim:$(call component_image_tag,$(WASM_SHIM_VERSION))
 
 ## developer-portal-controller
 DEVELOPERPORTAL_VERSION ?= latest
-developerportal_version_is_semantic := $(call is_semantic_version,$(DEVELOPERPORTAL_VERSION))
-
-ifeq (latest,$(DEVELOPERPORTAL_VERSION))
-RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:latest
-else ifeq (true,$(developerportal_version_is_semantic))
-RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:v$(DEVELOPERPORTAL_VERSION)
-else
-RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(DEVELOPERPORTAL_VERSION)
-endif
+RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(call component_image_tag,$(DEVELOPERPORTAL_VERSION))
 
 ## console-plugin
 CONSOLEPLUGIN_VERSION ?= latest
-consoleplugin_version_is_semantic := $(call is_semantic_version,$(CONSOLEPLUGIN_VERSION))
-
-ifeq (latest,$(CONSOLEPLUGIN_VERSION))
-RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:latest
-else ifeq (true,$(consoleplugin_version_is_semantic))
-RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:v$(CONSOLEPLUGIN_VERSION)
-else
-RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(CONSOLEPLUGIN_VERSION)
-endif
+RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(call component_image_tag,$(CONSOLEPLUGIN_VERSION))
 
 RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 ?= quay.io/kuadrant/console-plugin:v0.6.0
 RELATED_IMAGE_CONSOLE_PLUGIN_PF5 ?= quay.io/kuadrant/console-plugin:v0.1.5-2
@@ -279,6 +204,51 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 YQ ?= $(LOCALBIN)/yq
 OPM ?= $(LOCALBIN)/opm
+
+# bundle and helm-build reproduce the state described by release.yaml by default.
+# Environment and command-line values keep precedence over these target-specific
+# defaults, so existing VERSION=... and component-version overrides still work.
+RELEASE_YAML ?= $(PROJECT_PATH)/release.yaml
+release_value = $(strip $(shell $(YQ) -r '$(1)' $(RELEASE_YAML)))
+release_component_version = $(if $(filter 0.0.0,$(1)),latest,$(1))
+release_olm_channels = $(strip $(shell $(YQ) -r '.olm.channels | join(",")' $(RELEASE_YAML)))
+
+ifeq ($(origin VERSION),file)
+bundle helm-build: VERSION = $(call release_value,.kuadrant-operator.version)
+endif
+ifeq ($(origin CHANNELS),file)
+bundle: CHANNELS = $(release_olm_channels)
+endif
+ifeq ($(origin DEFAULT_CHANNEL),file)
+bundle: DEFAULT_CHANNEL = $(call release_value,.olm.default-channel)
+endif
+ifeq ($(origin AUTHORINO_VERSION),file)
+bundle helm-build: AUTHORINO_VERSION = $(call release_component_version,$(call release_value,.dependencies.authorino))
+endif
+ifeq ($(origin AUTHORINO_OPERATOR_VERSION),file)
+bundle helm-build: AUTHORINO_OPERATOR_VERSION = $(call release_component_version,$(call release_value,.dependencies.authorino-operator))
+endif
+ifeq ($(origin LIMITADOR_VERSION),file)
+bundle helm-build: LIMITADOR_VERSION = $(call release_component_version,$(call release_value,.dependencies.limitador))
+endif
+ifeq ($(origin LIMITADOR_OPERATOR_VERSION),file)
+bundle helm-build: LIMITADOR_OPERATOR_VERSION = $(call release_component_version,$(call release_value,.dependencies.limitador-operator))
+endif
+ifeq ($(origin DNS_OPERATOR_VERSION),file)
+bundle helm-build: DNS_OPERATOR_VERSION = $(call release_component_version,$(call release_value,.dependencies.dns-operator))
+endif
+ifeq ($(origin MCP_GATEWAY_VERSION),file)
+bundle helm-build: MCP_GATEWAY_VERSION = $(call release_component_version,$(call release_value,.dependencies.mcp-gateway))
+endif
+ifeq ($(origin WASM_SHIM_VERSION),file)
+bundle helm-build: WASM_SHIM_VERSION = $(call release_component_version,$(call release_value,.dependencies.wasm-shim))
+endif
+ifeq ($(origin DEVELOPERPORTAL_VERSION),file)
+bundle helm-build: DEVELOPERPORTAL_VERSION = $(call release_component_version,$(call release_value,.dependencies.developer-portal-controller))
+endif
+ifeq ($(origin CONSOLEPLUGIN_VERSION),file)
+bundle helm-build: CONSOLEPLUGIN_VERSION = $(call release_component_version,$(call release_value,.dependencies.console-plugin))
+endif
 KIND ?= $(LOCALBIN)/kind
 ACT ?= $(LOCALBIN)/act
 GINKGO ?= $(LOCALBIN)/ginkgo

@@ -255,8 +255,9 @@ spec:
         opa:
           rego: |
             groups := split(object.get(input.auth.identity.metadata.annotations, "kuadrant.io/groups", ""), ",")
-            allow { groups[_] == "free" }
-            allow { groups[_] == "gold" }
+            allow if groups[_] == "free"
+            allow if groups[_] == "gold"
+          version: v1
 EOF
 ```
 

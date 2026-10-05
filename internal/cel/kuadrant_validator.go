@@ -141,7 +141,6 @@ func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 	return nil
 }
 
-
 func validatePredicate(spec wasm.ActionSpec, policyKind, predicate string, validator *Validator) error {
 	ast, err := validator.Validate(policyKind, predicate)
 	if err != nil {

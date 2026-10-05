@@ -85,12 +85,25 @@ once scoped.
 
 ## Upgrade impact
 
-*Not yet investigated - deferred by design.* The question: starting from
-today's mainline (inline wasm config in the EnvoyFilter) with an
-already-running gateway under live traffic, what happens when the operator
-is upgraded to this PoC's approach - is the gateway interrupted, does
-enforcement fail open or fail closed temporarily, or is the transition
-smooth? To be investigated (live-tested) and filled in here once scoped.
+**Confirmed live:** migrating an already-running gateway from mainline to
+this PoC under continuous traffic (400 requests, no pod restart) never
+failed a single request - but for the ~6s between the EnvoyFilter
+switching and the first successful remote-config fetch, rate limiting was
+not enforced (empty bootstrap pipeline). That's the same fail-open
+bootstrap gap already tracked in Open follow-ups.
+
+Mechanics observed: operator image swap -> reconcile rewrites the
+EnvoyFilter (new wasm binary SHA256 + `remoteConfig` bootstrap stand-in in
+the same patch) -> Envoy spins up a new wasm VM in place
+-> `on_configure` dispatches the fetch -> real
+config applied **5.8s** later. No pod restart, no new migration logic - the
+digest/`vm_id` mechanisms already built for live policy updates handle this
+case too, unmodified.
+
+**The gap is structural, not a tuning problem.** `on_configure` must return
+`true`/`false` synchronously, and the proxy-wasm ABI has no blocking
+network call, so the wasm module cannot hold Envoy's "not ready yet" while
+it fetches. Closing it would need wasm-level request pause/resume.
 
 ## Key findings
 

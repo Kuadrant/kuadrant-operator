@@ -113,24 +113,24 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 	pol := policyKindFromWasmServiceName(spec.ServiceName)
 	for _, predicate := range spec.Predicates {
-		if err := validatePredicate(spec, pol, predicate, validator); err != nil {
+		if _, err := validateExpression(spec, pol, predicate, "when predicates", validator); err != nil {
 			return err
 		}
 	}
 	for _, conditionalData := range spec.ConditionalData {
 		for _, predicate := range conditionalData.Predicates {
-			if err := validatePredicate(spec, pol, predicate, validator); err != nil {
+			if _, err := validateExpression(spec, pol, predicate, "when predicates", validator); err != nil {
 				return err
 			}
 		}
 	}
 	if amount := spec.ReservationAmountCEL(); amount != "" {
-		if _, err := validator.Validate(pol, amount); err != nil {
+		if _, err := validateExpression(spec, pol, amount, "reservation.amount", validator); err != nil {
 			return err
 		}
 	}
 	if ttl := spec.ReservationTTLCEL(); ttl != "" {
-		ast, err := validator.Validate(pol, ttl)
+		ast, err := validateExpression(spec, pol, ttl, "reservation.ttl", validator)
 		if err != nil {
 			return err
 		}
@@ -141,26 +141,25 @@ func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 	return nil
 }
 
-func validatePredicate(spec wasm.ActionSpec, policyKind, predicate string, validator *Validator) error {
-	ast, err := validator.Validate(policyKind, predicate)
+func validateExpression(spec wasm.ActionSpec, policyKind, expression, field string, validator *Validator) (*cel.Ast, error) {
+	ast, err := validator.Validate(policyKind, expression)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Token rate-limit guard predicates run before an upstream response exists.
-	// Reject response-only body access here instead of accepting an expression
-	// that cannot participate in the enforcement decision at runtime.
+	// Guard predicates and reservation parameters run before an upstream response
+	// exists, so none of them can depend on response-body data.
 	if policyKind == TokenRateLimitPolicyKind && spec.IsGuard() {
 		usesResponseBody, err := astCallsFunction(ast, "responseBodyJSON")
 		if err != nil {
-			return fmt.Errorf("failed to inspect CEL predicate: %w", err)
+			return nil, fmt.Errorf("failed to inspect CEL expression for %s: %w", field, err)
 		}
 		if usesResponseBody {
-			return fmt.Errorf("responseBodyJSON is not available in TokenRateLimitPolicy when predicates because they are evaluated during the request phase")
+			return nil, fmt.Errorf("responseBodyJSON is not available in TokenRateLimitPolicy %s during the request phase", field)
 		}
 	}
 
-	return nil
+	return ast, nil
 }
 
 func astCallsFunction(ast *cel.Ast, function string) (bool, error) {

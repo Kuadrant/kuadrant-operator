@@ -214,6 +214,70 @@ func TestValidateWasmActionReservationValid(t *testing.T) {
 	assert.NilError(t, ValidateWasmActionSpec(wasmAction, validator))
 }
 
+func TestValidateTokenRateLimitReservationExpressions(t *testing.T) {
+	builder := NewRootValidatorBuilder()
+	builder.PushPolicyBinding(TokenRateLimitPolicyKind, RateLimitName, cel.AnyType)
+	validator, err := builder.Build()
+	assert.NilError(t, err)
+
+	for _, tc := range []struct {
+		name        string
+		reservation wasm.ReservationSpec
+		wantError   string
+	}{
+		{
+			name:        "reject response body in amount",
+			reservation: wasm.ReservationSpec{Amount: `responseBodyJSON("/usage/total_tokens")`},
+			wantError:   "responseBodyJSON is not available in TokenRateLimitPolicy reservation.amount",
+		},
+		{
+			name:        "reject nested response body in amount",
+			reservation: wasm.ReservationSpec{Amount: `1 + int(responseBodyJSON(["usage", "total_tokens"], "int"))`},
+			wantError:   "responseBodyJSON is not available in TokenRateLimitPolicy reservation.amount",
+		},
+		{
+			name:        "reject response body in ttl",
+			reservation: wasm.ReservationSpec{TTL: `duration(responseBodyJSON("/ttl"))`},
+			wantError:   "responseBodyJSON is not available in TokenRateLimitPolicy reservation.ttl",
+		},
+		{
+			name:        "reject response body in ttl condition",
+			reservation: wasm.ReservationSpec{TTL: `responseBodyJSON("/object") == "error" ? duration("1s") : duration("30s")`},
+			wantError:   "responseBodyJSON is not available in TokenRateLimitPolicy reservation.ttl",
+		},
+		{
+			name:        "allow request body in amount",
+			reservation: wasm.ReservationSpec{Amount: `requestBodyJSON("/max_tokens")`},
+		},
+		{
+			name:        "allow request body in ttl",
+			reservation: wasm.ReservationSpec{TTL: `duration(requestBodyJSON("/ttl"))`},
+		},
+		{
+			name:        "allow function name in amount string literal",
+			reservation: wasm.ReservationSpec{Amount: `size("responseBodyJSON('/usage/total_tokens')")`},
+		},
+		{
+			name:        "allow function name in ttl string literal",
+			reservation: wasm.ReservationSpec{TTL: `"responseBodyJSON('/ttl')" == "" ? duration("1s") : duration("30s")`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wasmAction := wasm.ActionSpec{
+				ServiceName: wasm.RateLimitReserveServiceName,
+				Scope:       "scope",
+				Reservation: &tc.reservation,
+			}
+			err := ValidateWasmActionSpec(wasmAction, validator)
+			if tc.wantError != "" {
+				assert.ErrorContains(t, err, tc.wantError)
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
+}
+
 func TestPolicyKindFromWasmServiceName_ReserveAndCommit(t *testing.T) {
 	assert.Equal(t, policyKindFromWasmServiceName(wasm.RateLimitReserveServiceName), TokenRateLimitPolicyKind)
 	assert.Equal(t, policyKindFromWasmServiceName(wasm.RateLimitCommitServiceName), TokenRateLimitPolicyKind)

@@ -28,6 +28,18 @@ type Config struct {
 // should fetch via PluginConfigService.GetPluginConfig.
 type RemoteConfigRef struct {
 	Gateway string `json:"gateway"`
+	// Digest is the SHA256 of the real (uncached) wasm config JSON, set so
+	// that this bootstrap stand-in's own JSON content changes whenever the
+	// real config changes - even though the real content itself is never
+	// embedded here. That content change is what makes the EnvoyFilter
+	// differ, which is what makes Envoy re-invoke on_configure on an
+	// already-running gateway, which is the only signal the wasm module has
+	// that it should re-fetch. Without this, the bootstrap stand-in is
+	// byte-identical across reconciles regardless of policy changes, so
+	// Envoy never pushes an update and on_configure never fires again after
+	// pod start (see "fetch-once behavior" in poc/extensions-endpoint's
+	// README).
+	Digest string `json:"digest,omitempty"`
 }
 
 func (c *Config) ToStruct() (*_struct.Struct, error) {

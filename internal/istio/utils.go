@@ -112,6 +112,17 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 		"name":    "kuadrant-wasm-shim",
 		"root_id": "kuadrant_wasm_shim",
 		"vm_config": map[string]any{
+			// Envoy's Wasm VM reuse is keyed on vm_id + a hash of the fetched code
+			// (see https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/wasm).
+			// Leaving vm_id unset means an in-place EnvoyFilter/LDS update that only
+			// changes vm_config.code.remote.sha256 does NOT spawn a new Wasm VM for an
+			// already-running gateway - the old binary keeps serving traffic until the
+			// gateway pod is restarted, even though the new binary was fetched and
+			// cached correctly. Tying vm_id to the binary's own SHA forces Envoy to
+			// treat a new binary as a genuinely new VM identity and reload it live, no
+			// pod restart needed. Confirmed live (PoC-only investigation, kept out of
+			// mainline pending a decision there - see kuadrant-operator#2351).
+			"vm_id":   "kuadrant_wasm_shim_" + imageSHA,
 			"runtime": "envoy.wasm.runtime.v8",
 			"code": map[string]any{
 				"remote": map[string]any{

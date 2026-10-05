@@ -125,16 +125,17 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		// the EnvoyFilter constant-size regardless of policy/ActionSet count.
 		envoyFilterWasmConfig := wasmConfig
 		if hasPolicies {
+			var digest string
 			if fullJSON, err := json.Marshal(&wasmConfig); err != nil {
 				logger.Error(err, "failed to marshal wasm config for remote-config store", "gateway", gatewayKey.String())
 			} else {
-				wasm.SetConfig(gateway.GetLocator(), fullJSON)
+				digest = wasm.SetConfig(gateway.GetLocator(), fullJSON)
 			}
 			envoyFilterWasmConfig = wasm.Config{
 				Services:          map[string]wasm.Service{},
 				ActionSets:        []wasm.ActionSet{},
 				DescriptorService: wasm.DescriptorServiceClusterName,
-				RemoteConfig:      &wasm.RemoteConfigRef{Gateway: gateway.GetLocator()},
+				RemoteConfig:      &wasm.RemoteConfigRef{Gateway: gateway.GetLocator(), Digest: digest},
 			}
 		}
 

@@ -25,15 +25,20 @@ var configStore = struct {
 	byGateway map[string]CachedConfig
 }{byGateway: make(map[string]CachedConfig)}
 
-// SetConfig stores the last-computed wasm config JSON for a gateway.
-func SetConfig(gatewayLocator string, configJSON []byte) {
+// SetConfig stores the last-computed wasm config JSON for a gateway and
+// returns its SHA256 digest, so callers can embed that digest in the
+// bootstrap stand-in EnvoyFilter config without duplicating the hashing
+// logic (see wasm.RemoteConfigRef.Digest for why).
+func SetConfig(gatewayLocator string, configJSON []byte) string {
 	sum := sha256.Sum256(configJSON)
+	digest := hex.EncodeToString(sum[:])
 	configStore.Lock()
 	defer configStore.Unlock()
 	configStore.byGateway[gatewayLocator] = CachedConfig{
 		ConfigJSON: configJSON,
-		SHA256:     hex.EncodeToString(sum[:]),
+		SHA256:     digest,
 	}
+	return digest
 }
 
 // GetConfig returns the last-computed wasm config JSON for a gateway, if any.

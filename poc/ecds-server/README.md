@@ -99,12 +99,30 @@ filled in here once scoped.
 
 ## Upgrade impact
 
-*Not yet investigated - deferred by design.* The question: starting from
-today's mainline (inline wasm config in the EnvoyFilter) with an
-already-running gateway under live traffic, what happens when the operator
-is upgraded to this PoC's approach - is the gateway interrupted, does
-enforcement fail open or fail closed temporarily, or is the transition
-smooth? To be investigated (live-tested) and filled in here once scoped.
+**Confirmed live: migrating an already-running gateway from mainline to
+this PoC, under continuous traffic, never failed a request and never
+opened an enforcement gap.** Unlike an in-place config patch, this upgrade
+needs the ECDS cluster statically present in the proxy's bootstrap (see
+Architecture) - not something an existing pod can be patched into, so one
+pod replace is unavoidable. The test: with the gateway on mainline (full
+inline config) and traffic running, the `parametersRef` bootstrap patch was
+applied first (standard rolling update: Kubernetes surges a new pod,
+keeps the old one serving until the new one passes its *existing*,
+ECDS-unaware readiness probe, then retires the old one - zero failures,
+nothing ECDS-specific needed here since this new pod is still running
+mainline at this point). Then the operator was upgraded to this PoC's
+image: it rewrote the EnvoyFilter to the ECDS stub, and - because the
+static cluster already existed from the prior step - Envoy applied this as
+an **in-place listener update, same pod, no restart**.
+
+The key result: a tight before/after check across a policy edit (60
+requests sent, Limitador's `authorized_calls` counter increased by exactly
+60) showed **every single request was rate-limited, with no gap** - not
+just no dropped requests. This is the structural payoff of ECDS being a
+real xDS resource: Envoy's own listener-warming waits for the ECDS push
+before activating the new listener version, so the *old* (already fully
+enforcing) listener keeps serving every request until the real config is
+ready - there's no window where an empty/default config is live.
 
 ## Key findings
 

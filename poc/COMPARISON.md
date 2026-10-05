@@ -60,11 +60,12 @@ Both PoCs solve the literal size problem, to a similar degree:
 
 This is where the two PoCs diverge sharply:
 
-- **`poc-extensions-endpoint`**: fetch-once at startup, by design (see its
-  Scope). Confirmed live: editing a TRLP's predicate on an already-running
-  gateway has **no effect** until the gateway pod is restarted. Deleting the
-  policy entirely *does* take effect immediately, because that's a normal
-  Envoy filter-chain/LDS removal, not an in-place wasm config refresh.
+- **`poc-extensions-endpoint`**: confirmed live that editing a TRLP
+  propagates to an already-running gateway within seconds, with **zero pod
+  restart** - a digest of the real config is embedded in the bootstrap
+  stand-in, so Envoy's own EnvoyFilter diffing re-triggers `on_configure`,
+  which re-fetches. Not a native xDS push like ECDS's, but reaches the same
+  outcome via a different path.
 - **`poc-ecds-server`**: confirmed live that editing a TRLP's counter
   expression propagates to an already-running gateway **within seconds, with
   zero pod restart** - Envoy's own xDS client detects and applies the new
@@ -84,8 +85,10 @@ This is where the two PoCs diverge sharply:
 
 - **`poc-extensions-endpoint`**: fully working end-to-end as committed, no
   outstanding blocker to reach this PoC's own stated scope. Known
-  by-design limitations: fetch-once (no live propagation), fail-open during
-  the bootstrap gap. See its "Open follow-ups".
+  limitation: fail-open during the bootstrap gap (cold start or wasm-binary
+  upgrade), structural to fetching config via an ad-hoc gRPC call rather
+  than a native xDS resource - see its "Open follow-ups" and "Upgrade
+  impact".
 - **`poc-ecds-server`**: fully working end-to-end, but only after a
   still-manual step (the `parametersRef` static-cluster provisioning) that
   is not yet automated by the operator. See its "Open follow-ups" for what
@@ -106,6 +109,34 @@ observability signal hasn't been investigated yet in either PoC.
 
 ## Upgrade-impact comparison
 
-*Pending.* Each PoC's own "Upgrade impact" section is still an open,
-to-be-live-tested investigation (deferred by design - see each README).
-This section will be filled in once both are answered.
+- **`poc-extensions-endpoint`**: live-tested. Migrating an already-running
+  gateway from mainline to this PoC under continuous traffic never failed a
+  request, but exposed a structural fail-open gap: for the few seconds
+  between the new wasm VM coming up and its first successful remote-config
+  fetch, policy enforcement is inactive. Root cause: `on_configure` must
+  return synchronously, and the proxy-wasm ABI has no blocking network
+  call, so the wasm module has no way to tell Envoy "not ready yet" -
+  Envoy marks the VM ready as soon as the empty bootstrap config is
+  accepted. See its "Upgrade impact" for the live numbers.
+- **`poc-ecds-server`**: live-tested, gap confirmed closed. Migrating from
+  mainline needs one pod replace (the ECDS cluster must be statically
+  present in the proxy's bootstrap - not patchable into a running pod),
+  done via a standard Kubernetes rolling update with zero failures. The
+  operator upgrade itself then applied as an in-place listener update
+  (same pod, no restart), because the static cluster already existed. A
+  tight before/after check across a policy edit (60 requests, Limitador's
+  counter +60) showed **every request was rate-limited, no gap at all** -
+  not just no dropped requests. This confirms the structural prediction:
+  Envoy's listener-warming waits for the ECDS push before activating a
+  listener, so the old, fully-enforcing listener keeps serving until the
+  real config is ready. Extra cost found: this PoC's new infrastructure
+  (ECDS Service/port/NetworkPolicy) isn't picked up by a bare operator
+  image swap - it needs the updated manifests applied too, or the ECDS
+  fetch never succeeds (no healthy upstream).
+
+**Bottom line**: `poc-extensions-endpoint` can upgrade with zero pod
+restarts but has a brief, structural fail-open window on every cold
+start/upgrade. `poc-ecds-server` cannot avoid one pod replace for this
+specific migration, but has zero enforcement gap at all once the static
+cluster exists - a direct consequence of ECDS being a real xDS resource
+instead of a wasm module doing its own ad-hoc fetch.

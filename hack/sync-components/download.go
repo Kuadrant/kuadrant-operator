@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const (
@@ -28,6 +29,15 @@ func downloadChart(repo, ref, chartPath, outputDir string) error {
 }
 
 func extractChart(r io.Reader, chartPath, outputDir string) error {
+	// MkdirAll/OpenFile's mode argument is masked by the process umask, so a
+	// restrictive umask (some CI runners and hardened shells set one) would
+	// otherwise silently produce directories/files more restrictive than the
+	// 0755/0644 requested below. Zeroing the umask for the duration of
+	// extraction makes the requested modes apply exactly, regardless of the
+	// caller's environment, without needing to chmod anything after the fact.
+	oldUmask := syscall.Umask(0)
+	defer syscall.Umask(oldUmask)
+
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return fmt.Errorf("gzip reader: %w", err)
@@ -87,7 +97,7 @@ func extractChart(r io.Reader, chartPath, outputDir string) error {
 			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 				return fmt.Errorf("creating parent dir for %s: %w", targetPath, err)
 			}
-			f, err := os.Create(targetPath)
+			f, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 			if err != nil {
 				return fmt.Errorf("creating file %s: %w", targetPath, err)
 			}

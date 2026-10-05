@@ -170,8 +170,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			},
 		},
 		Spec: authorinoopapi.AuthorinoSpec{
-			ClusterWide:            true,
-			SupersedingHostSubsets: true,
+			ClusterWide: true,
 			Listener: authorinoopapi.Listener{
 				Tls: authorinoopapi.Tls{
 					Enabled: ptr.To(false),

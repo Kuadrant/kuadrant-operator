@@ -1,12 +1,15 @@
 package v1beta1
 
 import (
+	"slices"
+
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -25,6 +28,9 @@ var (
 
 	DeploymentGroupKind = appsv1.SchemeGroupVersion.WithKind("Deployment").GroupKind()
 	DeploymentsResource = appsv1.SchemeGroupVersion.WithResource("deployments")
+
+	NetworkPolicyGroupKind = schema.GroupKind{Group: networkingv1.SchemeGroupVersion.Group, Kind: "NetworkPolicy"}
+	NetworkPolicyResource  = networkingv1.SchemeGroupVersion.WithResource("networkpolicies")
 )
 
 func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
@@ -66,6 +72,21 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(k machinery.Object, _ int) bool {
 				return k.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
+			})
+		},
+	}
+}
+
+func LinkAuthorinoToDeployment(objs controller.Store) machinery.LinkFunc {
+	authorinos := utils.Map(objs.FilterByGroupKind(AuthorinoGroupKind), ControllerObjectToMachineryObject)
+
+	return machinery.LinkFunc{
+		From: AuthorinoGroupKind,
+		To:   DeploymentGroupKind,
+		Func: func(deployment machinery.Object) []machinery.Object {
+			return lo.Filter(authorinos, func(authorino machinery.Object, _ int) bool {
+				// the name of the deployment is hardcoded. This deployment is owned by the authorino operator.
+				return authorino.GetNamespace() == deployment.GetNamespace() && deployment.GetName() == "authorino"
 			})
 		},
 	}
@@ -121,6 +142,70 @@ func LinkKuadrantToPodMonitor(objs controller.Store) machinery.LinkFunc {
 					}
 				}
 				return false
+			})
+		},
+	}
+}
+
+func LinkAuthorinoToNetworkPolicy(objs controller.Store) machinery.LinkFunc {
+	authorinos := utils.Map(objs.FilterByGroupKind(AuthorinoGroupKind), ControllerObjectToMachineryObject)
+
+	return machinery.LinkFunc{
+		From: AuthorinoGroupKind,
+		To:   NetworkPolicyGroupKind,
+		Func: func(networkPolicy machinery.Object) []machinery.Object {
+			return lo.Filter(authorinos, func(authorino machinery.Object, _ int) bool {
+				return authorino.GetNamespace() == networkPolicy.GetNamespace() && networkPolicy.GetName() == "kuadrant-authorino"
+			})
+		},
+	}
+}
+
+func LinkLimitadorToNetworkPolicy(objs controller.Store) machinery.LinkFunc {
+	limitadors := utils.Map(objs.FilterByGroupKind(LimitadorGroupKind), ControllerObjectToMachineryObject)
+
+	return machinery.LinkFunc{
+		From: LimitadorGroupKind,
+		To:   NetworkPolicyGroupKind,
+		Func: func(networkPolicy machinery.Object) []machinery.Object {
+			return lo.Filter(limitadors, func(limitador machinery.Object, _ int) bool {
+				return limitador.GetNamespace() == networkPolicy.GetNamespace() && networkPolicy.GetName() == "kuadrant-limitador"
+			})
+		},
+	}
+}
+
+func LinkDeploymentToNetworkPolicy(objs controller.Store) machinery.LinkFunc {
+	deployments := utils.Map(objs.FilterByGroupKind(DeploymentGroupKind), ControllerObjectToMachineryObject)
+
+	return machinery.LinkFunc{
+		From: DeploymentGroupKind,
+		To:   NetworkPolicyGroupKind,
+		Func: func(networkPolicy machinery.Object) []machinery.Object {
+			return lo.Filter(deployments, func(deployment machinery.Object, _ int) bool {
+				return deployment.GetNamespace() == networkPolicy.GetNamespace() && deployment.GetName() == networkPolicy.GetName()
+			})
+		},
+	}
+}
+
+func LinkSubDeploymentsToKuadrantDeployment(objs controller.Store) machinery.LinkFunc {
+	deployments := utils.Map(objs.FilterByGroupKind(DeploymentGroupKind), ControllerObjectToMachineryObject)
+	allowedDeployments := []string{
+		"authorino-operator",
+		"dns-operator-controller-manager",
+		"limitador-operator-controller-manager",
+	}
+
+	return machinery.LinkFunc{
+		From: DeploymentGroupKind,
+		To:   DeploymentGroupKind,
+		Func: func(deployment machinery.Object) []machinery.Object {
+			return lo.Filter(deployments, func(existingDeployment machinery.Object, _ int) bool {
+				if existingDeployment.GetName() != "kuadrant-operator-controller-manager" {
+					return false
+				}
+				return existingDeployment.GetNamespace() == deployment.GetNamespace() && slices.Contains(allowedDeployments, deployment.GetName())
 			})
 		},
 	}

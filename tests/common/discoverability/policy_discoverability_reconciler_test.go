@@ -31,10 +31,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Policy discoverability reconciler", func() {
+var _ = Describe("Policy discoverability reconciler", Labels{"common", "discoverability"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -82,7 +83,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		err = k8sClient.Create(ctx, grpcRoute)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(tests.GRPCRouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(grpcRoute))).WithContext(ctx).Should(BeTrue())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
@@ -155,7 +156,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		return true
 	}
 
-	Context("AuthPolicy", func() {
+	Context("AuthPolicy", Labels{"authpolicy"}, func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("AuthPolicy")
 
 		// policyFactory builds a standards AuthPolicy object that targets the test HTTPRoute by default, with the given mutate functions applied
@@ -465,7 +466,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		}, testTimeOut)
 	})
 
-	Context("RateLimitPolicy", func() {
+	Context("RateLimitPolicy", Labels{"ratelimitpolicy"}, func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("RateLimitPolicy")
 
 		// policyFactory builds a standards RateLimitPolicy object that targets the test HTTPRoute by default, with the given mutate functions applied
@@ -756,7 +757,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		}, testTimeOut)
 	})
 
-	Context("DNSPolicy", func() {
+	Context("DNSPolicy", Labels{"dnspolicy"}, func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("DNSPolicy")
 
 		// policyFactory builds a standards DNSPolicy object that targets the test gateway by default, with the given mutate functions applied
@@ -800,7 +801,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		BeforeEach(func(ctx SpecContext) {
 			dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace, strings.Replace(gwHost, "*.", "", 1))
 			Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		AfterEach(func(ctx SpecContext) {
 			// Wait until dns records are finished deleting since it can't finish deleting without the DNS provider secret
@@ -935,7 +936,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		}, testTimeOut)
 	})
 
-	Context("TLSPolicy", func() {
+	Context("TLSPolicy", Labels{"tlspolicy"}, func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("TLSPolicy")
 
 		var issuer *certmanv1.Issuer
@@ -974,7 +975,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		BeforeEach(func(ctx SpecContext) {
 			issuer, issuerRef = tests.BuildSelfSignedIssuer("testissuer", testNamespace)
 			Expect(k8sClient.Create(ctx, issuer)).To(BeNil())
-		})
+		}, beforeEachTimeOut)
 
 		AfterEach(func(ctx SpecContext) {
 			if issuer != nil {
@@ -1085,7 +1086,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		}, testTimeOut)
 	})
 
-	Context("GRPCRoute AuthPolicy", func() {
+	Context("GRPCRoute AuthPolicy", Labels{"authpolicy"}, func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("AuthPolicy")
 
 		It("adds PolicyAffected status condition to the targeted GRPCRoute", func(ctx SpecContext) {
@@ -1231,7 +1232,7 @@ var _ = Describe("Policy discoverability reconciler", func() {
 		}, testTimeOut)
 	})
 
-	Context("GRPCRoute RateLimitPolicy", func() {
+	Context("GRPCRoute RateLimitPolicy", Labels{"ratelimitpolicy"}, func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("RateLimitPolicy")
 
 		It("adds PolicyAffected status condition to the targeted GRPCRoute", func(ctx SpecContext) {

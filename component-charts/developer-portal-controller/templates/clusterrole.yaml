@@ -1,0 +1,10 @@
+{{- /* rules come from the controller-gen output copied in by make helm-build */ -}}
+{{- $role := required "rbac/role.yaml missing, run make helm-build" (.Files.Get "rbac/role.yaml") | fromYaml }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "developer-portal-controller.fullname" . }}-manager-role
+  labels:
+    {{- include "developer-portal-controller.labels" . | nindent 4 }}
+rules:
+  {{- toYaml $role.rules | nindent 2 }}

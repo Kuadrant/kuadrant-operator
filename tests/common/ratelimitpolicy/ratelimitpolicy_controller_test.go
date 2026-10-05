@@ -27,10 +27,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
+var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"common", "ratelimitpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -87,7 +88,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -116,7 +117,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			Expect(k8sClient.Create(ctx, route)).To(Succeed())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Enforced Reason", func(ctx SpecContext) {
 			policy := policyFactory()
@@ -150,10 +151,11 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 	})
 })
 
-var _ = Describe("RateLimitPolicy controller", func() {
+var _ = Describe("RateLimitPolicy controller", Labels{"common", "ratelimitpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -234,7 +236,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -430,7 +432,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 					Variables:  []string{},
 				})).WithContext(ctx).Should(Succeed())
-			})
+			}, beforeEachTimeOut)
 
 			When("Free route is created", func() {
 				It("Gateway policy should now be enforced", func(ctx SpecContext) {
@@ -509,7 +511,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					},
 				}
 			})
-		})
+		}, beforeEachTimeOut)
 
 		It("Gateway atomic override - gateway overrides exist and then route policy created", func(ctx SpecContext) {
 			// create GW RLP with overrides
@@ -817,7 +819,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			err = k8sClient.Create(ctx, untargetedRoute)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(untargetedRoute))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("It defines route policy limits with gateway policy overrides", func(ctx SpecContext) {
 			rlpGatewayA := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
@@ -931,7 +933,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			rlp := policyFactory()
 			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, client.ObjectKeyFromObject(rlp))).WithContext(ctx).Should(BeTrue())
-		})
+		}, beforeEachTimeOut)
 
 		It("Clears stale trace annotations from Limitador on limits update when tracing is disabled", func(ctx SpecContext) {
 			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
@@ -972,17 +974,18 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	})
 })
 
-var _ = Describe("RateLimitPolicy CEL Validations", func() {
+var _ = Describe("RateLimitPolicy CEL Validations", Labels{"common", "ratelimitpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)

@@ -256,6 +256,9 @@ func (r *TokenRateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1
 		if limitador == nil {
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("limitador"), false)
 		}
+		if kObj.GetTokenRateLimitingMode() == kuadrantv1beta1.TokenRateLimitingModeReservation && !limitador.ReservationsEnabled() {
+			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrReservationsDisabled(policyKind), false)
+		}
 		if !meta.IsStatusConditionTrue(limitador.Status.Conditions, limitadorv1alpha1.StatusConditionReady) {
 			componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)
 		}

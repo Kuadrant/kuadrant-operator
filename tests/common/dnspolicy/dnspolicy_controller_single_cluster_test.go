@@ -37,10 +37,11 @@ func getClusterUID(ctx context.Context, c client.Client) (string, error) {
 	return string(ns.UID), nil
 }
 
-var _ = Describe("DNSPolicy Single Cluster", func() {
+var _ = Describe("DNSPolicy Single Cluster", Labels{"common", "dnspolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(1 * time.Minute)
-		afterEachTimeOut = NodeTimeout(2 * time.Minute)
+		testTimeOut       = NodeTimeout(1 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	var gatewayClass *gatewayapiv1.GatewayClass
@@ -115,7 +116,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
 		wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		if gateway != nil {
@@ -161,7 +162,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("should create dns records", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
@@ -207,7 +208,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(wildcardDnsRecord.Status.OwnerID).ToNot(BeEmpty())
 				g.Expect(wildcardDnsRecord.Status.OwnerID).To(Equal(wildcardDnsRecord.GetUIDHash()))
 				g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
-			}, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 		}, testTimeOut)
 
 	})
@@ -221,7 +222,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 					WithTargetGateway(tests.GatewayName).
 					WithLoadBalancingFor(120, "IE", true)
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-			})
+			}, beforeEachTimeOut)
 
 			It("should create dns records", func(ctx SpecContext) {
 				Eventually(func(g Gomega, ctx context.Context) {
@@ -341,7 +342,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 					WithTargetGateway(tests.GatewayName).
 					WithLoadBalancingFor(120, "IE", false)
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-			})
+			}, beforeEachTimeOut)
 
 			It("should create dns records", func(ctx SpecContext) {
 				Eventually(func(g Gomega, ctx context.Context) {

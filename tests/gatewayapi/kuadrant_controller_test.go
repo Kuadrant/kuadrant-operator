@@ -20,17 +20,18 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller when gateway provider is missing", func() {
+var _ = Describe("Kuadrant controller when gateway provider is missing", Labels{"gatewayapi"}, func() {
 	var (
 		testNamespace string
 		// 20s to allow for slow CI runners where the operator may take longer to reconcile status
-		testTimeOut      = SpecTimeout(20 * time.Second)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(20 * time.Second)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-	})
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)

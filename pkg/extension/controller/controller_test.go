@@ -6,8 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	celtypes "github.com/google/cel-go/common/types"
@@ -19,13 +22,23 @@ import (
 	"gotest.tools/assert"
 	"gotest.tools/assert/cmp"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	ktypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	ctrlruntimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlruntimefake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	ctrlruntimeevent "sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
@@ -303,10 +316,11 @@ func TestHandshake_Success(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), []byte("token-value"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token-value"), "MyPolicy", nil)
 	assert.NilError(t, err)
-	assert.Equal(t, session.token, "returned-token")
+	assert.Equal(t, session.getToken(), "returned-token")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
+	assert.Equal(t, capturedReq.Version, protocol.Version)
 	assert.DeepEqual(t, capturedReq.Token, []byte("token-value"))
 }
 
@@ -323,9 +337,9 @@ func TestHandshake_Rejected(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), []byte("bad-token"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("bad-token"), "MyPolicy", nil)
 	assert.ErrorContains(t, err, "handshake rejected")
-	assert.Equal(t, session.token, "")
+	assert.Equal(t, session.getToken(), "")
 }
 
 func TestHandshake_RPCError(t *testing.T) {
@@ -338,24 +352,24 @@ func TestHandshake_RPCError(t *testing.T) {
 	session := &sessionCredentials{}
 	ec := &extensionClient{client: mock, session: session}
 
-	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy")
+	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy", nil)
 	assert.ErrorContains(t, err, "handshake RPC failed")
-	assert.Equal(t, session.token, "")
+	assert.Equal(t, session.getToken(), "")
 }
 
-func TestStart_TokenSourceError(t *testing.T) {
+func TestAttemptHandshake_TokenSourceError(t *testing.T) {
 	ec := &ExtensionController{
 		config:      ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
 		logger:      logr.Discard(),
-		tokenSource: func() ([]byte, error) { return nil, errors.New("token file missing") },
+		tokenSource: func(context.Context) ([]byte, error) { return nil, errors.New("token file missing") },
 	}
 
-	err := ec.Start(context.Background())
+	_, err := ec.attemptHandshake(context.Background())
 	assert.ErrorContains(t, err, "failed to obtain handshake credential")
 	assert.ErrorContains(t, err, "token file missing")
 }
 
-func TestStart_HandshakesWithSourcedToken(t *testing.T) {
+func TestAttemptHandshake_UsesSourcedToken(t *testing.T) {
 	var capturedReq *extpb.HandshakeRequest
 	mock := &mockExtensionServiceClient{
 		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
@@ -371,16 +385,356 @@ func TestStart_HandshakesWithSourcedToken(t *testing.T) {
 		tokenSource:     staticTokenSource([]byte("sourced-token")),
 	}
 
-	// A nil manager and an already-cancelled context let Start complete the
-	// handshake and then return immediately from its keep-alive wait.
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	err := ec.Start(ctx)
+	_, err := ec.attemptHandshake(context.Background())
 	assert.NilError(t, err)
 	assert.DeepEqual(t, capturedReq.Token, []byte("sourced-token"))
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
-	assert.Equal(t, session.token, "session")
+	assert.Equal(t, session.getToken(), "session")
+}
+
+func TestStart_ReturnsWhenTokenSourceBlocksAndContextCancelled(t *testing.T) {
+	// manager is nil, so Start runs the supervisor in the foreground and returns
+	// only once it unwinds; the blocking token source must honor cancellation.
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: &mockExtensionServiceClient{}, session: &sessionCredentials{}},
+		tokenSource:      func(ctx context.Context) ([]byte, error) { <-ctx.Done(); return nil, ctx.Err() },
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- ec.Start(ctx) }()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.NilError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start did not return after context cancellation")
+	}
+}
+
+func TestHeartbeat_CancelsStreamOnUnauthenticated(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		pingFn: func(context.Context, *extpb.PingRequest, ...grpc.CallOption) (*extpb.PongResponse, error) {
+			return nil, status.Error(codes.Unauthenticated, "session gone")
+		},
+	}
+	ec := &ExtensionController{
+		logger:            logr.Discard(),
+		extensionClient:   &extensionClient{client: mock, session: &sessionCredentials{}},
+		heartbeatInterval: time.Millisecond,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { ec.heartbeat(ctx, cancel); close(done) }()
+
+	select {
+	case <-done:
+		assert.Assert(t, errors.Is(ctx.Err(), context.Canceled))
+	case <-time.After(5 * time.Second):
+		t.Fatal("heartbeat did not cancel the stream after an Unauthenticated ping")
+	}
+}
+
+func TestHeartbeat_KeepsPingingOnTransientError(t *testing.T) {
+	pings := make(chan struct{}, 8)
+	mock := &mockExtensionServiceClient{
+		pingFn: func(context.Context, *extpb.PingRequest, ...grpc.CallOption) (*extpb.PongResponse, error) {
+			select {
+			case pings <- struct{}{}:
+			default:
+			}
+			return nil, status.Error(codes.Unavailable, "operator restarting")
+		},
+	}
+	ec := &ExtensionController{
+		logger:            logr.Discard(),
+		extensionClient:   &extensionClient{client: mock, session: &sessionCredentials{}},
+		heartbeatInterval: time.Millisecond,
+	}
+
+	ctx, stop := context.WithCancel(context.Background())
+	cancelled := make(chan struct{})
+	go ec.heartbeat(ctx, func() { close(cancelled) })
+
+	for range 3 {
+		select {
+		case <-pings:
+		case <-time.After(2 * time.Second):
+			t.Fatal("heartbeat stopped pinging after a transient error")
+		}
+	}
+	select {
+	case <-cancelled:
+		t.Fatal("heartbeat cancelled the stream on a transient error")
+	default:
+	}
+	stop()
+}
+
+func TestHandshakeWithBackoff_RetriesUntilAccepted(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			if attempts < 3 {
+				return nil, status.Error(codes.Unavailable, "operator not ready")
+			}
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.NilError(t, err)
+	assert.Equal(t, attempts, 3)
+}
+
+func TestHandshakeWithBackoff_ReturnsOnContextCancel(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return nil, status.Error(codes.Unavailable, "operator not ready")
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := ec.handshakeWithBackoff(ctx)
+	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
+}
+
+func TestHandshakeRejectedError_Terminal(t *testing.T) {
+	testCases := []struct {
+		rejection extpb.HandshakeRejection
+		terminal  bool
+	}{
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNSPECIFIED, false},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION, true},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST, true},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED, false},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.rejection.String(), func(t *testing.T) {
+			err := &handshakeRejectedError{reason: "nope", rejection: tc.rejection}
+			assert.Equal(t, err.terminal(), tc.terminal)
+		})
+	}
+}
+
+func TestHandshakeWithBackoff_StopsOnIncompatibleVersion(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			return &extpb.HandshakeResponse{
+				Accepted:  false,
+				Reason:    "protocol version 0.1.0 is not compatible with 9.9.9",
+				Version:   "9.9.9",
+				Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+			}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.ErrorContains(t, err, "not compatible")
+	assert.Equal(t, attempts, 1)
+}
+
+func TestHandshakeWithBackoff_RetriesUnauthorizedRejection(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			if attempts < 3 {
+				return &extpb.HandshakeResponse{
+					Accepted:  false,
+					Reason:    "handshake failed",
+					Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED,
+				}, nil
+			}
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.NilError(t, err)
+	assert.Equal(t, attempts, 3)
+}
+
+// An operator predating the rejection codes sends the zero value, which must
+// not be read as a terminal rejection.
+func TestHandshakeWithBackoff_RetriesUnclassifiedRejection(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			return &extpb.HandshakeResponse{Accepted: false, Reason: "handshake failed"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := ec.handshakeWithBackoff(ctx)
+	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
+	assert.Assert(t, attempts > 1)
+}
+
+func TestHandshake_RecordsPeerVersion(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session", Version: "0.1.4"}, nil
+		},
+	}
+	ec := &extensionClient{client: mock, session: &sessionCredentials{}}
+
+	assert.NilError(t, ec.handshake(context.Background(), []byte("token"), "MyPolicy", nil))
+	assert.Equal(t, ec.peerVersion, "0.1.4")
+}
+
+func TestSuperviseSession_ReturnsTerminalRejection(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{
+				Accepted:  false,
+				Reason:    "protocol version 0.1.0 is not compatible with 9.9.9",
+				Version:   "9.9.9",
+				Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+			}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	err := ec.superviseSession(context.Background(), make(chan ctrlruntimeevent.GenericEvent, 1))
+	assert.ErrorContains(t, err, "not compatible")
+}
+
+func TestSuperviseSession_ReturnsNilOnContextCancel(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return nil, status.Error(codes.Unavailable, "operator not ready")
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	assert.NilError(t, ec.superviseSession(ctx, make(chan ctrlruntimeevent.GenericEvent, 1)))
+}
+
+func TestIsSessionLost(t *testing.T) {
+	assert.Assert(t, isSessionLost(status.Error(codes.Unauthenticated, "session gone")))
+	assert.Assert(t, !isSessionLost(status.Error(codes.Unavailable, "transient")))
+	assert.Assert(t, !isSessionLost(nil))
+}
+
+func TestStreamSession_ClearsTokenOnUnauthenticated(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		subscribeFn: func(_ context.Context, _ *extpb.SubscribeRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error) {
+			return nil, status.Error(codes.Unauthenticated, "session gone")
+		},
+	}
+	session := &sessionCredentials{}
+	session.setToken("live-token")
+	ec := &ExtensionController{
+		config:          ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:          logr.Discard(),
+		extensionClient: &extensionClient{client: mock, session: session},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		ec.streamSession(context.Background(), make(chan ctrlruntimeevent.GenericEvent, 1))
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("streamSession did not return on Unauthenticated")
+	}
+	assert.Equal(t, session.getToken(), "")
+}
+
+func TestStreamSession_RidesOutUnavailableUntilContextCancel(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		subscribeFn: func(_ context.Context, _ *extpb.SubscribeRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error) {
+			attempts++
+			return nil, status.Error(codes.Unavailable, "transient")
+		},
+	}
+	session := &sessionCredentials{}
+	session.setToken("live-token")
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: session},
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	ec.streamSession(ctx, make(chan ctrlruntimeevent.GenericEvent, 1))
+
+	assert.Assert(t, attempts > 1)
+	assert.Equal(t, session.getToken(), "live-token")
 }
 
 func TestSessionCredentials_GetRequestMetadata(t *testing.T) {
@@ -390,7 +744,7 @@ func TestSessionCredentials_GetRequestMetadata(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, md == nil)
 
-	creds.token = "my-session-token"
+	creds.setToken("my-session-token")
 	md, err = creds.GetRequestMetadata(context.Background())
 	assert.NilError(t, err)
 	assert.Equal(t, md[sessionMetadataKey], "my-session-token")
@@ -399,8 +753,11 @@ func TestSessionCredentials_GetRequestMetadata(t *testing.T) {
 // mockExtensionServiceClient implements extpb.ExtensionServiceClient for testing.
 type mockExtensionServiceClient struct {
 	handshakeFn            func(ctx context.Context, in *extpb.HandshakeRequest, opts ...grpc.CallOption) (*extpb.HandshakeResponse, error)
+	subscribeFn            func(ctx context.Context, in *extpb.SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error)
 	registerActionMethodFn func(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pipelineCommitFn       func(ctx context.Context, in *extpb.PipelineCommitRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	pingFn                 func(ctx context.Context, in *extpb.PingRequest, opts ...grpc.CallOption) (*extpb.PongResponse, error)
+	clearPolicyFn          func(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error)
 }
 
 func (m *mockExtensionServiceClient) Handshake(ctx context.Context, in *extpb.HandshakeRequest, opts ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
@@ -409,10 +766,19 @@ func (m *mockExtensionServiceClient) Handshake(ctx context.Context, in *extpb.Ha
 	}
 	return &extpb.HandshakeResponse{Accepted: true, SessionToken: "test-token"}, nil
 }
-func (m *mockExtensionServiceClient) Ping(_ context.Context, _ *extpb.PingRequest, _ ...grpc.CallOption) (*extpb.PongResponse, error) {
+func (m *mockExtensionServiceClient) Ping(ctx context.Context, in *extpb.PingRequest, opts ...grpc.CallOption) (*extpb.PongResponse, error) {
+	if m.pingFn != nil {
+		return m.pingFn(ctx, in, opts...)
+	}
 	return nil, nil
 }
-func (m *mockExtensionServiceClient) Subscribe(_ context.Context, _ *extpb.SubscribeRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error) {
+func (m *mockExtensionServiceClient) ReleaseSession(_ context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+	return nil, nil
+}
+func (m *mockExtensionServiceClient) Subscribe(ctx context.Context, in *extpb.SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error) {
+	if m.subscribeFn != nil {
+		return m.subscribeFn(ctx, in, opts...)
+	}
 	return nil, nil
 }
 func (m *mockExtensionServiceClient) Resolve(_ context.Context, _ *extpb.ResolveRequest, _ ...grpc.CallOption) (*extpb.ResolveResponse, error) {
@@ -421,8 +787,11 @@ func (m *mockExtensionServiceClient) Resolve(_ context.Context, _ *extpb.Resolve
 func (m *mockExtensionServiceClient) RegisterMutator(_ context.Context, _ *extpb.RegisterMutatorRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
 	return nil, nil
 }
-func (m *mockExtensionServiceClient) ClearPolicy(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
-	return nil, nil
+func (m *mockExtensionServiceClient) ClearPolicy(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+	if m.clearPolicyFn != nil {
+		return m.clearPolicyFn(ctx, in, opts...)
+	}
+	return &extpb.ClearPolicyResponse{}, nil
 }
 func (m *mockExtensionServiceClient) RegisterActionMethod(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	if m.registerActionMethodFn != nil {
@@ -525,7 +894,7 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
@@ -549,10 +918,10 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 	assert.NilError(t, err)
 
 	assert.Equal(t, len(p.actions), 4)
-	assert.Equal(t, p.actions[0].phase, "request")
-	assert.Equal(t, p.actions[1].phase, "request")
-	assert.Equal(t, p.actions[2].phase, "response")
-	assert.Equal(t, p.actions[3].phase, "response")
+	assert.Equal(t, p.actions[0].phase, extpb.Phase_PHASE_REQUEST)
+	assert.Equal(t, p.actions[1].phase, extpb.Phase_PHASE_REQUEST)
+	assert.Equal(t, p.actions[2].phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Equal(t, p.actions[3].phase, extpb.Phase_PHASE_RESPONSE)
 }
 
 func TestPipeline_PhaseOrdering_RequestAfterResponse(t *testing.T) {
@@ -579,7 +948,24 @@ func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
 			Predicate:  "threatResponse.threat_level >= 5",
 			WithStatus: 403,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
+}
+
+func TestPipeline_VarAvailability_StoreForwardReference(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.StoreAction{
+			Path:  "threat_level",
+			Value: "threatResponse.threat_level",
+		},
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -592,7 +978,7 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -607,7 +993,7 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 func TestPipeline_VarAvailability_CrossCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+	err := p.OnHTTPRequest(exttypes.GRPCAction{
 		Method: "assess-threat",
 		Var:    "threatResponse",
 	})
@@ -624,8 +1010,8 @@ func TestPipeline_DuplicateVarName(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"},
-		exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"},
+		exttypes.GRPCAction{Method: "method-a", Var: "myVar"},
+		exttypes.GRPCAction{Method: "method-b", Var: "myVar"},
 	)
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
@@ -634,10 +1020,10 @@ func TestPipeline_DuplicateVarName(t *testing.T) {
 func TestPipeline_DuplicateVarName_AcrossCalls(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"})
+	err := p.OnHTTPRequest(exttypes.GRPCAction{Method: "method-a", Var: "myVar"})
 	assert.NilError(t, err)
 
-	err = p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"})
+	err = p.OnHTTPRequest(exttypes.GRPCAction{Method: "method-b", Var: "myVar"})
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
 }
@@ -674,7 +1060,7 @@ func TestPipeline_MultipleOnHTTPRequestCalls(t *testing.T) {
 func TestPipeline_VarInHeadersToAdd(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+	err := p.OnHTTPRequest(exttypes.GRPCAction{
 		Method: "assess-threat",
 		Var:    "threatResponse",
 	})
@@ -693,7 +1079,7 @@ func TestPipeline_VarInHeadersToAdd_ForwardReference(t *testing.T) {
 		exttypes.AddHeadersAction{
 			HeadersToAdd: `{"x-threat-level": string(threatResponse.threat_level)}`,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -729,7 +1115,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{
 				Predicate:  `request.url_path == "/blocked"`,
 				LogMessage: "blocked",
@@ -743,7 +1129,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{
 				Predicate:  `threatResponse.threat_level >= 5`,
 				LogMessage: "threat detected",
@@ -755,7 +1141,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 	t.Run("fail action referencing grpc var from previous call", func(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-		err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"})
+		err := p.OnHTTPRequest(exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"})
 		assert.NilError(t, err)
 
 		err = p.OnHTTPResponse(exttypes.FailAction{
@@ -769,7 +1155,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{LogMessage: "always fail"},
 		)
 		assert.Assert(t, err != nil)
@@ -794,7 +1180,7 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 			Predicate:  `request.url_path == "/blocked"`,
 			WithStatus: 403,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
@@ -825,25 +1211,25 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 
 	assert.Assert(t, cmp.Len(capturedReq.Actions, 5))
 
-	assert.Equal(t, capturedReq.Actions[0].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
-	assert.Equal(t, capturedReq.Actions[0].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[0].WithStatus, int32(403))
+	assert.Equal(t, capturedReq.Actions[0].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[0].GetDeny() != nil)
+	assert.Equal(t, capturedReq.Actions[0].GetDeny().WithStatus, int32(403))
 
-	assert.Equal(t, capturedReq.Actions[1].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
-	assert.Equal(t, capturedReq.Actions[1].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[1].Method, "assess-threat")
-	assert.Equal(t, capturedReq.Actions[1].Var, "threatResponse")
+	assert.Equal(t, capturedReq.Actions[1].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[1].GetGrpc() != nil)
+	assert.Equal(t, capturedReq.Actions[1].GetGrpc().Method, "assess-threat")
+	assert.Equal(t, capturedReq.Actions[1].GetGrpc().Var, "threatResponse")
 
-	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAIL)
-	assert.Equal(t, capturedReq.Actions[2].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[2].LogMessage, "Request blocked")
+	assert.Equal(t, capturedReq.Actions[2].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[2].GetFail() != nil)
+	assert.Equal(t, capturedReq.Actions[2].GetFail().LogMessage, "Request blocked")
 
-	assert.Equal(t, capturedReq.Actions[3].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
-	assert.Equal(t, capturedReq.Actions[3].Phase, "response")
+	assert.Equal(t, capturedReq.Actions[3].Phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Assert(t, capturedReq.Actions[3].GetDeny() != nil)
 
-	assert.Equal(t, capturedReq.Actions[4].ActionType, extpb.ActionType_ACTION_TYPE_ADD_HEADERS)
-	assert.Equal(t, capturedReq.Actions[4].Phase, "response")
-	assert.Equal(t, capturedReq.Actions[4].HeadersToAdd, `{"x-threat-checked": "true"}`)
+	assert.Equal(t, capturedReq.Actions[4].Phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Assert(t, capturedReq.Actions[4].GetAddHeaders() != nil)
+	assert.Equal(t, capturedReq.Actions[4].GetAddHeaders().HeadersToAdd, `{"x-threat-checked": "true"}`)
 }
 
 func TestPipelineCommit_EmptyPipeline(t *testing.T) {
@@ -878,4 +1264,456 @@ func TestPipelineCommit_PropagatesError(t *testing.T) {
 	err := pipeline.Commit(context.Background())
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "bad action"))
+}
+
+func newFinalizerTestController(mock *mockExtensionServiceClient, objs ...client.Object) (*ExtensionController, client.Client) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fakeClient := ctrlruntimefake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		Build()
+
+	eventCache := newEventTypeCache()
+	return &ExtensionController{
+		config: ExtensionConfig{
+			Name:       "test",
+			PolicyKind: "ConfigMap",
+			ForType:    &corev1.ConfigMap{},
+			Reconcile:  mockReconcile,
+		},
+		logger:          logr.Discard(),
+		extensionClient: &extensionClient{client: mock},
+		eventCache:      eventCache,
+		BaseReconciler:  basereconciler.NewBaseReconciler(fakeClient, scheme, fakeClient),
+	}, fakeClient
+}
+
+func terminatingPolicy(namespace, name string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         namespace,
+			Name:              name,
+			Finalizers:        []string{ExtensionFinalizer},
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		},
+	}
+}
+
+// A policy deleted while the extension was down is replayed as a create.
+func TestReconcile_ClearsFinalizerOnCreateEvent(t *testing.T) {
+	var cleared *extpb.ClearPolicyRequest
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, in *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			cleared = in
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+	ec, fakeClient := newFinalizerTestController(mock, terminatingPolicy("ns", "p"))
+	ec.eventCache.pushEvent("ns", "p", EventTypeCreate)
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+
+	assert.Assert(t, cleared != nil)
+	assert.Equal(t, cleared.Policy.Metadata.Kind, "ConfigMap")
+	assert.Equal(t, cleared.Policy.Metadata.Name, "p")
+
+	// Removing the last finalizer lets the fake client complete the deletion.
+	err = fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, &corev1.ConfigMap{})
+	assert.Assert(t, apierrors.IsNotFound(err))
+}
+
+func TestReconcile_ClearsFinalizerOnUnknownEvent(t *testing.T) {
+	var clearCalls int
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			clearCalls++
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+	ec, _ := newFinalizerTestController(mock, terminatingPolicy("ns", "p"))
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+	assert.Equal(t, clearCalls, 1)
+}
+
+func TestReconcile_LivePolicyIsNotCleared(t *testing.T) {
+	var clearCalls int
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			clearCalls++
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+	live := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "p"}}
+	ec, fakeClient := newFinalizerTestController(mock, live)
+	ec.eventCache.pushEvent("ns", "p", EventTypeCreate)
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+	assert.Equal(t, clearCalls, 0)
+
+	got := &corev1.ConfigMap{}
+	assert.NilError(t, fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, got))
+	assert.Assert(t, cmp.Contains(got.Finalizers, ExtensionFinalizer))
+}
+
+func TestReconcile_DoesNotAddFinalizerToTerminatingPolicy(t *testing.T) {
+	mock := &mockExtensionServiceClient{}
+	terminating := terminatingPolicy("ns", "p")
+	terminating.Finalizers = append(terminating.Finalizers, "other.io/keep")
+	ec, fakeClient := newFinalizerTestController(mock, terminating)
+	ec.eventCache.pushEvent("ns", "p", EventTypeCreate)
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+
+	got := &corev1.ConfigMap{}
+	assert.NilError(t, fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, got))
+	assert.Assert(t, !slices.Contains(got.Finalizers, ExtensionFinalizer))
+}
+
+func TestReconcile_KeepsFinalizerWhenClearPolicyFails(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, _ *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			return nil, status.Error(codes.Unavailable, "operator down")
+		},
+	}
+	ec, fakeClient := newFinalizerTestController(mock, terminatingPolicy("ns", "p"))
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "p"}}
+	result, err := ec.Reconcile(context.Background(), req)
+	assert.Assert(t, err != nil)
+	assert.Equal(t, result.RequeueAfter, time.Second)
+
+	got := &corev1.ConfigMap{}
+	assert.NilError(t, fakeClient.Get(context.Background(), ktypes.NamespacedName{Namespace: "ns", Name: "p"}, got))
+	assert.Assert(t, cmp.Contains(got.Finalizers, ExtensionFinalizer))
+}
+
+func TestReconcile_MissingPolicyIsNotAnError(t *testing.T) {
+	ec, _ := newFinalizerTestController(&mockExtensionServiceClient{})
+
+	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "gone"}}
+	_, err := ec.Reconcile(context.Background(), req)
+	assert.NilError(t, err)
+}
+
+type fakeInformerCache struct {
+	getInformerErr error
+	syncResult     bool
+	callOrder      []string
+	listFn         func(list client.ObjectList) error
+	listErr        error
+}
+
+func (f *fakeInformerCache) GetInformer(ctx context.Context, obj client.Object, opts ...ctrlruntimecache.InformerGetOption) (ctrlruntimecache.Informer, error) {
+	f.callOrder = append(f.callOrder, "GetInformer")
+	return nil, f.getInformerErr
+}
+
+func (f *fakeInformerCache) WaitForCacheSync(ctx context.Context) bool {
+	f.callOrder = append(f.callOrder, "WaitForCacheSync")
+	return f.syncResult
+}
+
+func (f *fakeInformerCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	if f.listErr != nil {
+		return f.listErr
+	}
+	if f.listFn != nil {
+		return f.listFn(list)
+	}
+	return nil
+}
+
+func TestAwaitCacheSync_Success(t *testing.T) {
+	fake := &fakeInformerCache{syncResult: true}
+	err := awaitCacheSync(context.Background(), fake, &corev1.ConfigMap{})
+	assert.NilError(t, err)
+	assert.DeepEqual(t, fake.callOrder, []string{"GetInformer", "WaitForCacheSync"})
+}
+
+func TestAwaitCacheSync_GetInformerError(t *testing.T) {
+	fake := &fakeInformerCache{getInformerErr: errors.New("informer error")}
+	err := awaitCacheSync(context.Background(), fake, &corev1.ConfigMap{})
+	assert.ErrorContains(t, err, "failed to register informer")
+	assert.DeepEqual(t, fake.callOrder, []string{"GetInformer"})
+}
+
+func TestAwaitCacheSync_WaitForCacheSyncFalse(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	fake := &fakeInformerCache{syncResult: false}
+	err := awaitCacheSync(ctx, fake, &corev1.ConfigMap{})
+	assert.ErrorContains(t, err, "cache sync did not complete")
+}
+
+func TestListOwnedPolicies_Success(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fake := &fakeInformerCache{
+		listFn: func(list client.ObjectList) error {
+			cmList := list.(*corev1.ConfigMapList)
+			cmList.Items = []corev1.ConfigMap{
+				{ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "ns1"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "cm2", Namespace: "ns2"}},
+			}
+			return nil
+		},
+	}
+
+	owned, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.NilError(t, err)
+	assert.Equal(t, len(owned), 2)
+	assert.Equal(t, owned[0].Group, "")
+	assert.Equal(t, owned[0].Namespace, "ns1")
+	assert.Equal(t, owned[0].Name, "cm1")
+	assert.Equal(t, owned[0].Kind, "")
+	assert.Equal(t, owned[1].Group, "")
+	assert.Equal(t, owned[1].Namespace, "ns2")
+	assert.Equal(t, owned[1].Name, "cm2")
+	assert.Equal(t, owned[1].Kind, "")
+}
+
+func TestListOwnedPolicies_TerminatingIncluded(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	now := metav1.Now()
+	fake := &fakeInformerCache{
+		listFn: func(list client.ObjectList) error {
+			cmList := list.(*corev1.ConfigMapList)
+			cmList.Items = []corev1.ConfigMap{
+				{ObjectMeta: metav1.ObjectMeta{Name: "terminating", Namespace: "ns1", DeletionTimestamp: &now}},
+			}
+			return nil
+		},
+	}
+
+	owned, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.NilError(t, err)
+	assert.Equal(t, len(owned), 1)
+	assert.Equal(t, owned[0].Name, "terminating")
+}
+
+func TestListOwnedPolicies_EmptyList(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fake := &fakeInformerCache{
+		listFn: func(list client.ObjectList) error {
+			return nil
+		},
+	}
+
+	owned, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.NilError(t, err)
+	assert.Equal(t, len(owned), 0)
+}
+
+func TestListOwnedPolicies_ListError(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+
+	fake := &fakeInformerCache{
+		listErr: errors.New("cache error"),
+	}
+
+	_, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.ErrorContains(t, err, "failed to list")
+}
+
+func TestListOwnedPolicies_MissingListType(t *testing.T) {
+	scheme := runtime.NewScheme()
+	gv := corev1.SchemeGroupVersion
+	scheme.AddKnownTypes(gv, &corev1.ConfigMap{})
+
+	fake := &fakeInformerCache{}
+
+	_, err := listOwnedPolicies(context.Background(), fake, &corev1.ConfigMap{}, scheme)
+	assert.ErrorContains(t, err, "failed to resolve list type")
+}
+
+func TestAttemptHandshake_NilManagerPassesNilOwnedPolicies(t *testing.T) {
+	var capturedReq *extpb.HandshakeRequest
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			capturedReq = in
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "token"}, nil
+		},
+	}
+
+	ec := &ExtensionController{
+		extensionClient: &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:     func(ctx context.Context) ([]byte, error) { return []byte("test-token"), nil },
+		config:          ExtensionConfig{PolicyKind: "TestPolicy"},
+		manager:         nil,
+	}
+
+	_, err := ec.attemptHandshake(context.Background())
+	assert.NilError(t, err)
+	assert.Assert(t, capturedReq.OwnedPolicies == nil)
+}
+
+func TestHandshake_SetsOwnedPolicies(t *testing.T) {
+	var capturedReq *extpb.HandshakeRequest
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, in *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			capturedReq = in
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "token"}, nil
+		},
+	}
+
+	session := &sessionCredentials{}
+	ec := &extensionClient{client: mock, session: session}
+
+	owned := []*extpb.Metadata{
+		{Group: "test.io", Namespace: "ns1", Name: "policy1"},
+		{Group: "test.io", Namespace: "ns2", Name: "policy2"},
+	}
+
+	err := ec.handshake(context.Background(), []byte("token"), "MyPolicy", owned)
+	assert.NilError(t, err)
+	assert.Equal(t, len(capturedReq.OwnedPolicies), 2)
+	assert.Equal(t, capturedReq.OwnedPolicies[0].Group, "test.io")
+	assert.Equal(t, capturedReq.OwnedPolicies[0].Namespace, "ns1")
+	assert.Equal(t, capturedReq.OwnedPolicies[0].Name, "policy1")
+	assert.Equal(t, capturedReq.OwnedPolicies[1].Group, "test.io")
+	assert.Equal(t, capturedReq.OwnedPolicies[1].Namespace, "ns2")
+	assert.Equal(t, capturedReq.OwnedPolicies[1].Name, "policy2")
+}
+
+func TestReplayOwnedPolicies_SendsEventPerPolicy(t *testing.T) {
+	ec := &ExtensionController{
+		config: ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger: logr.Discard(),
+	}
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent, 10)
+	owned := []*extpb.Metadata{
+		{Namespace: "ns1", Name: "a"},
+		{Namespace: "ns1", Name: "b"},
+		{Namespace: "ns2", Name: "c"},
+	}
+
+	ec.replayOwnedPolicies(context.Background(), owned, reconcileChan)
+	close(reconcileChan)
+
+	var events []ctrlruntimeevent.GenericEvent
+	for event := range reconcileChan {
+		events = append(events, event)
+	}
+
+	assert.Equal(t, len(events), 3)
+	assert.Equal(t, events[0].Object.GetNamespace(), "ns1")
+	assert.Equal(t, events[0].Object.GetName(), "a")
+	assert.Equal(t, events[0].Object.(*unstructured.Unstructured).GetKind(), "MyPolicy")
+	assert.Equal(t, events[1].Object.GetNamespace(), "ns1")
+	assert.Equal(t, events[1].Object.GetName(), "b")
+	assert.Equal(t, events[1].Object.(*unstructured.Unstructured).GetKind(), "MyPolicy")
+	assert.Equal(t, events[2].Object.GetNamespace(), "ns2")
+	assert.Equal(t, events[2].Object.GetName(), "c")
+	assert.Equal(t, events[2].Object.(*unstructured.Unstructured).GetKind(), "MyPolicy")
+}
+
+func TestReplayOwnedPolicies_EmptyIsNoOp(t *testing.T) {
+	ec := &ExtensionController{
+		config: ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger: logr.Discard(),
+	}
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent)
+
+	ec.replayOwnedPolicies(context.Background(), nil, reconcileChan)
+
+	select {
+	case <-reconcileChan:
+		t.Fatal("unexpected event received")
+	default:
+	}
+}
+
+func TestReplayOwnedPolicies_StopsOnContextCancel(t *testing.T) {
+	ec := &ExtensionController{
+		config: ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger: logr.Discard(),
+	}
+	reconcileChan := make(chan ctrlruntimeevent.GenericEvent)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	owned := []*extpb.Metadata{
+		{Namespace: "ns1", Name: "a"},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		ec.replayOwnedPolicies(ctx, owned, reconcileChan)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("replayOwnedPolicies did not return after context cancellation")
+	}
+}
+
+func TestPipeline_VarSpansSeparateReplyHooks(t *testing.T) {
+	tests := []struct {
+		name   string
+		action exttypes.Action
+	}{
+		{"store value", exttypes.StoreAction{Path: "combined", Value: "aResp.x + bResp.y"}},
+		{"deny predicate", exttypes.DenyAction{Predicate: "aResp.x > 1 && bResp.y > 1", WithStatus: 403}},
+		{"deny body", exttypes.DenyAction{Predicate: "true", WithStatus: 403, WithBody: "aResp.x + bResp.y"}},
+		{"add headers", exttypes.AddHeadersAction{HeadersToAdd: `{"x-a": aResp.x, "x-b": bResp.y}`}},
+		{"fail predicate", exttypes.FailAction{Predicate: "aResp.x > 1 && bResp.y > 1", LogMessage: "blocked"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+			err := p.OnHTTPRequest(
+				exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+				exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+				tt.action,
+			)
+			assert.Assert(t, err != nil)
+			assert.Assert(t, cmp.Contains(err.Error(), `references variables ["aResp" "bResp"] from separate gRPC actions`))
+		})
+	}
+}
+
+func TestPipeline_VarSpansSeparateReplyHooks_AcrossCalls(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+		exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+	)
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(exttypes.StoreAction{Path: "combined", Value: "aResp.x + bResp.y"})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), `references variables ["aResp" "bResp"] from separate gRPC actions`))
+}
+
+func TestPipeline_SingleVarAcrossMultipleProducers(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+		exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+		exttypes.StoreAction{Path: "just_b", Value: "bResp.y"},
+	)
+	assert.NilError(t, err)
 }

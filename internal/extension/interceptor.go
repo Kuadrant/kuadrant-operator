@@ -88,6 +88,7 @@ func (a *AuthInterceptor) authenticate(ctx context.Context) (string, error) {
 		return "", status.Error(codes.Unauthenticated, "invalid session token")
 	}
 
+	a.sessionStore.Touch(tokens[0])
 	return identity, nil
 }
 

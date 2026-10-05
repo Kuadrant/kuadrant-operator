@@ -148,16 +148,10 @@ jobs:
         run: |
           bundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.kuadrantOperatorTag }}
           echo bundleImg=$bundleImg >> $GITHUB_OUTPUT
-          limitadorBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/limitador-operator-bundle:v${{ env.limitadorOperatorVersion }}
-          echo limitadorBundleImg=$limitadorBundleImg >> $GITHUB_OUTPUT
-          authorinoBundleImg=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/authorino-operator-bundle:v${{ env.authorinoOperatorVersion }}
-          echo authorinoBundleImg=$authorinoBundleImg >> $GITHUB_OUTPUT
       - name: Print tags and references
         run: |
           echo "Operator bundle image tag = ${{ needs.build-bundle.outputs.image }}"
           echo "Reference in catalog = ${{ steps.catalog-variables.outputs.bundleImg }}"
-          echo "Limitador Operator bundle image tag = ${{ steps.catalog-variables.outputs.limitadorBundleImg }}"
-          echo "Authorino Operator bundle image tag = ${{ steps.catalog-variables.outputs.authorinoBundleImg }}"
       - name: Verify referenced bundle tag matches the bundle tag currently being built
         if: ${{ needs.build-bundle.outputs.image != steps.catalog-variables.outputs.bundleImg }}
         run: exit 1
@@ -167,8 +161,6 @@ jobs:
           # It should not matter for catalogs built for a single release
           make catalog \
             BUNDLE_IMG=${{ steps.catalog-variables.outputs.bundleImg }} \
-            LIMITADOR_OPERATOR_BUNDLE_IMG=${{ steps.catalog-variables.outputs.limitadorBundleImg }} \
-            AUTHORINO_OPERATOR_BUNDLE_IMG=${{ steps.catalog-variables.outputs.authorinoBundleImg }} \
             CHANNEL=stable
       - name: Install qemu dependency
         run: |

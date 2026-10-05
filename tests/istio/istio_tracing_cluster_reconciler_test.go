@@ -23,10 +23,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
+var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, Labels{"istio", "authpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -73,7 +74,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		// Clean up tracing configuration
 		kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}
@@ -99,7 +100,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 				Insecure:        true,
 			}
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("EnvoyFilter created with tracing cluster when gateway has effective policy", func(ctx SpecContext) {
 			createAuthPolicy(ctx)
@@ -152,7 +153,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 				Insecure:        false, // mTLS enabled
 			}
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("envoy filter has transport configured with mTLS", func(ctx SpecContext) {
 			createAuthPolicy(ctx)
@@ -227,7 +228,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 			original := kuadrantObj.DeepCopy()
 			kuadrantObj.Spec.Observability.Tracing = nil
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("EnvoyFilter is not created", func(ctx SpecContext) {
 			// Check envoy filter has not been created
@@ -252,7 +253,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 				Insecure:        true,
 			}
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("EnvoyFilter is not created", func(ctx SpecContext) {
 			// Check envoy filter has not been created even though tracing is configured
@@ -277,7 +278,7 @@ var _ = Describe("Tracing Cluster EnvoyFilter controller", Serial, func() {
 				Insecure:        true,
 			}
 			Expect(testClient().Patch(ctx, kuadrantObj, client.MergeFrom(original))).To(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("EnvoyFilter is deleted when tracing config is removed", func(ctx SpecContext) {
 			createAuthPolicy(ctx)

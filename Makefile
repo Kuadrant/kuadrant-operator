@@ -49,7 +49,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 USE_IMAGE_DIGESTS ?= false
 
 # BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
-BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS) --extra-service-accounts=developer-portal-controller-manager
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
 ifeq ($(USE_IMAGE_DIGESTS), true)
 	BUNDLE_GEN_FLAGS += --use-image-digests
 endif
@@ -104,7 +104,7 @@ endif
 IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 
 # Directories containing unit & integration test packages
-UNIT_DIRS := ./pkg/... ./api/... ./internal/...
+UNIT_DIRS := ./pkg/... ./api/... ./internal/... ./hack/sync-components...
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -132,43 +132,56 @@ EXTENSIONS_DIRECTORIES ?= $(shell ls -d $(PROJECT_PATH)/cmd/extensions/*/)
 
 # Kuadrant component versions
 ## authorino
-#ToDo Pin this version once we have an initial release of authorino
 AUTHORINO_OPERATOR_VERSION ?= latest
-authorino_bundle_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
+authorino_operator_version_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
 
 ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
-AUTHORINO_OPERATOR_BUNDLE_VERSION = 0.0.0
-AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = latest
-AUTHORINO_OPERATOR_GITREF = main
-else ifeq (true,$(authorino_bundle_is_semantic))
-AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
-AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
-AUTHORINO_OPERATOR_GITREF = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:latest
+else ifeq (true,$(authorino_operator_version_is_semantic))
+RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:v$(AUTHORINO_OPERATOR_VERSION)
 else
-AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
-AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
-AUTHORINO_OPERATOR_GITREF = $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_AUTHORINO_OPERATOR ?= quay.io/kuadrant/authorino-operator:$(AUTHORINO_OPERATOR_VERSION)
 endif
 
-AUTHORINO_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/authorino-operator-bundle:$(AUTHORINO_OPERATOR_BUNDLE_IMG_TAG)
-## limitador
-#ToDo Pin this version once we have an initial release of limitador
-LIMITADOR_OPERATOR_VERSION ?= latest
-limitador_bundle_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
-ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
-LIMITADOR_OPERATOR_BUNDLE_VERSION = 0.0.0
-LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = latest
-LIMITADOR_OPERATOR_GITREF = main
-else ifeq (true,$(limitador_bundle_is_semantic))
-LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
-LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
-LIMITADOR_OPERATOR_GITREF = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+## authorino (operand image authorino-operator deploys -- see RelatedImageEnvVars
+## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
+## needs its own copy of this rather than relying on the chart's default)
+AUTHORINO_VERSION ?= latest
+authorino_version_is_semantic := $(call is_semantic_version,$(AUTHORINO_VERSION))
+
+ifeq (latest,$(AUTHORINO_VERSION))
+RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:latest
+else ifeq (true,$(authorino_version_is_semantic))
+RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:v$(AUTHORINO_VERSION)
 else
-LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
-LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
-LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+RELATED_IMAGE_AUTHORINO ?= quay.io/kuadrant/authorino:$(AUTHORINO_VERSION)
 endif
-LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
+
+## limitador
+LIMITADOR_OPERATOR_VERSION ?= latest
+limitador_operator_version_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
+
+ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
+RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:latest
+else ifeq (true,$(limitador_operator_version_is_semantic))
+RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:v$(LIMITADOR_OPERATOR_VERSION)
+else
+RELATED_IMAGE_LIMITADOR_OPERATOR ?= quay.io/kuadrant/limitador-operator:$(LIMITADOR_OPERATOR_VERSION)
+endif
+
+## limitador (operand image limitador-operator deploys -- see RelatedImageEnvVars
+## doc comment in internal/controlplane/deployer.go for why kuadrant-operator
+## needs its own copy of this rather than relying on the chart's default)
+LIMITADOR_VERSION ?= latest
+limitador_version_is_semantic := $(call is_semantic_version,$(LIMITADOR_VERSION))
+
+ifeq (latest,$(LIMITADOR_VERSION))
+RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:latest
+else ifeq (true,$(limitador_version_is_semantic))
+RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:v$(LIMITADOR_VERSION)
+else
+RELATED_IMAGE_LIMITADOR ?= quay.io/kuadrant/limitador:$(LIMITADOR_VERSION)
+endif
 
 ## dns
 DNS_OPERATOR_VERSION ?= latest
@@ -180,6 +193,21 @@ else ifeq (true,$(dns_operator_version_is_semantic))
 RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:v$(DNS_OPERATOR_VERSION)
 else
 RELATED_IMAGE_DNS_OPERATOR ?= quay.io/kuadrant/dns-operator:$(DNS_OPERATOR_VERSION)
+endif
+
+## mcp-gateway
+MCP_GATEWAY_VERSION ?= latest
+mcp_gateway_version_is_semantic := $(call is_semantic_version,$(MCP_GATEWAY_VERSION))
+
+ifeq (latest,$(MCP_GATEWAY_VERSION))
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:latest
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:latest
+else ifeq (true,$(mcp_gateway_version_is_semantic))
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:v$(MCP_GATEWAY_VERSION)
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:v$(MCP_GATEWAY_VERSION)
+else
+RELATED_IMAGE_MCP_GATEWAY ?= ghcr.io/kuadrant/mcp-controller:$(MCP_GATEWAY_VERSION)
+RELATED_IMAGE_MCP_GATEWAY_BROKER ?= ghcr.io/kuadrant/mcp-gateway:$(MCP_GATEWAY_VERSION)
 endif
 
 ## wasm-shim
@@ -198,13 +226,10 @@ developerportal_version_is_semantic := $(call is_semantic_version,$(DEVELOPERPOR
 
 ifeq (latest,$(DEVELOPERPORTAL_VERSION))
 RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:latest
-DEVELOPERPORTAL_GITREF = main
 else ifeq (true,$(developerportal_version_is_semantic))
 RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:v$(DEVELOPERPORTAL_VERSION)
-DEVELOPERPORTAL_GITREF = v$(DEVELOPERPORTAL_VERSION)
 else
 RELATED_IMAGE_DEVELOPERPORTAL ?= quay.io/kuadrant/developer-portal-controller:$(DEVELOPERPORTAL_VERSION)
-DEVELOPERPORTAL_GITREF = $(DEVELOPERPORTAL_VERSION)
 endif
 
 ## console-plugin
@@ -262,7 +287,7 @@ GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 RATCHET ?= $(LOCALBIN)/ratchet
 
 ## Tool Versions
-OPERATOR_SDK_VERSION ?= v1.33.0
+OPERATOR_SDK_VERSION ?= v1.42.3
 CONTROLLER_GEN_VERSION ?= v0.19.0
 KUSTOMIZE_VERSION ?= v4.5.5
 YQ_VERSION ?= v4.34.2
@@ -341,12 +366,6 @@ $(RATCHET_V_BINARY): $(LOCALBIN)
 	$(call go-install-tool,$(RATCHET),github.com/sethvargo/ratchet,$(RATCHET_VERSION))
 
 ##@ Development
-define patch-config
-	envsubst \
-		< $1 \
-		> $2
-endef
-
 define update-csv-config
 	V="$1" \
 	$(YQ) eval '$(3) = strenv(V)' -i $2
@@ -372,15 +391,6 @@ extensions-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRo
 		$(CONTROLLER_GEN) rbac:roleName="$$role_name" webhook paths="$$ext_dir/..." output:rbac:artifacts:config="$$ext_dir/config/rbac"; \
 	done
 
-
-.PHONY: dependencies-manifests
-dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
-dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export DEVELOPERPORTAL_GITREF := $(DEVELOPERPORTAL_GITREF)
-dependencies-manifests: ## Update kuadrant dependencies manifests.
-	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
-	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-config,config/dependencies/developer-portal/kustomization.template.yaml,config/dependencies/developer-portal/kustomization.yaml)
 
 COMPONENT_CHARTS_DIR = $(PROJECT_PATH)/component-charts
 
@@ -435,12 +445,30 @@ $(WASM_BIN): ## Fetch and extract the wasm-shim binary from the OCI image.
 	$(CONTAINER_ENGINE) pull $(RELATED_IMAGE_WASMSHIM)
 	$(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout $$($(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar tf - | grep -E '^[a-f0-9]+\.tar$$' | while IFS= read -r layer; do $(CONTAINER_ENGINE) save $(RELATED_IMAGE_WASMSHIM) | tar xf - --to-stdout "$$layer" | tar tf - 2>/dev/null | grep -q plugin.wasm && echo "$$layer"; done | head -1) | tar xf - -C $(WASM_BIN_DIR)
 
+# Shared env vars needed by any target that runs the controller against
+# component charts (local `run` and integration tests). One place to add a
+# new component's RELATED_IMAGE_* var instead of updating every target.
+define LOCAL_RUN_ENV
+$(1): export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
+$(1): export CHARTS_PATH := $(PROJECT_PATH)/component-charts
+$(1): export RELATED_IMAGE_AUTHORINO_OPERATOR := $(RELATED_IMAGE_AUTHORINO_OPERATOR)
+$(1): export RELATED_IMAGE_LIMITADOR_OPERATOR := $(RELATED_IMAGE_LIMITADOR_OPERATOR)
+$(1): export RELATED_IMAGE_AUTHORINO := $(RELATED_IMAGE_AUTHORINO)
+$(1): export RELATED_IMAGE_LIMITADOR := $(RELATED_IMAGE_LIMITADOR)
+$(1): export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
+$(1): export RELATED_IMAGE_MCP_GATEWAY := $(RELATED_IMAGE_MCP_GATEWAY)
+$(1): export RELATED_IMAGE_MCP_GATEWAY_BROKER := $(RELATED_IMAGE_MCP_GATEWAY_BROKER)
+$(1): export RELATED_IMAGE_WASMSHIM := $(RELATED_IMAGE_WASMSHIM)
+$(1): export RELATED_IMAGE_DEVELOPERPORTAL := $(RELATED_IMAGE_DEVELOPERPORTAL)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_LATEST := $(RELATED_IMAGE_CONSOLE_PLUGIN_LATEST)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 := $(RELATED_IMAGE_CONSOLE_PLUGIN_SDK1)
+$(1): export RELATED_IMAGE_CONSOLE_PLUGIN_PF5 := $(RELATED_IMAGE_CONSOLE_PLUGIN_PF5)
+endef
+$(foreach t,run test-bare-k8s-integration test-controlplane-integration test-gatewayapi-env-integration test-istio-env-integration test-envoygateway-env-integration test-integration,$(eval $(call LOCAL_RUN_ENV,$(t))))
+
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
-run: export CHARTS_PATH := $(PROJECT_PATH)/component-charts
-run: export RELATED_IMAGE_DNS_OPERATOR := $(RELATED_IMAGE_DNS_OPERATOR)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.
@@ -500,6 +528,24 @@ set-related-images: yq ## Set RELATED_IMAGE_* env vars in config/manager/manager
 	# Set desired dns-operator image
 	V="$(RELATED_IMAGE_DNS_OPERATOR)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_DNS_OPERATOR").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired mcp-gateway controller image
+	V="$(RELATED_IMAGE_MCP_GATEWAY)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired mcp-gateway broker image
+	V="$(RELATED_IMAGE_MCP_GATEWAY_BROKER)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_MCP_GATEWAY_BROKER").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired authorino-operator image
+	V="$(RELATED_IMAGE_AUTHORINO_OPERATOR)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_AUTHORINO_OPERATOR").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired limitador-operator image
+	V="$(RELATED_IMAGE_LIMITADOR_OPERATOR)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_LIMITADOR_OPERATOR").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired authorino (operand) image
+	V="$(RELATED_IMAGE_AUTHORINO)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_AUTHORINO").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired limitador (operand) image
+	V="$(RELATED_IMAGE_LIMITADOR)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_LIMITADOR").value) = strenv(V)' -i config/manager/manager.yaml
 	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
@@ -517,7 +563,7 @@ set-related-images: yq ## Set RELATED_IMAGE_* env vars in config/manager/manager
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLE_PLUGIN_PF5").value) = strenv(V)' -i config/manager/manager.yaml
 
 .PHONY: bundle
-bundle: opm manifests dependencies-manifests kustomize operator-sdk set-related-images ## Generate bundle manifests and metadata, then validate generated files.
+bundle: opm manifests kustomize operator-sdk set-related-images ## Generate bundle manifests and metadata, then validate generated files.
 	@echo "Cleaning bundle manifests..."
 	rm -rf bundle/manifests
 	$(OPERATOR_SDK) generate kustomize manifests -q
@@ -529,7 +575,7 @@ bundle: opm manifests dependencies-manifests kustomize operator-sdk set-related-
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle $(BUNDLE_GEN_FLAGS)
-	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG)
+	$(MAKE) bundle-post-generate
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
@@ -542,11 +588,6 @@ bundle-post-generate: yq
 	# Set Openshift version in bundle annotations
 	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
 	$(YQ) -i '(.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
-	# Update operator dependencies from version strings (not Quay images)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_VERSION)
-	PATH=$(PROJECT_PATH)/bin:$$PATH; \
-			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_VERSION)
 ifeq ($(USE_IMAGE_DIGESTS),true)
 	# Deduplicate relatedImages and remove name field (operator-sdk --use-image-digests creates duplicates)
 	$(YQ) -i '.spec.relatedImages |= unique_by(.image) | del(.spec.relatedImages[].name)' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml
@@ -632,6 +673,7 @@ INTEGRATION_TEST_ENV ?=
 # Integration test configurations using colon delimiters
 INTEGRATION_CONFIGS := \
 	bare-k8s:local-k8s-env-setup:test-bare-k8s-integration: \
+	controlplane:local-gatewayapi-env-setup:test-controlplane-integration: \
 	gatewayapi:local-gatewayapi-env-setup:test-gatewayapi-env-integration: \
 	istio:local-env-setup:test-istio-env-integration:GATEWAYAPI_PROVIDER=istio \
 	envoygateway:local-env-setup:test-envoygateway-env-integration:GATEWAYAPI_PROVIDER=envoygateway \

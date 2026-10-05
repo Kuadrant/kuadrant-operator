@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -22,6 +23,7 @@ import (
 	clienttesting "k8s.io/client-go/testing"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 )
 
 func successReflectionFetcher(_ context.Context, _, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error) {
@@ -144,7 +146,9 @@ func validRequest() *extpb.RegisterActionMethodRequest {
 func TestHandshake_MissingPolicyKind(t *testing.T) {
 	svc := newTestExtensionService()
 
-	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{})
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version: protocol.Version,
+	})
 	if err != nil {
 		t.Fatalf("expected no gRPC error, got: %v", err)
 	}
@@ -154,6 +158,101 @@ func TestHandshake_MissingPolicyKind(t *testing.T) {
 	if resp.Reason != "policy_kind is required" {
 		t.Fatalf("expected reason %q, got %q", "policy_kind is required", resp.Reason)
 	}
+	if resp.Rejection != extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST {
+		t.Fatalf("expected INVALID_REQUEST rejection, got %v", resp.Rejection)
+	}
+}
+
+func TestHandshake_IncompatibleVersion(t *testing.T) {
+	testCases := []struct {
+		name    string
+		version string
+	}{
+		{"empty", ""},
+		{"unparseable", "invalid"},
+		{"partial", "0.1"},
+		{"out of band", semver.MustParse(protocol.Version).IncMajor().String()},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newTestExtensionService()
+			cred := validCredential()
+			svc.sessionStore.SetCredential("test-ext", cred)
+
+			resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+				Version:    tc.version,
+				Token:      cred,
+				PolicyKind: "TestPolicy",
+			})
+			if err != nil {
+				t.Fatalf("expected no gRPC error, got: %v", err)
+			}
+			if resp.Accepted {
+				t.Fatalf("expected handshake to be rejected for version %q", tc.version)
+			}
+			if resp.Rejection != extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION {
+				t.Fatalf("expected INCOMPATIBLE_VERSION rejection, got %v", resp.Rejection)
+			}
+			if resp.Version != protocol.Version {
+				t.Fatalf("expected operator version %q in rejection, got %q", protocol.Version, resp.Version)
+			}
+			if resp.SessionToken != "" {
+				t.Fatal("expected no session token on a rejected handshake")
+			}
+		})
+	}
+}
+
+func TestHandshake_VersionCheckPrecedesPruning(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+	policyID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "keep-me"}
+	svc.registeredData.Set(policyID, "targetRef1", extpb.Domain_DOMAIN_AUTH, "binding1", DataProviderEntry{
+		Binding:    "binding1",
+		Expression: "test",
+	})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       "9.9.9",
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for an incompatible version")
+	}
+	if !svc.registeredData.Exists(policyID, "targetRef1", extpb.Domain_DOMAIN_AUTH, "binding1") {
+		t.Fatal("expected registered data to survive a version-rejected handshake")
+	}
+}
+
+func TestHandshake_CompatibleWithinBand(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	current := semver.MustParse(protocol.Version)
+	peer := current.IncPatch()
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    peer.String(),
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected patch-level skew %q to be accepted, got reason: %s", peer.String(), resp.Reason)
+	}
+	if resp.Version != protocol.Version {
+		t.Fatalf("expected operator version %q in response, got %q", protocol.Version, resp.Version)
+	}
 }
 
 func TestHandshake_Builtin_Success(t *testing.T) {
@@ -162,7 +261,7 @@ func TestHandshake_Builtin_Success(t *testing.T) {
 	svc.sessionStore.SetCredential("test-ext", cred)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
-		Version:    "1.0.0",
+		Version:    protocol.Version,
 		Token:      cred,
 		PolicyKind: "TestPolicy",
 	})
@@ -185,6 +284,7 @@ func TestHandshake_Standalone_Success(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -207,6 +307,7 @@ func TestHandshake_Standalone_Unauthorized(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -234,6 +335,7 @@ func TestHandshake_Standalone_AuthorizedByGroup(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -261,6 +363,7 @@ func TestHandshake_Standalone_RejectedWhenGroupMissing(t *testing.T) {
 	)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -276,6 +379,7 @@ func TestHandshake_UnauthenticatedToken_GenericReason(t *testing.T) {
 	svc := newTestExtensionService()
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("bogus-token"),
 		PolicyKind: "TestPolicy",
 	})
@@ -300,6 +404,7 @@ func TestHandshake_WarmupGate_RejectsStandaloneDuringWarmup(t *testing.T) {
 	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -325,6 +430,7 @@ func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T
 	svc.sessionStore.BeginWarmup([]string{"builtin"}, time.Minute)
 
 	builtinResp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      builtinCred,
 		PolicyKind: "BuiltinPolicy",
 	})
@@ -336,6 +442,7 @@ func TestHandshake_WarmupGate_AllowsStandaloneAfterBuiltinRegisters(t *testing.T
 	}
 
 	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
 		Token:      []byte("standalone-service-account-token"),
 		PolicyKind: "StandalonePolicy",
 	})
@@ -1201,10 +1308,10 @@ func TestPipelineCommit_BothPhases(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Predicate: "true", Var: "threatResponse"},
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
-			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: `{"x-checked": "true"}`, Predicate: "true"},
-			{ActionType: extpb.ActionType_ACTION_TYPE_FAIL, Phase: "response", LogMessage: "internal error"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Predicate: "true", Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{Method: "assess-threat", Var: "threatResponse"}}},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
+			{Phase: extpb.Phase_PHASE_RESPONSE, Predicate: "true", Action: &extpb.ActionEntry_AddHeaders{AddHeaders: &extpb.AddHeadersAction{HeadersToAdd: `{"x-checked": "true"}`}}},
+			{Phase: extpb.Phase_PHASE_RESPONSE, Action: &extpb.ActionEntry_Fail{Fail: &extpb.FailAction{LogMessage: "internal error"}}},
 		},
 	})
 	if err != nil {
@@ -1216,31 +1323,31 @@ func TestPipelineCommit_BothPhases(t *testing.T) {
 	if len(reqActions) != 2 {
 		t.Fatalf("Expected 2 request actions, got %d", len(reqActions))
 	}
-	if reqActions[0].ActionType != extpb.ActionType_ACTION_TYPE_GRPC_METHOD {
-		t.Errorf("Expected first request action GRPC_METHOD, got %s", reqActions[0].ActionType)
+	if reqActions[0].Entry.GetGrpc() == nil {
+		t.Error("Expected first request action to be GRPC")
 	}
-	if reqActions[0].Method != "assess-threat" {
-		t.Errorf("Expected method 'assess-threat', got %q", reqActions[0].Method)
+	if reqActions[0].Entry.GetGrpc().GetMethod() != "assess-threat" {
+		t.Errorf("Expected method 'assess-threat', got %q", reqActions[0].Entry.GetGrpc().GetMethod())
 	}
-	if reqActions[0].Var != "threatResponse" {
-		t.Errorf("Expected var 'threatResponse', got %q", reqActions[0].Var)
+	if reqActions[0].Entry.GetGrpc().GetVar() != "threatResponse" {
+		t.Errorf("Expected var 'threatResponse', got %q", reqActions[0].Entry.GetGrpc().GetVar())
 	}
-	if reqActions[1].ActionType != extpb.ActionType_ACTION_TYPE_DENY {
-		t.Errorf("Expected second request action DENY, got %s", reqActions[1].ActionType)
+	if reqActions[1].Entry.GetDeny() == nil {
+		t.Error("Expected second request action to be DENY")
 	}
-	if reqActions[1].WithStatus != 403 {
-		t.Errorf("Expected WithStatus 403, got %d", reqActions[1].WithStatus)
+	if reqActions[1].Entry.GetDeny().GetWithStatus() != 403 {
+		t.Errorf("Expected WithStatus 403, got %d", reqActions[1].Entry.GetDeny().GetWithStatus())
 	}
 
 	respActions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseResponse)
 	if len(respActions) != 2 {
 		t.Fatalf("Expected 2 response actions, got %d", len(respActions))
 	}
-	if respActions[0].HeadersToAdd != `{"x-checked": "true"}` {
-		t.Errorf("Expected headers_to_add, got %q", respActions[0].HeadersToAdd)
+	if respActions[0].Entry.GetAddHeaders().GetHeadersToAdd() != `{"x-checked": "true"}` {
+		t.Errorf("Expected headers_to_add, got %q", respActions[0].Entry.GetAddHeaders().GetHeadersToAdd())
 	}
-	if respActions[1].LogMessage != "internal error" {
-		t.Errorf("Expected log message 'internal error', got %q", respActions[1].LogMessage)
+	if respActions[1].Entry.GetFail().GetLogMessage() != "internal error" {
+		t.Errorf("Expected log message 'internal error', got %q", respActions[1].Entry.GetFail().GetLogMessage())
 	}
 }
 
@@ -1250,17 +1357,17 @@ func TestPipelineCommit_InvalidPhase_RejectsAll(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "invalid", WithStatus: 403},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
+			{Phase: extpb.Phase_PHASE_UNSPECIFIED, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err == nil {
-		t.Fatal("Expected error for invalid response action")
+		t.Fatal("Expected error for invalid phase")
 	}
 
 	policyID := ResourceID{Kind: "DemoPolicy", Namespace: "default", Name: "demo"}
 	if actions := svc.registeredData.GetPipelineActions(policyID, PipelinePhaseRequest); len(actions) != 0 {
-		t.Errorf("Expected no request actions stored after response validation failure, got %d", len(actions))
+		t.Errorf("Expected no request actions stored after validation failure, got %d", len(actions))
 	}
 }
 
@@ -1280,19 +1387,52 @@ func TestPipelineCommit_NilActionEntry(t *testing.T) {
 	}
 }
 
-func TestPipelineCommit_InvalidActionType(t *testing.T) {
+func TestPipelineCommit_MissingAction(t *testing.T) {
 	svc := newTestExtensionService()
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_UNSPECIFIED, Phase: "request"},
+			{Phase: extpb.Phase_PHASE_REQUEST},
 		},
 	})
 	if err == nil {
-		t.Fatal("Expected error for unspecified action type")
+		t.Fatal("Expected error for missing action")
 	}
-	if !strings.Contains(err.Error(), "action_type must be specified") {
-		t.Errorf("Expected action_type error, got: %v", err)
+	if !strings.Contains(err.Error(), "action must be specified") {
+		t.Errorf("Expected action error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_NilActionPayload(t *testing.T) {
+	svc := newTestExtensionService()
+	tests := []struct {
+		name  string
+		entry *extpb.ActionEntry
+	}{
+		{"grpc", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{}}},
+		{"deny", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{}}},
+		{"add_headers", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_AddHeaders{}}},
+		{"fail", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Fail{}}},
+		{"store", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{}}},
+		{"nil grpc wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Grpc)(nil)}},
+		{"nil deny wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Deny)(nil)}},
+		{"nil add_headers wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_AddHeaders)(nil)}},
+		{"nil fail wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Fail)(nil)}},
+		{"nil store wrapper", &extpb.ActionEntry{Phase: extpb.Phase_PHASE_REQUEST, Action: (*extpb.ActionEntry_Store)(nil)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+				Policy:  testPipelinePolicy(),
+				Actions: []*extpb.ActionEntry{tt.entry},
+			})
+			if err == nil {
+				t.Fatal("Expected error for nil action payload")
+			}
+			if !strings.Contains(err.Error(), "action must be specified") {
+				t.Errorf("Expected action error, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -1301,7 +1441,7 @@ func TestPipelineCommit_InvalidPredicate(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403, Predicate: "!!!invalid cel"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Predicate: "!!!invalid cel", Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err == nil {
@@ -1317,7 +1457,7 @@ func TestPipelineCommit_GRPCMethod_UnregisteredMethod(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "nonexistent"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{Method: "nonexistent"}}},
 		},
 	})
 	if err == nil {
@@ -1333,13 +1473,13 @@ func TestPipelineCommit_GRPCMethod_MissingMethod(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{}}},
 		},
 	})
 	if err == nil {
 		t.Fatal("Expected error for missing method")
 	}
-	if !strings.Contains(err.Error(), "method must be specified") {
+	if !strings.Contains(err.Error(), "method must be specified for grpc actions") {
 		t.Errorf("Expected method error, got: %v", err)
 	}
 }
@@ -1350,7 +1490,7 @@ func TestPipelineCommit_GRPCMethod_InvalidVarName(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Var: "invalid var!"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{Method: "assess-threat", Var: "invalid var!"}}},
 		},
 	})
 	if err == nil {
@@ -1375,11 +1515,52 @@ func TestPipelineCommit_Deny_InvalidStatusCode(t *testing.T) {
 			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 				Policy: testPipelinePolicy(),
 				Actions: []*extpb.ActionEntry{
-					{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: tt.withStatus},
+					{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: tt.withStatus}}},
 				},
 			})
 			if err == nil {
 				t.Fatalf("Expected error for WithStatus=%d", tt.withStatus)
+			}
+		})
+	}
+}
+
+func TestPipelineCommit_Deny_UnsetStatusCodeAccepted(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected unset with_status to be accepted, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Deny_InvalidCEL(t *testing.T) {
+	svc := newTestExtensionService()
+	tests := []struct {
+		name  string
+		deny  *extpb.DenyAction
+		field string
+	}{
+		{"with_headers", &extpb.DenyAction{WithStatus: 403, WithHeaders: "!!!invalid cel"}, "with_headers"},
+		{"with_body", &extpb.DenyAction{WithStatus: 403, WithBody: "!!!invalid cel"}, "with_body"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+				Policy: testPipelinePolicy(),
+				Actions: []*extpb.ActionEntry{
+					{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: tt.deny}},
+				},
+			})
+			if err == nil {
+				t.Fatalf("Expected error for invalid CEL in %s", tt.field)
+			}
+			if !strings.Contains(err.Error(), tt.field) {
+				t.Errorf("Expected %s error, got: %v", tt.field, err)
 			}
 		})
 	}
@@ -1390,7 +1571,7 @@ func TestPipelineCommit_AddHeaders_MissingHeadersToAdd(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response"},
+			{Phase: extpb.Phase_PHASE_RESPONSE, Action: &extpb.ActionEntry_AddHeaders{AddHeaders: &extpb.AddHeadersAction{}}},
 		},
 	})
 	if err == nil {
@@ -1406,7 +1587,7 @@ func TestPipelineCommit_AddHeaders_InvalidCEL(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_ADD_HEADERS, Phase: "response", HeadersToAdd: "!!!invalid cel"},
+			{Phase: extpb.Phase_PHASE_RESPONSE, Action: &extpb.ActionEntry_AddHeaders{AddHeaders: &extpb.AddHeadersAction{HeadersToAdd: "!!!invalid cel"}}},
 		},
 	})
 	if err == nil {
@@ -1414,6 +1595,67 @@ func TestPipelineCommit_AddHeaders_InvalidCEL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "headers_to_add") {
 		t.Errorf("Expected headers_to_add error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_MissingPath(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Value: "request.path"}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing path")
+	}
+	if !strings.Contains(err.Error(), "path must be specified") {
+		t.Errorf("Expected path error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_MissingValue(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Path: "my_key"}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for missing value")
+	}
+	if !strings.Contains(err.Error(), "value must be specified") {
+		t.Errorf("Expected value error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_InvalidCEL(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Path: "my_key", Value: "!!!invalid cel"}}},
+		},
+	})
+	if err == nil {
+		t.Fatal("Expected error for invalid CEL in value")
+	}
+	if !strings.Contains(err.Error(), "value") {
+		t.Errorf("Expected value error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_Store_ValidAction(t *testing.T) {
+	svc := newTestExtensionService()
+	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+		Policy: testPipelinePolicy(),
+		Actions: []*extpb.ActionEntry{
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Store{Store: &extpb.StoreAction{Path: "request_path", Value: "request.path", ExportToHost: true}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Expected valid store action to succeed, got: %v", err)
 	}
 }
 
@@ -1485,8 +1727,8 @@ func TestPipelineCommit_CrossAction_ValidVarFieldAccess(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Var: "threatResponse"},
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "response", WithStatus: 403, Predicate: "threatResponse.threat_level >= 5"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{Method: "assess-threat", Var: "threatResponse"}}},
+			{Phase: extpb.Phase_PHASE_RESPONSE, Predicate: "threatResponse.threat_level >= 5", Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err != nil {
@@ -1501,8 +1743,8 @@ func TestPipelineCommit_CrossAction_InvalidVarFieldAccess(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_GRPC_METHOD, Phase: "request", Method: "assess-threat", Var: "threatResponse"},
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "response", WithStatus: 403, Predicate: "threatResponse.nonexistent_field >= 5"},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{Method: "assess-threat", Var: "threatResponse"}}},
+			{Phase: extpb.Phase_PHASE_RESPONSE, Predicate: "threatResponse.nonexistent_field >= 5", Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err == nil {
@@ -1510,6 +1752,35 @@ func TestPipelineCommit_CrossAction_InvalidVarFieldAccess(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "nonexistent_field") {
 		t.Errorf("Expected field name in error, got: %v", err)
+	}
+}
+
+func TestPipelineCommit_CrossAction_InvalidVarFieldAccessInDenyFields(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		deny *extpb.DenyAction
+	}{
+		{"with_body", &extpb.DenyAction{WithStatus: 403, WithBody: "string(threatResponse.nonexistent_field)"}},
+		{"with_headers", &extpb.DenyAction{WithStatus: 403, WithHeaders: `[["x-level", string(threatResponse.nonexistent_field)]]`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newTestExtensionService()
+			registerTestActionMethodWithFDS(t, svc, "demo", "assess-threat")
+
+			_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
+				Policy: testPipelinePolicy(),
+				Actions: []*extpb.ActionEntry{
+					{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{Method: "assess-threat", Var: "threatResponse"}}},
+					{Phase: extpb.Phase_PHASE_RESPONSE, Action: &extpb.ActionEntry_Deny{Deny: tc.deny}},
+				},
+			})
+			if err == nil {
+				t.Fatal("Expected error for invalid field access on proto response")
+			}
+			if !strings.Contains(err.Error(), "nonexistent_field") {
+				t.Errorf("Expected field name in error, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -1521,7 +1792,7 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err != nil {
@@ -1532,7 +1803,7 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	_, err = svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 401},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 401}}},
 		},
 	})
 	if err != nil {
@@ -1544,8 +1815,8 @@ func TestPipelineCommit_AtomicReplacement(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("Expected 1 action after replacement, got %d", len(actions))
 	}
-	if actions[0].WithStatus != 401 {
-		t.Errorf("Expected replaced action with WithStatus 401, got %d", actions[0].WithStatus)
+	if actions[0].Entry.GetDeny().GetWithStatus() != 401 {
+		t.Errorf("Expected replaced action with WithStatus 401, got %d", actions[0].Entry.GetDeny().GetWithStatus())
 	}
 }
 
@@ -1561,7 +1832,7 @@ func TestPipelineCommit_ChangeNotifier(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err != nil {
@@ -1582,7 +1853,7 @@ func TestPipelineCommit_ChangeNotifierError(t *testing.T) {
 	_, err := svc.PipelineCommit(context.Background(), &extpb.PipelineCommitRequest{
 		Policy: testPipelinePolicy(),
 		Actions: []*extpb.ActionEntry{
-			{ActionType: extpb.ActionType_ACTION_TYPE_DENY, Phase: "request", WithStatus: 403},
+			{Phase: extpb.Phase_PHASE_REQUEST, Action: &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{WithStatus: 403}}},
 		},
 	})
 	if err == nil {
@@ -1623,5 +1894,326 @@ func TestWarmupTimeout(t *testing.T) {
 				t.Fatalf("expected %v, got %v", tc.expected, got)
 			}
 		})
+	}
+}
+
+func TestSessionTTL(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    string
+		expected time.Duration
+	}{
+		{"seconds", "30s", 30 * time.Second},
+		{"minutes", "2m", 2 * time.Minute},
+		{"unset uses default", "", defaultSessionTTL},
+		{"zero uses default", "0s", defaultSessionTTL},
+		{"negative uses default", "-5s", defaultSessionTTL},
+		{"unparsable uses default", "notaduration", defaultSessionTTL},
+		{"bare number uses default", "45", defaultSessionTTL},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.value == "" {
+				t.Setenv("EXTENSIONS_SESSION_TTL", "")
+				os.Unsetenv("EXTENSIONS_SESSION_TTL")
+			} else {
+				t.Setenv("EXTENSIONS_SESSION_TTL", tc.value)
+			}
+
+			if got := sessionTTL(logr.Discard()); got != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestReaperInterval(t *testing.T) {
+	testCases := []struct {
+		name     string
+		ttl      time.Duration
+		expected time.Duration
+	}{
+		{"default ttl", 45 * time.Second, 15 * time.Second},
+		{"short ttl floored", 2 * time.Second, minReaperInterval},
+		{"exactly at floor", 3 * time.Second, 1 * time.Second},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reaperInterval(tc.ttl); got != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestManager_Reaper_RevokesStaleSessions(t *testing.T) {
+	t.Setenv("EXTENSIONS_SESSION_TTL", "1s")
+
+	store := newTestSessionStore()
+	clock := &fakeClock{t: time.Unix(0, 0)}
+	store.now = clock.now
+
+	token, err := store.CreateSession("stale-extension", "StalePolicy")
+	if err != nil {
+		t.Fatalf("expected session creation to succeed, got: %v", err)
+	}
+	clock.advance(2 * time.Second)
+
+	m := &Manager{sessionStore: store, logger: logr.Discard()}
+	m.startReaper()
+	defer m.stopReaper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, ok := store.ValidateSession(token); !ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("expected reaper to revoke the stale session")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestHandshake_OwnedPolicies_KindMismatch(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Kind: "WrongKind", Namespace: "default", Name: "policy1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for kind mismatch")
+	}
+	if resp.Reason != "invalid owned_policies" {
+		t.Fatalf("expected reason %q, got %q", "invalid owned_policies", resp.Reason)
+	}
+	if len(svc.sessionStore.sessions) != 0 {
+		t.Fatalf("expected no session to be created, got %d", len(svc.sessionStore.sessions))
+	}
+}
+
+func TestHandshake_OwnedPolicies_EmptyName(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Namespace: "default", Name: ""},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for empty name")
+	}
+	if resp.Reason != "invalid owned_policies" {
+		t.Fatalf("expected reason %q, got %q", "invalid owned_policies", resp.Reason)
+	}
+}
+
+func TestHandshake_OwnedPolicies_NilEntry(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Namespace: "default", Name: "policy1"},
+			nil,
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if resp.Accepted {
+		t.Fatal("expected handshake to be rejected for nil entry")
+	}
+	if resp.Reason != "invalid owned_policies" {
+		t.Fatalf("expected reason %q, got %q", "invalid owned_policies", resp.Reason)
+	}
+}
+
+func TestHandshake_OwnedPolicies_EmptyKind(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Kind: "", Namespace: "default", Name: "policy1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted with empty kind, got reason: %s", resp.Reason)
+	}
+	if resp.SessionToken == "" {
+		t.Fatal("expected non-empty session token")
+	}
+}
+
+func TestHandshake_OwnedPolicies_PrunesAll(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	policyID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "stale-policy"}
+	svc.registeredData.SetSubscription(policyID, "test.expression", Subscription{PolicyKind: "TestPolicy"})
+	svc.registeredData.SetPipelineTargetRefs(policyID, []TargetRef{
+		{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route1", Namespace: "default"},
+	})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       protocol.Version,
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	subs := svc.registeredData.GetSubscriptionsForPolicyKind("TestPolicy")
+	if len(subs) != 0 {
+		t.Fatalf("expected all subscriptions to be pruned, got %d", len(subs))
+	}
+	if refs := svc.registeredData.GetPipelineTargetRefs(policyID); len(refs) != 0 {
+		t.Fatalf("expected pipeline target refs to be pruned, got %d", len(refs))
+	}
+}
+
+func TestHandshake_OwnedPolicies_PrunesSubset(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	ownedID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "owned-policy"}
+	staleID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "stale-policy"}
+
+	svc.registeredData.SetSubscription(ownedID, "owned.expression", Subscription{PolicyKind: "TestPolicy"})
+	svc.registeredData.SetSubscription(staleID, "stale.expression", Subscription{PolicyKind: "TestPolicy"})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:    protocol.Version,
+		Token:      cred,
+		PolicyKind: "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{
+			{Namespace: "default", Name: "owned-policy"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	allSubs := svc.registeredData.GetAllSubscriptions()
+	foundOwned := false
+	foundStale := false
+	for key := range allSubs {
+		if key.Policy == ownedID {
+			foundOwned = true
+		}
+		if key.Policy == staleID {
+			foundStale = true
+		}
+	}
+
+	if !foundOwned {
+		t.Fatal("expected owned policy subscription to remain")
+	}
+	if foundStale {
+		t.Fatal("expected stale policy subscription to be pruned")
+	}
+}
+
+func TestHandshake_OwnedPolicies_DifferentKindUntouched(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	otherKindID := ResourceID{Kind: "OtherPolicy", Namespace: "default", Name: "other-policy"}
+	svc.registeredData.SetSubscription(otherKindID, "other.expression", Subscription{PolicyKind: "OtherPolicy"})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       protocol.Version,
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	otherSubs := svc.registeredData.GetSubscriptionsForPolicyKind("OtherPolicy")
+	if len(otherSubs) == 0 {
+		t.Fatal("expected OtherPolicy subscriptions to remain untouched")
+	}
+}
+
+func TestHandshake_OwnedPolicies_ChangeNotifierFires(t *testing.T) {
+	svc := newTestExtensionService()
+	cred := validCredential()
+	svc.sessionStore.SetCredential("test-ext", cred)
+
+	notified := false
+	svc.changeNotifier = func(reason string) error {
+		notified = true
+		return nil
+	}
+
+	policyID := ResourceID{Kind: "TestPolicy", Namespace: "default", Name: "stale-policy"}
+	svc.registeredData.Set(policyID, "targetRef1", extpb.Domain_DOMAIN_AUTH, "binding1", DataProviderEntry{
+		Binding:    "binding1",
+		Expression: "test",
+	})
+
+	resp, err := svc.Handshake(context.Background(), &extpb.HandshakeRequest{
+		Version:       protocol.Version,
+		Token:         cred,
+		PolicyKind:    "TestPolicy",
+		OwnedPolicies: []*extpb.Metadata{},
+	})
+	if err != nil {
+		t.Fatalf("expected no gRPC error, got: %v", err)
+	}
+	if !resp.Accepted {
+		t.Fatalf("expected handshake to be accepted, got reason: %s", resp.Reason)
+	}
+
+	if !notified {
+		t.Fatal("expected change notifier to fire when mutators are pruned")
 	}
 }

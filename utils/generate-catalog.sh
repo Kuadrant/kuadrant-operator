@@ -7,10 +7,8 @@ set -euo pipefail
 OPM="${1?:Error \$OPM not set. Bye}"
 YQ="${2?:Error \$YQ not set. Bye}"
 BUNDLE_IMG="${3?:Error \$BUNDLE_IMG not set. Bye}"
-LIMITADOR_OPERATOR_BUNDLE_IMG="${4?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
-AUTHORINO_OPERATOR_BUNDLE_IMG="${5?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
-CHANNEL="${6?:Error \$CHANNEL not set. Bye}"
-CATALOG_FILE="${7?:Error \$CATALOG_FILE not set. Bye}"
+CHANNEL="${4?:Error \$CHANNEL not set. Bye}"
+CATALOG_FILE="${5?:Error \$CATALOG_FILE not set. Bye}"
 
 CATALOG_FILE_BASEDIR="$(realpath "$(dirname "${CATALOG_FILE}")")"
 CATALOG_BASEDIR="$(realpath "$(dirname "${CATALOG_FILE_BASEDIR}")")"
@@ -18,54 +16,9 @@ CATALOG_BASEDIR="$(realpath "$(dirname "${CATALOG_FILE_BASEDIR}")")"
 TMP_DIR=$(mktemp -d)
 
 ${OPM} render ${BUNDLE_IMG} --output=yaml >> ${TMP_DIR}/kuadrant-operator-bundle.yaml
-${OPM} render ${LIMITADOR_OPERATOR_BUNDLE_IMG} --output=yaml >> ${TMP_DIR}/limitador-operator-bundle.yaml
-${OPM} render ${AUTHORINO_OPERATOR_BUNDLE_IMG} --output=yaml >> ${TMP_DIR}/authorino-operator-bundle.yaml
-
-# Verify kuadrant operator bundle's limitador/authorino references are the same
-# as provided by LIMITADOR_OPERATOR_BUNDLE_IMG and AUTHORINO_OPERATOR_BUNDLE_IMG
-LIMITADOR_VERSION=`${YQ} eval '.properties[] | select(.type == "olm.package") | .value.version' ${TMP_DIR}/limitador-operator-bundle.yaml`
-AUTHORINO_VERSION=`${YQ} eval '.properties[] | select(.type == "olm.package") | .value.version' ${TMP_DIR}/authorino-operator-bundle.yaml`
-LIMITADOR_REFERENCED_VERSION=`${YQ} eval '.properties[] | select(.type == "olm.package.required") | select(.value.packageName == "limitador-operator").value.versionRange' ${TMP_DIR}/kuadrant-operator-bundle.yaml`
-AUTHORINO_REFERENCED_VERSION=`${YQ} eval '.properties[] | select(.type == "olm.package.required") | select(.value.packageName == "authorino-operator").value.versionRange' ${TMP_DIR}/kuadrant-operator-bundle.yaml`
-
-if [[ "${LIMITADOR_VERSION}" != "${LIMITADOR_REFERENCED_VERSION}" ]]
-then
-    echo -e "\033[31m[ERROR] Referenced Limitador version is ${LIMITADOR_REFERENCED_VERSION}, but found ${LIMITADOR_VERSION} in the bundle \033[0m" >/dev/stderr
-    exit 1
-fi
-
-if [[ "${AUTHORINO_VERSION}" != "${AUTHORINO_REFERENCED_VERSION}" ]]
-then
-    echo -e "\033[31mReferenced Authorino version is ${AUTHORINO_REFERENCED_VERSION}, but found ${AUTHORINO_VERSION} in the bundle \033[0m" >/dev/stderr
-    exit 1
-fi
 
 mkdir -p ${CATALOG_FILE_BASEDIR}
 touch ${CATALOG_FILE}
-
-###
-# Limitador Operator
-###
-# Add the package
-${OPM} init limitador-operator --default-channel=${CHANNEL} --output yaml >> ${CATALOG_FILE}
-# Add a bundles to the Catalog
-cat ${TMP_DIR}/limitador-operator-bundle.yaml >> ${CATALOG_FILE}
-# Add a channel entry for the bundle
-V=`${YQ} eval '.name' ${TMP_DIR}/limitador-operator-bundle.yaml` \
-CHANNEL=${CHANNEL} \
-    ${YQ} eval '(.entries[0].name = strenv(V)) | (.name = strenv(CHANNEL))' ${CATALOG_BASEDIR}/limitador-operator-channel-entry.yaml >> ${CATALOG_FILE}
-
-###
-# Authorino Operator
-###
-# Add the package
-${OPM} init authorino-operator --default-channel=${CHANNEL} --output yaml >> ${CATALOG_FILE}
-# Add a bundles to the Catalog
-cat ${TMP_DIR}/authorino-operator-bundle.yaml >> ${CATALOG_FILE}
-# Add a channel entry for the bundle
-V=`${YQ} eval '.name' ${TMP_DIR}/authorino-operator-bundle.yaml` \
-CHANNEL=${CHANNEL} \
-    ${YQ} eval '(.entries[0].name = strenv(V)) | (.name = strenv(CHANNEL))' ${CATALOG_BASEDIR}/authorino-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 ###
 # Kuadrant Operator

@@ -46,8 +46,18 @@ rules:
 - apiGroups:
   - apiextensions.k8s.io
   resourceNames:
+  - apikeyapprovals.devportal.kuadrant.io
+  - apikeyrequests.devportal.kuadrant.io
+  - apikeys.devportal.kuadrant.io
+  - apiproducts.devportal.kuadrant.io
+  - authconfigs.authorino.kuadrant.io
+  - authorinos.operator.authorino.kuadrant.io
   - dnshealthcheckprobes.kuadrant.io
   - dnsrecords.kuadrant.io
+  - limitadors.limitador.kuadrant.io
+  - mcpgatewayextensions.mcp.kuadrant.io
+  - mcpserverregistrations.mcp.kuadrant.io
+  - mcpvirtualservers.mcp.kuadrant.io
   resources:
   - customresourcedefinitions
   verbs:
@@ -352,6 +362,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - operator.authorino.kuadrant.io
   resources:
   - authorinos
@@ -366,8 +388,12 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - authorino-operator-manager
+  - developer-portal-controller-manager-rolebinding
   - dns-operator-manager-rolebinding
   - dns-operator-remote-cluster-rolebinding
+  - limitador-operator-manager-rolebinding
+  - mcp-gateway-controller
   resources:
   - clusterrolebindings
   verbs:
@@ -385,12 +411,23 @@ rules:
 - apiGroups:
   - rbac.authorization.k8s.io
   resourceNames:
+  - authorino-authconfig-editor-role
+  - authorino-authconfig-viewer-role
+  - authorino-manager-k8s-auth-role
+  - authorino-manager-role
+  - authorino-operator
+  - authorino-operator-manager
+  - developer-portal-controller-manager-role
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role
+  - limitador-operator-controller-manager
+  - limitador-operator-manager-role
+  - mcp-gateway-controller
   resources:
   - clusterroles
   verbs:
   - bind
+  - delete
   - escalate
   - get
   - patch

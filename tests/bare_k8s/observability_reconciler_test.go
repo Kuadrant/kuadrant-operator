@@ -16,18 +16,19 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-var _ = Describe("Observabiltity monitors for kuadrant components", func() {
+var _ = Describe("Observabiltity monitors for kuadrant components", Labels{"bare_k8s"}, func() {
 	var (
-		testNamespace    string
-		testTimeOut      = NodeTimeout(30 * time.Second)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testNamespace     string
+		testTimeOut       = NodeTimeout(30 * time.Second)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
 	const kuadrantNamespace = "kuadrant-system"
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-	}, testTimeOut)
+	}, beforeEachTimeOut)
 
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)

@@ -43,6 +43,7 @@ import (
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -100,6 +101,7 @@ func init() {
 	utilruntime.Must(consolev1.AddToScheme(scheme))
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 	utilruntime.Must(istiosecurity.AddToScheme(scheme))
+	utilruntime.Must(networkingv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	sync = zapcore.Lock(zapcore.AddSync(os.Stdout))
@@ -267,9 +269,11 @@ func main() {
 	restConfig := ctrl.GetConfigOrDie()
 	ctx := ctrl.SetupSignalHandler()
 
+	cpLogger := setupLog.WithName("controlplane")
+
 	// Pre-manager: bootstrap child operator CRDs so PolicyMachineryController
 	// finds them when it checks for CRD availability at boot.
-	componentDeployer, err := controlplane.NewDeployer(restConfig, operatorNamespace, setupLog)
+	componentDeployer, err := controlplane.NewDeployer(restConfig, operatorNamespace, cpLogger)
 	if err != nil {
 		setupLog.Error(err, "unable to create component deployer")
 		os.Exit(1)
@@ -298,7 +302,7 @@ func main() {
 
 	// Register KuadrantControlPlane controller (standard controller-runtime).
 	// Manages child operator deployment and drift reconciliation.
-	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), componentDeployer, mgr.GetEventRecorder("kuadrant-control-plane"), setupLog)
+	cpReconciler := controlplane.NewReconciler(mgr.GetClient(), componentDeployer, mgr.GetEventRecorder("kuadrant-control-plane"), cpLogger)
 	if err := cpReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to setup KuadrantControlPlane controller")
 		os.Exit(1)
@@ -309,7 +313,7 @@ func main() {
 	if err := mgr.Add(controlplane.NewBootstrapRunnable(
 		restConfig, scheme,
 		mgr.GetEventRecorder("kuadrant-control-plane"),
-		operatorNamespace, setupLog,
+		operatorNamespace, cpLogger,
 	)); err != nil {
 		setupLog.Error(err, "unable to register bootstrap runnable")
 		os.Exit(1)

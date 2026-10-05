@@ -25,9 +25,6 @@ import (
 	"testing"
 	"time"
 
-	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
-	"github.com/kuadrant/kuadrant-operator/internal/log"
-	"github.com/kuadrant/kuadrant-operator/tests"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/rest"
@@ -35,6 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
+	"github.com/kuadrant/kuadrant-operator/internal/log"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -75,15 +76,18 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(cfg).NotTo(BeNil())
 
 	s := controllers.BootstrapScheme()
-	controllers.SetupKuadrantOperatorForTest(s, cfg)
+	controllers.SetupKuadrantOperatorForTest(s, cfg, true)
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-	ctx := context.Background()
-	ns := tests.CreateNamespace(ctx, testClient())
-	tests.ApplyKuadrantCR(ctx, testClient(), ns)
+	var ns string
+	if os.Getenv("MCP_AUTH_E2E") != "true" {
+		ctx := context.Background()
+		ns = tests.CreateNamespace(ctx, testClient())
+		tests.ApplyKuadrantCR(ctx, testClient(), ns)
+	}
 
 	data := controllers.MarshalConfig(cfg, controllers.WithKuadrantInstallNS(ns))
 
@@ -121,7 +125,9 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 var _ = SynchronizedAfterSuite(func() {}, func() {
 	By("tearing down the test environment")
-	tests.DeleteNamespace(context.Background(), k8sClient, kuadrantInstallationNS)
+	if kuadrantInstallationNS != "" {
+		tests.DeleteNamespace(context.Background(), k8sClient, kuadrantInstallationNS)
+	}
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })

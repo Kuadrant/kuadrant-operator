@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -43,6 +44,14 @@ type Component struct {
 	// the specified chart value key. Keys support dotted paths for nested
 	// values (e.g., "controller.image" sets values["controller"]["image"]).
 	ChartValueOverrides []ChartValueOverride
+	// RelatedImageEnvVars lists env var names (e.g. "RELATED_IMAGE_AUTHORINO")
+	// read from kuadrant-operator's own environment and used to override
+	// same-named env vars in containers[0] of DeploymentName post-render.
+	// Stopgap for charts where a related image is a hardcoded literal in an
+	// env var rather than a Helm value -- once a chart adds value-based
+	// configurability for it, prefer ChartValueOverrides instead (see
+	// mcp-gateway's broker image for that pattern).
+	RelatedImageEnvVars []string
 }
 
 type Deployer struct {
@@ -85,6 +94,50 @@ func allComponents() []Component {
 			ImageEnvVar:    "RELATED_IMAGE_DNS_OPERATOR",
 			DeploymentName: "dns-operator-controller-manager",
 			CRDNames:       []string{"dnsrecords.kuadrant.io", "dnshealthcheckprobes.kuadrant.io"},
+		},
+		{
+			Name:           "mcp-gateway",
+			ChartPath:      chartsBasePath + "/mcp-gateway",
+			DeploymentName: "mcp-gateway-controller",
+			CRDNames:       []string{"mcpgatewayextensions.mcp.kuadrant.io", "mcpserverregistrations.mcp.kuadrant.io", "mcpvirtualservers.mcp.kuadrant.io"},
+			ChartValues: map[string]any{
+				"mcpGatewayExtension": map[string]any{"create": false},
+				"gateway":             map[string]any{"create": false},
+			},
+			ChartValueOverrides: []ChartValueOverride{
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_MCP_GATEWAY", ValueKey: "imageController", Description: "controller"}},
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_MCP_GATEWAY_BROKER", ValueKey: "image", Description: "broker"}},
+			},
+		},
+		{
+			Name:                "authorino-operator",
+			ChartPath:           chartsBasePath + "/authorino-operator",
+			ImageEnvVar:         "RELATED_IMAGE_AUTHORINO_OPERATOR",
+			DeploymentName:      "authorino-operator",
+			CRDNames:            []string{"authconfigs.authorino.kuadrant.io", "authorinos.operator.authorino.kuadrant.io"},
+			RelatedImageEnvVars: []string{"RELATED_IMAGE_AUTHORINO"},
+		},
+		{
+			Name:                "limitador-operator",
+			ChartPath:           chartsBasePath + "/limitador-operator",
+			ImageEnvVar:         "RELATED_IMAGE_LIMITADOR_OPERATOR",
+			DeploymentName:      "limitador-operator-controller-manager",
+			CRDNames:            []string{"limitadors.limitador.kuadrant.io"},
+			RelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
+		},
+		{
+			Name:           "developer-portal-controller",
+			ChartPath:      chartsBasePath + "/developer-portal-controller",
+			DeploymentName: "developer-portal-controller",
+			CRDNames: []string{
+				"apiproducts.devportal.kuadrant.io",
+				"apikeys.devportal.kuadrant.io",
+				"apikeyrequests.devportal.kuadrant.io",
+				"apikeyapprovals.devportal.kuadrant.io",
+			},
+			ChartValueOverrides: []ChartValueOverride{
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_DEVELOPERPORTAL", ValueKey: "image", Description: "controller"}},
+			},
 		},
 	}
 }
@@ -157,8 +210,8 @@ func (d *Deployer) ApplyCRDsForComponents(ctx context.Context, components []Comp
 			continue
 		}
 
-		d.logger.Info("applying CRDs", "component", component.Name, "count", len(rendered.CRDs))
-		if err := applier.ApplyResources(ctx, rendered.CRDs); err != nil {
+		d.logger.V(1).Info("applying CRDs", "component", component.Name, "count", len(rendered.CRDs))
+		if err := applier.ApplyResources(ctx, rendered.CRDs, nil); err != nil {
 			return fmt.Errorf("applying CRDs for %s: %w", component.Name, err)
 		}
 		if err := applier.WaitForCRDs(ctx, CRDNames(rendered.CRDs)); err != nil {
@@ -168,7 +221,11 @@ func (d *Deployer) ApplyCRDsForComponents(ctx context.Context, components []Comp
 	return nil
 }
 
-func (d *Deployer) DeployComponent(ctx context.Context, component Component) error {
+// DeployComponent renders and applies a single component's chart. ownerRef,
+// if non-nil, is set on every applied resource except CRDs (see
+// ApplyResources), so deleting the KuadrantControlPlane CR cascade-deletes
+// everything the deployer created for this component.
+func (d *Deployer) DeployComponent(ctx context.Context, component Component, ownerRef *metav1.OwnerReference) error {
 	applier := d.applier
 
 	rendered, err := d.renderComponent(component)
@@ -179,7 +236,7 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component) err
 	d.chartVersions[component.Name] = rendered.ChartVersion
 
 	if len(rendered.CRDs) > 0 {
-		if err := applier.ApplyResources(ctx, rendered.CRDs); err != nil {
+		if err := applier.ApplyResources(ctx, rendered.CRDs, nil); err != nil {
 			return fmt.Errorf("applying CRDs for %s: %w", component.Name, err)
 		}
 		if err := applier.WaitForCRDs(ctx, CRDNames(rendered.CRDs)); err != nil {
@@ -197,13 +254,25 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component) err
 		}
 	}
 
+	// Post-render env var patching for charts that bake a related image into
+	// an env var as a hardcoded literal (see RelatedImageEnvVars doc comment).
+	if len(component.RelatedImageEnvVars) > 0 {
+		envVars := make(map[string]string, len(component.RelatedImageEnvVars))
+		for _, name := range component.RelatedImageEnvVars {
+			envVars[name] = os.Getenv(name)
+		}
+		if err := PatchContainerEnvVars(rendered.Resources, component.DeploymentName, envVars); err != nil {
+			return fmt.Errorf("patching related image env vars for %s: %w", component.Name, err)
+		}
+	}
+
 	d.deployedImages[component.Name] = extractDeploymentImages(rendered.Resources)
 
-	if err := applier.ApplyResources(ctx, rendered.Resources); err != nil {
+	if err := applier.ApplyResources(ctx, rendered.Resources, ownerRef); err != nil {
 		return fmt.Errorf("applying resources for %s: %w", component.Name, err)
 	}
 
-	d.logger.Info("component deployed", "component", component.Name,
+	d.logger.V(1).Info("component deployed", "component", component.Name,
 		"crds", len(rendered.CRDs), "resources", len(rendered.Resources))
 	return nil
 }

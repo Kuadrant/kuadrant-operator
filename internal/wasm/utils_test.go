@@ -133,6 +133,26 @@ func init() {
 	testBasicConfigYAML = string(yamlBytes)
 }
 
+func TestNewServiceBuilderDefaults(t *testing.T) {
+	logger := logr.Discard()
+	services := NewServiceBuilder(&logger).Build()
+
+	expectedNames := []string{
+		AuthServiceName,
+		RateLimitServiceName,
+		RateLimitCheckServiceName,
+		RateLimitReportServiceName,
+		RateLimitReserveServiceName,
+		RateLimitCommitServiceName,
+	}
+
+	assert.Equal(t, len(expectedNames), len(services))
+	for _, name := range expectedNames {
+		_, ok := services[name]
+		assert.Assert(t, ok, "expected default service %s", name)
+	}
+}
+
 func TestConfigFromJSON(t *testing.T) {
 	testCases := []struct {
 		name           string

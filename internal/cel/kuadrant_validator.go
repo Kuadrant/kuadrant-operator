@@ -80,27 +80,32 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 	builder.AddBinding("destination", cel.AnyType)
 	builder.AddBinding("connection", cel.AnyType)
 
-	requestBodyJSON := cel.Overload("request_body_json_string",
-		[]*cel.Type{cel.StringType},
-		cel.AnyType,
-		cel.UnaryBinding(func(_ ref.Val) ref.Val {
-			// just for parsing and checking purposes, not evaluation
-			return nil
-		},
-		),
-	)
+	noopUnary := func(_ ref.Val) ref.Val {
+		// just for parsing and checking purposes, not evaluation
+		return nil
+	}
+	noopBinary := func(_, _ ref.Val) ref.Val {
+		// just for parsing and checking purposes, not evaluation
+		return nil
+	}
 
-	builder.AddFunction("requestBodyJSON", requestBodyJSON)
+	requestBodyJSONString := cel.Overload("request_body_json_string",
+		[]*cel.Type{cel.StringType}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	requestBodyJSONList := cel.Overload("request_body_json_list",
+		[]*cel.Type{cel.ListType(cel.StringType)}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	requestBodyJSONListWithHint := cel.Overload("request_body_json_list_with_type_hint",
+		[]*cel.Type{cel.ListType(cel.StringType), cel.StringType}, cel.AnyType, cel.BinaryBinding(noopBinary))
 
-	responseBodyJSON := cel.Overload("response_body_json_string",
-		[]*cel.Type{cel.StringType},
-		cel.AnyType,
-		cel.UnaryBinding(func(_ ref.Val) ref.Val {
-			// just for parsing and checking purposes, not evaluation
-			return nil
-		},
-	)
-	builder.AddFunction("responseBodyJSON", responseBodyJSON)
+	builder.AddFunction("requestBodyJSON", requestBodyJSONString, requestBodyJSONList, requestBodyJSONListWithHint)
+
+	responseBodyJSONString := cel.Overload("response_body_json_string",
+		[]*cel.Type{cel.StringType}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	responseBodyJSONList := cel.Overload("response_body_json_list",
+		[]*cel.Type{cel.ListType(cel.StringType)}, cel.AnyType, cel.UnaryBinding(noopUnary))
+	responseBodyJSONListWithHint := cel.Overload("response_body_json_list_with_type_hint",
+		[]*cel.Type{cel.ListType(cel.StringType), cel.StringType}, cel.AnyType, cel.BinaryBinding(noopBinary))
+
+	builder.AddFunction("responseBodyJSON", responseBodyJSONString, responseBodyJSONList, responseBodyJSONListWithHint)
 
 	return builder
 }
@@ -119,8 +124,23 @@ func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 			}
 		}
 	}
+	if amount := spec.ReservationAmountCEL(); amount != "" {
+		if _, err := validator.Validate(pol, amount); err != nil {
+			return err
+		}
+	}
+	if ttl := spec.ReservationTTLCEL(); ttl != "" {
+		ast, err := validator.Validate(pol, ttl)
+		if err != nil {
+			return err
+		}
+		if ast.OutputType() != cel.DurationType {
+			return fmt.Errorf("reservation ttl expression must evaluate to duration, got %s", ast.OutputType())
+		}
+	}
 	return nil
 }
+
 
 func validatePredicate(spec wasm.ActionSpec, policyKind, predicate string, validator *Validator) error {
 	ast, err := validator.Validate(policyKind, predicate)
@@ -128,10 +148,9 @@ func validatePredicate(spec wasm.ActionSpec, policyKind, predicate string, valid
 		return err
 	}
 
-	// Token rate limit predicates are shared by both the pre-request check and
-	// post-response report. A response-only function in the guard therefore
-	// cannot be evaluated when the limit decision is made and may silently
-	// bypass enforcement at runtime.
+	// Token rate-limit guard predicates run before an upstream response exists.
+	// Reject response-only body access here instead of accepting an expression
+	// that cannot participate in the enforcement decision at runtime.
 	if policyKind == TokenRateLimitPolicyKind && spec.IsGuard() {
 		usesResponseBody, err := astCallsFunction(ast, "responseBodyJSON")
 		if err != nil {
@@ -203,9 +222,9 @@ func policyKindFromWasmServiceName(serviceName string) string {
 		return AuthPolicyKind
 	case wasm.RateLimitServiceName:
 		return RateLimitPolicyKind
-	case wasm.RateLimitCheckServiceName:
+	case wasm.RateLimitCheckServiceName, wasm.RateLimitReserveServiceName:
 		return TokenRateLimitPolicyKind
-	case wasm.RateLimitReportServiceName:
+	case wasm.RateLimitReportServiceName, wasm.RateLimitCommitServiceName:
 		return TokenRateLimitPolicyKind
 	default:
 		return RateLimitPolicyKind

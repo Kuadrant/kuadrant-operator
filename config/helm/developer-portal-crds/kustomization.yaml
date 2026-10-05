@@ -1,0 +1,16 @@
+# helm chart only. releases before developer-portal-controller became a
+# KuadrantControlPlane component shipped these CRDs in the chart, so dropping
+# them makes `helm upgrade` delete them and every APIProduct/APIKey with them.
+# sourced from the vendored component chart so the copy cannot drift; the keep
+# annotation lets a later release drop them from the chart without that loss.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../../component-charts/developer-portal-controller/crds/devportal.kuadrant.io_apiproducts.yaml
+- ../../../component-charts/developer-portal-controller/crds/devportal.kuadrant.io_apikeys.yaml
+- ../../../component-charts/developer-portal-controller/crds/devportal.kuadrant.io_apikeyrequests.yaml
+- ../../../component-charts/developer-portal-controller/crds/devportal.kuadrant.io_apikeyapprovals.yaml
+
+commonAnnotations:
+  helm.sh/resource-policy: keep

@@ -23,10 +23,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
+var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, Labels{"istio", "authpolicy"}, func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		testTimeOut       = NodeTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
+		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
@@ -47,7 +48,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 		})).WithContext(ctx).Should(Succeed())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, beforeEachTimeOut)
 	AfterEach(func(ctx SpecContext) {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
@@ -64,7 +65,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: false}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("EnvoyFilter only created if KAP is in the path to a route", func(ctx SpecContext) {
 			// create authpolicy
@@ -128,6 +129,9 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			var patchValue map[string]any
 			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
 			Expect(patchValue).To(HaveKey("name"))
+			// outlier_detection is applied to the auth cluster to eject stale pod IPs
+			// between DNS refresh cycles after the authorization service went headless.
+			Expect(patchValue).To(HaveKey("outlier_detection"))
 			// transport_socket config only added when mTLS is configured
 			Expect(patchValue).NotTo(HaveKey("transport_socket"))
 
@@ -155,7 +159,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 				kuadrantObj.Spec.MTLS = &kuadrantv1beta1.MTLS{Enable: true}
 				g.Expect(testClient().Update(ctx, kuadrantObj)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
-		})
+		}, beforeEachTimeOut)
 
 		It("envoy filter has transport configured with TLS", func(ctx SpecContext) {
 			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
@@ -207,6 +211,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			var patchValue map[string]any
 			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
 			Expect(patchValue).To(HaveKey("name"))
+			Expect(patchValue).To(HaveKey("outlier_detection"))
 			// transport_socket config only added when mTLS is configured
 			Expect(patchValue).To(HaveKey("transport_socket"))
 			Expect(patchValue["transport_socket"]).To(Equal(map[string]interface{}{

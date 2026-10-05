@@ -3,6 +3,9 @@
 package wasm
 
 import (
+	"fmt"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -284,6 +287,207 @@ func TestRateLimitRequestCEL_ToCEL(t *testing.T) {
 	})
 }
 
+func TestReserveRequestCEL_ToCEL(t *testing.T) {
+	t.Run("with ttl", func(t *testing.T) {
+		req := ReserveRequestCEL{Domain: `"my-scope"`, Amount: "uint(5000)", TTL: `duration("30s")`}
+		got := req.ToCEL()
+		expected := `kuadrant.service.ratelimit.v1.ReserveRequest {
+    domain: "my-scope",
+    descriptors: [],
+    amount: uint(5000),
+    ttl: duration("30s")
+}`
+		if got != expected {
+			t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+		}
+	})
+
+	t.Run("ttl omitted when empty", func(t *testing.T) {
+		req := ReserveRequestCEL{Domain: `"my-scope"`, Amount: "uint(5000)"}
+		got := req.ToCEL()
+		expected := `kuadrant.service.ratelimit.v1.ReserveRequest {
+    domain: "my-scope",
+    descriptors: [],
+    amount: uint(5000)
+}`
+		if got != expected {
+			t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+		}
+	})
+}
+
+func TestCommitRequestCEL_ToCEL(t *testing.T) {
+	req := CommitRequestCEL{
+		Domain:        `"my-scope"`,
+		ReservationID: "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd",
+		ActualAmount:  `uint(responseBodyJSON("/usage/total_tokens"))`,
+	}
+	got := req.ToCEL()
+	expected := `kuadrant.service.ratelimit.v1.CommitRequest {
+    domain: "my-scope",
+    descriptors: [],
+    reservation_id: kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd,
+    actual_amount: uint(responseBodyJSON("/usage/total_tokens"))
+}`
+	if got != expected {
+		t.Errorf("got:\n%s\nwant:\n%s", got, expected)
+	}
+}
+
+func TestActionSpecBuild_Reserve(t *testing.T) {
+	spec := ActionSpec{
+		ServiceName: RateLimitReserveServiceName,
+		Scope:       "my-scope",
+		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+		ConditionalData: []ConditionalData{{
+			Data: []DataType{
+				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "tokenlimit.foo__abcd", Value: "1"}}},
+			},
+		}},
+		Reservation: &ReservationSpec{
+			ID:     "tokenlimit.foo__abcd",
+			Amount: "5000",
+			TTL:    `duration("30s")`,
+		},
+	}
+	action := spec.Build()
+
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction, got %T", action)
+	}
+	if grpc.Var != reserveResponseVar {
+		t.Errorf("var = %q, want %q", grpc.Var, reserveResponseVar)
+	}
+	if grpc.Label != "ratelimit_reserve" {
+		t.Errorf("label = %q, want %q", grpc.Label, "ratelimit_reserve")
+	}
+	if !grpc.IsGuard {
+		t.Error("expected isGuard=true (reserve runs in request phase)")
+	}
+	// amount is wrapped in uint(), ttl passed through, reservation.id is not a descriptor entry
+	for _, want := range []string{"amount: uint(5000)", `ttl: duration("30s")`, `key: "tokenlimit.foo__abcd"`} {
+		if !strings.Contains(grpc.MessageBuilder, want) {
+			t.Errorf("messageBuilder missing %q:\n%s", want, grpc.MessageBuilder)
+		}
+	}
+	if strings.Contains(grpc.MessageBuilder, "reservation.id") {
+		t.Errorf("reservation.id should not appear as a descriptor entry:\n%s", grpc.MessageBuilder)
+	}
+	// onReply: deny(code==2), store(reservation_id), fail(unknown code)
+	if len(grpc.OnReply) != 3 {
+		t.Fatalf("onReply length = %d, want 3", len(grpc.OnReply))
+	}
+	deny, ok := grpc.OnReply[0].(*DenyAction)
+	if !ok {
+		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
+	}
+	wantDenyBody := `body: "{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"`
+	if !strings.Contains(deny.DenyWith, wantDenyBody) {
+		t.Errorf("deny body = %q, want it to contain %q", deny.DenyWith, wantDenyBody)
+	}
+	if !strings.Contains(deny.DenyWith, `["content-type", "application/json"]`) {
+		t.Errorf("deny headers = %q, want a content-type: application/json header", deny.DenyWith)
+	}
+	store, ok := grpc.OnReply[1].(*StoreAction)
+	if !ok {
+		t.Fatalf("onReply[1] = %T, want *StoreAction", grpc.OnReply[1])
+	}
+	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
+	if store.Path != wantPath {
+		t.Errorf("store path = %q, want %q", store.Path, wantPath)
+	}
+	if grpc.OnReply[2].ActionType() != ActionKindFail {
+		t.Errorf("onReply[2] type = %s, want fail", grpc.OnReply[2].ActionType())
+	}
+}
+
+func TestActionSpecBuild_Commit(t *testing.T) {
+	spec := ActionSpec{
+		ServiceName: RateLimitCommitServiceName,
+		Scope:       "my-scope",
+		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+		ConditionalData: []ConditionalData{{
+			Data: []DataType{
+				{Value: &Expression{ExpressionItem: ExpressionItem{Key: "tokenlimit.foo__abcd", Value: "1"}}},
+			},
+		}},
+		Reservation: &ReservationSpec{
+			ID:           "tokenlimit.foo__abcd",
+			ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
+		},
+	}
+	action := spec.Build()
+
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction, got %T", action)
+	}
+	if grpc.Var != commitResponseVar {
+		t.Errorf("var = %q, want %q", grpc.Var, commitResponseVar)
+	}
+	if grpc.Label != "ratelimit_commit" {
+		t.Errorf("label = %q, want %q", grpc.Label, "ratelimit_commit")
+	}
+	if grpc.IsGuard {
+		t.Error("expected isGuard=false (commit runs in response phase)")
+	}
+	// commit is skipped only when neither a reservation was held nor the usage
+	// is parseable (RFC 0021); otherwise it always runs.
+	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
+	hasReservation := fmt.Sprintf("%s != null", wantPath)
+	amountKnown := `(responseBodyJSON("/usage/total_tokens")) != null`
+	wantPredicate := fmt.Sprintf("(%s) || (%s)", hasReservation, amountKnown)
+	if grpc.Predicate != wantPredicate {
+		t.Errorf("predicate = %q, want %q", grpc.Predicate, wantPredicate)
+	}
+	// no reservation held -> empty reservation_id, which Limitador treats like a plain Report
+	wantReservationID := fmt.Sprintf(`(%s) ? %s : ""`, hasReservation, wantPath)
+	if !strings.Contains(grpc.MessageBuilder, "reservation_id: "+wantReservationID) {
+		t.Errorf("messageBuilder should read back reservation id from store path:\n%s", grpc.MessageBuilder)
+	}
+	// unparseable usage -> commit 0 so a held reservation is still released without charging an unknown amount
+	wantActualAmount := fmt.Sprintf(`(%s) ? uint(responseBodyJSON("/usage/total_tokens")) : 0u`, amountKnown)
+	if !strings.Contains(grpc.MessageBuilder, "actual_amount: "+wantActualAmount) {
+		t.Errorf("messageBuilder missing actual_amount:\n%s", grpc.MessageBuilder)
+	}
+	if len(grpc.OnReply) != 1 {
+		t.Fatalf("onReply length = %d, want 1", len(grpc.OnReply))
+	}
+	if grpc.OnReply[0].ActionType() != ActionKindFail {
+		t.Errorf("onReply[0] type = %s, want fail", grpc.OnReply[0].ActionType())
+	}
+}
+
+func TestActionSpecBuild_Commit_NoActualAmountData(t *testing.T) {
+	// Defensive case: a Commit spec with no ActualAmount set at all (shouldn't
+	// happen from the reconciler, which always sets one, but the builder must
+	// not panic and must still gate correctly on whether a reservation was held).
+	spec := ActionSpec{
+		ServiceName: RateLimitCommitServiceName,
+		Scope:       "my-scope",
+		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+		Reservation: &ReservationSpec{
+			ID: "tokenlimit.foo__abcd",
+		},
+	}
+	action := spec.Build()
+
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction, got %T", action)
+	}
+
+	wantPath := "kuadrant.internal.tokenratelimit.reservation.tokenlimit_foo__abcd"
+	wantPredicate := fmt.Sprintf("(%s != null) || (false)", wantPath)
+	if grpc.Predicate != wantPredicate {
+		t.Errorf("predicate = %q, want %q", grpc.Predicate, wantPredicate)
+	}
+	if !strings.Contains(grpc.MessageBuilder, "actual_amount: 0u") {
+		t.Errorf("messageBuilder should default actual_amount to 0u:\n%s", grpc.MessageBuilder)
+	}
+}
+
 func TestActionSpecBuild_Auth(t *testing.T) {
 	spec := ActionSpec{
 		ServiceName: AuthServiceName,
@@ -401,14 +605,49 @@ func TestActionSpecBuild_RateLimit(t *testing.T) {
 	if len(grpc.OnReply) != 3 {
 		t.Fatalf("onReply length = %d, want 3", len(grpc.OnReply))
 	}
-	if grpc.OnReply[0].ActionType() != ActionKindDeny {
-		t.Errorf("onReply[0] type = %s, want deny", grpc.OnReply[0].ActionType())
+	deny, ok := grpc.OnReply[0].(*DenyAction)
+	if !ok {
+		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
+	}
+	// plain RateLimitPolicy keeps the plain-text body; the JSON error body is
+	// only used for TokenRateLimitPolicy denials (Reserve, Optimistic's Check).
+	if !strings.Contains(deny.DenyWith, `body: "Too Many Requests\n"`) {
+		t.Errorf("deny body = %q, want plain-text \"Too Many Requests\"", deny.DenyWith)
 	}
 	if grpc.OnReply[1].ActionType() != ActionKindHeaders {
 		t.Errorf("onReply[1] type = %s, want headers", grpc.OnReply[1].ActionType())
 	}
 	if grpc.OnReply[2].ActionType() != ActionKindFail {
 		t.Errorf("onReply[2] type = %s, want fail", grpc.OnReply[2].ActionType())
+	}
+}
+
+func TestActionSpecBuild_Check_DenyBody(t *testing.T) {
+	spec := ActionSpec{
+		ServiceName: RateLimitCheckServiceName,
+		Scope:       "my-scope",
+		Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+	}
+	action := spec.Build()
+
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		t.Fatalf("expected *GrpcAction, got %T", action)
+	}
+	deny, ok := grpc.OnReply[0].(*DenyAction)
+	if !ok {
+		t.Fatalf("onReply[0] = %T, want *DenyAction", grpc.OnReply[0])
+	}
+	wantDenyBody := `body: "{\"error\": {\"message\": \"Too Many Requests\", \"type\": \"rate_limit_exceeded\", \"code\": 429}}"`
+	if !strings.Contains(deny.DenyWith, wantDenyBody) {
+		t.Errorf("deny body = %q, want it to contain %q", deny.DenyWith, wantDenyBody)
+	}
+	if !strings.Contains(deny.DenyWith, `["content-type", "application/json"]`) {
+		t.Errorf("deny headers = %q, want a content-type: application/json header", deny.DenyWith)
+	}
+	// the rate limit response's own response_headers_to_add must still be present
+	if !strings.Contains(deny.DenyWith, "ratelimit_response.response_headers_to_add") {
+		t.Errorf("deny headers = %q, want ratelimit_response.response_headers_to_add preserved", deny.DenyWith)
 	}
 }
 
@@ -552,6 +791,9 @@ func TestBodyRefFieldName(t *testing.T) {
 		{"/model", "model"},
 		{"/a/b/c", "c"},
 		{"single", "single"},
+		{"/usage/total-tokens", "total_tokens"},
+		{"/usage/weird]key", "weird_key"},
+		{"/2024", "_2024"},
 	}
 	for _, tc := range tests {
 		got := bodyRefFieldName(tc.pointer)
@@ -569,6 +811,7 @@ func TestSanitizePointer(t *testing.T) {
 		{"/usage/total_tokens", "usage_total_tokens"},
 		{"/model", "model"},
 		{"/a/b/c", "a_b_c"},
+		{"/a/b" + pointerListKeySep + "/c/d" + pointerListKeySep + "number", "a_b__c_d_number"},
 	}
 	for _, tc := range tests {
 		got := sanitizePointer(tc.pointer)
@@ -626,6 +869,79 @@ func TestExtractBodyRefs(t *testing.T) {
 		refs := extractBodyRefs(`responseBodyJSON("/model") + responseBodyJSON("/model")`)
 		if len(refs) != 1 {
 			t.Errorf("expected 1 deduplicated ref, got %d", len(refs))
+		}
+	})
+
+	t.Run("list of candidates with type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].Direction != "response" {
+			t.Errorf("direction = %q, want %q", refs[0].Direction, "response")
+		}
+		if refs[0].FieldName != "total_tokens" {
+			t.Errorf("fieldName = %q, want %q (leaf of first candidate)", refs[0].FieldName, "total_tokens")
+		}
+		expectedPointer := "/usage/total_tokens" + pointerListKeySep + "/usageMetadata/totalTokenCount" + pointerListKeySep + "number"
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
+
+	t.Run("list of candidates without type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/a", "/b"])`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		expectedPointer := "/a" + pointerListKeySep + "/b" + pointerListKeySep
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
+		}
+	})
+
+	t.Run("single-candidate list with type hint", func(t *testing.T) {
+		refs := extractBodyRefs(`requestBodyJSON(['/prompt'], "string")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].Direction != "request" {
+			t.Errorf("direction = %q, want %q", refs[0].Direction, "request")
+		}
+		if refs[0].FieldName != "prompt" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "prompt")
+		}
+	})
+
+	t.Run("distinguishes lists differing only in order", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(["/a", "/b"], "number") + responseBodyJSON(["/b", "/a"], "number")`)
+		if len(refs) != 2 {
+			t.Fatalf("expected 2 distinct refs (order matters), got %d", len(refs))
+		}
+	})
+
+	t.Run("list candidate containing a literal ']'", func(t *testing.T) {
+		// RFC 6901 reference tokens may legally contain "]", so the list matcher must not
+		// terminate at the first "]" it sees. FieldName is sanitized to "a_b" (rather than
+		// truncated to "a") to prove the full pointer "/usage/a]b" was captured before the
+		// CEL-identifier-safe substitution was applied.
+		refs := extractBodyRefs(`responseBodyJSON(["/usage/a]b"], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if refs[0].FieldName != "a_b" {
+			t.Errorf("fieldName = %q, want %q", refs[0].FieldName, "a_b")
+		}
+	})
+
+	t.Run("single-quoted candidate containing a literal ']'", func(t *testing.T) {
+		refs := extractBodyRefs(`responseBodyJSON(['/usage/a]b', '/other'], "number")`)
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		expectedPointer := "/usage/a]b" + pointerListKeySep + "/other" + pointerListKeySep + "number"
+		if refs[0].Pointer != expectedPointer {
+			t.Errorf("pointer = %q, want %q", refs[0].Pointer, expectedPointer)
 		}
 	})
 }
@@ -729,6 +1045,130 @@ func TestBuildActions_TokenLimitHitsAddend(t *testing.T) {
 	}
 	if strings.Contains(reportGrpc.MessageBuilder, "responseBodyJSON") {
 		t.Error("report message should not contain responseBodyJSON after replacement")
+	}
+}
+
+// TestBuildActions_ReservationActualAmount mirrors TestBuildActions_TokenLimitHitsAddend
+// for Reservation mode: Reservation.ActualAmount (not ConditionalData) is where a
+// responseBodyJSON(...) reference lives for Commit, so BuildActions/replaceBodyRefs
+// must hoist and rewrite it there too.
+func TestBuildActions_ReservationActualAmount(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitReserveServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{ID: "tokenlimit.foo__abcd", Amount: "5000"},
+		},
+		{
+			ServiceName: RateLimitCommitServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{
+				ID:           "tokenlimit.foo__abcd",
+				ActualAmount: `responseBodyJSON("/usage/total_tokens")`,
+			},
+		},
+	}
+	actions := BuildActions(specs)
+
+	// Expect: store action + reserve action + commit action
+	if len(actions) != 3 {
+		t.Fatalf("expected 3 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	if store.Path != responseBodyStorePath {
+		t.Errorf("store path = %q, want %q", store.Path, responseBodyStorePath)
+	}
+	expectedValue := `{"total_tokens": responseBodyJSON("/usage/total_tokens")}`
+	if store.Value != expectedValue {
+		t.Errorf("store value = %q, want %q", store.Value, expectedValue)
+	}
+
+	// Reserve action should be unchanged (no body refs in its Reservation data)
+	reserveGrpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if !reserveGrpc.IsGuard {
+		t.Error("reserve action should be a guard")
+	}
+	if strings.Contains(reserveGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("reserve message should not reference responseBodyJSON")
+	}
+
+	// Commit action should reference the store path instead of responseBodyJSON
+	commitGrpc, ok := actions[2].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[2] type = %s, want grpc", actions[2].ActionType())
+	}
+	if commitGrpc.IsGuard {
+		t.Error("commit action should not be a guard")
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(commitGrpc.MessageBuilder, expectedStorePath) {
+		t.Errorf("commit message should contain %q, got:\n%s", expectedStorePath, commitGrpc.MessageBuilder)
+	}
+	if strings.Contains(commitGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("commit message should not contain responseBodyJSON after replacement")
+	}
+}
+
+func TestBuildActions_ListBodyRef(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitCheckServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{Key: "ratelimit.hits_addend", Value: "0"}}},
+				},
+			}},
+		},
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "ratelimit.hits_addend",
+						Value: `responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")`,
+					}}},
+				},
+			}},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected 3 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	expectedValue := `{"total_tokens": responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")}`
+	if store.Value != expectedValue {
+		t.Errorf("store value = %q, want %q", store.Value, expectedValue)
+	}
+
+	reportGrpc, ok := actions[2].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[2] type = %s, want grpc", actions[2].ActionType())
+	}
+	if strings.Contains(reportGrpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("report message should not contain responseBodyJSON after replacement")
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(reportGrpc.MessageBuilder, "uint("+expectedStorePath+")") {
+		t.Errorf("report message should reference store path for total_tokens, got:\n%s", reportGrpc.MessageBuilder)
 	}
 }
 
@@ -838,6 +1278,111 @@ func TestBuildActions_CollidingLeafFieldNames(t *testing.T) {
 	}
 	if !strings.Contains(grpc.MessageBuilder, "kuadrant.internal.response.body.metadata_total_tokens") {
 		t.Errorf("grpc message should reference store path for metadata_total_tokens, got:\n%s", grpc.MessageBuilder)
+	}
+}
+
+func TestBuildActions_SanitizedKeyCollision(t *testing.T) {
+	// "/a" and "/_/a" both have leaf field name "a" (triggering the sanitized-pointer
+	// fallback), and sanitizePointer itself maps both to "a" (folding "_" the same way
+	// it folds "/"). Without disambiguation, one of the two extracted values would
+	// silently share the other's store path and be lost.
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitReportServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			ConditionalData: []ConditionalData{{
+				Data: []DataType{
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "field1",
+						Value: `responseBodyJSON("/a")`,
+					}}},
+					{Value: &Expression{ExpressionItem: ExpressionItem{
+						Key:   "field2",
+						Value: `responseBodyJSON("/_/a")`,
+					}}},
+				},
+			}},
+		},
+	}
+	actions := BuildActions(specs)
+
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+
+	// Sorted pointer order ("/_/a" < "/a") claims "a" first; "/a" must be
+	// disambiguated to a distinct key rather than colliding on "a" too.
+	if !strings.Contains(store.Value, `"a": responseBodyJSON("/_/a")`) {
+		t.Errorf("store value should contain \"a\" mapped to /_/a, got: %s", store.Value)
+	}
+	if !strings.Contains(store.Value, `"a_2": responseBodyJSON("/a")`) {
+		t.Errorf("store value should contain a disambiguated key for /a, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if strings.Contains(grpc.MessageBuilder, "responseBodyJSON") {
+		t.Error("grpc message should not contain responseBodyJSON after replacement")
+	}
+	storePathPattern := regexp.MustCompile(`kuadrant\.internal\.response\.body\.[A-Za-z0-9_]+`)
+	gotPaths := make(map[string]bool)
+	for _, p := range storePathPattern.FindAllString(grpc.MessageBuilder, -1) {
+		gotPaths[p] = true
+	}
+	wantPaths := map[string]bool{
+		"kuadrant.internal.response.body.a":   true,
+		"kuadrant.internal.response.body.a_2": true,
+	}
+	if !reflect.DeepEqual(gotPaths, wantPaths) {
+		t.Errorf("grpc message store paths = %v, want %v (message:\n%s)", gotPaths, wantPaths, grpc.MessageBuilder)
+	}
+}
+
+// TestBuildActions_PunctuationInPointer guards against a regression where a JSON Pointer's
+// last segment contains characters that are legal in RFC 6901 (e.g. "-") but unsafe in the
+// generated CEL dot-access store path (e.g. "kuadrant.internal.response.body.total-tokens",
+// where CEL parses "-" as subtraction rather than part of an identifier). Such a pointer is
+// accepted by ResponseDataExtraction's CRD validation, so BuildActions must sanitize it.
+func TestBuildActions_PunctuationInPointer(t *testing.T) {
+	specs := []ActionSpec{
+		{
+			ServiceName: RateLimitCommitServiceName,
+			Scope:       "my-scope",
+			Sources:     []string{"TokenRateLimitPolicy/default/my-trlp"},
+			Reservation: &ReservationSpec{
+				ID:           "limit-a",
+				ActualAmount: `responseBodyJSON(["/usage/total-tokens"], "number")`,
+			},
+		},
+	}
+	actions := BuildActions(specs)
+
+	store, ok := actions[0].(*StoreAction)
+	if !ok {
+		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+	}
+	if !strings.Contains(store.Value, `"total_tokens":`) {
+		t.Errorf("store value should use a sanitized key, got: %s", store.Value)
+	}
+
+	grpc, ok := actions[1].(*GrpcAction)
+	if !ok {
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	expectedStorePath := responseBodyStorePath + ".total_tokens"
+	if !strings.Contains(grpc.MessageBuilder, expectedStorePath) {
+		t.Errorf("commit message should reference sanitized store path %q, got:\n%s", expectedStorePath, grpc.MessageBuilder)
+	}
+	if strings.Contains(grpc.MessageBuilder, "total-tokens") {
+		t.Errorf("commit message must not contain the unsanitized punctuation-bearing key, got:\n%s", grpc.MessageBuilder)
 	}
 }
 

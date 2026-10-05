@@ -269,7 +269,7 @@ type BootOptionsBuilder struct {
 	isCertManagerInstalled           bool
 	isConsolePluginInstalled         bool
 	isClusterVersionInstalled        bool
-	consolePluginImageOverride       string
+	consolePluginImageOverride       consoleplugin.Image
 	isDNSOperatorInstalled           bool
 	isLimitadorOperatorInstalled     bool
 	isAuthorinoOperatorInstalled     bool
@@ -530,7 +530,13 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() ([]controller.ControllerO
 		return nil, err
 	}
 
-	b.consolePluginImageOverride = env.GetString(openshift.ConsolePluginImageOverrideEnvVar, "")
+	b.consolePluginImageOverride, err = openshift.GetConsolePluginImageOverride(
+		env.GetString(openshift.ConsolePluginImageOverrideEnvVar, ""),
+		env.GetString(openshift.ConsolePluginRuntimeOverrideEnvVar, ""),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	if !b.isConsolePluginInstalled {
 		b.logger.Info("console plugin API is not installed, skipping related watches and reconcilers")

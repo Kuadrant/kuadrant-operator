@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mcp_ref:
-        description: MCP Gateway ref (commit SHA or branch) for reproducing a nightly failure; operator checkout remains on main
+        description: MCP Gateway ref (commit SHA or branch) for reproducing a nightly failure; operator checkout uses this workflow ref
         required: false
         default: main
         type: string
@@ -34,10 +34,10 @@ jobs:
         shell: bash
 
     steps:
-      - name: Check out operator main
+      - name: Check out operator workflow ref
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Check out MCP Gateway source
@@ -472,7 +472,10 @@ jobs:
           kubectl wait --for=condition=Available deployment --all \
             -n mcp-test --timeout=5m
 
-
+      - name: Prepare NeMo Guardrails test servers
+        run: |
+          make -C mcp-gateway \
+            deploy-nemo-guardrails-test-servers
 
       - name: Run MCP Gateway E2E suite
         env:
@@ -486,6 +489,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/mcp-gateway-nightly"
           ginkgo_version="$(cd mcp-gateway && go list -m -f '{{.Version}}' github.com/onsi/ginkgo/v2)"
           echo "Using Ginkgo CLI ${ginkgo_version}"
+          set +e
           MCP_GATEWAY_NAMESPACE="$MCP_GATEWAY_NAMESPACE" \
           GATEWAY_NAMESPACE="$GATEWAY_NAMESPACE" \
           TEST_SERVER_NAMESPACE="$TEST_SERVER_NAMESPACE" \
@@ -497,6 +501,15 @@ jobs:
             E2E_TIMEOUT=60m \
             test-e2e-ci-full E2E_PROCS=4 \
             2>&1 | tee "$RUNNER_TEMP/mcp-gateway-nightly/e2e.log"
+          test_status=${PIPESTATUS[0]}
+          set -e
+          for dump in /tmp/e2e-cluster-dump-*.txt; do
+            if [[ -f "$dump" ]]; then
+              cp "$dump" "$RUNNER_TEMP/mcp-gateway-nightly/"
+            fi
+          done
+          exit "$test_status"
+
       - name: Prepare MCP AuthPolicy fixtures
         run: |
           kubectl create namespace keycloak --dry-run=client -o yaml | kubectl apply -f -
@@ -609,15 +622,31 @@ jobs:
           test -s mcp-gateway/out/certs/ca.crt
           (cd mcp-gateway && ./utils/patch-authorino-to-keycloak.sh kuadrant-system)
 
-          for policy in mcp-auth-policy mcps-auth-policy; do
-            policy_namespace=kuadrant-system
-            if [[ "$policy" == "mcps-auth-policy" ]]; then
-              policy_namespace=gateway-system
+          kubectl wait --for=condition=Accepted \
+            authpolicy/mcp-auth-policy -n kuadrant-system --timeout=5m
+          kubectl wait --for=condition=Accepted \
+            authpolicy/mcps-auth-policy -n gateway-system --timeout=5m
+          kubectl wait --for=condition=Enforced \
+            authpolicy/mcp-auth-policy -n kuadrant-system --timeout=5m
+
+          for attempt in $(seq 1 150); do
+            if kubectl get authpolicy/mcps-auth-policy -n gateway-system -o json \
+              | jq -e '
+                any(.status.conditions[]?;
+                  .type == "Enforced" and
+                  .status == "False" and
+                  .reason == "Overridden" and
+                  (.message | contains("mcp-auth-policy"))
+                )
+              ' >/dev/null; then
+              break
             fi
-            kubectl wait --for=condition=Accepted \
-              "authpolicy/$policy" -n "$policy_namespace" --timeout=5m
-            kubectl wait --for=condition=Enforced \
-              "authpolicy/$policy" -n "$policy_namespace" --timeout=5m
+            if (( attempt == 150 )); then
+              echo "Timed out waiting for mcps-auth-policy to be overridden by mcp-auth-policy" >&2
+              kubectl get authpolicy/mcps-auth-policy -n gateway-system -o yaml
+              exit 1
+            fi
+            sleep 2
           done
 
       - name: Run operator MCP AuthPolicy E2E

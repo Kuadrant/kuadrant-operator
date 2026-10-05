@@ -15,7 +15,7 @@ require (
 	github.com/kuadrant/authorino v0.28.0
 	github.com/kuadrant/authorino-operator v0.27.0
 	github.com/kuadrant/dns-operator v0.0.0-20260819172149-de271431efea
-	github.com/kuadrant/limitador-operator v0.15.0
+	github.com/kuadrant/limitador-operator v0.19.0
 	github.com/kuadrant/policy-machinery v0.9.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -193,8 +193,3 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
-
-// Pinned ahead of a tagged release to pick up the Reservations CRD field (limitador-operator#283),
-// Remove this replace once a limitador-operator release ships Reservation fields.
-// git describe --tags --match 'v*' returns v0.10.0-237-gece3f4b5b5a3, meaning v0.10.0 is the highest tag actually reachable from this commit, this is not a regression.
-replace github.com/kuadrant/limitador-operator => github.com/kuadrant/limitador-operator v0.10.1-0.20260911154343-ece3f4b5b5a3

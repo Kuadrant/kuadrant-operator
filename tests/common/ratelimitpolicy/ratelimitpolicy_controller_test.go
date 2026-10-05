@@ -128,7 +128,13 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"common",
 
 			// Remove limitador deployment to simulate enforcement error
 			// RLP should transition to enforcement false in this case
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}})).To(Succeed())
+			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}}))).To(Succeed())
+			// Limitador is a singleton shared across specs - make sure it is back to Ready
+			// before this spec finishes, so the next spec deleting it again doesn't race a NotFound.
+			DeferCleanup(func(ctx SpecContext) {
+				Eventually(tests.LimitadorIsReady(testClient(), limitadorKey)).WithContext(ctx).Should(Succeed())
+			})
 
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
 				"RateLimitPolicy waiting for the following components to sync: [Limitador]")).WithContext(ctx).Should(Succeed())
@@ -136,7 +142,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, Labels{"common",
 
 		It("Unknown Reason", func(ctx SpecContext) {
 			// Remove limitador deployment to simulate enforcement error
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}})).To(Succeed())
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: kuadrantInstallationNS}}))).To(Succeed())
 
 			// Enforced false as limitador is not ready
 			policy := policyFactory()

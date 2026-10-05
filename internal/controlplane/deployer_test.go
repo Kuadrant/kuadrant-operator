@@ -217,72 +217,209 @@ func TestRenderComponent_InvalidChart(t *testing.T) {
 }
 
 func TestDeployerImagePatching(t *testing.T) {
-	chartPath := findDNSOperatorChartForDeployer(t)
-
-	d := &Deployer{
-		namespace: "kuadrant-system",
-	}
-
-	component := Component{
-		Name:        "dns-operator",
-		ChartPath:   chartPath,
-		ImageEnvVar: "RELATED_IMAGE_DNS_OPERATOR",
-	}
-
 	tests := []struct {
 		name      string
-		envValue  string
+		image     string
 		wantImage string
+		objects   []*unstructured.Unstructured
 	}{
 		{
-			name:      "env var overrides image",
-			envValue:  "quay.io/kuadrant/dns-operator:v1.0.0",
-			wantImage: "quay.io/kuadrant/dns-operator:v1.0.0",
+			name:      "patches with provided image",
+			image:     "test.registry.io/test-component:v2.0.0",
+			wantImage: "test.registry.io/test-component:v2.0.0",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name":      "test-deployment",
+							"namespace": "test-namespace",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "test-container",
+											"image": "test.registry.io/test-component:default",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name:      "empty env var preserves chart default",
-			envValue:  "",
-			wantImage: "quay.io/kuadrant/dns-operator:latest",
+			name:      "empty image preserves original",
+			image:     "",
+			wantImage: "test.registry.io/test-component:default",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name":      "test-deployment",
+							"namespace": "test-namespace",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "test-container",
+											"image": "test.registry.io/test-component:default",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "patches multiple deployments",
+			image:     "test.registry.io/new:v1.0",
+			wantImage: "test.registry.io/new:v1.0",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "deploy-one",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "manager",
+											"image": "old.registry.io/one:v0.1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "deploy-two",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "manager",
+											"image": "old.registry.io/two:v0.2",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "ignores non-Deployment resources",
+			image:     "test.registry.io/patched:v1.0",
+			wantImage: "test.registry.io/patched:v1.0",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Service",
+						"metadata": map[string]interface{}{
+							"name": "my-service",
+						},
+					},
+				},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apiextensions.k8s.io/v1",
+						"kind":       "CustomResourceDefinition",
+						"metadata": map[string]interface{}{
+							"name": "myresources.example.com",
+						},
+					},
+				},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "deploy-to-patch",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "manager",
+											"image": "old.registry.io/app:v0.1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.envValue != "" {
-				t.Setenv("RELATED_IMAGE_DNS_OPERATOR", tt.envValue)
-			} else {
-				t.Setenv("RELATED_IMAGE_DNS_OPERATOR", "")
+			// Snapshot non-Deployment objects before patching
+			nonDeploymentSnapshots := make(map[string]interface{})
+			for _, obj := range tt.objects {
+				if obj.GetKind() != "Deployment" {
+					data, _ := obj.MarshalJSON()
+					nonDeploymentSnapshots[obj.GetKind()+"_"+obj.GetName()] = string(data)
+				}
 			}
 
-			rendered, err := d.renderComponent(component)
-			if err != nil {
-				t.Fatalf("renderComponent() error = %v", err)
-			}
-
-			image := os.Getenv(component.ImageEnvVar)
-			if err := PatchDeploymentImage(rendered.Resources, image); err != nil {
+			if err := PatchDeploymentImage(tt.objects, tt.image); err != nil {
 				t.Fatalf("PatchDeploymentImage() error = %v", err)
 			}
 
-			foundDeployment := false
-			for _, obj := range rendered.Resources {
+			// Verify Deployments are patched
+			for _, obj := range tt.objects {
 				if obj.GetKind() != "Deployment" {
 					continue
 				}
-				foundDeployment = true
-				containers, _, _ := unstructured.NestedSlice(obj.Object,
-					"spec", "template", "spec", "containers")
+				containers, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
 				if len(containers) == 0 {
 					t.Fatal("no containers in Deployment")
 				}
 				container := containers[0].(map[string]interface{})
 				got := container["image"].(string)
 				if got != tt.wantImage {
-					t.Errorf("image = %q, want %q", got, tt.wantImage)
+					t.Errorf("%s: image = %q, want %q", obj.GetName(), got, tt.wantImage)
 				}
 			}
-			if !foundDeployment {
-				t.Fatal("no Deployment found in rendered resources")
+
+			// Verify non-Deployment objects remain unchanged
+			for _, obj := range tt.objects {
+				if obj.GetKind() == "Deployment" {
+					continue
+				}
+				key := obj.GetKind() + "_" + obj.GetName()
+				data, _ := obj.MarshalJSON()
+				after := string(data)
+				if before, ok := nonDeploymentSnapshots[key]; ok && before != after {
+					t.Errorf("%s was modified by PatchDeploymentImage", key)
+				}
 			}
 		})
 	}

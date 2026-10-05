@@ -1,3 +1,0 @@
-resources:
-  - bases/extensions.kuadrant.io_threatpolicies.yaml
-#+kubebuilder:scaffold:crdkustomizeresource

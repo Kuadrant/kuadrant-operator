@@ -446,7 +446,7 @@ EOF
 ```
 
 - `reservation.amount`: a literal integer or a CEL expression evaluating to the number of tokens (`uint`) to reserve on request arrival. Defaults to `0` (no capacity reserved) when the `reservation` block or `amount` is omitted — set it explicitly to a meaningful, non-zero estimate to get protection against the concurrent-request race.
-- `reservation.ttl`: a CEL expression evaluating to the maximum duration the reservation is held before it auto-releases. Defaults to the route's `backendRequest` timeout when omitted.
+- `reservation.ttl`: a CEL expression evaluating to the maximum duration the reservation is held before it auto-releases. Defaults to the route's `backendRequest` timeout when available; otherwise, Limitador applies its default.
 
 See the [`reservation` API reference](../../reference/tokenratelimitpolicy.md#reservation) for full details, including the Limitador-side caps (`spec.reservations.maxFraction`, `spec.reservations.maxTtl`) on how much a single reservation can claim and how long it can be held.
 

@@ -88,14 +88,25 @@ it - found missing live (see "The NetworkPolicy gap" in Key findings).
 
 ## Observability
 
-*Not yet investigated - deferred by design.* The question: can a Policy's
-status (e.g. a TokenRateLimitPolicy's `Enforced` condition) accurately
-reflect whether its config is actually active in the data plane yet, rather
-than just "the operator reconciled successfully and wrote the EnvoyFilter"?
-This matters specifically for this PoC because config delivery is
-asynchronous (an xDS push that Envoy may ACK or NACK) rather than inline in
-the object Kubernetes already confirmed was written. To be investigated and
-filled in here once scoped.
+**The kuadrant operator, playing the role of ECDS server, can tell whether
+policies are actually active on the data plane.** It directly receives
+Envoy's own ACK/NACK for every config it pushes - first-party knowledge, not
+something inferred from a side channel or a Kubernetes object another
+controller wrote. Today's `Enforced` condition doesn't use this: it can't
+reflect data-plane state for Istio gateways at all (see below), and this PoC
+confirms a real, verified fix is available.
+
+Traced the actual logic (`gatewayComponentsToSync` in
+`internal/controller/data_plane_policies_workflow.go`): for Istio it's a
+hardcoded `return true` - Istio never populates EnvoyFilter status, so
+there's nothing to check. `Enforced: True` only means the operator wrote the
+object, never that Envoy loaded it.
+
+`go-control-plane`'s `StreamRequestFunc` callback fires on every gateway
+ACK/NACK (`ErrorDetail` on reject, `VersionInfo` confirming the applied
+version). Wired in temporarily: a real ACK for the pushed version arrived
+within ~20s. That signal could replace the `return true` stub - not
+implemented yet (empty `CallbackFuncs{}` today), but verified live.
 
 ## Upgrade impact
 

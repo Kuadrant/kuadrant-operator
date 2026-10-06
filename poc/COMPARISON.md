@@ -90,13 +90,42 @@ migration happens and what gap remains:
   keeps the old, fully-enforcing listener serving until the real config is
   ready.
 
+## Config size limits comparison
+
+Both PoCs remove the EnvoyFilter size ceiling, but the real config still
+has to be delivered and held in memory - live-tested by growing a TRLP to
+hundreds/thousands of limits. Two ceilings apply equally to both, and one
+doesn't:
+
+- **Shared, independent of delivery mechanism**: at default resource
+  limits, both the operator (reconcile cost scales with policy count) and
+  the gateway (applying an oversized config) can be OOM-killed. A ~15MB
+  config (300 TRLP limits) is stable at the gateway's default 1Gi memory
+  limit; ~30MB (600 limits) **crashes the whole gateway pod** on either
+  PoC. The operator's own 300Mi default (since raised to 500Mi by
+  kuadrant-operator#2321) was exceeded reconciling ~1000 limits (peaked
+  ~700Mi) on either PoC too - a higher ceiling, not an unbounded one.
+- **Where they diverge, with memory ruled out as a confound**:
+  `poc-extensions-endpoint`'s ad-hoc gRPC fetch showed real transport-level
+  failures (`status 13 INTERNAL`) starting around ~75MB (1500 limits;
+  retried, eventually succeeded) and became **consistently unrecoverable
+  around ~151MB (3000 limits)** - with memory staying flat and low during
+  the failures, confirming the channel itself was rejecting the message,
+  not running out of memory. `poc-ecds-server` pushed the same sizes -
+  75MB (1500 limits), 151MB (3000 limits), and **300MB (6000 limits)** -
+  all cleanly, no NACKs, no errors at any size tested. No
+  explicit message-size limit is configured in either PoC's code; this
+  difference comes from Envoy's native xDS machinery handling large pushes
+  more robustly than the ad-hoc unary gRPC call the other PoC relies on.
+
 ## Overall
 
 Both solve the size problem to the same degree and both enforce correctly
 and update without dropping traffic. `poc-extensions-endpoint` is simpler to
 deploy (one image, no new infrastructure), at the cost of a recurring,
-structural enforcement gap and an observability story that would need to be
+structural enforcement gap, a real ceiling on how large a single config can
+get (~100MB range), and an observability story that would need to be
 built from scratch. `poc-ecds-server` needs new infrastructure, but gets a
-gap-free upgrade story and a usable observability signal essentially for
-free, by leaning on Envoy's own xDS machinery instead of re-implementing a
-piece of it.
+gap-free upgrade story, a usable observability signal, and headroom to
+scale to much larger configs - all essentially for free, by leaning on
+Envoy's own xDS machinery instead of re-implementing a piece of it.

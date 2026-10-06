@@ -135,6 +135,32 @@ before activating the new listener version, so the *old* (already fully
 enforcing) listener keeps serving every request until the real config is
 ready - there's no window where an empty/default config is live.
 
+## Config size limits
+
+This PoC removes the EnvoyFilter size ceiling, but the real config still
+has to be delivered and held in memory somewhere - confirmed live that this
+introduces its own ceilings, found by growing a TRLP to hundreds/thousands
+of limits.
+
+**At default resource limits, both sides can be OOM-killed regardless of
+delivery mechanism.** The operator's own reconcile cost scales with policy
+count - compiling ~1000 limits peaked around 700Mi, exceeding the
+operator's shipped default memory limit (fixed in kuadrant-operator#2321,
+which raised it from 300Mi/limit to 500Mi/limit, but that's a higher
+ceiling, not an unbounded one). Separately, even after a push succeeds, the
+gateway pod itself can be OOM-killed applying an oversized config: a ~15MB
+config (300 TRLP limits) is stable at the gateway's default 1Gi memory
+limit, but ~30MB (600 limits) **crashes the whole gateway pod**
+(crash-loop, zero traffic) at that same default.
+
+**With memory ruled out as a confound** (both operator and gateway given
+generous headroom), ECDS pushed progressively larger configs - ~75MB
+(1500 limits), ~151MB (3000 limits), and ~300MB (6000 limits) - **all
+applied cleanly, no NACKs, no errors, at any size tested.** Memory use on both sides scaled with content size as
+expected, but the xDS push itself was never rejected. No explicit
+message-size limit is configured anywhere in this PoC's code, and none was
+found empirically up to the largest size tested.
+
 ## Key findings
 
 ### go-control-plane API research (grounding the implementation)

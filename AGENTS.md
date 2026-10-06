@@ -9,6 +9,7 @@ Kuadrant is a Kubernetes operator that extends Gateway API providers (Istio, Env
 ## Build and Test Commands
 
 ### Building
+
 ```bash
 # Build operator binary
 make build
@@ -21,6 +22,7 @@ make build VERSION=1.0.0
 ```
 
 ### Testing
+
 ```bash
 # Run unit tests
 make test-unit
@@ -52,6 +54,7 @@ make test-envoygateway-env-integration
 ```
 
 ### Linting and Code Quality
+
 ```bash
 # Run linter
 make run-lint
@@ -74,6 +77,7 @@ make pre-commit INTEGRATION_TEST_ENV=all
 ```
 
 ### Local Development
+
 ```bash
 # Setup local Kind cluster with all dependencies and operator
 make local-setup
@@ -99,11 +103,11 @@ make deploy
 # Deploy dependencies only
 make deploy-dependencies
 
-# Local setup with a custom wasm-shim and extra extensions (e.g. threat-policy)
+# Local setup with a custom wasm-shim and extra extensions (e.g. my-policy)
 # 1. Build wasm-shim from local repo
 docker build -t quay.io/kuadrant/wasm-shim:dev /path/to/wasm-shim
 # 2. Build operator with extra extensions, load images, and deploy
-make docker-build IMG=quay.io/kuadrant/kuadrant-operator:dev EXTRA_EXTENSIONS=threat-policy
+make docker-build IMG=quay.io/kuadrant/kuadrant-operator:dev EXTRA_EXTENSIONS=my-policy
 make local-setup IMG=quay.io/kuadrant/kuadrant-operator:dev
 # 3. Push wasm-shim to Kind's local registry (Istio fetches wasm via OCI, not container runtime)
 docker tag quay.io/kuadrant/wasm-shim:dev localhost:5001/kuadrant/wasm-shim:dev
@@ -115,6 +119,7 @@ kubectl set env deployment/kuadrant-operator-controller-manager -n kuadrant-syst
 ```
 
 ### Code Generation
+
 ```bash
 # Generate manifests (CRDs, RBAC, webhooks)
 make manifests
@@ -150,12 +155,14 @@ The operator supports out-of-process (OOP) extensions via gRPC over Unix domain 
 3. **Subscribe to cluster events** for reactive reconciliation
 
 **Extension Architecture:**
+
 - Extensions live in `cmd/extensions/*/` (e.g., `oidc-policy`, `plan-policy`, `telemetry-policy`)
 - They connect to the operator via Unix socket (path provided as first CLI arg)
 - Communication uses gRPC protocol defined in `pkg/extension/`
 - Extensions use the SDK in `pkg/extension/` for controller building
 
 **Data Flow:**
+
 ```
 Extension Controller → kuadrant.Resolve(CEL) → Operator Policy Machinery
                     ↓
@@ -163,6 +170,7 @@ Extension Controller → kuadrant.Resolve(CEL) → Operator Policy Machinery
 ```
 
 **Bindings and Domains:**
+
 - `DomainAuth`: Bindings consumed by Authorino (e.g., dynamic metadata, claims)
 - `DomainRequest`: Bindings consumed by Envoy wasm/Limitador (e.g., request labels, headers)
 
@@ -211,44 +219,58 @@ Extensions define their own API versions under `cmd/extensions/*/api/`.
 ## Key Packages
 
 ### `internal/controller/`
+
 Contains all reconciliation logic:
+
 - Workflow definitions for policy reconciliation
 - Integration reconcilers for Authorino, Limitador, Envoy Gateway, Istio
 - Status updaters and validators
 - Gateway provider-specific logic
 
 ### `internal/policymachinery/`
+
 Core policy machinery for topology management:
+
 - Policy attachment resolution
 - Target reference validation
 - Policy conflict detection
 
 ### `internal/extension/`
+
 Extension manager for OOP extensions:
+
 - gRPC server for extension communication
 - Extension discovery and lifecycle management
 - CEL evaluation context provider
 
 ### `internal/gatewayapi/`
+
 Gateway API utilities and helpers:
+
 - HTTPRoute matching and selection
 - Gateway status management
 - Policy attachment patterns
 
 ### `internal/authorino/`, `internal/istio/`, `internal/envoygateway/`
+
 Provider-specific integrations with platform-specific APIs and CRDs.
 
 ### `internal/wasm/`
+
 WebAssembly integration for Envoy-based rate limiting and policy enforcement.
 
 ### `pkg/extension/`
+
 Extension SDK for building OOP extensions:
+
 - Controller builder API
 - gRPC client/server definitions
 - Utilities for CEL evaluation and resource management
 
 ### `pkg/cel/`
+
 CEL (Common Expression Language) extensions:
+
 - Topology query functions (`findGateways()`, `findAuthPolicies()`)
 - Kuadrant-specific CEL functions
 - Expression evaluation utilities
@@ -271,6 +293,7 @@ When modifying policy types:
 ### Adding New Reconcilers
 
 New reconcilers should:
+
 - Implement the workflow pattern with preconditions, tasks, postconditions
 - Use `internal/reconcilers/` utilities for common operations
 - Follow the naming convention `*_reconciler.go`
@@ -279,12 +302,14 @@ New reconcilers should:
 ### Working with Extensions
 
 Extensions are independent controller processes:
+
 - Each extension has its own `main.go` in `cmd/extensions/*/`
 - Extensions receive the Unix socket path as the first CLI argument
 - Use `pkg/extension/controller.NewBuilder()` to construct controllers
 - Extensions must implement the Policy interface and define CRDs
 
 To develop a new extension:
+
 1. Create directory structure under `cmd/extensions/my-extension/`
 2. Define API types in `api/v1alpha1/`
 3. Implement reconciler in `internal/controller/`
@@ -295,6 +320,7 @@ To develop a new extension:
 ### Gateway Provider Support
 
 The operator supports multiple gateway providers (Istio, Envoy Gateway). When adding provider-specific logic:
+
 - Use `internal/istio/` for Istio-specific code
 - Use `internal/envoygateway/` for Envoy Gateway-specific code
 - Ensure logic is conditionally enabled based on CRD availability

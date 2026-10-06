@@ -169,7 +169,6 @@ rules:
   - oidcpolicies
   - planpolicies
   - telemetrypolicies
-  - threatpolicies
   verbs:
   - get
   - list
@@ -182,7 +181,6 @@ rules:
   - oidcpolicies/finalizers
   - planpolicies/finalizers
   - telemetrypolicies/finalizers
-  - threatpolicies/finalizers
   verbs:
   - update
 - apiGroups:
@@ -191,7 +189,6 @@ rules:
   - oidcpolicies/status
   - planpolicies/status
   - telemetrypolicies/status
-  - threatpolicies/status
   verbs:
   - get
   - patch

@@ -71,17 +71,26 @@ cold start" in Open follow-ups).
 
 ## Observability
 
-*Not yet investigated - deferred by design.* The question: can a Policy's
-status (e.g. a TokenRateLimitPolicy's `Enforced` condition) accurately
-reflect whether its config is actually active in the data plane yet, rather
-than just "the operator reconciled successfully and cached the config for
-the gRPC handler to serve"? This matters specifically for this PoC because
-the wasm module fetches asynchronously, on its own schedule, after the
-EnvoyFilter (with its bootstrap stand-in) has already been written and
-observed by Kubernetes - there's a real window (and, per the fail-open
-decision in Scope, a real enforcement gap) between "operator says done" and
-"gateway has actually applied it." To be investigated and filled in here
-once scoped.
+A policy's `Enforced` status condition is meant to answer one question: is
+this policy actually active on the data plane? That's only true if the
+condition reflects real data-plane state.
+
+**The kuadrant operator, playing the role of `PluginConfigService`, cannot
+tell whether a fetch is ever applied.** `GetPluginConfig`
+(`internal/extension/manager.go:701`) is a plain unary RPC: it looks up the
+cached config and returns it, discarding even the request context (`_
+context.Context`) - no peer identity, no logging, nothing recorded about
+which gateway fetched or when. Once the response leaves the handler, the
+operator has zero visibility into whether `on_configure` applied it,
+rejected it, or never ran at all. `Enforced`'s own logic confirms this has
+no bearing today either way - it only checks EnvoyFilter object sync, the
+same `return true` stub used for every Istio gateway regardless of PoC.
+
+This is fixable, but requires real protocol work: a digest-aware fetch (so
+the operator can tell *which* version a gateway has, not just that it
+fetched *something*) plus a second, purpose-built RPC for wasm-shim to
+report apply success/failure back. Neither exists today, and both would
+need to be designed and built from scratch.
 
 ## Upgrade impact
 

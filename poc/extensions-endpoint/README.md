@@ -114,6 +114,37 @@ case too, unmodified.
 network call, so the wasm module cannot hold Envoy's "not ready yet" while
 it fetches. Closing it would need wasm-level request pause/resume.
 
+## Config size limits
+
+This PoC removes the EnvoyFilter size ceiling, but the real config still
+has to be delivered and held in memory somewhere - confirmed live that this
+introduces two independent ceilings of its own, found by growing a TRLP to
+hundreds/thousands of limits.
+
+**At default resource limits, both sides can be OOM-killed before any
+transport question is even reached.** The operator's own reconcile cost
+scales with policy count - compiling ~1000 limits peaked around 700Mi,
+exceeding the operator's shipped default memory limit (fixed in
+kuadrant-operator#2321, which raised it from 300Mi/limit to 500Mi/limit,
+but that's a higher ceiling, not an unbounded one - larger policy sets
+still OOM it). Separately, even after a fetch succeeds, the gateway pod
+itself can be OOM-killed applying an oversized config: a ~15MB config
+(300 TRLP limits) is stable at the gateway's default 1Gi memory limit, but
+~30MB (600 limits) **crashes the whole gateway pod** (crash-loop, zero traffic) at that same default -
+notably worse than a clean rejection, since it takes the whole proxy down,
+not just this policy.
+
+**With memory ruled out as a confound** (both operator and gateway given
+generous headroom), a separate, genuine transport-level limit appeared:
+fetches around ~75MB (1500 limits) saw repeated `status 13 (INTERNAL)`
+failures before eventually succeeding on retry, and at ~151MB (3000
+limits) the fetch failed
+**consistently, every retry, with memory staying flat and low** - confirming
+this is the gRPC channel rejecting the message, not a memory problem. No
+explicit message-size limit is configured anywhere in this PoC's code; this
+behavior comes from the underlying gRPC/HTTP2 client Envoy uses internally
+for `dispatch_grpc_call`.
+
 ## Key findings
 
 ### Live-cluster findings

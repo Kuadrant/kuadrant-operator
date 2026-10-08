@@ -414,6 +414,9 @@ rules:
   - authorino-manager-role
   - authorino-operator
   - authorino-operator-manager
+  - authorino-set-cluster-wide
+  - authorino-set-image
+  - authorino-set-superseding-host-subsets
   - developer-portal-controller-manager-role
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role

@@ -33,7 +33,7 @@ const requeueInterval = 5 * time.Minute
 
 // Component deployer RBAC — ClusterRole management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=create
-//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller;authorino-manager-role;authorino-operator-manager;authorino-manager-k8s-auth-role;authorino-operator;authorino-authconfig-editor-role;authorino-authconfig-viewer-role;limitador-operator-manager-role;limitador-operator-controller-manager;developer-portal-controller-manager-role,verbs=delete;get;update;patch;bind;escalate
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,resourceNames=dns-operator-manager-role;dns-operator-remote-cluster-role;mcp-gateway-controller;authorino-manager-role;authorino-operator-manager;authorino-manager-k8s-auth-role;authorino-operator;authorino-authconfig-editor-role;authorino-authconfig-viewer-role;authorino-set-cluster-wide;authorino-set-image;authorino-set-superseding-host-subsets;limitador-operator-manager-role;limitador-operator-controller-manager;developer-portal-controller-manager-role,verbs=delete;get;update;patch;bind;escalate
 
 // Component deployer RBAC — ClusterRoleBinding management
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=create

@@ -201,6 +201,3 @@ type PlanPolicyList struct {
 	Items           []PlanPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&PlanPolicy{}, &PlanPolicyList{})
-}

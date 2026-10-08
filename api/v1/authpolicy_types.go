@@ -557,6 +557,3 @@ type AuthPolicyList struct {
 	Items           []AuthPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&AuthPolicy{}, &AuthPolicyList{})
-}

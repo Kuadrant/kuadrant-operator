@@ -313,6 +313,3 @@ type KuadrantList struct {
 	Items           []Kuadrant `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&Kuadrant{}, &KuadrantList{})
-}

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -28,8 +29,8 @@ const (
 )
 
 // list of all kinds that are allowed to re-create
-var recreatableKinds = map[string]struct{}{
-	"Deployment": {},
+var recreatableKinds = map[schema.GroupKind]struct{}{
+	{Group: "apps", Kind: "Deployment"}: {},
 }
 
 var installOrder = map[string]int{
@@ -165,7 +166,7 @@ func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.U
 }
 
 func isRecreatable(obj *unstructured.Unstructured) bool {
-	_, ok := recreatableKinds[obj.GetKind()]
+	_, ok := recreatableKinds[obj.GroupVersionKind().GroupKind()]
 	return ok
 }
 

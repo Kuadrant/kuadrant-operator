@@ -142,18 +142,22 @@ func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.U
 		return nil
 	}
 
-	if !isImmutableFieldError(err) || !isRecreatable(obj) {
-		return fmt.Errorf("applying %s %s: %w", obj.GetKind(), obj.GetName(), err)
+	if isImmutableFieldError(err) && isRecreatable(obj) {
+		return a.deleteForRecreate(ctx, rc, obj, err)
 	}
+	return fmt.Errorf("applying %s %s: %w", obj.GetKind(), obj.GetName(), err)
+}
 
+// deleteForRecreate deletes obj after an apply was rejected for an immutable
+// field change. It returns an error so the reconciler's requeue recreates it.
+func (a *ResourceApplier) deleteForRecreate(ctx context.Context, rc dynamic.ResourceInterface, obj *unstructured.Unstructured, applyErr error) error {
 	a.logger.Info("deleting resource due to immutable field conflict",
 		"kind", obj.GetKind(),
 		"name", obj.GetName(),
 		"namespace", obj.GetNamespace(),
-		"error", err.Error(),
+		"error", applyErr,
 	)
 
-	// deleting object which will be automatically recreated in the next reconcile cycle.
 	if delErr := rc.Delete(ctx, obj.GetName(), metav1.DeleteOptions{
 		PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
 	}); delErr != nil && !apierrors.IsNotFound(delErr) {
@@ -163,7 +167,7 @@ func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.U
 	// Returning the error is what recreates the object: the reconciler
 	// requeues on it, and the next apply finds nothing to conflict with.
 	return fmt.Errorf("deleted %s %s to resolve immutable field conflict, recreating on requeue: %w",
-		obj.GetKind(), obj.GetName(), err)
+		obj.GetKind(), obj.GetName(), applyErr)
 }
 
 func isRecreatable(obj *unstructured.Unstructured) bool {

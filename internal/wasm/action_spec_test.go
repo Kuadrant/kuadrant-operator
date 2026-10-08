@@ -164,6 +164,39 @@ func TestMetadataCEL_ToCEL(t *testing.T) {
 	}
 }
 
+func TestBuildMetadataContextOrdersFields(t *testing.T) {
+	fields := map[string]string{
+		"user_id":    "request.auth.identity.userid",
+		"account_id": "request.auth.identity.accountid",
+		"method":     "request.method",
+		"path":       "request.path",
+	}
+	want := MetadataCEL{FilterMetadata: []FilterMetadataEntryCEL{{
+		Domain: "io.kuadrant.logging",
+		Fields: []MetadataFieldCEL{
+			{Key: "account_id", Expression: "request.auth.identity.accountid"},
+			{Key: "method", Expression: "request.method"},
+			{Key: "path", Expression: "request.path"},
+			{Key: "user_id", Expression: "request.auth.identity.userid"},
+		},
+	}}}
+
+	for i := 0; i < 100; i++ {
+		bindings := make([]DataBinding, 0, len(fields))
+		for field, expression := range fields {
+			bindings = append(bindings, DataBinding{
+				Domain:     "logging",
+				Field:      field,
+				Expression: expression,
+			})
+		}
+
+		if got := buildMetadataContext(bindings); !reflect.DeepEqual(got, want) {
+			t.Fatalf("iteration %d: buildMetadataContext() = %#v, want %#v", i, got, want)
+		}
+	}
+}
+
 func TestCheckRequestCEL_ToCEL(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		req := CheckRequestCEL{Scope: "test-scope"}

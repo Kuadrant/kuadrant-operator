@@ -736,6 +736,12 @@ func buildMetadataContext(bindings []DataBinding) MetadataCEL {
 
 	groups := make([]domainGroup, 0, len(byDomain))
 	for _, g := range byDomain {
+		sort.Slice(g.fields, func(i, j int) bool {
+			if g.fields[i].Key != g.fields[j].Key {
+				return g.fields[i].Key < g.fields[j].Key
+			}
+			return g.fields[i].Expression < g.fields[j].Expression
+		})
 		groups = append(groups, *g)
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].domain < groups[j].domain })

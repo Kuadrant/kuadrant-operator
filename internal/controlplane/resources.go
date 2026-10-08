@@ -176,7 +176,8 @@ func isRecreatable(obj *unstructured.Unstructured) bool {
 }
 
 // isImmutableFieldError reports whether err is a validation rejection caused
-// by an attempt to change an immutable field.
+// by an attempt to change an immutable field, and only immutable fields (no
+// other validation errors that would persist after recreation).
 func isImmutableFieldError(err error) bool {
 	var statusErr *apierrors.StatusError
 	if !errors.As(err, &statusErr) || !apierrors.IsInvalid(err) {
@@ -186,12 +187,17 @@ func isImmutableFieldError(err error) bool {
 	if details == nil {
 		return false
 	}
+
+	hasImmutableError := false
 	for _, cause := range details.Causes {
-		if cause.Type == metav1.CauseTypeFieldValueInvalid && strings.Contains(cause.Message, "immutable") {
-			return true
+		if cause.Type == metav1.CauseTypeFieldValueInvalid {
+			if !strings.Contains(cause.Message, "immutable") {
+				return false
+			}
+			hasImmutableError = true
 		}
 	}
-	return false
+	return hasImmutableError
 }
 
 func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) error {

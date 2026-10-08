@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -170,9 +171,23 @@ func isRecreatable(obj *unstructured.Unstructured) bool {
 	return ok
 }
 
-// Checks if error on object is caused by immutable field change
+// isImmutableFieldError reports whether err is a validation rejection caused
+// by an attempt to change an immutable field.
 func isImmutableFieldError(err error) bool {
-	return apierrors.IsInvalid(err) && strings.Contains(err.Error(), "immutable")
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) || !apierrors.IsInvalid(err) {
+		return false
+	}
+	details := statusErr.Status().Details
+	if details == nil {
+		return false
+	}
+	for _, cause := range details.Causes {
+		if cause.Type == metav1.CauseTypeFieldValueInvalid && strings.Contains(cause.Message, "immutable") {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) error {

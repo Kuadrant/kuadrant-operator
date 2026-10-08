@@ -340,6 +340,18 @@ func TestApplyResource_DeleteOnImmutableField(t *testing.T) {
 			wantDeletes: 0,
 		},
 		{
+			name:   "does not delete a Deployment whose name is immutable",
+			object: deploymentWithImage("immutable", "limitador-operator:v1"),
+			applyErr: apierrors.NewInvalid(
+				schema.GroupKind{Group: "apps", Kind: "Deployment"},
+				"immutable",
+				field.ErrorList{
+					field.Required(field.NewPath("spec", "template", "spec", "containers"), "is required"),
+				},
+			),
+			wantDeletes: 0,
+		},
+		{
 			name:        "never deletes a kind outside the allowlist",
 			object:      newUnstructured("Service", "limitador-operator-metrics"),
 			applyErr:    immutableSelectorError("limitador-operator-metrics"),

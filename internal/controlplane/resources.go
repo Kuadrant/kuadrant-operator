@@ -2,20 +2,25 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/restmapper"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -23,6 +28,11 @@ const (
 	crdWaitTimeout  = 30 * time.Second
 	crdWaitInterval = 1 * time.Second
 )
+
+// list of all kinds that are allowed to re-create
+var recreatableKinds = map[schema.GroupKind]struct{}{
+	{Group: "apps", Kind: "Deployment"}: {},
+}
 
 var installOrder = map[string]int{
 	"Namespace":                0,
@@ -85,6 +95,7 @@ func kindOrder(kind string) int {
 // ApplyResources applies each object via server-side apply. If ownerRef is
 // non-nil, it's set on every object first, so deleting the owner (the
 // KuadrantControlPlane CR) cascade-deletes everything the deployer applied.
+// If changing immutable field and object is in allowlist, the object will be deleted and created again
 func (a *ResourceApplier) ApplyResources(ctx context.Context, objects []*unstructured.Unstructured, ownerRef *metav1.OwnerReference) error {
 	for _, obj := range objects {
 		if err := a.applyResource(ctx, obj, ownerRef); err != nil {
@@ -127,11 +138,66 @@ func (a *ResourceApplier) applyResource(ctx context.Context, obj *unstructured.U
 		FieldManager: fieldManager,
 		Force:        true,
 	})
-	if err != nil {
-		return fmt.Errorf("applying %s %s: %w", obj.GetKind(), obj.GetName(), err)
+	if err == nil {
+		return nil
 	}
 
-	return nil
+	if isImmutableFieldError(err) && isRecreatable(obj) {
+		return a.deleteForRecreate(ctx, rc, obj, err)
+	}
+	return fmt.Errorf("applying %s %s: %w", obj.GetKind(), obj.GetName(), err)
+}
+
+// deleteForRecreate deletes obj after an apply was rejected for an immutable
+// field change. It returns an error so the reconciler's requeue recreates it.
+func (a *ResourceApplier) deleteForRecreate(ctx context.Context, rc dynamic.ResourceInterface, obj *unstructured.Unstructured, applyErr error) error {
+	a.logger.Info("deleting resource due to immutable field conflict",
+		"kind", obj.GetKind(),
+		"name", obj.GetName(),
+		"namespace", obj.GetNamespace(),
+		"error", applyErr,
+	)
+
+	if delErr := rc.Delete(ctx, obj.GetName(), metav1.DeleteOptions{
+		PropagationPolicy: ptr.To(metav1.DeletePropagationBackground),
+	}); delErr != nil && !apierrors.IsNotFound(delErr) {
+		return fmt.Errorf("deleting %s %s after immutable field conflict: %w", obj.GetKind(), obj.GetName(), delErr)
+	}
+
+	// Returning the error is what recreates the object: the reconciler
+	// requeues on it, and the next apply finds nothing to conflict with.
+	return fmt.Errorf("deleted %s %s to resolve immutable field conflict, recreating on requeue: %w",
+		obj.GetKind(), obj.GetName(), applyErr)
+}
+
+func isRecreatable(obj *unstructured.Unstructured) bool {
+	_, ok := recreatableKinds[obj.GroupVersionKind().GroupKind()]
+	return ok
+}
+
+// isImmutableFieldError reports whether err is a validation rejection caused
+// by an attempt to change an immutable field, and only immutable fields (no
+// other validation errors that would persist after recreation).
+func isImmutableFieldError(err error) bool {
+	var statusErr *apierrors.StatusError
+	if !errors.As(err, &statusErr) || !apierrors.IsInvalid(err) {
+		return false
+	}
+	details := statusErr.Status().Details
+	if details == nil {
+		return false
+	}
+
+	hasImmutableError := false
+	for _, cause := range details.Causes {
+		if cause.Type == metav1.CauseTypeFieldValueInvalid {
+			if !strings.Contains(cause.Message, "immutable") {
+				return false
+			}
+			hasImmutableError = true
+		}
+	}
+	return hasImmutableError
 }
 
 func (a *ResourceApplier) WaitForCRDs(ctx context.Context, crdNames []string) error {

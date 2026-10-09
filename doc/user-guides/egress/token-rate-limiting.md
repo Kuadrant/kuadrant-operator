@@ -450,6 +450,12 @@ EOF
 
 See the [`reservation` API reference](../../reference/tokenratelimitpolicy.md#reservation) for full details, including the Limitador-side caps (`spec.reservations.maxFraction`, `spec.reservations.maxTtl`) on how much a single reservation can claim and how long it can be held.
 
+Clean up before the next section:
+
+```sh
+kubectl delete tokenratelimitpolicy ai-per-workload -n gateway-system
+```
+
 ### Cluster-Wide Mode
 
 The Kuadrant CR `spec.tokenRateLimiting.mode` field controls enforcement behavior cluster-wide, for every TokenRateLimitPolicy:

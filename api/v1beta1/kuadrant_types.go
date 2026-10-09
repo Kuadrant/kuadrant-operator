@@ -312,4 +312,3 @@ type KuadrantList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Kuadrant `json:"items"`
 }
-

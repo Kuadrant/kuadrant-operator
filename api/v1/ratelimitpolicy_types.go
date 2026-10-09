@@ -334,4 +334,3 @@ type RateLimitPolicyList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []RateLimitPolicy `json:"items"`
 }
-

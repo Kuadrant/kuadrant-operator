@@ -315,4 +315,3 @@ func (s *OIDCPolicyStatus) Equals(other *OIDCPolicyStatus, logger logr.Logger) b
 
 	return true
 }
-

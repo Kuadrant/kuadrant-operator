@@ -382,7 +382,9 @@ When using a real external AI API (for example, OpenAI), the egress gateway term
 
 ### Concurrent Request Race Condition
 
-The current TRLP implementation uses a two-phase protocol: the gateway checks limits before forwarding the request (without consuming tokens), then reports actual usage after receiving the response. Between these two phases, concurrent in-flight requests can race past the limit because nothing holds capacity during model processing. For most use cases this is acceptable because LLM responses are slow enough that burst patterns are uncommon. For strict enforcement under high concurrency, see [Token Limit Reservations](#token-limit-reservations-coming-soon) below.
+The Kuadrant CR field `spec.tokenRateLimiting.mode` controls cluster-wide how TRLP enforces limits: `Reservation` (the default) or `Optimistic`. In `Optimistic` mode, the gateway checks limits before forwarding the request (without consuming tokens), then reports actual usage after receiving the response; between these two phases, concurrent in-flight requests can race past the limit because nothing holds capacity during model processing.
+
+`Reservation` mode closes this gap by reserving an estimated token amount on request arrival and committing the actual usage once the upstream responds, releasing any unused portion of the reservation. However, **`reservation.amount` defaults to `0`, which reserves no capacity** — so a TokenRateLimitPolicy that doesn't set `amount` explicitly behaves like `Optimistic` even while the cluster is in `Reservation` mode. See [Token Limit Reservations](#token-limit-reservations) below to enable real protection on this egress gateway, and the [Token Rate Limiting Overview](../../overviews/token-rate-limiting.md#enforcement-modes) for the full explanation of both modes.
 
 ### Supported Response Formats
 
@@ -400,32 +402,30 @@ Verify that your AI provider returns `usage.total_tokens` in every response befo
 
 Egress gateway support targets Istio as the Gateway API provider. Envoy Gateway is not supported for egress at this time.
 
-## Token Limit Reservations (Coming Soon)
+## Token Limit Reservations
 
-> This section describes a planned enhancement. The code does not exist yet. See [architecture#190](https://github.com/Kuadrant/architecture/pull/190) for the full RFC.
+The cluster is already in `Reservation` mode by default (see [Concurrent Request Race Condition](#concurrent-request-race-condition) above), implemented per RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md). But without an explicit `reservation.amount` on a limit, that limit still behaves like `Optimistic` mode. This section shows how to turn on real reservation-based protection for the per-workload policy from [Per-Workload Token Limiting](#per-workload-token-limiting).
 
-The current two-phase flow (check then report) has a known race condition: concurrent in-flight requests all pass the check phase before any of them report usage, allowing cumulative consumption to exceed the configured limit. Token limit reservations close this gap by holding estimated capacity at request time.
+### How It Works
 
-### How It Will Work
-
-When a request arrives, the gateway will reserve an estimated token amount against the limit. If remaining capacity (accounting for all outstanding reservations) is insufficient, the request is rejected immediately. After the model responds, the actual usage is committed and the reservation is released.
+When a request arrives, the gateway reserves an estimated token amount against the limit. If remaining capacity (accounting for all outstanding reservations) is insufficient, the request is rejected immediately with `429`. After the model responds, the actual usage is committed and the unused portion of the reservation is released.
 
 ```
-Request arrives → Reserve(estimated amount, TTL) → Forward to model → Commit(actual usage) → Release reservation
+Request arrives → Reserve(estimated amount, TTL) → Forward to model → Commit(actual usage) → Release unused reservation
 ```
 
-If the model call fails or times out, the reservation expires on its own TTL. No cleanup call is needed.
+If the model call fails or times out, the reservation is released with a commit of `amount` `0`, reclaiming capacity without waiting for the counter window to roll over.
 
-### Policy Changes
+### Set a Reservation Amount
 
-A new optional `reservation` block on each limit will allow configuring the estimated amount and hold duration:
+Add a `reservation` block to the limit, with an estimated token cost per request and a hold duration:
 
-```yaml
-# Not yet available — requires Limitador and operator support
+```sh
+kubectl apply -f - <<'EOF'
 apiVersion: kuadrant.io/v1alpha1
 kind: TokenRateLimitPolicy
 metadata:
-  name: ai-token-limit-with-reservations
+  name: ai-per-workload
   namespace: gateway-system
 spec:
   targetRef:
@@ -435,35 +435,46 @@ spec:
   limits:
     per-workload:
       rates:
-        - limit: 50000
-          window: 24h
+        - limit: 100
+          window: 1m
       counters:
         - expression: auth.identity.username
       reservation:
-        amount: "uint(5000)"
-        ttl: "duration('30s')"
+        amount: 10
+        ttl: 'duration("30s")'
+EOF
 ```
 
-- `reservation.amount`: CEL expression for estimated tokens to hold. Defaults to `uint(5000)` when omitted.
-- `reservation.ttl`: how long to hold the reservation before auto-releasing. Defaults to the route's backend request timeout.
+- `reservation.amount`: a literal integer or a CEL expression evaluating to the number of tokens (`uint`) to reserve on request arrival. Defaults to `0` (no capacity reserved) when the `reservation` block or `amount` is omitted — set it explicitly to a meaningful, non-zero estimate to get protection against the concurrent-request race.
+- `reservation.ttl`: a CEL expression evaluating to the maximum duration the reservation is held before it auto-releases. Defaults to the route's `backendRequest` timeout when available; otherwise, Limitador applies its default.
 
-Policies that omit the `reservation` block automatically get safe defaults. No changes are required to existing TRLP resources.
+See the [`reservation` API reference](../../reference/tokenratelimitpolicy.md#reservation) for full details on the field, and the [Token Rate Limiting Overview](../../overviews/token-rate-limiting.md#enforcement-modes) for the Limitador-side caps (`spec.reservations.maxFraction`, `spec.reservations.maxTtl`) on how much a single reservation can claim and how long it can be held.
 
-### Cluster-Wide Mode Switch
+Clean up before the next section:
 
-The Kuadrant CR will gain a `tokenRateLimiting.mode` field to control the behavior cluster-wide:
+```sh
+kubectl delete tokenratelimitpolicy ai-per-workload -n gateway-system
+```
+
+### Cluster-Wide Mode
+
+The Kuadrant CR `spec.tokenRateLimiting.mode` field controls enforcement behavior cluster-wide, for every TokenRateLimitPolicy:
 
 ```yaml
-# Not yet available
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
 spec:
   tokenRateLimiting:
-    mode: Reservation   # default; set to CheckReport to revert to today's behavior
+    mode: Reservation   # default; set to Optimistic to use check-then-report instead
 ```
 
-- `Reservation` (default when available): uses Reserve/Commit for all TokenRateLimitPolicies
-- `CheckReport`: reverts to today's Check/Report behavior
+- `Reservation` (default): uses Reserve/Commit for all TokenRateLimitPolicies, per the per-limit `reservation` settings described above
+- `Optimistic`: uses check-then-report for all TokenRateLimitPolicies, as described in [Concurrent Request Race Condition](#concurrent-request-race-condition)
+
+See the [Token Rate Limiting Overview](../../overviews/token-rate-limiting.md#enforcement-modes) for the full comparison of both modes.
 
 ## Cleanup
 
@@ -484,7 +495,7 @@ curl -sL https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads
 ## References
 
 - [RFC 0013: AI Policies](https://github.com/Kuadrant/architecture/blob/main/rfcs/0013-ai-policies.md)
-- [RFC: Token Rate Limit Reservations](https://github.com/Kuadrant/architecture/pull/190) (draft)
+- [RFC 0021: Token Rate Limit Reservations](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md)
 - [TokenRateLimitPolicy Overview](../../overviews/token-rate-limiting.md)
 - [Token Rate Limiting Tutorial](../tokenratelimitpolicy/authenticated-token-ratelimiting-tutorial.md)
 - [Egress Gateway Setup](egress-gateway.md)

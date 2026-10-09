@@ -1,4 +1,4 @@
-# Monitoring and Troubleshooting Egress Traffic
+# Monitoring and troubleshooting egress traffic
 
 The same metrics, access logs, and tracing infrastructure that works on ingress gateways also works on egress. This guide covers the label values, troubleshooting patterns, and security considerations specific to outbound traffic through an Istio egress gateway.
 
@@ -16,7 +16,7 @@ The examples in this guide use:
 | Gateway name | `kuadrant-egressgateway` |
 | External service | `httpbin.org` |
 
-### Common Tasks
+### Common tasks
 
 | Goal | Section |
 |------|---------|
@@ -27,9 +27,9 @@ The examples in this guide use:
 | Trace request flow through policies | [Egress Span Chain](#egress-span-chain) |
 | Prevent trace headers from reaching external services | [Preventing Trace Header Leaking](#preventing-trace-header-leaking) |
 
-## Egress Metrics
+## Egress metrics
 
-### Available Metrics
+### Available metrics
 
 The egress gateway emits the same standard Istio proxy metrics as an ingress gateway. Because the egress gateway terminates HTTP from the workload and originates TLS to the external service, full L7 metrics are available:
 
@@ -40,7 +40,7 @@ The egress gateway emits the same standard Istio proxy metrics as an ingress gat
 | `istio_request_bytes` | Histogram | Request body size distribution |
 | `istio_response_bytes` | Histogram | Response body size distribution |
 
-### Egress-Specific Label Values
+### Egress-specific label values
 
 The same labels appear on egress metrics as on ingress, but their values differ in important ways:
 
@@ -59,7 +59,7 @@ The same labels appear on egress metrics as on ingress, but their values differ 
 
 **Understanding `source_workload`:** On the egress gateway, `source_workload` identifies the gateway itself, not the workload that initiated the request. To attribute egress traffic to specific workloads, use [workload identity via AuthPolicy](egress-gateway.md#workload-identity) and correlate using access logs or traces. Alternatively, if the route is rate limited, [TelemetryPolicy](#custom-metric-labels-with-telemetrypolicy) can record the calling workload directly as a label on the Kuadrant data plane metrics.
 
-### Querying Egress Metrics
+### Querying egress metrics
 
 You can verify that metrics are being emitted by querying the egress gateway pod Prometheus endpoint directly:
 
@@ -80,7 +80,7 @@ istio_requests_total{...,destination_service="httpbin.org",...,response_code="50
 istio_requests_total{...,destination_service="unknown",...,response_code="404",response_flags="NR",...} 4
 ```
 
-### PromQL Examples
+### PromQL examples
 
 These queries work when Prometheus is scraping the egress gateway pod.
 
@@ -139,17 +139,17 @@ sum(rate(istio_requests_total{
 }[5m])) by (destination_service)
 ```
 
-### Identifying the Egress Gateway
+### Identifying the egress gateway
 
 For Kubernetes queries (kubectl, log filtering), use the pod label `gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway`.
 
 For PromQL queries, filter by `source_workload="kuadrant-egressgateway-istio"` to isolate egress traffic from ingress traffic on the same Prometheus instance. This is the Istio proxy workload name, which appears as a label on all `istio_*` metrics.
 
-## Custom Metric Labels with TelemetryPolicy
+## Custom metric labels with TelemetryPolicy
 
 The `istio_*` metrics above cannot tell you which workload made an outbound call: on an egress gateway, `source_workload` is always the gateway itself. [TelemetryPolicy](../../overviews/telemetrypolicy.md) closes that gap by adding custom labels, derived from CEL expressions, to the metrics Kuadrant's own data plane emits. The policy itself has no egress-specific fields, so a policy written for an egress gateway looks identical to one written for an ingress gateway.
 
-### Which Metrics Get Labeled
+### Which metrics get labeled
 
 TelemetryPolicy labels the metrics Kuadrant's own components emit; it does not touch the `istio_*` metrics. Two components consume the labels.
 
@@ -183,7 +183,7 @@ For the labels Authorino does apply, a single metric can hold series with differ
 
 Adding a TelemetryPolicy does not change `istio_requests_total` in any way.
 
-### Requirements for Emitting Labels
+### Requirements for emitting labels
 
 Neither of the following requirements is specific to egress, but both are commonly missed when the target is an egress gateway:
 
@@ -212,7 +212,7 @@ The examples below use the resources from the [Egress Gateway Setup](egress-gate
 | External service | `api.ai-mock.local` |
 | Calling workload | `team-gold` service account in `egress-test` |
 
-### Attributing Egress Traffic to the Calling Workload
+### Attributing egress traffic to the calling workload
 
 Attach a TelemetryPolicy to the egress gateway, labeling each metric with the authenticated identity of the calling workload and the external destination:
 
@@ -275,7 +275,7 @@ The same labels appear on `limited_calls` when a workload exceeds its limit, so 
 limited_calls{source_ip="10.244.0.24",workload="system:serviceaccount:egress-test:default",destination="api.ai-mock.local",limitador_namespace="gateway-system/ai-mock-external"} 12
 ```
 
-### CEL Attributes Available on Egress
+### CEL attributes available on egress
 
 Each label is attached to both the rate limit check descriptor and the report descriptor. The check runs in the **request** phase, before the external service responds, so every expression must resolve at that point. This is the single most important constraint on egress: response attributes are not available, even for labels that only appear on `report_calls`.
 
@@ -294,7 +294,7 @@ Note that `request.scheme` describes the workload-to-gateway leg, not the gatewa
 
 To label by response status, use the `istio_requests_total` metric and its `response_code` label instead, as shown in [PromQL examples](#promql-examples).
 
-### Label Cardinality
+### Label cardinality
 
 Every distinct combination of label values creates a new Prometheus time series, so a high-cardinality expression on a busy egress gateway is expensive.
 
@@ -310,7 +310,7 @@ source_ip: source.address.substring(0, source.address.lastIndexOf(":")).replace(
 
 Prefer bounded dimensions such as the workload identity, the destination host, or the request method. Avoid `request.path` unless the path set is small and known; on an API with per-resource paths the series count grows without limit.
 
-### PromQL with Custom Labels
+### PromQL with custom labels
 
 After the labels exist, egress traffic can be broken down by workload and destination.
 
@@ -338,7 +338,7 @@ sum(rate(authorized_hits[5m])) by (workload)
 sum(rate(authorized_calls[5m])) by (workload, destination)
 ```
 
-### Known Limitations
+### Known limitations
 
 **A label expression referencing an unavailable attribute silently stops the metrics.** An expression such as `response.code` is not dropped. Evaluating the Limitador descriptor fails, the gateway logs the following for every request, and no metrics are recorded for the affected route:
 
@@ -358,9 +358,9 @@ kubectl delete telemetrypolicy egress-telemetry -n gateway-system
 
 Then reapply the policy as shown in [Attributing Egress Traffic to the Calling Workload](#attributing-egress-traffic-to-the-calling-workload). Tracked in [#2243](https://github.com/Kuadrant/kuadrant-operator/issues/2243).
 
-## Access Logging
+## Access logging
 
-### Enabling Access Logs
+### Enabling access logs
 
 Enable access logs on the egress gateway using the Istio Telemetry API. Use a `selector` to scope the configuration to the egress gateway pods, avoiding conflicts with other Telemetry resources in the namespace:
 
@@ -385,7 +385,7 @@ Access logs appear in the egress gateway pod stdout:
 kubectl logs -n gateway-system -l gateway.networking.k8s.io/gateway-name=kuadrant-egressgateway -f
 ```
 
-### Reading Egress Access Logs
+### Reading egress access logs
 
 The Envoy default log format includes fields that are particularly useful for egress troubleshooting:
 
@@ -413,7 +413,7 @@ Each access log entry captures both connection legs of the egress path: the inco
 | Downstream remote address | `%DOWNSTREAM_REMOTE_ADDRESS%` | `10.244.0.18:43722` | Source workload pod IP and port |
 | Route name | `%ROUTE_NAME%` | `gateway-system.httpbin-external.0` | Which HTTPRoute matched |
 
-### Troubleshooting with Access Logs
+### Troubleshooting with access logs
 
 **External service errors**
 
@@ -498,7 +498,7 @@ When the calling workload times out before receiving a response:
 - `response_code=0` with `response_flags=DC` (Downstream Connection termination).
 - This means the client gave up before the external service responded. Investigate whether the external service is slow or the client timeout is too short.
 
-### Response Flags Reference
+### Response flags reference
 
 Response flags in access logs indicate where and why a request failed. Flags most relevant to egress:
 
@@ -515,7 +515,7 @@ Response flags in access logs indicate where and why a request failed. Flags mos
 
 The distinction between `response_flags=-` and other flags is critical: a 503 with flags `-` means the external service returned 503. A 503 with `UF` means the gateway could not reach the external service at all.
 
-### Filtering Access Logs
+### Filtering access logs
 
 To reduce log volume, filter access logs to only capture errors. Use `!has(response.code)` to also capture connection failures where no HTTP response code is generated (for example, `UF`, `UH`, `UT` flags):
 
@@ -548,7 +548,7 @@ filter:
   expression: '!request.url_path.startsWith("/healthz")'
 ```
 
-### JSON-Formatted Access Logs
+### JSON-formatted access logs
 
 For integration with log aggregation systems (Loki, Elasticsearch), configure JSON access logs via the Istio mesh configuration. See the [Envoy Access Logs guide](../../observability/envoy-access-logs.md#structured-logging-json-format) for setup instructions.
 
@@ -576,11 +576,11 @@ A recommended JSON format for egress includes these egress-relevant fields:
 }
 ```
 
-## Distributed Tracing
+## Distributed tracing
 
 Distributed tracing shows the complete request flow through the egress gateway, including policy evaluation by the wasm-shim, authentication checks in Authorino, and rate limit checks in Limitador. This section covers egress-specific tracing behavior. For general tracing setup, see the [tracing guide](../../observability/tracing.md).
 
-### Tracing Prerequisites
+### Tracing prerequisites
 
 In addition to the [general prerequisites](#prerequisites), tracing requires two layers of configuration that work together:
 
@@ -608,7 +608,7 @@ spec:
 
 You also need at least one Kuadrant policy (AuthPolicy, RateLimitPolicy, or TokenRateLimitPolicy) attached to the egress gateway or its HTTPRoutes.
 
-### How Tracing Works on Egress
+### How tracing works on egress
 
 The tracing infrastructure is gateway-agnostic. When the Kuadrant CR has a tracing endpoint configured and a policy is attached to the egress gateway, the operator automatically:
 
@@ -628,7 +628,7 @@ NAME                                      AGE
 kuadrant-tracing-kuadrant-egressgateway   10s
 ```
 
-### Egress Span Chain
+### Egress span chain
 
 A request flowing through the egress gateway with both AuthPolicy and RateLimitPolicy produces the following span hierarchy. The wasm-shim creates a root span and child spans for each policy evaluation, propagating trace context to Authorino and Limitador via gRPC metadata:
 
@@ -676,7 +676,7 @@ Key span attributes for troubleshooting:
 | `grpc_service` | `grpc_request` | The upstream service called (for example, `envoy.service.auth.v3.Authorization`) |
 | `grpc_method` | `grpc_request` | The gRPC method called (for example, `Check`, `ShouldRateLimit`) |
 
-### Two Trace Boundaries
+### Two trace boundaries
 
 Envoy does not propagate trace context to wasm filters ([envoyproxy/envoy#22028](https://github.com/envoyproxy/envoy/issues/22028)). This means each request produces two independent traces:
 
@@ -704,7 +704,7 @@ kubectl exec -n egress-test test-client -- \
 
 In Jaeger, search `kuadrant-filter` for tag `request_id=egress-trace-test`, then search `kuadrant-egressgateway-istio.gateway-system` for tag `guid:x-request-id=egress-trace-test`. Both traces correspond to the same request.
 
-### Preventing Trace Header Leaking
+### Preventing trace header leaking
 
 By default, Istio propagates `traceparent`, `tracestate`, and `baggage` headers to upstream services. On an egress gateway, this means trace headers reach external services, which is a security concern: the headers reveal internal infrastructure details (trace IDs, span IDs, internal state).
 
@@ -749,13 +749,13 @@ filters:
 
 **Istio < 1.30:** The `disableContextPropagation` field is not available. Header removal via `RequestHeaderModifier` in HTTPRoute does not work for `traceparent` and `tracestate` because Istio re-injects these headers after the filter processes the request. Only `baggage` can be stripped this way. Consider upgrading to Istio 1.30+ for egress tracing security.
 
-### Tracing Without a Sidecar
+### Tracing without a sidecar
 
 When the calling workload does not have an Istio sidecar (for example, reaching the egress gateway via its ClusterIP service), the first Envoy span starts at the egress gateway. No workload sidecar outbound span exists.
 
 Wasm-shim traces work identically regardless of sidecar presence. For trace continuity, workloads must propagate `x-request-id` headers in their requests so the wasm-shim can correlate traces.
 
-### Tracing Troubleshooting
+### Troubleshooting tracing
 
 **No `kuadrant-filter` service in Jaeger**
 
@@ -771,7 +771,7 @@ This is expected behavior due to the Envoy/wasm trace context limitation ([envoy
 
 If Limitador or Authorino spans are in their own traces (not linked to the kuadrant-filter trace), verify that the tracing endpoint is correctly configured. The wasm-shim propagates trace context via gRPC metadata, so Authorino and Limitador appear as child spans within the kuadrant-filter trace when configuration is correct.
 
-## Ensuring Prometheus Scrapes the Egress Gateway
+## Ensuring Prometheus scrapes the egress gateway
 
 Istio gateway pods expose metrics on port 15020 (`/stats/prometheus`). If you deployed the observability stack using the [observability guide](../../observability/README.md) and applied the Istio service monitors, Prometheus is already scraping the egress gateway pod.
 
@@ -785,7 +785,7 @@ kubectl get pods -n gateway-system \
 
 If Prometheus uses annotation-based discovery, verify that the pod has `prometheus.io/scrape: "true"` and `prometheus.io/port: "15020"`. If it uses ServiceMonitor-based discovery, ensure that a ServiceMonitor selects the egress gateway Kubernetes Service.
 
-## Next Steps
+## Next steps
 
 - [TelemetryPolicy](../../overviews/telemetrypolicy.md): the full policy API behind the [custom metric labels](#custom-metric-labels-with-telemetrypolicy) described above
 - [TokenRateLimitPolicy](../../overviews/rate-limiting.md): cap AI inference costs by token consumption per workload

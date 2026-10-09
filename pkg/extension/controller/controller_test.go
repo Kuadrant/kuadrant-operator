@@ -99,6 +99,10 @@ func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, policy exttypes.Policy,
 	return m.addDataToFn(ctx, policy, domain, binding, expression)
 }
 
+func (m *mockKuadrantCtx) ClearPolicyData(context.Context, exttypes.Policy) error {
+	return nil
+}
+
 func (m *mockKuadrantCtx) GetClient() client.Client {
 	return nil
 }
@@ -811,6 +815,28 @@ func newTestExtensionController(mockClient *mockExtensionServiceClient) *Extensi
 		extensionClient: &extensionClient{
 			client: mockClient,
 		},
+	}
+}
+
+func TestClearPolicyData(t *testing.T) {
+	var captured *extpb.ClearPolicyRequest
+	mock := &mockExtensionServiceClient{
+		clearPolicyFn: func(_ context.Context, in *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+			captured = in
+			return &extpb.ClearPolicyResponse{}, nil
+		},
+	}
+
+	controller := newTestExtensionController(mock)
+	policy := &mockPolicy{name: "test-policy", namespace: "test-namespace"}
+	if err := controller.ClearPolicyData(context.Background(), policy); err != nil {
+		t.Fatalf("ClearPolicyData returned an error: %v", err)
+	}
+	if captured == nil || captured.Policy == nil || captured.Policy.Metadata == nil {
+		t.Fatal("ClearPolicyData did not send a policy")
+	}
+	if captured.Policy.Metadata.Name != policy.name || captured.Policy.Metadata.Namespace != policy.namespace || captured.Policy.Metadata.Kind != "TestPolicy" {
+		t.Fatalf("ClearPolicyData sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
 	}
 }
 

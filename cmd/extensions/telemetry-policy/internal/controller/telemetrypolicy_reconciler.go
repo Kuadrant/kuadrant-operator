@@ -68,6 +68,14 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
+	// Registration is an upsert operation. Clear the policy's old data first so
+	// bindings removed from its spec are also removed from the rendered data-plane
+	// configuration before the current metrics and logging fields are registered.
+	if err := kuadrantCtx.ClearPolicyData(ctx, pol); err != nil {
+		r.Logger.Error(err, "failed to clear policy data before registering telemetry bindings")
+		return calculateErrorStatus(pol, err), err
+	}
+
 	if pol.Spec.Metrics != nil {
 		for binding, expression := range pol.Spec.Metrics.Default.Labels {
 			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {

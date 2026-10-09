@@ -25,9 +25,18 @@ type addDataCall struct {
 }
 
 type mockKuadrantCtx struct {
-	calls   []addDataCall
-	failOn  string // return error when binding matches this value
-	failErr error
+	calls       []addDataCall
+	clearCalls  int
+	clearPolicy types.Policy
+	clearErr    error
+	failOn      string // return error when binding matches this value
+	failErr     error
+}
+
+func (m *mockKuadrantCtx) ClearPolicyData(_ context.Context, policy types.Policy) error {
+	m.clearCalls++
+	m.clearPolicy = policy
+	return m.clearErr
 }
 
 func (m *mockKuadrantCtx) AddDataTo(_ context.Context, _ types.Policy, domain types.Domain, binding, expression string) error {
@@ -94,6 +103,12 @@ func TestReconcileSpec_LoggingFieldsOnly(t *testing.T) {
 	}
 	if status == nil {
 		t.Fatal("reconcileSpec returned nil status")
+	}
+	if mock.clearCalls != 1 {
+		t.Fatalf("expected 1 ClearPolicyData call, got %d", mock.clearCalls)
+	}
+	if mock.clearPolicy != pol {
+		t.Fatal("ClearPolicyData received the wrong policy")
 	}
 
 	if len(mock.calls) != 2 {
@@ -176,6 +191,27 @@ func TestReconcileSpec_LoggingFieldError(t *testing.T) {
 	}
 	if status == nil {
 		t.Fatal("expected error status, got nil")
+	}
+}
+
+func TestReconcileSpec_ClearPolicyDataError(t *testing.T) {
+	expectedErr := fmt.Errorf("clear policy data failed")
+	mock := &mockKuadrantCtx{clearErr: expectedErr}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+
+	status, err := r.reconcileSpec(context.Background(), newTestPolicy(nil, map[string]string{
+		"request_path": "request.path",
+	}), mock)
+	if err != expectedErr {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if status == nil {
+		t.Fatal("expected an error status")
+	}
+	if len(mock.calls) != 0 {
+		t.Fatalf("expected no AddDataTo calls after ClearPolicyData fails, got %d", len(mock.calls))
 	}
 }
 

@@ -591,12 +591,22 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 			Name:      name,
 		},
 	}
+	return ec.clearPolicy(ctx, pbPolicy)
+}
 
+// ClearPolicyData removes the registered state for a live policy so its next
+// reconciliation can replace all bindings with the current specification.
+func (ec *ExtensionController) ClearPolicyData(ctx context.Context, policy exttypes.Policy) error {
+	return ec.clearPolicy(ctx, convertPolicyToProtobuf(policy))
+}
+
+func (ec *ExtensionController) clearPolicy(ctx context.Context, pbPolicy *extpb.Policy) error {
 	resp, err := ec.extensionClient.client.ClearPolicy(ctx, &extpb.ClearPolicyRequest{
 		Policy: pbPolicy,
 	})
-
-	ec.logger.Info("cleared policy", "subscriptions", resp.GetClearedSubscriptions(), "mutators", resp.GetClearedMutators())
+	if err == nil {
+		ec.logger.Info("cleared policy", "subscriptions", resp.GetClearedSubscriptions(), "mutators", resp.GetClearedMutators())
+	}
 	return err
 }
 

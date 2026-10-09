@@ -67,6 +67,7 @@ type ActionMethodConfig struct {
 type KuadrantCtx interface {
 	Resolve(context.Context, Policy, string, bool) (celref.Val, error)
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
+	ClearPolicyData(context.Context, Policy) error
 	AddDataTo(context.Context, Policy, Domain, string, string) error
 	ReconcileObject(context.Context, client.Object, client.Object, MutateFn) (client.Object, error)
 	RegisterActionMethod(ctx context.Context, policy Policy, svc ActionMethodConfig) error

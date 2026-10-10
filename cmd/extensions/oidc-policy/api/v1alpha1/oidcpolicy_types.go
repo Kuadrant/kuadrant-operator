@@ -315,7 +315,3 @@ func (s *OIDCPolicyStatus) Equals(other *OIDCPolicyStatus, logger logr.Logger) b
 
 	return true
 }
-
-func init() {
-	SchemeBuilder.Register(&OIDCPolicy{}, &OIDCPolicyList{})
-}

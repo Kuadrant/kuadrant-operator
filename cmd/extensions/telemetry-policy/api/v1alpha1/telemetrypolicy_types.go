@@ -141,7 +141,3 @@ type TelemetryPolicyList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TelemetryPolicy `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&TelemetryPolicy{}, &TelemetryPolicyList{})
-}

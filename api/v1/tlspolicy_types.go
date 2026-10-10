@@ -195,7 +195,6 @@ type TLSPolicyList struct {
 	Items           []TLSPolicy `json:"items"`
 }
 
-
 //API Helpers
 
 func NewTLSPolicy(policyName, ns string) *TLSPolicy {

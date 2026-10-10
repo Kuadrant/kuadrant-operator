@@ -23,7 +23,7 @@ package v1alpha1
 import (
 	apiv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 

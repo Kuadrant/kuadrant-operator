@@ -227,7 +227,6 @@ type DNSPolicyList struct {
 	Items           []DNSPolicy `json:"items"`
 }
 
-
 //API Helpers
 
 func NewDNSPolicy(name, ns string) *DNSPolicy {

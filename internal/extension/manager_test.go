@@ -4,6 +4,7 @@ package extension
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -760,6 +761,60 @@ func TestPruneMutators_EmptySetRemovesAllPolicyMutators(t *testing.T) {
 	}
 	if svc.registeredData.Exists(policyID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
 		t.Fatal("expected empty retain set to remove all policy mutators")
+	}
+}
+
+func TestPruneMutators_RejectsIncompleteTargetReference(t *testing.T) {
+	svc := newTestExtensionService()
+	policy := testPolicy("TelemetryPolicy", "default", "telemetry", &extpb.TargetRef{Name: "route"})
+
+	_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{Policy: policy})
+	if err == nil {
+		t.Fatal("expected incomplete target reference to be rejected")
+	}
+	if !strings.Contains(err.Error(), "kind and name") {
+		t.Fatalf("expected target reference validation error, got %v", err)
+	}
+}
+
+func TestPruneMutators_RetriesFailedChangeNotification(t *testing.T) {
+	svc := newTestExtensionService()
+	target := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route", "default")
+	policy := testPolicy("TelemetryPolicy", "default", "telemetry", target)
+	policyID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "telemetry"}
+	locator := createLocatorFromProtobuf(target)
+
+	svc.registeredData.Set(policyID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path", DataProviderEntry{Policy: policyID, Binding: "logging.fields.path", Expression: "request.path"})
+
+	notificationAttempts := 0
+	svc.changeNotifier = func(string) error {
+		notificationAttempts++
+		if notificationAttempts == 1 {
+			return errors.New("notifier unavailable")
+		}
+		return nil
+	}
+
+	request := &extpb.PruneMutatorsRequest{Policy: policy}
+	if _, err := svc.PruneMutators(context.Background(), request); err == nil {
+		t.Fatal("expected failed change notification")
+	}
+	if svc.registeredData.Exists(policyID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
+		t.Fatal("expected stale mutator to be pruned before notification")
+	}
+
+	if _, err := svc.PruneMutators(context.Background(), request); err != nil {
+		t.Fatalf("expected pending notification retry to succeed, got %v", err)
+	}
+	if notificationAttempts != 2 {
+		t.Fatalf("expected two notification attempts, got %d", notificationAttempts)
+	}
+
+	if _, err := svc.PruneMutators(context.Background(), request); err != nil {
+		t.Fatalf("expected no error after notification succeeds, got %v", err)
+	}
+	if notificationAttempts != 2 {
+		t.Fatalf("expected no further notification after success, got %d attempts", notificationAttempts)
 	}
 }
 

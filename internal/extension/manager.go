@@ -30,6 +30,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -503,13 +504,15 @@ func (m *Manager) HasSynced() bool {
 type ReflectionFetcher func(ctx context.Context, url, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error)
 
 type extensionService struct {
-	dag               *nilGuardedPointer[StateAwareDAG]
-	registeredData    *RegisteredDataStore
-	sessionStore      *SessionStore
-	authenticator     *tokenAuthenticator
-	reflectionFetcher ReflectionFetcher
-	changeNotifier    ChangeNotifier
-	logger            logr.Logger
+	dag                                *nilGuardedPointer[StateAwareDAG]
+	registeredData                     *RegisteredDataStore
+	sessionStore                       *SessionStore
+	authenticator                      *tokenAuthenticator
+	reflectionFetcher                  ReflectionFetcher
+	changeNotifier                     ChangeNotifier
+	pendingMutatorPruneNotifications   map[ResourceID]struct{}
+	pendingMutatorPruneNotificationsMu sync.Mutex
+	logger                             logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 	extpb.UnimplementedDescriptorServiceServer
 }
@@ -878,6 +881,9 @@ func (s *extensionService) PruneMutators(_ context.Context, request *extpb.Prune
 		if targetRef == nil {
 			return nil, errors.New("policy target reference cannot be nil")
 		}
+		if targetRef.Kind == "" || targetRef.Name == "" {
+			return nil, errors.New("policy target reference kind and name must be specified")
+		}
 		targetRefLocator := createLocatorFromProtobuf(targetRef)
 		for _, binding := range request.Bindings {
 			if binding == nil {
@@ -896,14 +902,45 @@ func (s *extensionService) PruneMutators(_ context.Context, request *extpb.Prune
 	}
 
 	pruned := s.registeredData.PruneMutators(policyID, retained)
-	if pruned > 0 && s.changeNotifier != nil {
-		reason := fmt.Sprintf("mutators pruned for policy %s/%s (%d removed)", policyID.Namespace, policyID.Name, pruned)
-		if err := s.changeNotifier(reason); err != nil {
-			return nil, fmt.Errorf("mutators pruned but failed to trigger reconciliation: %w", err)
-		}
+	if pruned > 0 {
+		s.markMutatorPruneNotificationPending(policyID)
+	}
+	if err := s.notifyPendingMutatorPrune(policyID, pruned); err != nil {
+		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *extensionService) markMutatorPruneNotificationPending(policyID ResourceID) {
+	if s.changeNotifier == nil {
+		return
+	}
+
+	s.pendingMutatorPruneNotificationsMu.Lock()
+	defer s.pendingMutatorPruneNotificationsMu.Unlock()
+
+	if s.pendingMutatorPruneNotifications == nil {
+		s.pendingMutatorPruneNotifications = make(map[ResourceID]struct{})
+	}
+	s.pendingMutatorPruneNotifications[policyID] = struct{}{}
+}
+
+func (s *extensionService) notifyPendingMutatorPrune(policyID ResourceID, pruned int) error {
+	s.pendingMutatorPruneNotificationsMu.Lock()
+	defer s.pendingMutatorPruneNotificationsMu.Unlock()
+
+	if _, pending := s.pendingMutatorPruneNotifications[policyID]; !pending || s.changeNotifier == nil {
+		return nil
+	}
+
+	reason := fmt.Sprintf("mutators pruned for policy %s/%s (%d removed)", policyID.Namespace, policyID.Name, pruned)
+	if err := s.changeNotifier(reason); err != nil {
+		return fmt.Errorf("mutators pruned but failed to trigger reconciliation: %w", err)
+	}
+	delete(s.pendingMutatorPruneNotifications, policyID)
+
+	return nil
 }
 
 func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPolicyRequest) (*extpb.ClearPolicyResponse, error) {

@@ -39,7 +39,7 @@ spec:
             - name: RELATED_IMAGE_DEVELOPERPORTAL
               value: "quay.io/kuadrant/developer-portal-controller:v0.3.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
-              value: "quay.io/kuadrant/console-plugin:v0.7.0"
+              value: "quay.io/kuadrant/console-plugin:v0.7.1"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_SDK1
               value: "quay.io/kuadrant/console-plugin:v0.6.0"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5

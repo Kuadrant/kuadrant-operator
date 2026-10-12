@@ -571,6 +571,25 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Po
 	return err
 }
 
+// PruneMutators removes mutators that are absent from the completed policy
+// reconciliation. Callers must invoke it only after every AddDataTo call has
+// succeeded so the previous state remains available on reconciliation failure.
+func (ec *ExtensionController) PruneMutators(ctx context.Context, policy exttypes.Policy, bindings []exttypes.MutatorBinding) error {
+	pbBindings := make([]*extpb.MutatorBinding, 0, len(bindings))
+	for _, binding := range bindings {
+		pbBindings = append(pbBindings, &extpb.MutatorBinding{
+			Domain:  convertDomainToProtobuf(binding.Domain),
+			Binding: binding.Binding,
+		})
+	}
+
+	_, err := ec.extensionClient.client.PruneMutators(ctx, &extpb.PruneMutatorsRequest{
+		Policy:   convertPolicyToProtobuf(policy),
+		Bindings: pbBindings,
+	})
+	return err
+}
+
 // ReconcileObject performs a create/update patch against the API server for a
 // desired object applying the provided mutate function on differences.
 func (ec *ExtensionController) ReconcileObject(ctx context.Context, obj client.Object, desired client.Object, mutateFn exttypes.MutateFn) (client.Object, error) {
@@ -592,12 +611,6 @@ func (ec *ExtensionController) ClearPolicy(ctx context.Context, namespace, name,
 		},
 	}
 	return ec.clearPolicy(ctx, pbPolicy)
-}
-
-// ClearPolicyData removes the registered state for a live policy so its next
-// reconciliation can replace all bindings with the current specification.
-func (ec *ExtensionController) ClearPolicyData(ctx context.Context, policy exttypes.Policy) error {
-	return ec.clearPolicy(ctx, convertPolicyToProtobuf(policy))
 }
 
 func (ec *ExtensionController) clearPolicy(ctx context.Context, pbPolicy *extpb.Policy) error {

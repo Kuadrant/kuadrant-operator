@@ -703,6 +703,66 @@ func TestRegisterActionMethod_InvalidMethod(t *testing.T) {
 	}
 }
 
+func TestPruneMutators_RetainsCurrentPolicyBindings(t *testing.T) {
+	svc := newTestExtensionService()
+	currentTarget := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "current-route", "default")
+	policy := testPolicy("TelemetryPolicy", "default", "telemetry", currentTarget)
+	policyID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "telemetry"}
+	currentLocator := createLocatorFromProtobuf(currentTarget)
+	oldLocator := createLocatorFromProtobuf(testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "old-route", "default"))
+
+	// A target reference removed from the policy must be pruned even when the
+	// surviving binding has the same domain and name.
+	svc.registeredData.Set(policyID, oldLocator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path", DataProviderEntry{Policy: policyID, Binding: "logging.fields.path", Expression: "request.path"})
+	for _, binding := range []string{"logging.fields.path", "logging.fields.authorization"} {
+		_, err := svc.RegisterMutator(context.Background(), &extpb.RegisterMutatorRequest{
+			Policy: policy, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: binding, Expression: "request.path",
+		})
+		if err != nil {
+			t.Fatalf("failed to register %q: %v", binding, err)
+		}
+	}
+
+	_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{
+		Policy:   policy,
+		Bindings: []*extpb.MutatorBinding{{Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}},
+	})
+	if err != nil {
+		t.Fatalf("PruneMutators returned an error: %v", err)
+	}
+	if !svc.registeredData.Exists(policyID, currentLocator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
+		t.Fatal("expected current binding to remain")
+	}
+	if svc.registeredData.Exists(policyID, currentLocator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.authorization") {
+		t.Fatal("expected removed binding to be pruned")
+	}
+	if svc.registeredData.Exists(policyID, oldLocator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
+		t.Fatal("expected removed target reference binding to be pruned")
+	}
+}
+
+func TestPruneMutators_EmptySetRemovesAllPolicyMutators(t *testing.T) {
+	svc := newTestExtensionService()
+	target := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route", "default")
+	policy := testPolicy("TelemetryPolicy", "default", "telemetry", target)
+	policyID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "telemetry"}
+	locator := createLocatorFromProtobuf(target)
+
+	_, err := svc.RegisterMutator(context.Background(), &extpb.RegisterMutatorRequest{
+		Policy: policy, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path", Expression: "request.path",
+	})
+	if err != nil {
+		t.Fatalf("failed to register mutator: %v", err)
+	}
+	_, err = svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{Policy: policy})
+	if err != nil {
+		t.Fatalf("PruneMutators returned an error: %v", err)
+	}
+	if svc.registeredData.Exists(policyID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
+		t.Fatal("expected empty retain set to remove all policy mutators")
+	}
+}
+
 func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	svc := newTestExtensionService()
 

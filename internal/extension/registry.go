@@ -933,6 +933,24 @@ func pipelineTargetRefsMatch(storedRefs []TargetRef, targetRefs []machinery.Poli
 	return false
 }
 
+// PruneMutators removes data providers for policy that are not part of the
+// retained set from a successfully completed reconciliation.
+func (r *RegisteredDataStore) PruneMutators(policy ResourceID, retained map[DataProviderKey]struct{}) int {
+	r.dataMutex.Lock()
+	defer r.dataMutex.Unlock()
+
+	pruned := 0
+	for key := range r.dataProviders {
+		if key.Policy == policy {
+			if _, keep := retained[key]; !keep {
+				delete(r.dataProviders, key)
+				pruned++
+			}
+		}
+	}
+	return pruned
+}
+
 func (r *RegisteredDataStore) ClearPolicyData(policies ...ResourceID) PruneCounts {
 	if len(policies) == 0 {
 		return PruneCounts{}

@@ -201,6 +201,38 @@ func TestRegisteredDataStore_SetSubscription(t *testing.T) {
 	}
 }
 
+func TestRegisteredDataStore_PruneMutators(t *testing.T) {
+	store := NewRegisteredDataStore()
+	policy := testResourceID("TelemetryPolicy", "test-ns", "test-policy")
+	otherPolicy := testResourceID("TelemetryPolicy", "test-ns", "other-policy")
+
+	retainedKey := DataProviderKey{Policy: policy, TargetRefLocator: "new-target", Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}
+	staleBindingKey := DataProviderKey{Policy: policy, TargetRefLocator: "new-target", Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.authorization"}
+	staleTargetKey := DataProviderKey{Policy: policy, TargetRefLocator: "old-target", Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}
+	otherPolicyKey := DataProviderKey{Policy: otherPolicy, TargetRefLocator: "new-target", Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}
+
+	for _, key := range []DataProviderKey{retainedKey, staleBindingKey, staleTargetKey, otherPolicyKey} {
+		store.Set(key.Policy, key.TargetRefLocator, key.Domain, key.Binding, DataProviderEntry{Policy: key.Policy, Binding: key.Binding})
+	}
+
+	pruned := store.PruneMutators(policy, map[DataProviderKey]struct{}{retainedKey: {}})
+	if pruned != 2 {
+		t.Fatalf("expected 2 pruned mutators, got %d", pruned)
+	}
+	if !store.Exists(retainedKey.Policy, retainedKey.TargetRefLocator, retainedKey.Domain, retainedKey.Binding) {
+		t.Fatal("expected retained mutator to remain")
+	}
+	if store.Exists(staleBindingKey.Policy, staleBindingKey.TargetRefLocator, staleBindingKey.Domain, staleBindingKey.Binding) {
+		t.Fatal("expected stale binding to be removed")
+	}
+	if store.Exists(staleTargetKey.Policy, staleTargetKey.TargetRefLocator, staleTargetKey.Domain, staleTargetKey.Binding) {
+		t.Fatal("expected stale target reference binding to be removed")
+	}
+	if !store.Exists(otherPolicyKey.Policy, otherPolicyKey.TargetRefLocator, otherPolicyKey.Domain, otherPolicyKey.Binding) {
+		t.Fatal("expected other policy mutator to remain")
+	}
+}
+
 func TestRegisteredDataStore_ClearPolicyData(t *testing.T) {
 	store := NewRegisteredDataStore()
 

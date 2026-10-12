@@ -99,7 +99,7 @@ func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, policy exttypes.Policy,
 	return m.addDataToFn(ctx, policy, domain, binding, expression)
 }
 
-func (m *mockKuadrantCtx) ClearPolicyData(context.Context, exttypes.Policy) error {
+func (m *mockKuadrantCtx) PruneMutators(context.Context, exttypes.Policy, []exttypes.MutatorBinding) error {
 	return nil
 }
 
@@ -760,6 +760,7 @@ type mockExtensionServiceClient struct {
 	subscribeFn            func(ctx context.Context, in *extpb.SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error)
 	registerActionMethodFn func(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pipelineCommitFn       func(ctx context.Context, in *extpb.PipelineCommitRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	pruneMutatorsFn        func(ctx context.Context, in *extpb.PruneMutatorsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pingFn                 func(ctx context.Context, in *extpb.PingRequest, opts ...grpc.CallOption) (*extpb.PongResponse, error)
 	clearPolicyFn          func(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error)
 }
@@ -791,6 +792,12 @@ func (m *mockExtensionServiceClient) Resolve(_ context.Context, _ *extpb.Resolve
 func (m *mockExtensionServiceClient) RegisterMutator(_ context.Context, _ *extpb.RegisterMutatorRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
 	return nil, nil
 }
+func (m *mockExtensionServiceClient) PruneMutators(ctx context.Context, in *extpb.PruneMutatorsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	if m.pruneMutatorsFn != nil {
+		return m.pruneMutatorsFn(ctx, in, opts...)
+	}
+	return &emptypb.Empty{}, nil
+}
 func (m *mockExtensionServiceClient) ClearPolicy(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
 	if m.clearPolicyFn != nil {
 		return m.clearPolicyFn(ctx, in, opts...)
@@ -818,25 +825,29 @@ func newTestExtensionController(mockClient *mockExtensionServiceClient) *Extensi
 	}
 }
 
-func TestClearPolicyData(t *testing.T) {
-	var captured *extpb.ClearPolicyRequest
+func TestPruneMutators(t *testing.T) {
+	var captured *extpb.PruneMutatorsRequest
 	mock := &mockExtensionServiceClient{
-		clearPolicyFn: func(_ context.Context, in *extpb.ClearPolicyRequest, _ ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
+		pruneMutatorsFn: func(_ context.Context, in *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
 			captured = in
-			return &extpb.ClearPolicyResponse{}, nil
+			return &emptypb.Empty{}, nil
 		},
 	}
 
 	controller := newTestExtensionController(mock)
 	policy := &mockPolicy{name: "test-policy", namespace: "test-namespace"}
-	if err := controller.ClearPolicyData(context.Background(), policy); err != nil {
-		t.Fatalf("ClearPolicyData returned an error: %v", err)
+	bindings := []exttypes.MutatorBinding{{Domain: exttypes.DomainRequest, Binding: "logging.fields.request_path"}}
+	if err := controller.PruneMutators(context.Background(), policy, bindings); err != nil {
+		t.Fatalf("PruneMutators returned an error: %v", err)
 	}
 	if captured == nil || captured.Policy == nil || captured.Policy.Metadata == nil {
-		t.Fatal("ClearPolicyData did not send a policy")
+		t.Fatal("PruneMutators did not send a policy")
 	}
 	if captured.Policy.Metadata.Name != policy.name || captured.Policy.Metadata.Namespace != policy.namespace || captured.Policy.Metadata.Kind != "TestPolicy" {
-		t.Fatalf("ClearPolicyData sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
+		t.Fatalf("PruneMutators sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
+	}
+	if len(captured.Bindings) != 1 || captured.Bindings[0].Domain != extpb.Domain_DOMAIN_REQUEST || captured.Bindings[0].Binding != "logging.fields.request_path" {
+		t.Fatalf("PruneMutators sent bindings %#v, want request/logging.fields.request_path", captured.Bindings)
 	}
 }
 

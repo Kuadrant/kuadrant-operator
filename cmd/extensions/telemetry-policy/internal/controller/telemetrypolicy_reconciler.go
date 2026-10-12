@@ -68,30 +68,35 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
-	// Registration is an upsert operation. Clear the policy's old data first so
-	// bindings removed from its spec are also removed from the rendered data-plane
-	// configuration before the current metrics and logging fields are registered.
-	if err := kuadrantCtx.ClearPolicyData(ctx, pol); err != nil {
-		r.Logger.Error(err, "failed to clear policy data before registering telemetry bindings")
-		return calculateErrorStatus(pol, err), err
-	}
+	bindings := make([]types.MutatorBinding, 0)
 
 	if pol.Spec.Metrics != nil {
 		for binding, expression := range pol.Spec.Metrics.Default.Labels {
-			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
+			binding := types.KuadrantMetricBinding(binding)
+			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, binding, expression); err != nil {
 				r.Logger.Error(err, "failed to add data to request domain")
 				return calculateErrorStatus(pol, err), err
 			}
+			bindings = append(bindings, types.MutatorBinding{Domain: types.DomainRequest, Binding: binding})
 		}
 	}
 
 	if pol.Spec.Logging != nil {
 		for binding, expression := range pol.Spec.Logging.Default.Fields {
-			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantLoggingBinding(binding), expression); err != nil {
+			binding := types.KuadrantLoggingBinding(binding)
+			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, binding, expression); err != nil {
 				r.Logger.Error(err, "failed to add data to request domain")
 				return calculateErrorStatus(pol, err), err
 			}
+			bindings = append(bindings, types.MutatorBinding{Domain: types.DomainRequest, Binding: binding})
 		}
+	}
+
+	// RegisterMutator is additive. Prune only after every current binding was
+	// registered so a failed reconcile leaves the last complete set in place.
+	if err := kuadrantCtx.PruneMutators(ctx, pol, bindings); err != nil {
+		r.Logger.Error(err, "failed to prune stale telemetry bindings")
+		return calculateErrorStatus(pol, err), err
 	}
 
 	return calculateEnforcedStatus(pol, nil),

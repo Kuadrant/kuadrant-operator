@@ -860,6 +860,52 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 	return &emptypb.Empty{}, nil
 }
 
+func (s *extensionService) PruneMutators(_ context.Context, request *extpb.PruneMutatorsRequest) (*emptypb.Empty, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+
+	policyID, err := validatePolicyRequest(request.Policy)
+	if err != nil {
+		return nil, err
+	}
+	if len(request.Policy.TargetRefs) == 0 {
+		return nil, errors.New("policy must have target references")
+	}
+
+	retained := make(map[DataProviderKey]struct{}, len(request.Policy.TargetRefs)*len(request.Bindings))
+	for _, targetRef := range request.Policy.TargetRefs {
+		if targetRef == nil {
+			return nil, errors.New("policy target reference cannot be nil")
+		}
+		targetRefLocator := createLocatorFromProtobuf(targetRef)
+		for _, binding := range request.Bindings {
+			if binding == nil {
+				return nil, errors.New("mutator binding cannot be nil")
+			}
+			if binding.Domain == extpb.Domain_DOMAIN_UNSPECIFIED {
+				return nil, errors.New("mutator binding domain must be specified")
+			}
+			retained[DataProviderKey{
+				Policy:           policyID,
+				TargetRefLocator: targetRefLocator,
+				Domain:           binding.Domain,
+				Binding:          binding.Binding,
+			}] = struct{}{}
+		}
+	}
+
+	pruned := s.registeredData.PruneMutators(policyID, retained)
+	if pruned > 0 && s.changeNotifier != nil {
+		reason := fmt.Sprintf("mutators pruned for policy %s/%s (%d removed)", policyID.Namespace, policyID.Name, pruned)
+		if err := s.changeNotifier(reason); err != nil {
+			return nil, fmt.Errorf("mutators pruned but failed to trigger reconciliation: %w", err)
+		}
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
 func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPolicyRequest) (*extpb.ClearPolicyResponse, error) {
 	if request == nil {
 		return nil, errors.New("request cannot be nil")

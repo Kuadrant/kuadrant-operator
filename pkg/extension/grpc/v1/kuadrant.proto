@@ -24,6 +24,8 @@ service ExtensionService {
   rpc Resolve(ResolveRequest) returns (ResolveResponse) {}
   // Add data to an existing policy
   rpc RegisterMutator(RegisterMutatorRequest) returns (google.protobuf.Empty) {}
+  // Remove mutators that are no longer part of a successfully reconciled policy.
+  rpc PruneMutators(PruneMutatorsRequest) returns (google.protobuf.Empty) {}
   // Clear all subscriptions and registered mutators for a policy
   rpc ClearPolicy(ClearPolicyRequest) returns (ClearPolicyResponse) {}
   // Register a named gRPC action method for a policy
@@ -101,6 +103,18 @@ message RegisterMutatorRequest {
   Domain domain = 2;
   string binding = 3;
   string expression = 4;
+}
+
+// MutatorBinding identifies a mutator to retain after a successful reconcile.
+message MutatorBinding {
+  Domain domain = 1;
+  string binding = 2;
+}
+
+// PruneMutatorsRequest removes a policy's mutators except those listed in bindings.
+message PruneMutatorsRequest {
+  kuadrant.v1.Policy policy = 1;
+  repeated MutatorBinding bindings = 2;
 }
 
 message ClearPolicyRequest {

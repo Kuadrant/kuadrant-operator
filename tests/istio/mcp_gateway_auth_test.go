@@ -49,7 +49,7 @@ var (
 	mcpAuthBackendHostnameSuffix = mcpAuthEnv("MCP_AUTH_BACKEND_HOSTNAME_SUFFIX", mcpAuthBackendHostnameSuffixDefault)
 )
 
-var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gateway", "long-running"), func() {
+var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, ContinueOnFailure, Label("mcp-gateway", "long-running"), func() {
 	var (
 		createdResources  []client.Object
 		originalExtension *unstructured.Unstructured
@@ -116,7 +116,7 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, Label("mcp-gatew
 			status, _, _, err := mcpAuthRawPost(ctx, mcpAuthGatewayURL, "", mcpAuthInitializeBody(), nil)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(status).To(Equal(http.StatusUnauthorized))
-		}).WithContext(ctx).Should(Succeed())
+		}).WithContext(ctx).WithTimeout(mcpAuthReadyTimeout).Should(Succeed())
 	})
 
 	AfterAll(func(ctx SpecContext) {

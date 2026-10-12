@@ -157,10 +157,12 @@ The **Limitador** counters carry the complete label set:
 
 | Metric | Description |
 |--------|-------------|
-| `authorized_calls` | Requests allowed by a rate limit check |
-| `limited_calls` | Requests rejected by a rate limit check |
+| `authorized_calls` | Requests admitted on the request phase (the `Check` call, or the `Reserve` call when TokenRateLimitPolicy runs in `Reservation` mode) |
+| `limited_calls` | Requests rejected on the request phase, by either `Check` or `Reserve` |
 | `authorized_hits` | Hits counted against a limit (for TokenRateLimitPolicy, token consumption) |
-| `report_calls` | Calls to the Limitador `Report` method, which TokenRateLimitPolicy uses to report token usage after the response |
+| `report_calls` | Response-phase calls that settle the counter: the `Report` call, or the `Commit` call when TokenRateLimitPolicy runs in `Reservation` mode |
+
+`Reservation` is the cluster-wide default for TokenRateLimitPolicy, so on a default install the egress token counters are driven by `Reserve`/`Commit` rather than `Check`/`Report`. The metric names are the same either way. See [enforcement modes](../../overviews/token-rate-limiting.md#enforcement-modes) for the difference between the two.
 
 Each series also carries Limitador's own `limitador_namespace` label, which identifies the targeted route (for example, `gateway-system/ai-mock-external`). For the full set of Limitador counters and their built-in labels, see the [Limitador metrics guide](../observability/limitador-metrics.md).
 
@@ -277,7 +279,7 @@ limited_calls{source_ip="10.244.0.24",workload="system:serviceaccount:egress-tes
 
 ### CEL Attributes Available on Egress
 
-Each label is attached to both the rate limit check descriptor and the report descriptor. The check runs in the **request** phase, before the external service responds, so every expression must resolve at that point. This is the single most important constraint on egress: response attributes are not available, even for labels that only appear on `report_calls`.
+Each label is attached to both the request-phase descriptor and the response-phase descriptor (`Check`/`Report`, or `Reserve`/`Commit` under `Reservation` mode). The request-phase call runs before the external service responds, so every expression must resolve at that point. This is the single most important constraint on egress: response attributes are not available, even for labels that only appear on `report_calls`.
 
 | Expression | Available | Example value |
 |------------|-----------|---------------|
@@ -788,7 +790,7 @@ If Prometheus uses annotation-based discovery, verify that the pod has `promethe
 ## Next Steps
 
 - [TelemetryPolicy](../../overviews/telemetrypolicy.md): the full policy API behind the [custom metric labels](#custom-metric-labels-with-telemetrypolicy) described above
-- [TokenRateLimitPolicy](../../overviews/rate-limiting.md): cap AI inference costs by token consumption per workload
+- [TokenRateLimitPolicy](../../overviews/token-rate-limiting.md): cap AI inference costs by token consumption per workload
 
 ## References
 

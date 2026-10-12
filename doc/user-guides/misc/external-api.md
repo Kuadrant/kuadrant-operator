@@ -29,7 +29,7 @@ This guide uses Istio as the gateway provider. The pattern relies on four capabi
 3. **`Hostname` backendRef** (`group: networking.istio.io`) — allows an HTTPRoute to reference the ServiceEntry as a backend
 4. **`HTTPRouteHostRewrite`** — the [URLRewrite hostname filter](https://gateway-api.sigs.k8s.io/guides/user-guides/http-redirect-rewrite/) is an Extended Gateway API feature; the gateway provider must support it
 
-If you are using a different gateway provider, check whether it supports these or equivalent mechanisms. For a list of supported providers, see the [Getting Started](https://docs.kuadrant.io/latest/getting-started/) guide.
+If you are using a different gateway provider, check whether it supports these or equivalent mechanisms.
 
 The `openshift-default` GatewayClass installs a lightweight Istio via the Ingress Operator, but restricts the API surface to standard Gateway API resources — vendor-specific Istio resources are not supported. See [Configuring Gateway API](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/ingress_and_load_balancing/configuring-gateway-api) for details on what is available, and [Integrate OpenShift Gateway API with OpenShift Service Mesh](https://developers.redhat.com/articles/2025/12/09/integrate-openshift-gateway-api-openshift-service-mesh) for adding full Service Mesh support.
 

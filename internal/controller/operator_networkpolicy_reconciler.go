@@ -193,7 +193,7 @@ func commonOperatorPolicy(logger logr.Logger, deployment *appsv1.Deployment, top
 		},
 	}
 
-	policy, update := mergeNetworkPolicy(*desiredPolicy, existingPolicy)
+	policy, update := mergeNetworkPolicy(logger, *desiredPolicy, existingPolicy)
 	checks.Update = update
 
 	updateRef, err := setOwnerRef(policy, existingPolicy, deployment)
@@ -271,7 +271,7 @@ func kuadrantOperatorPolicy(logger logr.Logger, deployment *appsv1.Deployment, t
 		},
 	}
 
-	policy, update := mergeNetworkPolicy(*desiredPolicy, existingPolicy)
+	policy, update := mergeNetworkPolicy(logger, *desiredPolicy, existingPolicy)
 	checks.Update = update
 
 	updateRef, err := setOwnerRef(policy, existingPolicy, deployment)

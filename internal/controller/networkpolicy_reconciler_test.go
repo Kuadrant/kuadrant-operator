@@ -6,6 +6,7 @@ import (
 	"maps"
 	"testing"
 
+	"github.com/go-logr/logr"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -198,7 +199,7 @@ func TestMergeNetworkPolicy(t *testing.T) {
 				Labels:    map[string]string{"app": "test"},
 			},
 		}
-		result, changed := mergeNetworkPolicy(*desired, nil)
+		result, changed := mergeNetworkPolicy(logr.Discard(), *desired, nil)
 
 		assert.Assert(t, changed, "should report changed=true")
 		assert.DeepEqual(t, result, desired)
@@ -223,7 +224,7 @@ func TestMergeNetworkPolicy(t *testing.T) {
 		desired := policy.DeepCopy()
 		current := policy.DeepCopy()
 
-		result, changed := mergeNetworkPolicy(*desired, current)
+		result, changed := mergeNetworkPolicy(logr.Discard(), *desired, current)
 
 		assert.Assert(t, !changed, "should report changed=false for identical policies")
 		assert.DeepEqual(t, result, current)
@@ -253,7 +254,7 @@ func TestMergeNetworkPolicy(t *testing.T) {
 			},
 		}
 
-		result, changed := mergeNetworkPolicy(*desired, current)
+		result, changed := mergeNetworkPolicy(logr.Discard(), *desired, current)
 
 		assert.Assert(t, changed, "should report changed=true for different labels")
 		assert.Equal(t, result.Labels["app"], "new-value")
@@ -287,7 +288,7 @@ func TestMergeNetworkPolicy(t *testing.T) {
 			},
 		}
 
-		result, changed := mergeNetworkPolicy(*desired, current)
+		result, changed := mergeNetworkPolicy(logr.Discard(), *desired, current)
 
 		assert.Assert(t, changed, "should report changed=true for different ingress")
 		assert.DeepEqual(t, result.Spec.Ingress, desired.Spec.Ingress)
@@ -321,7 +322,7 @@ func TestMergeNetworkPolicy(t *testing.T) {
 			},
 		}
 
-		result, changed := mergeNetworkPolicy(*desired, current)
+		result, changed := mergeNetworkPolicy(logr.Discard(), *desired, current)
 
 		assert.Assert(t, changed, "should report changed=true for different pod selector")
 		assert.DeepEqual(t, result.Spec.PodSelector, desired.Spec.PodSelector)
@@ -351,7 +352,7 @@ func TestMergeNetworkPolicy(t *testing.T) {
 			},
 		}
 
-		result, changed := mergeNetworkPolicy(*desired, current)
+		result, changed := mergeNetworkPolicy(logr.Discard(), *desired, current)
 
 		assert.Assert(t, !changed, "should report changed=false when extra labels exist")
 		assert.Equal(t, result.Labels["app"], "test")
@@ -980,14 +981,6 @@ func TestNewNetworkPolicyReconciler(t *testing.T) {
 	t.Run("constructor returns non-nil", func(t *testing.T) {
 		reconciler := NewNetworkPolicyReconciler(nil)
 		assert.Assert(t, reconciler != nil, "constructor should return non-nil reconciler")
-	})
-
-	t.Run("subscription has 9 events", func(t *testing.T) {
-		reconciler := NewNetworkPolicyReconciler(nil)
-		subscription := reconciler.Subscription()
-
-		assert.Assert(t, subscription != nil, "subscription should not be nil")
-		assert.Assert(t, is.Len(subscription.Events, 9), "subscription should have 9 events")
 	})
 
 	t.Run("events match expected kinds and event types", func(t *testing.T) {

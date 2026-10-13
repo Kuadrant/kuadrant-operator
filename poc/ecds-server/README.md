@@ -52,6 +52,19 @@ wasm-shim needs **zero code changes**.
 
 ## Architecture / how it works
 
+```mermaid
+flowchart LR
+    OP[Kuadrant operator<br/>runs ECDS xDS server]
+
+    subgraph ENVOY[Envoy]
+        WASM[wasm-shim]
+    end
+
+    OP -->|"① EnvoyFilter: small stub pointing at ECDS<br/>(constant size, no inline config)"| ENVOY
+    ENVOY -->|"② native xDS: fetch config for this gateway"| OP
+    OP -->|"③ pushes full wasm config (hot-swap, no restart)"| ENVOY
+```
+
 The operator runs a small, standalone Envoy ExtensionConfigDiscoveryService
 (ECDS) server (new `internal/ecds` package), built on `go-control-plane` -
 the same library istiod itself is built on. On every reconcile, instead of

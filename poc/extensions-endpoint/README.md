@@ -42,7 +42,7 @@ flowchart LR
         WASM[wasm-shim]
     end
 
-    OP -->|"① EnvoyFilter: small stub + config digest<br/>(constant size, no inline config)"| ENVOY
+    OP -->|"① EnvoyFilter: small stub + config digest<br/>(constant size, no inline config)"| WASM
     WASM -->|"② gRPC: fetch real config for this gateway"| OP
     OP -->|"③ returns the full wasm config"| WASM
 ```

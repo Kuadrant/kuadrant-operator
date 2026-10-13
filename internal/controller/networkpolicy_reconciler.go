@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	NetworkPolicyReconcilerName = "NetworkPolicyReconciler"
+	NetworkPolicyReconcilerName = "NetworkPolicyReconciler.operands"
 	AuthorinoNetworkPolicy      = "kuadrant-authorino"
 	LimitadorNetworkPolicy      = "kuadrant-limitador"
 )
@@ -61,6 +61,7 @@ func (r *NetworkPolicyReconciler) Subscription() *controller.Subscription {
 			{Kind: &v1beta1.NetworkPolicyGroupKind},
 			{Kind: &machinery.GatewayGroupKind, EventType: ptr.To(controller.CreateEvent)},
 			{Kind: &machinery.GatewayGroupKind, EventType: ptr.To(controller.DeleteEvent)},
+			{Kind: &v1beta1.DeploymentGroupKind},
 		},
 	}
 }
@@ -106,7 +107,7 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 			}
 		}
 
-		desiredAuthorinoNetworkPolicy, update := mergeNetworkPolicy(*minAuthorinoNetworkPolicy, existingAuthorinoNetworkPolicy)
+		desiredAuthorinoNetworkPolicy, update := mergeNetworkPolicy(logger, *minAuthorinoNetworkPolicy, existingAuthorinoNetworkPolicy)
 
 		ownerRef := metav1.OwnerReference{
 			APIVersion:         authorinoObj.GroupVersionKind().GroupVersion().String(),
@@ -164,7 +165,7 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 			}
 		}
 
-		desiredLimitadorNetworkPolicy, update := mergeNetworkPolicy(*minLimitadorNetworkPolicy, existingLimitadorNetworkPolicy)
+		desiredLimitadorNetworkPolicy, update := mergeNetworkPolicy(logger, *minLimitadorNetworkPolicy, existingLimitadorNetworkPolicy)
 
 		ownerRef := metav1.OwnerReference{
 			APIVersion:         lObj.GroupVersionKind().GroupVersion().String(),
@@ -361,12 +362,13 @@ func networkPolicyPortTCP(port int) []networkingv1.NetworkPolicyPort {
 	}
 }
 
-func mergeNetworkPolicy(desired networkingv1.NetworkPolicy, current *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, bool) {
+func mergeNetworkPolicy(logger logr.Logger, desired networkingv1.NetworkPolicy, current *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, bool) {
 	changed := false
 
 	if current == nil {
 		return &desired, true
 	}
+	logger.V(1).Info("merging network policy", "current.Name", current.GetName())
 	// check desiredLabels
 	desiredLabels := desired.GetLabels()
 	currentLabels := current.GetLabels()
@@ -377,17 +379,177 @@ func mergeNetworkPolicy(desired networkingv1.NetworkPolicy, current *networkingv
 		}
 	}
 
-	if !reflect.DeepEqual(desired.Spec.Ingress, current.Spec.Ingress) {
+	if !compareIngressRules(desired.Spec.Ingress, current.Spec.Ingress) {
 		current.Spec.Ingress = desired.Spec.Ingress
 		changed = true
 	}
 
-	if !reflect.DeepEqual(desired.Spec.PodSelector, current.Spec.PodSelector) {
+	logger.V(1).Info("checking pod selectors", "current.Name", current.GetName())
+	if !comparePodSelector(desired.Spec.PodSelector, current.Spec.PodSelector) {
+		logger.V(1).Info("pod selectors not equal, updating", "current.Name", current.GetName())
 		current.Spec.PodSelector = desired.Spec.PodSelector
 		changed = true
 	}
 
 	return current, changed
+}
+
+func comparePodSelector(a, b metav1.LabelSelector) bool {
+	if len(a.MatchLabels) != len(b.MatchLabels) {
+		return false
+	}
+	for k, v := range a.MatchLabels {
+		if b.MatchLabels[k] != v {
+			return false
+		}
+	}
+
+	if len(a.MatchExpressions) != len(b.MatchExpressions) {
+		return false
+	}
+
+	matchedB := make([]bool, len(b.MatchExpressions))
+	for _, exprA := range a.MatchExpressions {
+		found := false
+		for j, exprB := range b.MatchExpressions {
+			if matchedB[j] {
+				continue
+			}
+			if exprA.Key == exprB.Key && exprA.Operator == exprB.Operator && slices.Equal(exprA.Values, exprB.Values) {
+				matchedB[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func compareIngressRules(a, b []networkingv1.NetworkPolicyIngressRule) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	matchedB := make([]bool, len(b))
+	for _, ruleA := range a {
+		found := false
+		for j, ruleB := range b {
+			if matchedB[j] {
+				continue
+			}
+			if comparePorts(ruleA.Ports, ruleB.Ports) && comparePeers(ruleA.From, ruleB.From) {
+				matchedB[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func comparePorts(a, b []networkingv1.NetworkPolicyPort) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	matchedB := make([]bool, len(b))
+	for _, portA := range a {
+		found := false
+		for j, portB := range b {
+			if matchedB[j] {
+				continue
+			}
+			if comparePort(portA, portB) {
+				matchedB[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func comparePort(a, b networkingv1.NetworkPolicyPort) bool {
+	if (a.Protocol == nil) != (b.Protocol == nil) {
+		return false
+	}
+	if a.Protocol != nil && *a.Protocol != *b.Protocol {
+		return false
+	}
+	if (a.Port == nil) != (b.Port == nil) {
+		return false
+	}
+	if a.Port != nil && a.Port.String() != b.Port.String() {
+		return false
+	}
+	if (a.EndPort == nil) != (b.EndPort == nil) {
+		return false
+	}
+	if a.EndPort != nil && *a.EndPort != *b.EndPort {
+		return false
+	}
+	return true
+}
+
+func comparePeers(a, b []networkingv1.NetworkPolicyPeer) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	matchedB := make([]bool, len(b))
+	for _, peerA := range a {
+		found := false
+		for j, peerB := range b {
+			if matchedB[j] {
+				continue
+			}
+			if comparePeer(peerA, peerB) {
+				matchedB[j] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func comparePeer(a, b networkingv1.NetworkPolicyPeer) bool {
+	if (a.PodSelector == nil) != (b.PodSelector == nil) {
+		return false
+	}
+	if a.PodSelector != nil && !comparePodSelector(*a.PodSelector, *b.PodSelector) {
+		return false
+	}
+	if (a.NamespaceSelector == nil) != (b.NamespaceSelector == nil) {
+		return false
+	}
+	if a.NamespaceSelector != nil && !comparePodSelector(*a.NamespaceSelector, *b.NamespaceSelector) {
+		return false
+	}
+	if (a.IPBlock == nil) != (b.IPBlock == nil) {
+		return false
+	}
+	if a.IPBlock != nil {
+		if a.IPBlock.CIDR != b.IPBlock.CIDR {
+			return false
+		}
+		if !slices.Equal(a.IPBlock.Except, b.IPBlock.Except) {
+			return false
+		}
+	}
+	return true
 }
 
 func generateLimitadorNetworkPolicy(kObj *v1beta1.Kuadrant, lObj *limitadorv1alpha1.Limitador, topology *machinery.Topology) *networkingv1.NetworkPolicy {

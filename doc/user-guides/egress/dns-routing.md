@@ -1,4 +1,4 @@
-# DNS Routing for Egress Gateway
+# DNS routing for the egress gateway
 
 This guide covers routing approaches for directing pod traffic through an Istio egress gateway to external services. The approaches are independent of how the egress gateway was deployed.
 
@@ -19,13 +19,13 @@ The examples in this guide use:
 
 ---
 
-## Recommended: Internal Hostname
+## Recommended: internal hostname
 
 The application uses the egress gateway's cluster-internal service name as the hostname. The gateway rewrites the host header and routes the request to the real external service with TLS origination.
 
 This is the recommended approach because it requires zero DNS configuration, works on any platform, and has the simplest TLS model.
 
-### How It Works
+### How internal hostname routing works
 
 ```text
 Application: curl http://kuadrant-egressgateway-istio.gateway-system.svc.cluster.local/get
@@ -36,7 +36,7 @@ Application: curl http://kuadrant-egressgateway-istio.gateway-system.svc.cluster
     -> External service receives the request over HTTPS and responds
 ```
 
-### DNS Configuration
+### DNS configuration
 
 No additional DNS configuration is needed. When Istio provisions the egress gateway, it creates a Kubernetes Service named `kuadrant-egressgateway-istio` in the gateway's namespace. Kubernetes automatically adds this service to the cluster DNS, so any pod can resolve it without additional configuration:
 
@@ -61,7 +61,7 @@ spec:
 
 Applications in `app-namespace` can then use `http://httpbin-egress/get`.
 
-### HTTPRoute with Host Rewrite
+### HTTPRoute with host rewrite
 
 This approach replaces the HTTPRoute deployed by the [egress gateway setup](egress-gateway.md). Instead of matching the external hostname, it matches the gateway's internal service name and rewrites the `Host` header to the real external hostname:
 
@@ -93,7 +93,7 @@ The `URLRewrite` filter changes the `Host` header from the internal hostname to 
 
 > **Note:** The Gateway listener does not restrict by hostname, so it accepts traffic on any host, including the internal service name.
 
-### TLS Considerations
+### TLS considerations for internal hostname
 
 This approach has the simplest TLS model:
 
@@ -102,7 +102,7 @@ This approach has the simplest TLS model:
 
 The application does not need to handle TLS certificates for the external service at all.
 
-### Validated Result
+### Validated result for internal hostname
 
 Tested by sending a request from a pod in the `egress-test` namespace:
 
@@ -130,13 +130,13 @@ Response confirms the flow works end-to-end:
 
 ---
 
-## Alternative: Pod DNS with Kuadrant CoreDNS
+## Alternative: pod DNS with Kuadrant CoreDNS
 
 The application uses the real external hostname (`httpbin.org`) transparently. Workload pods are configured with a custom `dnsConfig` that uses a kuadrant CoreDNS instance as their nameserver. A DNSPolicy on the egress gateway creates DNS records that resolve the external hostname to the gateway IP.
 
 Use this approach when the application cannot be changed to use an internal hostname.
 
-### How It Works
+### How pod DNS routing works
 
 ```text
 Application: curl http://httpbin.org/get
@@ -150,14 +150,14 @@ Application: curl http://httpbin.org/get
 
 Split DNS is handled by design: workload pods use kuadrant CoreDNS (which returns the gateway IP), while the gateway pod uses standard cluster DNS (which returns real external IPs). These separate resolution paths prevent routing loops.
 
-### Prerequisites
+### Additional prerequisites for pod DNS
 
 In addition to the [common prerequisites](#prerequisites), this approach requires:
 
 - **dns-operator** installed (included with Kuadrant)
 - **Kuadrant CoreDNS** deployed - see the [CoreDNS integration guide](https://github.com/kuadrant/dns-operator/blob/main/docs/coredns/coredns-integration.md) for deployment instructions
 
-### CoreDNS Configuration
+### CoreDNS configuration
 
 The kuadrant CoreDNS instance needs a zone block for the external hostname and a forward block for all other queries:
 
@@ -181,7 +181,7 @@ The `httpbin.org` zone block serves egress records via the kuadrant plugin. The 
 
 Add one zone block per external hostname that should be routed through the egress gateway.
 
-### Gateway Listener Hostname
+### Gateway listener hostname
 
 For this approach, the egress gateway listener must specify the external hostname. DNSPolicy reads listener hostnames to create DNS records:
 
@@ -205,7 +205,7 @@ spec:
 
 Add one listener per external hostname that should be routed through the egress gateway.
 
-### Provider Secret and DNSPolicy
+### Provider secret and DNSPolicy
 
 Create a CoreDNS provider secret with the external hostname as the zone:
 
@@ -235,11 +235,11 @@ spec:
 
 The dns-operator processes the resulting DNSRecord and publishes it to the kuadrant CoreDNS instance, which serves it to pods.
 
-### HTTPRoute
+### Routing with the external hostname
 
 This approach uses the HTTPRoute deployed by the [egress gateway setup](egress-gateway.md) as-is - it already matches `httpbin.org` and routes to the external service. No changes needed.
 
-### Workload Pod Configuration
+### Workload pod configuration
 
 Configure workload pods with `dnsPolicy: None` and a `dnsConfig` pointing exclusively to the kuadrant CoreDNS instance:
 
@@ -263,7 +263,7 @@ kubectl get svc kuadrant-coredns -n kuadrant-coredns -o jsonpath='{.spec.cluster
 
 > **Important:** Use only the kuadrant CoreDNS IP as the nameserver. Do not add the cluster DNS as a second nameserver - some resolver implementations (notably musl libc, used by Alpine-based images) send queries to all nameservers simultaneously and use whichever responds first, which can bypass the egress routing. The kuadrant CoreDNS forwards non-egress queries to the cluster DNS via the `.` forward block, so all DNS resolution continues to work.
 
-### TLS Considerations
+### TLS considerations for pod DNS
 
 This approach has the same TLS model as the internal hostname approach:
 
@@ -272,7 +272,7 @@ This approach has the same TLS model as the internal hostname approach:
 
 The application must send HTTP (not HTTPS) for Kuadrant policies to inspect request headers. If the application sends HTTPS, the gateway cannot terminate TLS (it does not hold a certificate for the external hostname), and policies cannot inspect the encrypted traffic.
 
-### Validated Result
+### Validated result for pod DNS
 
 Tested by creating a pod with custom dnsConfig and sending a request using the real hostname:
 
@@ -306,9 +306,9 @@ kubectl exec egress-dns-test -- nslookup kubernetes.default.svc.cluster.local
 
 ---
 
-## Other Alternatives
+## Other alternatives
 
-### hostAliases
+### Pod hostAliases entries
 
 Kubernetes pods support [`hostAliases`](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/) to add entries to `/etc/hosts`. This can map an external hostname to the egress gateway IP per pod:
 
@@ -322,7 +322,7 @@ spec:
 
 This is simple and works on any platform, but the gateway IP is hardcoded in every pod spec. If the gateway service is recreated and gets a new IP, all pods need redeployment. The kuadrant CoreDNS approach avoids this problem since DNSRecord updates propagate automatically.
 
-### Sidecar-Based Routing
+### Sidecar-based routing
 
 If workloads are already enrolled in the Istio service mesh with sidecar injection, traffic can be routed through the egress gateway using a VirtualService with the `mesh` gateway. The sidecar proxy intercepts outbound connections and routes them to the egress gateway transparently - no DNS changes needed. This is a native Istio pattern but requires mesh membership, which adds resource overhead per pod. Consider this option only if your workloads already use sidecar injection.
 

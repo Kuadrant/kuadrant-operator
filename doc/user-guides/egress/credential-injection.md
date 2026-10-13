@@ -1,4 +1,4 @@
-# Egress Gateway Credential Injection
+# Egress gateway credential injection
 
 This guide demonstrates how to use AuthPolicy with an Istio egress gateway to inject credentials into requests to external services using [HashiCorp Vault](https://developer.hashicorp.com/vault) as the credential source.
 
@@ -6,7 +6,7 @@ This guide demonstrates how to use AuthPolicy with an Istio egress gateway to in
 
 This guide builds on the [workload identity](egress-gateway.md#workload-identity) pattern from the egress gateway setup guide. That pattern uses `kubernetesTokenReview` to validate workload SA tokens. Credential injection extends it by adding Vault integration - using the validated identity to fetch per-workload credentials and inject them into outbound requests.
 
-### Request Flow
+### Request flow
 
 1. Internal workload sends an HTTP request to the egress gateway with `Authorization: Bearer <sa-token>`
 2. The gateway triggers an ext_authz check with Authorino
@@ -15,7 +15,7 @@ This guide builds on the [workload identity](egress-gateway.md#workload-identity
 5. Authorino reads the external credential from Vault and overwrites the `Authorization` header via `response.success.headers`
 6. The egress gateway originates TLS and forwards the request with the external credential to the external service
 
-### Topology
+### Credential injection topology
 
 ```mermaid
 graph TB
@@ -58,11 +58,11 @@ export EGRESS_IP=$(kubectl get gtw kuadrant-egressgateway -n gateway-system \
     -o jsonpath='{.status.addresses[0].value}')
 ```
 
-## Credential Injection
+## Credential injection
 
 The AuthPolicy below authenticates the workload via its Kubernetes service account token, fetches a per-identity credential from Vault, and injects it into the outbound request. The Vault path is constructed dynamically from the workload's namespace and service account name, so different workloads get different credentials. The workload sends `Authorization: Bearer <sa-token>`; the gateway replaces it with `Authorization: Bearer <external-key>`.
 
-### Step 1: Apply the AuthPolicy
+### Applying the AuthPolicy
 
 ```sh
 kubectl apply -f - <<'EOF'
@@ -120,7 +120,7 @@ EOF
 - `authorization.vault_credential_check` - verifies the Vault credential fetch succeeded. If the workload's SA isn't authorized by Vault's policy, the request is denied (403).
 - `response.success.headers.authorization` - overwrites the `Authorization` header with the external credential. The workload's SA token never reaches the external service.
 
-### Step 2: Test
+### Testing credential injection
 
 The setup script stored a test credential at `secret/egress/egress-test/default` for the test client. Test the three access scenarios:
 
@@ -151,7 +151,7 @@ curl -s -o /dev/null -w "%{http_code}" -H "Host: httpbin.org" \
 kubectl delete pod bad-client -n default
 ```
 
-### Per-Identity Credentials
+### Per-identity credentials
 
 Different workload identities automatically get different credentials from Vault. The `urlExpression` constructs the Vault path from the workload's namespace and service account name.
 
@@ -202,7 +202,7 @@ curl -s -H "Host: httpbin.org" \
 # Authorization: Bearer sk-different-key-for-workload-b
 ```
 
-## Security
+## Two-layer security model
 
 Access control is enforced at two layers:
 

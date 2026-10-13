@@ -68,8 +68,6 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
-	bindings := make([]types.MutatorBinding, 0)
-
 	if pol.Spec.Metrics != nil {
 		for binding, expression := range pol.Spec.Metrics.Default.Labels {
 			binding := types.KuadrantMetricBinding(binding)
@@ -77,7 +75,6 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 				r.Logger.Error(err, "failed to add data to request domain")
 				return calculateErrorStatus(pol, err), err
 			}
-			bindings = append(bindings, types.MutatorBinding{Domain: types.DomainRequest, Binding: binding})
 		}
 	}
 
@@ -88,15 +85,7 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 				r.Logger.Error(err, "failed to add data to request domain")
 				return calculateErrorStatus(pol, err), err
 			}
-			bindings = append(bindings, types.MutatorBinding{Domain: types.DomainRequest, Binding: binding})
 		}
-	}
-
-	// RegisterMutator is additive. Prune only after every current binding was
-	// registered so a failed reconcile leaves the last complete set in place.
-	if err := kuadrantCtx.PruneMutators(ctx, pol, bindings); err != nil {
-		r.Logger.Error(err, "failed to prune stale telemetry bindings")
-		return calculateErrorStatus(pol, err), err
 	}
 
 	return calculateEnforcedStatus(pol, nil),

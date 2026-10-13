@@ -99,10 +99,6 @@ func (m *mockKuadrantCtx) AddDataTo(ctx context.Context, policy exttypes.Policy,
 	return m.addDataToFn(ctx, policy, domain, binding, expression)
 }
 
-func (m *mockKuadrantCtx) PruneMutators(context.Context, exttypes.Policy, []exttypes.MutatorBinding) error {
-	return nil
-}
-
 func (m *mockKuadrantCtx) GetClient() client.Client {
 	return nil
 }
@@ -825,7 +821,7 @@ func newTestExtensionController(mockClient *mockExtensionServiceClient) *Extensi
 	}
 }
 
-func TestPruneMutators(t *testing.T) {
+func TestAddDataToTracksMutatorsForClosingPrune(t *testing.T) {
 	var captured *extpb.PruneMutatorsRequest
 	mock := &mockExtensionServiceClient{
 		pruneMutatorsFn: func(_ context.Context, in *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
@@ -836,18 +832,22 @@ func TestPruneMutators(t *testing.T) {
 
 	controller := newTestExtensionController(mock)
 	policy := &mockPolicy{name: "test-policy", namespace: "test-namespace"}
-	bindings := []exttypes.MutatorBinding{{Domain: exttypes.DomainRequest, Binding: "logging.fields.request_path"}}
-	if err := controller.PruneMutators(context.Background(), policy, bindings); err != nil {
-		t.Fatalf("PruneMutators returned an error: %v", err)
+	state := newMutatorReconcileState()
+	ctx := context.WithValue(context.Background(), mutatorReconcileStateKey{}, state)
+	if err := controller.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.request_path", "request.path"); err != nil {
+		t.Fatalf("AddDataTo returned an error: %v", err)
+	}
+	if err := controller.pruneTrackedMutators(ctx, policy, state); err != nil {
+		t.Fatalf("closing prune returned an error: %v", err)
 	}
 	if captured == nil || captured.Policy == nil || captured.Policy.Metadata == nil {
-		t.Fatal("PruneMutators did not send a policy")
+		t.Fatal("closing prune did not send a policy")
 	}
 	if captured.Policy.Metadata.Name != policy.name || captured.Policy.Metadata.Namespace != policy.namespace || captured.Policy.Metadata.Kind != "TestPolicy" {
-		t.Fatalf("PruneMutators sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
+		t.Fatalf("closing prune sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
 	}
 	if len(captured.Bindings) != 1 || captured.Bindings[0].Domain != extpb.Domain_DOMAIN_REQUEST || captured.Bindings[0].Binding != "logging.fields.request_path" {
-		t.Fatalf("PruneMutators sent bindings %#v, want request/logging.fields.request_path", captured.Bindings)
+		t.Fatalf("closing prune sent bindings %#v, want request/logging.fields.request_path", captured.Bindings)
 	}
 }
 

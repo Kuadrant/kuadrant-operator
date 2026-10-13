@@ -25,13 +25,9 @@ type addDataCall struct {
 }
 
 type mockKuadrantCtx struct {
-	calls         []addDataCall
-	pruneCalls    int
-	prunePolicy   types.Policy
-	pruneBindings []types.MutatorBinding
-	pruneErr      error
-	failOn        string // return error when binding matches this value
-	failErr       error
+	calls   []addDataCall
+	failOn  string // return error when binding matches this value
+	failErr error
 }
 
 func (m *mockKuadrantCtx) AddDataTo(_ context.Context, _ types.Policy, domain types.Domain, binding, expression string) error {
@@ -40,13 +36,6 @@ func (m *mockKuadrantCtx) AddDataTo(_ context.Context, _ types.Policy, domain ty
 		return m.failErr
 	}
 	return nil
-}
-
-func (m *mockKuadrantCtx) PruneMutators(_ context.Context, policy types.Policy, bindings []types.MutatorBinding) error {
-	m.pruneCalls++
-	m.prunePolicy = policy
-	m.pruneBindings = append([]types.MutatorBinding(nil), bindings...)
-	return m.pruneErr
 }
 
 func (m *mockKuadrantCtx) Resolve(context.Context, types.Policy, string, bool) (celref.Val, error) {
@@ -106,13 +95,6 @@ func TestReconcileSpec_LoggingFieldsOnly(t *testing.T) {
 	if status == nil {
 		t.Fatal("reconcileSpec returned nil status")
 	}
-	if mock.pruneCalls != 1 {
-		t.Fatalf("expected 1 PruneMutators call, got %d", mock.pruneCalls)
-	}
-	if mock.prunePolicy != pol {
-		t.Fatal("PruneMutators received the wrong policy")
-	}
-
 	if len(mock.calls) != 2 {
 		t.Fatalf("expected 2 AddDataTo calls, got %d", len(mock.calls))
 	}
@@ -138,15 +120,6 @@ func TestReconcileSpec_LoggingFieldsOnly(t *testing.T) {
 	} else {
 		if c.expression != "request.path" {
 			t.Errorf("request_path expression = %q, want %q", c.expression, "request.path")
-		}
-	}
-	prunedBindings := make(map[string]types.MutatorBinding, len(mock.pruneBindings))
-	for _, binding := range mock.pruneBindings {
-		prunedBindings[binding.Binding] = binding
-	}
-	for _, binding := range []string{"logging.fields.client_identity", "logging.fields.request_path"} {
-		if pruned, ok := prunedBindings[binding]; !ok || pruned.Domain != types.DomainRequest {
-			t.Errorf("PruneMutators is missing request-domain binding %q", binding)
 		}
 	}
 }
@@ -203,30 +176,6 @@ func TestReconcileSpec_LoggingFieldError(t *testing.T) {
 	if status == nil {
 		t.Fatal("expected error status, got nil")
 	}
-	if mock.pruneCalls != 0 {
-		t.Fatalf("expected no PruneMutators call after AddDataTo fails, got %d", mock.pruneCalls)
-	}
-}
-
-func TestReconcileSpec_PruneMutatorsError(t *testing.T) {
-	expectedErr := fmt.Errorf("prune mutators failed")
-	mock := &mockKuadrantCtx{pruneErr: expectedErr}
-	r := &TelemetryPolicyReconciler{
-		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
-	}
-
-	status, err := r.reconcileSpec(context.Background(), newTestPolicy(nil, map[string]string{
-		"request_path": "request.path",
-	}), mock)
-	if err != expectedErr {
-		t.Fatalf("expected error %v, got %v", expectedErr, err)
-	}
-	if status == nil {
-		t.Fatal("expected an error status")
-	}
-	if len(mock.calls) != 1 {
-		t.Fatalf("expected AddDataTo to succeed before PruneMutators fails, got %d calls", len(mock.calls))
-	}
 }
 
 func TestReconcileSpec_EmptySpec(t *testing.T) {
@@ -245,11 +194,5 @@ func TestReconcileSpec_EmptySpec(t *testing.T) {
 	}
 	if len(mock.calls) != 0 {
 		t.Errorf("expected 0 AddDataTo calls for empty spec, got %d", len(mock.calls))
-	}
-	if mock.pruneCalls != 1 {
-		t.Fatalf("expected 1 PruneMutators call for empty spec, got %d", mock.pruneCalls)
-	}
-	if len(mock.pruneBindings) != 0 {
-		t.Errorf("expected no retained bindings for empty spec, got %d", len(mock.pruneBindings))
 	}
 }

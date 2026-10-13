@@ -62,20 +62,12 @@ type ActionMethodConfig struct {
 	MessageTemplate string // Opaque template string for building the gRPC request message
 }
 
-// MutatorBinding identifies a registered data binding that must remain after a
-// successful policy reconciliation.
-type MutatorBinding struct {
-	Domain  Domain
-	Binding string
-}
-
 // KuadrantCtx is passed to ReconcileFn providing access to CEL resolution,
 // mutator registration, object reconciliation helpers and action method registration.
 type KuadrantCtx interface {
 	Resolve(context.Context, Policy, string, bool) (celref.Val, error)
 	ResolvePolicy(context.Context, Policy, string, bool) (Policy, error)
 	AddDataTo(context.Context, Policy, Domain, string, string) error
-	PruneMutators(context.Context, Policy, []MutatorBinding) error
 	ReconcileObject(context.Context, client.Object, client.Object, MutateFn) (client.Object, error)
 	RegisterActionMethod(ctx context.Context, policy Policy, svc ActionMethodConfig) error
 	NewPipeline(policy Policy) Pipeline

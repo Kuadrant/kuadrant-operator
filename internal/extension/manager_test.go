@@ -818,6 +818,56 @@ func TestPruneMutators_RetriesFailedChangeNotification(t *testing.T) {
 	}
 }
 
+func TestPruneMutators_DoesNotBlockOtherPoliciesDuringNotification(t *testing.T) {
+	svc := newTestExtensionService()
+	target := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route", "default")
+	firstPolicy := testPolicy("TelemetryPolicy", "default", "first", target)
+	secondPolicy := testPolicy("TelemetryPolicy", "default", "second", target)
+	firstID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "first"}
+	secondID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "second"}
+	locator := createLocatorFromProtobuf(target)
+
+	svc.registeredData.Set(firstID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path", DataProviderEntry{Policy: firstID, Binding: "logging.fields.path", Expression: "request.path"})
+	svc.registeredData.Set(secondID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path", DataProviderEntry{Policy: secondID, Binding: "logging.fields.path", Expression: "request.path"})
+
+	firstNotificationStarted := make(chan struct{})
+	releaseFirstNotification := make(chan struct{})
+	svc.changeNotifier = func(reason string) error {
+		if strings.Contains(reason, "policy default/first") {
+			close(firstNotificationStarted)
+			<-releaseFirstNotification
+		}
+		return nil
+	}
+
+	firstResult := make(chan error, 1)
+	go func() {
+		_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{Policy: firstPolicy})
+		firstResult <- err
+	}()
+	<-firstNotificationStarted
+
+	secondResult := make(chan error, 1)
+	go func() {
+		_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{Policy: secondPolicy})
+		secondResult <- err
+	}()
+
+	select {
+	case err := <-secondResult:
+		if err != nil {
+			t.Fatalf("second policy prune returned an error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second policy prune was blocked by the first notification")
+	}
+
+	close(releaseFirstNotification)
+	if err := <-firstResult; err != nil {
+		t.Fatalf("first policy prune returned an error: %v", err)
+	}
+}
+
 func TestClearPolicy_ProtoCacheCleanup(t *testing.T) {
 	svc := newTestExtensionService()
 

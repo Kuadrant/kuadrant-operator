@@ -510,7 +510,7 @@ type extensionService struct {
 	authenticator                      *tokenAuthenticator
 	reflectionFetcher                  ReflectionFetcher
 	changeNotifier                     ChangeNotifier
-	pendingMutatorPruneNotifications   map[ResourceID]struct{}
+	pendingMutatorPruneNotifications   map[ResourceID]uint64
 	pendingMutatorPruneNotificationsMu sync.Mutex
 	logger                             logr.Logger
 	extpb.UnimplementedExtensionServiceServer
@@ -921,24 +921,31 @@ func (s *extensionService) markMutatorPruneNotificationPending(policyID Resource
 	defer s.pendingMutatorPruneNotificationsMu.Unlock()
 
 	if s.pendingMutatorPruneNotifications == nil {
-		s.pendingMutatorPruneNotifications = make(map[ResourceID]struct{})
+		s.pendingMutatorPruneNotifications = make(map[ResourceID]uint64)
 	}
-	s.pendingMutatorPruneNotifications[policyID] = struct{}{}
+	s.pendingMutatorPruneNotifications[policyID]++
 }
 
 func (s *extensionService) notifyPendingMutatorPrune(policyID ResourceID, pruned int) error {
 	s.pendingMutatorPruneNotificationsMu.Lock()
-	defer s.pendingMutatorPruneNotificationsMu.Unlock()
+	generation, pending := s.pendingMutatorPruneNotifications[policyID]
+	notifier := s.changeNotifier
+	s.pendingMutatorPruneNotificationsMu.Unlock()
 
-	if _, pending := s.pendingMutatorPruneNotifications[policyID]; !pending || s.changeNotifier == nil {
+	if !pending || notifier == nil {
 		return nil
 	}
 
 	reason := fmt.Sprintf("mutators pruned for policy %s/%s (%d removed)", policyID.Namespace, policyID.Name, pruned)
-	if err := s.changeNotifier(reason); err != nil {
+	if err := notifier(reason); err != nil {
 		return fmt.Errorf("mutators pruned but failed to trigger reconciliation: %w", err)
 	}
-	delete(s.pendingMutatorPruneNotifications, policyID)
+
+	s.pendingMutatorPruneNotificationsMu.Lock()
+	if s.pendingMutatorPruneNotifications[policyID] == generation {
+		delete(s.pendingMutatorPruneNotifications, policyID)
+	}
+	s.pendingMutatorPruneNotificationsMu.Unlock()
 
 	return nil
 }

@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	NetworkPolicyReconcilerName = "NetworkPolicyReconciler"
+	NetworkPolicyReconcilerName = "NetworkPolicyReconciler.operands"
 	AuthorinoNetworkPolicy      = "kuadrant-authorino"
 	LimitadorNetworkPolicy      = "kuadrant-limitador"
 )
@@ -61,6 +61,7 @@ func (r *NetworkPolicyReconciler) Subscription() *controller.Subscription {
 			{Kind: &v1beta1.NetworkPolicyGroupKind},
 			{Kind: &machinery.GatewayGroupKind, EventType: ptr.To(controller.CreateEvent)},
 			{Kind: &machinery.GatewayGroupKind, EventType: ptr.To(controller.DeleteEvent)},
+			{Kind: &v1beta1.DeploymentGroupKind},
 		},
 	}
 }
@@ -106,7 +107,7 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 			}
 		}
 
-		desiredAuthorinoNetworkPolicy, update := mergeNetworkPolicy(*minAuthorinoNetworkPolicy, existingAuthorinoNetworkPolicy)
+		desiredAuthorinoNetworkPolicy, update := mergeNetworkPolicy(logger, *minAuthorinoNetworkPolicy, existingAuthorinoNetworkPolicy)
 
 		ownerRef := metav1.OwnerReference{
 			APIVersion:         authorinoObj.GroupVersionKind().GroupVersion().String(),
@@ -164,7 +165,7 @@ func (r *NetworkPolicyReconciler) Reconcile(ctx context.Context, _ []controller.
 			}
 		}
 
-		desiredLimitadorNetworkPolicy, update := mergeNetworkPolicy(*minLimitadorNetworkPolicy, existingLimitadorNetworkPolicy)
+		desiredLimitadorNetworkPolicy, update := mergeNetworkPolicy(logger, *minLimitadorNetworkPolicy, existingLimitadorNetworkPolicy)
 
 		ownerRef := metav1.OwnerReference{
 			APIVersion:         lObj.GroupVersionKind().GroupVersion().String(),
@@ -361,12 +362,13 @@ func networkPolicyPortTCP(port int) []networkingv1.NetworkPolicyPort {
 	}
 }
 
-func mergeNetworkPolicy(desired networkingv1.NetworkPolicy, current *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, bool) {
+func mergeNetworkPolicy(logger logr.Logger, desired networkingv1.NetworkPolicy, current *networkingv1.NetworkPolicy) (*networkingv1.NetworkPolicy, bool) {
 	changed := false
 
 	if current == nil {
 		return &desired, true
 	}
+	logger.V(1).Info("merging network policy", "current.Name", current.GetName())
 	// check desiredLabels
 	desiredLabels := desired.GetLabels()
 	currentLabels := current.GetLabels()
@@ -382,7 +384,9 @@ func mergeNetworkPolicy(desired networkingv1.NetworkPolicy, current *networkingv
 		changed = true
 	}
 
+	logger.V(1).Info("checking pod selectors", "current.Name", current.GetName())
 	if !reflect.DeepEqual(desired.Spec.PodSelector, current.Spec.PodSelector) {
+		logger.V(1).Info("pod selectors not equal, updating", "current.Name", current.GetName())
 		current.Spec.PodSelector = desired.Spec.PodSelector
 		changed = true
 	}

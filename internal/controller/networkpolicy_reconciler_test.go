@@ -371,7 +371,7 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 		},
 	}
 
-	t.Run("nil authorino no gateways - only OIDC rule", func(t *testing.T) {
+	t.Run("nil authorino no gateways - OIDC and metrics rules", func(t *testing.T) {
 		topology, err := machinery.NewTopology()
 		assert.NilError(t, err)
 
@@ -380,11 +380,14 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 		assert.Equal(t, result.Name, AuthorinoNetworkPolicy)
 		assert.Equal(t, result.Namespace, "kuadrant-system")
 		assert.DeepEqual(t, result.Spec.PodSelector.MatchLabels, map[string]string{"kuadrant.io/managed": "true"})
-		assert.Assert(t, is.Len(result.Spec.Ingress, 1), "should have only OIDC ingress rule when no gateways")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have OIDC and metrics ingress rules when no gateways")
 
 		// Verify OIDC port (default 8083)
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8083)))
 		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "OIDC should not have peers")
+		// Verify metrics port (8080)
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8080)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 0), "metrics should not have peers")
 	})
 
 	t.Run("nil authorino with gateways - default ports", func(t *testing.T) {
@@ -405,17 +408,20 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		result := generateAuthorinoNetworkPolicy(kuadrant, nil, topology)
 
-		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules when gateways exist")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 4), "should have 4 ingress rules when gateways exist")
 
 		// Verify OIDC port (default 8083) - first rule, no peers
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8083)))
 		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "OIDC should not have peers")
+		// Verify metrics port (8080)
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8080)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 0), "metrics should not have peers")
 		// Verify gRPC port (default 50051)
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(50051)))
-		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "gRPC should have gateway peer")
+		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(50051)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 1), "gRPC should have gateway peer")
 		// Verify HTTP port (default 5001)
-		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(5001)))
-		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 1), "HTTP should have gateway peer")
+		assert.DeepEqual(t, result.Spec.Ingress[3].Ports[0].Port, new(intstr.FromInt(5001)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[3].From, 1), "HTTP should have gateway peer")
 	})
 
 	t.Run("authorino with custom ports and gateways", func(t *testing.T) {
@@ -438,6 +444,9 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 				OIDCServer: authorinooperatorv1beta1.OIDCServer{
 					Port: new(int32(9002)),
 				},
+				Metrics: authorinooperatorv1beta1.Metrics{
+					Port: new(int32(9090)),
+				},
 			},
 		}
 		gateway := &gatewayapiv1.Gateway{
@@ -457,16 +466,18 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		result := generateAuthorinoNetworkPolicy(kuadrant, authorino, topology)
 
-		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules with gateways")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 4), "should have 4 ingress rules with gateways")
 		// Verify custom OIDC port (first rule)
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9002)))
+		// Verify custom metrics port
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9090)))
 		// Verify custom gRPC port
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9000)))
+		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(9000)))
 		// Verify custom HTTP port
-		assert.DeepEqual(t, result.Spec.Ingress[2].Ports[0].Port, new(intstr.FromInt(9001)))
+		assert.DeepEqual(t, result.Spec.Ingress[3].Ports[0].Port, new(intstr.FromInt(9001)))
 	})
 
-	t.Run("authorino with custom ports no gateways - only OIDC", func(t *testing.T) {
+	t.Run("authorino with custom ports no gateways - OIDC and metrics", func(t *testing.T) {
 		authorino := &authorinooperatorv1beta1.Authorino{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Authorino",
@@ -486,6 +497,9 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 				OIDCServer: authorinooperatorv1beta1.OIDCServer{
 					Port: new(int32(9002)),
 				},
+				Metrics: authorinooperatorv1beta1.Metrics{
+					Port: new(int32(9090)),
+				},
 			},
 		}
 		topology, err := machinery.NewTopology()
@@ -493,8 +507,9 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		result := generateAuthorinoNetworkPolicy(kuadrant, authorino, topology)
 
-		assert.Assert(t, is.Len(result.Spec.Ingress, 1), "should have only OIDC rule without gateways")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have OIDC and metrics rules without gateways")
 		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(9002)))
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(9090)))
 	})
 
 	t.Run("gateway in topology - peers in gRPC and HTTP but not OIDC", func(t *testing.T) {
@@ -515,19 +530,22 @@ func TestGenerateAuthorinoNetworkPolicy(t *testing.T) {
 
 		result := generateAuthorinoNetworkPolicy(kuadrant, nil, topology)
 
-		assert.Assert(t, is.Len(result.Spec.Ingress, 3), "should have 3 ingress rules")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 4), "should have 4 ingress rules")
 
 		// OIDC rule (index 0) should NOT have gateway peer (empty From)
 		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "OIDC should not have gateway peer")
 
-		// gRPC rule (index 1) should have gateway peer
-		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "gRPC should have gateway peer")
-		assert.DeepEqual(t, result.Spec.Ingress[1].From[0].NamespaceSelector.MatchLabels,
+		// metrics rule (index 1) should NOT have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 0), "metrics should not have gateway peer")
+
+		// gRPC rule (index 2) should have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 1), "gRPC should have gateway peer")
+		assert.DeepEqual(t, result.Spec.Ingress[2].From[0].NamespaceSelector.MatchLabels,
 			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
 
-		// HTTP rule (index 2) should have gateway peer
-		assert.Assert(t, is.Len(result.Spec.Ingress[2].From, 1), "HTTP should have gateway peer")
-		assert.DeepEqual(t, result.Spec.Ingress[2].From[0].NamespaceSelector.MatchLabels,
+		// HTTP rule (index 3) should have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[3].From, 1), "HTTP should have gateway peer")
+		assert.DeepEqual(t, result.Spec.Ingress[3].From[0].NamespaceSelector.MatchLabels,
 			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
 	})
 
@@ -556,7 +574,7 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 		},
 	}
 
-	t.Run("nil limitador no gateways - empty ingress", func(t *testing.T) {
+	t.Run("nil limitador no gateways - metrics HTTP only", func(t *testing.T) {
 		topology, err := machinery.NewTopology()
 		assert.NilError(t, err)
 
@@ -565,7 +583,9 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 		assert.Equal(t, result.Name, LimitadorNetworkPolicy)
 		assert.Equal(t, result.Namespace, "kuadrant-system")
 		assert.Assert(t, result.Spec.PodSelector.MatchLabels == nil, "should have nil labels when no deployment linked")
-		assert.Assert(t, is.Len(result.Spec.Ingress, 0), "should have no ingress rules without gateways")
+		assert.Assert(t, is.Len(result.Spec.Ingress, 1), "should have HTTP metrics rule without gateways")
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8080)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "HTTP metrics should not have peers")
 	})
 
 	t.Run("nil limitador with gateways - default ports", func(t *testing.T) {
@@ -587,10 +607,11 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 		result := generateLimitadorNetworkPolicy(kuadrant, nil, topology)
 
 		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have 2 ingress rules with gateways")
+		// Verify HTTP metrics port (default 8080) — empty From
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8080)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "HTTP metrics should not have peers")
 		// Verify gRPC port (default 8081)
-		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(8081)))
-		// Verify HTTP port (default 8080)
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8080)))
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(8081)))
 	})
 
 	t.Run("limitador with custom ports and gateways", func(t *testing.T) {
@@ -628,13 +649,14 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 		result := generateLimitadorNetworkPolicy(kuadrant, limitador, topology)
 
 		assert.Assert(t, is.Len(result.Spec.Ingress, 2), "should have 2 ingress rules with gateways")
+		// Verify custom HTTP port (metrics)
+		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(7002)))
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "HTTP metrics should not have peers")
 		// Verify custom gRPC port
-		assert.DeepEqual(t, result.Spec.Ingress[0].Ports[0].Port, new(intstr.FromInt(7001)))
-		// Verify custom HTTP port
-		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(7002)))
+		assert.DeepEqual(t, result.Spec.Ingress[1].Ports[0].Port, new(intstr.FromInt(7001)))
 	})
 
-	t.Run("gateway peers appear in both ingress rules", func(t *testing.T) {
+	t.Run("gateway peers appear only on gRPC ingress", func(t *testing.T) {
 		gateway := &gatewayapiv1.Gateway{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Gateway",
@@ -652,13 +674,11 @@ func TestGenerateLimitadorNetworkPolicy(t *testing.T) {
 
 		result := generateLimitadorNetworkPolicy(kuadrant, nil, topology)
 
-		// gRPC rule should have gateway peer
-		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 1), "gRPC should have gateway peer")
-		assert.DeepEqual(t, result.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels,
-			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
+		// HTTP metrics rule should NOT have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[0].From, 0), "HTTP metrics should not have gateway peer")
 
-		// HTTP rule should have gateway peer
-		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "HTTP should have gateway peer")
+		// gRPC rule should have gateway peer
+		assert.Assert(t, is.Len(result.Spec.Ingress[1].From, 1), "gRPC should have gateway peer")
 		assert.DeepEqual(t, result.Spec.Ingress[1].From[0].NamespaceSelector.MatchLabels,
 			map[string]string{"kubernetes.io/metadata.name": "gateway-ns"})
 	})

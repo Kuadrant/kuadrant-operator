@@ -23,7 +23,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
+var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, Labels{"istio", "authpolicy"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
@@ -129,6 +129,9 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			var patchValue map[string]any
 			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
 			Expect(patchValue).To(HaveKey("name"))
+			// outlier_detection is applied to the auth cluster to eject stale pod IPs
+			// between DNS refresh cycles after the authorization service went headless.
+			Expect(patchValue).To(HaveKey("outlier_detection"))
 			// transport_socket config only added when mTLS is configured
 			Expect(patchValue).NotTo(HaveKey("transport_socket"))
 
@@ -208,6 +211,7 @@ var _ = Describe("Authorino Cluster EnvoyFilter controller", Serial, func() {
 			var patchValue map[string]any
 			Expect(json.Unmarshal(patchValueRaw, &patchValue)).ToNot(HaveOccurred())
 			Expect(patchValue).To(HaveKey("name"))
+			Expect(patchValue).To(HaveKey("outlier_detection"))
 			// transport_socket config only added when mTLS is configured
 			Expect(patchValue).To(HaveKey("transport_socket"))
 			Expect(patchValue["transport_socket"]).To(Equal(map[string]interface{}{

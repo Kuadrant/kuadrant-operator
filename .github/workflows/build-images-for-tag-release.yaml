@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set environment variables
         run: |
           bash ./utils/release/load_github_envvar.sh
@@ -79,6 +81,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
@@ -136,6 +140,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed

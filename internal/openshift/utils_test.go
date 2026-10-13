@@ -5,6 +5,8 @@ package openshift
 import (
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
+
 	configv1 "github.com/openshift/api/config/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -17,87 +19,98 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 		sdk1EnvVar        string
 		pf5EnvVar         string
 		expectedImage     string
+		expectedRuntime   consoleplugin.Runtime
 		expectedErrSubstr string
 	}{
 		{
-			name:          "OpenShift 4.16 uses PF5 env var",
-			version:       "4.16.0",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.1.5",
+			name:            "OpenShift 4.16 uses PF5 env var",
+			version:         "4.16.0",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
-			name:          "OpenShift 4.19 uses PF5 env var",
-			version:       "4.19.0",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.1.5",
+			name:            "OpenShift 4.19 uses PF5 env var",
+			version:         "4.19.0",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
-			name:          "OpenShift 4.20 uses SDK1 env var",
-			version:       "4.20.0",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
+			name:            "OpenShift 4.20 uses SDK1 env var",
+			version:         "4.20.0",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.6.0",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
-			name:          "OpenShift 4.21 uses SDK1 env var",
-			version:       "4.21.0",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
+			name:            "OpenShift 4.21 uses SDK1 env var",
+			version:         "4.21.0",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.6.0",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
-			name:          "OpenShift 4.22 uses LATEST env var",
-			version:       "4.22.0",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:latest",
+			name:            "OpenShift 4.22 uses LATEST env var",
+			version:         "4.22.0",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:latest",
+			expectedRuntime: consoleplugin.RuntimeGo,
 		},
 		{
-			name:          "OpenShift 5.0 uses LATEST env var",
-			version:       "5.0.0",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:latest",
+			name:            "OpenShift 5.0 uses LATEST env var",
+			version:         "5.0.0",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:latest",
+			expectedRuntime: consoleplugin.RuntimeGo,
 		},
 		{
-			name:          "OpenShift 4.20.0-rc.1 pre-release uses SDK1 env var",
-			version:       "4.20.0-rc.1",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
+			name:            "OpenShift 4.20.0-rc.1 pre-release uses SDK1 env var",
+			version:         "4.20.0-rc.1",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.6.0",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
-			name:          "OpenShift 4.22.0-rc.1 pre-release uses LATEST env var",
-			version:       "4.22.0-rc.1",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:latest",
+			name:            "OpenShift 4.22.0-rc.1 pre-release uses LATEST env var",
+			version:         "4.22.0-rc.1",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:latest",
+			expectedRuntime: consoleplugin.RuntimeGo,
 		},
 		{
-			name:          "OpenShift 4.20.0-alpha.1 pre-release uses SDK1 env var",
-			version:       "4.20.0-alpha.1",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.6.0",
+			name:            "OpenShift 4.20.0-alpha.1 pre-release uses SDK1 env var",
+			version:         "4.20.0-alpha.1",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.6.0",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
-			name:          "OpenShift 4.19.0-rc.1 pre-release uses PF5 env var",
-			version:       "4.19.0-rc.1",
-			latestEnvVar:  "quay.io/kuadrant/console-plugin:latest",
-			sdk1EnvVar:    "quay.io/kuadrant/console-plugin:v0.6.0",
-			pf5EnvVar:     "quay.io/kuadrant/console-plugin:v0.1.5",
-			expectedImage: "quay.io/kuadrant/console-plugin:v0.1.5",
+			name:            "OpenShift 4.19.0-rc.1 pre-release uses PF5 env var",
+			version:         "4.19.0-rc.1",
+			latestEnvVar:    "quay.io/kuadrant/console-plugin:latest",
+			sdk1EnvVar:      "quay.io/kuadrant/console-plugin:v0.6.0",
+			pf5EnvVar:       "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedImage:   "quay.io/kuadrant/console-plugin:v0.1.5",
+			expectedRuntime: consoleplugin.RuntimeNginx,
 		},
 		{
 			name:              "Empty version returns error",
@@ -176,8 +189,11 @@ func TestGetConsolePluginImageForVersion(t *testing.T) {
 				return
 			}
 
-			if image != tt.expectedImage {
-				t.Errorf("expected image %q, got %q", tt.expectedImage, image)
+			if image.Runtime != tt.expectedRuntime {
+				t.Errorf("expected runtime %q, got %q", tt.expectedRuntime, image.Runtime)
+			}
+			if image.URL != tt.expectedImage {
+				t.Errorf("expected image %q, got %q", tt.expectedImage, image.URL)
 			}
 		})
 	}
@@ -194,4 +210,61 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestConsolePluginImageOverrideRuntime(t *testing.T) {
+	for _, tc := range []struct {
+		name, image, runtime string
+		want                 consoleplugin.Runtime
+		wantError            bool
+	}{
+		{name: "default preserves Go development images", image: "localhost/kuadrant/console-plugin:dev", want: consoleplugin.RuntimeGo},
+		{name: "explicit Go", image: "quay.io/kuadrant/console-plugin:v0.7.0", runtime: "go", want: consoleplugin.RuntimeGo},
+		{name: "explicit nginx", image: "quay.io/kuadrant/console-plugin:v0.6.0", runtime: "nginx", want: consoleplugin.RuntimeNginx},
+		{name: "invalid runtime", image: "localhost/kuadrant/console-plugin:dev", runtime: "invalid", wantError: true},
+		{name: "removed image allows cleanup", runtime: "nginx"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			image, err := GetConsolePluginImageOverride(tc.image, tc.runtime)
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("invalid runtime must be rejected")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if image.URL != tc.image || image.Runtime != tc.want {
+				t.Fatalf("unexpected image configuration: %+v", image)
+			}
+		})
+	}
+}
+
+func TestConsolePluginWaitsForCompletedOpenShiftUpdate(t *testing.T) {
+	t.Setenv(RelatedImageConsolePluginSDK1EnvVar, "quay.io/kuadrant/console-plugin:v0.6.0")
+	t.Setenv(RelatedImageConsolePluginLatestEnvVar, "quay.io/kuadrant/console-plugin:v0.7.0")
+	cv := &configv1.ClusterVersion{Status: configv1.ClusterVersionStatus{
+		Desired: configv1.Release{Version: "4.22.0"},
+		History: []configv1.UpdateHistory{
+			{Version: "4.22.0", State: configv1.PartialUpdate},
+			{Version: "4.21.0", State: configv1.CompletedUpdate},
+		},
+	}}
+	image, err := GetConsolePluginImageForVersion(cv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if image.URL != "quay.io/kuadrant/console-plugin:v0.6.0" || image.Runtime != consoleplugin.RuntimeNginx {
+		t.Fatalf("must keep the legacy plugin until the OpenShift update completes, got %+v", image)
+	}
+	cv.Status.History[0].State = configv1.CompletedUpdate
+	image, err = GetConsolePluginImageForVersion(cv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if image.URL != "quay.io/kuadrant/console-plugin:v0.7.0" || image.Runtime != consoleplugin.RuntimeGo {
+		t.Fatalf("completed OpenShift update must select the Go plugin, got %+v", image)
+	}
 }

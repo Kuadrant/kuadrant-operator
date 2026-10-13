@@ -150,6 +150,19 @@ spec:
                         type: boolean
                     type: object
                 type: object
+              tokenRateLimiting:
+                description: TokenRateLimiting configures cluster-wide behavior for
+                  TokenRateLimitPolicy.
+                properties:
+                  mode:
+                    default: Reservation
+                    description: Mode selects how TokenRateLimitPolicy limits are
+                      enforced across the cluster.
+                    enum:
+                    - Reservation
+                    - Optimistic
+                    type: string
+                type: object
             type: object
           status:
             description: KuadrantStatus defines the observed state of Kuadrant

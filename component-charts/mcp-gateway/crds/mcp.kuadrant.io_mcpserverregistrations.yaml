@@ -129,6 +129,45 @@ spec:
                   Returned by the discover_tools meta-tool to help agents decide which tools to select.
                 maxLength: 256
                 type: string
+              oauth2ClientCredentials:
+                description: |-
+                  oauth2ClientCredentials configures the OAuth 2.0 client credentials grant the broker uses
+                  to obtain access tokens for this MCP server. The broker refreshes the token on expiry.
+                  Used exclusively by the broker for tool discovery and session management, exactly like
+                  credentialRef. Mutually exclusive with credentialRef.
+                properties:
+                  scopes:
+                    description: scopes requested with the token. Omitted from the
+                      request when empty.
+                    items:
+                      minLength: 1
+                      type: string
+                    maxItems: 10
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  secretRef:
+                    description: |-
+                      secretRef references a Secret containing the keys clientID and clientSecret.
+                      The referenced Secret must have the label mcp.kuadrant.io/secret=true.
+                    properties:
+                      name:
+                        description: name is the name of the Secret resource.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  tokenURL:
+                    description: |-
+                      tokenURL is the authorization server's token endpoint. Must be https: the client
+                      secret is sent on this connection.
+                    minLength: 1
+                    pattern: ^https://
+                    type: string
+                required:
+                - secretRef
+                - tokenURL
+                type: object
               path:
                 default: /mcp
                 description: |-
@@ -157,6 +196,28 @@ spec:
                 - Enabled
                 - Disabled
                 type: string
+              supportedProtocolVersions:
+                description: |-
+                  supportedProtocolVersions overrides the protocol versions the broker
+                  treats this upstream as supporting.
+                  By default the broker learns an upstream's versions from its
+                  server/discover response, falling back to the version negotiated at
+                  initialize. Some MCP servers do not advertise all the protocol versions
+                  they actually support, so the broker classifies them from an incomplete
+                  list and federates their tools only to clients on the advertised versions.
+                  Set this field to the full list of versions the upstream actually serves
+                  (for example ["2025-11-25","2026-07-28"]) to force the broker to classify
+                  and serve its tools to clients on each listed version. The version
+                  negotiated at initialize is always included implicitly.
+                  This is a last-resort override for servers that misreport their supported
+                  versions; it does not guarantee any future protocol discovery or
+                  compatibility.
+                items:
+                  pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+                  type: string
+                maxItems: 10
+                type: array
+                x-kubernetes-list-type: atomic
               tags:
                 description: |-
                   tags is an optional list of arbitrary labels for this MCP server.
@@ -228,6 +289,8 @@ spec:
             x-kubernetes-validations:
             - message: prefix is required when userSpecificList is Enabled
               rule: 'self.userSpecificList != "Enabled" || self.prefix != "" '
+            - message: credentialRef and oauth2ClientCredentials are mutually exclusive
+              rule: '!(has(self.credentialRef) && has(self.oauth2ClientCredentials))'
           status:
             description: status defines the observed state of MCPServerRegistration.
             properties:
@@ -417,6 +480,45 @@ spec:
                   Returned by the discover_tools meta-tool to help agents decide which tools to select.
                 maxLength: 256
                 type: string
+              oauth2ClientCredentials:
+                description: |-
+                  oauth2ClientCredentials configures the OAuth 2.0 client credentials grant the broker uses
+                  to obtain access tokens for this MCP server. The broker refreshes the token on expiry.
+                  Used exclusively by the broker for tool discovery and session management, exactly like
+                  credentialRef. Mutually exclusive with credentialRef.
+                properties:
+                  scopes:
+                    description: scopes requested with the token. Omitted from the
+                      request when empty.
+                    items:
+                      minLength: 1
+                      type: string
+                    maxItems: 10
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  secretRef:
+                    description: |-
+                      secretRef references a Secret containing the keys clientID and clientSecret.
+                      The referenced Secret must have the label mcp.kuadrant.io/secret=true.
+                    properties:
+                      name:
+                        description: name is the name of the Secret resource.
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  tokenURL:
+                    description: |-
+                      tokenURL is the authorization server's token endpoint. Must be https: the client
+                      secret is sent on this connection.
+                    minLength: 1
+                    pattern: ^https://
+                    type: string
+                required:
+                - secretRef
+                - tokenURL
+                type: object
               path:
                 default: /mcp
                 description: |-
@@ -516,6 +618,8 @@ spec:
             x-kubernetes-validations:
             - message: prefix is required when userSpecificList is Enabled
               rule: 'self.userSpecificList != "Enabled" || self.prefix != "" '
+            - message: credentialRef and oauth2ClientCredentials are mutually exclusive
+              rule: '!(has(self.credentialRef) && has(self.oauth2ClientCredentials))'
           status:
             description: status defines the observed state of MCPServerRegistration.
             properties:

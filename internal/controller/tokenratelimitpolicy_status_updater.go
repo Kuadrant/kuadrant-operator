@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -207,36 +206,9 @@ func (r *TokenRateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1
 		}
 	}
 
-	// build the status message about policy rules overridden
-	var message string
-	if len(overridingPolicies) > 0 {
-		var overriddenPolicyRules []string
-		for policyRuleKey, overriddenBy := range overridingPolicies {
-			var overriddenByMessage string
-			if len(overriddenBy) > 0 && overriddenBy[0] != "" {
-				overriddenByMessage = fmt.Sprintf(" by %s", overriddenBy[0])
-			}
-			overriddenPolicyRules = append(overriddenPolicyRules, fmt.Sprintf("%s%s", policyRuleKey, overriddenByMessage))
-		}
-		message = fmt.Sprintf("policy rule(s) overridden: %s", strings.Join(overriddenPolicyRules, ", "))
-	}
-
 	if len(affectedGateways) == 0 { // no rules of the policy found in the effective policies
 		if len(overridingPolicies) == 0 { // no rules of the policy have been overridden by any other policy
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrNoRoutes(policyKind), false)
-		}
-		// all rules of the policy have been overridden by at least one other policy
-		overridingPoliciesKeys := lo.FilterMap(lo.Uniq(lo.Flatten(lo.Values(overridingPolicies))), func(policyLocator string, _ int) (k8stypes.NamespacedName, bool) {
-			policyKey, err := kuadrantpolicymachinery.NamespacedNameFromLocator(policyLocator)
-			return policyKey, err == nil
-		})
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policyKind, overridingPoliciesKeys), false)
-	}
-
-	// check if any policy rule of the policy has been overridden by a more specific policy
-	if len(overridingPolicies) > 0 {
-		if message != "" {
-			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, fmt.Errorf("%s", message)), false)
 		}
 		// all rules of the policy have been overridden by at least one other policy
 		overridingPoliciesKeys := lo.FilterMap(lo.Uniq(lo.Flatten(lo.Values(overridingPolicies))), func(policyLocator string, _ int) (k8stypes.NamespacedName, bool) {
@@ -255,6 +227,9 @@ func (r *TokenRateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1
 		limitador := GetLimitadorFromTopology(topology, state)
 		if limitador == nil {
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrSystemResource("limitador"), false)
+		}
+		if kObj.GetTokenRateLimitingMode() == kuadrantv1beta1.TokenRateLimitingModeReservation && !limitador.ReservationsEnabled() {
+			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrReservationsDisabled(policyKind), false)
 		}
 		if !meta.IsStatusConditionTrue(limitador.Status.Conditions, limitadorv1alpha1.StatusConditionReady) {
 			componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)

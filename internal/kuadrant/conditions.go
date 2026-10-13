@@ -20,6 +20,7 @@ const (
 	PolicyReasonMissingDependency    gatewayapiv1alpha2.PolicyConditionReason = "MissingDependency"
 	PolicyReasonMissingResource      gatewayapiv1alpha2.PolicyConditionReason = "MissingResource"
 	PolicyReasonInvalidCelExpression gatewayapiv1alpha2.PolicyConditionReason = "InvalidCelExpression"
+	PolicyReasonReservationsDisabled gatewayapiv1alpha2.PolicyConditionReason = "ReservationsDisabled"
 )
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.

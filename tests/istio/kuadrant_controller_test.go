@@ -16,7 +16,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller on istio", func() {
+var _ = Describe("Kuadrant controller on istio", Labels{"istio"}, func() {
 	var (
 		testNamespace     string
 		testTimeOut       = NodeTimeout(2 * time.Minute)

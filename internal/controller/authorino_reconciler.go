@@ -101,7 +101,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 				Insecure: kobj.Spec.Observability.Tracing.Insecure,
 			}
 		}
-
 		unstructuredAuthorino, err := controller.Destruct(patch)
 		if err != nil {
 			span.RecordError(err)
@@ -190,7 +189,6 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			Insecure: kobj.Spec.Observability.Tracing.Insecure,
 		}
 	}
-
 	unstructuredAuthorino, err := controller.Destruct(authorino)
 	if err != nil {
 		span.RecordError(err)
@@ -200,6 +198,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	}
 
 	logger.V(1).Info("creating authorino resource", "status", "processing")
+
 	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
 		if apiErrors.IsAlreadyExists(err) {

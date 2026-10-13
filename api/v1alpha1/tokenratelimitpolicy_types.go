@@ -20,6 +20,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -31,6 +32,20 @@ import (
 var (
 	TokenRateLimitPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "TokenRateLimitPolicy"}
 	TokenRateLimitPoliciesResource = GroupVersion.WithResource("tokenratelimitpolicies")
+
+	// RulesKeyDataExtraction is the key used to store the dataExtraction rule within the Rules() map,
+	// following the same "not a limit name" trick as kuadrantv1.RulesKeyTopLevelPredicates.
+	RulesKeyDataExtraction = "###_DATA_EXTRACTION_###"
+
+	// DefaultTotalTokensPointers is the built-in, ordered list of JSON Pointer (RFC 6901) candidates used
+	// to extract total token usage from the response body when dataExtraction.response.totalTokens is
+	// unset. Order matters: the first candidate that resolves wins.
+	DefaultTotalTokensPointers = []string{
+		"/usage/total_tokens",            // OpenAI, Azure OpenAI, OpenAI-compatible servers, OpenAI Responses API (non-streaming)
+		"/usageMetadata/totalTokenCount", // Google Gemini
+		"/response/usage/total_tokens",   // OpenAI Responses API (streaming)
+		"/usage/totalTokens",             // AWS Bedrock Converse API (non-streaming)
+	}
 )
 
 // +kubebuilder:object:root=true
@@ -113,6 +128,10 @@ func (p *TokenRateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 		rules[kuadrantv1.RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(&whenPredicates, policyLocator)
 	}
 
+	if spec.DataExtraction != nil {
+		rules[RulesKeyDataExtraction] = kuadrantv1.NewMergeableRule(spec.DataExtraction, policyLocator)
+	}
+
 	for ruleID := range spec.Limits {
 		limit := spec.Limits[ruleID]
 		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
@@ -125,15 +144,19 @@ func (p *TokenRateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRul
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().Limits = nil
 	p.Spec.Proper().MergeableWhenPredicates = kuadrantv1.MergeableWhenPredicates{}
+	p.Spec.Proper().DataExtraction = nil
 
 	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]TokenLimit)
 	}
 
 	for ruleID := range rules {
-		if ruleID == kuadrantv1.RulesKeyTopLevelPredicates {
+		switch ruleID {
+		case kuadrantv1.RulesKeyTopLevelPredicates:
 			p.Spec.Proper().MergeableWhenPredicates = *rules[ruleID].(*kuadrantv1.MergeableWhenPredicates)
-		} else {
+		case RulesKeyDataExtraction:
+			p.Spec.Proper().DataExtraction = rules[ruleID].(*DataExtraction)
+		default:
 			p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*TokenLimit)
 		}
 	}
@@ -153,6 +176,8 @@ func (p *TokenRateLimitPolicy) Kind() string {
 // +kubebuilder:validation:XValidation:rule="!(has(self.overrides) || has(self.defaults)) ? has(self.limits) && size(self.limits) > 0 : true",message="At least one spec.limits must be defined"
 // +kubebuilder:validation:XValidation:rule="has(self.overrides) ? has(self.overrides.limits) && size(self.overrides.limits) > 0 : true",message="At least one spec.overrides.limits must be defined"
 // +kubebuilder:validation:XValidation:rule="has(self.defaults) ? has(self.defaults.limits) && size(self.defaults.limits) > 0 : true",message="At least one spec.defaults.limits must be defined"
+// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.dataExtraction))",message="Implicit dataExtraction and explicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.dataExtraction))",message="Implicit dataExtraction and overrides are mutually exclusive"
 type TokenRateLimitPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -204,6 +229,70 @@ type TokenRateLimitPolicySpecProper struct {
 	// Limits holds the struct of token-based limits indexed by a unique name
 	// +optional
 	Limits map[string]TokenLimit `json:"limits,omitempty"`
+
+	// DataExtraction configures how token usage data is extracted from requests and responses.
+	// If omitted, built-in defaults are used to extract total token usage from common LLM provider
+	// response shapes.
+	// +optional
+	DataExtraction *DataExtraction `json:"dataExtraction,omitempty"`
+}
+
+// DataExtraction defines how the wasm data plane extracts application-level data (e.g. token usage)
+// from requests and responses, for use in token-based rate limiting.
+type DataExtraction struct {
+	// Response configures data extraction from the response body.
+	// +optional
+	Response ResponseDataExtraction `json:"response,omitempty"`
+
+	// Source stores the locator of the policy where this rule is originally defined (internal use)
+	Source string `json:"-"`
+}
+
+// ResponseDataExtractionKeyTotalTokens is the key under which an ordered list of JSON Pointer
+// candidates for total token usage extraction is stored in a ResponseDataExtraction map.
+const ResponseDataExtractionKeyTotalTokens = "totalTokens"
+
+// JSONPointerCandidates is an ordered list of JSON Pointer (RFC 6901) expressions evaluated against
+// the response body. The first pointer that resolves to a numeric value is used. Reference tokens
+// may not contain '"' or '\': these are legal, unescaped RFC 6901 characters, but this
+// implementation embeds each pointer as a CEL string literal, so they are excluded here to avoid
+// ambiguity between JSON Pointer content and CEL/wasm string escaping.
+// +kubebuilder:validation:MinItems=1
+// +kubebuilder:validation:MaxItems=8
+// +kubebuilder:validation:items:Pattern=`^(/([^/~"\\]|~[01])*)+$`
+type JSONPointerCandidates []string
+
+// ResponseDataExtraction maps an extraction target name (e.g. "totalTokens", potentially
+// contributed by an extension) to the JSONPointerCandidates used to resolve it.
+// +kubebuilder:validation:MaxProperties=16
+type ResponseDataExtraction map[string]JSONPointerCandidates
+
+var _ kuadrantv1.MergeableRule = &DataExtraction{}
+
+// ResponseTotalTokensPointers resolves the effective ordered list of JSON Pointer expressions used to
+// extract total token usage from the response body, falling back to DefaultTotalTokensPointers when
+// dataExtraction.response.totalTokens is unset. Safe to call on a nil receiver.
+func (d *DataExtraction) ResponseTotalTokensPointers() []string {
+	if d == nil {
+		return DefaultTotalTokensPointers
+	}
+	if pointers := d.Response[ResponseDataExtractionKeyTotalTokens]; len(pointers) > 0 {
+		return []string(pointers)
+	}
+	return DefaultTotalTokensPointers
+}
+
+func (d *DataExtraction) GetSpec() any {
+	return d
+}
+
+func (d *DataExtraction) GetSource() string {
+	return d.Source
+}
+
+func (d *DataExtraction) WithSource(source string) kuadrantv1.MergeableRule {
+	d.Source = source
+	return d
 }
 
 // TokenLimit represents a complete token-based rate limit configuration
@@ -222,8 +311,37 @@ type TokenLimit struct {
 	// +optional
 	Counters []kuadrantv1.Counter `json:"counters,omitempty"`
 
+	// Reservation configures token reservation for this limit. It only takes
+	// effect when the Kuadrant CR spec.tokenRateLimiting.mode is Reservation:
+	// an estimated token amount is reserved on request arrival and committed
+	// with the actual usage once the upstream responds. When omitted, defaults
+	// are generated (amount 0, meaning no capacity is reserved, and the route
+	// backendRequest timeout for ttl).
+	// +optional
+	Reservation *Reservation `json:"reservation,omitempty"`
+
 	// Source stores the locator of the policy where the limit is originally defined (internal use)
 	Source string `json:"-"`
+}
+
+// Reservation configures token reservation behavior for a TokenLimit, used when
+// the Kuadrant CR is in Reservation mode (see RFC 0021).
+type Reservation struct {
+	// Amount is either a literal integer number of tokens to reserve on request
+	// arrival, or a CEL expression evaluating to the number of tokens (uint).
+	// Defaults to 0 when omitted, which reserves no capacity: Limitador
+	// short-circuits amount-0 reservations, so this limit behaves like
+	// Optimistic unless amount is set explicitly to a non-zero estimate.
+	// +optional
+	// +kubebuilder:validation:XIntOrString
+	Amount *intstr.IntOrString `json:"amount,omitempty"`
+
+	// TTL is a CEL expression evaluating to the maximum duration
+	// (google.protobuf.Duration) the reservation is held before it expires.
+	// When omitted, the route's HTTPRoute.spec.rules[].timeouts.backendRequest
+	// is used.
+	// +optional
+	TTL *kuadrantv1.Expression `json:"ttl,omitempty"`
 }
 
 func (l TokenLimit) CountersAsStringList() []string {

@@ -23,7 +23,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, func() {
+var _ = Describe("Upstream cluster EnvoyFilter controller", Serial, Labels{"istio"}, func() {
 	const (
 		testTimeOut       = NodeTimeout(2 * time.Minute)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)

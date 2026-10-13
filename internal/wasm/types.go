@@ -332,6 +332,14 @@ const (
 	ActionKindFail    ActionKind = "fail"
 )
 
+// HeaderTarget selects which set of headers a HeadersAction modifies.
+type HeaderTarget string
+
+const (
+	HeaderTargetRequest  HeaderTarget = "request"
+	HeaderTargetResponse HeaderTarget = "response"
+)
+
 // Action is the interface for typed pipeline actions in the wasm-shim format.
 // Concrete implementations: GrpcAction, DenyAction, HeadersAction, StoreAction, FailAction.
 type Action interface {
@@ -409,7 +417,7 @@ func (a *DenyAction) EqualTo(other Action) bool {
 
 type HeadersAction struct {
 	ActionBase
-	Target  string
+	Target  HeaderTarget
 	Headers string
 }
 
@@ -472,7 +480,7 @@ type actionWire struct {
 	MessageBuilder string            `json:"messageBuilder,omitempty"`
 	OnReply        []json.RawMessage `json:"onReply,omitempty"`
 	DenyWith       string            `json:"denyWith,omitempty"`
-	Target         string            `json:"target,omitempty"`
+	Target         HeaderTarget      `json:"target,omitempty"`
 	Headers        string            `json:"headers,omitempty"`
 	Path           string            `json:"path,omitempty"`
 	Value          string            `json:"value,omitempty"`

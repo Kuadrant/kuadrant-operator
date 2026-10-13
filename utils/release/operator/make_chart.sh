@@ -74,7 +74,8 @@ kustomize edit set image controller=$operator_image
 cd -
 
 # Build the helm chart templates from kustomize manifests
-kustomize build $env/config/helm > $env/charts/kuadrant-operator/templates/manifests.yaml
+# LoadRestrictionsNone: config/helm/developer-portal-crds reads CRDs from component-charts/ (same as make helm-build)
+kustomize build --load-restrictor LoadRestrictionsNone $env/config/helm > $env/charts/kuadrant-operator/templates/manifests.yaml
 
 # Set the helm chart version
 operator_version=$(mod_version $(yq '.kuadrant-operator.version' $env/release.yaml))

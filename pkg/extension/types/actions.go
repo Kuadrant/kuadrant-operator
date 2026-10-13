@@ -6,46 +6,37 @@ import (
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
 )
 
-// ActionType discriminates how the wasm-shim dispatches an action.
-type ActionType string
-
-const (
-	ActionTypeGRPCMethod ActionType = "grpc_method"
-	ActionTypeDeny       ActionType = "deny"
-	ActionTypeFail       ActionType = "fail"
-	ActionTypeAddHeaders ActionType = "add_headers"
-)
-
 // Action is the interface implemented by all pipeline action types.
 // Actions can be used in either the request or response phase.
 type Action interface {
-	actionType() ActionType
+	sealedAction()
 	CelExpressions() []string
 	PopulateProtobuf(entry *extpb.ActionEntry)
 }
 
-// GRPCMethodAction invokes a registered gRPC action method and optionally
+// GRPCAction invokes a registered gRPC action method and optionally
 // stores the response in a named variable for use by subsequent actions.
-type GRPCMethodAction struct {
+type GRPCAction struct {
 	Predicate string // CEL — if true, call the gRPC method
 	Method    string // Name of a registered ActionMethod
 	Var       string // Variable name to store gRPC response (optional)
 }
 
-func (a GRPCMethodAction) actionType() ActionType { return ActionTypeGRPCMethod }
+func (a GRPCAction) sealedAction() {}
 
-func (a GRPCMethodAction) CelExpressions() []string {
+func (a GRPCAction) CelExpressions() []string {
 	if a.Predicate != "" {
 		return []string{a.Predicate}
 	}
 	return nil
 }
 
-func (a GRPCMethodAction) PopulateProtobuf(entry *extpb.ActionEntry) {
-	entry.ActionType = extpb.ActionType_ACTION_TYPE_GRPC_METHOD
+func (a GRPCAction) PopulateProtobuf(entry *extpb.ActionEntry) {
 	entry.Predicate = a.Predicate
-	entry.Method = a.Method
-	entry.Var = a.Var
+	entry.Action = &extpb.ActionEntry_Grpc{Grpc: &extpb.GrpcAction{
+		Method: a.Method,
+		Var:    a.Var,
+	}}
 }
 
 // DenyAction denies the request or response when the predicate evaluates
@@ -63,7 +54,7 @@ type DenyAction struct {
 	WithBody    string // CEL expression; optional
 }
 
-func (a DenyAction) actionType() ActionType { return ActionTypeDeny }
+func (a DenyAction) sealedAction() {}
 
 func (a DenyAction) CelExpressions() []string {
 	var exprs []string
@@ -80,11 +71,12 @@ func (a DenyAction) CelExpressions() []string {
 }
 
 func (a DenyAction) PopulateProtobuf(entry *extpb.ActionEntry) {
-	entry.ActionType = extpb.ActionType_ACTION_TYPE_DENY
 	entry.Predicate = a.Predicate
-	entry.WithStatus = int32(a.WithStatus) //nolint:gosec
-	entry.WithHeaders = a.WithHeaders
-	entry.WithBody = a.WithBody
+	entry.Action = &extpb.ActionEntry_Deny{Deny: &extpb.DenyAction{
+		WithStatus:  int32(a.WithStatus), //nolint:gosec
+		WithHeaders: a.WithHeaders,
+		WithBody:    a.WithBody,
+	}}
 }
 
 // FailAction logs an error message and terminates the action chain when
@@ -94,7 +86,7 @@ type FailAction struct {
 	LogMessage string // Error message to log
 }
 
-func (a FailAction) actionType() ActionType { return ActionTypeFail }
+func (a FailAction) sealedAction() {}
 
 func (a FailAction) CelExpressions() []string {
 	if a.Predicate != "" {
@@ -104,9 +96,10 @@ func (a FailAction) CelExpressions() []string {
 }
 
 func (a FailAction) PopulateProtobuf(entry *extpb.ActionEntry) {
-	entry.ActionType = extpb.ActionType_ACTION_TYPE_FAIL
 	entry.Predicate = a.Predicate
-	entry.LogMessage = a.LogMessage
+	entry.Action = &extpb.ActionEntry_Fail{Fail: &extpb.FailAction{
+		LogMessage: a.LogMessage,
+	}}
 }
 
 // AddHeadersAction adds headers to the request or response depending on
@@ -120,7 +113,7 @@ type AddHeadersAction struct {
 	HeadersToAdd string // CEL expression evaluating to a map of headers
 }
 
-func (a AddHeadersAction) actionType() ActionType { return ActionTypeAddHeaders }
+func (a AddHeadersAction) sealedAction() {}
 
 func (a AddHeadersAction) CelExpressions() []string {
 	var exprs []string
@@ -134,9 +127,39 @@ func (a AddHeadersAction) CelExpressions() []string {
 }
 
 func (a AddHeadersAction) PopulateProtobuf(entry *extpb.ActionEntry) {
-	entry.ActionType = extpb.ActionType_ACTION_TYPE_ADD_HEADERS
 	entry.Predicate = a.Predicate
-	entry.HeadersToAdd = a.HeadersToAdd
+	entry.Action = &extpb.ActionEntry_AddHeaders{AddHeaders: &extpb.AddHeadersAction{
+		HeadersToAdd: a.HeadersToAdd,
+	}}
+}
+
+type StoreAction struct {
+	Predicate    string // CEL — if true, store the value
+	Path         string
+	Value        string // CEL expression
+	ExportToHost bool
+}
+
+func (a StoreAction) sealedAction() {}
+
+func (a StoreAction) CelExpressions() []string {
+	var exprs []string
+	if a.Predicate != "" {
+		exprs = append(exprs, a.Predicate)
+	}
+	if a.Value != "" {
+		exprs = append(exprs, a.Value)
+	}
+	return exprs
+}
+
+func (a StoreAction) PopulateProtobuf(entry *extpb.ActionEntry) {
+	entry.Predicate = a.Predicate
+	entry.Action = &extpb.ActionEntry_Store{Store: &extpb.StoreAction{
+		Path:         a.Path,
+		Value:        a.Value,
+		ExportToHost: a.ExportToHost,
+	}}
 }
 
 // Pipeline provides a builder for composing ordered actions on HTTP request

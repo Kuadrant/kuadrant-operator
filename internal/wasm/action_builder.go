@@ -7,7 +7,7 @@ func NewDenyAction(predicate, denyWith string) *DenyAction {
 	}
 }
 
-func NewHeadersAction(predicate, target, headers string) *HeadersAction {
+func NewHeadersAction(predicate string, target HeaderTarget, headers string) *HeadersAction {
 	return &HeadersAction{
 		ActionBase: ActionBase{Predicate: predicate, Terminal: false, IsGuard: true},
 		Target:     target,

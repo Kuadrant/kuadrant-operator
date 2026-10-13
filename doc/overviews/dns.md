@@ -266,6 +266,25 @@ dig echo.apps.hcpapps.net +short
 172.31.201.1
 ```
 
+### DNS Failover via Groups
+
+DNS failover via groups allows you to switch traffic from one set of clusters to another in the event of an outage. Each dns-operator instance can be assigned to a group, and a TXT record in the DNS provider (`kuadrant-active-groups.<domain>`) determines which groups are currently active. Only records from active groups are published to DNS.
+
+This feature is useful when you have a replica deployment standing by in a separate group. When the primary group experiences an outage, you update the active groups to include the standby group and remove the failed group. Active controllers then clean up DNS records from the inactive group.
+
+Key capabilities:
+- **Group management via CLI**: Use `kubectl-kuadrant_dns add-active-group` and `remove-active-group` to manage which groups are active
+- **Impact preview**: Use `--dry-run` with `remove-active-group` to preview which DNS endpoints would be affected before committing
+- **Observability**: Prometheus metrics expose group assignments, active/inactive state, and cleanup operations per DNSRecord
+- **Health checks**: Can be combined with groups so that unhealthy endpoints are surfaced in DNSPolicy status even during failover transitions
+
+For detailed guides on configuring and exercising DNS failover, see the dns-operator documentation:
+- [Migrating existing clusters to use groups](https://github.com/Kuadrant/dns-operator/blob/main/docs/migrating_existing_clusters_to_use_groups.md)
+- [Exercising DNS failover via groups](https://github.com/Kuadrant/dns-operator/blob/main/docs/exercising_dns_failover_via_groups.md)
+- [Migrating away from DNS groups](https://github.com/Kuadrant/dns-operator/blob/main/docs/migrating_away_from_dns_groups.md)
+- [DNS group metrics](https://github.com/Kuadrant/dns-operator/blob/main/docs/dns_group_metrics.md)
+- [CLI reference](https://github.com/Kuadrant/dns-operator/blob/main/docs/cli.md)
+
 ### Known limitations
 
 * One Gateway can only be targeted by one DNSPolicy unless subsequent DNSPolicies choose to specific a sectionName in their targetRef.
@@ -276,11 +295,11 @@ dig echo.apps.hcpapps.net +short
 The `Status.Conditions` on DNSPolicy mostly serves as an aggregation of the DNSRecords conditions. 
 The DNSPolicy conditions: 
 - `Accepted` indicates that policy was validated and is accepted by the controller for the reconciliation. 
-- `Enforced` indicates that the controller acted upon the policy. If DNSRecords were created as the result this condition will reflect the `Ready` condition on the record. This condition is removed if `Accepted` is false. If partially enforced, the condition will be set to `True`
+- `Enforced` indicates that the controller acted upon the policy. If DNSRecords were created as the result this condition will reflect the `Ready` condition on the record. This condition is removed if `Accepted` is false. If partially enforced, the condition will be set to `True`. **Note:** When using DNS failover groups, records in an inactive group will report `Enforced` as `False` — this is expected and does not indicate a failure.
 - `SubResourcesHealthy` reflects `Healthy` conditions of sub-resources. This condition is removed if `Accepted` is false. If partially healthy, the condition will be set to `False` 
 
 The `Status.Conditions` on the DNSRecord are as follows: 
-- `Ready` indicates that the record was successfully published to the provider. 
+- `Ready` indicates that the record was successfully published to the provider. When using DNS failover groups, records in an inactive group will report `Ready` as `False` — this is expected and does not indicate a failure.
 - `Healthy` indicates that dnshealthcheckprobes are healthy. If not all probes are healthy, the condition will be set to `False`
 
 
@@ -332,8 +351,7 @@ kubectl get dnsrecord -n <dnspolicy-namespace>
 kubectl get dnsrecord <dnsrecord-name> -n <dnspolicy-namespace> -o yaml | yq '.status'
 ```
 Most of the time the `conditions` will hold all necessary information. 
-However, it is advised to pay attention to the `queuedAt` and `validFor` field 
-to understand when the record was processed and when controller expects it to be reconciled again. 
+The `writeCounter` field tracks how many times the record has been written to the DNS provider for the current generation.
 
 #### Inspect health check probes 
 We create a probe per address per dns record. The name of the probe is DNSRecord name followed by an address. 

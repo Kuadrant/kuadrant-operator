@@ -38,6 +38,7 @@ import (
 
 	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
@@ -319,7 +320,7 @@ func TestHandshake_Success(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, session.getToken(), "returned-token")
 	assert.Equal(t, capturedReq.PolicyKind, "MyPolicy")
-	assert.Equal(t, capturedReq.Version, protocolVersion)
+	assert.Equal(t, capturedReq.Version, protocol.Version)
 	assert.DeepEqual(t, capturedReq.Token, []byte("token-value"))
 }
 
@@ -519,6 +520,161 @@ func TestHandshakeWithBackoff_ReturnsOnContextCancel(t *testing.T) {
 
 	_, err := ec.handshakeWithBackoff(ctx)
 	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
+}
+
+func TestHandshakeRejectedError_Terminal(t *testing.T) {
+	testCases := []struct {
+		rejection extpb.HandshakeRejection
+		terminal  bool
+	}{
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNSPECIFIED, false},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION, true},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_INVALID_REQUEST, true},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED, false},
+		{extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAVAILABLE, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.rejection.String(), func(t *testing.T) {
+			err := &handshakeRejectedError{reason: "nope", rejection: tc.rejection}
+			assert.Equal(t, err.terminal(), tc.terminal)
+		})
+	}
+}
+
+func TestHandshakeWithBackoff_StopsOnIncompatibleVersion(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			return &extpb.HandshakeResponse{
+				Accepted:  false,
+				Reason:    "protocol version 0.1.0 is not compatible with 9.9.9",
+				Version:   "9.9.9",
+				Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+			}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.ErrorContains(t, err, "not compatible")
+	assert.Equal(t, attempts, 1)
+}
+
+func TestHandshakeWithBackoff_RetriesUnauthorizedRejection(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			if attempts < 3 {
+				return &extpb.HandshakeResponse{
+					Accepted:  false,
+					Reason:    "handshake failed",
+					Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_UNAUTHORIZED,
+				}, nil
+			}
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	_, err := ec.handshakeWithBackoff(context.Background())
+	assert.NilError(t, err)
+	assert.Equal(t, attempts, 3)
+}
+
+// An operator predating the rejection codes sends the zero value, which must
+// not be read as a terminal rejection.
+func TestHandshakeWithBackoff_RetriesUnclassifiedRejection(t *testing.T) {
+	attempts := 0
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			attempts++
+			return &extpb.HandshakeResponse{Accepted: false, Reason: "handshake failed"}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := ec.handshakeWithBackoff(ctx)
+	assert.Assert(t, errors.Is(err, context.DeadlineExceeded))
+	assert.Assert(t, attempts > 1)
+}
+
+func TestHandshake_RecordsPeerVersion(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{Accepted: true, SessionToken: "session", Version: "0.1.4"}, nil
+		},
+	}
+	ec := &extensionClient{client: mock, session: &sessionCredentials{}}
+
+	assert.NilError(t, ec.handshake(context.Background(), []byte("token"), "MyPolicy", nil))
+	assert.Equal(t, ec.peerVersion, "0.1.4")
+}
+
+func TestSuperviseSession_ReturnsTerminalRejection(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return &extpb.HandshakeResponse{
+				Accepted:  false,
+				Reason:    "protocol version 0.1.0 is not compatible with 9.9.9",
+				Version:   "9.9.9",
+				Rejection: extpb.HandshakeRejection_HANDSHAKE_REJECTION_INCOMPATIBLE_VERSION,
+			}, nil
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	err := ec.superviseSession(context.Background(), make(chan ctrlruntimeevent.GenericEvent, 1))
+	assert.ErrorContains(t, err, "not compatible")
+}
+
+func TestSuperviseSession_ReturnsNilOnContextCancel(t *testing.T) {
+	mock := &mockExtensionServiceClient{
+		handshakeFn: func(_ context.Context, _ *extpb.HandshakeRequest, _ ...grpc.CallOption) (*extpb.HandshakeResponse, error) {
+			return nil, status.Error(codes.Unavailable, "operator not ready")
+		},
+	}
+	ec := &ExtensionController{
+		config:           ExtensionConfig{Name: "test-controller", PolicyKind: "MyPolicy"},
+		logger:           logr.Discard(),
+		extensionClient:  &extensionClient{client: mock, session: &sessionCredentials{}},
+		tokenSource:      staticTokenSource([]byte("token")),
+		reconnectBackoff: wait.Backoff{Duration: time.Millisecond, Factor: 1.0, Steps: math.MaxInt32},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	assert.NilError(t, ec.superviseSession(ctx, make(chan ctrlruntimeevent.GenericEvent, 1)))
 }
 
 func TestIsSessionLost(t *testing.T) {
@@ -738,7 +894,7 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
@@ -762,10 +918,10 @@ func TestPipeline_AccumulatesBothPhases(t *testing.T) {
 	assert.NilError(t, err)
 
 	assert.Equal(t, len(p.actions), 4)
-	assert.Equal(t, p.actions[0].phase, "request")
-	assert.Equal(t, p.actions[1].phase, "request")
-	assert.Equal(t, p.actions[2].phase, "response")
-	assert.Equal(t, p.actions[3].phase, "response")
+	assert.Equal(t, p.actions[0].phase, extpb.Phase_PHASE_REQUEST)
+	assert.Equal(t, p.actions[1].phase, extpb.Phase_PHASE_REQUEST)
+	assert.Equal(t, p.actions[2].phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Equal(t, p.actions[3].phase, extpb.Phase_PHASE_RESPONSE)
 }
 
 func TestPipeline_PhaseOrdering_RequestAfterResponse(t *testing.T) {
@@ -792,7 +948,24 @@ func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {
 			Predicate:  "threatResponse.threat_level >= 5",
 			WithStatus: 403,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
+			Method: "assess-threat",
+			Var:    "threatResponse",
+		},
+	)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "references variable \"threatResponse\" before it is populated"))
+}
+
+func TestPipeline_VarAvailability_StoreForwardReference(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.StoreAction{
+			Path:  "threat_level",
+			Value: "threatResponse.threat_level",
+		},
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -805,7 +978,7 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -820,7 +993,7 @@ func TestPipeline_VarAvailability_WithinCallValid(t *testing.T) {
 func TestPipeline_VarAvailability_CrossCallValid(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+	err := p.OnHTTPRequest(exttypes.GRPCAction{
 		Method: "assess-threat",
 		Var:    "threatResponse",
 	})
@@ -837,8 +1010,8 @@ func TestPipeline_DuplicateVarName(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 	err := p.OnHTTPRequest(
-		exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"},
-		exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"},
+		exttypes.GRPCAction{Method: "method-a", Var: "myVar"},
+		exttypes.GRPCAction{Method: "method-b", Var: "myVar"},
 	)
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
@@ -847,10 +1020,10 @@ func TestPipeline_DuplicateVarName(t *testing.T) {
 func TestPipeline_DuplicateVarName_AcrossCalls(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-a", Var: "myVar"})
+	err := p.OnHTTPRequest(exttypes.GRPCAction{Method: "method-a", Var: "myVar"})
 	assert.NilError(t, err)
 
-	err = p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "method-b", Var: "myVar"})
+	err = p.OnHTTPRequest(exttypes.GRPCAction{Method: "method-b", Var: "myVar"})
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "duplicate variable name \"myVar\""))
 }
@@ -887,7 +1060,7 @@ func TestPipeline_MultipleOnHTTPRequestCalls(t *testing.T) {
 func TestPipeline_VarInHeadersToAdd(t *testing.T) {
 	p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-	err := p.OnHTTPRequest(exttypes.GRPCMethodAction{
+	err := p.OnHTTPRequest(exttypes.GRPCAction{
 		Method: "assess-threat",
 		Var:    "threatResponse",
 	})
@@ -906,7 +1079,7 @@ func TestPipeline_VarInHeadersToAdd_ForwardReference(t *testing.T) {
 		exttypes.AddHeadersAction{
 			HeadersToAdd: `{"x-threat-level": string(threatResponse.threat_level)}`,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Method: "assess-threat",
 			Var:    "threatResponse",
 		},
@@ -942,7 +1115,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{
 				Predicate:  `request.url_path == "/blocked"`,
 				LogMessage: "blocked",
@@ -956,7 +1129,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{
 				Predicate:  `threatResponse.threat_level >= 5`,
 				LogMessage: "threat detected",
@@ -968,7 +1141,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 	t.Run("fail action referencing grpc var from previous call", func(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
-		err := p.OnHTTPRequest(exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"})
+		err := p.OnHTTPRequest(exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"})
 		assert.NilError(t, err)
 
 		err = p.OnHTTPResponse(exttypes.FailAction{
@@ -982,7 +1155,7 @@ func TestPipeline_TopLevelFailAction(t *testing.T) {
 		p := &PipelineImpl{populatedVars: make(map[string]bool)}
 
 		err := p.OnHTTPRequest(
-			exttypes.GRPCMethodAction{Method: "assess-threat", Var: "threatResponse"},
+			exttypes.GRPCAction{Method: "assess-threat", Var: "threatResponse"},
 			exttypes.FailAction{LogMessage: "always fail"},
 		)
 		assert.Assert(t, err != nil)
@@ -1007,7 +1180,7 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 			Predicate:  `request.url_path == "/blocked"`,
 			WithStatus: 403,
 		},
-		exttypes.GRPCMethodAction{
+		exttypes.GRPCAction{
 			Predicate: "true",
 			Method:    "assess-threat",
 			Var:       "threatResponse",
@@ -1038,25 +1211,25 @@ func TestPipelineCommit_SendsAllActions(t *testing.T) {
 
 	assert.Assert(t, cmp.Len(capturedReq.Actions, 5))
 
-	assert.Equal(t, capturedReq.Actions[0].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
-	assert.Equal(t, capturedReq.Actions[0].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[0].WithStatus, int32(403))
+	assert.Equal(t, capturedReq.Actions[0].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[0].GetDeny() != nil)
+	assert.Equal(t, capturedReq.Actions[0].GetDeny().WithStatus, int32(403))
 
-	assert.Equal(t, capturedReq.Actions[1].ActionType, extpb.ActionType_ACTION_TYPE_GRPC_METHOD)
-	assert.Equal(t, capturedReq.Actions[1].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[1].Method, "assess-threat")
-	assert.Equal(t, capturedReq.Actions[1].Var, "threatResponse")
+	assert.Equal(t, capturedReq.Actions[1].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[1].GetGrpc() != nil)
+	assert.Equal(t, capturedReq.Actions[1].GetGrpc().Method, "assess-threat")
+	assert.Equal(t, capturedReq.Actions[1].GetGrpc().Var, "threatResponse")
 
-	assert.Equal(t, capturedReq.Actions[2].ActionType, extpb.ActionType_ACTION_TYPE_FAIL)
-	assert.Equal(t, capturedReq.Actions[2].Phase, "request")
-	assert.Equal(t, capturedReq.Actions[2].LogMessage, "Request blocked")
+	assert.Equal(t, capturedReq.Actions[2].Phase, extpb.Phase_PHASE_REQUEST)
+	assert.Assert(t, capturedReq.Actions[2].GetFail() != nil)
+	assert.Equal(t, capturedReq.Actions[2].GetFail().LogMessage, "Request blocked")
 
-	assert.Equal(t, capturedReq.Actions[3].ActionType, extpb.ActionType_ACTION_TYPE_DENY)
-	assert.Equal(t, capturedReq.Actions[3].Phase, "response")
+	assert.Equal(t, capturedReq.Actions[3].Phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Assert(t, capturedReq.Actions[3].GetDeny() != nil)
 
-	assert.Equal(t, capturedReq.Actions[4].ActionType, extpb.ActionType_ACTION_TYPE_ADD_HEADERS)
-	assert.Equal(t, capturedReq.Actions[4].Phase, "response")
-	assert.Equal(t, capturedReq.Actions[4].HeadersToAdd, `{"x-threat-checked": "true"}`)
+	assert.Equal(t, capturedReq.Actions[4].Phase, extpb.Phase_PHASE_RESPONSE)
+	assert.Assert(t, capturedReq.Actions[4].GetAddHeaders() != nil)
+	assert.Equal(t, capturedReq.Actions[4].GetAddHeaders().HeadersToAdd, `{"x-threat-checked": "true"}`)
 }
 
 func TestPipelineCommit_EmptyPipeline(t *testing.T) {
@@ -1491,4 +1664,56 @@ func TestReplayOwnedPolicies_StopsOnContextCancel(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("replayOwnedPolicies did not return after context cancellation")
 	}
+}
+
+func TestPipeline_VarSpansSeparateReplyHooks(t *testing.T) {
+	tests := []struct {
+		name   string
+		action exttypes.Action
+	}{
+		{"store value", exttypes.StoreAction{Path: "combined", Value: "aResp.x + bResp.y"}},
+		{"deny predicate", exttypes.DenyAction{Predicate: "aResp.x > 1 && bResp.y > 1", WithStatus: 403}},
+		{"deny body", exttypes.DenyAction{Predicate: "true", WithStatus: 403, WithBody: "aResp.x + bResp.y"}},
+		{"add headers", exttypes.AddHeadersAction{HeadersToAdd: `{"x-a": aResp.x, "x-b": bResp.y}`}},
+		{"fail predicate", exttypes.FailAction{Predicate: "aResp.x > 1 && bResp.y > 1", LogMessage: "blocked"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+			err := p.OnHTTPRequest(
+				exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+				exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+				tt.action,
+			)
+			assert.Assert(t, err != nil)
+			assert.Assert(t, cmp.Contains(err.Error(), `references variables ["aResp" "bResp"] from separate gRPC actions`))
+		})
+	}
+}
+
+func TestPipeline_VarSpansSeparateReplyHooks_AcrossCalls(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+		exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+	)
+	assert.NilError(t, err)
+
+	err = p.OnHTTPResponse(exttypes.StoreAction{Path: "combined", Value: "aResp.x + bResp.y"})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), `references variables ["aResp" "bResp"] from separate gRPC actions`))
+}
+
+func TestPipeline_SingleVarAcrossMultipleProducers(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+
+	err := p.OnHTTPRequest(
+		exttypes.GRPCAction{Method: "method-a", Var: "aResp"},
+		exttypes.GRPCAction{Method: "method-b", Var: "bResp"},
+		exttypes.StoreAction{Path: "just_b", Value: "bResp.y"},
+	)
+	assert.NilError(t, err)
 }

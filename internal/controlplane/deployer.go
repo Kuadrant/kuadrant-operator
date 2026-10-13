@@ -125,6 +125,20 @@ func allComponents() []Component {
 			CRDNames:            []string{"limitadors.limitador.kuadrant.io"},
 			RelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
 		},
+		{
+			Name:           "developer-portal-controller",
+			ChartPath:      chartsBasePath + "/developer-portal-controller",
+			DeploymentName: "developer-portal-controller",
+			CRDNames: []string{
+				"apiproducts.devportal.kuadrant.io",
+				"apikeys.devportal.kuadrant.io",
+				"apikeyrequests.devportal.kuadrant.io",
+				"apikeyapprovals.devportal.kuadrant.io",
+			},
+			ChartValueOverrides: []ChartValueOverride{
+				&ImageSplitValue{ImageValue: ImageValue{EnvVar: "RELATED_IMAGE_DEVELOPERPORTAL", ValueKey: "image", Description: "controller"}},
+			},
+		},
 	}
 }
 
@@ -196,7 +210,7 @@ func (d *Deployer) ApplyCRDsForComponents(ctx context.Context, components []Comp
 			continue
 		}
 
-		d.logger.Info("applying CRDs", "component", component.Name, "count", len(rendered.CRDs))
+		d.logger.V(1).Info("applying CRDs", "component", component.Name, "count", len(rendered.CRDs))
 		if err := applier.ApplyResources(ctx, rendered.CRDs, nil); err != nil {
 			return fmt.Errorf("applying CRDs for %s: %w", component.Name, err)
 		}
@@ -258,7 +272,7 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component, own
 		return fmt.Errorf("applying resources for %s: %w", component.Name, err)
 	}
 
-	d.logger.Info("component deployed", "component", component.Name,
+	d.logger.V(1).Info("component deployed", "component", component.Name,
 		"crds", len(rendered.CRDs), "resources", len(rendered.Resources))
 	return nil
 }

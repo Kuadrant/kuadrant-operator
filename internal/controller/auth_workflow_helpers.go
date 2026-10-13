@@ -63,7 +63,13 @@ func AuthClusterName(gatewayName string) string {
 }
 
 func authClusterPatch(host string, port int, mTLS bool) map[string]any {
-	return buildClusterPatch(kuadrant.KuadrantAuthClusterName, host, port, mTLS)
+	patch := buildClusterPatch(kuadrant.KuadrantAuthClusterName, host, port, mTLS)
+	// Authorino is a pure gRPC service. Outlier detection ejects pod IPs that
+	// accumulate consecutive gateway failures (gRPC UNAVAILABLE / connection errors)
+	// between DNS refresh cycles, reducing the window where traffic is routed to a
+	// dead pod after a rolling update or restart.
+	patch["outlier_detection"] = grpcOutlierDetection()
+	return patch
 }
 
 type authorinoServiceInfo struct {

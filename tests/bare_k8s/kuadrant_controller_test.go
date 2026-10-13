@@ -28,12 +28,15 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
+var _ = Describe("Kuadrant controller when Gateway API is missing", Labels{"bare_k8s"}, func() {
 	var (
 		testNamespace     string
 		testTimeOut       = NodeTimeout(30 * time.Second)
 		beforeEachTimeOut = NodeTimeout(1 * time.Minute)
 		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
+
+		// Includes pulling the operator and operand images on a fresh cluster.
+		operandReadyTimeOut = NodeTimeout(2 * time.Minute)
 	)
 
 	BeforeEach(func(ctx SpecContext) {
@@ -93,9 +96,9 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 
 				cond := meta.FindStatusCondition(limitador.Status.Conditions, limitadorv1alpha1.StatusConditionReady)
 				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue), "%s: %s", cond.Reason, cond.Message)
 			}).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
+		}, operandReadyTimeOut)
 
 		It("Limitador CR should retain user fields and restore default", func(ctx SpecContext) {
 			By("Patching Limitador CR with user fields")
@@ -533,7 +536,13 @@ var _ = Describe("Kuadrant controller when Gateway API is missing", func() {
 			}).WithContext(ctx).Should(Succeed())
 		}, tlsTestTimeOut)
 
-		It("Propagates OpenShift APIServer TLS profile to Authorino", func(ctx SpecContext) {
+		It("Propagates OpenShift APIServer TLS profile to Authorino", Label("openshift"), func(ctx SpecContext) {
+			installed, err := openshift.IsOpenShiftServerConfigInstalled(testClient().RESTMapper())
+			Expect(err).ToNot(HaveOccurred())
+			if !installed {
+				Skip("OpenShift APIServer API not available, skipping OpenShift-specific test")
+			}
+
 			By("Waiting for Authorino to be created with TLS disabled")
 			Eventually(func(g Gomega) {
 				authorino := &authorinoopapi.Authorino{}

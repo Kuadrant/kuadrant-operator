@@ -15,7 +15,7 @@ token exchange via secure channel and other default protection rules for a given
 
 ### Integration
 
-OIDCPolicy works in conjunction with the [Extensions SDK](../overviews/extension-sdk.md), AuthPolicy and [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/):
+OIDCPolicy works in conjunction with the [Extensions SDK](authoring-extensions.md), AuthPolicy and [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/):
 
 1. **OIDCPolicy** Entry point for provider configuration and authorization rules.
 2. The policy automatically creates an `HTTPRoute` for the callback from the IDP and `AuthPolicies` for the protected rule and the callback one for token exchange

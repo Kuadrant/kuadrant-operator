@@ -30,11 +30,13 @@ import (
 )
 
 const (
-	RateLimitServiceName       = "ratelimit-service"
-	RateLimitCheckServiceName  = "ratelimit-check-service"
-	RateLimitReportServiceName = "ratelimit-report-service"
-	AuthServiceName            = "auth-service"
-	TracingServiceName         = "tracing-service"
+	RateLimitServiceName        = "ratelimit-service"
+	RateLimitCheckServiceName   = "ratelimit-check-service"
+	RateLimitReportServiceName  = "ratelimit-report-service"
+	RateLimitReserveServiceName = "ratelimit-reserve-service"
+	RateLimitCommitServiceName  = "ratelimit-commit-service"
+	AuthServiceName             = "auth-service"
+	TracingServiceName          = "tracing-service"
 
 	DescriptorServiceClusterName = "kuadrant-operator-grpc"
 
@@ -45,7 +47,26 @@ const (
 	KuadrantRateLimitGrpcService = "kuadrant.service.ratelimit.v1.RateLimitService"
 	RateLimitCheckGrpcMethod     = "CheckRateLimit"
 	RateLimitReportGrpcMethod    = "Report"
+	RateLimitReserveGrpcMethod   = "Reserve"
+	RateLimitCommitGrpcMethod    = "Commit"
 )
+
+// mergeableServices are the services whose ActionSpecs may be merged together
+// when they share the same scope, because they carry uniform per-call
+// parameters (e.g. a uniform hits_addend). Services with per-call state that
+// must not be collapsed are excluded: Auth (per-call response handling),
+// Reserve and Commit (per-limit reservation_id, amount and ttl).
+var mergeableServices = map[string]bool{
+	RateLimitServiceName:       true,
+	RateLimitCheckServiceName:  true,
+	RateLimitReportServiceName: true,
+}
+
+// IsMergeableService reports whether ActionSpecs targeting the given service
+// name may be merged together when they share the same scope.
+func IsMergeableService(name string) bool {
+	return mergeableServices[name]
+}
 
 type LogLevel int
 
@@ -97,6 +118,22 @@ func RatelimitReportServiceTimeout() string {
 
 func RatelimitReportServiceFailureMode(logger *logr.Logger) FailureModeType {
 	return parseFailureModeValue("RATELIMIT_REPORT_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
+}
+
+func RatelimitReserveServiceTimeout() string {
+	return env.GetString("RATELIMIT_RESERVE_SERVICE_TIMEOUT", "100ms")
+}
+
+func RatelimitReserveServiceFailureMode(logger *logr.Logger) FailureModeType {
+	return parseFailureModeValue("RATELIMIT_RESERVE_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
+}
+
+func RatelimitCommitServiceTimeout() string {
+	return env.GetString("RATELIMIT_COMMIT_SERVICE_TIMEOUT", "100ms")
+}
+
+func RatelimitCommitServiceFailureMode(logger *logr.Logger) FailureModeType {
+	return parseFailureModeValue("RATELIMIT_COMMIT_SERVICE_FAILURE_MODE", FailureModeAllow, logger)
 }
 
 func TracingServiceTimeout() string {
@@ -209,6 +246,22 @@ func NewServiceBuilder(logger *logr.Logger) *ServiceBuilder {
 				Timeout:     ptr.To(RatelimitReportServiceTimeout()),
 				GrpcService: ptr.To(KuadrantRateLimitGrpcService),
 				GrpcMethod:  ptr.To(RateLimitReportGrpcMethod),
+			},
+			RateLimitReserveServiceName: {
+				Type:        DynamicServiceType,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				FailureMode: RatelimitReserveServiceFailureMode(logger),
+				Timeout:     ptr.To(RatelimitReserveServiceTimeout()),
+				GrpcService: ptr.To(KuadrantRateLimitGrpcService),
+				GrpcMethod:  ptr.To(RateLimitReserveGrpcMethod),
+			},
+			RateLimitCommitServiceName: {
+				Type:        DynamicServiceType,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
+				FailureMode: RatelimitCommitServiceFailureMode(logger),
+				Timeout:     ptr.To(RatelimitCommitServiceTimeout()),
+				GrpcService: ptr.To(KuadrantRateLimitGrpcService),
+				GrpcMethod:  ptr.To(RateLimitCommitGrpcMethod),
 			},
 		},
 		logger: logger,

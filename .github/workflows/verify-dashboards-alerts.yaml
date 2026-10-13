@@ -25,6 +25,8 @@ jobs:
         shell: bash -eo pipefail {0}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up golang
         run: |

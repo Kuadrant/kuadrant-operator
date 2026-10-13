@@ -1,0 +1,22 @@
+image:
+  repository: quay.io/kuadrant/developer-portal-controller
+  # defaults to v<appVersion>, or latest while appVersion is 0.0.0 (unreleased main)
+  tag: ""
+  # empty keeps the kubernetes default: Always for latest, IfNotPresent otherwise
+  pullPolicy: ""
+
+replicaCount: 1
+
+# extra env vars for the manager container, e.g. OPENAPI_SPEC_MAX_SIZE
+env: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+nameOverride: ""
+fullnameOverride: ""

@@ -12,9 +12,12 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift"
 	"github.com/kuadrant/kuadrant-operator/internal/openshift/consoleplugin"
 	"github.com/kuadrant/kuadrant-operator/internal/reconcilers"
@@ -23,21 +26,24 @@ import (
 
 //+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=config.openshift.io,resources=clusterversions,verbs=get;list;watch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 
 type ConsolePluginReconciler struct {
 	*reconcilers.BaseReconciler
 
-	namespace string
+	namespace     string
+	imageOverride consoleplugin.Image
 }
 
-func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string) *ConsolePluginReconciler {
+func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string, imageOverride consoleplugin.Image) *ConsolePluginReconciler {
 	return &ConsolePluginReconciler{
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(),
 			mgr.GetScheme(),
 			mgr.GetAPIReader(),
 		),
-		namespace: namespace,
+		namespace:     namespace,
+		imageOverride: imageOverride,
 	}
 }
 
@@ -45,6 +51,7 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Run,
 		Events: []controller.ResourceEventMatcher{
+			{Kind: ptr.To(openshift.ClusterVersionGroupKind.GroupKind()), ObjectName: "version"},
 			{Kind: ptr.To(openshift.ConsolePluginGVK.GroupKind())},
 			{
 				Kind:            ptr.To(ConfigMapGroupKind),
@@ -57,6 +64,11 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 				ObjectNamespace: r.namespace,
 				ObjectName:      TopologyConfigMapName,
 				EventType:       ptr.To(controller.DeleteEvent),
+			},
+			{
+				Kind:            ptr.To(v1beta1.NetworkPolicyGroupKind),
+				ObjectNamespace: r.namespace,
+				ObjectName:      consoleplugin.NetworkPolicyName(),
 			},
 		},
 	}
@@ -79,34 +91,73 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	})
 
 	clusterVersionExists := len(clusterVersions) > 0
+	consolePluginSupported := clusterVersionExists || r.imageOverride.URL != ""
+
+	// Resolve the image and serving configuration before changing resources.
+	var image consoleplugin.Image
+	var err error
+	if topologyExists && r.imageOverride.URL != "" {
+		image = r.imageOverride
+	} else if topologyExists && clusterVersionExists {
+		clusterVersion := clusterVersions[0].(*controller.RuntimeObject).Object.(*configv1.ClusterVersion)
+		image, err = openshift.GetConsolePluginImageForVersion(clusterVersion)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Apply ingress protection before starting the backend. The topology
+	// ConfigMap anchors the plugin's lifecycle, including garbage collection.
+	networkPolicy := consoleplugin.NetworkPolicy(r.namespace)
+	if !topologyExists || !consolePluginSupported {
+		utils.TagObjectToDelete(networkPolicy)
+	} else {
+		owner := existingTopologyConfigMaps[0].(*controller.RuntimeObject).Object
+		if err := controllerutil.SetOwnerReference(owner, networkPolicy, r.Scheme()); err != nil {
+			return err
+		}
+	}
+	_, err = r.ReconcileResource(ctx, &networkingv1.NetworkPolicy{}, networkPolicy,
+		reconcilers.Mutator[*networkingv1.NetworkPolicy](consoleplugin.NetworkPolicyMutator))
+	if err != nil {
+		logger.Error(err, "reconciling network policy")
+		return err
+	}
 
 	// Service
 	service := consoleplugin.Service(r.namespace)
-	if !topologyExists || !clusterVersionExists {
+	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(service)
 	}
-	_, err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
+	_, err = r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling service")
 		return err
 	}
 
-	// Deployment
-	var consolePluginImageURL string
-	if topologyExists && clusterVersionExists {
-		clusterVersion := clusterVersions[0].(*controller.RuntimeObject).Object.(*configv1.ClusterVersion)
-
-		consolePluginImageURL, err = openshift.GetConsolePluginImageForVersion(clusterVersion)
+	// Create nginx configuration before any pod can reference it. Retain an
+	// existing ConfigMap for Go deployments: old pods may still need it during
+	// a rolling update. It is removed when the plugin is removed.
+	if !topologyExists || !consolePluginSupported || image.Runtime == consoleplugin.RuntimeNginx {
+		configMap := consoleplugin.LegacyNginxConfigMap(r.namespace)
+		if !topologyExists || !consolePluginSupported {
+			utils.TagObjectToDelete(configMap)
+		}
+		_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, configMap, reconcilers.CreateOnlyMutator)
 		if err != nil {
-			logger.Error(err, "failed to get console plugin image for OpenShift version")
 			return err
 		}
 	}
 
-	deployment := consoleplugin.Deployment(r.namespace, consolePluginImageURL, TopologyConfigMapName)
-	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0, 1)
+	// Deployment
+	deployment := consoleplugin.Deployment(r.namespace, image, TopologyConfigMapName)
+	if r.imageOverride.URL != "" {
+		deployment.Spec.Template.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
+	}
+	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0, 2)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
-	if !topologyExists || !clusterVersionExists {
+	deploymentMutators = append(deploymentMutators, consoleplugin.DeploymentConfigMutator)
+	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(deployment)
 	}
 	_, err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
@@ -115,23 +166,12 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 		return err
 	}
 
-	// Nginx ConfigMap
-	nginxConfigMap := consoleplugin.NginxConfigMap(r.namespace)
-	if !topologyExists || !clusterVersionExists {
-		utils.TagObjectToDelete(nginxConfigMap)
-	}
-	_, err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
-	if err != nil {
-		logger.Error(err, "reconciling nginx configmap")
-		return err
-	}
-
 	// ConsolePlugin
-	consolePlugin := consoleplugin.ConsolePlugin(r.namespace)
-	if !topologyExists || !clusterVersionExists {
+	consolePlugin := consoleplugin.ConsolePlugin(r.namespace, image.Runtime)
+	if !topologyExists || !consolePluginSupported {
 		utils.TagObjectToDelete(consolePlugin)
 	}
-	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.ServiceMutator)
+	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.SpecMutator)
 	_, err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, consolePluginMutator)
 	if err != nil {
 		logger.Error(err, "reconciling consoleplugin")

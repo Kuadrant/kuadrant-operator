@@ -2,10 +2,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -14,7 +16,7 @@ import (
 	"github.com/google/cel-go/common/types/ref"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,6 +34,7 @@ import (
 
 	basereconciler "github.com/kuadrant/kuadrant-operator/internal/reconcilers"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/extension/protocol"
 	exttypes "github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 	extutils "github.com/kuadrant/kuadrant-operator/pkg/extension/utils"
 )
@@ -41,8 +44,6 @@ const (
 	// cleanup (e.g. mutator/subscription deregistration) can occur prior to
 	// object deletion.
 	ExtensionFinalizer = "kuadrant.io/extensions"
-
-	protocolVersion = "1.0.0"
 
 	handshakeTimeout         = 10 * time.Second
 	defaultHeartbeatInterval = 15 * time.Second
@@ -124,8 +125,7 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 
 	// test path: supervise runs blocking in the foreground
 	if ec.manager == nil {
-		ec.superviseSession(ctx, reconcileChan)
-		return nil
+		return ec.superviseSession(ctx, reconcileChan)
 	}
 
 	ctrl, err := ctrlruntimectrl.New(ec.config.Name, ec.manager, ctrlruntimectrl.Options{Reconciler: ec})
@@ -138,39 +138,58 @@ func (ec *ExtensionController) Start(ctx context.Context) error {
 		}
 	}
 
+	managerCtx, stopManager := context.WithCancel(ctx)
+	defer stopManager()
 	sessionCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	supervisorDone := make(chan struct{})
+	var sessionErr error
 	go func() {
 		defer close(supervisorDone)
-		ec.superviseSession(sessionCtx, reconcileChan)
+		sessionErr = ec.superviseSession(sessionCtx, reconcileChan)
+		if sessionErr != nil {
+			stopManager()
+		}
 	}()
 
-	err = ec.manager.Start(ctx)
+	err = ec.manager.Start(managerCtx)
 	cancel()
 	<-supervisorDone
+	if sessionErr != nil {
+		return sessionErr
+	}
 	if err != nil {
 		return fmt.Errorf("error starting manager: %w", err)
 	}
 	return nil
 }
 
-func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) {
+func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileChan chan ctrlruntimeevent.GenericEvent) error {
 	defer ec.shutdown()
 	if ec.manager != nil {
 		if err := awaitCacheSync(ctx, ec.manager.GetCache(), ec.config.ForType); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			ec.logger.Error(err, "not handshaking")
-			return
+			return err
 		}
 	}
 	for {
 		owned, err := ec.handshakeWithBackoff(ctx)
 		if err != nil {
-			return
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
 		}
-		ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind)
+		operatorVersion := ec.extensionClient.peerVersion
+		ec.logger.Info("handshake accepted", "extension", ec.config.Name, "policyKind", ec.config.PolicyKind, "protocolVersion", protocol.Version, "operatorProtocolVersion", operatorVersion)
+		if operatorVersion != "" && operatorVersion != protocol.Version {
+			ec.logger.Info("extension and operator protocol versions differ but remain compatible", "extension", protocol.Version, "operator", operatorVersion)
+		}
 		if ctx.Err() != nil {
-			return
+			return nil
 		}
 		ec.replayOwnedPolicies(ctx, owned, reconcileChan)
 
@@ -180,7 +199,7 @@ func (ec *ExtensionController) superviseSession(ctx context.Context, reconcileCh
 		cancel()
 
 		if ctx.Err() != nil {
-			return
+			return nil
 		}
 	}
 }
@@ -194,6 +213,11 @@ func (ec *ExtensionController) handshakeWithBackoff(ctx context.Context) ([]*ext
 		owned, err := ec.attemptHandshake(ctx)
 		if err == nil {
 			return owned, nil
+		}
+		var rejected *handshakeRejectedError
+		if errors.As(err, &rejected) && rejected.terminal() {
+			ec.logger.Error(err, "handshake permanently rejected, not retrying", "extension", ec.config.Name, "rejection", rejected.rejection.String(), "extension.protocolVersion", protocol.Version, "operator.protocolVersion", ec.extensionClient.peerVersion)
+			return nil, err
 		}
 		ec.logger.Error(err, "handshake attempt failed, retrying")
 		if !waitBackoff(ctx, &backoff) {
@@ -409,7 +433,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	// Ensure finalizer exists for both create and updates
 	if eventType == EventTypeCreate || eventType == EventTypeUpdate {
 		if err := ec.ensureFinalizer(ctx, request); err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				return reconcile.Result{}, err
 			}
 			return reconcile.Result{RequeueAfter: time.Second}, err
@@ -424,7 +448,7 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	if err := ec.cleanupFinalizer(ctx, request); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{RequeueAfter: time.Second}, err
@@ -610,16 +634,9 @@ func (ec *ExtensionController) NewPipeline(policy exttypes.Policy) exttypes.Pipe
 	}
 }
 
-type pipelinePhase = string
-
-const (
-	phaseRequest  pipelinePhase = "request"
-	phaseResponse pipelinePhase = "response"
-)
-
 type pipelineEntry struct {
 	action exttypes.Action
-	phase  pipelinePhase
+	phase  extpb.Phase
 }
 
 // PipelineImpl implements Pipeline by accumulating actions locally with
@@ -633,21 +650,21 @@ type PipelineImpl struct {
 
 func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
 	for _, entry := range p.actions {
-		if entry.phase == phaseResponse {
+		if entry.phase == extpb.Phase_PHASE_RESPONSE {
 			return fmt.Errorf("cannot add request actions after response actions have been added")
 		}
 	}
-	return p.validateAndAppend(phaseRequest, actions)
+	return p.validateAndAppend(extpb.Phase_PHASE_REQUEST, actions)
 }
 
 func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
-	return p.validateAndAppend(phaseResponse, actions)
+	return p.validateAndAppend(extpb.Phase_PHASE_RESPONSE, actions)
 }
 
-func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action) error {
+func (p *PipelineImpl) validateAndAppend(phase extpb.Phase, actions []exttypes.Action) error {
 	batchVars := make(map[string]bool)
 	for _, action := range actions {
-		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {
 			batchVars[grpc.Var] = true
 		}
 	}
@@ -668,34 +685,30 @@ func (p *PipelineImpl) validateAndAppend(phase string, actions []exttypes.Action
 	}
 
 	for _, action := range actions {
-		if _, ok := action.(exttypes.FailAction); ok {
-			refsVar := false
-			for _, expr := range action.CelExpressions() {
-				for _, pattern := range varPatterns {
-					if pattern.MatchString(expr) {
-						refsVar = true
-						break
-					}
-				}
-				if refsVar {
-					break
-				}
-			}
-			if !refsVar {
-				return fmt.Errorf("fail action must reference a gRPC response variable")
-			}
-		}
-
 		exprs := action.CelExpressions()
-		for _, expr := range exprs {
-			for varName, pattern := range varPatterns {
-				if !localPopulated[varName] && pattern.MatchString(expr) {
-					return fmt.Errorf("action references variable %q before it is populated", varName)
-				}
+		referenced := make([]string, 0, len(varPatterns))
+		for varName, pattern := range varPatterns {
+			if slices.ContainsFunc(exprs, pattern.MatchString) {
+				referenced = append(referenced, varName)
+			}
+		}
+		slices.Sort(referenced)
+
+		if _, ok := action.(exttypes.FailAction); ok && len(referenced) == 0 {
+			return fmt.Errorf("fail action must reference a gRPC response variable")
+		}
+
+		for _, varName := range referenced {
+			if !localPopulated[varName] {
+				return fmt.Errorf("action references variable %q before it is populated", varName)
 			}
 		}
 
-		if grpc, ok := action.(exttypes.GRPCMethodAction); ok && grpc.Var != "" {
+		if len(referenced) > 1 {
+			return fmt.Errorf("action references variables %q from separate gRPC actions; a response variable is only in scope within its own reply hook", referenced)
+		}
+
+		if grpc, ok := action.(exttypes.GRPCAction); ok && grpc.Var != "" {
 			if localPopulated[grpc.Var] {
 				return fmt.Errorf("duplicate variable name %q", grpc.Var)
 			}

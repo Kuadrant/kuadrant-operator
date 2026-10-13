@@ -29,8 +29,8 @@ import (
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// TelemetryPolicy enables custom metric labelling for Kuadrant data plane resources
-// through the use of dynamically evaluated CEL expressions.
+// TelemetryPolicy enables custom metric labelling and log field enrichment for
+// Kuadrant data plane resources through the use of dynamically evaluated CEL expressions.
 type TelemetryPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -39,6 +39,7 @@ type TelemetryPolicy struct {
 	Status TelemetryPolicyStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="has(self.metrics) || has(self.logging)",message="At least one of spec.metrics or spec.logging must be defined"
 type TelemetryPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -46,7 +47,12 @@ type TelemetryPolicySpec struct {
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Metrics holds the telemetry metrics configuration
-	Metrics MetricsSpec `json:"metrics"`
+	// +optional
+	Metrics *MetricsSpec `json:"metrics,omitempty"`
+
+	// Logging holds the telemetry logging configuration
+	// +optional
+	Logging *LoggingSpec `json:"logging,omitempty"`
 }
 
 func (p *TelemetryPolicy) GetName() string {
@@ -75,6 +81,22 @@ type MetricsConfig struct {
 	// Only labels whose CEL expressions resolve successfully will be included.
 	// +kubebuilder:validation:MinProperties=1
 	Labels map[string]string `json:"labels"`
+}
+
+// LoggingSpec defines the configuration for telemetry logging
+type LoggingSpec struct {
+	// Default logging configuration that applies to all requests
+	Default LoggingConfig `json:"default"`
+}
+
+// LoggingConfig defines reusable logging configuration
+type LoggingConfig struct {
+	// Fields to add to auth decision log records, where keys are field names and values are
+	// CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
+	// Only fields whose CEL expressions resolve successfully will be included.
+	// +kubebuilder:validation:MinProperties=1
+	// +kubebuilder:validation:XValidation:rule="self.all(k, !k.contains('.'))",message="field names must not contain periods"
+	Fields map[string]string `json:"fields"`
 }
 
 // TelemetryPolicyStatus defines the observed state of TelemetryPolicy

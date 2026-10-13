@@ -47,6 +47,12 @@ func TestDefaultComponents(t *testing.T) {
 			wantEnvVar:              "RELATED_IMAGE_LIMITADOR_OPERATOR",
 			wantRelatedImageEnvVars: []string{"RELATED_IMAGE_LIMITADOR"},
 		},
+		{
+			name:                    "developer-portal-controller is registered",
+			wantName:                "developer-portal-controller",
+			wantChart:               chartsBasePath + "/developer-portal-controller",
+			wantChartValueOverrides: 1,
+		},
 	}
 
 	if len(components) != len(tests) {
@@ -211,72 +217,209 @@ func TestRenderComponent_InvalidChart(t *testing.T) {
 }
 
 func TestDeployerImagePatching(t *testing.T) {
-	chartPath := findDNSOperatorChartForDeployer(t)
-
-	d := &Deployer{
-		namespace: "kuadrant-system",
-	}
-
-	component := Component{
-		Name:        "dns-operator",
-		ChartPath:   chartPath,
-		ImageEnvVar: "RELATED_IMAGE_DNS_OPERATOR",
-	}
-
 	tests := []struct {
 		name      string
-		envValue  string
+		image     string
 		wantImage string
+		objects   []*unstructured.Unstructured
 	}{
 		{
-			name:      "env var overrides image",
-			envValue:  "quay.io/kuadrant/dns-operator:v1.0.0",
-			wantImage: "quay.io/kuadrant/dns-operator:v1.0.0",
+			name:      "patches with provided image",
+			image:     "test.registry.io/test-component:v2.0.0",
+			wantImage: "test.registry.io/test-component:v2.0.0",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name":      "test-deployment",
+							"namespace": "test-namespace",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "test-container",
+											"image": "test.registry.io/test-component:default",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 		{
-			name:      "empty env var preserves chart default",
-			envValue:  "",
-			wantImage: "quay.io/kuadrant/dns-operator:latest",
+			name:      "empty image preserves original",
+			image:     "",
+			wantImage: "test.registry.io/test-component:default",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name":      "test-deployment",
+							"namespace": "test-namespace",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "test-container",
+											"image": "test.registry.io/test-component:default",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "patches multiple deployments",
+			image:     "test.registry.io/new:v1.0",
+			wantImage: "test.registry.io/new:v1.0",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "deploy-one",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "manager",
+											"image": "old.registry.io/one:v0.1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "deploy-two",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "manager",
+											"image": "old.registry.io/two:v0.2",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:      "ignores non-Deployment resources",
+			image:     "test.registry.io/patched:v1.0",
+			wantImage: "test.registry.io/patched:v1.0",
+			objects: []*unstructured.Unstructured{
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "v1",
+						"kind":       "Service",
+						"metadata": map[string]interface{}{
+							"name": "my-service",
+						},
+					},
+				},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apiextensions.k8s.io/v1",
+						"kind":       "CustomResourceDefinition",
+						"metadata": map[string]interface{}{
+							"name": "myresources.example.com",
+						},
+					},
+				},
+				{
+					Object: map[string]interface{}{
+						"apiVersion": "apps/v1",
+						"kind":       "Deployment",
+						"metadata": map[string]interface{}{
+							"name": "deploy-to-patch",
+						},
+						"spec": map[string]interface{}{
+							"template": map[string]interface{}{
+								"spec": map[string]interface{}{
+									"containers": []interface{}{
+										map[string]interface{}{
+											"name":  "manager",
+											"image": "old.registry.io/app:v0.1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.envValue != "" {
-				t.Setenv("RELATED_IMAGE_DNS_OPERATOR", tt.envValue)
-			} else {
-				t.Setenv("RELATED_IMAGE_DNS_OPERATOR", "")
+			// Snapshot non-Deployment objects before patching
+			nonDeploymentSnapshots := make(map[string]interface{})
+			for _, obj := range tt.objects {
+				if obj.GetKind() != "Deployment" {
+					data, _ := obj.MarshalJSON()
+					nonDeploymentSnapshots[obj.GetKind()+"_"+obj.GetName()] = string(data)
+				}
 			}
 
-			rendered, err := d.renderComponent(component)
-			if err != nil {
-				t.Fatalf("renderComponent() error = %v", err)
-			}
-
-			image := os.Getenv(component.ImageEnvVar)
-			if err := PatchDeploymentImage(rendered.Resources, image); err != nil {
+			if err := PatchDeploymentImage(tt.objects, tt.image); err != nil {
 				t.Fatalf("PatchDeploymentImage() error = %v", err)
 			}
 
-			foundDeployment := false
-			for _, obj := range rendered.Resources {
+			// Verify Deployments are patched
+			for _, obj := range tt.objects {
 				if obj.GetKind() != "Deployment" {
 					continue
 				}
-				foundDeployment = true
-				containers, _, _ := unstructured.NestedSlice(obj.Object,
-					"spec", "template", "spec", "containers")
+				containers, _, _ := unstructured.NestedSlice(obj.Object, "spec", "template", "spec", "containers")
 				if len(containers) == 0 {
 					t.Fatal("no containers in Deployment")
 				}
 				container := containers[0].(map[string]interface{})
 				got := container["image"].(string)
 				if got != tt.wantImage {
-					t.Errorf("image = %q, want %q", got, tt.wantImage)
+					t.Errorf("%s: image = %q, want %q", obj.GetName(), got, tt.wantImage)
 				}
 			}
-			if !foundDeployment {
-				t.Fatal("no Deployment found in rendered resources")
+
+			// Verify non-Deployment objects remain unchanged
+			for _, obj := range tt.objects {
+				if obj.GetKind() == "Deployment" {
+					continue
+				}
+				key := obj.GetKind() + "_" + obj.GetName()
+				data, _ := obj.MarshalJSON()
+				after := string(data)
+				if before, ok := nonDeploymentSnapshots[key]; ok && before != after {
+					t.Errorf("%s was modified by PatchDeploymentImage", key)
+				}
 			}
 		})
 	}
@@ -387,15 +530,101 @@ func TestEffectiveValues(t *testing.T) {
 
 func findDNSOperatorChartForDeployer(t *testing.T) string {
 	t.Helper()
+	return findComponentChartForDeployer(t, "dns-operator")
+}
+
+func findComponentChartForDeployer(t *testing.T, name string) string {
+	t.Helper()
 	candidates := []string{
-		filepath.Join("..", "..", "component-charts", "dns-operator"),
-		filepath.Join("component-charts", "dns-operator"),
+		filepath.Join("..", "..", "component-charts", name),
+		filepath.Join("component-charts", name),
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(filepath.Join(p, "Chart.yaml")); err == nil {
 			return p
 		}
 	}
-	t.Skip("dns-operator chart not found, skipping deployer tests against real chart")
+	t.Skipf("%s chart not found, skipping deployer tests against real chart", name)
 	return ""
+}
+
+// TestRenderDeveloperPortalComponent renders the vendored
+// developer-portal-controller chart exactly as the deployer does at runtime:
+// registered component values plus the RELATED_IMAGE_DEVELOPERPORTAL override.
+// The chart reads its ClusterRole rules via .Files.Get, so this also proves
+// the Helm SDK loader path used by the operator picks those files up.
+func TestRenderDeveloperPortalComponent(t *testing.T) {
+	registry := &Deployer{components: allComponents()}
+	component, ok := registry.ComponentByName("developer-portal-controller")
+	if !ok {
+		t.Fatal("developer-portal-controller not registered")
+	}
+	component.ChartPath = findComponentChartForDeployer(t, "developer-portal-controller")
+
+	d := &Deployer{namespace: "kuadrant-system"}
+
+	tests := []struct {
+		name  string
+		image string
+	}{
+		{name: "tag reference", image: "quay.io/kuadrant/developer-portal-controller:v1.2.3"},
+		{name: "digest reference", image: "quay.io/kuadrant/developer-portal-controller@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("RELATED_IMAGE_DEVELOPERPORTAL", tt.image)
+
+			rendered, err := d.renderComponent(component)
+			if err != nil {
+				t.Fatalf("renderComponent() error = %v", err)
+			}
+
+			wantCRDs := map[string]bool{}
+			for _, name := range component.CRDNames {
+				wantCRDs[name] = true
+			}
+			for _, crd := range rendered.CRDs {
+				delete(wantCRDs, crd.GetName())
+			}
+			if len(rendered.CRDs) != len(component.CRDNames) || len(wantCRDs) != 0 {
+				t.Errorf("rendered CRDs = %v, want exactly %v", CRDNames(rendered.CRDs), component.CRDNames)
+			}
+
+			var deployment, clusterRole *unstructured.Unstructured
+			for _, obj := range rendered.Resources {
+				switch {
+				case obj.GetKind() == "Deployment" && obj.GetName() == component.DeploymentName:
+					deployment = obj
+				case obj.GetKind() == "ClusterRole" && obj.GetName() == "developer-portal-controller-manager-role":
+					clusterRole = obj
+				}
+			}
+			if deployment == nil {
+				t.Fatalf("Deployment %q not rendered", component.DeploymentName)
+			}
+			if clusterRole == nil {
+				t.Fatal("ClusterRole developer-portal-controller-manager-role not rendered")
+			}
+
+			containers, _, err := unstructured.NestedSlice(deployment.Object, "spec", "template", "spec", "containers")
+			if err != nil || len(containers) != 1 {
+				t.Fatalf("containers = %v (err %v), want exactly one", containers, err)
+			}
+			container, _ := containers[0].(map[string]interface{})
+			if got := container["image"]; got != tt.image {
+				t.Errorf("container image = %v, want %q", got, tt.image)
+			}
+
+			rules, found, err := unstructured.NestedSlice(clusterRole.Object, "rules")
+			if err != nil || !found || len(rules) == 0 {
+				t.Errorf("ClusterRole rules = %v (found %v, err %v), want rules from rbac/role.yaml", rules, found, err)
+			}
+
+			images := extractDeploymentImages(rendered.Resources)
+			if len(images) != 1 || images[0].Container != "manager" || images[0].Image != tt.image {
+				t.Errorf("extractDeploymentImages() = %v, want manager=%s", images, tt.image)
+			}
+		})
+	}
 }

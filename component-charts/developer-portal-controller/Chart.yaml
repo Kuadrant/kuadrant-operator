@@ -1,0 +1,17 @@
+apiVersion: v2
+name: developer-portal-controller
+description: Kubernetes controller reconciling Kuadrant developer portal resources (APIProduct, APIKey, APIKeyRequest, APIKeyApproval).
+type: application
+# 0.0.0 on main; release branches stamp the released version
+version: 0.0.0
+appVersion: 0.0.0
+home: https://kuadrant.io
+sources:
+  - https://github.com/Kuadrant/developer-portal-controller
+keywords:
+  - kuadrant
+  - developer-portal
+  - api-management
+maintainers:
+  - name: Kuadrant Team
+    url: https://github.com/Kuadrant

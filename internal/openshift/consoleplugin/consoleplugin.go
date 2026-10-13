@@ -9,8 +9,8 @@ func Name() string {
 	return KuadrantConsoleName
 }
 
-func ConsolePlugin(ns string) *consolev1.ConsolePlugin {
-	return &consolev1.ConsolePlugin{
+func ConsolePlugin(ns string, runtime Runtime) *consolev1.ConsolePlugin {
+	plugin := &consolev1.ConsolePlugin{
 		TypeMeta: metav1.TypeMeta{Kind: "ConsolePlugin", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   Name(),
@@ -30,6 +30,24 @@ func ConsolePlugin(ns string) *consolev1.ConsolePlugin {
 					BasePath:  "/",
 				},
 			},
+			Proxy: []consolev1.ConsolePluginProxy{
+				{
+					Alias:         "backend",
+					Authorization: consolev1.UserToken,
+					Endpoint: consolev1.ConsolePluginProxyEndpoint{
+						Type: consolev1.ProxyTypeService,
+						Service: &consolev1.ConsolePluginProxyServiceConfig{
+							Name:      ServiceName(),
+							Namespace: ns,
+							Port:      9443,
+						},
+					},
+				},
+			},
 		},
 	}
+	if runtime != RuntimeGo {
+		plugin.Spec.Proxy = nil
+	}
+	return plugin
 }

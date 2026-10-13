@@ -147,6 +147,62 @@ func (r RateLimitRequestCEL) ToCEL() string {
 }`, r.Domain, r.HitsAddend, descriptorsCEL)
 }
 
+// ReserveRequestCEL models a kuadrant.service.ratelimit.v1.ReserveRequest for
+// CEL rendering. Amount is required and expected to resolve to a uint. TTL is
+// optional (a google.protobuf.Duration message): when empty the field is
+// omitted so Limitador applies its own default; when set it is expected to
+// resolve to a CEL duration (converted to google.protobuf.Duration by the
+// wasm-shim).
+type ReserveRequestCEL struct {
+	Domain      string
+	Amount      string
+	TTL         string
+	Descriptors []RateLimitDescriptorCEL
+}
+
+func (r ReserveRequestCEL) ToCEL() string {
+	fields := []string{
+		fmt.Sprintf("domain: %s", r.Domain),
+		fmt.Sprintf("descriptors: %s", descriptorsToCEL(r.Descriptors)),
+		fmt.Sprintf("amount: %s", r.Amount),
+	}
+	if r.TTL != "" {
+		fields = append(fields, fmt.Sprintf("ttl: %s", r.TTL))
+	}
+	return fmt.Sprintf("kuadrant.service.ratelimit.v1.ReserveRequest {\n    %s\n}", strings.Join(fields, ",\n    "))
+}
+
+// CommitRequestCEL models a kuadrant.service.ratelimit.v1.CommitRequest for CEL
+// rendering. ReservationID is the CEL expression that reads back the id captured
+// by the paired Reserve action; ActualAmount is expected to resolve to a uint.
+type CommitRequestCEL struct {
+	Domain        string
+	ReservationID string
+	ActualAmount  string
+	Descriptors   []RateLimitDescriptorCEL
+}
+
+func (r CommitRequestCEL) ToCEL() string {
+	return fmt.Sprintf(`kuadrant.service.ratelimit.v1.CommitRequest {
+    domain: %s,
+    descriptors: %s,
+    reservation_id: %s,
+    actual_amount: %s
+}`, r.Domain, descriptorsToCEL(r.Descriptors), r.ReservationID, r.ActualAmount)
+}
+
+// descriptorsToCEL renders a descriptor list as a CEL list literal.
+func descriptorsToCEL(descriptors []RateLimitDescriptorCEL) string {
+	if len(descriptors) == 0 {
+		return "[]"
+	}
+	parts := make([]string, len(descriptors))
+	for i, d := range descriptors {
+		parts[i] = d.ToCEL()
+	}
+	return fmt.Sprintf("[%s]", strings.Join(parts, ", "))
+}
+
 // RateLimitDescriptorCEL models a single descriptor with entries.
 //
 // Two modes:

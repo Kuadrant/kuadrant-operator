@@ -46,6 +46,10 @@ rules:
 - apiGroups:
   - apiextensions.k8s.io
   resourceNames:
+  - apikeyapprovals.devportal.kuadrant.io
+  - apikeyrequests.devportal.kuadrant.io
+  - apikeys.devportal.kuadrant.io
+  - apiproducts.devportal.kuadrant.io
   - authconfigs.authorino.kuadrant.io
   - authorinos.operator.authorino.kuadrant.io
   - dnshealthcheckprobes.kuadrant.io
@@ -165,7 +169,6 @@ rules:
   - oidcpolicies
   - planpolicies
   - telemetrypolicies
-  - threatpolicies
   verbs:
   - get
   - list
@@ -178,7 +181,6 @@ rules:
   - oidcpolicies/finalizers
   - planpolicies/finalizers
   - telemetrypolicies/finalizers
-  - threatpolicies/finalizers
   verbs:
   - update
 - apiGroups:
@@ -187,7 +189,6 @@ rules:
   - oidcpolicies/status
   - planpolicies/status
   - telemetrypolicies/status
-  - threatpolicies/status
   verbs:
   - get
   - patch
@@ -385,6 +386,7 @@ rules:
   - rbac.authorization.k8s.io
   resourceNames:
   - authorino-operator-manager
+  - developer-portal-controller-manager-rolebinding
   - dns-operator-manager-rolebinding
   - dns-operator-remote-cluster-rolebinding
   - limitador-operator-manager-rolebinding
@@ -412,6 +414,10 @@ rules:
   - authorino-manager-role
   - authorino-operator
   - authorino-operator-manager
+  - authorino-set-cluster-wide
+  - authorino-set-image
+  - authorino-set-superseding-host-subsets
+  - developer-portal-controller-manager-role
   - dns-operator-manager-role
   - dns-operator-remote-cluster-role
   - limitador-operator-controller-manager

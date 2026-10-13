@@ -1092,9 +1092,11 @@ spec:
                     x-kubernetes-int-or-string: true
                     x-kubernetes-validations:
                     - message: maxFraction must be greater than 0
-                      rule: quantity(self).isGreaterThan(quantity('0'))
+                      rule: 'type(self) == string ? quantity(self).isGreaterThan(quantity(''0''))
+                        : quantity(string(self)).isGreaterThan(quantity(''0''))'
                     - message: maxFraction must be at most 1
-                      rule: '!quantity(self).isGreaterThan(quantity(''1''))'
+                      rule: 'type(self) == string ? !quantity(self).isGreaterThan(quantity(''1''))
+                        : !quantity(string(self)).isGreaterThan(quantity(''1''))'
                   maxTtl:
                     description: |-
                       MaxTTL sets the maximum ttl a Reserve call may request. Passed to the

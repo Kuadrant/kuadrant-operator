@@ -35,16 +35,16 @@ the EnvoyFilter constant-size regardless of policy count.
 ## Architecture / how it works
 
 ```mermaid
-flowchart LR
+flowchart TB
     OP[Kuadrant operator<br/>runs gRPC server]
 
     subgraph ENVOY[Envoy]
         WASM[wasm-shim]
     end
 
-    OP -->|"① EnvoyFilter: small stub + config digest<br/>(constant size, no inline config)"| WASM
-    WASM -->|"② gRPC: fetch real config for this gateway"| OP
-    OP -->|"③ returns the full wasm config"| WASM
+    OP -->|"① EnvoyFilter: stub + digest"| WASM
+    WASM -->|"② gRPC: fetch config"| OP
+    OP -->|"③ return full config"| WASM
 ```
 
 ### Operator side

@@ -16167,7 +16167,7 @@ spec:
         - name: RELATED_IMAGE_WASMSHIM
           value: quay.io/kuadrant/wasm-shim:v0.15.0
         - name: RELATED_IMAGE_DEVELOPERPORTAL
-          value: quay.io/kuadrant/developer-portal-controller:v0.3.0
+          value: quay.io/kuadrant/developer-portal-controller:v0.3.1
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
           value: quay.io/kuadrant/console-plugin:v0.7.1
         - name: RELATED_IMAGE_CONSOLE_PLUGIN_SDK1
@@ -16192,7 +16192,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: quay.io/kuadrant/kuadrant-operator:v1.6.0-rc4
+        image: quay.io/kuadrant/kuadrant-operator:v1.6.0-rc5
         livenessProbe:
           httpGet:
             path: /healthz

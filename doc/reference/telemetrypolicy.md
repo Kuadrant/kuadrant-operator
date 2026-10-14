@@ -23,9 +23,12 @@ A policy whose expression reads a sensitive request header is therefore rejected
 `x-api-key` and `apikey`, matched case-insensitively, the same list Authorino redacts by
 default. Reading `request.headers` or `request` as a whole, or indexing `request.headers`
 with a key that is not a string literal, is rejected for the same reason, as is an
-expression that does not parse. Presence tests such as
-`has(request.headers.authorization) ? "bearer" : "anonymous"` do not read the header value
-and are accepted.
+expression that does not parse. Presence tests do not read the header value and are
+accepted in both spellings: `has(request.headers.authorization) ? "bearer" : "anonymous"`,
+and for hyphenated names, which `has()` cannot select,
+`"x-tenant" in request.headers ? string(request.headers["x-tenant"]) : ""`. A membership
+test naming a sensitive header, such as `"authorization" in request.headers`, is rejected
+like a read of that header.
 
 | **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                             |
 |-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

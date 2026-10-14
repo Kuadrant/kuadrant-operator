@@ -32,6 +32,8 @@ func TestCheckSensitiveHeaders(t *testing.T) {
 		{name: "presence test of sensitive header", expression: "has(request.headers.authorization)"},
 		{name: "presence test in ternary", expression: `has(request.headers.authorization) ? "bearer" : "anonymous"`},
 		{name: "presence test of headers map", expression: "has(request.headers)"},
+		{name: "membership test of non-sensitive header", expression: `"x-tenant" in request.headers`},
+		{name: "membership test guarding a non-sensitive read", expression: `"x-tenant" in request.headers ? string(request.headers["x-tenant"]) : ""`},
 		{name: "shim-only function", expression: "requestBodyJSON('/model')"},
 		{name: "shim-only function with list", expression: "responseBodyJSON(['/usage/total_tokens'])"},
 		{name: "string literal", expression: `"static"`},
@@ -53,6 +55,8 @@ func TestCheckSensitiveHeaders(t *testing.T) {
 		{name: "sensitive header inside a list", expression: "[request.path, request.headers.cookie]", wantErr: sensitiveCookie},
 		{name: "sensitive header inside a map", expression: `{"k": request.headers.apikey}`, wantErr: sensitiveAPIKey},
 		{name: "sensitive header as index key", expression: "request.headers[request.headers.authorization]", wantErr: errNonLiteralHeader.Error()},
+		{name: "membership test of sensitive header", expression: `"authorization" in request.headers`, wantErr: sensitiveAuthorization},
+		{name: "membership test guarding a sensitive read", expression: `"authorization" in request.headers ? string(request.headers["authorization"]) : ""`, wantErr: sensitiveAuthorization},
 
 		// rejected: headers map as a whole
 		{name: "bare headers", expression: "request.headers", wantErr: errWholeHeaders.Error()},
@@ -66,6 +70,7 @@ func TestCheckSensitiveHeaders(t *testing.T) {
 		// rejected: non-literal header key
 		{name: "header key from attribute", expression: "request.headers[request.path]", wantErr: errNonLiteralHeader.Error()},
 		{name: "header key from concatenation", expression: `request.headers["auth" + "orization"]`, wantErr: errNonLiteralHeader.Error()},
+		{name: "membership test with non-literal key", expression: "request.path in request.headers", wantErr: errNonLiteralHeader.Error()},
 
 		// rejected: request as a whole
 		{name: "bare request", expression: "request", wantErr: errWholeRequest.Error()},

@@ -61,7 +61,10 @@ func (e errInvalidExpression) Reason() gatewayapiv1alpha2.PolicyConditionReason 
 //     statically;
 //   - request used as a whole value, which includes the headers.
 //
-// Presence tests such as has(request.headers.authorization) read no value and are accepted.
+// Presence tests read no value. has(request.headers.<name>) is accepted for any name, and a
+// membership test such as "x-tenant" in request.headers, the only presence spelling for
+// hyphenated names, is checked like an index: accepted for a non-sensitive literal name,
+// rejected for a sensitive one or a non-literal key.
 // An expression that does not parse is rejected as well, since it could not be checked.
 func checkSensitiveHeaders(expression string) error {
 	// The standard macros must be registered for has() to parse as a presence test and for
@@ -119,8 +122,14 @@ func checkHeadersUse(node ast.NavigableExpr) error {
 		}
 		return checkHeaderName(sel.FieldName())
 	case ast.CallKind:
-		// request.headers[<key>]
-		if key, ok := indexKey(parent.AsCall(), node); ok {
+		// request.headers[<key>] reads a header; <key> in request.headers tests its presence.
+		// Both name a single header, so both are checked against the sensitive list.
+		call := parent.AsCall()
+		key, ok := indexKey(call, node)
+		if !ok {
+			key, ok = membershipKey(call, node)
+		}
+		if ok {
 			name, isLiteral := stringLiteral(key)
 			if !isLiteral {
 				return errNonLiteralHeader
@@ -186,6 +195,14 @@ func indexKey(call ast.CallExpr, operand ast.NavigableExpr) (ast.Expr, bool) {
 		return nil, false
 	}
 	return call.Args()[1], true
+}
+
+// membershipKey returns the key expression when call is `key in operand` for the given operand.
+func membershipKey(call ast.CallExpr, operand ast.NavigableExpr) (ast.Expr, bool) {
+	if call.FunctionName() != operators.In || len(call.Args()) != 2 || call.Args()[1].ID() != operand.ID() {
+		return nil, false
+	}
+	return call.Args()[0], true
 }
 
 func stringLiteral(e ast.Expr) (string, bool) {

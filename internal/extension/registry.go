@@ -1258,11 +1258,54 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			if len(routeLocators) > 0 && asRoute != "" && !slices.Contains(routeLocators, asRoute) {
 				continue
 			}
-			wasmConfig.ActionSets[i].Actions = append(wasmConfig.ActionSets[i].Actions, pipelineActions...)
+			wasmConfig.ActionSets[i].Actions = mergePipelineActions(wasmConfig.ActionSets[i].Actions, pipelineActions)
 		}
 	}
 
 	return nil
+}
+
+// mergePipelineActions keeps ordinary extension actions after the built-in policy actions while
+// placing the fixed OCSF metadata projections before terminal guards. This lets completion-time
+// audit logging cover locally denied requests without changing ordering for general SDK actions.
+func mergePipelineActions(existing, pipeline []wasm.Action) []wasm.Action {
+	prelude := make([]wasm.Action, 0, len(pipeline))
+	actor := make([]wasm.Action, 0, len(pipeline))
+	ordinary := make([]wasm.Action, 0, len(pipeline))
+	for _, action := range pipeline {
+		if wasm.IsOCSFPreludeAction(action) {
+			prelude = append(prelude, action)
+		} else if wasm.IsOCSFActorAction(action) {
+			actor = append(actor, action)
+		} else {
+			ordinary = append(ordinary, action)
+		}
+	}
+
+	preludeEnd := 0
+	for preludeEnd < len(existing) && wasm.IsOCSFPreludeAction(existing[preludeEnd]) {
+		preludeEnd++
+	}
+
+	// AuthService stores its successful dynamic metadata in auth.* from its on-reply actions.
+	// Place actor projections immediately after the last AuthService call so they see that data,
+	// but still before later policy guards can terminate the request.
+	afterAuth := preludeEnd
+	for i := preludeEnd; i < len(existing); i++ {
+		grpcAction, ok := existing[i].(*wasm.GrpcAction)
+		if ok && grpcAction.Service == wasm.AuthServiceName {
+			afterAuth = i + 1
+		}
+	}
+
+	merged := make([]wasm.Action, 0, len(existing)+len(pipeline))
+	merged = append(merged, existing[:preludeEnd]...)
+	merged = append(merged, prelude...)
+	merged = append(merged, existing[preludeEnd:afterAuth]...)
+	merged = append(merged, actor...)
+	merged = append(merged, existing[afterAuth:]...)
+	merged = append(merged, ordinary...)
+	return merged
 }
 
 func predicateOrTrue(predicate string) string {

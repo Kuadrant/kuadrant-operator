@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -13,6 +14,17 @@ import (
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
+)
+
+const (
+	ocsfStorePathPrefix            = "ocsf."
+	ocsfActorUserNameStorePath     = ocsfStorePathPrefix + "actor.user.name"
+	ocsfActorUserUIDStorePath      = ocsfStorePathPrefix + "actor.user.uid"
+	ocsfActorUserGroupsStorePath   = ocsfStorePathPrefix + "actor.user.groups"
+	ocsfResourceNameStorePath      = ocsfStorePathPrefix + "resource.name"
+	ocsfResourceNamespaceStorePath = ocsfStorePathPrefix + "resource.namespace"
+	ocsfResourceTypeStorePath      = ocsfStorePathPrefix + "resource.type"
+	ocsfAIProviderStorePath        = ocsfStorePathPrefix + "ai_model.ai_provider"
 )
 
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=telemetrypolicies,verbs=get;list;watch;update;patch
@@ -86,8 +98,82 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 		}
 	}
 
+	pipeline := kuadrantCtx.NewPipeline(pol)
+	if pol.Spec.Logging != nil && pol.Spec.Logging.Default.OCSF != nil {
+		if err := pipeline.OnHTTPRequest(ocsfStoreActions(pol.Spec.Logging.Default.OCSF)...); err != nil {
+			r.Logger.Error(err, "failed to configure OCSF request metadata")
+			return calculateErrorStatus(pol, err), err
+		}
+	}
+	// Commit even when OCSF is absent so removing the stanza clears actions from a previous
+	// successful reconcile atomically.
+	if err := pipeline.Commit(ctx); err != nil {
+		r.Logger.Error(err, "failed to commit telemetry pipeline")
+		return calculateErrorStatus(pol, err), err
+	}
+
 	return calculateEnforcedStatus(pol, nil),
 		nil
+}
+
+func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) []types.Action {
+	namespaceExpression, namespacePredicate := pathSegmentExpression(config.Target.RequestPath.NamespaceSegment)
+	nameExpression, namePredicate := pathSegmentExpression(config.Target.RequestPath.NameSegment)
+	actions := []types.Action{
+		types.StoreAction{
+			Path:         ocsfResourceTypeStorePath,
+			Value:        strconv.Quote(config.Target.ResourceType),
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Predicate:    namespacePredicate,
+			Path:         ocsfResourceNamespaceStorePath,
+			Value:        namespaceExpression,
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Predicate:    namePredicate,
+			Path:         ocsfResourceNameStorePath,
+			Value:        nameExpression,
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Path:         ocsfAIProviderStorePath,
+			Value:        strconv.Quote(config.Target.AIProvider),
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Predicate:    fmt.Sprintf("has(%s)", config.Actor.Identity),
+			Path:         ocsfActorUserNameStorePath,
+			Value:        config.Actor.Identity,
+			ExportToHost: true,
+		},
+	}
+	if config.Actor.UID != "" {
+		actions = append(actions, types.StoreAction{
+			Predicate:    fmt.Sprintf("has(%s)", config.Actor.UID),
+			Path:         ocsfActorUserUIDStorePath,
+			Value:        config.Actor.UID,
+			ExportToHost: true,
+		})
+	}
+	if config.Actor.Groups != "" {
+		actions = append(actions, types.StoreAction{
+			Predicate:    fmt.Sprintf("has(%s)", config.Actor.Groups),
+			Path:         ocsfActorUserGroupsStorePath,
+			Value:        config.Actor.Groups,
+			ExportToHost: true,
+		})
+	}
+
+	return actions
+}
+
+func pathSegmentExpression(segment int32) (expression, predicate string) {
+	// split preserves the empty prefix of an absolute path, hence the one-based CEL index.
+	index := segment + 1
+	parts := "request.url_path.split('/')"
+	return fmt.Sprintf("%s[%d]", parts, index), fmt.Sprintf("%s.size() > %d", parts, index)
 }
 
 func (r *TelemetryPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.TelemetryPolicy, newStatus *v1alpha1.TelemetryPolicyStatus) (ctrl.Result, error) {

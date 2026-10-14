@@ -2428,6 +2428,61 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 	}
 }
 
+func TestMutateWasmConfig_OCSFProjectionPrecedesTerminalGuards(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	policyID := testResourceID("TelemetryPolicy", "default", "audit")
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		storeEntry(wasm.OCSFResourceTypeStorePath, `"LLMInferenceService"`, true, "true", extpb.Phase_PHASE_REQUEST),
+		storeEntry("ocsf.actor.user.name", "auth.identity.username", true, "has(auth.identity.username)", extpb.Phase_PHASE_REQUEST),
+		storeEntry("ordinary", `"value"`, true, "true", extpb.Phase_PHASE_REQUEST),
+	})
+	store.SetPipelineTargetRefs(policyID, []TargetRef{{
+		Group:     "gateway.networking.k8s.io",
+		Kind:      "Gateway",
+		Name:      mockTargetRef.GetName(),
+		Namespace: mockTargetRef.GetNamespace(),
+	}})
+
+	guard := &wasm.DenyAction{
+		ActionBase: wasm.ActionBase{Predicate: "true", Terminal: true},
+		DenyWith:   "DenyResponse{status: 403u}",
+	}
+	authCall := wasm.NewGrpcAction("true", "auth_response", wasm.AuthServiceName, "{}", "auth")
+	config := &wasm.Config{ActionSets: []wasm.ActionSet{{
+		Name:    "set1",
+		Actions: []wasm.Action{authCall, guard},
+	}}}
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	if err := mutator.Mutate(config, []machinery.PolicyTargetReference{mockTargetRef}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions := config.ActionSets[0].Actions
+	if len(actions) != 5 {
+		t.Fatalf("expected 5 actions, got %d", len(actions))
+	}
+	marker, ok := actions[0].(*wasm.StoreAction)
+	if !ok || marker.Path != wasm.OCSFResourceTypeStorePath {
+		t.Fatalf("expected OCSF marker before auth call, got %#v", actions[0])
+	}
+	if actions[1] != authCall {
+		t.Fatalf("expected auth call after OCSF request metadata, got %#v", actions[1])
+	}
+	actor, ok := actions[2].(*wasm.StoreAction)
+	if !ok || actor.Path != "ocsf.actor.user.name" {
+		t.Fatalf("expected actor projection after auth call, got %#v", actions[2])
+	}
+	if actions[3] != guard {
+		t.Fatalf("expected actor projection before terminal guard, got %#v", actions[3])
+	}
+	ordinary, ok := actions[4].(*wasm.StoreAction)
+	if !ok || ordinary.Path != "ordinary" {
+		t.Fatalf("expected ordinary extension action after guard, got %#v", actions[4])
+	}
+}
+
 // testTopology builds a topology with gateway→listener→route links for testing.
 func testTopology(t *testing.T, gateways []*gwapiv1.Gateway, httpRoutes []*gwapiv1.HTTPRoute, grpcRoutes []*gwapiv1.GRPCRoute) *machinery.Topology {
 	t.Helper()

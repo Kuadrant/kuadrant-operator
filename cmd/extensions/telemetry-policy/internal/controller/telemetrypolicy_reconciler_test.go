@@ -25,9 +25,32 @@ type addDataCall struct {
 }
 
 type mockKuadrantCtx struct {
-	calls   []addDataCall
-	failOn  string // return error when binding matches this value
-	failErr error
+	calls    []addDataCall
+	failOn   string // return error when binding matches this value
+	failErr  error
+	pipeline *mockPipeline
+}
+
+type mockPipeline struct {
+	requestActions  []types.Action
+	responseActions []types.Action
+	committed       bool
+	commitErr       error
+}
+
+func (m *mockPipeline) OnHTTPRequest(actions ...types.Action) error {
+	m.requestActions = append(m.requestActions, actions...)
+	return nil
+}
+
+func (m *mockPipeline) OnHTTPResponse(actions ...types.Action) error {
+	m.responseActions = append(m.responseActions, actions...)
+	return nil
+}
+
+func (m *mockPipeline) Commit(context.Context) error {
+	m.committed = true
+	return m.commitErr
 }
 
 func (m *mockKuadrantCtx) AddDataTo(_ context.Context, _ types.Policy, domain types.Domain, binding, expression string) error {
@@ -50,7 +73,12 @@ func (m *mockKuadrantCtx) ReconcileObject(context.Context, client.Object, client
 func (m *mockKuadrantCtx) RegisterActionMethod(_ context.Context, _ types.Policy, _ types.ActionMethodConfig) error {
 	return nil
 }
-func (m *mockKuadrantCtx) NewPipeline(types.Policy) types.Pipeline { return nil }
+func (m *mockKuadrantCtx) NewPipeline(types.Policy) types.Pipeline {
+	if m.pipeline == nil {
+		m.pipeline = &mockPipeline{}
+	}
+	return m.pipeline
+}
 
 func newTestPolicy(metrics map[string]string, loggingFields map[string]string) *v1alpha1.TelemetryPolicy {
 	pol := &v1alpha1.TelemetryPolicy{
@@ -195,5 +223,110 @@ func TestReconcileSpec_EmptySpec(t *testing.T) {
 	}
 	if len(mock.calls) != 0 {
 		t.Errorf("expected 0 AddDataTo calls for empty spec, got %d", len(mock.calls))
+	}
+	if !mock.pipeline.committed {
+		t.Error("expected an empty pipeline commit to clear stale OCSF actions")
+	}
+	if len(mock.pipeline.requestActions) != 0 {
+		t.Errorf("expected 0 request actions, got %d", len(mock.pipeline.requestActions))
+	}
+}
+
+func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(nil, nil)
+	pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{
+		OCSF: &v1alpha1.OCSFLoggingConfig{
+			Profile: v1alpha1.OCSFProfileAIOperation,
+			Actor:   v1alpha1.OCSFActorConfig{Identity: "auth.identity.user.username"},
+			Target: v1alpha1.OCSFTargetConfig{
+				ResourceType: "LLMInferenceService",
+				RequestPath: v1alpha1.OCSFRequestPathTarget{
+					NamespaceSegment: 0,
+					NameSegment:      1,
+				},
+				AIProvider: "KServe",
+			},
+		},
+	}}
+
+	_, err := r.reconcileSpec(context.Background(), pol, mock)
+	if err != nil {
+		t.Fatalf("reconcileSpec returned error: %v", err)
+	}
+	if !mock.pipeline.committed {
+		t.Fatal("expected OCSF pipeline to be committed")
+	}
+	if got, want := len(mock.pipeline.requestActions), 5; got != want {
+		t.Fatalf("request actions = %d, want %d", got, want)
+	}
+
+	want := map[string]types.StoreAction{
+		ocsfActorUserNameStorePath: {
+			Predicate:    "has(auth.identity.user.username)",
+			Path:         ocsfActorUserNameStorePath,
+			Value:        "auth.identity.user.username",
+			ExportToHost: true,
+		},
+		ocsfResourceNamespaceStorePath: {
+			Predicate:    "request.url_path.split('/').size() > 1",
+			Path:         ocsfResourceNamespaceStorePath,
+			Value:        "request.url_path.split('/')[1]",
+			ExportToHost: true,
+		},
+		ocsfResourceNameStorePath: {
+			Predicate:    "request.url_path.split('/').size() > 2",
+			Path:         ocsfResourceNameStorePath,
+			Value:        "request.url_path.split('/')[2]",
+			ExportToHost: true,
+		},
+		ocsfResourceTypeStorePath: {
+			Path:         ocsfResourceTypeStorePath,
+			Value:        `"LLMInferenceService"`,
+			ExportToHost: true,
+		},
+		ocsfAIProviderStorePath: {
+			Path:         ocsfAIProviderStorePath,
+			Value:        `"KServe"`,
+			ExportToHost: true,
+		},
+	}
+
+	for _, action := range mock.pipeline.requestActions {
+		store, ok := action.(types.StoreAction)
+		if !ok {
+			t.Fatalf("action type = %T, want types.StoreAction", action)
+		}
+		expected, ok := want[store.Path]
+		if !ok {
+			t.Errorf("unexpected store path %q", store.Path)
+			continue
+		}
+		if store != expected {
+			t.Errorf("store action for %s = %#v, want %#v", store.Path, store, expected)
+		}
+		delete(want, store.Path)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing store actions: %#v", want)
+	}
+}
+
+func TestReconcileSpec_PipelineCommitError(t *testing.T) {
+	expectedErr := fmt.Errorf("commit failed")
+	mock := &mockKuadrantCtx{pipeline: &mockPipeline{commitErr: expectedErr}}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+
+	status, err := r.reconcileSpec(context.Background(), newTestPolicy(nil, nil), mock)
+	if err != expectedErr {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
+	}
+	if status == nil {
+		t.Fatal("expected error status, got nil")
 	}
 }

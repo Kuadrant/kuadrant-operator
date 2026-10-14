@@ -15,6 +15,18 @@ Creating a TelemetryPolicy alone does not enable custom logging, and logging
 fields apply only to routes with an AuthPolicy. This requires an Authorino and
 Authorino Operator version supporting custom logging fields.
 
+Metric label and logging field expressions that do not reference `auth.*` are evaluated
+in the gateway's wasm filter and their values are forwarded verbatim: logging fields reach
+Authorino as plain strings, outside its log redaction, and metric labels reach Limitador.
+A policy whose expression reads a sensitive request header is therefore rejected with
+`Accepted=False` and reason `Invalid`. The sensitive headers are `authorization`, `cookie`,
+`x-api-key` and `apikey`, matched case-insensitively, the same list Authorino redacts by
+default. Reading `request.headers` or `request` as a whole, or indexing `request.headers`
+with a key that is not a string literal, is rejected for the same reason, as is an
+expression that does not parse. Presence tests such as
+`has(request.headers.authorization) ? "bearer" : "anonymous"` do not read the header value
+and are accepted.
+
 | **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                             |
 |-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `targetRef` | [LocalPolicyTargetReferenceWithSectionName](#localpolicytargetreferencewithsectionname) | Yes          | Reference to a Kubernetes resource that the policy attaches to. For more [info](https://gateway-api.sigs.k8s.io/reference/spec/#localpolicytargetreferencewithsectionname)                                                                                                                              |

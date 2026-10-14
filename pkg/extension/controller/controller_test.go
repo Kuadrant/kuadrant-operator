@@ -1443,6 +1443,156 @@ func TestReconcile_MissingPolicyIsNotAnError(t *testing.T) {
 	assert.NilError(t, err)
 }
 
+func TestReconcile_DoesNotPruneAfterRequeue(t *testing.T) {
+	for _, resultToReturn := range []reconcile.Result{
+		{Requeue: true},
+		{RequeueAfter: time.Second},
+	} {
+		pruneCalls := 0
+		mock := &mockExtensionServiceClient{
+			pruneMutatorsFn: func(_ context.Context, _ *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+				pruneCalls++
+				return &emptypb.Empty{}, nil
+			},
+		}
+		ec, _ := newMutatorReconcileTestController(mock, newMutatorTestPolicy("route"))
+		ec.config.Reconcile = func(context.Context, reconcile.Request, exttypes.KuadrantCtx) (reconcile.Result, error) {
+			return resultToReturn, nil
+		}
+
+		result, err := ec.Reconcile(context.Background(), reconcile.Request{
+			NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
+		})
+		assert.NilError(t, err)
+		assert.Equal(t, result, resultToReturn)
+		assert.Equal(t, pruneCalls, 0)
+	}
+}
+
+func TestReconcile_PrunesIntentionallyEmptyBindingSet(t *testing.T) {
+	var captured *extpb.PruneMutatorsRequest
+	mock := &mockExtensionServiceClient{
+		pruneMutatorsFn: func(_ context.Context, in *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			captured = in
+			return &emptypb.Empty{}, nil
+		},
+	}
+	ec, _ := newMutatorReconcileTestController(mock, newMutatorTestPolicy("route"))
+
+	_, err := ec.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, captured != nil)
+	assert.Equal(t, len(captured.Bindings), 0)
+	assert.Equal(t, len(captured.Policy.TargetRefs), 1)
+}
+
+func TestReconcile_RequeuesWhenPolicyChangesDuringReconciliation(t *testing.T) {
+	pruneCalls := 0
+	mock := &mockExtensionServiceClient{
+		pruneMutatorsFn: func(_ context.Context, _ *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			pruneCalls++
+			return &emptypb.Empty{}, nil
+		},
+	}
+	policy := newMutatorTestPolicy("old-route")
+	ec, fakeClient := newMutatorReconcileTestController(mock, policy)
+	ec.config.Reconcile = func(ctx context.Context, request reconcile.Request, kuadrantCtx exttypes.KuadrantCtx) (reconcile.Result, error) {
+		if err := kuadrantCtx.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.path", "request.path"); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		latest := &mutatorTestPolicy{}
+		if err := fakeClient.Get(ctx, request.NamespacedName, latest); err != nil {
+			return reconcile.Result{}, err
+		}
+		latest.Spec.TargetRefs = []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{mutatorTestTargetRef("new-route")}
+		latest.Generation++
+		if err := fakeClient.Update(ctx, latest); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
+	result, err := ec.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, result.RequeueAfter > 0)
+	assert.Equal(t, pruneCalls, 0)
+}
+
+type mutatorTestPolicySpec struct {
+	TargetRefs []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRefs,omitempty"`
+}
+
+type mutatorTestPolicy struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              mutatorTestPolicySpec `json:"spec,omitempty"`
+}
+
+var mutatorTestGroupVersion = schema.GroupVersion{Group: "extensions.test.kuadrant.io", Version: "v1alpha1"}
+
+func (p *mutatorTestPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	return p.Spec.TargetRefs
+}
+
+func (p *mutatorTestPolicy) DeepCopyObject() runtime.Object {
+	if p == nil {
+		return nil
+	}
+	copy := *p
+	copy.ObjectMeta = *p.ObjectMeta.DeepCopy()
+	copy.Spec.TargetRefs = slices.Clone(p.Spec.TargetRefs)
+	return &copy
+}
+
+func newMutatorTestPolicy(targetName string) *mutatorTestPolicy {
+	return &mutatorTestPolicy{
+		TypeMeta: metav1.TypeMeta{APIVersion: mutatorTestGroupVersion.String(), Kind: "TestPolicy"},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "ns",
+			Name:       "policy",
+			Generation: 1,
+		},
+		Spec: mutatorTestPolicySpec{
+			TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{mutatorTestTargetRef(targetName)},
+		},
+	}
+}
+
+func mutatorTestTargetRef(name string) gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	return gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: "gateway.networking.k8s.io",
+			Kind:  "HTTPRoute",
+			Name:  gatewayapiv1alpha2.ObjectName(name),
+		},
+	}
+}
+
+func newMutatorReconcileTestController(mock *mockExtensionServiceClient, policy *mutatorTestPolicy) (*ExtensionController, client.Client) {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(mutatorTestGroupVersion.WithKind("TestPolicy"), &mutatorTestPolicy{})
+	metav1.AddToGroupVersion(scheme, mutatorTestGroupVersion)
+
+	fakeClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
+	return &ExtensionController{
+		config: ExtensionConfig{
+			Name:       "test",
+			PolicyKind: "TestPolicy",
+			ForType:    &mutatorTestPolicy{},
+			Reconcile:  mockReconcile,
+		},
+		logger:          logr.Discard(),
+		extensionClient: &extensionClient{client: mock},
+		eventCache:      newEventTypeCache(),
+		BaseReconciler:  basereconciler.NewBaseReconciler(fakeClient, scheme, fakeClient),
+	}, fakeClient
+}
+
 type fakeInformerCache struct {
 	getInformerErr error
 	syncResult     bool

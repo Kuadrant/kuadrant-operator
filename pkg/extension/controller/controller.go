@@ -114,11 +114,20 @@ type trackedMutatorBinding struct {
 // register mutators eagerly through AddDataTo; the SDK records the successful
 // registrations and closes the reconciliation with a single prune request.
 type mutatorReconcileState struct {
-	bindings map[mutatorPolicyKey]map[trackedMutatorBinding]struct{}
+	bindings          map[mutatorPolicyKey]map[trackedMutatorBinding]struct{}
+	policyGeneration  int64
+	policyWasObserved bool
 }
 
 func newMutatorReconcileState() *mutatorReconcileState {
 	return &mutatorReconcileState{bindings: make(map[mutatorPolicyKey]map[trackedMutatorBinding]struct{})}
+}
+
+func reconciliationNeedsMoreWork(result reconcile.Result) bool {
+	// Requeue is deprecated, but existing extension implementations may still
+	// return it; pruning in that case would treat an incomplete pass as empty.
+	//nolint:staticcheck
+	return result.Requeue || result.RequeueAfter > 0
 }
 
 func mutatorKey(policy exttypes.Policy) mutatorPolicyKey {
@@ -485,7 +494,8 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	ctx = ec.setupContext(ctx)
-	ctx = context.WithValue(ctx, mutatorReconcileStateKey{}, newMutatorReconcileState())
+	state := newMutatorReconcileState()
+	ctx = context.WithValue(ctx, mutatorReconcileStateKey{}, state)
 
 	// Ensure finalizer exists for both create and updates
 	if eventType == EventTypeCreate || eventType == EventTypeUpdate {
@@ -496,6 +506,9 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{RequeueAfter: time.Second}, err
 		}
 	}
+	if err := ec.capturePolicyGeneration(ctx, request, state); err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// Call user reconcile function
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "event", eventType)
@@ -503,8 +516,22 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	if err != nil {
 		return result, err
 	}
-	if err := ec.pruneReconciledMutators(ctx, request); err != nil {
+	// AddDataTo remains immediate for validation and feedback, but a requeue means
+	// this reconciliation has not reached a stable completion boundary. In
+	// particular, an empty binding set must not be mistaken for a completed
+	// reconciliation that intentionally removes every binding.
+	if reconciliationNeedsMoreWork(result) {
+		return result, nil
+	}
+	policyUnchanged, err := ec.pruneReconciledMutators(ctx, request, state)
+	if err != nil {
 		return result, err
+	}
+	if !policyUnchanged {
+		// The policy spec changed while the extension was reconciling. Leave the
+		// current and newly registered mutators alone and let the next pass
+		// reconcile the newer target refs and bindings as one unit.
+		return reconcile.Result{RequeueAfter: time.Nanosecond}, nil
 	}
 
 	if err := ec.cleanupFinalizer(ctx, request); err != nil {
@@ -636,29 +663,44 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Po
 	return err
 }
 
-func (ec *ExtensionController) pruneReconciledMutators(ctx context.Context, request reconcile.Request) error {
-	state, ok := ctx.Value(mutatorReconcileStateKey{}).(*mutatorReconcileState)
-	if !ok {
-		return nil
-	}
-
+func (ec *ExtensionController) capturePolicyGeneration(ctx context.Context, request reconcile.Request, state *mutatorReconcileState) error {
 	obj := ec.config.ForType.DeepCopyObject().(client.Object)
-	if err := ec.Client().Get(ctx, request.NamespacedName, obj); err != nil {
+	if err := ec.APIClientReader().Get(ctx, request.NamespacedName, obj); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("getting policy for mutator reconciliation: %w", err)
+		return fmt.Errorf("getting policy before mutator reconciliation: %w", err)
+	}
+	state.policyGeneration = obj.GetGeneration()
+	state.policyWasObserved = true
+	return nil
+}
+
+func (ec *ExtensionController) pruneReconciledMutators(ctx context.Context, request reconcile.Request, state *mutatorReconcileState) (bool, error) {
+	if state == nil {
+		return true, nil
+	}
+
+	obj := ec.config.ForType.DeepCopyObject().(client.Object)
+	if err := ec.APIClientReader().Get(ctx, request.NamespacedName, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("getting policy for mutator reconciliation: %w", err)
 	}
 	if obj.GetDeletionTimestamp() != nil {
-		return nil
+		return true, nil
+	}
+	if !state.policyWasObserved || obj.GetGeneration() != state.policyGeneration {
+		return false, nil
 	}
 
 	policy, ok := obj.(exttypes.Policy)
 	if !ok {
-		return nil
+		return true, nil
 	}
 
-	return ec.pruneTrackedMutators(ctx, policy, state)
+	return true, ec.pruneTrackedMutators(ctx, policy, state)
 }
 
 func (ec *ExtensionController) pruneTrackedMutators(ctx context.Context, policy exttypes.Policy, state *mutatorReconcileState) error {

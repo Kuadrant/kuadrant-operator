@@ -872,10 +872,6 @@ func (s *extensionService) PruneMutators(_ context.Context, request *extpb.Prune
 	if err != nil {
 		return nil, err
 	}
-	if len(request.Policy.TargetRefs) == 0 {
-		return nil, errors.New("policy must have target references")
-	}
-
 	retained := make(map[DataProviderKey]struct{}, len(request.Policy.TargetRefs)*len(request.Bindings))
 	for _, targetRef := range request.Policy.TargetRefs {
 		if targetRef == nil {

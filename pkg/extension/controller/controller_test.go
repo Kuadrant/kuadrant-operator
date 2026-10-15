@@ -50,15 +50,16 @@ type mockKuadrantCtx struct {
 }
 
 type mockPolicy struct {
-	name      string
-	namespace string
+	name       string
+	namespace  string
+	targetRefs []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName
 }
 
 func (m *mockPolicy) GetName() string                  { return m.name }
 func (m *mockPolicy) GetNamespace() string             { return m.namespace }
 func (m *mockPolicy) GetObjectKind() schema.ObjectKind { return &mockObjectKind{} }
 func (m *mockPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return nil
+	return m.targetRefs
 }
 
 type mockObjectKind struct{}
@@ -831,13 +832,17 @@ func TestAddDataToTracksMutatorsForClosingPrune(t *testing.T) {
 	}
 
 	controller := newTestExtensionController(mock)
-	policy := &mockPolicy{name: "test-policy", namespace: "test-namespace"}
+	policy := &mockPolicy{
+		name:       "test-policy",
+		namespace:  "test-namespace",
+		targetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{mutatorTestTargetRef("route")},
+	}
 	state := newMutatorReconcileState()
 	ctx := context.WithValue(context.Background(), mutatorReconcileStateKey{}, state)
 	if err := controller.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.request_path", "request.path"); err != nil {
 		t.Fatalf("AddDataTo returned an error: %v", err)
 	}
-	if err := controller.pruneTrackedMutators(ctx, policy, state); err != nil {
+	if err := controller.pruneTrackedMutators(ctx, reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: policy.namespace, Name: policy.name}}, state); err != nil {
 		t.Fatalf("closing prune returned an error: %v", err)
 	}
 	if captured == nil || captured.Policy == nil || captured.Policy.Metadata == nil {
@@ -846,7 +851,7 @@ func TestAddDataToTracksMutatorsForClosingPrune(t *testing.T) {
 	if captured.Policy.Metadata.Name != policy.name || captured.Policy.Metadata.Namespace != policy.namespace || captured.Policy.Metadata.Kind != "TestPolicy" {
 		t.Fatalf("closing prune sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
 	}
-	if len(captured.Bindings) != 1 || captured.Bindings[0].Domain != extpb.Domain_DOMAIN_REQUEST || captured.Bindings[0].Binding != "logging.fields.request_path" {
+	if len(captured.Bindings) != 1 || captured.Bindings[0].TargetRef.GetName() != "route" || captured.Bindings[0].Domain != extpb.Domain_DOMAIN_REQUEST || captured.Bindings[0].Binding != "logging.fields.request_path" {
 		t.Fatalf("closing prune sent bindings %#v, want request/logging.fields.request_path", captured.Bindings)
 	}
 }
@@ -1485,14 +1490,16 @@ func TestReconcile_PrunesIntentionallyEmptyBindingSet(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, captured != nil)
 	assert.Equal(t, len(captured.Bindings), 0)
-	assert.Equal(t, len(captured.Policy.TargetRefs), 1)
+	assert.Equal(t, len(captured.Policy.TargetRefs), 0)
 }
 
-func TestReconcile_RequeuesWhenPolicyChangesDuringReconciliation(t *testing.T) {
+func TestReconcile_PrunesMutatorsRecordedAgainstReconciledPolicy(t *testing.T) {
 	pruneCalls := 0
+	var captured *extpb.PruneMutatorsRequest
 	mock := &mockExtensionServiceClient{
-		pruneMutatorsFn: func(_ context.Context, _ *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+		pruneMutatorsFn: func(_ context.Context, request *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
 			pruneCalls++
+			captured = request
 			return &emptypb.Empty{}, nil
 		},
 	}
@@ -1519,8 +1526,10 @@ func TestReconcile_RequeuesWhenPolicyChangesDuringReconciliation(t *testing.T) {
 		NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
 	})
 	assert.NilError(t, err)
-	assert.Assert(t, result.RequeueAfter > 0)
-	assert.Equal(t, pruneCalls, 0)
+	assert.Equal(t, result, reconcile.Result{})
+	assert.Equal(t, pruneCalls, 1)
+	assert.Equal(t, len(captured.Bindings), 1)
+	assert.Equal(t, captured.Bindings[0].TargetRef.GetName(), "old-route")
 }
 
 type mutatorTestPolicySpec struct {

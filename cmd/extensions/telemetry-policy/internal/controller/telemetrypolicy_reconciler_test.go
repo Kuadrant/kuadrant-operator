@@ -95,6 +95,7 @@ func TestReconcileSpec_LoggingFieldsOnly(t *testing.T) {
 	if status == nil {
 		t.Fatal("reconcileSpec returned nil status")
 	}
+
 	if len(mock.calls) != 2 {
 		t.Fatalf("expected 2 AddDataTo calls, got %d", len(mock.calls))
 	}

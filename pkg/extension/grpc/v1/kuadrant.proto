@@ -105,10 +105,12 @@ message RegisterMutatorRequest {
   string expression = 4;
 }
 
-// MutatorBinding identifies a mutator to retain after a successful reconcile.
+// MutatorBinding identifies an exact mutator association to retain after a
+// successful reconcile.
 message MutatorBinding {
   Domain domain = 1;
   string binding = 2;
+  TargetRef target_ref = 3;
 }
 
 // PruneMutatorsRequest removes a policy's mutators except those listed in bindings.

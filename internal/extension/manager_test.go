@@ -726,7 +726,7 @@ func TestPruneMutators_RetainsCurrentPolicyBindings(t *testing.T) {
 
 	_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{
 		Policy:   policy,
-		Bindings: []*extpb.MutatorBinding{{Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}},
+		Bindings: []*extpb.MutatorBinding{{TargetRef: currentTarget, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}},
 	})
 	if err != nil {
 		t.Fatalf("PruneMutators returned an error: %v", err)
@@ -739,6 +739,59 @@ func TestPruneMutators_RetainsCurrentPolicyBindings(t *testing.T) {
 	}
 	if svc.registeredData.Exists(policyID, oldLocator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
 		t.Fatal("expected removed target reference binding to be pruned")
+	}
+}
+
+func TestPruneMutators_RetainsExactTargetBindingAssociations(t *testing.T) {
+	svc := newTestExtensionService()
+	firstTarget := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "first-route", "default")
+	secondTarget := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "second-route", "default")
+	policyID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "telemetry"}
+	firstPolicy := testPolicy("TelemetryPolicy", "default", "telemetry", firstTarget)
+	secondPolicy := testPolicy("TelemetryPolicy", "default", "telemetry", secondTarget)
+
+	for _, request := range []*extpb.RegisterMutatorRequest{
+		{Policy: firstPolicy, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.first", Expression: "request.first"},
+		{Policy: secondPolicy, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.second", Expression: "request.second"},
+	} {
+		if _, err := svc.RegisterMutator(context.Background(), request); err != nil {
+			t.Fatalf("failed to register mutator: %v", err)
+		}
+	}
+	for _, entry := range []struct {
+		target  *extpb.TargetRef
+		binding string
+	}{
+		{firstTarget, "logging.fields.second"},
+		{secondTarget, "logging.fields.first"},
+	} {
+		svc.registeredData.Set(policyID, createLocatorFromProtobuf(entry.target), extpb.Domain_DOMAIN_REQUEST, entry.binding, DataProviderEntry{Policy: policyID, Binding: entry.binding})
+	}
+
+	_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{
+		Policy: testPolicy("TelemetryPolicy", "default", "telemetry"),
+		Bindings: []*extpb.MutatorBinding{
+			{TargetRef: firstTarget, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.first"},
+			{TargetRef: secondTarget, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.second"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PruneMutators returned an error: %v", err)
+	}
+	for _, entry := range []struct {
+		target  *extpb.TargetRef
+		binding string
+		want    bool
+	}{
+		{firstTarget, "logging.fields.first", true},
+		{secondTarget, "logging.fields.second", true},
+		{firstTarget, "logging.fields.second", false},
+		{secondTarget, "logging.fields.first", false},
+	} {
+		got := svc.registeredData.Exists(policyID, createLocatorFromProtobuf(entry.target), extpb.Domain_DOMAIN_REQUEST, entry.binding)
+		if got != entry.want {
+			t.Errorf("mutator %q for %s exists=%v, want %v", entry.binding, entry.target.Name, got, entry.want)
+		}
 	}
 }
 
@@ -764,40 +817,18 @@ func TestPruneMutators_EmptySetRemovesAllPolicyMutators(t *testing.T) {
 	}
 }
 
-func TestPruneMutators_EmptyTargetRefsRemovesAllPolicyMutators(t *testing.T) {
-	svc := newTestExtensionService()
-	target := testTargetRef("gateway.networking.k8s.io", "HTTPRoute", "route", "default")
-	policy := testPolicy("TelemetryPolicy", "default", "telemetry", target)
-	policyID := ResourceID{Kind: "TelemetryPolicy", Namespace: "default", Name: "telemetry"}
-	locator := createLocatorFromProtobuf(target)
-
-	_, err := svc.RegisterMutator(context.Background(), &extpb.RegisterMutatorRequest{
-		Policy: policy, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path", Expression: "request.path",
-	})
-	if err != nil {
-		t.Fatalf("failed to register mutator: %v", err)
-	}
-
-	_, err = svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{
-		Policy: testPolicy("TelemetryPolicy", "default", "telemetry"),
-	})
-	if err != nil {
-		t.Fatalf("PruneMutators with no target refs returned an error: %v", err)
-	}
-	if svc.registeredData.Exists(policyID, locator, extpb.Domain_DOMAIN_REQUEST, "logging.fields.path") {
-		t.Fatal("expected mutators from removed target refs to be pruned")
-	}
-}
-
 func TestPruneMutators_RejectsIncompleteTargetReference(t *testing.T) {
 	svc := newTestExtensionService()
-	policy := testPolicy("TelemetryPolicy", "default", "telemetry", &extpb.TargetRef{Name: "route"})
+	policy := testPolicy("TelemetryPolicy", "default", "telemetry")
 
-	_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{Policy: policy})
+	_, err := svc.PruneMutators(context.Background(), &extpb.PruneMutatorsRequest{
+		Policy:   policy,
+		Bindings: []*extpb.MutatorBinding{{TargetRef: &extpb.TargetRef{Name: "route"}, Domain: extpb.Domain_DOMAIN_REQUEST, Binding: "logging.fields.path"}},
+	})
 	if err == nil {
 		t.Fatal("expected incomplete target reference to be rejected")
 	}
-	if !strings.Contains(err.Error(), "kind and name") {
+	if !strings.Contains(err.Error(), "target reference kind and name") {
 		t.Fatalf("expected target reference validation error, got %v", err)
 	}
 }

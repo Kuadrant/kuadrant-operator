@@ -872,29 +872,26 @@ func (s *extensionService) PruneMutators(_ context.Context, request *extpb.Prune
 	if err != nil {
 		return nil, err
 	}
-	retained := make(map[DataProviderKey]struct{}, len(request.Policy.TargetRefs)*len(request.Bindings))
-	for _, targetRef := range request.Policy.TargetRefs {
-		if targetRef == nil {
-			return nil, errors.New("policy target reference cannot be nil")
+	retained := make(map[DataProviderKey]struct{}, len(request.Bindings))
+	for _, binding := range request.Bindings {
+		if binding == nil {
+			return nil, errors.New("mutator binding cannot be nil")
 		}
-		if targetRef.Kind == "" || targetRef.Name == "" {
-			return nil, errors.New("policy target reference kind and name must be specified")
+		if binding.Domain == extpb.Domain_DOMAIN_UNSPECIFIED {
+			return nil, errors.New("mutator binding domain must be specified")
 		}
-		targetRefLocator := createLocatorFromProtobuf(targetRef)
-		for _, binding := range request.Bindings {
-			if binding == nil {
-				return nil, errors.New("mutator binding cannot be nil")
-			}
-			if binding.Domain == extpb.Domain_DOMAIN_UNSPECIFIED {
-				return nil, errors.New("mutator binding domain must be specified")
-			}
-			retained[DataProviderKey{
-				Policy:           policyID,
-				TargetRefLocator: targetRefLocator,
-				Domain:           binding.Domain,
-				Binding:          binding.Binding,
-			}] = struct{}{}
+		if binding.TargetRef == nil {
+			return nil, errors.New("mutator binding target reference cannot be nil")
 		}
+		if binding.TargetRef.Kind == "" || binding.TargetRef.Name == "" {
+			return nil, errors.New("mutator binding target reference kind and name must be specified")
+		}
+		retained[DataProviderKey{
+			Policy:           policyID,
+			TargetRefLocator: createLocatorFromProtobuf(binding.TargetRef),
+			Domain:           binding.Domain,
+			Binding:          binding.Binding,
+		}] = struct{}{}
 	}
 
 	pruned := s.registeredData.PruneMutators(policyID, retained)

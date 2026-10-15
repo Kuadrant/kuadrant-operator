@@ -726,11 +726,13 @@ func (x *RegisterMutatorRequest) GetExpression() string {
 	return ""
 }
 
-// MutatorBinding identifies a mutator to retain after a successful reconcile.
+// MutatorBinding identifies an exact mutator association to retain after a
+// successful reconcile.
 type MutatorBinding struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Domain        Domain                 `protobuf:"varint,1,opt,name=domain,proto3,enum=kuadrant.v1.Domain" json:"domain,omitempty"`
 	Binding       string                 `protobuf:"bytes,2,opt,name=binding,proto3" json:"binding,omitempty"`
+	TargetRef     *TargetRef             `protobuf:"bytes,3,opt,name=target_ref,json=targetRef,proto3" json:"target_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -777,6 +779,13 @@ func (x *MutatorBinding) GetBinding() string {
 		return x.Binding
 	}
 	return ""
+}
+
+func (x *MutatorBinding) GetTargetRef() *TargetRef {
+	if x != nil {
+		return x.TargetRef
+	}
+	return nil
 }
 
 // PruneMutatorsRequest removes a policy's mutators except those listed in bindings.
@@ -1515,10 +1524,12 @@ const file_v1_kuadrant_proto_rawDesc = "" +
 	"\abinding\x18\x03 \x01(\tR\abinding\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x04 \x01(\tR\n" +
-	"expression\"W\n" +
+	"expression\"\x8e\x01\n" +
 	"\x0eMutatorBinding\x12+\n" +
 	"\x06domain\x18\x01 \x01(\x0e2\x13.kuadrant.v1.DomainR\x06domain\x12\x18\n" +
-	"\abinding\x18\x02 \x01(\tR\abinding\"|\n" +
+	"\abinding\x18\x02 \x01(\tR\abinding\x125\n" +
+	"\n" +
+	"target_ref\x18\x03 \x01(\v2\x16.kuadrant.v1.TargetRefR\ttargetRef\"|\n" +
 	"\x14PruneMutatorsRequest\x12+\n" +
 	"\x06policy\x18\x01 \x01(\v2\x13.kuadrant.v1.PolicyR\x06policy\x127\n" +
 	"\bbindings\x18\x02 \x03(\v2\x1b.kuadrant.v1.MutatorBindingR\bbindings\"A\n" +
@@ -1638,7 +1649,8 @@ var file_v1_kuadrant_proto_goTypes = []any{
 	(*Policy)(nil),                      // 27: kuadrant.v1.Policy
 	(*v1alpha1.Value)(nil),              // 28: google.api.expr.v1alpha1.Value
 	(*status.Status)(nil),               // 29: google.rpc.Status
-	(*empty.Empty)(nil),                 // 30: google.protobuf.Empty
+	(*TargetRef)(nil),                   // 30: kuadrant.v1.TargetRef
+	(*empty.Empty)(nil),                 // 31: google.protobuf.Empty
 }
 var file_v1_kuadrant_proto_depIdxs = []int32{
 	25, // 0: kuadrant.v1.PingRequest.out:type_name -> google.protobuf.Timestamp
@@ -1653,43 +1665,44 @@ var file_v1_kuadrant_proto_depIdxs = []int32{
 	27, // 9: kuadrant.v1.RegisterMutatorRequest.policy:type_name -> kuadrant.v1.Policy
 	1,  // 10: kuadrant.v1.RegisterMutatorRequest.domain:type_name -> kuadrant.v1.Domain
 	1,  // 11: kuadrant.v1.MutatorBinding.domain:type_name -> kuadrant.v1.Domain
-	27, // 12: kuadrant.v1.PruneMutatorsRequest.policy:type_name -> kuadrant.v1.Policy
-	13, // 13: kuadrant.v1.PruneMutatorsRequest.bindings:type_name -> kuadrant.v1.MutatorBinding
-	27, // 14: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
-	27, // 15: kuadrant.v1.RegisterActionMethodRequest.policy:type_name -> kuadrant.v1.Policy
-	2,  // 16: kuadrant.v1.ActionEntry.phase:type_name -> kuadrant.v1.Phase
-	18, // 17: kuadrant.v1.ActionEntry.grpc:type_name -> kuadrant.v1.GrpcAction
-	19, // 18: kuadrant.v1.ActionEntry.deny:type_name -> kuadrant.v1.DenyAction
-	20, // 19: kuadrant.v1.ActionEntry.add_headers:type_name -> kuadrant.v1.AddHeadersAction
-	21, // 20: kuadrant.v1.ActionEntry.fail:type_name -> kuadrant.v1.FailAction
-	22, // 21: kuadrant.v1.ActionEntry.store:type_name -> kuadrant.v1.StoreAction
-	27, // 22: kuadrant.v1.PipelineCommitRequest.policy:type_name -> kuadrant.v1.Policy
-	23, // 23: kuadrant.v1.PipelineCommitRequest.actions:type_name -> kuadrant.v1.ActionEntry
-	5,  // 24: kuadrant.v1.ExtensionService.Handshake:input_type -> kuadrant.v1.HandshakeRequest
-	3,  // 25: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
-	30, // 26: kuadrant.v1.ExtensionService.ReleaseSession:input_type -> google.protobuf.Empty
-	10, // 27: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
-	7,  // 28: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
-	12, // 29: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
-	14, // 30: kuadrant.v1.ExtensionService.PruneMutators:input_type -> kuadrant.v1.PruneMutatorsRequest
-	15, // 31: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
-	17, // 32: kuadrant.v1.ExtensionService.RegisterActionMethod:input_type -> kuadrant.v1.RegisterActionMethodRequest
-	24, // 33: kuadrant.v1.ExtensionService.PipelineCommit:input_type -> kuadrant.v1.PipelineCommitRequest
-	6,  // 34: kuadrant.v1.ExtensionService.Handshake:output_type -> kuadrant.v1.HandshakeResponse
-	4,  // 35: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
-	30, // 36: kuadrant.v1.ExtensionService.ReleaseSession:output_type -> google.protobuf.Empty
-	9,  // 37: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
-	8,  // 38: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
-	30, // 39: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
-	30, // 40: kuadrant.v1.ExtensionService.PruneMutators:output_type -> google.protobuf.Empty
-	16, // 41: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
-	30, // 42: kuadrant.v1.ExtensionService.RegisterActionMethod:output_type -> google.protobuf.Empty
-	30, // 43: kuadrant.v1.ExtensionService.PipelineCommit:output_type -> google.protobuf.Empty
-	34, // [34:44] is the sub-list for method output_type
-	24, // [24:34] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	30, // 12: kuadrant.v1.MutatorBinding.target_ref:type_name -> kuadrant.v1.TargetRef
+	27, // 13: kuadrant.v1.PruneMutatorsRequest.policy:type_name -> kuadrant.v1.Policy
+	13, // 14: kuadrant.v1.PruneMutatorsRequest.bindings:type_name -> kuadrant.v1.MutatorBinding
+	27, // 15: kuadrant.v1.ClearPolicyRequest.policy:type_name -> kuadrant.v1.Policy
+	27, // 16: kuadrant.v1.RegisterActionMethodRequest.policy:type_name -> kuadrant.v1.Policy
+	2,  // 17: kuadrant.v1.ActionEntry.phase:type_name -> kuadrant.v1.Phase
+	18, // 18: kuadrant.v1.ActionEntry.grpc:type_name -> kuadrant.v1.GrpcAction
+	19, // 19: kuadrant.v1.ActionEntry.deny:type_name -> kuadrant.v1.DenyAction
+	20, // 20: kuadrant.v1.ActionEntry.add_headers:type_name -> kuadrant.v1.AddHeadersAction
+	21, // 21: kuadrant.v1.ActionEntry.fail:type_name -> kuadrant.v1.FailAction
+	22, // 22: kuadrant.v1.ActionEntry.store:type_name -> kuadrant.v1.StoreAction
+	27, // 23: kuadrant.v1.PipelineCommitRequest.policy:type_name -> kuadrant.v1.Policy
+	23, // 24: kuadrant.v1.PipelineCommitRequest.actions:type_name -> kuadrant.v1.ActionEntry
+	5,  // 25: kuadrant.v1.ExtensionService.Handshake:input_type -> kuadrant.v1.HandshakeRequest
+	3,  // 26: kuadrant.v1.ExtensionService.Ping:input_type -> kuadrant.v1.PingRequest
+	31, // 27: kuadrant.v1.ExtensionService.ReleaseSession:input_type -> google.protobuf.Empty
+	10, // 28: kuadrant.v1.ExtensionService.Subscribe:input_type -> kuadrant.v1.SubscribeRequest
+	7,  // 29: kuadrant.v1.ExtensionService.Resolve:input_type -> kuadrant.v1.ResolveRequest
+	12, // 30: kuadrant.v1.ExtensionService.RegisterMutator:input_type -> kuadrant.v1.RegisterMutatorRequest
+	14, // 31: kuadrant.v1.ExtensionService.PruneMutators:input_type -> kuadrant.v1.PruneMutatorsRequest
+	15, // 32: kuadrant.v1.ExtensionService.ClearPolicy:input_type -> kuadrant.v1.ClearPolicyRequest
+	17, // 33: kuadrant.v1.ExtensionService.RegisterActionMethod:input_type -> kuadrant.v1.RegisterActionMethodRequest
+	24, // 34: kuadrant.v1.ExtensionService.PipelineCommit:input_type -> kuadrant.v1.PipelineCommitRequest
+	6,  // 35: kuadrant.v1.ExtensionService.Handshake:output_type -> kuadrant.v1.HandshakeResponse
+	4,  // 36: kuadrant.v1.ExtensionService.Ping:output_type -> kuadrant.v1.PongResponse
+	31, // 37: kuadrant.v1.ExtensionService.ReleaseSession:output_type -> google.protobuf.Empty
+	9,  // 38: kuadrant.v1.ExtensionService.Subscribe:output_type -> kuadrant.v1.SubscribeResponse
+	8,  // 39: kuadrant.v1.ExtensionService.Resolve:output_type -> kuadrant.v1.ResolveResponse
+	31, // 40: kuadrant.v1.ExtensionService.RegisterMutator:output_type -> google.protobuf.Empty
+	31, // 41: kuadrant.v1.ExtensionService.PruneMutators:output_type -> google.protobuf.Empty
+	16, // 42: kuadrant.v1.ExtensionService.ClearPolicy:output_type -> kuadrant.v1.ClearPolicyResponse
+	31, // 43: kuadrant.v1.ExtensionService.RegisterActionMethod:output_type -> google.protobuf.Empty
+	31, // 44: kuadrant.v1.ExtensionService.PipelineCommit:output_type -> google.protobuf.Empty
+	35, // [35:45] is the sub-list for method output_type
+	25, // [25:35] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_v1_kuadrant_proto_init() }

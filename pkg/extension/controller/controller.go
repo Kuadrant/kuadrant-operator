@@ -106,17 +106,20 @@ type mutatorPolicyKey struct {
 }
 
 type trackedMutatorBinding struct {
-	domain  exttypes.Domain
-	binding string
+	targetRefGroup       string
+	targetRefKind        string
+	targetRefNamespace   string
+	targetRefName        string
+	targetRefSectionName string
+	domain               extpb.Domain
+	binding              string
 }
 
 // mutatorReconcileState is scoped to one SDK reconciliation. Extension authors
 // register mutators eagerly through AddDataTo; the SDK records the successful
 // registrations and closes the reconciliation with a single prune request.
 type mutatorReconcileState struct {
-	bindings          map[mutatorPolicyKey]map[trackedMutatorBinding]struct{}
-	policyGeneration  int64
-	policyWasObserved bool
+	bindings map[mutatorPolicyKey]map[trackedMutatorBinding]struct{}
 }
 
 func newMutatorReconcileState() *mutatorReconcileState {
@@ -130,29 +133,61 @@ func reconciliationNeedsMoreWork(result reconcile.Result) bool {
 	return result.Requeue || result.RequeueAfter > 0
 }
 
-func mutatorKey(policy exttypes.Policy) mutatorPolicyKey {
-	gvk := policy.GetObjectKind().GroupVersionKind()
-	return mutatorPolicyKey{Kind: gvk.Kind, Namespace: policy.GetNamespace(), Name: policy.GetName()}
+func mutatorKey(policy *extpb.Policy) mutatorPolicyKey {
+	metadata := policy.GetMetadata()
+	return mutatorPolicyKey{Kind: metadata.GetKind(), Namespace: metadata.GetNamespace(), Name: metadata.GetName()}
 }
 
-func (s *mutatorReconcileState) record(policy exttypes.Policy, domain exttypes.Domain, binding string) {
+func (s *mutatorReconcileState) record(policy *extpb.Policy, domain extpb.Domain, binding string) {
 	key := mutatorKey(policy)
 	if s.bindings[key] == nil {
 		s.bindings[key] = make(map[trackedMutatorBinding]struct{})
 	}
-	s.bindings[key][trackedMutatorBinding{domain: domain, binding: binding}] = struct{}{}
+	for _, targetRef := range policy.GetTargetRefs() {
+		s.bindings[key][trackedMutatorBinding{
+			targetRefGroup:       targetRef.GetGroup(),
+			targetRefKind:        targetRef.GetKind(),
+			targetRefNamespace:   targetRef.GetNamespace(),
+			targetRefName:        targetRef.GetName(),
+			targetRefSectionName: targetRef.GetSectionName(),
+			domain:               domain,
+			binding:              binding,
+		}] = struct{}{}
+	}
 }
 
-func (s *mutatorReconcileState) protobufBindings(policy exttypes.Policy) []*extpb.MutatorBinding {
-	bindings := s.bindings[mutatorKey(policy)]
+func (s *mutatorReconcileState) protobufBindings(policy mutatorPolicyKey) []*extpb.MutatorBinding {
+	bindings := s.bindings[policy]
 	result := make([]*extpb.MutatorBinding, 0, len(bindings))
 	for binding := range bindings {
 		result = append(result, &extpb.MutatorBinding{
-			Domain:  convertDomainToProtobuf(binding.domain),
+			Domain:  binding.domain,
 			Binding: binding.binding,
+			TargetRef: &extpb.TargetRef{
+				Group:       binding.targetRefGroup,
+				Kind:        binding.targetRefKind,
+				Namespace:   binding.targetRefNamespace,
+				Name:        binding.targetRefName,
+				SectionName: binding.targetRefSectionName,
+			},
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
+		if result[i].TargetRef.GetGroup() != result[j].TargetRef.GetGroup() {
+			return result[i].TargetRef.GetGroup() < result[j].TargetRef.GetGroup()
+		}
+		if result[i].TargetRef.GetKind() != result[j].TargetRef.GetKind() {
+			return result[i].TargetRef.GetKind() < result[j].TargetRef.GetKind()
+		}
+		if result[i].TargetRef.GetNamespace() != result[j].TargetRef.GetNamespace() {
+			return result[i].TargetRef.GetNamespace() < result[j].TargetRef.GetNamespace()
+		}
+		if result[i].TargetRef.GetName() != result[j].TargetRef.GetName() {
+			return result[i].TargetRef.GetName() < result[j].TargetRef.GetName()
+		}
+		if result[i].TargetRef.GetSectionName() != result[j].TargetRef.GetSectionName() {
+			return result[i].TargetRef.GetSectionName() < result[j].TargetRef.GetSectionName()
+		}
 		if result[i].Domain != result[j].Domain {
 			return result[i].Domain < result[j].Domain
 		}
@@ -506,10 +541,6 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{RequeueAfter: time.Second}, err
 		}
 	}
-	if err := ec.capturePolicyGeneration(ctx, request, state); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	// Call user reconcile function
 	ec.logger.Info("reconciling request", "namespace", request.Namespace, "name", request.Name, "event", eventType)
 	result, err := ec.config.Reconcile(ctx, request, ec)
@@ -523,15 +554,8 @@ func (ec *ExtensionController) Reconcile(ctx context.Context, request reconcile.
 	if reconciliationNeedsMoreWork(result) {
 		return result, nil
 	}
-	policyUnchanged, err := ec.pruneReconciledMutators(ctx, request, state)
-	if err != nil {
+	if err := ec.pruneTrackedMutators(ctx, request, state); err != nil {
 		return result, err
-	}
-	if !policyUnchanged {
-		// The policy spec changed while the extension was reconciling. Leave the
-		// current and newly registered mutators alone and let the next pass
-		// reconcile the newer target refs and bindings as one unit.
-		return reconcile.Result{RequeueAfter: time.Nanosecond}, nil
 	}
 
 	if err := ec.cleanupFinalizer(ctx, request); err != nil {
@@ -657,55 +681,20 @@ func (ec *ExtensionController) AddDataTo(ctx context.Context, policy exttypes.Po
 	})
 	if err == nil {
 		if state, ok := ctx.Value(mutatorReconcileStateKey{}).(*mutatorReconcileState); ok {
-			state.record(policy, domain, binding)
+			state.record(pbPolicy, pbDomain, binding)
 		}
 	}
 	return err
 }
 
-func (ec *ExtensionController) capturePolicyGeneration(ctx context.Context, request reconcile.Request, state *mutatorReconcileState) error {
-	obj := ec.config.ForType.DeepCopyObject().(client.Object)
-	if err := ec.APIClientReader().Get(ctx, request.NamespacedName, obj); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("getting policy before mutator reconciliation: %w", err)
-	}
-	state.policyGeneration = obj.GetGeneration()
-	state.policyWasObserved = true
-	return nil
-}
-
-func (ec *ExtensionController) pruneReconciledMutators(ctx context.Context, request reconcile.Request, state *mutatorReconcileState) (bool, error) {
-	if state == nil {
-		return true, nil
-	}
-
-	obj := ec.config.ForType.DeepCopyObject().(client.Object)
-	if err := ec.APIClientReader().Get(ctx, request.NamespacedName, obj); err != nil {
-		if apierrors.IsNotFound(err) {
-			return true, nil
-		}
-		return false, fmt.Errorf("getting policy for mutator reconciliation: %w", err)
-	}
-	if obj.GetDeletionTimestamp() != nil {
-		return true, nil
-	}
-	if !state.policyWasObserved || obj.GetGeneration() != state.policyGeneration {
-		return false, nil
-	}
-
-	policy, ok := obj.(exttypes.Policy)
-	if !ok {
-		return true, nil
-	}
-
-	return true, ec.pruneTrackedMutators(ctx, policy, state)
-}
-
-func (ec *ExtensionController) pruneTrackedMutators(ctx context.Context, policy exttypes.Policy, state *mutatorReconcileState) error {
+func (ec *ExtensionController) pruneTrackedMutators(ctx context.Context, request reconcile.Request, state *mutatorReconcileState) error {
+	policy := mutatorPolicyKey{Kind: ec.config.PolicyKind, Namespace: request.Namespace, Name: request.Name}
 	_, err := ec.extensionClient.client.PruneMutators(ctx, &extpb.PruneMutatorsRequest{
-		Policy:   convertPolicyToProtobuf(policy),
+		Policy: &extpb.Policy{Metadata: &extpb.Metadata{
+			Kind:      policy.Kind,
+			Namespace: policy.Namespace,
+			Name:      policy.Name,
+		}},
 		Bindings: state.protobufBindings(policy),
 	})
 	return err

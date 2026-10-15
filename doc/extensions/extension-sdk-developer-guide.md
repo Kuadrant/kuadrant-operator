@@ -248,6 +248,8 @@ The operator answers these from its own topology, so your extension needs no RBA
 
 `DomainAuth` bindings become metadata evaluators on the managed AuthConfig, so the result is available to later Authorino evaluators and as dynamic metadata downstream. `DomainRequest` bindings go into the managed wasm configuration, so the result is forwarded per request to Authorino and Limitador. The operator re-renders those managed resources when a binding changes; it never modifies user-authored policies such as AuthPolicy or RateLimitPolicy.
 
+Each successful reconciliation that does not request a requeue defines the policy's complete desired binding set. Call `AddDataTo` for every binding that should remain: bindings not registered during that reconciliation are removed, and registering none removes all previously published bindings for the policy. If reconciliation fails or requests a requeue, the SDK keeps the previously published bindings.
+
 Binding names are plain strings; a dotted name is a convention, not a nested structure. Two helpers produce names the data plane treats specially:
 
 | Helper                                 | Produces              | Effect                                      |

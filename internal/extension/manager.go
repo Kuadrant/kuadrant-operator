@@ -30,6 +30,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -503,13 +504,15 @@ func (m *Manager) HasSynced() bool {
 type ReflectionFetcher func(ctx context.Context, url, serviceName, methodName string) (*descriptorpb.FileDescriptorSet, error)
 
 type extensionService struct {
-	dag               *nilGuardedPointer[StateAwareDAG]
-	registeredData    *RegisteredDataStore
-	sessionStore      *SessionStore
-	authenticator     *tokenAuthenticator
-	reflectionFetcher ReflectionFetcher
-	changeNotifier    ChangeNotifier
-	logger            logr.Logger
+	dag                                *nilGuardedPointer[StateAwareDAG]
+	registeredData                     *RegisteredDataStore
+	sessionStore                       *SessionStore
+	authenticator                      *tokenAuthenticator
+	reflectionFetcher                  ReflectionFetcher
+	changeNotifier                     ChangeNotifier
+	pendingMutatorPruneNotifications   map[ResourceID]uint64
+	pendingMutatorPruneNotificationsMu sync.Mutex
+	logger                             logr.Logger
 	extpb.UnimplementedExtensionServiceServer
 	extpb.UnimplementedDescriptorServiceServer
 }
@@ -858,6 +861,86 @@ func (s *extensionService) RegisterMutator(_ context.Context, request *extpb.Reg
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func (s *extensionService) PruneMutators(_ context.Context, request *extpb.PruneMutatorsRequest) (*emptypb.Empty, error) {
+	if request == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+
+	policyID, err := validatePolicyRequest(request.Policy)
+	if err != nil {
+		return nil, err
+	}
+	retained := make(map[DataProviderKey]struct{}, len(request.Bindings))
+	for _, binding := range request.Bindings {
+		if binding == nil {
+			return nil, errors.New("mutator binding cannot be nil")
+		}
+		if binding.Domain == extpb.Domain_DOMAIN_UNSPECIFIED {
+			return nil, errors.New("mutator binding domain must be specified")
+		}
+		if binding.TargetRef == nil {
+			return nil, errors.New("mutator binding target reference cannot be nil")
+		}
+		if binding.TargetRef.Kind == "" || binding.TargetRef.Name == "" {
+			return nil, errors.New("mutator binding target reference kind and name must be specified")
+		}
+		retained[DataProviderKey{
+			Policy:           policyID,
+			TargetRefLocator: createLocatorFromProtobuf(binding.TargetRef),
+			Domain:           binding.Domain,
+			Binding:          binding.Binding,
+		}] = struct{}{}
+	}
+
+	pruned := s.registeredData.PruneMutators(policyID, retained)
+	if pruned > 0 {
+		s.markMutatorPruneNotificationPending(policyID)
+	}
+	if err := s.notifyPendingMutatorPrune(policyID, pruned); err != nil {
+		return nil, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *extensionService) markMutatorPruneNotificationPending(policyID ResourceID) {
+	if s.changeNotifier == nil {
+		return
+	}
+
+	s.pendingMutatorPruneNotificationsMu.Lock()
+	defer s.pendingMutatorPruneNotificationsMu.Unlock()
+
+	if s.pendingMutatorPruneNotifications == nil {
+		s.pendingMutatorPruneNotifications = make(map[ResourceID]uint64)
+	}
+	s.pendingMutatorPruneNotifications[policyID]++
+}
+
+func (s *extensionService) notifyPendingMutatorPrune(policyID ResourceID, pruned int) error {
+	s.pendingMutatorPruneNotificationsMu.Lock()
+	generation, pending := s.pendingMutatorPruneNotifications[policyID]
+	notifier := s.changeNotifier
+	s.pendingMutatorPruneNotificationsMu.Unlock()
+
+	if !pending || notifier == nil {
+		return nil
+	}
+
+	reason := fmt.Sprintf("mutators pruned for policy %s/%s (%d removed)", policyID.Namespace, policyID.Name, pruned)
+	if err := notifier(reason); err != nil {
+		return fmt.Errorf("mutators pruned but failed to trigger reconciliation: %w", err)
+	}
+
+	s.pendingMutatorPruneNotificationsMu.Lock()
+	if s.pendingMutatorPruneNotifications[policyID] == generation {
+		delete(s.pendingMutatorPruneNotifications, policyID)
+	}
+	s.pendingMutatorPruneNotificationsMu.Unlock()
+
+	return nil
 }
 
 func (s *extensionService) ClearPolicy(_ context.Context, request *extpb.ClearPolicyRequest) (*extpb.ClearPolicyResponse, error) {

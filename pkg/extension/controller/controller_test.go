@@ -832,6 +832,7 @@ func TestAddDataToTracksMutatorsForClosingPrune(t *testing.T) {
 	}
 
 	controller := newTestExtensionController(mock)
+	controller.config.PolicyKind = "TestPolicy"
 	policy := &mockPolicy{
 		name:       "test-policy",
 		namespace:  "test-namespace",
@@ -839,21 +840,18 @@ func TestAddDataToTracksMutatorsForClosingPrune(t *testing.T) {
 	}
 	state := newMutatorReconcileState()
 	ctx := context.WithValue(context.Background(), mutatorReconcileStateKey{}, state)
-	if err := controller.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.request_path", "request.path"); err != nil {
-		t.Fatalf("AddDataTo returned an error: %v", err)
-	}
-	if err := controller.pruneTrackedMutators(ctx, reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: policy.namespace, Name: policy.name}}, state); err != nil {
-		t.Fatalf("closing prune returned an error: %v", err)
-	}
-	if captured == nil || captured.Policy == nil || captured.Policy.Metadata == nil {
-		t.Fatal("closing prune did not send a policy")
-	}
-	if captured.Policy.Metadata.Name != policy.name || captured.Policy.Metadata.Namespace != policy.namespace || captured.Policy.Metadata.Kind != "TestPolicy" {
-		t.Fatalf("closing prune sent metadata %#v, want TestPolicy/%s/%s", captured.Policy.Metadata, policy.namespace, policy.name)
-	}
-	if len(captured.Bindings) != 1 || captured.Bindings[0].TargetRef.GetName() != "route" || captured.Bindings[0].Domain != extpb.Domain_DOMAIN_REQUEST || captured.Bindings[0].Binding != "logging.fields.request_path" {
-		t.Fatalf("closing prune sent bindings %#v, want request/logging.fields.request_path", captured.Bindings)
-	}
+	assert.NilError(t, controller.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.request_path", "request.path"))
+	assert.NilError(t, controller.pruneTrackedMutators(ctx, reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: policy.namespace, Name: policy.name}}, state))
+	assert.Assert(t, captured != nil)
+	assert.Assert(t, captured.Policy != nil)
+	assert.Assert(t, captured.Policy.Metadata != nil)
+	assert.Equal(t, captured.Policy.Metadata.Name, policy.name)
+	assert.Equal(t, captured.Policy.Metadata.Namespace, policy.namespace)
+	assert.Equal(t, captured.Policy.Metadata.Kind, "TestPolicy")
+	assert.Equal(t, len(captured.Bindings), 1)
+	assert.Equal(t, captured.Bindings[0].TargetRef.GetName(), "route")
+	assert.Equal(t, captured.Bindings[0].Domain, extpb.Domain_DOMAIN_REQUEST)
+	assert.Equal(t, captured.Bindings[0].Binding, "logging.fields.request_path")
 }
 
 func TestRegisterActionMethod_Success(t *testing.T) {

@@ -252,7 +252,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Hostnames: []string{"*.example.com"},
 							Predicates: []string{
 								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+								"request.url_path.startsWith(\"/toy\")",
 							},
 						},
 						Actions: []wasm.Action{
@@ -601,7 +601,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.url_path == '/assets'",
+				"request.url_path == \"/assets\"",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
@@ -659,7 +659,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
 				"request.method == 'GET'",
-				"request.url_path.startsWith('/toys')",
+				"request.url_path.startsWith(\"/toys\")",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
@@ -717,7 +717,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
 				"request.method == 'POST'",
-				"request.url_path.startsWith('/toys')",
+				"request.url_path.startsWith(\"/toys\")",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
@@ -774,7 +774,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.url_path == '/assets'",
+				"request.url_path == \"/assets\"",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
@@ -832,7 +832,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
 				"request.method == 'GET'",
-				"request.url_path.startsWith('/toys')",
+				"request.url_path.startsWith(\"/toys\")",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
@@ -890,7 +890,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
 				"request.method == 'POST'",
-				"request.url_path.startsWith('/toys')",
+				"request.url_path.startsWith(\"/toys\")",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions[1].Scope).To(Equal(controllers.LimitsNamespaceFromRoute(httpRoute)))
@@ -1036,7 +1036,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Hostnames: []string{"*.example.com"},
 							Predicates: []string{
 								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+								"request.url_path.startsWith(\"/toy\")",
 							},
 						},
 						Actions: []wasm.Action{
@@ -1282,7 +1282,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/toy')",
+									"request.url_path.startsWith(\"/toy\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -1511,7 +1511,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/toy')",
+									"request.url_path.startsWith(\"/toy\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -1658,7 +1658,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/toy')",
+									"request.url_path.startsWith(\"/toy\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -1879,7 +1879,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+									"request.url_path.startsWith(\"/routeA\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -1989,7 +1989,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.b.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeB')",
+									"request.url_path.startsWith(\"/routeB\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -2185,7 +2185,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+									"request.url_path.startsWith(\"/routeA\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -2313,7 +2313,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+									"request.url_path.startsWith(\"/routeA\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -2545,7 +2545,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+									"request.url_path.startsWith(\"/routeA\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -2670,7 +2670,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+									"request.url_path.startsWith(\"/routeA\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -2701,7 +2701,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 								Hostnames: []string{"*.b.example.com"},
 								Predicates: []string{
 									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeB')",
+									"request.url_path.startsWith(\"/routeB\")",
 								},
 							},
 							Actions: []wasm.Action{
@@ -2861,7 +2861,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Hostnames: []string{gwHostname},
 							Predicates: []string{
 								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+								"request.url_path.startsWith(\"/toy\")",
 							},
 						},
 						Actions: []wasm.Action{
@@ -2958,7 +2958,7 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 							Hostnames: []string{hostname},
 							Predicates: []string{
 								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+								"request.url_path.startsWith(\"/toy\")",
 							},
 						},
 						Actions: []wasm.Action{

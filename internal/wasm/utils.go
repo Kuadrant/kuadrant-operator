@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -623,6 +624,19 @@ func PredicatesFromGRPCRouteMatch(match gatewayapiv1.GRPCRouteMatch) []string {
 	return predicates
 }
 
+// celString renders s as a CEL string literal. Gateway API match fields (header/query/path
+// values, gRPC service/method) are free-form, user-controlled strings, so they must not be
+// interpolated into CEL source with a bare '%s'-style quote: a quote or backslash in the value
+// would let it break out of the literal and inject arbitrary CEL syntax.
+//
+// strconv.Quote produces a double-quoted, backslash-escaped literal using the same escaping
+// scheme CEL string literals use (CEL's STRING grammar accepts double-quoted, C-style escaped
+// strings; cel-go's own unparser uses strconv.Quote for the same reason, see
+// google/cel-go parser/unparser.go's visitConstVal).
+func celString(s string) string {
+	return strconv.Quote(s)
+}
+
 func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 	var (
 		attr          = "request.url_path"
@@ -640,13 +654,13 @@ func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 
 	switch pathMatchType {
 	case gatewayapiv1.PathMatchExact:
-		return fmt.Sprintf("%s == '%s'", attr, value)
+		return fmt.Sprintf("%s == %s", attr, celString(value))
 	case gatewayapiv1.PathMatchPathPrefix:
-		return fmt.Sprintf("%s.startsWith('%s')", attr, value)
+		return fmt.Sprintf("%s.startsWith(%s)", attr, celString(value))
 	case gatewayapiv1.PathMatchRegularExpression:
-		return fmt.Sprintf("%s.matches('%s')", attr, value)
+		return fmt.Sprintf("%s.matches(%s)", attr, celString(value))
 	default:
-		return fmt.Sprintf("%s == '%s'", attr, value)
+		return fmt.Sprintf("%s == %s", attr, celString(value))
 	}
 }
 
@@ -657,21 +671,22 @@ func predicateFromMethod(method gatewayapiv1.HTTPMethod) string {
 func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) string {
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
-	return fmt.Sprintf("request.headers.exists(h, h.lowerAscii() == '%s' && request.headers[h] == '%s')",
-		strings.ToLower(string(headerMatch.Name)), headerMatch.Value)
+	return fmt.Sprintf("request.headers.exists(h, h.lowerAscii() == %s && request.headers[h] == %s)",
+		celString(strings.ToLower(string(headerMatch.Name))), celString(headerMatch.Value))
 }
 
 func predicateFromGRPCHeader(headerMatch gatewayapiv1.GRPCHeaderMatch) string {
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GRPCHeaderMatch
 	// GRPCHeaderMatch has the same structure as HTTPHeaderMatch
-	return fmt.Sprintf("request.headers.exists(h, h.lowerAscii() == '%s' && request.headers[h] == '%s')",
-		strings.ToLower(string(headerMatch.Name)), headerMatch.Value)
+	return fmt.Sprintf("request.headers.exists(h, h.lowerAscii() == %s && request.headers[h] == %s)",
+		celString(strings.ToLower(string(headerMatch.Name))), celString(headerMatch.Value))
 }
 
 func predicateFromQueryParam(queryParam gatewayapiv1.HTTPQueryParamMatch) string {
-	return fmt.Sprintf("'%s' in queryMap(request.query) ? queryMap(request.query)['%s'] == '%s' : false",
-		queryParam.Name, queryParam.Name, queryParam.Value)
+	name := celString(string(queryParam.Name))
+	return fmt.Sprintf("%s in queryMap(request.query) ? queryMap(request.query)[%s] == %s : false",
+		name, name, celString(queryParam.Value))
 }
 
 // predicateFromGRPCMethod generates a CEL predicate for gRPC service/method matching.
@@ -697,7 +712,11 @@ func predicateFromGRPCMethod(methodMatch gatewayapiv1.GRPCMethodMatch) string {
 		return ""
 	}
 
-	// Exact match type (default)
+	// Exact match type (default). The CRD enforces XValidation character-set restrictions on
+	// Service (^(?i)\.?[a-z_][a-z_0-9]*(\.[a-z_][a-z_0-9]*)*$) and Method (^[A-Za-z_][A-Za-z_0-9]*$)
+	// for this match type, so neither value can contain a CEL metacharacter and celString
+	// escaping is not required here (unlike the RegularExpression branches below, which have
+	// no such restriction).
 	if serviceType == gatewayapiv1.GRPCMethodMatchExact {
 		if hasService && hasMethod {
 			// Exact service + exact method: exact path match
@@ -711,17 +730,18 @@ func predicateFromGRPCMethod(methodMatch gatewayapiv1.GRPCMethodMatch) string {
 		return fmt.Sprintf("%s.matches('^/[^/]+/%s$')", attr, *method)
 	}
 
-	// RegularExpression match type
+	// RegularExpression match type: Service/Method are free-form here (only length-limited by
+	// the CRD), so they must be escaped before being embedded in the CEL predicate.
 	if hasService && hasMethod {
 		// Regex service + regex method
-		return fmt.Sprintf("%s.matches('^/%s/%s$')", attr, *service, *method)
+		return fmt.Sprintf("%s.matches(%s)", attr, celString(fmt.Sprintf("^/%s/%s$", *service, *method)))
 	}
 	if hasService {
 		// Regex service only
-		return fmt.Sprintf("%s.matches('^/%s/.*$')", attr, *service)
+		return fmt.Sprintf("%s.matches(%s)", attr, celString(fmt.Sprintf("^/%s/.*$", *service)))
 	}
 	// Regex method only
-	return fmt.Sprintf("%s.matches('^/[^/]+/%s$')", attr, *method)
+	return fmt.Sprintf("%s.matches(%s)", attr, celString(fmt.Sprintf("^/[^/]+/%s$", *method)))
 }
 
 // ConvertGRPCRouteMatchToHTTP converts a GRPCRouteMatch to an HTTPRouteMatch for sorting purposes.

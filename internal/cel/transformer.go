@@ -12,6 +12,14 @@ import (
 	"github.com/google/cel-go/parser"
 )
 
+// escapeCelStringLiteral escapes backslashes and double quotes so that `expression` can be safely
+// embedded inside a double-quoted CEL string literal. Without this, an `expression` containing a
+// `"` (e.g. `request.headers["x-test-user"]`) would terminate the literal early and produce invalid
+// CEL, causing the whole generated limit definition to fail to parse.
+func escapeCelStringLiteral(expression string) string {
+	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(expression)
+}
+
 func parseExpression(expression string) (*ast.AST, error) {
 	prsr, err := parser.NewParser()
 	if err != nil {
@@ -37,7 +45,7 @@ func parseExpression(expression string) (*ast.AST, error) {
 // the `expression` passed in. This keeps the resulting expression as close to the input as possible.
 func TransformCounterVariable(expression string, celAstTransform bool) (*string, error) {
 	if !celAstTransform {
-		exp := fmt.Sprintf(`descriptors[0]["%s"]`, strings.TrimSpace(expression))
+		exp := fmt.Sprintf(`descriptors[0]["%s"]`, escapeCelStringLiteral(strings.TrimSpace(expression)))
 		return &exp, nil
 	}
 	knownAttributes := []string{"request", "source", "destination", "connection", "metadata", "filter_state", "auth", "ratelimit"}

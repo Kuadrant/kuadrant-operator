@@ -1,5 +1,5 @@
 kuadrant-operator:
-  version: "1.6.0-rc5"
+  version: "1.6.0-rc6"
 olm:
   channels:
     - "stable"
@@ -10,7 +10,7 @@ dependencies:
   console-plugin: "0.7.1"
   developer-portal-controller: "0.3.1"
   dns-operator: "0.18.0"
-  mcp-gateway: "1.0.1"
+  mcp-gateway: "1.0.2"
   limitador: "2.5.0"
   limitador-operator: "0.19.0"
   wasm-shim: "0.15.0"

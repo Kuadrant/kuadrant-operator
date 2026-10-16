@@ -224,10 +224,10 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
-    containerImage: quay.io/kuadrant/kuadrant-operator:v1.6.0-rc5
-    createdAt: "2026-10-14T08:43:03Z"
+    containerImage: quay.io/kuadrant/kuadrant-operator:latest
+    createdAt: "2026-09-04T15:43:03Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
-    operators.operatorframework.io/builder: operator-sdk-v1.42.3
+    operators.operatorframework.io/builder: operator-sdk-v1.33.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant

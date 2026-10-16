@@ -44,4 +44,3 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
-- deny-all.yaml

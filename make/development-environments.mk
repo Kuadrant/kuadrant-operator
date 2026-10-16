@@ -1,7 +1,5 @@
 ##@ Deployment
 
-OLM_VERSION ?= v0.46.0
-
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	# Use server side apply, otherwise will hit into this issue https://medium.com/pareture/kubectl-install-crd-failed-annotations-too-long-2ebc91b40c7d
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side -f -
@@ -29,7 +27,7 @@ uninstall-metallb: kustomize
 
 .PHONY: install-olm
 install-olm: operator-sdk
-	$(OPERATOR_SDK) olm install --version $(OLM_VERSION)
+	$(OPERATOR_SDK) olm install
 
 .PHONY: uninstall-olm
 uninstall-olm:

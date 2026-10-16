@@ -273,10 +273,10 @@ func TestPredicatesFromHTTPRouteMatch(t *testing.T) {
 	})
 
 	assert.Equal(t, predicates[0], "request.method == 'TRACE'")
-	assert.Equal(t, predicates[1], "request.url_path.startsWith('/admin')")
-	assert.Equal(t, predicates[2], "request.headers.exists(h, h.lowerAscii() == 'x-auth' && request.headers[h] == 'kuadrant')")
-	assert.Equal(t, predicates[3], "'foo' in queryMap(request.query) ? queryMap(request.query)['foo'] == 'bar' : false")
-	assert.Equal(t, predicates[4], "'kua' in queryMap(request.query) ? queryMap(request.query)['kua'] == 'drant' : false")
+	assert.Equal(t, predicates[1], `request.url_path.startsWith("/admin")`)
+	assert.Equal(t, predicates[2], `request.headers.exists(h, h.lowerAscii() == "x-auth" && request.headers[h] == "kuadrant")`)
+	assert.Equal(t, predicates[3], `"foo" in queryMap(request.query) ? queryMap(request.query)["foo"] == "bar" : false`)
+	assert.Equal(t, predicates[4], `"kua" in queryMap(request.query) ? queryMap(request.query)["kua"] == "drant" : false`)
 	assert.Equal(t, len(predicates), 5)
 }
 
@@ -333,7 +333,7 @@ func TestPredicatesFromGRPCRouteMatch(t *testing.T) {
 				},
 			},
 			expectedPredicates: []string{
-				"request.url_path.matches('^/com\\.example\\..*Service/Get.*$')",
+				`request.url_path.matches("^/com\\.example\\..*Service/Get.*$")`,
 			},
 		},
 		{
@@ -345,7 +345,7 @@ func TestPredicatesFromGRPCRouteMatch(t *testing.T) {
 				},
 			},
 			expectedPredicates: []string{
-				"request.url_path.matches('^/com\\.example\\..*/.*$')",
+				`request.url_path.matches("^/com\\.example\\..*/.*$")`,
 			},
 		},
 		{
@@ -357,7 +357,7 @@ func TestPredicatesFromGRPCRouteMatch(t *testing.T) {
 				},
 			},
 			expectedPredicates: []string{
-				"request.url_path.matches('^/[^/]+/Get.*$')",
+				`request.url_path.matches("^/[^/]+/Get.*$")`,
 			},
 		},
 		{
@@ -394,8 +394,8 @@ func TestPredicatesFromGRPCRouteMatch(t *testing.T) {
 			},
 			expectedPredicates: []string{
 				"request.url_path == '/example.Service/Echo'",
-				"request.headers.exists(h, h.lowerAscii() == 'x-tenant' && request.headers[h] == 'acme')",
-				"request.headers.exists(h, h.lowerAscii() == 'x-env' && request.headers[h] == 'prod')",
+				`request.headers.exists(h, h.lowerAscii() == "x-tenant" && request.headers[h] == "acme")`,
+				`request.headers.exists(h, h.lowerAscii() == "x-env" && request.headers[h] == "prod")`,
 			},
 		},
 		{
@@ -410,7 +410,7 @@ func TestPredicatesFromGRPCRouteMatch(t *testing.T) {
 				},
 			},
 			expectedPredicates: []string{
-				"request.headers.exists(h, h.lowerAscii() == 'x-api-key' && request.headers[h] == 'secret')",
+				`request.headers.exists(h, h.lowerAscii() == "x-api-key" && request.headers[h] == "secret")`,
 			},
 		},
 	}

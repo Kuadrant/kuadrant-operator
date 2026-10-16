@@ -788,9 +788,9 @@ spec:
                 - name: RELATED_IMAGE_DNS_OPERATOR
                   value: quay.io/kuadrant/dns-operator:v0.18.0
                 - name: RELATED_IMAGE_MCP_GATEWAY
-                  value: ghcr.io/kuadrant/mcp-controller:v1.0.1
+                  value: ghcr.io/kuadrant/mcp-controller:v1.0.2
                 - name: RELATED_IMAGE_MCP_GATEWAY_BROKER
-                  value: ghcr.io/kuadrant/mcp-gateway:v1.0.1
+                  value: ghcr.io/kuadrant/mcp-gateway:v1.0.2
                 - name: RELATED_IMAGE_AUTHORINO_OPERATOR
                   value: quay.io/kuadrant/authorino-operator:v0.27.0
                 - name: RELATED_IMAGE_LIMITADOR_OPERATOR
@@ -939,9 +939,9 @@ spec:
     name: console-plugin-pf5
   - image: quay.io/kuadrant/dns-operator:v0.18.0
     name: dns-operator
-  - image: ghcr.io/kuadrant/mcp-controller:v1.0.1
+  - image: ghcr.io/kuadrant/mcp-controller:v1.0.2
     name: mcp-gateway
-  - image: ghcr.io/kuadrant/mcp-gateway:v1.0.1
+  - image: ghcr.io/kuadrant/mcp-gateway:v1.0.2
     name: mcp-gateway-broker
   - image: quay.io/kuadrant/authorino-operator:v0.27.0
     name: authorino-operator

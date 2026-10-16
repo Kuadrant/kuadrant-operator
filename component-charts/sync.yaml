@@ -32,7 +32,7 @@ components:
     repo: Kuadrant/mcp-gateway
     chart-path: charts/mcp-gateway
     tracked-branch: release-1.0
-    ref: f86459e5116ee1f16f3a1829f7ec9687eec98f35
+    ref: e48ae51cfa52a57f93f334bdadbe8ce58ef5a9f6
     auto-merge: false
   developer-portal-controller:
     repo: Kuadrant/developer-portal-controller

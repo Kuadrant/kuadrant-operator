@@ -116,7 +116,10 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			wasmConfig.Services = lo.Assign(wasmConfig.Services, serviceBuilder.Build())
 		}
 
-		desiredEnvoyFilter := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
+		desiredEnvoyFilter, err := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
+		if err != nil {
+			return fmt.Errorf("failed to build EnvoyFilter for gateway %s: %w", gatewayKey.String(), err)
+		}
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
@@ -650,7 +653,7 @@ func specsHaveAuthAccess(specs []wasm.ActionSpec) bool {
 }
 
 // buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
-func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	var configPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
 
 	if len(wasmConfig.ActionSets) > 0 {
@@ -668,6 +671,14 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		if err == nil {
 			configPatches = append(configPatches, clusterPatches...)
 		}
+	}
+
+	if wasmConfig.HasOCSFAuditLogging() {
+		accessLogPatch, err := kuadrantistio.BuildEnvoyFilterOCSFAccessLogPatch()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build OCSF access-log patch: %w", err)
+		}
+		configPatches = append(configPatches, accessLogPatch)
 	}
 
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
@@ -704,5 +715,5 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		utils.TagObjectToDelete(envoyFilter)
 	}
 
-	return envoyFilter
+	return envoyFilter, nil
 }

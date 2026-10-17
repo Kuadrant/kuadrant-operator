@@ -398,7 +398,3 @@ type TokenRateLimitPolicyList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TokenRateLimitPolicy `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&TokenRateLimitPolicy{}, &TokenRateLimitPolicyList{})
-}

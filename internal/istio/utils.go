@@ -112,6 +112,11 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 		"name":    "kuadrant-wasm-shim",
 		"root_id": "kuadrant_wasm_shim",
 		"vm_config": map[string]any{
+			// vm_id is derived from the wasm content SHA so that a content change
+			// forces a new Envoy Wasm VM (vm_key = hash(vm_id, config, code)) even
+			// when the code isn't yet in the remote cache. Prevents the stale-VM
+			// reuse bug on in-place SHA updates (kuadrant-operator#2351).
+			"vm_id":   imageSHA,
 			"runtime": "envoy.wasm.runtime.v8",
 			"code": map[string]any{
 				"remote": map[string]any{

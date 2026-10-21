@@ -12,3 +12,4 @@ fi
 
 cd "$env" || exit 1
 make bundle "${RELEASE_MAKE_ARGS[@]}" "BUNDLE_METADATA_OPTS=$bundle_metadata_opts"
+operator-sdk bundle validate "$env/bundle"

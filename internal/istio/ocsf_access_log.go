@@ -93,9 +93,9 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 			"ip":   "%UPSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%",
 			"port": "%TYPED_CEL(has(upstream.address) ? upstream.port : null)%",
 		},
-		"status_id":    "%TYPED_CEL(response.code < 400 ? 1 : 2)%",
-		"status":       "%TYPED_CEL(response.code < 400 ? 'Success' : 'Failure')%",
-		"status_code":  "%RESPONSE_CODE%",
+		"status_id":   "%TYPED_CEL(response.code < 400 ? 1 : 2)%",
+		"status":      "%TYPED_CEL(response.code < 400 ? 'Success' : 'Failure')%",
+		"status_code": "%RESPONSE_CODE%",
 		"resources": []any{
 			map[string]any{
 				"name":      ocsfTypedFilterStateValue("wasm.kuadrant.ocsf.resource.name"),

@@ -4,15 +4,31 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
+)
+
+const (
+	ocsfStorePathPrefix                                           = "ocsf."
+	ocsfActorUserNameStorePath                                    = ocsfStorePathPrefix + "actor.user.name"
+	ocsfActorUserUIDStorePath                                     = ocsfStorePathPrefix + "actor.user.uid"
+	ocsfActorUserGroupsStorePath                                  = ocsfStorePathPrefix + "actor.user.groups"
+	ocsfURLPathStorePath                                          = ocsfStorePathPrefix + "http_request.url.path"
+	ocsfResourceNameStorePath                                     = ocsfStorePathPrefix + "resource.name"
+	ocsfResourceNamespaceStorePath                                = ocsfStorePathPrefix + "resource.namespace"
+	ocsfResourceTypeStorePath                                     = ocsfStorePathPrefix + "resource.type"
+	ocsfAIProviderStorePath                                       = ocsfStorePathPrefix + "ai_model.ai_provider"
+	istioGatewayControllerName     gatewayapiv1.GatewayController = "istio.io/gateway-controller"
 )
 
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=telemetrypolicies,verbs=get;list;watch;update;patch
@@ -68,6 +84,13 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
+	if pol.Spec.Logging != nil && pol.Spec.Logging.Default.OCSF != nil {
+		if err := r.validateOCSFGatewayProvider(ctx, pol); err != nil {
+			r.Logger.Error(err, "cannot validate Gateway provider for OCSF logging")
+			return calculateEnforcedStatus(pol, err), err
+		}
+	}
+
 	if pol.Spec.Metrics != nil {
 		for binding, expression := range pol.Spec.Metrics.Default.Labels {
 			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
@@ -86,8 +109,114 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 		}
 	}
 
+	pipeline := kuadrantCtx.NewPipeline(pol)
+	if pol.Spec.Logging != nil && pol.Spec.Logging.Default.OCSF != nil {
+		if err := pipeline.OnHTTPRequest(ocsfStoreActions(pol.Spec.Logging.Default.OCSF)...); err != nil {
+			r.Logger.Error(err, "failed to configure OCSF request metadata")
+			return calculateErrorStatus(pol, err), err
+		}
+	}
+	// Commit even when OCSF is absent so removing the stanza clears actions from a previous
+	// successful reconcile atomically.
+	if err := pipeline.Commit(ctx); err != nil {
+		r.Logger.Error(err, "failed to commit telemetry pipeline")
+		return calculateErrorStatus(pol, err), err
+	}
+
 	return calculateEnforcedStatus(pol, nil),
 		nil
+}
+
+func (r *TelemetryPolicyReconciler) validateOCSFGatewayProvider(ctx context.Context, pol *v1alpha1.TelemetryPolicy) error {
+	if r.Client == nil {
+		return fmt.Errorf("cannot validate OCSF Gateway provider: Kubernetes client is not configured")
+	}
+
+	gateway := &gatewayapiv1.Gateway{}
+	gatewayKey := client.ObjectKey{
+		Namespace: pol.Namespace,
+		Name:      string(pol.Spec.TargetRef.Name),
+	}
+	if err := r.Client.Get(ctx, gatewayKey, gateway); err != nil {
+		return fmt.Errorf("failed to get target Gateway %s/%s for OCSF provider validation: %w", gatewayKey.Namespace, gatewayKey.Name, err)
+	}
+
+	gatewayClass := &gatewayapiv1.GatewayClass{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: string(gateway.Spec.GatewayClassName)}, gatewayClass); err != nil {
+		return fmt.Errorf("failed to get GatewayClass %q for OCSF provider validation: %w", gateway.Spec.GatewayClassName, err)
+	}
+	if gatewayClass.Spec.ControllerName != istioGatewayControllerName {
+		return fmt.Errorf("OCSF logging is only supported by Istio GatewayClasses; GatewayClass %q uses controller %q", gatewayClass.Name, gatewayClass.Spec.ControllerName)
+	}
+
+	return nil
+}
+
+func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) []types.Action {
+	namespaceExpression, namespacePredicate := pathSegmentExpression(config.Target.RequestPath.NamespaceSegment)
+	nameExpression, namePredicate := pathSegmentExpression(config.Target.RequestPath.NameSegment)
+	actions := []types.Action{
+		types.StoreAction{
+			Path:         ocsfResourceTypeStorePath,
+			Value:        strconv.Quote(config.Target.ResourceType),
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Predicate:    namespacePredicate,
+			Path:         ocsfResourceNamespaceStorePath,
+			Value:        namespaceExpression,
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Predicate:    namePredicate,
+			Path:         ocsfResourceNameStorePath,
+			Value:        nameExpression,
+			ExportToHost: true,
+		},
+		// request.url_path excludes query parameters, unlike the HTTP :path header.
+		types.StoreAction{
+			Path:         ocsfURLPathStorePath,
+			Value:        "request.url_path",
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Path:         ocsfAIProviderStorePath,
+			Value:        strconv.Quote(config.Target.AIProvider),
+			ExportToHost: true,
+		},
+		types.StoreAction{
+			Predicate:    fmt.Sprintf("has(%s)", config.Actor.Identity),
+			Path:         ocsfActorUserNameStorePath,
+			Value:        config.Actor.Identity,
+			ExportToHost: true,
+		},
+	}
+	if config.Actor.UID != "" {
+		actions = append(actions, types.StoreAction{
+			Predicate:    fmt.Sprintf("has(%s)", config.Actor.UID),
+			Path:         ocsfActorUserUIDStorePath,
+			Value:        config.Actor.UID,
+			ExportToHost: true,
+		})
+	}
+	if config.Actor.Groups != "" {
+		// Project group names in the request-time WASM CEL action; Envoy's CEL formatter disables comprehensions.
+		actions = append(actions, types.StoreAction{
+			Predicate:    fmt.Sprintf("has(%s)", config.Actor.Groups),
+			Path:         ocsfActorUserGroupsStorePath,
+			Value:        fmt.Sprintf(`%s.map(group, {"name": group})`, config.Actor.Groups),
+			ExportToHost: true,
+		})
+	}
+
+	return actions
+}
+
+func pathSegmentExpression(segment int32) (expression, predicate string) {
+	// split preserves the empty prefix of an absolute path, hence the one-based CEL index.
+	index := segment + 1
+	parts := "request.url_path.split('/')"
+	return fmt.Sprintf("%s[%d]", parts, index), fmt.Sprintf("%s.size() > %d", parts, index)
 }
 
 func (r *TelemetryPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.TelemetryPolicy, newStatus *v1alpha1.TelemetryPolicyStatus) (ctrl.Result, error) {

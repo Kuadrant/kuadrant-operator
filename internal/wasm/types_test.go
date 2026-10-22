@@ -40,6 +40,29 @@ func TestConfigToStruct(t *testing.T) {
 	}
 }
 
+func TestConfigHasOCSFAuditLogging(t *testing.T) {
+	tests := []struct {
+		name   string
+		action Action
+		want   bool
+	}{
+		{name: "exported OCSF marker", action: &StoreAction{Path: OCSFResourceTypeStorePath, ExportToHost: true}, want: true},
+		{name: "exported OCSF actor without marker", action: &StoreAction{Path: "ocsf.actor.user.name", ExportToHost: true}},
+		{name: "OCSF value not exported", action: &StoreAction{Path: "ocsf.actor.user.name"}},
+		{name: "unrelated exported value", action: &StoreAction{Path: "auth", ExportToHost: true}},
+		{name: "non-store action", action: &FailAction{LogMessage: "failed"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{ActionSets: []ActionSet{{Actions: []Action{tt.action}}}}
+			if got := config.HasOCSFAuditLogging(); got != tt.want {
+				t.Fatalf("HasOCSFAuditLogging() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConfigEqual(t *testing.T) {
 	testCases := []struct {
 		name     string

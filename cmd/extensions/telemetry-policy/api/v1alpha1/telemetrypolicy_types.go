@@ -89,14 +89,90 @@ type LoggingSpec struct {
 	Default LoggingConfig `json:"default"`
 }
 
-// LoggingConfig defines reusable logging configuration
+// LoggingConfig defines reusable logging configuration.
+// +kubebuilder:validation:XValidation:rule="has(self.fields) || has(self.ocsf)",message="at least one of fields or ocsf must be configured"
 type LoggingConfig struct {
 	// Fields to add to auth decision log records, where keys are field names and values are
 	// CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
 	// Only fields whose CEL expressions resolve successfully will be included.
+	// +optional
 	// +kubebuilder:validation:MinProperties=1
 	// +kubebuilder:validation:XValidation:rule="self.all(k, !k.contains('.'))",message="field names must not contain periods"
-	Fields map[string]string `json:"fields"`
+	Fields map[string]string `json:"fields,omitempty"`
+
+	// OCSF configures a canonical OCSF event emitted by the gateway when request processing completes.
+	// Unlike Fields, this is a fixed, security-sensitive event profile and does not accept arbitrary
+	// request headers, query strings, or payload expressions.
+	// +optional
+	OCSF *OCSFLoggingConfig `json:"ocsf,omitempty"`
+}
+
+// OCSFProfile identifies a supported OCSF event preset.
+// +kubebuilder:validation:Enum=aiOperation
+type OCSFProfile string
+
+const (
+	// OCSFProfileAIOperation emits an OCSF 1.9.0 API Activity event with the ai_operation profile.
+	OCSFProfileAIOperation OCSFProfile = "aiOperation"
+)
+
+// OCSFLoggingConfig configures gateway request-completion audit events.
+type OCSFLoggingConfig struct {
+	// Profile selects the fixed OCSF event preset.
+	Profile OCSFProfile `json:"profile"`
+
+	// Actor selects authenticated identity metadata supplied by Authorino.
+	Actor OCSFActorConfig `json:"actor"`
+
+	// Target identifies the resource and AI model from safe request-path segments.
+	Target OCSFTargetConfig `json:"target"`
+}
+
+// OCSFActorConfig configures the authenticated actor included in an OCSF event.
+type OCSFActorConfig struct {
+	// Identity is a CEL field path rooted in Authorino's auth.identity metadata. Only dotted field
+	// paths are accepted; arbitrary CEL expressions could bypass the intended request-data boundary.
+	// +kubebuilder:validation:MinLength=6
+	// +kubebuilder:validation:Pattern=`^auth\.identity(\.[A-Za-z_][A-Za-z0-9_]*)+$`
+	Identity string `json:"identity"`
+
+	// UID optionally selects the authenticated actor UID from Authorino auth metadata.
+	// +optional
+	// +kubebuilder:validation:MinLength=6
+	// +kubebuilder:validation:Pattern=`^auth\.identity(\.[A-Za-z_][A-Za-z0-9_]*)+$`
+	UID string `json:"uid,omitempty"`
+
+	// Groups optionally selects a list of authenticated group names from Authorino auth metadata.
+	// +optional
+	// +kubebuilder:validation:MinLength=6
+	// +kubebuilder:validation:Pattern=`^auth\.identity(\.[A-Za-z_][A-Za-z0-9_]*)+$`
+	Groups string `json:"groups,omitempty"`
+}
+
+// OCSFTargetConfig configures the audited target resource and AI model.
+type OCSFTargetConfig struct {
+	// ResourceType is the resource type written to the OCSF resources array.
+	// +kubebuilder:validation:MinLength=1
+	ResourceType string `json:"resourceType"`
+
+	// RequestPath selects resource namespace and name from the URL path after removing its leading slash.
+	RequestPath OCSFRequestPathTarget `json:"requestPath"`
+
+	// AIProvider is written to the OCSF ai_model object. The model name is the target resource name.
+	// +kubebuilder:validation:MinLength=1
+	AIProvider string `json:"aiProvider"`
+}
+
+// OCSFRequestPathTarget maps safe URL path segments to target resource fields.
+// +kubebuilder:validation:XValidation:rule="self.namespaceSegment != self.nameSegment",message="namespaceSegment and nameSegment must differ"
+type OCSFRequestPathTarget struct {
+	// NamespaceSegment is the zero-based path segment containing the resource namespace.
+	// +kubebuilder:validation:Minimum=0
+	NamespaceSegment int32 `json:"namespaceSegment"`
+
+	// NameSegment is the zero-based path segment containing the resource name.
+	// +kubebuilder:validation:Minimum=0
+	NameSegment int32 `json:"nameSegment"`
 }
 
 // TelemetryPolicyStatus defines the observed state of TelemetryPolicy

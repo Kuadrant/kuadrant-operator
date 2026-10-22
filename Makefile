@@ -435,7 +435,7 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 build: generate fmt vet ## Build manager binary.
-	go build -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o bin/manager cmd/main.go
+	go build -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY} -X github.com/kuadrant/kuadrant-operator/internal/istio.versionString=v$(VERSION)" -o bin/manager cmd/main.go
 
 WASM_BIN_DIR := $(PROJECT_PATH)/bin/wasm
 WASM_BIN := $(WASM_BIN_DIR)/plugin.wasm
@@ -472,7 +472,7 @@ run: export WASM_SERVER_FILE_PATH := $(WASM_BIN)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet $(WASM_BIN) ## Run a controller from your host.
-	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -race ./cmd/main.go
+	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY} -X github.com/kuadrant/kuadrant-operator/internal/istio.versionString=v$(VERSION)" -race ./cmd/main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")

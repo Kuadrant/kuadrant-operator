@@ -219,10 +219,17 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *testing.T) {
 	config := wasm.Config{ActionSets: []wasm.ActionSet{{
 		Name: "ocsf",
-		Actions: []wasm.Action{&wasm.StoreAction{
-			Path:         wasm.OCSFResourceTypeStorePath,
-			ExportToHost: true,
-		}},
+		Actions: []wasm.Action{
+			&wasm.StoreAction{
+				Path:         wasm.OCSFResourceTypeStorePath,
+				ExportToHost: true,
+			},
+			&wasm.StoreAction{
+				Path:         "ocsf.http_request.url.path",
+				Value:        "request.url_path",
+				ExportToHost: true,
+			},
+		},
 	}}}
 
 	envoyFilter, err := buildIstioEnvoyFilterForGateway(testGateway, config, "http://wasm.example/plugin.wasm", "wasm.example", 8082, "")
@@ -281,7 +288,7 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 	}
 	logger := mapField(loggerObject, "typed_config")
 	logFormat := mapField(logger, "log_format")
-	event := mapField(logFormat, "typed_json_format")
+	event := mapField(logFormat, "json_format")
 
 	if event["class_uid"] != float64(6003) || event["type_uid"] != float64(600399) {
 		t.Fatalf("expected OCSF API Activity class/type IDs, got class_uid=%v type_uid=%v", event["class_uid"], event["type_uid"])
@@ -306,7 +313,7 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 		}
 	}
 	api := mapField(event, "api")
-	if api["operation"] != "%REQ(:METHOD)% %REQ_WITHOUT_QUERY(:PATH)%" {
+	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {
 		t.Fatalf("expected method and query-safe path in api.operation, got %v", api["operation"])
 	}
 	httpRequest := mapField(event, "http_request")
@@ -322,7 +329,7 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 	if _, ok := event["authorization"]; ok {
 		t.Fatal("OCSF event must not include authorization credentials")
 	}
-	if url := mapField(httpRequest, "url"); url["path"] != "%REQ_WITHOUT_QUERY(:PATH)%" {
+	if url := mapField(httpRequest, "url"); url["path"] != `%TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {
 		t.Fatalf("expected query-safe URL path, got %v", url["path"])
 	}
 
@@ -353,7 +360,7 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 	if _, ok := aiModel["name"]; !ok {
 		t.Error("expected OCSF ai_model.name field")
 	}
-	if aiModel["ai_provider"] != "%FILTER_STATE(wasm.kuadrant.ocsf.ai_model.ai_provider:TYPED)%" {
+	if aiModel["ai_provider"] != `%TYPED_CEL("wasm.kuadrant.ocsf.ai_model.ai_provider" in filter_state ? filter_state["wasm.kuadrant.ocsf.ai_model.ai_provider"] : null)%` {
 		t.Fatalf("expected projected OCSF AI provider, got %v", aiModel["ai_provider"])
 	}
 }

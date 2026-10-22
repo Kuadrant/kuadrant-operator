@@ -120,12 +120,14 @@ gateway workload with `gateway.networking.k8s.io/gateway-name`. A CEL access-log
 dedicated `wasm.kuadrant.ocsf.resource.type` marker, so requests for routes without an attached OCSF
 TelemetryPolicy do not produce this event.
 
-Envoy's typed JSON access-log formatter can render scalar filter-state values with
-`%FILTER_STATE(wasm.kuadrant.ocsf.<field>:TYPED)%`. Its CEL formatter supplies typed conditionals for
-OCSF status fields and derives epoch milliseconds from the request timestamp. Request method, path,
-protocol, response code, byte count, latency, and connection endpoints come from Envoy access-log
-operators rather than from user-provided expressions. The path uses
-`%REQ_WITHOUT_QUERY(:PATH)%` so the canonical record never includes query parameters.
+Envoy's JSON access-log formatter uses `%TYPED_CEL(...)%` expressions over the dedicated
+`wasm.kuadrant.ocsf.*` filter-state keys. CEL emits JSON-native values instead of serializing the
+filter-state protobuf wrappers. It also supplies typed conditionals for OCSF status fields and derives
+epoch milliseconds from the request timestamp. Request method, path, protocol, response code, byte
+count, latency, and connection endpoints come from Envoy access-log operators rather than from
+user-provided expressions. The query-free URL path is projected from
+`request.url_path` by the TelemetryPolicy into filter state, because the deployed Envoy access-log
+formatter does not support `REQ_WITHOUT_QUERY`.
 
 The access logger must:
 

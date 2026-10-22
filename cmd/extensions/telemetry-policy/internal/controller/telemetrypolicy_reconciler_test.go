@@ -5,13 +5,17 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
 	celref "github.com/google/cel-go/common/types/ref"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
@@ -104,6 +108,29 @@ func newTestPolicy(metrics map[string]string, loggingFields map[string]string) *
 		pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{Fields: loggingFields}}
 	}
 	return pol
+}
+
+func newTestGatewayClient(t *testing.T, controllerName gatewayapiv1.GatewayController) client.Client {
+	t.Helper()
+
+	scheme := runtime.NewScheme()
+	if err := gatewayapiv1.Install(scheme); err != nil {
+		t.Fatalf("failed to install Gateway API scheme: %v", err)
+	}
+
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(
+			&gatewayapiv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-gw", Namespace: "default"},
+				Spec:       gatewayapiv1.GatewaySpec{GatewayClassName: "test-class"},
+			},
+			&gatewayapiv1.GatewayClass{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-class"},
+				Spec:       gatewayapiv1.GatewayClassSpec{ControllerName: controllerName},
+			},
+		).
+		Build()
 }
 
 func TestReconcileSpec_LoggingFieldsOnly(t *testing.T) {
@@ -235,13 +262,19 @@ func TestReconcileSpec_EmptySpec(t *testing.T) {
 func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	mock := &mockKuadrantCtx{}
 	r := &TelemetryPolicyReconciler{
-		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+		ExtensionBase: types.ExtensionBase{
+			Logger: logr.Discard(),
+			Client: newTestGatewayClient(t, istioGatewayControllerName),
+		},
 	}
 	pol := newTestPolicy(nil, nil)
 	pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{
 		OCSF: &v1alpha1.OCSFLoggingConfig{
 			Profile: v1alpha1.OCSFProfileAIOperation,
-			Actor:   v1alpha1.OCSFActorConfig{Identity: "auth.identity.user.username"},
+			Actor: v1alpha1.OCSFActorConfig{
+				Identity: "auth.identity.user.username",
+				Groups:   "auth.identity.user.groups",
+			},
 			Target: v1alpha1.OCSFTargetConfig{
 				ResourceType: "LLMInferenceService",
 				RequestPath: v1alpha1.OCSFRequestPathTarget{
@@ -260,7 +293,7 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	if !mock.pipeline.committed {
 		t.Fatal("expected OCSF pipeline to be committed")
 	}
-	if got, want := len(mock.pipeline.requestActions), 5; got != want {
+	if got, want := len(mock.pipeline.requestActions), 7; got != want {
 		t.Fatalf("request actions = %d, want %d", got, want)
 	}
 
@@ -269,6 +302,17 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 			Predicate:    "has(auth.identity.user.username)",
 			Path:         ocsfActorUserNameStorePath,
 			Value:        "auth.identity.user.username",
+			ExportToHost: true,
+		},
+		ocsfActorUserGroupsStorePath: {
+			Predicate:    "has(auth.identity.user.groups)",
+			Path:         ocsfActorUserGroupsStorePath,
+			Value:        `auth.identity.user.groups.map(group, {"name": group})`,
+			ExportToHost: true,
+		},
+		ocsfURLPathStorePath: {
+			Path:         ocsfURLPathStorePath,
+			Value:        "request.url_path",
 			ExportToHost: true,
 		},
 		ocsfResourceNamespaceStorePath: {
@@ -312,6 +356,49 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Errorf("missing store actions: %#v", want)
+	}
+}
+
+func TestReconcileSpec_OCSFRejectsUnsupportedGatewayProvider(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{
+			Logger: logr.Discard(),
+			Client: newTestGatewayClient(t, gatewayapiv1.GatewayController("gateway.envoyproxy.io/gatewayclass-controller")),
+		},
+	}
+	pol := newTestPolicy(nil, nil)
+	pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{OCSF: &v1alpha1.OCSFLoggingConfig{}}}
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	if err == nil || !strings.Contains(err.Error(), "only supported by Istio") {
+		t.Fatalf("reconcileSpec error = %v, want unsupported Gateway provider error", err)
+	}
+	if len(mock.calls) != 0 {
+		t.Fatalf("unexpected binding calls before provider validation: %#v", mock.calls)
+	}
+	if mock.pipeline != nil {
+		t.Fatal("unsupported Gateway provider must not commit an OCSF pipeline")
+	}
+
+	accepted := false
+	enforced := false
+	for _, condition := range status.Conditions {
+		switch condition.Type {
+		case string(gatewayapiv1alpha2.PolicyConditionAccepted):
+			accepted = condition.Status == metav1.ConditionTrue
+		case string(types.PolicyConditionEnforced):
+			enforced = true
+			if condition.Status != metav1.ConditionFalse {
+				t.Fatalf("Enforced condition status = %s, want False", condition.Status)
+			}
+		}
+	}
+	if !accepted {
+		t.Fatal("unsupported provider should remain Accepted=True with a clear Enforced=False condition")
+	}
+	if !enforced {
+		t.Fatal("unsupported provider should set Enforced=False")
 	}
 }
 

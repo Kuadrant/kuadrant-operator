@@ -66,6 +66,18 @@ func TestBuildEnvoyFilterOCSFAccessLogPatch(t *testing.T) {
 	if jsonFormat["status_code"] != "%RESPONSE_CODE%" {
 		t.Fatalf("expected status code to use Envoy native formatter, got %v", jsonFormat["status_code"])
 	}
+	httpResponse := ocsfMapField(t, jsonFormat, "http_response")
+	wantLatency := `%TYPED_CEL((request.duration.getSeconds() * 1000 + request.duration.getMilliseconds()))%`
+	if httpResponse["latency"] != wantLatency {
+		t.Fatalf("expected latency to use total request duration in milliseconds, got %v", httpResponse["latency"])
+	}
+	dstEndpoint := ocsfMapField(t, jsonFormat, "dst_endpoint")
+	if dstEndpoint["ip"] != "%UPSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%" {
+		t.Fatalf("expected destination IP without a port, got %v", dstEndpoint["ip"])
+	}
+	if dstEndpoint["port"] != "%TYPED_CEL(has(upstream.address) ? upstream.port : null)%" {
+		t.Fatalf("expected destination port to remain numeric and be omitted when unavailable, got %v", dstEndpoint["port"])
+	}
 
 	api := ocsfMapField(t, jsonFormat, "api")
 	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {

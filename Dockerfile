@@ -35,7 +35,7 @@ ENV DIRTY=${DIRTY:-unknown}
 ENV VERSION=${VERSION:-unknown}
 
 # Kuadrant Operator
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.version=${VERSION} -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o manager cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -a -ldflags "-X main.version=${VERSION} -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY} -X github.com/kuadrant/kuadrant-operator/internal/istio.versionString=${VERSION}" -o manager cmd/main.go
 
 # Conditionally build extensions
 RUN mkdir -p extensions

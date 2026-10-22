@@ -83,13 +83,16 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 		"http_response": map[string]any{
 			"code":        "%TYPED_CEL(response.code)%",
 			"body_length": "%TYPED_CEL(response.size)%",
-			"latency":     "%TYPED_CEL(request.duration.getMilliseconds())%",
+			"latency":     "%TYPED_CEL(" + requestDurationMillis + ")%",
 		},
 		"src_endpoint": map[string]any{
 			"ip":   "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS_WITHOUT_PORT%",
 			"port": "%TYPED_CEL(source.port)%",
 		},
-		"dst_endpoint": "%TYPED_CEL(has(upstream.address) ? {'ip': upstream.address, 'port': upstream.port} : null)%",
+		"dst_endpoint": map[string]any{
+			"ip":   "%UPSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%",
+			"port": "%TYPED_CEL(has(upstream.address) ? upstream.port : null)%",
+		},
 		"status_id":    "%TYPED_CEL(response.code < 400 ? 1 : 2)%",
 		"status":       "%TYPED_CEL(response.code < 400 ? 'Success' : 'Failure')%",
 		"status_code":  "%RESPONSE_CODE%",

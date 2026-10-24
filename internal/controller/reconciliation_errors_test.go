@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
@@ -129,6 +131,7 @@ func TestPersistentErrorTracker_UpdateFromRegistry(t *testing.T) {
 	// Second reconciliation - resource1 still fails, resource2 succeeds
 	registry2 := NewErrorRegistry()
 	registry2.Record("TestReconciler", "delete", resource1, kind, errors.New("error1 still failing"))
+	registry2.MarkReconciled("TestReconciler")
 
 	tracker.UpdateFromRegistry(registry2)
 
@@ -146,6 +149,54 @@ func TestPersistentErrorTracker_UpdateFromRegistry(t *testing.T) {
 		t.Errorf("Expected retry count 1, got %d", err.RetryCount)
 	}
 	tracker.mu.RUnlock()
+}
+
+func TestPersistentErrorTracker_UpdateFromRegistry_SourceNotReconciled(t *testing.T) {
+	logger := logr.Discard()
+	tracker := NewPersistentErrorTracker(logger)
+
+	resource := k8stypes.NamespacedName{Namespace: "ns", Name: "resource"}
+	kind := schema.GroupKind{Group: "test.io", Kind: "TestKind"}
+	key := "TestKind.test.io/ns/resource/create"
+
+	// First reconciliation - ReconcilerA fails to create the resource
+	registry1 := NewErrorRegistry()
+	registry1.Record("ReconcilerA", "create", resource, kind, errors.New("forbidden"))
+	registry1.MarkReconciled("ReconcilerA")
+	tracker.UpdateFromRegistry(registry1)
+
+	// Second reconciliation - triggered by an unrelated event, only ReconcilerB runs
+	registry2 := NewErrorRegistry()
+	registry2.MarkReconciled("ReconcilerB")
+	tracker.UpdateFromRegistry(registry2)
+
+	// Third reconciliation - ReconcilerA returns an error before retrying the create,
+	// so it is not marked as reconciled
+	tracker.UpdateFromRegistry(NewErrorRegistry())
+
+	// The error must still be tracked, untouched, since ReconcilerA never retried the operation
+	if tracker.GetErrorCount() != 1 {
+		t.Fatalf("Expected error to remain tracked while its source did not run, got %d errors", tracker.GetErrorCount())
+	}
+	tracker.mu.RLock()
+	if err, found := tracker.errors[key]; !found {
+		t.Error("Expected error to still be tracked")
+	} else if err.RetryCount != 0 {
+		t.Errorf("Expected retry count 0 for an error that was not retried, got %d", err.RetryCount)
+	}
+	tracker.mu.RUnlock()
+	if delay := tracker.ShouldRequeue(); delay != 2*time.Second {
+		t.Errorf("Expected 2s requeue delay, got %v", delay)
+	}
+
+	// Fourth reconciliation - ReconcilerA runs and no longer records the error
+	registry4 := NewErrorRegistry()
+	registry4.MarkReconciled("ReconcilerA")
+	tracker.UpdateFromRegistry(registry4)
+
+	if tracker.GetErrorCount() != 0 {
+		t.Errorf("Expected error to be resolved once its source ran without recording it, got %d errors", tracker.GetErrorCount())
+	}
 }
 
 func TestPersistentErrorTracker_ShouldRequeue(t *testing.T) {
@@ -241,6 +292,101 @@ func TestReconciliationErrorHandler_Reconcile(t *testing.T) {
 	// Should have scheduled retry via callback
 	if scheduledDelay != 2*time.Second {
 		t.Errorf("Expected retry scheduled with 2s delay, got %v", scheduledDelay)
+	}
+}
+
+func TestErrorTrackingReconcileFunc(t *testing.T) {
+	ctx := context.Background()
+	reconcileErr := errors.New("reconcile error")
+
+	tests := []struct {
+		name               string
+		reconcileErr       error
+		expectedReconciled bool
+	}{
+		{"marks source as reconciled on success", nil, true},
+		{"does not mark source as reconciled on error", reconcileErr, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &sync.Map{}
+			called := false
+			reconcileFunc := errorTrackingReconcileFunc("TestReconciler", func(_ context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, s *sync.Map) error {
+				called = true
+				if s != state {
+					t.Error("Expected state to be passed through to the wrapped reconcile func")
+				}
+				return tt.reconcileErr
+			})
+
+			if err := reconcileFunc(ctx, nil, nil, nil, state); !errors.Is(err, tt.reconcileErr) {
+				t.Errorf("Expected error %v, got %v", tt.reconcileErr, err)
+			}
+			if !called {
+				t.Error("Expected wrapped reconcile func to be called")
+			}
+
+			registry := GetOrCreateErrorRegistry(state)
+			if registry.WasReconciled("TestReconciler") != tt.expectedReconciled {
+				t.Errorf("Expected WasReconciled() = %v, got %v", tt.expectedReconciled, registry.WasReconciled("TestReconciler"))
+			}
+			if registry.WasReconciled("OtherReconciler") {
+				t.Error("Expected other sources not to be marked as reconciled")
+			}
+		})
+	}
+}
+
+func TestReconciliationErrorHandler_UnrelatedEventDoesNotResolveError(t *testing.T) {
+	logger := logr.Discard()
+	tracker := NewPersistentErrorTracker(logger)
+	handler := NewReconciliationErrorHandler(tracker, nil)
+
+	ctx := controller.LoggerIntoContext(context.Background(), logger)
+	resource := k8stypes.NamespacedName{Namespace: "ns", Name: "resource"}
+	subscribedKind := schema.GroupKind{Group: "test.io", Kind: "SubscribedKind"}
+	unrelatedKind := schema.GroupKind{Group: "test.io", Kind: "UnrelatedKind"}
+
+	failing := true
+	subscription := controller.Subscription{
+		ReconcileFunc: errorTrackingReconcileFunc("TestReconciler", func(_ context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, state *sync.Map) error {
+			if failing {
+				GetOrCreateErrorRegistry(state).Record("TestReconciler", OperationCreate, resource, subscribedKind, errors.New("forbidden"))
+			}
+			return nil
+		}),
+		Events: []controller.ResourceEventMatcher{{Kind: &subscribedKind}},
+	}
+
+	reconcile := func(kind schema.GroupKind) {
+		events := []controller.ResourceEvent{{Kind: kind, EventType: controller.UpdateEvent, NewObject: &unstructured.Unstructured{}}}
+		state := &sync.Map{}
+		if err := subscription.Reconcile(ctx, events, nil, nil, state); err != nil {
+			t.Fatalf("Expected no error from subscription, got %v", err)
+		}
+		if err := handler.Reconcile(ctx, events, nil, nil, state); err != nil {
+			t.Fatalf("Expected no error from handler, got %v", err)
+		}
+	}
+
+	// The subscribed reconciler runs and fails
+	reconcile(subscribedKind)
+	if tracker.GetErrorCount() != 1 {
+		t.Fatalf("Expected 1 tracked error, got %d", tracker.GetErrorCount())
+	}
+
+	// An unrelated event does not run the subscribed reconciler, so its error must not be resolved
+	reconcile(unrelatedKind)
+	if tracker.GetErrorCount() != 1 {
+		t.Fatalf("Expected error to remain tracked after an unrelated reconciliation, got %d errors", tracker.GetErrorCount())
+	}
+
+	// The subscribed reconciler runs again and the operation now succeeds
+	failing = false
+	reconcile(subscribedKind)
+	if tracker.GetErrorCount() != 0 {
+		t.Errorf("Expected error to be resolved once its reconciler succeeded, got %d errors", tracker.GetErrorCount())
 	}
 }
 

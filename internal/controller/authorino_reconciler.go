@@ -45,7 +45,7 @@ func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 		events = append(events, controller.ResourceEventMatcher{Kind: ptr.To(openshift.APIServerGroupKind)})
 	}
 	return &controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(AuthorinoReconcilerName, r.Reconcile),
 		Events:        events,
 	}
 }

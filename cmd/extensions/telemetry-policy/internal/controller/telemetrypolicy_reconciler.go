@@ -160,35 +160,41 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) []types.Action {
 			Path:         ocsfResourceTypeStorePath,
 			Value:        strconv.Quote(config.Target.ResourceType),
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		types.StoreAction{
 			Predicate:    namespacePredicate,
 			Path:         ocsfResourceNamespaceStorePath,
 			Value:        namespaceExpression,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		types.StoreAction{
 			Predicate:    namePredicate,
 			Path:         ocsfResourceNameStorePath,
 			Value:        nameExpression,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		// request.url_path excludes query parameters, unlike the HTTP :path header.
 		types.StoreAction{
 			Path:         ocsfURLPathStorePath,
 			Value:        "request.url_path",
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		types.StoreAction{
 			Path:         ocsfAIProviderStorePath,
 			Value:        strconv.Quote(config.Target.AIProvider),
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		types.StoreAction{
 			Predicate:    fmt.Sprintf("has(%s)", config.Actor.Identity),
 			Path:         ocsfActorUserNameStorePath,
 			Value:        config.Actor.Identity,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 	}
 	if config.Actor.UID != "" {
@@ -197,6 +203,7 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) []types.Action {
 			Path:         ocsfActorUserUIDStorePath,
 			Value:        config.Actor.UID,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		})
 	}
 	if config.Actor.Groups != "" {
@@ -206,6 +213,7 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) []types.Action {
 			Path:         ocsfActorUserGroupsStorePath,
 			Value:        fmt.Sprintf(`%s.map(group, {"name": group})`, config.Actor.Groups),
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		})
 	}
 

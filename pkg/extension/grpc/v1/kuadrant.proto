@@ -150,6 +150,7 @@ message StoreAction {
   string path = 1;
   string value = 2; // CEL expression
   bool export_to_host = 3;
+  string export_format = 4;
 }
 
 message ActionEntry {

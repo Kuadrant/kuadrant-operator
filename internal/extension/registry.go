@@ -1458,8 +1458,15 @@ func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, er
 		return wasm.NewFailAction(predicate, a.Fail.LogMessage).
 			WithSources(sources), nil
 	case *extpb.ActionEntry_Store:
+		exportFormat := wasm.StoreExportFormat(a.Store.ExportFormat)
+		switch exportFormat {
+		case "", wasm.StoreExportFormatProtobufValue:
+		default:
+			return nil, fmt.Errorf("actions[%d]: store has unsupported export format %q", entry.Index, exportFormat)
+		}
 		return wasm.NewStoreAction(predicate, a.Store.Path, a.Store.Value).
 			WithExportToHost(a.Store.ExportToHost).
+			WithExportFormat(exportFormat).
 			WithSources(sources), nil
 	default:
 		return nil, fmt.Errorf("actions[%d]: unknown action type %T", entry.Index, entry.Entry.Action)

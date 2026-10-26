@@ -345,6 +345,8 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Expect(string(eventJSON)).NotTo(ContainSubstring(querySentinel))
 		Expect(string(eventJSON)).NotTo(ContainSubstring(credentialSentinel))
 		Expect(string(eventJSON)).NotTo(ContainSubstring("Bearer " + credentialSentinel))
+		Expect(string(accessLogs)).NotTo(ContainSubstring(credentialSentinel),
+			"the Authorization credential must not appear anywhere in the Gateway proxy logs")
 		for _, artifact := range []string{
 			"Gg5vY3NmLXRlc3QtdXNlcg==",
 			"string_value",

@@ -2263,7 +2263,9 @@ func TestEntryToAction_AddHeadersRejectsUnsetPhase(t *testing.T) {
 }
 
 func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
-	action, err := entryToAction(storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST), []string{"TestPolicy/default/my-policy"})
+	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "protobufValue"
+	action, err := entryToAction(entry, []string{"TestPolicy/default/my-policy"})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -2280,8 +2282,23 @@ func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
 	if !store.ExportToHost {
 		t.Error("ExportToHost should be true")
 	}
+	if store.ExportFormat != wasm.StoreExportFormatProtobufValue {
+		t.Errorf("ExportFormat = %q, want %q", store.ExportFormat, wasm.StoreExportFormatProtobufValue)
+	}
 	if len(store.SourcePolicyLocators) != 1 || store.SourcePolicyLocators[0] != "TestPolicy/default/my-policy" {
 		t.Errorf("SourcePolicyLocators = %v, want [%q]", store.SourcePolicyLocators, "TestPolicy/default/my-policy")
+	}
+}
+
+func TestEntryToAction_StoreRejectsUnknownExportFormat(t *testing.T) {
+	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "unsupported"
+	action, err := entryToAction(entry, nil)
+	if err == nil {
+		t.Fatal("Expected an error for unsupported store export format")
+	}
+	if action != nil {
+		t.Fatalf("Expected no action alongside error, got %T", action)
 	}
 }
 

@@ -303,39 +303,46 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 			Path:         ocsfActorUserNameStorePath,
 			Value:        "auth.identity.user.username",
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		ocsfActorUserGroupsStorePath: {
 			Predicate:    "has(auth.identity.user.groups)",
 			Path:         ocsfActorUserGroupsStorePath,
 			Value:        `auth.identity.user.groups.map(group, {"name": group})`,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		ocsfURLPathStorePath: {
 			Path:         ocsfURLPathStorePath,
 			Value:        "request.url_path",
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		ocsfResourceNamespaceStorePath: {
 			Predicate:    "request.url_path.split('/').size() > 1",
 			Path:         ocsfResourceNamespaceStorePath,
 			Value:        "request.url_path.split('/')[1]",
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		ocsfResourceNameStorePath: {
 			Predicate:    "request.url_path.split('/').size() > 2",
 			Path:         ocsfResourceNameStorePath,
 			Value:        "request.url_path.split('/')[2]",
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		ocsfResourceTypeStorePath: {
 			Path:         ocsfResourceTypeStorePath,
 			Value:        `"LLMInferenceService"`,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 		ocsfAIProviderStorePath: {
 			Path:         ocsfAIProviderStorePath,
 			Value:        `"KServe"`,
 			ExportToHost: true,
+			ExportFormat: types.StoreExportFormatProtobufValue,
 		},
 	}
 

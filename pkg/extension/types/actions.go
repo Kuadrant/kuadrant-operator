@@ -133,11 +133,16 @@ func (a AddHeadersAction) PopulateProtobuf(entry *extpb.ActionEntry) {
 	}}
 }
 
+type StoreExportFormat string
+
+const StoreExportFormatProtobufValue StoreExportFormat = "protobufValue"
+
 type StoreAction struct {
 	Predicate    string // CEL — if true, store the value
 	Path         string
 	Value        string // CEL expression
 	ExportToHost bool
+	ExportFormat StoreExportFormat
 }
 
 func (a StoreAction) sealedAction() {}
@@ -159,6 +164,7 @@ func (a StoreAction) PopulateProtobuf(entry *extpb.ActionEntry) {
 		Path:         a.Path,
 		Value:        a.Value,
 		ExportToHost: a.ExportToHost,
+		ExportFormat: string(a.ExportFormat),
 	}}
 }
 

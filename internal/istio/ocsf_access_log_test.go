@@ -35,7 +35,7 @@ func TestBuildEnvoyFilterOCSFAccessLogPatch(t *testing.T) {
 	if err := json.Unmarshal(raw, &value); err != nil {
 		t.Fatalf("failed to unmarshal rendered patch: %v", err)
 	}
-	for _, prohibited := range []string{".string_value", ".number_value", ".bool_value", ".list_value", ".struct_value", "base64"} {
+	for _, prohibited := range []string{".string_value", ".number_value", ".bool_value", ".list_value", ".struct_value", "proto.Unmarshal", "protojson", "protowire", "base64"} {
 		if strings.Contains(string(raw), prohibited) {
 			t.Fatalf("OCSF formatter must not project protobuf oneof fields or parse wire values; found %q", prohibited)
 		}

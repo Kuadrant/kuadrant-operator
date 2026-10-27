@@ -40,6 +40,76 @@ func TestConfigToStruct(t *testing.T) {
 	}
 }
 
+func TestStoreActionExportFormatJSONRoundTrip(t *testing.T) {
+	store := &StoreAction{
+		ActionBase:   ActionBase{Predicate: "true"},
+		Path:         "custom.audit.value",
+		Value:        "'value'",
+		ExportToHost: true,
+		ExportFormat: StoreExportFormatProtobufValue,
+	}
+	encoded, err := json.Marshal(store)
+	if err != nil {
+		t.Fatalf("marshal store action: %v", err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatalf("unmarshal store action JSON: %v", err)
+	}
+	if got := wire["exportFormat"]; got != string(StoreExportFormatProtobufValue) {
+		t.Fatalf("exportFormat = %v, want %q", got, StoreExportFormatProtobufValue)
+	}
+	decoded, err := UnmarshalAction(encoded)
+	if err != nil {
+		t.Fatalf("unmarshal store action: %v", err)
+	}
+	if !store.EqualTo(decoded) {
+		t.Fatalf("store action did not round-trip: got %#v", decoded)
+	}
+
+	legacy, err := json.Marshal(&StoreAction{Path: "auth.identity.user"})
+	if err != nil {
+		t.Fatalf("marshal legacy store action: %v", err)
+	}
+	var legacyWire map[string]any
+	if err := json.Unmarshal(legacy, &legacyWire); err != nil {
+		t.Fatalf("unmarshal legacy store action JSON: %v", err)
+	}
+	if _, exists := legacyWire["exportFormat"]; exists {
+		t.Fatal("unset export format should be omitted to preserve the legacy config shape")
+	}
+	legacyDecoded, err := UnmarshalAction(legacy)
+	if err != nil {
+		t.Fatalf("unmarshal legacy store action: %v", err)
+	}
+	if got := legacyDecoded.(*StoreAction).ExportFormat; got != "" {
+		t.Fatalf("legacy export format = %q, want unset", got)
+	}
+}
+
+func TestConfigHasOCSFAuditLogging(t *testing.T) {
+	tests := []struct {
+		name   string
+		action Action
+		want   bool
+	}{
+		{name: "exported OCSF marker", action: &StoreAction{Path: OCSFResourceTypeStorePath, ExportToHost: true}, want: true},
+		{name: "exported OCSF actor without marker", action: &StoreAction{Path: "ocsf.actor.user.name", ExportToHost: true}},
+		{name: "OCSF value not exported", action: &StoreAction{Path: "ocsf.actor.user.name"}},
+		{name: "unrelated exported value", action: &StoreAction{Path: "auth", ExportToHost: true}},
+		{name: "non-store action", action: &FailAction{LogMessage: "failed"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{ActionSets: []ActionSet{{Actions: []Action{tt.action}}}}
+			if got := config.HasOCSFAuditLogging(); got != tt.want {
+				t.Fatalf("HasOCSFAuditLogging() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestConfigEqual(t *testing.T) {
 	testCases := []struct {
 		name     string

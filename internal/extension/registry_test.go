@@ -2295,7 +2295,9 @@ func TestEntryToAction_AddHeadersRejectsUnsetPhase(t *testing.T) {
 }
 
 func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
-	action, err := entryToAction(storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST), []string{"TestPolicy/default/my-policy"})
+	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "protobufValue"
+	action, err := entryToAction(entry, []string{"TestPolicy/default/my-policy"})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -2312,8 +2314,23 @@ func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
 	if !store.ExportToHost {
 		t.Error("ExportToHost should be true")
 	}
+	if store.ExportFormat != wasm.StoreExportFormatProtobufValue {
+		t.Errorf("ExportFormat = %q, want %q", store.ExportFormat, wasm.StoreExportFormatProtobufValue)
+	}
 	if len(store.SourcePolicyLocators) != 1 || store.SourcePolicyLocators[0] != "TestPolicy/default/my-policy" {
 		t.Errorf("SourcePolicyLocators = %v, want [%q]", store.SourcePolicyLocators, "TestPolicy/default/my-policy")
+	}
+}
+
+func TestEntryToAction_StoreRejectsUnknownExportFormat(t *testing.T) {
+	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "unsupported"
+	action, err := entryToAction(entry, nil)
+	if err == nil {
+		t.Fatal("Expected an error for unsupported store export format")
+	}
+	if action != nil {
+		t.Fatalf("Expected no action alongside error, got %T", action)
 	}
 }
 
@@ -2457,6 +2474,61 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 		if as.Actions[1].ActionType() != wasm.ActionKindGrpc {
 			t.Errorf("ActionSet[%d]: expected actions[1] grpc, got %s", i, as.Actions[1].ActionType())
 		}
+	}
+}
+
+func TestMutateWasmConfig_OCSFProjectionPrecedesTerminalGuards(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	policyID := testResourceID("TelemetryPolicy", "default", "audit")
+	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
+		storeEntry(wasm.OCSFResourceTypeStorePath, `"LLMInferenceService"`, true, "true", extpb.Phase_PHASE_REQUEST),
+		storeEntry("ocsf.actor.user.name", "auth.identity.username", true, "has(auth.identity.username)", extpb.Phase_PHASE_REQUEST),
+		storeEntry("ordinary", `"value"`, true, "true", extpb.Phase_PHASE_REQUEST),
+	})
+	store.SetPipelineTargetRefs(policyID, []TargetRef{{
+		Group:     "gateway.networking.k8s.io",
+		Kind:      "Gateway",
+		Name:      mockTargetRef.GetName(),
+		Namespace: mockTargetRef.GetNamespace(),
+	}})
+
+	guard := &wasm.DenyAction{
+		ActionBase: wasm.ActionBase{Predicate: "true", Terminal: true},
+		DenyWith:   "DenyResponse{status: 403u}",
+	}
+	authCall := wasm.NewGrpcAction("true", "auth_response", wasm.AuthServiceName, "{}", "auth")
+	config := &wasm.Config{ActionSets: []wasm.ActionSet{{
+		Name:    "set1",
+		Actions: []wasm.Action{authCall, guard},
+	}}}
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	if err := mutator.Mutate(config, []machinery.PolicyTargetReference{mockTargetRef}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions := config.ActionSets[0].Actions
+	if len(actions) != 5 {
+		t.Fatalf("expected 5 actions, got %d", len(actions))
+	}
+	marker, ok := actions[0].(*wasm.StoreAction)
+	if !ok || marker.Path != wasm.OCSFResourceTypeStorePath {
+		t.Fatalf("expected OCSF marker before auth call, got %#v", actions[0])
+	}
+	if actions[1] != authCall {
+		t.Fatalf("expected auth call after OCSF request metadata, got %#v", actions[1])
+	}
+	actor, ok := actions[2].(*wasm.StoreAction)
+	if !ok || actor.Path != "ocsf.actor.user.name" {
+		t.Fatalf("expected actor projection after auth call, got %#v", actions[2])
+	}
+	if actions[3] != guard {
+		t.Fatalf("expected actor projection before terminal guard, got %#v", actions[3])
+	}
+	ordinary, ok := actions[4].(*wasm.StoreAction)
+	if !ok || ordinary.Path != "ordinary" {
+		t.Fatalf("expected ordinary extension action after guard, got %#v", actions[4])
 	}
 }
 

@@ -54,6 +54,26 @@ test-mcp-authpolicy-e2e: ## Run MCP AuthPolicy E2E against an existing Istio clu
 		-ginkgo.focus='MCP Gateway AuthPolicy integration' \
 		-timeout 15m
 
+.PHONY: test-ocsf-event-e2e
+test-ocsf-event-e2e: export GATEWAYAPI_PROVIDER = istio
+test-ocsf-event-e2e: export USE_EXISTING_OPERATOR = true
+test-ocsf-event-e2e: export OCSF_E2E = true
+test-ocsf-event-e2e: ## Verify a live OCSF event against a deployed Istio operator with extensions enabled.
+	go test -count=1 -tags=integration,ocsf_e2e ./tests/istio \
+		-run '^TestAPIs$$' \
+		-ginkgo.focus='OCSF access log emits an OCSF 1.9.0 API Activity event' \
+		-timeout 15m
+
+.PHONY: test-wasm-shim-control-e2e
+test-wasm-shim-control-e2e: export WASM_CONTROL_E2E = true
+test-wasm-shim-control-e2e: export GATEWAYAPI_PROVIDER = istio
+test-wasm-shim-control-e2e: export USE_EXISTING_OPERATOR = true
+test-wasm-shim-control-e2e: ## Verify the shared WASM shim loads without OCSF configuration.
+	go test -count=1 -tags=integration,ocsf_e2e ./tests/istio \
+		-run '^TestAPIs$$' \
+		-ginkgo.focus='WASM runtime control' \
+		-timeout 15m
+
 .PHONY: test-envoygateway-env-integration
 test-envoygateway-env-integration: INTEGRATION_COVER_OUTPUT_DIR=$(PROJECT_PATH)/coverage/envoygateway-integration
 test-envoygateway-env-integration: INTEGRATION_TEST_PACKAGES=tests/envoygateway/...

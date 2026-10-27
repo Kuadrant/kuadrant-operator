@@ -23,6 +23,11 @@ func NewStoreAction(predicate, path, value string) *StoreAction {
 	}
 }
 
+func (a *StoreAction) WithExportFormat(format StoreExportFormat) *StoreAction {
+	a.ExportFormat = format
+	return a
+}
+
 func NewFailAction(predicate, logMessage string) *FailAction {
 	return &FailAction{
 		ActionBase: ActionBase{Predicate: predicate, Terminal: true, IsGuard: true},

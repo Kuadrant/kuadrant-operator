@@ -59,9 +59,95 @@ spec:
                         x-kubernetes-validations:
                         - message: field names must not contain periods
                           rule: self.all(k, !k.contains('.'))
-                    required:
-                    - fields
+                      ocsf:
+                        description: |-
+                          OCSF configures a canonical OCSF event emitted by the gateway when request processing completes.
+                          Unlike Fields, this is a fixed, security-sensitive event profile and does not accept arbitrary
+                          request headers, query strings, or payload expressions.
+                        properties:
+                          actor:
+                            description: Actor selects authenticated identity metadata
+                              supplied by Authorino.
+                            properties:
+                              groups:
+                                description: Groups optionally selects a list of authenticated
+                                  group names from Authorino auth metadata.
+                                minLength: 6
+                                pattern: ^auth\.identity(\.[A-Za-z_][A-Za-z0-9_]*)+$
+                                type: string
+                              identity:
+                                description: |-
+                                  Identity is a CEL field path rooted in Authorino's auth.identity metadata. Only dotted field
+                                  paths are accepted; arbitrary CEL expressions could bypass the intended request-data boundary.
+                                minLength: 6
+                                pattern: ^auth\.identity(\.[A-Za-z_][A-Za-z0-9_]*)+$
+                                type: string
+                              uid:
+                                description: UID optionally selects the authenticated
+                                  actor UID from Authorino auth metadata.
+                                minLength: 6
+                                pattern: ^auth\.identity(\.[A-Za-z_][A-Za-z0-9_]*)+$
+                                type: string
+                            required:
+                            - identity
+                            type: object
+                          profile:
+                            description: Profile selects the fixed OCSF event preset.
+                            enum:
+                            - aiOperation
+                            type: string
+                          target:
+                            description: Target identifies the resource and AI model
+                              from safe request-path segments.
+                            properties:
+                              aiProvider:
+                                description: AIProvider is written to the OCSF ai_model
+                                  object. The model name is the target resource name.
+                                minLength: 1
+                                type: string
+                              requestPath:
+                                description: RequestPath selects resource namespace
+                                  and name from the URL path after removing its leading
+                                  slash.
+                                properties:
+                                  nameSegment:
+                                    description: NameSegment is the zero-based path
+                                      segment containing the resource name.
+                                    format: int32
+                                    minimum: 0
+                                    type: integer
+                                  namespaceSegment:
+                                    description: NamespaceSegment is the zero-based
+                                      path segment containing the resource namespace.
+                                    format: int32
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                - nameSegment
+                                - namespaceSegment
+                                type: object
+                                x-kubernetes-validations:
+                                - message: namespaceSegment and nameSegment must differ
+                                  rule: self.namespaceSegment != self.nameSegment
+                              resourceType:
+                                description: ResourceType is the resource type written
+                                  to the OCSF resources array.
+                                minLength: 1
+                                type: string
+                            required:
+                            - aiProvider
+                            - requestPath
+                            - resourceType
+                            type: object
+                        required:
+                        - actor
+                        - profile
+                        - target
+                        type: object
                     type: object
+                    x-kubernetes-validations:
+                    - message: at least one of fields or ocsf must be configured
+                      rule: has(self.fields) || has(self.ocsf)
                 required:
                 - default
                 type: object

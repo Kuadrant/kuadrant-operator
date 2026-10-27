@@ -1,9 +1,10 @@
-# Kuadrant Extension SDK — Developer Guide
+# Kuadrant Extension SDK developer guide
 
 This guide shows how to build a custom extension policy using the Kuadrant Extension SDK. It covers the project structure, the SDK API, and three reconciler patterns you can choose from depending on your use case.
 
-## Project structure
+## Review project structure
 
+```
     my-extension/
     ├── main.go
     ├── go.mod
@@ -25,15 +26,14 @@ This guide shows how to build a custom extension policy using the Kuadrant Exten
     │       ├── kustomization.yaml
     │       └── role.yaml
     └── internal/
-        └── controller/
-            └── mypolicy_reconciler.go
+    └── controller/
+    └── mypolicy_reconciler.go
 
-This is the generic shape — for a complete, runnable extension you can deploy
-as its own workload (`Deployment`, `ServiceAccount`, RBAC, `NetworkPolicy`
-under `config/deploy/standalone/`), see the [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions)
-repo's README and the `threat-policy` example.
+```
 
-## Policy type (CRD)
+This is the generic shape — for a complete, runnable extension you can deploy as its own workload (`Deployment`, `ServiceAccount`, RBAC, `NetworkPolicy` under `config/deploy/standalone/`), see the [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions) repo's README and the `threat-policy` example.
+
+## Define policy types
 
 Every extension must define a policy type that implements the `types.Policy` interface. The policy attaches to Gateway API resources via a `targetRef` field.
 
@@ -88,7 +88,7 @@ Key points:
 - Include `ObservedGeneration` in the status for proper status tracking.
 - Add kubebuilder validation markers on the `TargetRef` to restrict to supported kinds.
 
-## Main
+## Configure the main entry point
 
 The entry point uses the SDK builder to wire everything together.
 
@@ -96,15 +96,15 @@ The entry point uses the SDK builder to wire everything together.
 package main
 
 import (
-    "os"
+	"os"
 
-    k8sruntime "k8s.io/apimachinery/pkg/runtime"
-    utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-    ctrl "sigs.k8s.io/controller-runtime"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 
-    "your-module/api/v1alpha1"
-    "your-module/internal/controller"
-    extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
+	"your-module/api/v1alpha1"
+	"your-module/internal/controller"
+	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 )
 
 var scheme = k8sruntime.NewScheme()
@@ -138,18 +138,18 @@ func main() {
 }
 ```
 
-### Builder methods
+### Review SDK builder methods
 
 The builder mirrors controller-runtime's own (`ctrl.NewControllerManagedBy(mgr).For(...).Watches(...).Owns(...)`) — `WithScheme`, `For`, `Watches`, and `Owns` behave exactly as they do in any kubebuilder project.
 
-What's different:
+Key differences:
 
 | Method               | Purpose                                                                                                                                       |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WithReconciler(fn)` | Sets the reconcile function — its signature takes an extra `types.KuadrantCtx` argument (see [KuadrantCtx interface](#kuadrantctx-interface)) |
 | `Build()`            | Validates config and connects to the operator over gRPC instead of just assembling a `ctrl.Manager` — returns `*ExtensionController`          |
 
-### Scheme registration
+### Register custom schemes
 
 Registering schemes works exactly like any controller-runtime project — nothing here is specific to the extension SDK. Register whatever your reconciler's client needs, e.g.:
 
@@ -160,9 +160,9 @@ Registering schemes works exactly like any controller-runtime project — nothin
 | `kuadrantv1`    | If you create/manage RateLimitPolicy or AuthPolicy resources      |
 | `corev1`        | If you interact with Secrets, ConfigMaps, or other core resources |
 
-## SDK API reference
+## Extension SDK API reference
 
-### ExtensionBase
+### Configure ExtensionBase
 
 Embed `types.ExtensionBase` in your reconciler struct to get `Logger`, `Client`, and `Scheme` fields. You **must** call `Configure(ctx)` at the start of every reconcile invocation to populate these fields from the context:
 
@@ -180,7 +180,7 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 }
 ```
 
-### KuadrantCtx interface
+### Understand the KuadrantCtx interface
 
 `KuadrantCtx` is passed to your reconcile function and provides access to the operator:
 
@@ -193,7 +193,7 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 | `RegisterActionMethod` | `(ctx, policy, config ActionMethodConfig) error`                          | Register an external gRPC service for data-plane dispatch (see [Action methods and pipelines](#action-methods-and-pipelines)) |
 | `NewPipeline`          | `(policy) Pipeline`                                                       | Create an action pipeline builder (see [Action methods and pipelines](#action-methods-and-pipelines))                         |
 
-### Resolve and ResolvePolicy
+### Evaluate topology using Resolve and ResolvePolicy
 
 `Resolve` evaluates a CEL expression against the operator's topology and returns the result. `ResolvePolicy` is for expressions that yield a single policy object, returning it as a `types.Policy`.
 
@@ -210,7 +210,7 @@ gwInfo, err := extcontroller.Resolve[GatewayInfo](ctx, kctx, pol,
 
 CEL does the conversion, and errors if the result does not fit `T`.
 
-#### Topology CEL functions
+#### Execute topology CEL functions
 
 The operator evaluates these expressions against its topology: the graph of Gateways, Routes and attached policies it already maintains. On top of standard CEL, these are available:
 
@@ -237,7 +237,7 @@ val, err = kctx.Resolve(ctx, pol, `self.targetRefs[0].findGateways()`, false)
 
 The operator answers these from its own topology, so your extension needs no RBAC for anything it finds that way. That is also the limit of what the functions see: only Gateways, Routes and policies the operator already tracks. Reading anything else, including resources of your own, still needs RBAC and a client call. The function set may grow; `pkg/cel/ext/kuadrant.go` is the current source of truth.
 
-### AddDataTo and domains
+### Publish data bindings with AddDataTo
 
 `AddDataTo` publishes a binding: a named CEL expression the data plane evaluates per request. The domain decides who consumes it:
 
@@ -259,7 +259,7 @@ Binding names are plain strings; a dotted name is a convention, not a nested str
 
 Those prefixes only govern Authorino. Limitador labels its metrics with every `DomainRequest` binding it receives, prefixed or not, so a binding you published for some other purpose still shows up there. Keep high-cardinality values out of `DomainRequest`. Logging bindings are the exception: they are only ever sent to Authorino.
 
-### ReconcileObject
+### Manage resources using ReconcileObject
 
 Creates or updates a Kubernetes resource your policy manages, in the role `controllerutil.CreateOrUpdate` plays in a plain controller:
 
@@ -286,11 +286,11 @@ The second argument is an empty object for the lookup to read into; `desired` su
 
 Set an owner reference on `desired` before calling, so deleting your policy garbage-collects what it created. To delete a managed resource explicitly, annotate `desired` with `kuadrant.io/delete: "true"`.
 
-### Action methods and pipelines
+### Configure action methods and pipelines
 
 A pipeline is an ordered list of actions the data plane runs on the HTTP request and response phases for the traffic your policy targets. Actions that call out to your own gRPC service need that service registering first.
 
-#### Registering an action method
+#### Register an action method
 
 `RegisterActionMethod` makes an external gRPC service callable from a pipeline. The operator resolves the service by gRPC reflection and creates the Envoy cluster and wasm service entries for it:
 
@@ -308,7 +308,7 @@ err := kctx.RegisterActionMethod(ctx, pol, types.ActionMethodConfig{
 
 Envoy calls this service at request time, not your extension, so it must be reachable from the proxy. It must also serve gRPC reflection, which the operator uses to validate the registration and the response fields your actions reference. If the operator cannot reach it, the call returns an error wrapping `types.ErrUpstreamUnreachable`; test for it with `errors.Is` to report a distinct status condition.
 
-#### Action types
+#### Select action types
 
 | Action             | Purpose                                                                   | Key fields                                                     |
 | ------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -322,7 +322,7 @@ Every action takes an optional `Predicate`, a CEL expression gating whether it r
 
 `DenyAction` and `AddHeadersAction` mean different things in each phase. In the request phase, a deny responds to the client without the request ever reaching the backend, and added headers are seen by the backend. In the response phase, a deny replaces the backend's response, and added headers are seen by the client.
 
-#### Phases and ordering
+#### Manage execution phases and ordering
 
 ```go
 pipeline := kctx.NewPipeline(pol)
@@ -333,22 +333,22 @@ pipeline.Commit(ctx)
 
 Actions run in the order you add them, within the phase you add them to. All request-phase actions must be added before any response-phase ones; calling `OnHTTPRequest` after `OnHTTPResponse` is rejected.
 
-#### Variables
+#### Pass pipeline variables
 
 `GRPCAction.Var` names a variable holding that call's response; `StoreAction.Path` names one holding the result of any CEL expression. Later actions reference either by name in their own CEL expressions, including across the phase boundary: a response-phase action can read a variable a request-phase gRPC call populated.
 
 The builder validates these references as you add actions, but it only tracks the variables gRPC actions populate. It rejects:
 
-- referencing a variable before the action that populates it
-- referencing variables from two different gRPC actions in one expression, since a response variable is only in scope within its own reply hook
-- reusing a variable name already populated in the pipeline
-- a `FailAction` that references no gRPC response variable, since it exists to handle a bad reply
+- Referencing a variable before the action that populates it
+- Referencing variables from two different gRPC actions in one expression, since a response variable is only in scope within its own reply hook
+- Reusing a variable name already populated in the pipeline
+- A `FailAction` that references no gRPC response variable, since it exists to handle a bad reply
 
 The paths a `StoreAction` populates are not tracked, so neither referencing one before the store that fills it nor reusing a path name is caught here. Those mistakes reach the data plane instead of failing the commit, so keep your path names distinct and order store actions ahead of whatever reads them.
 
 Setting `ExportToHost: true` on a `StoreAction` additionally makes the stored value visible outside the pipeline, to subsequent Envoy filters in the chain.
 
-#### Commit
+#### Commit pipeline changes
 
 `Commit` sends the whole pipeline in one call and atomically replaces whatever that policy had registered before, so a reconcile that rebuilds the pipeline from scratch each time converges with no stale actions left behind. Nothing reaches the operator until you commit; the builder calls only accumulate locally.
 
@@ -356,7 +356,7 @@ The operator validates the committed pipeline and rejects it as a whole. On top 
 
 It also checks field accesses on a gRPC response variable against that method's response message, using the proto descriptor it obtained by reflection. So if the service returns a `tier` field and an action reads `planResponse.teir`, the commit fails with that error rather than the misspelled field quietly evaluating to nothing on every request.
 
-### Status condition helpers
+### Manage status conditions with SDK helpers
 
 The SDK provides helpers for setting standard Gateway API policy conditions:
 
@@ -378,7 +378,7 @@ meta.SetStatusCondition(&status.Conditions, *extcontroller.EnforcedCondition(pol
 marshaledJSON, _ := extcontroller.ConditionMarshal(status.Conditions)
 ```
 
-## Environment
+## Configure environment variables
 
 The SDK reads its configuration from the environment; none of it is passed on the command line.
 
@@ -391,9 +391,9 @@ The SDK reads its configuration from the environment; none of it is passed on th
 
 `Build()` fails immediately if `KUADRANT_EXTENSION_ADDRESS` is unset. See [Authoring Extensions](authoring-extensions.md) for the Deployment that supplies these.
 
-## Reconciler patterns
+## Select a reconciler pattern
 
-### Pattern 1: Data bindings (simplest)
+### Implement data bindings
 
 Inject data into the auth or request domain via CEL expressions. No external service needed.
 
@@ -429,11 +429,11 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 
 **Note:** The last argument to `AddDataTo` is a **CEL expression string**, not a resolved value. The expression is evaluated at request time by the data plane (Authorino or wasm-shim), not at reconcile time.
 
-**Note:** Authorino only emits a binding as a metric if its name is qualified with `types.KuadrantMetricBinding(...)`. Limitador ignores the prefix and labels its metrics with every `DomainRequest` binding it receives. See [AddDataTo and domains](#adddatato-and-domains).
+**Note:** Authorino only emits a binding as a metric if its name is qualified with `types.KuadrantMetricBinding(...)`. Limitador ignores the prefix and labels its metrics with every `DomainRequest` binding it receives. See [Publish data bindings with AddDataTo](#publish-data-bindings-with-adddatato).
 
 See: [`cmd/extensions/telemetry-policy/internal/controller/telemetrypolicy_reconciler.go`](https://github.com/Kuadrant/kuadrant-operator/blob/main/cmd/extensions/telemetry-policy/internal/controller/telemetrypolicy_reconciler.go)
 
-### Pattern 2: Pipeline with external gRPC service
+### Implement external gRPC service pipelines
 
 Register an external gRPC service and build an action pipeline that calls it on matching requests, then acts on that service's reply (deny, fail, add headers).
 
@@ -514,11 +514,11 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 }
 ```
 
-The external gRPC service is deployed separately, as its own Deployment and Service. See [Action methods and pipelines](#action-methods-and-pipelines) for what it must support and for the rules the pipeline is validated against.
+The external gRPC service is deployed separately, as its own Deployment and Service. See [Configure action methods and pipelines](#configure-action-methods-and-pipelines) for what it must support and for the rules the pipeline is validated against.
 
 See: [`threat-policy/internal/controller/threatpolicy_reconciler.go`](https://github.com/Kuadrant/example-extensions/blob/main/threat-policy/internal/controller/threatpolicy_reconciler.go)
 
-### Pattern 3: Topology queries and owned resources
+### Query topology and manage owned resources
 
 Query the gateway topology via CEL and create/manage Kubernetes resources owned by your policy.
 
@@ -585,20 +585,20 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 }
 ```
 
-See [Topology CEL functions](#topology-cel-functions) for what the expression can query.
+See [Execute topology CEL functions](#execute-topology-cel-functions) for what the expression can query.
 
 See:
 
 - [`cmd/extensions/oidc-policy/internal/controller/oidcpolicy_reconciler.go`](https://github.com/Kuadrant/kuadrant-operator/blob/main/cmd/extensions/oidc-policy/internal/controller/oidcpolicy_reconciler.go)
 - [`cmd/extensions/plan-policy/internal/controller/planpolicy_reconciler.go`](https://github.com/Kuadrant/kuadrant-operator/blob/main/cmd/extensions/plan-policy/internal/controller/planpolicy_reconciler.go)
 
-### Combining patterns
+### Combine reconciler patterns
 
 The patterns above are not mutually exclusive. You can use any combination of SDK methods in a single reconciler. For example, a reconciler could query the topology via `Resolve` to discover gateway information, create owned resources via `ReconcileObject`, register an external gRPC service via `RegisterActionMethod`, build a pipeline, and publish data bindings via `AddDataTo` — all in the same `Reconcile` function.
 
 The built-in PlanPolicy already combines patterns — it uses `ReconcileObject` to create a RateLimitPolicy and `AddDataTo` to publish auth bindings in the same reconcile cycle.
 
-## Status management
+## Implement status management
 
 All patterns should include proper status management. The SDK provides helpers that follow Gateway API conventions:
 
@@ -624,7 +624,7 @@ func calculateEnforcedStatus(pol *v1alpha1.MyPolicy, enforcedErr error) *v1alpha
 }
 ```
 
-## RBAC
+## Configure RBAC permissions
 
 Add kubebuilder RBAC markers to your reconciler. At minimum, every extension needs:
 
@@ -646,7 +646,7 @@ Add additional markers if your reconciler interacts with other resources:
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 ```
 
-## Concrete examples in the kuadrant-operator repo
+## Review concrete repository examples
 
 | Extension                                                                                                   | Pattern                            | SDK methods                                 | Description                                                             |
 | ----------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
@@ -654,4 +654,5 @@ Add additional markers if your reconciler interacts with other resources:
 | [plan-policy](https://github.com/Kuadrant/kuadrant-operator/tree/main/cmd/extensions/plan-policy)           | Owned resources + bindings         | `ReconcileObject`, `AddDataTo` (DomainAuth) | Creates RateLimitPolicy and publishes plan CEL expression for Authorino |
 | [oidc-policy](https://github.com/Kuadrant/kuadrant-operator/tree/main/cmd/extensions/oidc-policy)           | Topology queries + owned resources | `Resolve[T]`, `ReconcileObject`             | Resolves gateway info via CEL, creates AuthPolicy and HTTPRoute         |
 
-For an example of the pipeline pattern (Pattern 2), see [ThreatPolicy](https://github.com/Kuadrant/example-extensions/tree/main/threat-policy) in the standalone [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions) repo.
+For an example of the pipeline pattern, see [ThreatPolicy](https://github.com/Kuadrant/example-extensions/tree/main/threat-policy) in the standalone [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions) repo.
+

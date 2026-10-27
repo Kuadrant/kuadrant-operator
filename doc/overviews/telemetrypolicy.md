@@ -30,3 +30,11 @@ spec:
         user: auth.identity.userid
         group: auth.identity.groups
 ```
+
+## Optional request headers
+
+Logging fields enrich Authorino's authorization decision records the same way as metric
+labels, see the [reference](../reference/telemetrypolicy.md#loggingconfig). A logging field or
+metric label that is a bare read of one request header is guarded automatically and yields
+`""` when the header is absent; a compound expression that reads a header, and any label on
+the rate-limit path, needs its own `has()` or `in` guard.

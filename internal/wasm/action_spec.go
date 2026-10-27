@@ -514,7 +514,10 @@ func isResponsePhaseExpression(expr string) bool {
 		strings.Contains(expr, requestBodyStorePath)
 }
 
-const loggingFieldsDomain = "logging.fields"
+const (
+	loggingFieldsDomain = "logging.fields"
+	metricsLabelsDomain = "metrics.labels"
+)
 
 // AttachBindings walks specs in pipeline order and attaches only bindings whose
 // dependencies are satisfied at each position. Three checks are applied:
@@ -731,6 +734,11 @@ func buildMetadataContext(bindings []DataBinding) MetadataCEL {
 		byDomain[key].fields = append(byDomain[key].fields, MetadataFieldCEL{
 			Key:        b.Field,
 			Expression: b.Expression,
+			// Logging fields and metric labels are inlined into the Authorino CheckRequest
+			// expression, where one unevaluable field fails the whole request; guard bare
+			// header reads there. The rate-limit descriptor path (bindingsToDescriptor) is a
+			// separate rendering site and is deliberately left unguarded.
+			GuardHeaderRead: b.Domain == loggingFieldsDomain || b.Domain == metricsLabelsDomain,
 		})
 	}
 
@@ -1012,7 +1020,7 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 	entries := make([]DescriptorEntryCEL, 0, len(bindings))
 	for _, b := range bindings {
 		key := b.Field
-		if b.Domain != "" && b.Domain != "metrics.labels" {
+		if b.Domain != "" && b.Domain != metricsLabelsDomain {
 			key = fmt.Sprintf("%s.%s", b.Domain, b.Field)
 		}
 		entries = append(entries, DescriptorEntryCEL{

@@ -104,10 +104,13 @@ func (e FilterMetadataEntryCEL) ToCEL() string {
 
 // MetadataFieldCEL is a single field within a filter_metadata Struct.
 // Auth-referencing expressions are wrapped as cel_expr for deferred evaluation;
-// other expressions are resolved immediately as string values.
+// other expressions are resolved immediately as string values. With GuardHeaderRead set, an
+// expression that is a bare read of one request header is rendered with a presence guard, so
+// a missing header yields "" instead of failing the whole message build.
 type MetadataFieldCEL struct {
-	Key        string
-	Expression string
+	Key             string
+	Expression      string
+	GuardHeaderRead bool
 }
 
 func (f MetadataFieldCEL) ToCEL() string {
@@ -120,6 +123,11 @@ func (f MetadataFieldCEL) valueCEL() string {
 			`google.protobuf.Value{struct_value: google.protobuf.Struct{fields: {"cel_expr": google.protobuf.Value{string_value: "%s"}}}}`,
 			escapeCELString(f.Expression),
 		)
+	}
+	if f.GuardHeaderRead {
+		if name, index, ok := bareHeaderRead(f.Expression); ok {
+			return fmt.Sprintf(`google.protobuf.Value{string_value: %s}`, guardedHeaderReadCEL(name, index))
+		}
 	}
 	return fmt.Sprintf(`google.protobuf.Value{string_value: string(%s)}`, f.Expression)
 }

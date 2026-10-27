@@ -59,6 +59,21 @@ Authorino Operator version supporting custom logging fields.
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions |
 
+Logging field and metric label expressions that do not reference `auth.*` are evaluated in
+the gateway's wasm filter, inside the single expression that builds the Authorino check
+request. A field or label whose expression is a bare read of one request header,
+`request.headers.<name>` or `request.headers["<name>"]`, is rendered with a presence guard and
+yields `""` when the header is absent, so a request that lacks the header still proceeds. Any
+other expression that reads a header, for example
+`request.headers["x-tenant"] + "-" + request.path`, needs its own guard, such as
+`"x-tenant" in request.headers ? ... : ""` or `has(request.headers.<name>) ? ... : ""`;
+without one, a request that lacks the header fails with a 500 before Authorino is called.
+Metric labels are also sent to Limitador with each rate-limit action, and that path is not
+guarded: a label that reads an absent header fails the rate-limit action, which by default
+lets the request through without rate limiting and without the metric, so give a label on an
+optional header an explicit `has()` or `in` guard. Header names are matched as written and
+the gateway exposes them in lowercase, so write `request.headers["x-tenant"]`, not `X-Tenant`.
+
 ### TelemetryPolicyStatus
 
 | **Field**            | **Type**                                                                                     | **Description**                                                                                                                     |

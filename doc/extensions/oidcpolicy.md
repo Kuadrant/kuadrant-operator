@@ -1,6 +1,6 @@
 # OIDCPolicy extension
 
-The _OIDCPolicy_ ([Open ID Connect](https://openid.net/developers/discover-openid-and-openid-connect/) Policy) extension helps users quickly get started with the Kuadrant stack to set up an [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) without needing to understand how to use Kuadrant's `AuthPolicy`.
+The _OIDCPolicy_ ([OpenID Connect](https://openid.net/developers/discover-openid-and-openid-connect/) Policy) extension helps users quickly get started with the Kuadrant stack to set up an [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) without needing to understand how to use Kuadrant's `AuthPolicy`.
 
 ## Overview
 
@@ -132,7 +132,7 @@ Check out the following user guides for complete deployment examples:
 
 ## Known limitations
 
-- `OIDCPolicy` currently only targets [GatewayAPI HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/) objects.
+- `OIDCPolicy` currently only targets [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/) objects.
 - The policy only supports the [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) (Implicit and Hybrid Flows are not supported).
 - Current OIDC workflows only function for browser applications and native applications that manage authentication using a browser.
 - `TokenSource` only supports `cookies` as a source.

@@ -26,8 +26,8 @@ This guide shows how to build a custom extension policy using the Kuadrant Exten
     │       ├── kustomization.yaml
     │       └── role.yaml
     └── internal/
-    └── controller/
-    └── mypolicy_reconciler.go
+        └── controller/
+            └── mypolicy_reconciler.go
 
 ```
 
@@ -146,7 +146,7 @@ Key differences:
 
 | Method               | Purpose                                                                                                                                       |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WithReconciler(fn)` | Sets the reconcile function — its signature takes an extra `types.KuadrantCtx` argument (see [KuadrantCtx interface](#kuadrantctx-interface)) |
+| `WithReconciler(fn)` | Sets the reconcile function — its signature takes an extra `types.KuadrantCtx` argument (see [Understand the KuadrantCtx interface](#understand-the-kuadrantctx-interface)) |
 | `Build()`            | Validates config and connects to the operator over gRPC instead of just assembling a `ctrl.Manager` — returns `*ExtensionController`          |
 
 ### Register custom schemes
@@ -190,8 +190,8 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 | `ResolvePolicy`        | `(ctx, policy, celExpr string, subscribe bool) (Policy, error)`           | Same as Resolve but returns a Policy                                                                                          |
 | `AddDataTo`            | `(ctx, policy, domain Domain, binding string, celExpr string) error`      | Register a data binding (CEL expression) for auth or request domain                                                           |
 | `ReconcileObject`      | `(ctx, existing, desired client.Object, mutateFn) (client.Object, error)` | Create or update a Kubernetes resource                                                                                        |
-| `RegisterActionMethod` | `(ctx, policy, config ActionMethodConfig) error`                          | Register an external gRPC service for data-plane dispatch (see [Action methods and pipelines](#action-methods-and-pipelines)) |
-| `NewPipeline`          | `(policy) Pipeline`                                                       | Create an action pipeline builder (see [Action methods and pipelines](#action-methods-and-pipelines))                         |
+| `RegisterActionMethod` | `(ctx, policy, config ActionMethodConfig) error`                          | Register an external gRPC service for data-plane dispatch (see [Configure action methods and pipelines](#configure-action-methods-and-pipelines)) |
+| `NewPipeline`          | `(policy) Pipeline`                                                       | Create an action pipeline builder (see [Configure action methods and pipelines](#configure-action-methods-and-pipelines))                         |
 
 ### Evaluate topology using Resolve and ResolvePolicy
 

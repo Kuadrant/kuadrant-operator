@@ -138,7 +138,7 @@ Add two numeric values or concatenate two strings, bytes, or lists.
 b'hi' + bytes('ya') // b'hiya'
 [1] + [2, 3] // [1, 2, 3]
 duration('1m') + duration('1s') // duration('1m1s')
-duration('24h') + timestamp('2023-01-01T00:00:00Z') // timestamp('2023-01-02T00:00:02Z')
+duration('24h') + timestamp('2023-01-01T00:00:00Z') // timestamp('2023-01-02T00:00:00Z')
 timestamp('2023-01-01T00:00:00Z') + duration('24h1m2s') // timestamp('2023-01-02T00:01:02Z')
 
 ```

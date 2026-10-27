@@ -48,7 +48,7 @@ The [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions
 
 ```
 
-On startup the SDK connects to the operator and completes a handshake, where your extension proves its identity and claims the policy kind it manages. The SDK does this for you; what you provide is the configuration behind it, covered under [Deploying](#deploying). From then on your reconciler runs for every instance of your CRD exactly as a controller-runtime reconciler would, with one extra argument: a `KuadrantCtx` carrying the SDK methods.
+On startup the SDK connects to the operator and completes a handshake, where your extension proves its identity and claims the policy kind it manages. The SDK does this for you; what you provide is the configuration behind it, covered under [Deploy an extension](#deploy-an-extension). From then on your reconciler runs for every instance of your CRD exactly as a controller-runtime reconciler would, with one extra argument: a `KuadrantCtx` carrying the SDK methods.
 
 Everything your extension tells the operator is scoped to the policy that told it. When a policy is deleted, the bindings and pipeline actions it published go with it.
 
@@ -368,12 +368,11 @@ If nothing is reconciling at all, the handshake is the first thing to check. The
 
 ## Additional resources
 
-* [Extension SDK developer guide](https://www.google.com/search?q=extension-sdk-developer-guide.md): full reference for the SDK API, reconciler patterns and project layout
+* [Extension SDK developer guide](extension-sdk-developer-guide.md): full reference for the SDK API, reconciler patterns and project layout
 * [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions): reference extensions to read and copy from, with their deployment manifests
 * [Gateway API Policy Attachment](https://gateway-api.sigs.k8s.io/geps/gep-713/)
-* [Kuadrant's introduction to CEL](https://www.google.com/search?q=../cel/introduction.md)
+* [Kuadrant's introduction to CEL](../cel/introduction.md)
 * [CEL language definition](https://github.com/google/cel-spec)
 * [Authorino documentation](https://docs.kuadrant.io/authorino/)
 * [Limitador documentation](https://docs.kuadrant.io/limitador/)
-
 ```

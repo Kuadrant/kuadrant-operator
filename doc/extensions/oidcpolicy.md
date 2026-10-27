@@ -109,7 +109,7 @@ Configure parameters used to extract the [JWT](https://en.wikipedia.org/wiki/JSO
     # TokenSource informs where the JWT token will be found in the request for authentication
     # At the moment it only supports `cookies` and it represents the name of the cookie, in the example below, _jwt_
     tokenSource: jwt
-    # Claims contains the JWT Claims [https://www.rfc-editor.org/rfc/rfc7519.html#section-4](https://www.rfc-editor.org/rfc/rfc7519.html#section-4)
+    # Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
     claims:
       # In this example is using the `groups_direct` claim with the value `engineering_team`
       groups_direct: "engineering_team"

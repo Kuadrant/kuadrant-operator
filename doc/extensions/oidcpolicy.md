@@ -1,40 +1,32 @@
-# OIDCPolicy Extension
+# OIDCPolicy extension
 
-The _OIDCPolicy_ ([Open ID Connect](https://openid.net/developers/discover-openid-and-openid-connect/) Policy) extension
-aims at helping users to easily & quickly get started with the Kuadrant stack to set up an
-[OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) without needing to initially understand how to
-use Kuadrant's `AuthPolicy` to achieve their goals.
+The _OIDCPolicy_ ([OpenID Connect](https://openid.net/developers/discover-openid-and-openid-connect/) Policy) extension helps users quickly get started with the Kuadrant stack to set up an [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) without needing to understand how to use Kuadrant's `AuthPolicy`.
 
 ## Overview
 
-OIDCPolicy exposes in its config spec, the specifics for setting up an [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
-leveraging behind the scenes the configuration of `AuthPolicies` and `HTTPRoutes` for the redirection to IDP login and authorization page,
-token exchange via secure channel and other default protection rules for a given Application/Service.
+The `OIDCPolicy` resource configures an [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth). Behind the scenes, it manages `AuthPolicies` and `HTTPRoutes` for IDP login redirect, authorization pages, token exchange over secure channels, and default protection rules for an application or service.
 
-## How it works
+## Understand how OIDCPolicy works
 
-### Integration
+### Review extension integration
 
-OIDCPolicy works in conjunction with the [Extensions SDK](authoring-extensions.md), AuthPolicy and [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/):
+OIDCPolicy works in conjunction with the [Extensions SDK](authoring-extensions.md), AuthPolicy, and [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/):
 
-1. **OIDCPolicy** Entry point for provider configuration and authorization rules.
-2. The policy automatically creates an `HTTPRoute` for the callback from the IDP and `AuthPolicies` for the protected rule and the callback one for token exchange
-3. It also subscribes for Gateway updates through the Extensions SDK, in order to keep in sync with the AuthPolicies the hostname vlaue.
-4. There is an extra **HTTPRoute** that was created by the OIDCPolicy reconciler is available to handle traffic for the code/token exchange
-5. There is an **AuthPolicy** for Authenticating/Authorizing the access to the protected service and a second one attached to
-the callback HTTPRoute that handles the code/token exchange.
+1. **OIDCPolicy** acts as the entry point for provider configuration and authorization rules.
+2. The policy automatically creates an `HTTPRoute` for the callback from the IDP and `AuthPolicies` for the protected rule and the callback for token exchange.
+3. The policy subscribes to Gateway updates through the Extensions SDK to synchronize the hostname value with `AuthPolicies`.
+4. The reconciler creates an additional **HTTPRoute** to handle traffic for the code and token exchange.
+5. The policy manages two **AuthPolicy** resources: one authenticates and authorizes access to the protected service, and the second attaches to the callback `HTTPRoute` to handle the code and token exchange.
 
-### The OIDCPolicy custom resource
-
-#### Overview
+### Review the OIDCPolicy custom resource
 
 The `OIDCPolicy` spec includes the following parts:
 
 - A reference to an existing Gateway API resource (`spec.targetRef`)
 - Settings related to the Identity Provider (IDP) (`spec.provider`)
-- A definition of settings that will enforce Authorization rules (`spec.auth`)
+- A definition of settings that enforce authorization rules (`spec.auth`)
 
-#### High-level example and field definition
+#### Inspect field definitions and example configuration
 
 ```yaml
 apiVersion: extensions.kuadrant.io/v1alpha1
@@ -53,19 +45,20 @@ spec:
     # OAuth2 Client ID.
     clientID: oidc-demo
     # URL of the OpenID Connect (OIDC) token issuer endpoint.
-    # Use it for automatically discovering the JWKS URL from an OpenID Connect Discovery endpoint (https://openid.net/specs/openid-connect-discovery-1_0.html).
+    # Use it for automatically discovering the JWKS URL from an OpenID Connect Discovery endpoint ([https://openid.net/specs/openid-connect-discovery-1_0.html](https://openid.net/specs/openid-connect-discovery-1_0.html)).
     # The Well-Known Discovery path (i.e. "/.well-known/openid-configuration") is appended to this URL to fetch the OIDC configuration.
     issuerURL: https://idp-provider.example.org
   auth:
-    # Claims contains the JWT Claims https://www.rfc-editor.org/rfc/rfc7519.html#section-4
+    # Claims contains the JWT Claims [https://www.rfc-editor.org/rfc/rfc7519.html#section-4](https://www.rfc-editor.org/rfc/rfc7519.html#section-4)
     claims:
       group: kuadrant
-
 ```
-## Using the OIDCPolicy
-### Targeting a HTTPRoute networking resource
-When a OIDCPolicy targets an HTTPRoute, the policy will be enforced on all traffic flowing through that specific route.
-Target an HTTPRoute by setting the `spec.targetRef` field of the OIDCPolicy as follows:
+
+## Use the OIDCPolicy
+
+### Target an HTTPRoute resource
+
+When an `OIDCPolicy` targets an `HTTPRoute`, the policy is enforced on all traffic flowing through that specific route. Target an `HTTPRoute` by setting the `spec.targetRef` field of the `OIDCPolicy`:
 
 ```yaml
 apiVersion: extensions.kuadrant.io/v1alpha1
@@ -83,14 +76,15 @@ spec:
     # ... auth definition
 ```
 
-### Provider definition
-Definitions that will configure the IDP settings, the way it will authenticate with it, and the specific endpoints.
+### Configure the provider definition
+
+Configure the IDP settings, authentication mechanisms, and specific endpoints:
 
 ```yaml
     # Client/Application ID from the IDP
     clientID: oidc-demo
     # URL of the OpenID Connect (OIDC) token issuer endpoint. It's chosen when no _jwksURL_ is introduced
-    issuerURL: https://idp-provider.example.org
+    issuerURL: [https://idp-provider.example.org](https://idp-provider.example.org)
     # URL of the OIDC JSON Web Key Set (JWKS) endpoint. It's chosen when no _issuerURL_ is introduced
     jwksURL: https://idp-provider.example.org/openid-connect/jwks
     # Reference to a Kubernetes secret that will store the IDP client secret
@@ -107,8 +101,9 @@ Definitions that will configure the IDP settings, the way it will authenticate w
     redirectURI: https://your-deployed-app.org/callback
 ```
 
-### Auth definition
-Definitions that will be used to get the [JWT](https://en.wikipedia.org/wiki/JSON_Web_Token) and enforce Authorization.
+### Configure the authentication definition
+
+Configure parameters used to extract the [JWT](https://en.wikipedia.org/wiki/JSON_Web_Token) and enforce authorization:
 
 ```yaml
     # TokenSource informs where the JWT token will be found in the request for authentication
@@ -122,22 +117,22 @@ Definitions that will be used to get the [JWT](https://en.wikipedia.org/wiki/JSO
 
 ## Prerequisites
 
-Before using OIDCPolicy, ensure you have:
+Before using `OIDCPolicy`, satisfy the following requirements:
 
-1. **Kuadrant Operator** installed and running
-2. **Gateway API** resources (Gateway and HTTPRoute) configured
-3. An **Identity Provider** such as [Keycloak](https://www.keycloak.org/) installed and running or an account somewhere
+1. Install and run the **Kuadrant Operator**.
+2. Configure **Gateway API** resources (`Gateway` and `HTTPRoute`).
+3. Deploy an **Identity Provider** such as [Keycloak](https://www.keycloak.org/) or obtain access to an external provider account.
 
-## Examples
+## Additional resources
 
-Check out the following user guide for a complete example of using PlanPolicy:
+Check out the following user guides for complete deployment examples:
 
 - [OIDC with Keycloak](../user-guides/oidcpolicy/oidc-keycloak.md)
 - [OIDC with Gitlab](../user-guides/oidcpolicy/oidc-gitlab.md)
 
 ## Known limitations
 
-- The _OIDCPolicy_, at the moment, only targets  [GatewayAPI HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/) objects
-- It only implements the [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) (recommended). Missing Implicit and Hybrid Flow
-- Current OIDC Workflow works only for Browser apps and Native apps that manage the Auth via browser
-- TokenSource works only with `cookies` as of today
+- `OIDCPolicy` currently only targets [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/api-types/httproute/) objects.
+- The policy only supports the [OpenID Connect Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth) (Implicit and Hybrid Flows are not supported).
+- Current OIDC workflows only function for browser applications and native applications that manage authentication using a browser.
+- `TokenSource` only supports `cookies` as a source.

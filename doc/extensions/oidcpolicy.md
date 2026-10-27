@@ -47,7 +47,7 @@ spec:
     # URL of the OpenID Connect (OIDC) token issuer endpoint.
     # Use it for automatically discovering the JWKS URL from an OpenID Connect Discovery endpoint ([https://openid.net/specs/openid-connect-discovery-1_0.html](https://openid.net/specs/openid-connect-discovery-1_0.html)).
     # The Well-Known Discovery path (i.e. "/.well-known/openid-configuration") is appended to this URL to fetch the OIDC configuration.
-    issuerURL: [https://idp-provider.example.org](https://idp-provider.example.org)
+    issuerURL: https://idp-provider.example.org
   auth:
     # Claims contains the JWT Claims [https://www.rfc-editor.org/rfc/rfc7519.html#section-4](https://www.rfc-editor.org/rfc/rfc7519.html#section-4)
     claims:
@@ -86,7 +86,7 @@ Configure the IDP settings, authentication mechanisms, and specific endpoints:
     # URL of the OpenID Connect (OIDC) token issuer endpoint. It's chosen when no _jwksURL_ is introduced
     issuerURL: [https://idp-provider.example.org](https://idp-provider.example.org)
     # URL of the OIDC JSON Web Key Set (JWKS) endpoint. It's chosen when no _issuerURL_ is introduced
-    jwksURL: [https://idp-provider.example.org/openid-connect/jwks](https://idp-provider.example.org/openid-connect/jwks)
+    jwksURL: https://idp-provider.example.org/openid-connect/jwks
     # Reference to a Kubernetes secret that will store the IDP client secret
     clientSecretRef:
       # The name of the secret in the Kuadrant's namespace to select from
@@ -98,7 +98,7 @@ Configure the IDP settings, authentication mechanisms, and specific endpoints:
     # Defines the URL to obtain an Access Token, an ID Token, and optionally a Refresh Token. Default value is the IssuerURL + "/oauth/token"
     tokenEndpoint: https://idp-provider/openid-connect/token
     # The RedirectURI defines the URL that is part of the authentication request to the AuthorizationEndpoint and the one defined in the IDP. Default value is the IssuerURL + "/auth/callback"
-    redirectURI: [https://your-deployed-app.org/callback](https://your-deployed-app.org/callback)
+    redirectURI: https://your-deployed-app.org/callback
 ```
 
 ### Configure the authentication definition

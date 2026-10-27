@@ -257,7 +257,7 @@ kind: ClusterRole
 metadata:
   name: my-policy-register
 rules:
-- apiGroups: ["extensions.kuadrant.io"]
+    - apiGroups: ["extensions.kuadrant.io"]
     resources: ["policyregistrations"]
     resourceNames: ["MyPolicy"] # must match the Kind passed to For()
     verbs: ["register"]

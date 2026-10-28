@@ -36,7 +36,7 @@ func NewLimitadorReconciler(client *dynamic.DynamicClient) *LimitadorReconciler 
 
 func (r *LimitadorReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(LimitadorReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
 			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.UpdateEvent)},

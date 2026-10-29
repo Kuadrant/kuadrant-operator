@@ -84,11 +84,12 @@ spec:
                           type: string
                         description: |-
                           Labels to add to metrics, where keys are label names and values are CEL expressions.
-                          Expressions are evaluated on every request, as part of the authorization request and of
-                          each rate-limit descriptor. An expression that cannot be evaluated for a request, for
-                          example one that reads a request header the request does not carry, is not skipped: on
-                          the authorization action the request fails with HTTP 500, and on a rate-limit action the
-                          action fails and, by default, the request proceeds without rate limiting. Guard optional
+                          On the authorization action an expression that references auth.* is sent to Authorino
+                          unevaluated and resolved there after authentication; every other expression is evaluated in
+                          the gateway, and one that cannot be evaluated for a request, for example a read of a request
+                          header the request does not carry, fails that request with HTTP 500. On a rate-limit action
+                          every expression, including auth.*, is evaluated in the gateway; one that cannot be evaluated
+                          fails the action and, by default, the request proceeds without rate limiting. Guard optional
                           attributes, for example '"x-tenant" in request.headers ? request.headers["x-tenant"] : ""'.
                         minProperties: 1
                         type: object

@@ -7,12 +7,13 @@ The Kuadrant [TelemetryPolicy CRD](../reference/telemetrypolicy.md) allows you t
 Custom labels are defined as key-value pairs, where the key is the label name and the value is either a literal or a CEL expression.
 Using dynamically evaluated CEL expressions, you can label existing metrics with any data referenced by the [Well-known Attributes](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md).
 
-Expressions are evaluated on every request and are not skipped when they fail: a label
-expression that cannot be evaluated for a request, for example one that reads a header the
-request does not carry, fails that request with HTTP 500 on the authorization action. Guard
-optional attributes in the expression; the
-[TelemetryPolicy reference](../reference/telemetrypolicy.md#evaluation-of-expressions) describes the
-evaluation model and the guard spellings.
+Expressions are evaluated on every request and are not skipped when they fail. On the
+authorization action an expression that cannot be evaluated for a request, for example one
+that reads a header the request does not carry, fails that request with HTTP 500; on a
+rate-limit action it fails the action and, by default, the request proceeds without rate
+limiting. Guard optional attributes in the expression; the
+[TelemetryPolicy reference](../reference/telemetrypolicy.md#evaluation-of-expressions)
+describes the evaluation model and the guard spellings.
 
 ## Examples
 

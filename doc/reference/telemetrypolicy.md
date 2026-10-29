@@ -47,7 +47,7 @@ Authorino Operator version supporting custom logging fields.
 ### MetricsConfig
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions |
+| `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions. Evaluated on every request; an expression that cannot be evaluated fails the request rather than being skipped, see [below](#evaluation-of-expressions) |
 
 ### LoggingSpec
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
@@ -57,7 +57,24 @@ Authorino Operator version supporting custom logging fields.
 ### LoggingConfig
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions |
+| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions. An `auth.*` expression that cannot be resolved is omitted from the record; any other expression that cannot be evaluated fails the request, see [below](#evaluation-of-expressions) |
+
+#### Evaluation of expressions
+
+Logging fields that reference `auth.*` are resolved by Authorino after authentication, and a
+field that cannot be resolved is omitted from the record. Every other logging field, and every
+metric label, is evaluated in the gateway as part of the single expression that builds the
+authorization request, so an expression that cannot be evaluated for a request, for example one
+that reads a header the request does not carry, fails that request with HTTP 500 before
+Authorino is called, and no record is written. Metric labels are also evaluated as part of each
+rate-limit descriptor, where a failing expression fails the rate-limit action; by default the
+request then proceeds without rate limiting.
+
+Guard optional attributes in the expression itself:
+`"x-tenant" in request.headers ? request.headers["x-tenant"] : ""` works for any header name,
+and `has(request.headers.xtenant) ? string(request.headers.xtenant) : ""` for names without
+hyphens. The gateway exposes header names in lowercase, so write `request.headers["x-tenant"]`,
+not `X-Tenant`. CEL optional field syntax (`.?`) is not supported.
 
 ### TelemetryPolicyStatus
 

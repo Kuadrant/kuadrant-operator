@@ -224,3 +224,36 @@ func TestValidatorSupportsStringExtensions(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatorSupportsOptionalExpression(t *testing.T) {
+	builder := NewValidatorBuilder()
+	if _, err := builder.AddPolicyBindingAfter(nil, "foo", "first", cel.AnyType); err != nil {
+		t.Fatal(err)
+	}
+
+	validator, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{name: "optional syntax", expr: "first.?randomField"},
+		{name: "optional orValue", expr: "first.?randomField.orValue('none')"},
+		{name: "optional of", expr: "optional.of(10)"},
+		{name: "optional ofNonZeroValue", expr: "optional.ofNonZeroValue([])"},
+		{name: "optional hasValue", expr: "optional.of(first.randomField).hasValue()"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if ast, err := validator.Validate("foo", tc.expr); err != nil {
+				t.Fatalf("unexpected error validating expr '%s': %v", tc.expr, err)
+			} else if ast == nil {
+				t.Fatalf("expected non-nil AST for expr '%s'", tc.expr)
+			}
+		})
+	}
+}

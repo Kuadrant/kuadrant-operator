@@ -42,6 +42,7 @@ import (
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -254,10 +255,21 @@ func main() {
 		PprofBindAddress:       pprofAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "f139389e.kuadrant.io",
-		// Restrict caching secrets to operator namespace
+		// Restrict shared manager cache to operator-relevant objects only.
+		// Third-party objects of these kinds in other namespaces or without kuadrant labels
+		// are irrelevant to reconciliation and inflate memory unnecessarily.
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
 				&corev1.Secret{}: {
+					// Secrets are only needed in the operator namespace.
+					Namespaces: map[string]cache.Config{
+						operatorNamespace: {},
+					},
+				},
+				&appsv1.Deployment{}: {
+					// The control-plane controller only reads Deployments from the operator
+					// namespace (child operator deployments). Caching cluster-wide would hold
+					// every Deployment on the cluster unnecessarily.
 					Namespaces: map[string]cache.Config{
 						operatorNamespace: {},
 					},

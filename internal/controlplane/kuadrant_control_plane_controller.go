@@ -137,7 +137,10 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToControlPlane),
 			builder.WithPredicates(r.childDeploymentPredicate())).
-		Watches(&apiextv1.CustomResourceDefinition{},
+		// WatchesMetadata avoids caching full CRD objects (which embed large openAPIV3Schema
+		// content) cluster-wide. The controller only needs to know that specific CRDs exist
+		// by name; getCRDStatuses reads live state via the dynamic client, not the cache.
+		WatchesMetadata(&apiextv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToControlPlane),
 			builder.WithPredicates(r.childCRDPredicate())).
 		Named("kuadrant-control-plane").

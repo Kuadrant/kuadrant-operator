@@ -20,7 +20,7 @@ components:
     repo: Kuadrant/authorino-operator
     chart-path: charts/authorino-operator
     tracked-branch: main
-    ref: 1ac152522a76050c44579415214c6433b8024bf1
+    ref: f7549ae74564a5845890284661e5448fdb185d62
     auto-merge: true
   limitador-operator:
     repo: Kuadrant/limitador-operator
@@ -32,7 +32,7 @@ components:
     repo: Kuadrant/mcp-gateway
     chart-path: charts/mcp-gateway
     tracked-branch: main
-    ref: 26c7bb4ffa25ed31e3f166373a718f00ea0b50ff
+    ref: 5e45f2372a704ac98cc0bec21e7e77d6d5d73715
     auto-merge: true
   developer-portal-controller:
     repo: Kuadrant/developer-portal-controller

@@ -78,13 +78,12 @@ type MetricsSpec struct {
 // MetricsConfig defines reusable metrics configuration that can be applied to different metric types
 type MetricsConfig struct {
 	// Labels to add to metrics, where keys are label names and values are CEL expressions.
-	// On the authorization action an expression that references auth.* is sent to Authorino
-	// unevaluated and resolved there after authentication; every other expression is evaluated in
-	// the gateway, and one that cannot be evaluated for a request, for example a read of a request
-	// header the request does not carry, fails that request with HTTP 500. On a rate-limit action
-	// every expression, including auth.*, is evaluated in the gateway; one that cannot be evaluated
-	// fails the action and, by default, the request proceeds without rate limiting. Guard optional
-	// attributes, for example '"x-tenant" in request.headers ? request.headers["x-tenant"] : ""'.
+	// On the authorization action, expressions referencing `auth.*` are evaluated in the auth
+	// provider and unresolved metric labels are omitted. Any other CEL evaluation failure,
+	// including an `auth.*` expression on a rate-limit action, follows the failure mode of the
+	// corresponding protection service.
+	// If missing values are expected, guard against them, for example:
+	// `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"`.
 	// +kubebuilder:validation:MinProperties=1
 	Labels map[string]string `json:"labels"`
 }
@@ -99,12 +98,11 @@ type LoggingSpec struct {
 type LoggingConfig struct {
 	// Fields to add to auth decision log records, where keys are field names and values are
 	// CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
-	// An expression that references auth.* is resolved by Authorino after authentication, and a
-	// field that cannot be resolved is omitted from the record. Any other expression is evaluated
-	// in the gateway before the authorization request; if it cannot be evaluated, for example
-	// because it reads a request header the request does not carry, the request fails with
-	// HTTP 500 and no record is written. Guard optional attributes, for example
-	// '"x-tenant" in request.headers ? request.headers["x-tenant"] : ""'.
+	// Expressions referencing `auth.*` are evaluated in the auth provider; unresolved
+	// logging fields are omitted. Other CEL evaluation failures follow the failure mode
+	// of the corresponding protection service.
+	// If missing values are expected, guard against them, for example:
+	// `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"`.
 	// +kubebuilder:validation:MinProperties=1
 	// +kubebuilder:validation:XValidation:rule="self.all(k, !k.contains('.'))",message="field names must not contain periods"
 	Fields map[string]string `json:"fields"`

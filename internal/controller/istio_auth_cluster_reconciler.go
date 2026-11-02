@@ -36,7 +36,7 @@ type IstioAuthClusterReconciler struct {
 // IstioAuthClusterReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources for auth
 func (r *IstioAuthClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(IstioAuthClusterReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

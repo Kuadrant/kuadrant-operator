@@ -83,18 +83,22 @@ func (e *ReconciliationError) ShouldRetry() bool {
 // ErrorRegistry collects non-blocking errors during a single reconciliation
 // It's stored in the workflow state map and only lives for one reconciliation cycle
 type ErrorRegistry struct {
-	mu     sync.Mutex
-	errors map[string]*ReconciliationError
+	mu         sync.Mutex
+	errors     map[string]*ReconciliationError
+	reconciled map[string]struct{} // Sources that completed a run in this reconciliation
 }
 
 // NewErrorRegistry creates a new error registry
 func NewErrorRegistry() *ErrorRegistry {
 	return &ErrorRegistry{
-		errors: make(map[string]*ReconciliationError),
+		errors:     make(map[string]*ReconciliationError),
+		reconciled: make(map[string]struct{}),
 	}
 }
 
 // Record adds a non-blocking error to the registry
+// The ReconcileFunc of the recording reconciler must be wrapped with errorTrackingReconcileFunc
+// using the same source, so the tracker can resolve the error once the reconciler stops recording it
 func (r *ErrorRegistry) Record(source, operation string, resource k8stypes.NamespacedName, kind schema.GroupKind, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -111,6 +115,23 @@ func (r *ErrorRegistry) Record(source, operation string, resource k8stypes.Names
 	}
 
 	r.errors[rec.Key()] = rec
+}
+
+// MarkReconciled records that the given source completed a run in this reconciliation.
+// Only errors from sources marked as reconciled can be considered resolved by the tracker,
+// since a source that did not run did not retry its failed operations.
+func (r *ErrorRegistry) MarkReconciled(source string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reconciled[source] = struct{}{}
+}
+
+// WasReconciled returns true if the given source completed a run in this reconciliation
+func (r *ErrorRegistry) WasReconciled(source string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, found := r.reconciled[source]
+	return found
 }
 
 // GetErrors returns all recorded errors
@@ -140,6 +161,21 @@ func GetOrCreateErrorRegistry(state *sync.Map) *ErrorRegistry {
 
 	reg, _ := state.LoadOrStore(StateReconciliationErrors, NewErrorRegistry())
 	return reg.(*ErrorRegistry)
+}
+
+// errorTrackingReconcileFunc wraps the ReconcileFunc of a reconciler that records non-blocking errors
+// under the given source name, marking the source as reconciled in the error registry when it
+// completes successfully. Reconcilers subscribe to a subset of events, so this is what lets the
+// tracker tell apart errors that were retried and not re-recorded (resolved) from errors whose
+// reconciler did not run in the current reconciliation (still pending).
+func errorTrackingReconcileFunc(source string, reconcileFunc controller.ReconcileFunc) controller.ReconcileFunc {
+	return func(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
+		if reconcileErr := reconcileFunc(ctx, events, topology, err, state); reconcileErr != nil {
+			return reconcileErr
+		}
+		GetOrCreateErrorRegistry(state).MarkReconciled(source)
+		return nil
+	}
 }
 
 // PersistentErrorTracker tracks errors across reconciliation cycles
@@ -216,10 +252,11 @@ func (t *PersistentErrorTracker) UpdateFromRegistry(registry *ErrorRegistry) {
 		}
 	}
 
-	// Remove errors that were not seen in this reconciliation
-	// (they were successfully resolved)
+	// Remove errors that were not seen in this reconciliation, provided their source ran
+	// (they were successfully resolved). Errors whose source did not run in this
+	// reconciliation, e.g. because it was triggered by an unrelated event, are left untouched.
 	for key, err := range t.errors {
-		if !currentKeys[key] {
+		if !currentKeys[key] && registry.WasReconciled(err.Source) {
 			t.logger.Info("non-blocking error resolved",
 				"key", key,
 				"attempts", err.RetryCount+1,

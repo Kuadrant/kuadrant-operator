@@ -44,7 +44,7 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 			{Kind: &kuadrantv1.TLSPolicyGroupKind},
 			{Kind: &CertManagerCertificateKind},
 		},
-		ReconcileFunc: t.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(EffectiveTLSPoliciesReconcilerName, t.Reconcile),
 	}
 }
 

@@ -9,7 +9,10 @@ import (
 	"testing"
 
 	"github.com/google/cel-go/cel"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/api/v1alpha1"
 )
 
 // evalClaimPredicate compiles the predicate produced by claimPredicate and
@@ -83,6 +86,27 @@ func TestClaimPredicate(t *testing.T) {
 			value:    "admin",
 			identity: map[string]interface{}{"groups": []interface{}{"dev", "ops"}},
 			want:     false,
+		},
+		{
+			name:     "claim key that is not a CEL identifier",
+			claim:    "custom:role",
+			value:    "admin",
+			identity: map[string]interface{}{"custom:role": "admin"},
+			want:     true,
+		},
+		{
+			name:     "quote in value cannot change the predicate",
+			claim:    "email",
+			value:    `x" || true || "x`,
+			identity: map[string]interface{}{"email": "user@example.com"},
+			want:     false,
+		},
+		{
+			name:     "quote in value is matched literally",
+			claim:    "email",
+			value:    `a"b`,
+			identity: map[string]interface{}{"email": `a"b`},
+			want:     true,
 		},
 		{
 			name:     "claim absent from identity",
@@ -624,5 +648,90 @@ func TestBuildOpaAuthorizationRule_CustomRedirectURI_Scenario(t *testing.T) {
 	// Redirect to authorize URL for re-authentication
 	if !strings.Contains(rule, `location := "https://auth.example.com/authorize" { not input.auth.metadata.token.id_token }`) {
 		t.Error("Location 3 should redirect to authorize URL when auth fails")
+	}
+}
+
+// evalCEL compiles and evaluates a generated CEL expression against the given
+// variables, failing the test if it does not compile.
+func evalCEL(t *testing.T, expr string, vars map[string]interface{}) interface{} {
+	t.Helper()
+	env, err := cel.NewEnv(cel.Variable("auth", cel.DynType), cel.Variable("request", cel.DynType))
+	if err != nil {
+		t.Fatalf("cel.NewEnv failed: %v", err)
+	}
+	ast, iss := env.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		t.Fatalf("compile failed for expression %q: %v", expr, iss.Err())
+	}
+	prg, err := env.Program(ast)
+	if err != nil {
+		t.Fatalf("program failed: %v", err)
+	}
+	out, _, err := prg.Eval(vars)
+	if err != nil {
+		t.Fatalf("eval failed for expression %q: %v", expr, err)
+	}
+	return out.Value()
+}
+
+var tokenVars = map[string]interface{}{
+	"auth":    map[string]interface{}{"metadata": map[string]interface{}{"token": map[string]interface{}{"id_token": "tok"}}},
+	"request": map[string]interface{}{"url_path": "/path", "query": ""},
+}
+
+func TestIssuerPredicateQuotesIssuerURL(t *testing.T) {
+	issuer := `https://issuer.example.com/" || true || "`
+	pol := &v1alpha1.OIDCPolicy{}
+	pol.Spec.Provider = &v1alpha1.Provider{IssuerURL: issuer, ClientID: "client"}
+	pol.Spec.Auth = &v1alpha1.Auth{Claims: map[string]string{"email": "user@example.com"}}
+	igw := &ingressGatewayInfo{Hostname: "example.com", Protocol: gatewayapiv1.HTTPProtocolType, Port: 80}
+
+	authPolicy, err := buildMainAuthPolicy(pol, igw)
+	if err != nil {
+		t.Fatalf("buildMainAuthPolicy failed: %v", err)
+	}
+	predicate := authPolicy.Spec.Overrides.AuthScheme.Authorization["oidc"].Conditions[0].Predicate
+
+	for iss, want := range map[string]bool{issuer: true, "https://other.example.com": false} {
+		vars := map[string]interface{}{"auth": map[string]interface{}{"identity": map[string]interface{}{"iss": iss}}}
+		if got := evalCEL(t, predicate, vars); got != want {
+			t.Errorf("predicate %q with iss %q = %v, want %v", predicate, iss, got, want)
+		}
+	}
+}
+
+func TestCredentialsHeaderQuotesPrefix(t *testing.T) {
+	for _, prefix := range []string{"Bearer", `Bearer" + "x`, `back\slash`} {
+		tokenSource := &authorinov1beta3.Credentials{AuthorizationHeader: &authorinov1beta3.Prefixed{Prefix: prefix}}
+		expr := string(credentialsHeader(tokenSource, &ingressGatewayInfo{})["Authorization"].Expression)
+		if got, want := evalCEL(t, expr, tokenVars), prefix+" tok"; got != want {
+			t.Errorf("expression %q = %q, want %q", expr, got, want)
+		}
+	}
+}
+
+func TestCookieHeadersQuoteValues(t *testing.T) {
+	cases := []struct {
+		cookieName string
+		hostname   string
+		protocol   gatewayapiv1.ProtocolType
+	}{
+		{cookieName: "jwt", hostname: "example.com", protocol: gatewayapiv1.HTTPProtocolType},
+		{cookieName: "jwt", hostname: "example.com", protocol: gatewayapiv1.HTTPSProtocolType},
+		{cookieName: `a" + "b`, hostname: `example.com" + "x`, protocol: gatewayapiv1.HTTPSProtocolType},
+	}
+	for _, tc := range cases {
+		attrs := fmt.Sprintf("; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600", tc.hostname, getSecureFlag(tc.protocol))
+		igw := &ingressGatewayInfo{Hostname: tc.hostname, Protocol: tc.protocol}
+
+		expr := string(cookieHeader(tc.cookieName, igw).Expression)
+		if got, want := evalCEL(t, expr, tokenVars), tc.cookieName+"=tok"+attrs; got != want {
+			t.Errorf("cookieHeader expression %q = %q, want %q", expr, got, want)
+		}
+
+		expr = buildTargetCookieExpression(tc.hostname, tc.protocol)
+		if got, want := evalCEL(t, expr, tokenVars), "target=/path"+attrs; got != want {
+			t.Errorf("buildTargetCookieExpression %q = %q, want %q", expr, got, want)
+		}
 	}
 }

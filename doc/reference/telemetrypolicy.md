@@ -69,8 +69,13 @@ fails the action it belongs to. What happens to the request then follows the fai
 corresponding protection service: the authorization service defaults to `failureMode: deny`, so
 the request fails with HTTP 500 and no decision record is written; the rate limit service
 defaults to `failureMode: allow`, so the request proceeds without rate limiting. On a rate-limit
-action every metric label, including one that references `auth.*`, is evaluated in the gateway
-as part of the descriptor and follows that rule.
+action that runs after authentication every metric label, including one that references
+`auth.*`, is evaluated in the gateway as part of the descriptor and follows that rule; on one
+that runs before authentication, `auth.*` labels are left out of the descriptor and are not
+evaluated. The two sides also see identity differently: a Kubernetes TokenReview identity is
+`auth.identity.user.username` in Authorino but `auth.identity.username` in the gateway, so one
+expression cannot resolve on both, see the
+[egress observability guide](../user-guides/egress/observability.md).
 
 Guard optional attributes in the expression itself:
 `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"` works for any header name,

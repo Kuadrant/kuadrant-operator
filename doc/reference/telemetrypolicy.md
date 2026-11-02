@@ -47,7 +47,7 @@ Authorino Operator version supporting custom logging fields.
 ### MetricsConfig
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions |
+| `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions. On the authorization action an unresolved `auth.*` label is omitted; any other evaluation failure follows the failure mode of the corresponding protection service, see [below](#evaluation-of-expressions) |
 
 ### LoggingSpec
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
@@ -57,7 +57,31 @@ Authorino Operator version supporting custom logging fields.
 ### LoggingConfig
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions |
+| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions. An unresolved `auth.*` field is omitted from the record; any other evaluation failure follows the failure mode of the authorization service, see [below](#evaluation-of-expressions) |
+
+#### Evaluation of expressions
+
+On the authorization action, logging fields and metric labels that reference `auth.*` are
+evaluated in the auth provider after authentication, and one that cannot be resolved is omitted
+from the record or the metric. Every other expression is evaluated in the gateway, and one that
+cannot be evaluated for a request, for example a read of a header the request does not carry,
+fails the action it belongs to. What happens to the request then follows the failure mode of the
+corresponding protection service: the authorization service defaults to `failureMode: deny`, so
+the request fails with HTTP 500 and no decision record is written; the rate limit service
+defaults to `failureMode: allow`, so the request proceeds without rate limiting. On a rate-limit
+action that runs after authentication every metric label, including one that references
+`auth.*`, is evaluated in the gateway as part of the descriptor and follows that rule; on one
+that runs before authentication, `auth.*` labels are left out of the descriptor and are not
+evaluated. The two sides also see identity differently: a Kubernetes TokenReview identity is
+`auth.identity.user.username` in Authorino but `auth.identity.username` in the gateway, so one
+expression cannot resolve on both, see the
+[egress observability guide](../user-guides/egress/observability.md).
+
+Guard optional attributes in the expression itself:
+`"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"` works for any header name,
+and `has(request.headers.xtenant) ? string(request.headers.xtenant) : "unknown"` for names without
+hyphens. The gateway exposes header names in lowercase, so write `request.headers["x-tenant"]`,
+not `X-Tenant`. CEL optional field syntax (`.?`) is not supported.
 
 ### TelemetryPolicyStatus
 

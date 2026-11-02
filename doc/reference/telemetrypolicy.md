@@ -47,7 +47,7 @@ Authorino Operator version supporting custom logging fields.
 ### MetricsConfig
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions. Evaluated on every request and not skipped on failure: on the authorization action a failing expression fails the request, on a rate-limit action it fails the action and by default the request proceeds without rate limiting, see [below](#evaluation-of-expressions) |
+| `labels` | Map<String: String>  | Yes | Labels to add to metrics, where keys are label names and values are CEL expressions. On the authorization action an unresolved `auth.*` label is omitted; any other evaluation failure follows the failure mode of the corresponding protection service, see [below](#evaluation-of-expressions) |
 
 ### LoggingSpec
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
@@ -57,23 +57,24 @@ Authorino Operator version supporting custom logging fields.
 ### LoggingConfig
 | Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
 |-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions. An `auth.*` expression that cannot be resolved is omitted from the record; any other expression that cannot be evaluated fails the request, see [below](#evaluation-of-expressions) |
+| `fields` | Map<String: String>  | Yes | Fields to add to authorization decision logs, where keys are field names and values are CEL expressions. An unresolved `auth.*` field is omitted from the record; any other evaluation failure follows the failure mode of the authorization service, see [below](#evaluation-of-expressions) |
 
 #### Evaluation of expressions
 
-On the authorization action, logging fields and metric labels that reference `auth.*` are sent
-to Authorino unevaluated and resolved there after authentication; a logging field that cannot be
-resolved is omitted from the record. Every other expression is evaluated in the gateway as part
-of the single expression that builds the authorization request, so one that cannot be evaluated
-for a request, for example a read of a header the request does not carry, fails that request with
-HTTP 500 before Authorino is called, and no record is written. On a rate-limit action every
-metric label, including one that references `auth.*`, is evaluated in the gateway as part of the
-descriptor; a failing expression fails the rate-limit action and, by default, the request then
-proceeds without rate limiting.
+On the authorization action, logging fields and metric labels that reference `auth.*` are
+evaluated in the auth provider after authentication, and one that cannot be resolved is omitted
+from the record or the metric. Every other expression is evaluated in the gateway, and one that
+cannot be evaluated for a request, for example a read of a header the request does not carry,
+fails the action it belongs to. What happens to the request then follows the failure mode of the
+corresponding protection service: the authorization service defaults to `failureMode: deny`, so
+the request fails with HTTP 500 and no decision record is written; the rate limit service
+defaults to `failureMode: allow`, so the request proceeds without rate limiting. On a rate-limit
+action every metric label, including one that references `auth.*`, is evaluated in the gateway
+as part of the descriptor and follows that rule.
 
 Guard optional attributes in the expression itself:
-`"x-tenant" in request.headers ? request.headers["x-tenant"] : ""` works for any header name,
-and `has(request.headers.xtenant) ? string(request.headers.xtenant) : ""` for names without
+`"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"` works for any header name,
+and `has(request.headers.xtenant) ? string(request.headers.xtenant) : "unknown"` for names without
 hyphens. The gateway exposes header names in lowercase, so write `request.headers["x-tenant"]`,
 not `X-Tenant`. CEL optional field syntax (`.?`) is not supported.
 

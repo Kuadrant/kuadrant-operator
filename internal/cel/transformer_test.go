@@ -26,6 +26,30 @@ func TestSimpleTransform(t *testing.T) {
 	}
 }
 
+func TestSimpleTransformEscapesEmbeddedDoubleQuotes(t *testing.T) {
+	exp := `request.headers["x-test-user"]`
+	if out, err := TransformCounterVariable(exp, false); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		expected := `descriptors[0]["request.headers[\"x-test-user\"]"]`
+		if *out != expected {
+			t.Errorf(`Not transformed as expected: got %s, want %s`, *out, expected)
+		}
+	}
+}
+
+func TestSimpleTransformEscapesBackslashes(t *testing.T) {
+	exp := `request.headers["x\\y"]`
+	if out, err := TransformCounterVariable(exp, false); err != nil {
+		t.Errorf(`err: %v`, err)
+	} else {
+		expected := `descriptors[0]["request.headers[\"x\\\\y\"]"]`
+		if *out != expected {
+			t.Errorf(`Not transformed as expected: got %s, want %s`, *out, expected)
+		}
+	}
+}
+
 func TestTransformWithStraightReplaces(t *testing.T) {
 	exp := `request`
 	if out, err := TransformCounterVariable(exp, true); err != nil {

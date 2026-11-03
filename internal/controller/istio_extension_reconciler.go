@@ -461,6 +461,13 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 
 	tracer := controller.TracerFromContext(ctx)
 
+	// validatorCache avoids rebuilding identical cel.Env sets for paths that share
+	// the same active policy combination (auth, RL, TRLP). In a uniform deployment
+	// (e.g. every route has auth + TRLP), this reduces cel.Env allocations from
+	// O(N_paths × ~57 KB) to O(1 × ~57 KB) per reconcile.
+	type validatorKey struct{ hasAuth, hasRL, hasTRLP bool }
+	validatorCache := make(map[validatorKey]*celvalidator.Validator)
+
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
 	for i := range paths {
 		pathID := paths[i].Key
@@ -503,7 +510,9 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		}
 
 		// rate limit
+		hasRL := false
 		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
+			hasRL = true
 			rlSpecs := buildWasmActionSpecsForRateLimit(effectivePolicy, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
 			if specsHaveAuthAccess(rlSpecs) {
 				specs = append(specs, rlSpecs...)
@@ -519,7 +528,9 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
+		hasTRLP := false
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
+			hasTRLP = true
 			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
 			if specsHaveAuthAccess(trlSpecs) {
 				specs = append(specs, trlSpecs...)
@@ -569,12 +580,18 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			continue
 		}
 
-		validator, err := validatorBuilder.Build()
-		if err != nil {
-			pathSpan.RecordError(err)
-			pathSpan.SetStatus(codes.Error, "failed to build validator")
-			pathSpan.End()
-			return nil, nil, nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, err)
+		vkey := validatorKey{hasAuth: hasAuth, hasRL: hasRL, hasTRLP: hasTRLP}
+		validator, validatorCached := validatorCache[vkey]
+		if !validatorCached {
+			var buildErr error
+			validator, buildErr = validatorBuilder.Build()
+			if buildErr != nil {
+				pathSpan.RecordError(buildErr)
+				pathSpan.SetStatus(codes.Error, "failed to build validator")
+				pathSpan.End()
+				return nil, nil, nil, fmt.Errorf("failed to build validator for path %s: %w", pathID, buildErr)
+			}
+			validatorCache[vkey] = validator
 		}
 
 		// Validate specs, then build validated ones into Actions

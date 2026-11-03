@@ -26,7 +26,7 @@ components:
     repo: Kuadrant/limitador-operator
     chart-path: charts/limitador-operator
     tracked-branch: main
-    ref: 9b5f3f80b5ab9117b8bc7e3f216c90f503abc308
+    ref: bb94c89bed1130e95bd59a38dc5e0b5f3d5424d0
     auto-merge: true
   mcp-gateway:
     repo: Kuadrant/mcp-gateway

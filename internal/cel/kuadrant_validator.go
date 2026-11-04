@@ -6,6 +6,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	"github.com/samber/lo"
+	exprpb "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
@@ -112,24 +113,24 @@ func NewRootValidatorBuilder() *ValidatorBuilder {
 func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 	pol := policyKindFromWasmServiceName(spec.ServiceName)
 	for _, predicate := range spec.Predicates {
-		if _, err := validator.Validate(pol, predicate); err != nil {
+		if _, err := validateExpression(spec, pol, predicate, "when predicates", validator); err != nil {
 			return err
 		}
 	}
 	for _, conditionalData := range spec.ConditionalData {
 		for _, predicate := range conditionalData.Predicates {
-			if _, err := validator.Validate(pol, predicate); err != nil {
+			if _, err := validateExpression(spec, pol, predicate, "when predicates", validator); err != nil {
 				return err
 			}
 		}
 	}
 	if amount := spec.ReservationAmountCEL(); amount != "" {
-		if _, err := validator.Validate(pol, amount); err != nil {
+		if _, err := validateExpression(spec, pol, amount, "reservation.amount", validator); err != nil {
 			return err
 		}
 	}
 	if ttl := spec.ReservationTTLCEL(); ttl != "" {
-		ast, err := validator.Validate(pol, ttl)
+		ast, err := validateExpression(spec, pol, ttl, "reservation.ttl", validator)
 		if err != nil {
 			return err
 		}
@@ -138,6 +139,79 @@ func ValidateWasmActionSpec(spec wasm.ActionSpec, validator *Validator) error {
 		}
 	}
 	return nil
+}
+
+func validateExpression(spec wasm.ActionSpec, policyKind, expression, field string, validator *Validator) (*cel.Ast, error) {
+	ast, err := validator.Validate(policyKind, expression)
+	if err != nil {
+		return nil, err
+	}
+
+	// Guard predicates and reservation parameters run before an upstream response
+	// exists, so none of them can depend on response-body data.
+	if policyKind == TokenRateLimitPolicyKind && spec.IsGuard() {
+		usesResponseBody, err := astCallsFunction(ast, "responseBodyJSON")
+		if err != nil {
+			return nil, fmt.Errorf("failed to inspect CEL expression for %s: %w", field, err)
+		}
+		if usesResponseBody {
+			return nil, fmt.Errorf("responseBodyJSON is not available in TokenRateLimitPolicy %s during the request phase", field)
+		}
+	}
+
+	return ast, nil
+}
+
+func astCallsFunction(ast *cel.Ast, function string) (bool, error) {
+	parsed, err := cel.AstToParsedExpr(ast)
+	if err != nil {
+		return false, err
+	}
+	return exprCallsFunction(parsed.GetExpr(), function), nil
+}
+
+func exprCallsFunction(expr *exprpb.Expr, function string) bool {
+	if expr == nil {
+		return false
+	}
+
+	switch kind := expr.ExprKind.(type) {
+	case *exprpb.Expr_CallExpr:
+		if kind.CallExpr.GetFunction() == function {
+			return true
+		}
+		if exprCallsFunction(kind.CallExpr.GetTarget(), function) {
+			return true
+		}
+		for _, arg := range kind.CallExpr.GetArgs() {
+			if exprCallsFunction(arg, function) {
+				return true
+			}
+		}
+	case *exprpb.Expr_SelectExpr:
+		return exprCallsFunction(kind.SelectExpr.GetOperand(), function)
+	case *exprpb.Expr_ListExpr:
+		for _, element := range kind.ListExpr.GetElements() {
+			if exprCallsFunction(element, function) {
+				return true
+			}
+		}
+	case *exprpb.Expr_StructExpr:
+		for _, entry := range kind.StructExpr.GetEntries() {
+			if exprCallsFunction(entry.GetMapKey(), function) || exprCallsFunction(entry.GetValue(), function) {
+				return true
+			}
+		}
+	case *exprpb.Expr_ComprehensionExpr:
+		c := kind.ComprehensionExpr
+		return exprCallsFunction(c.GetIterRange(), function) ||
+			exprCallsFunction(c.GetAccuInit(), function) ||
+			exprCallsFunction(c.GetLoopCondition(), function) ||
+			exprCallsFunction(c.GetLoopStep(), function) ||
+			exprCallsFunction(c.GetResult(), function)
+	}
+
+	return false
 }
 
 func policyKindFromWasmServiceName(serviceName string) string {

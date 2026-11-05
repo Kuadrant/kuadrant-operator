@@ -65,6 +65,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/controlplane"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
@@ -258,6 +259,11 @@ func main() {
 		// Restrict caching secrets to operator namespace
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
+				&corev1.ConfigMap{}: {
+					Namespaces: map[string]cache.Config{
+						operatorNamespace: {},
+					},
+				},
 				&corev1.Secret{}: {
 					Namespaces: map[string]cache.Config{
 						operatorNamespace: {},
@@ -265,6 +271,23 @@ func main() {
 				},
 				&networkingv1.NetworkPolicy{}: {
 					Label: labels.SelectorFromSet(labels.Set{"app.kubernetes.io/managed-by": "kuadrant-operator"}),
+				},
+				&monitoringv1.PodMonitor{}: {
+					Label: labels.SelectorFromSet(labels.Set{kuadrant.ObservabilityLabel: "true"}),
+				},
+				&monitoringv1.ServiceMonitor{}: {
+					Label: labels.SelectorFromSet(labels.Set{kuadrant.ObservabilityLabel: "true"}),
+				},
+				&corev1.Service{}: {
+					Namespaces: map[string]cache.Config{
+						operatorNamespace: {},
+					},
+				},
+				&corev1.ServiceAccount{}: {
+					Label: labels.SelectorFromSet(labels.Set{"app.kubernetes.io/managed-by": "kuadrant-operator"}),
+				},
+				&istionetworkingv1alpha3.EnvoyFilter{}: {
+					Label: labels.SelectorFromSet(labels.Set{"kuadrant.io/managed": "true"}),
 				},
 			},
 		},

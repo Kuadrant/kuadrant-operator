@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -19,12 +20,14 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -865,4 +868,121 @@ func TokenRateLimitPolicyEnforcedCondition(ctx context.Context, cl client.Client
 		fmt.Println("  actual condition reason:", string(reason), "message:", message)
 	}
 	return success
+}
+
+// policyWithStatus is a policy reporting its status conditions
+type policyWithStatus interface {
+	client.Object
+	GetStatus() kuadrantgatewayapi.PolicyStatus
+}
+
+// observedGeneration returns the generation the status of a rate limiting policy was computed for
+func observedGeneration(status kuadrantgatewayapi.PolicyStatus) int64 {
+	switch s := status.(type) {
+	case *kuadrantv1.RateLimitPolicyStatus:
+		return s.ObservedGeneration
+	case *kuadrantv1alpha1.TokenRateLimitPolicyStatus:
+		return s.ObservedGeneration
+	default:
+		return 0
+	}
+}
+
+// EnforcedConditionRecorder records the Enforced condition of every version of a single policy
+// delivered by a watch. Polling misses short-lived transitions; a watch delivers each write.
+type EnforcedConditionRecorder struct {
+	cl         client.Client
+	key        client.ObjectKey
+	watcher    watch.Interface
+	done       chan struct{}
+	mu         sync.Mutex
+	conditions []metav1.Condition
+	latest     policyWithStatus
+}
+
+// RecordEnforcedConditions starts recording the Enforced condition of the policy identified by key.
+// list must be the list type of the policy kind, e.g. &kuadrantv1.RateLimitPolicyList{}.
+func RecordEnforcedConditions(ctx context.Context, cl client.WithWatch, list client.ObjectList, key client.ObjectKey) (*EnforcedConditionRecorder, error) {
+	watcher, err := cl.Watch(ctx, list, client.InNamespace(key.Namespace), client.MatchingFields{"metadata.name": key.Name})
+	if err != nil {
+		return nil, err
+	}
+	r := &EnforcedConditionRecorder{cl: cl, key: key, watcher: watcher, done: make(chan struct{})}
+	go func() {
+		defer close(r.done)
+		for event := range watcher.ResultChan() {
+			policy, ok := event.Object.(policyWithStatus)
+			if !ok {
+				continue
+			}
+			r.mu.Lock()
+			r.latest = policy
+			if cond := meta.FindStatusCondition(policy.GetStatus().GetConditions(), string(kuadrant.PolicyConditionEnforced)); cond != nil {
+				// Policy conditions carry no observedGeneration, only the status does
+				recorded := *cond
+				recorded.ObservedGeneration = observedGeneration(policy.GetStatus())
+				r.conditions = append(r.conditions, recorded)
+			}
+			r.mu.Unlock()
+		}
+	}()
+	return r, nil
+}
+
+// Stop waits until the latest version of the policy is recorded, so a closed watch fails instead of
+// returning a partial history. It ends the watch and returns the recorded conditions, oldest first,
+// with ObservedGeneration set to the one of the policy status.
+func (r *EnforcedConditionRecorder) Stop(ctx context.Context) []metav1.Condition {
+	Eventually(func(g Gomega) {
+		r.mu.Lock()
+		latest := r.latest
+		r.mu.Unlock()
+		g.Expect(latest).NotTo(BeNil())
+		current := latest.DeepCopyObject().(client.Object)
+		g.Expect(r.cl.Get(ctx, r.key, current)).To(Succeed())
+		g.Expect(latest.GetResourceVersion()).To(Equal(current.GetResourceVersion()))
+	}).WithContext(ctx).Should(Succeed())
+	r.watcher.Stop()
+	<-r.done
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.conditions
+}
+
+// EnforcedAtGeneration waits until the status of the current generation of the policy is written
+// and reports it enforced, and returns that generation
+func EnforcedAtGeneration(ctx context.Context, cl client.Client, policy policyWithStatus, key client.ObjectKey) int64 {
+	Eventually(func(g Gomega) {
+		g.Expect(cl.Get(ctx, key, policy)).To(Succeed())
+		g.Expect(observedGeneration(policy.GetStatus())).To(Equal(policy.GetGeneration()))
+		g.Expect(meta.IsStatusConditionTrue(policy.GetStatus().GetConditions(), string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+	}).WithContext(ctx).Should(Succeed())
+	return policy.GetGeneration()
+}
+
+// WaitingForLimitador matches an Enforced condition reporting that only Limitador is out of sync
+func WaitingForLimitador() types.GomegaMatcher {
+	return And(
+		HaveField("Status", metav1.ConditionFalse),
+		HaveField("Message", ContainSubstring("waiting for the following components to sync: [Limitador]")),
+	)
+}
+
+// ExpectWaitedForLimitador checks that the first status written for each generation reports waiting
+// for Limitador, i.e. the policy never claims a generation enforced before its limits are written
+func ExpectWaitedForLimitador(key client.ObjectKey, conditions []metav1.Condition, generations ...int64) {
+	for _, generation := range generations {
+		first := slices.IndexFunc(conditions, func(c metav1.Condition) bool { return c.ObservedGeneration == generation })
+		Expect(first).NotTo(Equal(-1), "policy %s has no status for generation %d", key.Name, generation)
+		Expect(conditions[first]).To(WaitingForLimitador(), "policy %s did not wait for Limitador at generation %d", key.Name, generation)
+	}
+}
+
+// ExpectStayedEnforced checks that the policy never left the Enforced condition it had when recording started
+func ExpectStayedEnforced(key client.ObjectKey, conditions []metav1.Condition) {
+	Expect(conditions).NotTo(BeEmpty())
+	for _, condition := range conditions {
+		Expect(condition.Status).To(Equal(metav1.ConditionTrue), "policy %s went %s: %s", key.Name, condition.Reason, condition.Message)
+		Expect(condition.LastTransitionTime).To(Equal(conditions[0].LastTransitionTime), "policy %s changed its Enforced condition", key.Name)
+	}
 }

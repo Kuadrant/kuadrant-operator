@@ -49,6 +49,13 @@ var (
 	ErrMissingStateEffectiveTokenRateLimitPolicies = fmt.Errorf("missing token rate limit effective policies stored in the reconciliation state")
 )
 
+// isLimitadorLimitsModified tells whether the current reconciliation modified the Limitador limits of the policy.
+// StateLimitadorLimitsModified holds the locators of the policies whose limits were modified.
+func isLimitadorLimitsModified(state *sync.Map, policy machinery.Policy) bool {
+	modifiedPolicies, found := state.Load(StateLimitadorLimitsModified)
+	return found && lo.Contains(modifiedPolicies.([]string), policy.GetLocator())
+}
+
 func GetLimitadorFromTopology(topology *machinery.Topology, state *sync.Map) *limitadorv1alpha1.Limitador {
 	kuadrant := GetKuadrantFromTopology(topology, state)
 	if kuadrant == nil {

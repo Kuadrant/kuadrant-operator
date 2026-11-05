@@ -69,6 +69,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
 	"github.com/kuadrant/kuadrant-operator/internal/trace"
+	versioninfo "github.com/kuadrant/kuadrant-operator/internal/version"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -78,7 +79,6 @@ var (
 	logMode  = env.GetString("LOG_MODE", "production")
 	gitSHA   string              // value injected in compilation-time
 	dirty    string              // value injected in compilation-time
-	version  string              // value injected in compilation-time
 	sync     zapcore.WriteSyncer // logger output sync
 )
 
@@ -123,14 +123,14 @@ func printControllerMetaInfo() {
 	setupLog.Info(fmt.Sprintf("go version: %s", runtime.Version()))
 	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	setupLog.Info("base logger", "log level", logLevel, "log mode", logMode)
-	setupLog.Info("build information", "version", version, "commit", gitSHA, "dirty", dirty)
+	setupLog.Info("build information", "version", versioninfo.String(), "commit", gitSHA, "dirty", dirty)
 }
 
 func main() {
 	var opts []controller.ControllerOption
 
 	// Setup OpenTelemetry if enabled
-	otelConfig := kuadrantOtel.NewConfig(gitSHA, dirty, version)
+	otelConfig := kuadrantOtel.NewConfig(gitSHA, dirty, versioninfo.String())
 
 	// Setup OTel logging if endpoint is configured
 	if otelConfig.LogsEndpoint() != "" {

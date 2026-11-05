@@ -83,7 +83,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(k8sClient).NotTo(BeNil())
 
 	var ns string
-	if os.Getenv("MCP_AUTH_E2E") != "true" {
+	if os.Getenv("MCP_AUTH_E2E") != "true" && os.Getenv("OCSF_E2E") != "true" {
 		ctx := context.Background()
 		ns = tests.CreateNamespace(ctx, testClient())
 		tests.ApplyKuadrantCR(ctx, testClient(), ns)

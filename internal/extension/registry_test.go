@@ -1720,17 +1720,23 @@ func TestPipelineActionStore_ClearPolicyDataIncludesPipeline(t *testing.T) {
 	store := NewRegisteredDataStore()
 	policy := testResourceID("ThreatPolicy", "default", "my-policy")
 
+	store.AppendPipelineActions(policy, PipelinePhaseRequestPrelude, []PipelineActionEntry{
+		storeEntry("audit.request_metadata", "{}", true, "true", extpb.Phase_PHASE_REQUEST_PRELUDE),
+	})
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
 		grpcEntry("check", "", "", extpb.Phase_PHASE_REQUEST),
 	})
 
 	counts := store.ClearPolicyData(policy)
 
-	if counts.PipelineActions != 1 {
-		t.Errorf("Expected 1 cleared pipeline action, got %d", counts.PipelineActions)
+	if counts.PipelineActions != 2 {
+		t.Errorf("Expected 2 cleared pipeline actions, got %d", counts.PipelineActions)
+	}
+	if actions := store.GetPipelineActions(policy, PipelinePhaseRequestPrelude); actions != nil {
+		t.Errorf("Expected request prelude actions to be cleared by ClearPolicyData, got %v", actions)
 	}
 	if actions := store.GetPipelineActions(policy, PipelinePhaseRequest); actions != nil {
-		t.Errorf("Expected pipeline actions to be cleared by ClearPolicyData, got %v", actions)
+		t.Errorf("Expected request actions to be cleared by ClearPolicyData, got %v", actions)
 	}
 }
 
@@ -2295,7 +2301,9 @@ func TestEntryToAction_AddHeadersRejectsUnsetPhase(t *testing.T) {
 }
 
 func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
-	action, err := entryToAction(storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST), []string{"TestPolicy/default/my-policy"})
+	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "protobufValue"
+	action, err := entryToAction(entry, []string{"TestPolicy/default/my-policy"})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -2312,8 +2320,23 @@ func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
 	if !store.ExportToHost {
 		t.Error("ExportToHost should be true")
 	}
+	if store.ExportFormat != wasm.StoreExportFormatProtobufValue {
+		t.Errorf("ExportFormat = %q, want %q", store.ExportFormat, wasm.StoreExportFormatProtobufValue)
+	}
 	if len(store.SourcePolicyLocators) != 1 || store.SourcePolicyLocators[0] != "TestPolicy/default/my-policy" {
 		t.Errorf("SourcePolicyLocators = %v, want [%q]", store.SourcePolicyLocators, "TestPolicy/default/my-policy")
+	}
+}
+
+func TestEntryToAction_StoreRejectsUnknownExportFormat(t *testing.T) {
+	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "unsupported"
+	action, err := entryToAction(entry, nil)
+	if err == nil {
+		t.Fatal("Expected an error for unsupported store export format")
+	}
+	if action != nil {
+		t.Fatalf("Expected no action alongside error, got %T", action)
 	}
 }
 
@@ -2460,7 +2483,192 @@ func TestMutateWasmConfig_PipelineActionsAppendToMultipleActionSets(t *testing.T
 	}
 }
 
-// testTopology builds a topology with gateway→listener→route links for testing.
+func TestMutateWasmConfig_OCSFActorRunsAfterAuthMetadata(t *testing.T) {
+	store := NewRegisteredDataStore()
+	mockTargetRef := createMockGatewayTargetRef()
+	firstPolicy := testResourceID("TelemetryPolicy", "default", "audit")
+	secondPolicy := testResourceID("TelemetryPolicy", "default", "z-audit")
+
+	store.AppendPipelineActions(firstPolicy, PipelinePhaseRequestPrelude, []PipelineActionEntry{
+		storeEntry(wasm.OCSFResourcesStorePath, "true", true, "true", extpb.Phase_PHASE_REQUEST_PRELUDE),
+	})
+	store.AppendPipelineActions(secondPolicy, PipelinePhaseRequestPrelude, []PipelineActionEntry{
+		storeEntry("audit.extra_metadata", "true", true, "true", extpb.Phase_PHASE_REQUEST_PRELUDE),
+	})
+	store.AppendPipelineActions(firstPolicy, PipelinePhaseRequest, []PipelineActionEntry{
+		storeEntry("ordinary", "value", true, "true", extpb.Phase_PHASE_REQUEST),
+	})
+	store.AppendPipelineActions(firstPolicy, PipelinePhaseResponse, []PipelineActionEntry{
+		storeEntry(wasm.OCSFActorUserStorePath, "auth.identity.username", true, "has(auth.identity.username)", extpb.Phase_PHASE_RESPONSE),
+	})
+	store.AppendPipelineActions(secondPolicy, PipelinePhaseResponse, []PipelineActionEntry{
+		storeEntry(wasm.OCSFActorUserStorePath, "auth.identity.name", true, "has(auth.identity.name)", extpb.Phase_PHASE_RESPONSE),
+	})
+	targetRefs := []TargetRef{{
+		Group:     "gateway.networking.k8s.io",
+		Kind:      "Gateway",
+		Name:      mockTargetRef.GetName(),
+		Namespace: mockTargetRef.GetNamespace(),
+	}}
+	store.SetPipelineTargetRefs(firstPolicy, targetRefs)
+	store.SetPipelineTargetRefs(secondPolicy, targetRefs)
+
+	guard := &wasm.DenyAction{
+		ActionBase: wasm.ActionBase{Predicate: "true", Terminal: true},
+		DenyWith:   "DenyResponse{status: 403u}",
+	}
+	authMetadata := wasm.NewStoreAction("true", wasm.AuthStorePath, "auth_response.dynamic_metadata").WithExportToHost(true)
+	authCall := wasm.NewGrpcAction("true", "auth_response", wasm.AuthServiceName, "{}", "auth").
+		WithOnReply(authMetadata)
+	config := &wasm.Config{ActionSets: []wasm.ActionSet{{
+		Name:    "set1",
+		Actions: []wasm.Action{authCall, guard},
+	}}}
+
+	mutator := NewRegisteredDataMutator[*wasm.Config](store)
+	if err := mutator.Mutate(config, []machinery.PolicyTargetReference{mockTargetRef}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	actions := config.ActionSets[0].Actions
+	if len(actions) != 5 {
+		t.Fatalf("expected 5 root actions, got %d", len(actions))
+	}
+	firstMetadata, ok := actions[0].(*wasm.StoreAction)
+	if !ok || firstMetadata.Path != wasm.OCSFResourcesStorePath {
+		t.Fatalf("expected first sorted request prelude before built-in actions, got %#v", actions[0])
+	}
+	secondMetadata, ok := actions[1].(*wasm.StoreAction)
+	if !ok || secondMetadata.Path != "audit.extra_metadata" {
+		t.Fatalf("expected second sorted request prelude before built-in actions, got %#v", actions[1])
+	}
+	if actions[2] != authCall {
+		t.Fatalf("expected auth call after request prelude, got %#v", actions[2])
+	}
+	if actions[3] != guard {
+		t.Fatalf("expected existing terminal guard to retain its position, got %#v", actions[3])
+	}
+	ordinary, ok := actions[4].(*wasm.StoreAction)
+	if !ok || ordinary.Path != "ordinary" {
+		t.Fatalf("expected ordinary extension action after existing actions, got %#v", actions[4])
+	}
+
+	if len(authCall.OnReply) != 3 || authCall.OnReply[0] != authMetadata {
+		t.Fatalf("expected actor projections after AuthService dynamic metadata store, got %#v", authCall.OnReply)
+	}
+	actor, ok := authCall.OnReply[1].(*wasm.StoreAction)
+	if !ok || actor.Path != wasm.OCSFActorUserStorePath || actor.Value != "auth.identity.username" {
+		t.Fatalf("expected the first policy's response-phase actor projection after auth metadata, got %#v", authCall.OnReply[1])
+	}
+	secondActor, ok := authCall.OnReply[2].(*wasm.StoreAction)
+	if !ok || secondActor.Path != wasm.OCSFActorUserStorePath || secondActor.Value != "auth.identity.name" {
+		t.Fatalf("expected the second policy's response-phase actor projection to retain sorted policy order, got %#v", authCall.OnReply[2])
+	}
+}
+
+func TestMergePipelineActionsPreservesExplicitPreludeOrdering(t *testing.T) {
+	prelude1 := wasm.NewStoreAction("true", wasm.OCSFResourcesStorePath, "{}").WithExportToHost(true)
+	prelude2 := wasm.NewStoreAction("true", "audit.request_metadata", "{}").WithExportToHost(true)
+	actor1 := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
+	actor2 := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
+	ordinaryOCSFPath := wasm.NewStoreAction("true", "ocsf.custom", "ordinary").WithExportToHost(true)
+	ordinary := wasm.NewStoreAction("true", "ordinary", "value")
+	authMetadata := wasm.NewStoreAction("true", wasm.AuthStorePath, "auth_response.dynamic_metadata").WithExportToHost(true)
+	auth := wasm.NewGrpcAction("true", "auth_response", wasm.AuthServiceName, "{}", "auth").WithOnReply(authMetadata)
+	barrier := wasm.NewStoreAction("true", "barrier", "value").WithExecution(wasm.ExecutionSequential)
+	guard := wasm.NewDenyAction("true", "DenyResponse{status: 403u}")
+	responseHeaders := wasm.NewHeadersAction("true", wasm.HeaderTargetResponse, "[]")
+
+	existing := []wasm.Action{ordinary, auth, barrier, guard}
+	prelude := []wasm.Action{prelude1, prelude2}
+	request := []wasm.Action{ordinaryOCSFPath}
+	response := []wasm.Action{actor1, responseHeaders, actor2}
+	merged := mergePipelineActions(existing, prelude, request, response)
+
+	want := []wasm.Action{prelude1, prelude2, ordinary, auth, barrier, guard, ordinaryOCSFPath}
+	if len(merged) != len(want) {
+		t.Fatalf("merged actions = %d, want %d", len(merged), len(want))
+	}
+	for i := range want {
+		if merged[i] != want[i] {
+			t.Errorf("action[%d] = %#v, want %#v", i, merged[i], want[i])
+		}
+	}
+	if len(auth.OnReply) != 4 || auth.OnReply[0] != authMetadata || auth.OnReply[1] != actor1 || auth.OnReply[2] != responseHeaders || auth.OnReply[3] != actor2 {
+		t.Fatalf("AuthService reply actions = %#v, want metadata followed by response-phase actions in policy order", auth.OnReply)
+	}
+	for _, action := range merged {
+		if action == actor1 || action == actor2 || action == responseHeaders {
+			t.Fatal("response-phase actions must run in AuthService OnReply, not as independent root actions")
+		}
+	}
+	index := func(action wasm.Action) int {
+		for i, got := range merged {
+			if got == action {
+				return i
+			}
+		}
+		return -1
+	}
+	if index(ordinaryOCSFPath) < index(guard) {
+		t.Fatal("an unrelated ocsf-prefixed request store must remain after the built-in action sequence")
+	}
+}
+
+// TestMergePipelineActionsWithoutAuthLeavesOCSFActorAtRoot covers configurations
+// without an AuthService metadata producer.
+func TestMergePipelineActionsWithoutAuthLeavesOCSFActorAtRoot(t *testing.T) {
+	actor := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
+	guard := wasm.NewDenyAction("true", "DenyResponse{status: 403u}")
+
+	merged := mergePipelineActions([]wasm.Action{guard}, nil, nil, []wasm.Action{actor})
+	if len(merged) != 2 || merged[0] != guard || merged[1] != actor {
+		t.Fatalf("merged actions = %#v, want guard followed by response action without an AuthService", merged)
+	}
+}
+
+// TestPhaseFromProtoSupportsRequestPrelude verifies the added request prelude phase.
+func TestPhaseFromProtoSupportsRequestPrelude(t *testing.T) {
+	tests := []struct {
+		phase extpb.Phase
+		want  PipelinePhase
+	}{
+		{phase: extpb.Phase_PHASE_REQUEST_PRELUDE, want: PipelinePhaseRequestPrelude},
+		{phase: extpb.Phase_PHASE_REQUEST, want: PipelinePhaseRequest},
+		{phase: extpb.Phase_PHASE_RESPONSE, want: PipelinePhaseResponse},
+	}
+	for _, tt := range tests {
+		got, err := phaseFromProto(tt.phase)
+		if err != nil {
+			t.Fatalf("phaseFromProto(%v) returned error: %v", tt.phase, err)
+		}
+		if got != tt.want {
+			t.Errorf("phaseFromProto(%v) = %q, want %q", tt.phase, got, tt.want)
+		}
+	}
+	if _, err := phaseFromProto(extpb.Phase_PHASE_UNSPECIFIED); err == nil {
+		t.Fatal("expected unspecified phase to be rejected")
+	}
+}
+
+func TestTranslateRequestPreludeActionsRejectsInvalidActionsAndForwardReferences(t *testing.T) {
+	invalidAction := denyEntry(403, "true", extpb.Phase_PHASE_REQUEST_PRELUDE)
+	if _, err := translateRequestPreludeActions([]PipelineActionEntry{invalidAction}, nil, nil, nil); err == nil {
+		t.Fatal("expected non-store request prelude action to be rejected")
+	}
+
+	prelude := storeEntry("ocsf.request_metadata", "authResponse.status", true, "true", extpb.Phase_PHASE_REQUEST_PRELUDE)
+	grpc := grpcEntry("authorize", "authResponse", "true", extpb.Phase_PHASE_REQUEST)
+	if _, err := translateRequestPreludeActions([]PipelineActionEntry{prelude}, []PipelineActionEntry{grpc}, nil, nil); err == nil {
+		t.Fatal("expected request prelude depending on later request gRPC result to be rejected")
+	}
+
+	responseGRPC := grpcEntry("authorize", "authResponse", "true", extpb.Phase_PHASE_RESPONSE)
+	if _, err := translateRequestPreludeActions([]PipelineActionEntry{prelude}, nil, []PipelineActionEntry{responseGRPC}, nil); err == nil {
+		t.Fatal("expected request prelude depending on later response gRPC result to be rejected")
+	}
+}
+
 func testTopology(t *testing.T, gateways []*gwapiv1.Gateway, httpRoutes []*gwapiv1.HTTPRoute, grpcRoutes []*gwapiv1.GRPCRoute) *machinery.Topology {
 	t.Helper()
 	mGateways := lo.Map(gateways, func(g *gwapiv1.Gateway, _ int) *machinery.Gateway {
@@ -2691,6 +2899,9 @@ func TestReplacePipelineActions(t *testing.T) {
 	otherPolicy := testResourceID("ThreatPolicy", "default", "other-policy")
 
 	// Seed with initial actions for both policies
+	store.AppendPipelineActions(policy, PipelinePhaseRequestPrelude, []PipelineActionEntry{
+		storeEntry("old.prelude", "{}", true, "", extpb.Phase_PHASE_REQUEST_PRELUDE),
+	})
 	store.AppendPipelineActions(policy, PipelinePhaseRequest, []PipelineActionEntry{
 		grpcEntry("old-check", "", "", extpb.Phase_PHASE_REQUEST),
 	})
@@ -2701,8 +2912,9 @@ func TestReplacePipelineActions(t *testing.T) {
 		denyEntry(403, "", extpb.Phase_PHASE_REQUEST),
 	})
 
-	// Replace both phases atomically
+	// Replace all phases atomically.
 	err := store.ReplacePipelineActions(policy, []PipelineActionEntry{
+		storeEntry("new.prelude", "{}", true, "", extpb.Phase_PHASE_REQUEST_PRELUDE),
 		denyEntry(403, `request.url_path == "/blocked"`, extpb.Phase_PHASE_REQUEST),
 		grpcEntry("new-check", "threatResponse", "", extpb.Phase_PHASE_REQUEST),
 		addHeadersEntry(`{"x-new": "true"}`, "", extpb.Phase_PHASE_RESPONSE),
@@ -2712,7 +2924,13 @@ func TestReplacePipelineActions(t *testing.T) {
 		t.Fatalf("ReplacePipelineActions returned error: %v", err)
 	}
 
-	// Verify request actions replaced
+	// Verify request prelude actions replaced.
+	preludeActions := store.GetPipelineActions(policy, PipelinePhaseRequestPrelude)
+	if len(preludeActions) != 1 || preludeActions[0].Entry.GetStore().GetPath() != "new.prelude" {
+		t.Fatalf("request prelude actions = %#v, want only new.prelude", preludeActions)
+	}
+
+	// Verify request actions replaced.
 	reqActions := store.GetPipelineActions(policy, PipelinePhaseRequest)
 	if len(reqActions) != 2 {
 		t.Fatalf("Expected 2 request actions, got %d", len(reqActions))
@@ -3116,6 +3334,9 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 	policyID := testResourceID("DenyPolicy", "test-ns", "deny-route-b")
 	routeRef := TargetRef{Group: "gateway.networking.k8s.io", Kind: "HTTPRoute", Name: "route-b", Namespace: "test-ns"}
 
+	store.AppendPipelineActions(policyID, PipelinePhaseRequestPrelude, []PipelineActionEntry{
+		storeEntry("audit.request_metadata", "{}", true, "true", extpb.Phase_PHASE_REQUEST_PRELUDE),
+	})
 	store.AppendPipelineActions(policyID, PipelinePhaseRequest, []PipelineActionEntry{
 		denyEntry(403, "true", extpb.Phase_PHASE_REQUEST),
 	})
@@ -3186,11 +3407,15 @@ func TestApplyWasmConfigMutators_SkeletonCreatedForExtensionOnlyRoute(t *testing
 	if wasmConfig.ActionSets[1].SourceRoute != "HTTPRoute/test-ns/route-b" {
 		t.Errorf("Expected route-b action set second, got %s", wasmConfig.ActionSets[1].SourceRoute)
 	}
-	if len(wasmConfig.ActionSets[1].Actions) != 1 {
-		t.Fatalf("route-b: expected 1 action (deny), got %d", len(wasmConfig.ActionSets[1].Actions))
+	if len(wasmConfig.ActionSets[1].Actions) != 2 {
+		t.Fatalf("route-b: expected request prelude and deny actions, got %d", len(wasmConfig.ActionSets[1].Actions))
 	}
-	if wasmConfig.ActionSets[1].Actions[0].ActionType() != wasm.ActionKindDeny {
-		t.Errorf("route-b: expected deny action, got %s", wasmConfig.ActionSets[1].Actions[0].ActionType())
+	metadata, ok := wasmConfig.ActionSets[1].Actions[0].(*wasm.StoreAction)
+	if !ok || metadata.Path != "audit.request_metadata" {
+		t.Errorf("route-b: expected request prelude first, got %#v", wasmConfig.ActionSets[1].Actions[0])
+	}
+	if wasmConfig.ActionSets[1].Actions[1].ActionType() != wasm.ActionKindDeny {
+		t.Errorf("route-b: expected deny action after request prelude, got %s", wasmConfig.ActionSets[1].Actions[1].ActionType())
 	}
 }
 

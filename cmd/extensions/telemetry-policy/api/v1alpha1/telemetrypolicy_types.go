@@ -168,10 +168,12 @@ type OCSFTargetConfig struct {
 type OCSFRequestPathTarget struct {
 	// NamespaceSegment is the zero-based path segment containing the resource namespace.
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483646
 	NamespaceSegment int32 `json:"namespaceSegment"`
 
 	// NameSegment is the zero-based path segment containing the resource name.
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483646
 	NameSegment int32 `json:"nameSegment"`
 }
 

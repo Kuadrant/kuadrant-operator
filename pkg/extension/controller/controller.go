@@ -657,6 +657,22 @@ func (p *PipelineImpl) OnHTTPRequest(actions ...exttypes.Action) error {
 	return p.validateAndAppend(extpb.Phase_PHASE_REQUEST, actions)
 }
 
+// OnHTTPRequestPrelude adds request-only store projections that must run before
+// normal pipeline actions so terminal actions cannot suppress required metadata.
+func (p *PipelineImpl) OnHTTPRequestPrelude(actions ...exttypes.Action) error {
+	for _, entry := range p.actions {
+		if entry.phase != extpb.Phase_PHASE_REQUEST_PRELUDE {
+			return fmt.Errorf("cannot add request prelude actions after request or response actions have been added")
+		}
+	}
+	for _, action := range actions {
+		if _, ok := action.(exttypes.StoreAction); !ok {
+			return fmt.Errorf("request prelude only supports store actions, got %T", action)
+		}
+	}
+	return p.validateAndAppend(extpb.Phase_PHASE_REQUEST_PRELUDE, actions)
+}
+
 func (p *PipelineImpl) OnHTTPResponse(actions ...exttypes.Action) error {
 	return p.validateAndAppend(extpb.Phase_PHASE_RESPONSE, actions)
 }
@@ -726,6 +742,9 @@ func (p *PipelineImpl) validateAndAppend(phase extpb.Phase, actions []exttypes.A
 }
 
 func (p *PipelineImpl) Commit(ctx context.Context) error {
+	if err := p.validateRequestPrelude(); err != nil {
+		return err
+	}
 	entries := make([]*extpb.ActionEntry, 0, len(p.actions))
 	for _, pe := range p.actions {
 		entries = append(entries, convertAction(pe))
@@ -735,6 +754,35 @@ func (p *PipelineImpl) Commit(ctx context.Context) error {
 		Actions: entries,
 	})
 	return err
+}
+
+func (p *PipelineImpl) validateRequestPrelude() error {
+	varNames := make([]string, 0)
+	patterns := make(map[string]*regexp.Regexp)
+	for _, entry := range p.actions {
+		grpc, ok := entry.action.(exttypes.GRPCAction)
+		if !ok || grpc.Var == "" {
+			continue
+		}
+		if _, exists := patterns[grpc.Var]; exists {
+			continue
+		}
+		varNames = append(varNames, grpc.Var)
+		patterns[grpc.Var] = regexp.MustCompile(`\b` + regexp.QuoteMeta(grpc.Var) + `\b`)
+	}
+	slices.Sort(varNames)
+
+	for _, entry := range p.actions {
+		if entry.phase != extpb.Phase_PHASE_REQUEST_PRELUDE {
+			continue
+		}
+		for _, varName := range varNames {
+			if slices.ContainsFunc(entry.action.CelExpressions(), patterns[varName].MatchString) {
+				return fmt.Errorf("request prelude action references pipeline variable %q before its producer", varName)
+			}
+		}
+	}
+	return nil
 }
 
 func convertAction(pe pipelineEntry) *extpb.ActionEntry {

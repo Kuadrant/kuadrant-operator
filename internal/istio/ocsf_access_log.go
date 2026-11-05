@@ -5,6 +5,9 @@ import (
 	"fmt"
 
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
+
+	versioninfo "github.com/kuadrant/kuadrant-operator/internal/version"
+	wasmtypes "github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 const (
@@ -13,15 +16,12 @@ const (
 	ocsfCELFormatterName            = "envoy.formatter.cel"
 	ocsfCELAccessLogFilterName      = "envoy.access_loggers.extension_filters.cel"
 	ocsfCELAccessLogFilterType      = "type.googleapis.com/envoy.extensions.access_loggers.filters.cel.v3.ExpressionFilter"
-	ocsfResourceTypeFilterStateKey  = "wasm.kuadrant.ocsf.resource.type"
-	ocsfActorNameFilterStateKey     = "wasm.kuadrant.ocsf.actor.user.name"
-	ocsfActorUIDFilterStateKey      = "wasm.kuadrant.ocsf.actor.user.uid"
-	ocsfActorGroupsFilterStateKey   = "wasm.kuadrant.ocsf.actor.user.groups"
-	ocsfURLPathFilterStateKey       = "wasm.kuadrant.ocsf.http_request.url.path"
-)
 
-// versionString is set by the Makefile linker flags for release builds.
-var versionString = "unknown"
+	ocsfResourcesFilterStateKey = wasmtypes.OCSFResourcesFilterStateKey
+	ocsfAIModelFilterStateKey   = wasmtypes.OCSFAIModelFilterStateKey
+	ocsfURLPathFilterStateKey   = wasmtypes.OCSFURLPathFilterStateKey
+	ocsfActorUserFilterStateKey = wasmtypes.OCSFActorUserFilterStateKey
+)
 
 // BuildEnvoyFilterOCSFAccessLogPatch returns an EnvoyFilter patch that appends one OCSF 1.9.0
 // API Activity record to the gateway's stdout access log when a request completes. Filter-state
@@ -31,15 +31,10 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 	requestStartMillis := `(` + requestStartDuration + `.getSeconds() * 1000 + ` + requestStartDuration + `.getMilliseconds())`
 	requestDurationMillis := `(request.duration.getSeconds() * 1000 + request.duration.getMilliseconds())`
 	requestEndMillis := requestStartMillis + ` + ` + requestDurationMillis
-	actorName := ocsfTypedFilterStateValue(ocsfActorNameFilterStateKey)
-	actorTypeID := fmt.Sprintf(
-		`%q in filter_state ? (filter_state[%q].startsWith("system:serviceaccount:") ? 4 : 1) : null`,
-		ocsfActorNameFilterStateKey,
-		ocsfActorNameFilterStateKey,
-	)
-	actorUID := ocsfTypedFilterStateValue(ocsfActorUIDFilterStateKey)
-	urlPath := ocsfTypedFilterStateValue(ocsfURLPathFilterStateKey)
-	actorGroups := ocsfTypedFilterStateValue(ocsfActorGroupsFilterStateKey)
+	actorUser := ocsfTypedFilterStateValue(ocsfActorUserFilterStateKey, `{"type_id": 0}`)
+	resources := ocsfTypedFilterStateValue(ocsfResourcesFilterStateKey, "[]")
+	aiModel := ocsfTypedFilterStateValue(ocsfAIModelFilterStateKey, "{}")
+	urlPath := ocsfTypedFilterStateValue(ocsfURLPathFilterStateKey, `""`)
 	httpVersion := `request.protocol == "HTTP/1.0" ? "1.0" : request.protocol == "HTTP/1.1" ? "1.1" : request.protocol == "HTTP/2" ? "2.0" : request.protocol == "HTTP/3" ? "3.0" : request.protocol`
 
 	jsonFormat := map[string]any{
@@ -58,17 +53,12 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 			"profiles": []any{"ai_operation"},
 			"product": map[string]any{
 				"name":    "kuadrant-gateway",
-				"version": versionString,
+				"version": versioninfo.String(),
 			},
 			"logged_time": "%TYPED_CEL(" + requestEndMillis + ")%",
 		},
 		"actor": map[string]any{
-			"user": map[string]any{
-				"name":    actorName,
-				"uid":     actorUID,
-				"type_id": ocsfTypedCEL(actorTypeID),
-				"groups":  actorGroups,
-			},
+			"user": actorUser,
 		},
 		"api": map[string]any{
 			"operation": "%REQ(:METHOD)% " + urlPath,
@@ -87,28 +77,17 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 		},
 		"src_endpoint": map[string]any{
 			"ip":   "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS_WITHOUT_PORT%",
-			"port": "%TYPED_CEL(source.port)%",
+			"port": "%DOWNSTREAM_DIRECT_REMOTE_PORT%",
 		},
 		"dst_endpoint": map[string]any{
 			"ip":   "%UPSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%",
-			"port": "%TYPED_CEL(has(upstream.address) ? upstream.port : null)%",
+			"port": "%UPSTREAM_REMOTE_PORT%",
 		},
 		"status_id":   "%TYPED_CEL(response.code < 400 ? 1 : 2)%",
 		"status":      "%TYPED_CEL(response.code < 400 ? 'Success' : 'Failure')%",
-		"status_code": "%RESPONSE_CODE%",
-		"resources": []any{
-			map[string]any{
-				"name":      ocsfTypedFilterStateValue("wasm.kuadrant.ocsf.resource.name"),
-				"namespace": ocsfTypedFilterStateValue("wasm.kuadrant.ocsf.resource.namespace"),
-				"type":      ocsfTypedFilterStateValue("wasm.kuadrant.ocsf.resource.type"),
-				"role_id":   1,
-				"role":      "Target",
-			},
-		},
-		"ai_model": map[string]any{
-			"name":        ocsfTypedFilterStateValue("wasm.kuadrant.ocsf.resource.name"),
-			"ai_provider": ocsfTypedFilterStateValue("wasm.kuadrant.ocsf.ai_model.ai_provider"),
-		},
+		"status_code": "%CEL(response.code)%",
+		"resources":   resources,
+		"ai_model":    aiModel,
 	}
 
 	patchRaw, err := json.Marshal(map[string]any{
@@ -125,7 +104,7 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 								"name": ocsfCELAccessLogFilterName,
 								"typed_config": map[string]any{
 									"@type":      ocsfCELAccessLogFilterType,
-									"expression": fmt.Sprintf(`%q in filter_state && filter_state[%q] != ""`, ocsfResourceTypeFilterStateKey, ocsfResourceTypeFilterStateKey),
+									"expression": fmt.Sprintf(`%q in filter_state`, ocsfResourcesFilterStateKey),
 								},
 							},
 						},
@@ -175,12 +154,8 @@ func BuildEnvoyFilterOCSFAccessLogPatch() (*istioapinetworkingv1alpha3.EnvoyFilt
 	}, nil
 }
 
-func ocsfOptionalFilterStateValue(key string) string {
-	return fmt.Sprintf(`%q in filter_state ? filter_state[%q] : null`, key, key)
-}
-
-func ocsfTypedFilterStateValue(key string) string {
-	return ocsfTypedCEL(ocsfOptionalFilterStateValue(key))
+func ocsfTypedFilterStateValue(key, fallback string) string {
+	return ocsfTypedCEL(fmt.Sprintf(`%q in filter_state ? filter_state[%q] : %s`, key, key, fallback))
 }
 
 func ocsfTypedCEL(expression string) string {

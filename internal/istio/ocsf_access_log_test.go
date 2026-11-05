@@ -52,7 +52,7 @@ func TestBuildEnvoyFilterOCSFAccessLogPatch(t *testing.T) {
 	}
 	extensionFilter := ocsfMapField(t, ocsfMapField(t, logger, "filter"), "extension_filter")
 	filterConfig := ocsfMapField(t, extensionFilter, "typed_config")
-	if filterConfig["expression"] != `"wasm.kuadrant.ocsf.resource.type" in filter_state && filter_state["wasm.kuadrant.ocsf.resource.type"] != ""` {
+	if filterConfig["expression"] != `"wasm.kuadrant.ocsf.resources" in filter_state` {
 		t.Fatalf("expected logger to select only OCSF policy requests, got %v", filterConfig["expression"])
 	}
 	logFormat := ocsfMapField(t, ocsfMapField(t, logger, "typed_config"), "log_format")
@@ -63,24 +63,32 @@ func TestBuildEnvoyFilterOCSFAccessLogPatch(t *testing.T) {
 	if jsonFormat["class_uid"] != float64(6003) {
 		t.Fatalf("expected OCSF API Activity class_uid, got %v", jsonFormat["class_uid"])
 	}
-	if jsonFormat["status_code"] != "%RESPONSE_CODE%" {
-		t.Fatalf("expected status code to use Envoy native formatter, got %v", jsonFormat["status_code"])
+	if jsonFormat["status_code"] != "%CEL(response.code)%" {
+		t.Fatalf("expected OCSF status_code to use the string-returning CEL formatter, got %v", jsonFormat["status_code"])
 	}
 	httpResponse := ocsfMapField(t, jsonFormat, "http_response")
 	wantLatency := `%TYPED_CEL((request.duration.getSeconds() * 1000 + request.duration.getMilliseconds()))%`
 	if httpResponse["latency"] != wantLatency {
 		t.Fatalf("expected latency to use total request duration in milliseconds, got %v", httpResponse["latency"])
 	}
+
+	srcEndpoint := ocsfMapField(t, jsonFormat, "src_endpoint")
+	if srcEndpoint["ip"] != "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS_WITHOUT_PORT%" {
+		t.Fatalf("expected source IP from the direct remote address provider, got %v", srcEndpoint["ip"])
+	}
+	if srcEndpoint["port"] != "%DOWNSTREAM_DIRECT_REMOTE_PORT%" {
+		t.Fatalf("expected source port from the matching direct remote provider, got %v", srcEndpoint["port"])
+	}
 	dstEndpoint := ocsfMapField(t, jsonFormat, "dst_endpoint")
 	if dstEndpoint["ip"] != "%UPSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%" {
 		t.Fatalf("expected destination IP without a port, got %v", dstEndpoint["ip"])
 	}
-	if dstEndpoint["port"] != "%TYPED_CEL(has(upstream.address) ? upstream.port : null)%" {
-		t.Fatalf("expected destination port to remain numeric and be omitted when unavailable, got %v", dstEndpoint["port"])
+	if dstEndpoint["port"] != "%UPSTREAM_REMOTE_PORT%" {
+		t.Fatalf("expected destination port from the matching upstream provider, got %v", dstEndpoint["port"])
 	}
 
 	api := ocsfMapField(t, jsonFormat, "api")
-	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {
+	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : "")%` {
 		t.Fatalf("expected query-safe API operation, got %v", api["operation"])
 	}
 	httpRequest := ocsfMapField(t, jsonFormat, "http_request")
@@ -88,50 +96,23 @@ func TestBuildEnvoyFilterOCSFAccessLogPatch(t *testing.T) {
 		t.Fatalf("expected HTTP version to use CEL-compatible string operations, got %v", httpRequest["version"])
 	}
 	url := ocsfMapField(t, httpRequest, "url")
-	if url["path"] != `%TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {
+	if url["path"] != `%TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : "")%` {
 		t.Fatalf("expected query-safe request path, got %v", url["path"])
 	}
-	actor := ocsfMapField(t, ocsfMapField(t, jsonFormat, "actor"), "user")
-	if actor["name"] != `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user.name" in filter_state ? filter_state["wasm.kuadrant.ocsf.actor.user.name"] : null)%` {
-		t.Fatalf("expected actor to use the projected identity, got %v", actor["name"])
-	}
-	if actor["uid"] != `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user.uid" in filter_state ? filter_state["wasm.kuadrant.ocsf.actor.user.uid"] : null)%` {
-		t.Fatalf("expected optional actor UID to be safely omitted when absent, got %v", actor["uid"])
-	}
-	if actor["type_id"] != `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user.name" in filter_state ? (filter_state["wasm.kuadrant.ocsf.actor.user.name"].startsWith("system:serviceaccount:") ? 4 : 1) : null)%` {
-		t.Fatalf("expected actor type to be derived only when the identity is present, got %v", actor["type_id"])
-	}
-	if actor["groups"] != `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user.groups" in filter_state ? filter_state["wasm.kuadrant.ocsf.actor.user.groups"] : null)%` {
-		t.Fatalf("expected OCSF groups to use the pre-projected filter-state value, got %v", actor["groups"])
+
+	actor := ocsfMapField(t, jsonFormat, "actor")
+	wantActor := `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user" in filter_state ? filter_state["wasm.kuadrant.ocsf.actor.user"] : {"type_id": 0})%`
+	if actor["user"] != wantActor {
+		t.Fatalf("expected actor user to be a grouped typed value with the OCSF unknown-user fallback, got %v", actor["user"])
 	}
 
-	resources := ocsfSliceField(t, jsonFormat, "resources")
-	if len(resources) != 1 {
-		t.Fatalf("expected one OCSF target resource, got %d", len(resources))
+	wantResources := `%TYPED_CEL("wasm.kuadrant.ocsf.resources" in filter_state ? filter_state["wasm.kuadrant.ocsf.resources"] : [])%`
+	if jsonFormat["resources"] != wantResources {
+		t.Fatalf("expected resources to use the full typed filter-state value, got %v", jsonFormat["resources"])
 	}
-	resource, ok := resources[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected OCSF target resource object, got %T", resources[0])
-	}
-	for field, key := range map[string]string{
-		"name":      "wasm.kuadrant.ocsf.resource.name",
-		"namespace": "wasm.kuadrant.ocsf.resource.namespace",
-		"type":      "wasm.kuadrant.ocsf.resource.type",
-	} {
-		want := `%TYPED_CEL("` + key + `" in filter_state ? filter_state["` + key + `"] : null)%`
-		if resource[field] != want {
-			t.Fatalf("expected resource %s to pass the complete filter-state value to TYPED_CEL, got %v", field, resource[field])
-		}
-	}
-	aiModel := ocsfMapField(t, jsonFormat, "ai_model")
-	for field, key := range map[string]string{
-		"name":        "wasm.kuadrant.ocsf.resource.name",
-		"ai_provider": "wasm.kuadrant.ocsf.ai_model.ai_provider",
-	} {
-		want := `%TYPED_CEL("` + key + `" in filter_state ? filter_state["` + key + `"] : null)%`
-		if aiModel[field] != want {
-			t.Fatalf("expected ai_model %s to pass the complete filter-state value to TYPED_CEL, got %v", field, aiModel[field])
-		}
+	wantAIModel := `%TYPED_CEL("wasm.kuadrant.ocsf.ai_model" in filter_state ? filter_state["wasm.kuadrant.ocsf.ai_model"] : {})%`
+	if jsonFormat["ai_model"] != wantAIModel {
+		t.Fatalf("expected AI model fields to use the full typed filter-state value, got %v", jsonFormat["ai_model"])
 	}
 }
 
@@ -168,7 +149,7 @@ func TestOCSFTypedFilterStateValuePreservesCELTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			formatted := ocsfTypedFilterStateValue(tt.key)
+			formatted := ocsfTypedFilterStateValue(tt.key, "null")
 			wantFormatter := "%TYPED_CEL(" + `"` + tt.key + `" in filter_state ? filter_state["` + tt.key + `"] : null)%`
 			if formatted != wantFormatter {
 				t.Fatalf("expected full filter-state value to be passed to TYPED_CEL, got %q", formatted)

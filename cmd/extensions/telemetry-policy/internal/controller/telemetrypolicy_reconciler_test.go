@@ -9,7 +9,11 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/google/cel-go/cel"
+	celtypes "github.com/google/cel-go/common/types"
 	celref "github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/common/types/traits"
+	celext "github.com/google/cel-go/ext"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -19,6 +23,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
+	wasmtypes "github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
 
@@ -29,17 +34,31 @@ type addDataCall struct {
 }
 
 type mockKuadrantCtx struct {
-	calls    []addDataCall
-	failOn   string // return error when binding matches this value
-	failErr  error
-	pipeline *mockPipeline
+	calls             []addDataCall
+	failOn            string // return error when binding matches this value
+	failErr           error
+	gatewayClassNames []string
+	resolveErr        error
+	resolveCalls      []resolveCall
+	pipeline          *mockPipeline
+}
+
+type resolveCall struct {
+	expression string
+	subscribe  bool
 }
 
 type mockPipeline struct {
+	preludeActions  []types.Action
 	requestActions  []types.Action
 	responseActions []types.Action
 	committed       bool
 	commitErr       error
+}
+
+func (m *mockPipeline) OnHTTPRequestPrelude(actions ...types.Action) error {
+	m.preludeActions = append(m.preludeActions, actions...)
+	return nil
 }
 
 func (m *mockPipeline) OnHTTPRequest(actions ...types.Action) error {
@@ -65,8 +84,12 @@ func (m *mockKuadrantCtx) AddDataTo(_ context.Context, _ types.Policy, domain ty
 	return nil
 }
 
-func (m *mockKuadrantCtx) Resolve(context.Context, types.Policy, string, bool) (celref.Val, error) {
-	return nil, nil
+func (m *mockKuadrantCtx) Resolve(_ context.Context, _ types.Policy, expression string, subscribe bool) (celref.Val, error) {
+	m.resolveCalls = append(m.resolveCalls, resolveCall{expression: expression, subscribe: subscribe})
+	if m.resolveErr != nil {
+		return nil, m.resolveErr
+	}
+	return celtypes.DefaultTypeAdapter.NativeToValue(m.gatewayClassNames), nil
 }
 func (m *mockKuadrantCtx) ResolvePolicy(context.Context, types.Policy, string, bool) (types.Policy, error) {
 	return nil, nil
@@ -254,13 +277,16 @@ func TestReconcileSpec_EmptySpec(t *testing.T) {
 	if !mock.pipeline.committed {
 		t.Error("expected an empty pipeline commit to clear stale OCSF actions")
 	}
+	if len(mock.pipeline.preludeActions) != 0 {
+		t.Errorf("expected 0 request prelude actions, got %d", len(mock.pipeline.preludeActions))
+	}
 	if len(mock.pipeline.requestActions) != 0 {
 		t.Errorf("expected 0 request actions, got %d", len(mock.pipeline.requestActions))
 	}
 }
 
 func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
-	mock := &mockKuadrantCtx{}
+	mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
 	r := &TelemetryPolicyReconciler{
 		ExtensionBase: types.ExtensionBase{
 			Logger: logr.Discard(),
@@ -273,6 +299,7 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 			Profile: v1alpha1.OCSFProfileAIOperation,
 			Actor: v1alpha1.OCSFActorConfig{
 				Identity: "auth.identity.user.username",
+				UID:      "auth.identity.user.uid",
 				Groups:   "auth.identity.user.groups",
 			},
 			Target: v1alpha1.OCSFTargetConfig{
@@ -293,99 +320,96 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	if !mock.pipeline.committed {
 		t.Fatal("expected OCSF pipeline to be committed")
 	}
-	if got, want := len(mock.pipeline.requestActions), 7; got != want {
-		t.Fatalf("request actions = %d, want %d", got, want)
+	if got, want := len(mock.pipeline.preludeActions), 3; got != want {
+		t.Fatalf("request prelude actions = %d, want %d", got, want)
+	}
+	if got := len(mock.pipeline.requestActions); got != 0 {
+		t.Fatalf("ordinary request actions = %d, want 0", got)
+	}
+	if got, want := len(mock.pipeline.responseActions), 1; got != want {
+		t.Fatalf("response actions = %d, want %d", got, want)
 	}
 
-	want := map[string]types.StoreAction{
-		ocsfActorUserNameStorePath: {
-			Predicate:    "has(auth.identity.user.username)",
-			Path:         ocsfActorUserNameStorePath,
-			Value:        "auth.identity.user.username",
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
-		ocsfActorUserGroupsStorePath: {
-			Predicate:    "has(auth.identity.user.groups)",
-			Path:         ocsfActorUserGroupsStorePath,
-			Value:        `auth.identity.user.groups.map(group, {"name": group})`,
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
-		ocsfURLPathStorePath: {
-			Path:         ocsfURLPathStorePath,
-			Value:        "request.url_path",
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
-		ocsfResourceNamespaceStorePath: {
-			Predicate:    "request.url_path.split('/').size() > 1",
-			Path:         ocsfResourceNamespaceStorePath,
-			Value:        "request.url_path.split('/')[1]",
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
-		ocsfResourceNameStorePath: {
-			Predicate:    "request.url_path.split('/').size() > 2",
-			Path:         ocsfResourceNameStorePath,
-			Value:        "request.url_path.split('/')[2]",
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
-		ocsfResourceTypeStorePath: {
-			Path:         ocsfResourceTypeStorePath,
-			Value:        `"LLMInferenceService"`,
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
-		ocsfAIProviderStorePath: {
-			Path:         ocsfAIProviderStorePath,
-			Value:        `"KServe"`,
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
-		},
+	env, err := cel.NewEnv(cel.Variable("request", cel.DynType), celext.Strings())
+	if err != nil {
+		t.Fatalf("cel.NewEnv failed: %v", err)
+	}
+	metadataPaths := []string{wasmtypes.OCSFResourcesStorePath, wasmtypes.OCSFAIModelStorePath, wasmtypes.OCSFURLPathStorePath}
+	for index, path := range metadataPaths {
+		metadata, ok := mock.pipeline.preludeActions[index].(types.StoreAction)
+		if !ok {
+			t.Fatalf("request prelude action %d has type %T, want types.StoreAction", index, mock.pipeline.preludeActions[index])
+		}
+		if metadata.Path != path || !metadata.ExportToHost || metadata.ExportFormat != types.StoreExportFormatProtobufValue {
+			t.Fatalf("request metadata store action = %#v, want typed host export at %q", metadata, path)
+		}
+		var required []string
+		switch path {
+		case wasmtypes.OCSFResourcesStorePath:
+			required = []string{"name", "namespace", "LLMInferenceService"}
+		case wasmtypes.OCSFAIModelStorePath:
+			required = []string{"ai_provider", "KServe"}
+		case wasmtypes.OCSFURLPathStorePath:
+			required = []string{"request.url_path", "has(request.url_path) ? request.url_path"}
+		}
+		for _, want := range required {
+			if !strings.Contains(metadata.Value, want) {
+				t.Errorf("request metadata value %q does not contain %q", metadata.Value, want)
+			}
+		}
+		if strings.Contains(metadata.Value, "request.headers") || strings.Contains(metadata.Value, "Authorization") || strings.Contains(metadata.Value, "request.query") {
+			t.Errorf("request metadata value must not export headers, credentials, or query data: %q", metadata.Value)
+		}
+		_, issues := env.Compile(metadata.Value)
+		if issues != nil && issues.Err() != nil {
+			t.Errorf("request metadata expression is invalid CEL: %v", issues.Err())
+		}
 	}
 
-	for _, action := range mock.pipeline.requestActions {
-		store, ok := action.(types.StoreAction)
-		if !ok {
-			t.Fatalf("action type = %T, want types.StoreAction", action)
-		}
-		expected, ok := want[store.Path]
-		if !ok {
-			t.Errorf("unexpected store path %q", store.Path)
-			continue
-		}
-		if store != expected {
-			t.Errorf("store action for %s = %#v, want %#v", store.Path, store, expected)
-		}
-		delete(want, store.Path)
+	actor, ok := mock.pipeline.responseActions[0].(types.StoreAction)
+	if !ok {
+		t.Fatalf("response action type = %T, want types.StoreAction", mock.pipeline.responseActions[0])
 	}
-	if len(want) != 0 {
-		t.Errorf("missing store actions: %#v", want)
+	if actor.Path != ocsfActorUserStorePath || actor.Predicate != ocsfSelectorPresentPredicate("auth.identity.user.username") ||
+		actor.Value != ocsfActorUserValue(pol.Spec.Logging.Default.OCSF.Actor) || !actor.ExportToHost ||
+		actor.ExportFormat != types.StoreExportFormatProtobufValue {
+		t.Fatalf("response actor action = %#v, want configured typed actor projection", actor)
+	}
+
+	if len(mock.resolveCalls) != 1 {
+		t.Fatalf("Resolve calls = %d, want 1", len(mock.resolveCalls))
+	}
+	if !mock.resolveCalls[0].subscribe || mock.resolveCalls[0].expression != "self.findGateways().map(gateway, gateway.spec.gatewayClassName)" {
+		t.Fatalf("Resolve call = %#v, want a subscribed Gateway topology lookup", mock.resolveCalls[0])
 	}
 }
 
 func TestReconcileSpec_OCSFRejectsUnsupportedGatewayProvider(t *testing.T) {
-	mock := &mockKuadrantCtx{}
+	mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
 	r := &TelemetryPolicyReconciler{
 		ExtensionBase: types.ExtensionBase{
 			Logger: logr.Discard(),
 			Client: newTestGatewayClient(t, gatewayapiv1.GatewayController("gateway.envoyproxy.io/gatewayclass-controller")),
 		},
 	}
-	pol := newTestPolicy(nil, nil)
-	pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{OCSF: &v1alpha1.OCSFLoggingConfig{}}}
+	pol := newTestPolicy(
+		map[string]string{"metric_label": "request.path"},
+		map[string]string{"custom_field": "request.path"},
+	)
+	pol.Spec.Logging.Default.OCSF = &v1alpha1.OCSFLoggingConfig{}
 
 	status, err := r.reconcileSpec(context.Background(), pol, mock)
-	if err == nil || !strings.Contains(err.Error(), "only supported by Istio") {
-		t.Fatalf("reconcileSpec error = %v, want unsupported Gateway provider error", err)
+	if err != nil {
+		t.Fatalf("unsupported Gateway provider should be reported in policy status without requeueing: %v", err)
 	}
-	if len(mock.calls) != 0 {
-		t.Fatalf("unexpected binding calls before provider validation: %#v", mock.calls)
+	if len(mock.calls) != 2 {
+		t.Fatalf("metrics and custom logging should still be reconciled, got calls %#v", mock.calls)
 	}
-	if mock.pipeline != nil {
-		t.Fatal("unsupported Gateway provider must not commit an OCSF pipeline")
+	if mock.pipeline == nil || !mock.pipeline.committed {
+		t.Fatal("unsupported Gateway provider should commit the remaining policy pipeline to clear stale OCSF actions")
+	}
+	if len(mock.pipeline.requestActions) != 0 || len(mock.pipeline.responseActions) != 0 {
+		t.Fatalf("unsupported Gateway provider should not install OCSF actions: prelude=%#v request=%#v response=%#v", mock.pipeline.preludeActions, mock.pipeline.requestActions, mock.pipeline.responseActions)
 	}
 
 	accepted := false
@@ -396,17 +420,240 @@ func TestReconcileSpec_OCSFRejectsUnsupportedGatewayProvider(t *testing.T) {
 			accepted = condition.Status == metav1.ConditionTrue
 		case string(types.PolicyConditionEnforced):
 			enforced = true
-			if condition.Status != metav1.ConditionFalse {
-				t.Fatalf("Enforced condition status = %s, want False", condition.Status)
+			if condition.Status != metav1.ConditionFalse || !strings.Contains(condition.Message, "only supported by Istio") {
+				t.Fatalf("Enforced condition = %#v, want False with unsupported provider detail", condition)
 			}
 		}
 	}
 	if !accepted {
-		t.Fatal("unsupported provider should remain Accepted=True with a clear Enforced=False condition")
+		t.Fatal("unsupported provider should remain Accepted=True")
 	}
 	if !enforced {
 		t.Fatal("unsupported provider should set Enforced=False")
 	}
+}
+
+func TestReconcileSpec_OCSFMissingGatewayPreservesOtherBindings(t *testing.T) {
+	mock := &mockKuadrantCtx{gatewayClassNames: []string{}}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{
+			Logger: logr.Discard(),
+			Client: newTestGatewayClient(t, istioGatewayControllerName),
+		},
+	}
+	pol := newTestPolicy(
+		map[string]string{"metric_label": "request.path"},
+		map[string]string{"custom_field": "request.path"},
+	)
+	pol.Spec.Logging.Default.OCSF = &v1alpha1.OCSFLoggingConfig{}
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	if err != nil {
+		t.Fatalf("missing Gateway should update status without requeueing: %v", err)
+	}
+	if len(mock.calls) != 2 {
+		t.Fatalf("metrics and custom logging should still be reconciled, got calls %#v", mock.calls)
+	}
+	if mock.pipeline == nil || !mock.pipeline.committed {
+		t.Fatal("missing Gateway should commit the remaining policy pipeline")
+	}
+	if len(mock.pipeline.preludeActions) != 0 || len(mock.pipeline.requestActions) != 0 || len(mock.pipeline.responseActions) != 0 {
+		t.Fatal("missing Gateway must not install OCSF actions")
+	}
+	if len(mock.resolveCalls) != 1 || !mock.resolveCalls[0].subscribe {
+		t.Fatalf("missing Gateway lookup must subscribe to topology changes, got %#v", mock.resolveCalls)
+	}
+
+	accepted := false
+	for _, condition := range status.Conditions {
+		if condition.Type == string(gatewayapiv1alpha2.PolicyConditionAccepted) {
+			accepted = condition.Status == metav1.ConditionFalse
+		}
+	}
+	if !accepted {
+		t.Fatal("missing Gateway should report Accepted=False")
+	}
+}
+
+func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testing.T) {
+	actor := v1alpha1.OCSFActorConfig{
+		Identity: "auth.identity.user.username",
+		UID:      "auth.identity.user.uid",
+		Groups:   "auth.identity.user.groups",
+	}
+	expression := ocsfActorUserValue(actor)
+	for _, expected := range []string{
+		"has(auth.identity.user)",
+		"has(auth.identity.user.uid)",
+		"has(auth.identity.user.groups)",
+		`auth.identity.user.groups.map(group, {"name": group})`,
+		`"type_id": auth.identity.user.username.startsWith("system:serviceaccount:") ? 4 : 1`,
+	} {
+		if !strings.Contains(expression, expected) {
+			t.Errorf("actor expression %q does not contain %q", expression, expected)
+		}
+	}
+	if strings.Contains(expression, "type(") {
+		t.Fatalf("actor expression must not use unsupported CEL type(): %s", expression)
+	}
+	if strings.Contains(expression, "null") {
+		t.Fatalf("optional actor fields must be omitted from grouped maps, not exported as null: %s", expression)
+	}
+
+	requiredOnly := ocsfActorUserValue(v1alpha1.OCSFActorConfig{Identity: actor.Identity})
+	if strings.Contains(requiredOnly, actor.UID) || strings.Contains(requiredOnly, actor.Groups) {
+		t.Fatalf("unconfigured optional actor fields must be absent from the value: %s", requiredOnly)
+	}
+}
+
+func TestOCSFStoreActionsExportDirectTypedValues(t *testing.T) {
+	config := &v1alpha1.OCSFLoggingConfig{
+		Actor: v1alpha1.OCSFActorConfig{
+			Identity: "auth.identity.user.username",
+			UID:      "auth.identity.user.uid",
+			Groups:   "auth.identity.user.groups",
+		},
+		Target: v1alpha1.OCSFTargetConfig{
+			ResourceType: "model",
+			RequestPath: v1alpha1.OCSFRequestPathTarget{
+				NamespaceSegment: 0,
+				NameSegment:      1,
+			},
+			AIProvider: "KServe",
+		},
+	}
+
+	requestActions, responseActions := ocsfStoreActions(config)
+	wantPaths := []string{
+		wasmtypes.OCSFResourcesStorePath,
+		wasmtypes.OCSFAIModelStorePath,
+		wasmtypes.OCSFURLPathStorePath,
+	}
+	if len(requestActions) != len(wantPaths) {
+		t.Fatalf("request actions = %d, want %d", len(requestActions), len(wantPaths))
+	}
+	for index, action := range requestActions {
+		store, ok := action.(types.StoreAction)
+		if !ok {
+			t.Fatalf("request action %d = %T, want StoreAction", index, action)
+		}
+		if store.Path != wantPaths[index] || !store.ExportToHost || store.ExportFormat != types.StoreExportFormatProtobufValue {
+			t.Fatalf("request action %d = %#v, want typed host export to %q", index, store, wantPaths[index])
+		}
+		if strings.Contains(store.Value, "request_metadata") {
+			t.Fatalf("request action %d must export a directly readable filter-state value, got %q", index, store.Value)
+		}
+	}
+	if len(responseActions) != 1 {
+		t.Fatalf("response actions = %d, want one grouped actor action", len(responseActions))
+	}
+	actor, ok := responseActions[0].(types.StoreAction)
+	if !ok || actor.Path != wasmtypes.OCSFActorUserStorePath || !actor.ExportToHost || actor.ExportFormat != types.StoreExportFormatProtobufValue {
+		t.Fatalf("response actor action = %#v, want one grouped typed host export", responseActions[0])
+	}
+}
+
+func TestOCSFActorUserValueHandlesMissingParentsAndOptionalFields(t *testing.T) {
+	actor := v1alpha1.OCSFActorConfig{
+		Identity: "auth.identity.user.username",
+		UID:      "auth.identity.user.uid",
+		Groups:   "auth.identity.user.groups",
+	}
+	env, err := cel.NewEnv(cel.Variable("auth", cel.DynType))
+	if err != nil {
+		t.Fatalf("cel.NewEnv failed: %v", err)
+	}
+	evaluate := func(expression string, auth map[string]any) celref.Val {
+		t.Helper()
+		ast, issues := env.Compile(expression)
+		if issues != nil && issues.Err() != nil {
+			t.Fatalf("failed to compile CEL expression %q: %v", expression, issues.Err())
+		}
+		program, err := env.Program(ast)
+		if err != nil {
+			t.Fatalf("failed to create CEL program for %q: %v", expression, err)
+		}
+		value, _, err := program.Eval(map[string]any{"auth": auth})
+		if err != nil {
+			t.Fatalf("failed to evaluate CEL expression %q: %v", expression, err)
+		}
+		return value
+	}
+
+	t.Run("missing parent returns false without error", func(t *testing.T) {
+		predicate := evaluate(ocsfSelectorPresentPredicate(actor.Identity), map[string]any{
+			"identity": map[string]any{},
+		})
+		if !celtypes.IsBool(predicate) || predicate != celtypes.False {
+			t.Fatalf("identity predicate = %v (%T), want false", predicate, predicate)
+		}
+	})
+
+	t.Run("missing optional selectors are omitted without error", func(t *testing.T) {
+		auth := map[string]any{
+			"identity": map[string]any{
+				"user": map[string]any{"username": "alice"},
+			},
+		}
+		predicate := evaluate(ocsfSelectorPresentPredicate(actor.Identity), auth)
+		if !celtypes.IsBool(predicate) || predicate != celtypes.True {
+			t.Fatalf("identity predicate = %v (%T), want true", predicate, predicate)
+		}
+
+		value := evaluate(ocsfActorUserValue(actor), auth).Value()
+		user, ok := value.(map[celref.Val]celref.Val)
+		if !ok {
+			t.Fatalf("actor user value = %T, want CEL map", value)
+		}
+		field := func(key string) (any, bool) {
+			value, exists := user[celtypes.String(key)]
+			if !exists {
+				return nil, false
+			}
+			return value.Value(), true
+		}
+		name, hasName := field("name")
+		typeID, hasTypeID := field("type_id")
+		if !hasName || !hasTypeID || name != "alice" || typeID != int64(1) {
+			t.Fatalf("actor user name=%v type_id=%v, want alice and 1", name, typeID)
+		}
+		if _, ok := field("uid"); ok {
+			t.Fatal("missing UID must be omitted")
+		}
+		if _, ok := field("groups"); ok {
+			t.Fatal("missing groups must be omitted")
+		}
+	})
+
+	t.Run("group names are mapped to OCSF group objects", func(t *testing.T) {
+		auth := map[string]any{
+			"identity": map[string]any{
+				"user": map[string]any{
+					"username": "alice",
+					"groups":   []any{"admins", "operators"},
+				},
+			},
+		}
+		value := evaluate(ocsfActorUserValue(actor), auth).Value()
+		user, ok := value.(map[celref.Val]celref.Val)
+		if !ok {
+			t.Fatalf("actor user value = %T, want CEL map", value)
+		}
+		groups, ok := user[celtypes.String("groups")].(traits.Lister)
+		if !ok {
+			t.Fatalf("groups value = %T, want CEL list", user[celtypes.String("groups")])
+		}
+		if groups.Size().Value() != int64(2) {
+			t.Fatalf("groups size = %v, want 2", groups.Size())
+		}
+		first, ok := groups.Get(celtypes.Int(0)).Value().(map[celref.Val]celref.Val)
+		if !ok {
+			t.Fatalf("first group = %T, want CEL map", groups.Get(celtypes.Int(0)).Value())
+		}
+		if name, ok := first[celtypes.String("name")]; !ok || name.Value() != "admins" {
+			t.Fatalf("first group name = %v, want admins", name)
+		}
+	})
 }
 
 func TestReconcileSpec_PipelineCommitError(t *testing.T) {

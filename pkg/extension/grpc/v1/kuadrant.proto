@@ -125,6 +125,7 @@ enum Phase {
   PHASE_UNSPECIFIED = 0;
   PHASE_REQUEST = 1;
   PHASE_RESPONSE = 2;
+  PHASE_REQUEST_PRELUDE = 3;
 }
 
 message GrpcAction {

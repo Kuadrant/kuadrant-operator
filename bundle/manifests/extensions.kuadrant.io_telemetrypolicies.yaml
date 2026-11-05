@@ -116,12 +116,14 @@ spec:
                                     description: NameSegment is the zero-based path
                                       segment containing the resource name.
                                     format: int32
+                                    maximum: 2147483646
                                     minimum: 0
                                     type: integer
                                   namespaceSegment:
                                     description: NamespaceSegment is the zero-based
                                       path segment containing the resource namespace.
                                     format: int32
+                                    maximum: 2147483646
                                     minimum: 0
                                     type: integer
                                 required:

@@ -13,11 +13,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,8 +44,9 @@ const (
 	ocsfE2EReadyTimeout     = 5 * time.Minute
 	ocsfE2EHTTPTimeout      = 15 * time.Second
 	ocsfHTTPBinImage        = "quay.io/kuadrant/httpbin@sha256:2865a9ac6596340135fc3cd82cbc543c4050124afb10361e36f727abe4f71900"
+	grpcbinTestImage        = "quay.io/kuadrant/grpcbin@sha256:bd8f2ffdd02d0849fad2d1c754eff4402c867e7a3e0552b8992f4590f5687d20"
 	ocsfAccessLoggerName    = "envoy.access_loggers.stdout"
-	ocsfResourceTypeKey     = "wasm.kuadrant.ocsf.resource.type"
+	ocsfResourcesKey        = wasm.OCSFResourcesFilterStateKey
 	ocsfMarkerDiagnosticKey = "ocsf_marker_diagnostic"
 )
 
@@ -187,13 +192,13 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 					hasAccessLogPatch = true
 				}
 				pluginConfigJSON, found, err := unstructured.NestedString(typedConfig, "value", "config", "configuration", "value")
-				if err == nil && found && hasExportedOCSFResourceTypeStoreAction(pluginConfigJSON) {
+				if err == nil && found && hasExportedOCSFResourcesStoreAction(pluginConfigJSON) {
 					hasExportedOCSFResourceTypeAction = true
 				}
 			}
 			g.Expect(hasAccessLogPatch).To(BeTrue(), "EnvoyFilter %s does not yet contain an access-log patch", envoyFilterKey)
 			g.Expect(hasExportedOCSFResourceTypeAction).To(BeTrue(),
-				"EnvoyFilter %s does not yet contain an exported ocsf.resource.type WASM store action", envoyFilterKey)
+				"EnvoyFilter %s does not yet contain an exported ocsf.ai_model WASM store action", envoyFilterKey)
 		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
 
 		By("port-forwarding to the Gateway's ready Envoy pod")
@@ -217,7 +222,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
 		GinkgoWriter.Printf("OCSF E2E gateway pod: %s/%s (uid=%s)\n", gatewayPod.Namespace, gatewayPod.Name, gatewayPod.UID)
 
-		By("installing an isolated diagnostic logger for the OCSF resource marker")
+		By("installing an isolated diagnostic logger for the OCSF request metadata marker")
 		diagnosticEnvoyFilter := ocsfMarkerDiagnosticEnvoyFilter(testNamespace, gatewayPod.Labels)
 		Expect(testClient().Create(ctx, diagnosticEnvoyFilter)).To(Succeed())
 
@@ -232,9 +237,9 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			}
 			g.Expect(bytes.Contains(configDump, []byte(ocsfAccessLoggerName))).To(BeTrue(),
 				"Envoy active config does not include the OCSF access logger: %s", activeConfigSummary)
-			g.Expect(bytes.Contains(configDump, []byte(ocsfResourceTypeKey))).To(BeTrue(),
-				"Envoy active config does not include the OCSF resource marker: %s", activeConfigSummary)
-			g.Expect(hasExportedOCSFResourceTypeStoreActionInEnvoyConfigDump(configDump)).To(BeTrue(),
+			g.Expect(bytes.Contains(configDump, []byte(ocsfResourcesKey))).To(BeTrue(),
+				"Envoy active config does not include the OCSF request metadata marker: %s", activeConfigSummary)
+			g.Expect(hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump)).To(BeTrue(),
 				"Envoy active config does not include the exported OCSF WASM store action: %s", activeConfigSummary)
 			g.Expect(bytes.Contains(configDump, []byte(ocsfMarkerDiagnosticKey))).To(BeTrue(),
 				"Envoy active config does not include the test-only OCSF marker diagnostic logger: %s", activeConfigSummary)
@@ -267,7 +272,11 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		_, readErr := io.Copy(io.Discard, response.Body)
 		Expect(readErr).NotTo(HaveOccurred())
 		Expect(response.Body.Close()).To(Succeed())
-		Expect(response.StatusCode).To(Equal(http.StatusOK))
+		if response.StatusCode != http.StatusOK {
+			diagnostics := ocsfGatewayDiagnostics(ctx, testNamespace, gatewayPod.Name)
+			Fail(fmt.Sprintf("request through the Gateway returned HTTP %d\n%s", response.StatusCode, diagnostics))
+			return
+		}
 
 		By("waiting for the OCSF event in the Gateway access log")
 		var event map[string]any
@@ -291,8 +300,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			markerDiagnostic := findOCSFMarkerDiagnostic(accessLogs)
 			markerSummary := "not observed"
 			if markerDiagnostic != nil {
-				markerValue, _ := markerDiagnostic["resource_type"].(string)
-				markerSummary = fmt.Sprintf("method=%v resource_type=%q", markerDiagnostic["method"], markerValue)
+				markerSummary = fmt.Sprintf("method=%v resources=%#v", markerDiagnostic["method"], markerDiagnostic["resources"])
 			}
 			g.Expect(event).NotTo(BeNil(),
 				"recent istio-proxy log summary:\n%s\nOCSF marker diagnostic: %s",
@@ -313,7 +321,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Expect(metadata["logged_time"]).To(BeNumerically(">=", event["time"]))
 
 		actor := ocsfEventObject(ocsfEventObject(event, "actor"), "user")
-		Expect(actor["name"]).To(Equal("ocsf-test-user"))
+		Expect(actor["name"]).To(Equal("ocsf-test-user"), "actor fields: %#v", actor)
 		Expect(actor["type_id"]).To(Equal(float64(1)))
 		Expect(actor["uid"]).To(BeNil(), "an absent optional filter-state value must not break the event")
 		Expect(actor["groups"]).To(Equal([]any{map[string]any{"name": "ocsf-test-group"}}),
@@ -326,7 +334,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		httpResponse := ocsfEventObject(event, "http_response")
 		Expect(httpResponse["code"]).To(Equal(float64(http.StatusOK)))
 		Expect(event["status"]).To(Equal("Success"))
-		Expect(event["status_code"]).To(Equal(float64(http.StatusOK)))
+		Expect(event["status_code"]).To(Equal("200"))
 
 		resources, ok := event["resources"].([]any)
 		Expect(ok).To(BeTrue())
@@ -604,6 +612,264 @@ var _ = Describe("WASM runtime control", Label("wasm-control", "long-running"), 
 	})
 })
 
+var _ = Describe("TelemetryPolicy gRPC audit logging", Label("grpc", "telemetrypolicy", "long-running"), Serial, func() {
+	It("writes configured logging fields into Authorino audit logs for gRPC traffic", func(ctx SpecContext) {
+		if os.Getenv("GRPC_TELEMETRY_LOGGING_E2E") != "true" {
+			Skip("GRPC_TELEMETRY_LOGGING_E2E is not true; use make test-telemetry-grpc-logging-e2e")
+		}
+
+		testNamespace := tests.CreateNamespace(ctx, testClient())
+		DeferCleanup(func(ctx SpecContext) {
+			tests.DeleteNamespace(ctx, testClient(), testNamespace)
+		})
+		By("using the shared Kuadrant installation for this isolated test namespace")
+
+		By("enabling Authorino decision logging fields")
+		authorino, restoreAuthorino, err := configureAuthorinoLoggingFields(ctx, testClient(), kuadrantInstallationNS)
+		if restoreAuthorino != nil {
+			DeferCleanup(func(ctx SpecContext) {
+				Expect(restoreAuthorino(ctx)).To(Succeed())
+			})
+		}
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+
+		enabled, found, err := unstructured.NestedBool(authorino.Object, "spec", "enableLoggingFields")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found && enabled).To(BeTrue(), "Authorino must preserve spec.enableLoggingFields=true")
+
+		By("waiting for the Authorino deployment to apply the logging configuration")
+		authorinoDeploymentKey := client.ObjectKey{Namespace: authorino.GetNamespace(), Name: authorino.GetName()}
+		Eventually(func(g Gomega) {
+			deployment := &appsv1.Deployment{}
+			getErr := testClient().Get(ctx, authorinoDeploymentKey, deployment)
+			g.Expect(getErr).To(Succeed())
+			if getErr != nil {
+				return
+			}
+			desiredReplicas := int32(1)
+			if deployment.Spec.Replicas != nil {
+				desiredReplicas = *deployment.Spec.Replicas
+			}
+			g.Expect(deployment.Status.ObservedGeneration).To(BeNumerically(">=", deployment.Generation))
+			g.Expect(deployment.Status.UpdatedReplicas).To(Equal(desiredReplicas))
+			g.Expect(deployment.Status.ReadyReplicas).To(Equal(desiredReplicas))
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
+
+		By("deploying the grpcbin backend")
+		backendLabels := map[string]string{"app": "grpc-audit-backend"}
+		backend := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "grpc-audit-backend", Namespace: testNamespace},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: ptr.To[int32](1),
+				Selector: &metav1.LabelSelector{MatchLabels: backendLabels},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: backendLabels},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:            "grpcbin",
+							Image:           grpcbinTestImage,
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Ports:           []corev1.ContainerPort{{Name: "grpc", ContainerPort: 9000, Protocol: corev1.ProtocolTCP}},
+						}},
+					},
+				},
+			},
+		}
+		Expect(testClient().Create(ctx, backend)).To(Succeed())
+		backendService := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: backend.Name, Namespace: testNamespace},
+			Spec: corev1.ServiceSpec{
+				Selector: backendLabels,
+				Ports: []corev1.ServicePort{{
+					Name: "grpc", Port: 9000, TargetPort: intstr.FromInt32(9000), Protocol: corev1.ProtocolTCP,
+				}},
+			},
+		}
+		Expect(testClient().Create(ctx, backendService)).To(Succeed())
+		Eventually(func(g Gomega) {
+			current := &appsv1.Deployment{}
+			g.Expect(testClient().Get(ctx, client.ObjectKeyFromObject(backend), current)).To(Succeed())
+			g.Expect(current.Status.ObservedGeneration).To(BeNumerically(">=", current.Generation))
+			g.Expect(current.Status.ReadyReplicas).To(Equal(int32(1)))
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
+
+		By("creating an Istio Gateway and an accepted GRPCRoute matching grpcbin DummyUnary")
+		hostname := fmt.Sprintf("grpc-audit-%s.e2e.test", strings.TrimPrefix(testNamespace, "test-namespace-"))
+		gateway := tests.NewGatewayBuilder("grpc-audit-gateway", tests.GatewayClassName, testNamespace).
+			WithHTTPListener("http", hostname).Gateway
+		Expect(testClient().Create(ctx, gateway)).To(Succeed())
+		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).
+			WithTimeout(ocsfE2EReadyTimeout).Should(BeTrue())
+
+		route := tests.BuildBasicGrpcRoute("grpc-audit-route", gateway.Name, testNamespace, []string{hostname})
+		route.Spec.Rules[0].Matches[0].Method.Method = ptr.To("DummyUnary")
+		route.Spec.Rules[0].BackendRefs = []gatewayapiv1.GRPCBackendRef{{
+			BackendRef: gatewayapiv1.BackendRef{
+				BackendObjectReference: gatewayapiv1.BackendObjectReference{
+					Name: gatewayapiv1.ObjectName(backendService.Name),
+					Port: ptr.To(gatewayapiv1.PortNumber(9000)),
+				},
+			},
+		}}
+		Expect(testClient().Create(ctx, route)).To(Succeed())
+		Eventually(tests.GRPCRouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).
+			WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(BeTrue())
+
+		By("attaching a simple accepting AuthPolicy to the GRPCRoute")
+		authPolicy := ocsfAuthPolicy(testNamespace, gateway.Name)
+		authPolicy.SetName("grpc-audit-auth-policy")
+		Expect(unstructured.SetNestedField(authPolicy.Object, "GRPCRoute", "spec", "targetRef", "kind")).To(Succeed())
+		Expect(unstructured.SetNestedField(authPolicy.Object, route.Name, "spec", "targetRef", "name")).To(Succeed())
+		unstructured.RemoveNestedField(authPolicy.Object, "spec", "rules")
+		plainAuthentication := map[string]any{
+			"grpc-test-identity": map[string]any{
+				"plain": map[string]any{
+					"expression": "{'username': 'grpc-audit-test-user'}",
+				},
+			},
+		}
+		Expect(unstructured.SetNestedMap(authPolicy.Object, map[string]any{"rules": map[string]any{"authentication": plainAuthentication}}, "spec", "defaults")).To(Succeed())
+		Expect(testClient().Create(ctx, authPolicy)).To(Succeed())
+		Eventually(func() error {
+			return ocsfAuthPolicyEnforcementStatus(ctx, testClient(), client.ObjectKeyFromObject(authPolicy))
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
+
+		By("attaching a Gateway-targeted TelemetryPolicy to cover the GRPCRoute")
+		fieldName := "grpc_request_path_" + strings.ReplaceAll(testNamespace, "-", "_")
+		policy := grpcTelemetryLoggingPolicy(testNamespace, gateway.Name, fieldName)
+		Expect(testClient().Create(ctx, policy)).To(Succeed())
+		Eventually(func() error {
+			return ocsfTelemetryPolicyEnforcementStatus(ctx, testClient(), client.ObjectKeyFromObject(policy))
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
+
+		By("port-forwarding to the ready Gateway pod")
+		serviceName := gateway.Name + "-istio"
+		var gatewayPod *corev1.Pod
+		Eventually(func(g Gomega) {
+			service := &corev1.Service{}
+			g.Expect(testClient().Get(ctx, client.ObjectKey{Namespace: testNamespace, Name: serviceName}, service)).To(Succeed())
+			g.Expect(service.Spec.Selector).NotTo(BeEmpty())
+			pods := &corev1.PodList{}
+			g.Expect(testClient().List(ctx, pods, client.InNamespace(testNamespace), client.MatchingLabels(service.Spec.Selector))).To(Succeed())
+			var readyPod *corev1.Pod
+			for i := range pods.Items {
+				if podIsReady(&pods.Items[i]) {
+					readyPod = pods.Items[i].DeepCopy()
+					break
+				}
+			}
+			g.Expect(readyPod).NotTo(BeNil())
+			gatewayPod = readyPod
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
+
+		localPort, stopPortForward, _, err := ocsfPortForward(ctx, testNamespace, "pod/"+gatewayPod.Name, 80)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		DeferCleanup(stopPortForward)
+
+		conn, err := grpc.NewClient(
+			fmt.Sprintf("127.0.0.1:%d", localPort),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithAuthority(hostname),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		DeferCleanup(func() {
+			Expect(conn.Close()).To(Succeed())
+		})
+
+		By("waiting for active Envoy configuration for the route, AuthPolicy, and logging field")
+		var activeConfigDump []byte
+		Eventually(func(g Gomega) {
+			configDump, configErr := ocsfEnvoyConfigDump(ctx, testNamespace, gatewayPod.Name)
+			g.Expect(configErr).To(Succeed(), "could not read active Envoy config")
+			if configErr != nil {
+				return
+			}
+			activeConfigDump = configDump
+			raw := string(configDump)
+			g.Expect(raw).To(ContainSubstring(route.Name), "active Envoy config must contain the GRPCRoute")
+			g.Expect(raw).To(ContainSubstring("/grpcbin.GRPCBin/DummyUnary"), "active Envoy config must contain the gRPC method")
+			g.Expect(raw).To(ContainSubstring("kuadrant-auth-service"), "active Envoy config must contain the Authorino service")
+			g.Expect(raw).To(ContainSubstring(fieldName), "active Envoy config must contain the TelemetryPolicy field")
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).WithPolling(time.Second).Should(Succeed())
+		fmt.Fprintf(GinkgoWriter, "active gRPC config summary: %s\n", summarizeGRPCEnvoyConfigDump(activeConfigDump, route.Name, fieldName))
+
+		By("sending a gRPC DummyUnary request through the Gateway to grpcbin")
+		requestCtx, cancelRequest := context.WithTimeout(ctx, ocsfE2EHTTPTimeout)
+		defer cancelRequest()
+		// grpcbin DummyUnary uses a field-1 string request/response; StringValue has the same wire shape.
+		reply := &wrapperspb.StringValue{}
+		err = conn.Invoke(requestCtx, "/grpcbin.GRPCBin/DummyUnary", wrapperspb.String("grpc-audit-test-user"), reply)
+		if err != nil {
+			By("collecting Gateway, route, backend, and Authorino diagnostics")
+			diagnosticCommands := [][]string{
+				{"get", "grpcroute", route.Name, "-o", "yaml"},
+				{"get", "endpointslices", "-l", "kubernetes.io/service-name=" + backendService.Name, "-o", "yaml"},
+				{"logs", gatewayPod.Name, "-c", "istio-proxy", "--tail=100"},
+				{"logs", "deployment/" + authorino.GetName(), "-c", "authorino", "--tail=100"},
+				{"logs", "deployment/" + backend.Name, "-c", "grpcbin", "--tail=100"},
+			}
+			for _, diagnosticArgs := range diagnosticCommands {
+				args := append([]string{"-n", testNamespace}, diagnosticArgs...)
+				diagnostic, diagnosticErr := exec.CommandContext(ctx, "kubectl", args...).CombinedOutput()
+				fmt.Fprintf(GinkgoWriter, "\n$ kubectl %s\n%s", strings.Join(args, " "), diagnostic)
+				if diagnosticErr != nil {
+					fmt.Fprintf(GinkgoWriter, "diagnostic command error: %v\n", diagnosticErr)
+				}
+			}
+			Fail(fmt.Sprintf("request through Gateway failed: %v", err))
+		}
+		Expect(reply.Value).To(Equal("grpc-audit-test-user"), "grpcbin DummyUnary should echo the request")
+
+		By("confirming the active Envoy configuration used for the request")
+		fmt.Fprintf(GinkgoWriter, "active gRPC config summary: %s\n", summarizeGRPCEnvoyConfigDump(activeConfigDump, route.Name, fieldName))
+
+		By("finding the structured Authorino decision log record")
+		const expectedRequestPath = "/grpcbin.GRPCBin/DummyUnary"
+		var decisionRecord map[string]any
+		Eventually(func(g Gomega) {
+			deployment := &appsv1.Deployment{}
+			getErr := testClient().Get(ctx, authorinoDeploymentKey, deployment)
+			g.Expect(getErr).To(Succeed(), "could not get the Authorino deployment")
+			if getErr != nil || deployment.Spec.Selector == nil {
+				return
+			}
+			pods := &corev1.PodList{}
+			listErr := testClient().List(ctx, pods, client.InNamespace(authorino.GetNamespace()), client.MatchingLabels(deployment.Spec.Selector.MatchLabels))
+			g.Expect(listErr).To(Succeed(), "could not list Authorino pods")
+			if listErr != nil {
+				return
+			}
+			var logs bytes.Buffer
+			for _, pod := range pods.Items {
+				command := exec.CommandContext(ctx, "kubectl", "-n", authorino.GetNamespace(), "logs", pod.Name,
+					"-c", "authorino", "--since=5m")
+				podLogs, commandErr := command.CombinedOutput()
+				g.Expect(commandErr).NotTo(HaveOccurred(), "could not retrieve logs from Authorino pod %s", pod.Name)
+				if commandErr != nil {
+					continue
+				}
+				logs.Write(podLogs)
+				logs.WriteByte('\n')
+			}
+			decisionRecord = findAuthorinoDecisionLogWithField(logs.Bytes(), fieldName, expectedRequestPath)
+			g.Expect(decisionRecord).NotTo(BeNil(),
+				"no structured Authorino decision log contained custom.%s=%q; recent records: %s", fieldName, expectedRequestPath, summarizeAuthorinoLogRecords(logs.Bytes(), fieldName))
+		}).WithContext(ctx).WithTimeout(time.Minute).WithPolling(time.Second).Should(Succeed())
+
+		Expect(decisionRecord["msg"]).To(Equal("outgoing authorization response"))
+		Expect(decisionRecord["custom."+fieldName]).To(Equal(expectedRequestPath))
+	})
+})
+
 func wasmShimIdentityFromEnvoyFilter(envoyFilter *unstructured.Unstructured) (runtime, moduleURL, moduleSHA, pluginConfig string, err error) {
 	configPatches, found, err := unstructured.NestedSlice(envoyFilter.Object, "spec", "configPatches")
 	if err != nil {
@@ -779,7 +1045,7 @@ func ocsfTelemetryPolicy(namespace, gatewayName string) *unstructured.Unstructur
 	return policy
 }
 
-// ocsfMarkerDiagnosticEnvoyFilter logs only the request method and OCSF resource-type marker; it must not log paths, headers, or bodies.
+// ocsfMarkerDiagnosticEnvoyFilter logs only the request method and OCSF resources marker; it must not log paths, headers, or bodies.
 func ocsfMarkerDiagnosticEnvoyFilter(namespace string, workloadLabels map[string]string) *unstructured.Unstructured {
 	labels := make(map[string]any, len(workloadLabels))
 	for key, value := range workloadLabels {
@@ -823,7 +1089,7 @@ func ocsfMarkerDiagnosticEnvoyFilter(namespace string, workloadLabels map[string
 												"json_format": map[string]any{
 													ocsfMarkerDiagnosticKey: true,
 													"method":                "%REQ(:METHOD)%",
-													"resource_type":         fmt.Sprintf("%%FILTER_STATE(%s:TYPED)%%", ocsfResourceTypeKey),
+													"resources":             fmt.Sprintf("%%FILTER_STATE(%s:TYPED)%%", ocsfResourcesKey),
 												},
 												"omit_empty_values": false,
 												"formatters": []any{
@@ -999,6 +1265,7 @@ func ocsfGatewayDiagnostics(ctx context.Context, namespace, podName string) stri
 		{"get", "pod", podName, "-o", `jsonpath={range .status.containerStatuses[*]}{.name}:{.restartCount}:{.state}:{.lastState}{"\n"}{end}`},
 		{"get", "events", "--field-selector", "involvedObject.name=" + podName, "--sort-by=.lastTimestamp"},
 		{"exec", podName, "-c", "istio-proxy", "--", "pilot-agent", "request", "GET", "/config_dump"},
+		{"logs", podName, "-c", "istio-proxy", "--tail=100"},
 		{"logs", podName, "-c", "istio-proxy", "--previous", "--tail=100"},
 	}
 	for _, args := range commands {
@@ -1026,18 +1293,19 @@ func ocsfEnvoyConfigDump(ctx context.Context, namespace, podName string) ([]byte
 }
 
 func summarizeOCSFEnvoyConfigDump(configDump []byte) string {
-	return fmt.Sprintf("config dump bytes=%d; OCSF access logger present=%t; OCSF resource marker present=%t; exported OCSF WASM store action present=%t",
-		len(configDump), bytes.Contains(configDump, []byte(ocsfAccessLoggerName)), bytes.Contains(configDump, []byte(ocsfResourceTypeKey)),
-		hasExportedOCSFResourceTypeStoreActionInEnvoyConfigDump(configDump))
+	return fmt.Sprintf("config dump bytes=%d; OCSF access logger present=%t; OCSF resources marker present=%t; exported typed OCSF WASM store action present=%t",
+		len(configDump), bytes.Contains(configDump, []byte(ocsfAccessLoggerName)), bytes.Contains(configDump, []byte(ocsfResourcesKey)),
+		hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump))
 }
 
-func hasExportedOCSFResourceTypeStoreAction(pluginConfigJSON string) bool {
+func hasExportedOCSFResourcesStoreAction(pluginConfigJSON string) bool {
 	var pluginConfig struct {
 		ActionSets []struct {
 			Actions []struct {
 				Type         string `json:"type"`
 				Path         string `json:"path"`
 				ExportToHost bool   `json:"exportToHost"`
+				ExportFormat string `json:"exportFormat"`
 			} `json:"actions"`
 		} `json:"actionSets"`
 	}
@@ -1046,7 +1314,7 @@ func hasExportedOCSFResourceTypeStoreAction(pluginConfigJSON string) bool {
 	}
 	for _, actionSet := range pluginConfig.ActionSets {
 		for _, action := range actionSet.Actions {
-			if action.Type == "store" && action.Path == strings.TrimPrefix(ocsfResourceTypeKey, "wasm.kuadrant.") && action.ExportToHost {
+			if action.Type == "store" && action.Path == wasm.OCSFResourcesStorePath && action.ExportToHost && action.ExportFormat == string(wasm.StoreExportFormatProtobufValue) {
 				return true
 			}
 		}
@@ -1054,7 +1322,7 @@ func hasExportedOCSFResourceTypeStoreAction(pluginConfigJSON string) bool {
 	return false
 }
 
-func hasExportedOCSFResourceTypeStoreActionInEnvoyConfigDump(configDump []byte) bool {
+func hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump []byte) bool {
 	var envoyConfig any
 	if err := json.Unmarshal(configDump, &envoyConfig); err != nil {
 		return false
@@ -1068,7 +1336,7 @@ func hasExportedOCSFResourceTypeStoreActionInEnvoyConfigDump(configDump []byte) 
 				configuration, ok := typed["configuration"].(map[string]any)
 				if ok {
 					pluginConfigJSON, ok := configuration["value"].(string)
-					if ok && hasExportedOCSFResourceTypeStoreAction(pluginConfigJSON) {
+					if ok && hasExportedOCSFResourcesStoreAction(pluginConfigJSON) {
 						return true
 					}
 				}
@@ -1097,8 +1365,12 @@ func summarizeOCSFProxyLogs(logs []byte) string {
 	var recentLines []string
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) > 512 {
-			line = line[:512] + "...[truncated]"
+		lineLimit := 512
+		if strings.Contains(line, "Failed to evaluate predicate") {
+			lineLimit = 4096
+		}
+		if len(line) > lineLimit {
+			line = line[:lineLimit] + "...[truncated]"
 		}
 		recentLines = append(recentLines, line)
 		if len(recentLines) > 6 {
@@ -1183,4 +1455,172 @@ func ocsfEventObject(object map[string]any, field string) map[string]any {
 	value, ok := object[field].(map[string]any)
 	Expect(ok).To(BeTrue(), "expected OCSF field %q to be an object, got %T", field, object[field])
 	return value
+}
+
+func grpcTelemetryLoggingPolicy(namespace, gatewayName, fieldName string) *unstructured.Unstructured {
+	policy := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "extensions.kuadrant.io/v1alpha1",
+		"kind":       "TelemetryPolicy",
+		"metadata": map[string]any{
+			"name":      "grpc-audit-telemetry-policy",
+			"namespace": namespace,
+		},
+		"spec": map[string]any{
+			"targetRef": map[string]any{
+				"group": "gateway.networking.k8s.io",
+				"kind":  "Gateway",
+				"name":  gatewayName,
+			},
+			"logging": map[string]any{
+				"default": map[string]any{
+					"fields": map[string]any{
+						fieldName: "request.path",
+					},
+				},
+			},
+		},
+	}}
+	policy.SetGroupVersionKind(schema.GroupVersionKind{Group: "extensions.kuadrant.io", Version: "v1alpha1", Kind: "TelemetryPolicy"})
+	return policy
+}
+
+func configureAuthorinoLoggingFields(ctx context.Context, c client.Client, namespace string) (*unstructured.Unstructured, func(context.Context) error, error) {
+	key := client.ObjectKey{Namespace: namespace, Name: "authorino"}
+	gvk := schema.GroupVersionKind{Group: "operator.authorino.kuadrant.io", Version: "v1beta1", Kind: "Authorino"}
+
+	var authorino *unstructured.Unstructured
+	Eventually(func(g Gomega) {
+		authorino = &unstructured.Unstructured{}
+		authorino.SetGroupVersionKind(gvk)
+		g.Expect(c.Get(ctx, key, authorino)).To(Succeed())
+	}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
+
+	originalValue, originalFound, err := unstructured.NestedFieldNoCopy(authorino.Object, "spec", "enableLoggingFields")
+	if err != nil {
+		return nil, nil, fmt.Errorf("read Authorino spec.enableLoggingFields: %w", err)
+	}
+	if originalFound {
+		originalEnabled, ok := originalValue.(bool)
+		if !ok {
+			return nil, nil, fmt.Errorf("Authorino spec.enableLoggingFields is not a boolean")
+		}
+		if originalEnabled {
+			return authorino, func(context.Context) error { return nil }, nil
+		}
+	}
+
+	before := authorino.DeepCopy()
+	if err := unstructured.SetNestedField(authorino.Object, true, "spec", "enableLoggingFields"); err != nil {
+		return nil, nil, fmt.Errorf("set Authorino spec.enableLoggingFields: %w", err)
+	}
+	if err := c.Patch(ctx, authorino, client.MergeFrom(before)); err != nil {
+		return nil, nil, fmt.Errorf("enable Authorino logging fields: %w", err)
+	}
+
+	originalUID := authorino.GetUID()
+	cleanup := func(cleanupCtx context.Context) error {
+		current := &unstructured.Unstructured{}
+		current.SetGroupVersionKind(gvk)
+		if err := c.Get(cleanupCtx, key, current); err != nil {
+			return fmt.Errorf("get Authorino instance %s while restoring logging fields: %w", key, err)
+		}
+		if originalUID != "" && current.GetUID() != originalUID {
+			return fmt.Errorf("Authorino %s was replaced during the test; leaving the replacement intact", key)
+		}
+		beforeRestore := current.DeepCopy()
+		if originalFound {
+			if err := unstructured.SetNestedField(current.Object, originalValue, "spec", "enableLoggingFields"); err != nil {
+				return fmt.Errorf("restore Authorino spec.enableLoggingFields: %w", err)
+			}
+		} else {
+			unstructured.RemoveNestedField(current.Object, "spec", "enableLoggingFields")
+		}
+		return c.Patch(cleanupCtx, current, client.MergeFrom(beforeRestore))
+	}
+
+	updated := &unstructured.Unstructured{}
+	updated.SetGroupVersionKind(gvk)
+	if err := c.Get(ctx, key, updated); err != nil {
+		return nil, cleanup, fmt.Errorf("read Authorino instance after enabling logging fields: %w", err)
+	}
+	return updated, cleanup, nil
+}
+
+func summarizeAuthorinoLogRecords(logs []byte, fieldName string) string {
+	scanner := bufio.NewScanner(bytes.NewReader(logs))
+	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
+	var summaries []string
+	for scanner.Scan() {
+		var record map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			continue
+		}
+		keys := make([]string, 0, len(record))
+		for key := range record {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		fieldValue, fieldFound := record["custom."+fieldName]
+		summaries = append(summaries, fmt.Sprintf("msg=%q authorized=%v custom.%s=%#v (present=%t) keys=%v", record["msg"], record["authorized"], fieldName, fieldValue, fieldFound, keys))
+	}
+	if len(summaries) > 10 {
+		summaries = summaries[len(summaries)-10:]
+	}
+	return strings.Join(summaries, "; ")
+}
+
+func summarizeGRPCEnvoyConfigDump(configDump []byte, routeName, fieldName string) string {
+	var config any
+	if err := json.Unmarshal(configDump, &config); err != nil {
+		return fmt.Sprintf("could not parse config dump: %v", err)
+	}
+	raw := string(configDump)
+	activeHTTPFilters := map[string]struct{}{}
+	var visit func(any)
+	visit = func(value any) {
+		switch value := value.(type) {
+		case map[string]any:
+			name, _ := value["name"].(string)
+			if strings.HasPrefix(name, "envoy.filters.http.") && value["typed_config"] != nil {
+				activeHTTPFilters[name] = struct{}{}
+			}
+			for _, nested := range value {
+				visit(nested)
+			}
+		case []any:
+			for _, nested := range value {
+				visit(nested)
+			}
+		}
+	}
+	visit(config)
+	filterNames := make([]string, 0, len(activeHTTPFilters))
+	for name := range activeHTTPFilters {
+		filterNames = append(filterNames, name)
+	}
+	sort.Strings(filterNames)
+	return fmt.Sprintf("active HTTP filters=%v, route config present=%t, gRPC method path present=%t, auth service cluster present=%t, logging field present=%t",
+		filterNames,
+		strings.Contains(raw, routeName),
+		strings.Contains(raw, "/grpcbin.GRPCBin/DummyUnary"),
+		strings.Contains(raw, "kuadrant-auth-service"),
+		strings.Contains(raw, fieldName))
+}
+
+func findAuthorinoDecisionLogWithField(logs []byte, fieldName, expectedValue string) map[string]any {
+	scanner := bufio.NewScanner(bytes.NewReader(logs))
+	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
+	for scanner.Scan() {
+		var record map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			continue
+		}
+		if record["msg"] != "outgoing authorization response" || record["authorized"] != true {
+			continue
+		}
+		if record["custom."+fieldName] == expectedValue {
+			return record
+		}
+	}
+	return nil
 }

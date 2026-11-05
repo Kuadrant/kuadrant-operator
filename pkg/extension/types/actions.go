@@ -172,6 +172,9 @@ func (a StoreAction) PopulateProtobuf(entry *extpb.ActionEntry) {
 // and response phases. Actions accumulate locally with immediate ordering
 // validation. Commit sends all actions atomically to the operator.
 type Pipeline interface {
+	// OnHTTPRequestPrelude adds request-only Store actions that run before normal pipeline actions, including terminal guards.
+	// Prelude actions must not depend on values produced by any pipeline action.
+	OnHTTPRequestPrelude(actions ...Action) error
 	OnHTTPRequest(actions ...Action) error
 	OnHTTPResponse(actions ...Action) error
 	Commit(ctx context.Context) error

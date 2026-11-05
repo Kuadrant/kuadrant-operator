@@ -197,11 +197,11 @@ func (r *MutatorRegistry) hasRelevantPipelineActions(targetRefs []machinery.Poli
 		// Check policies with registered upstreams
 		relevantUpstreamKeys := m.store.GetRelevantUpstreamKeys(targetRefs)
 		policyIDs := lo.Uniq(lo.Map(lo.Keys(relevantUpstreamKeys), func(k RegisteredUpstreamKey, _ int) ResourceID { return k.Policy }))
-		// Also include pipeline-only policies whose target refs match this gateway
+		// Also include pipeline-only policies whose target refs match this gateway.
 		policyIDs = append(policyIDs, m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...)
 		policyIDs = lo.Uniq(policyIDs)
 		for _, policyID := range policyIDs {
-			for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+			for _, phase := range []PipelinePhase{PipelinePhaseRequestPrelude, PipelinePhaseRequest, PipelinePhaseResponse} {
 				if actions := m.store.GetPipelineActions(policyID, phase); len(actions) > 0 {
 					return true
 				}
@@ -372,12 +372,15 @@ type TargetRef struct {
 type PipelinePhase string
 
 const (
-	PipelinePhaseRequest  PipelinePhase = "request"
-	PipelinePhaseResponse PipelinePhase = "response"
+	PipelinePhaseRequestPrelude PipelinePhase = "request-prelude"
+	PipelinePhaseRequest        PipelinePhase = "request"
+	PipelinePhaseResponse       PipelinePhase = "response"
 )
 
 func phaseFromProto(p extpb.Phase) (PipelinePhase, error) {
 	switch p {
+	case extpb.Phase_PHASE_REQUEST_PRELUDE:
+		return PipelinePhaseRequestPrelude, nil
 	case extpb.Phase_PHASE_REQUEST:
 		return PipelinePhaseRequest, nil
 	case extpb.Phase_PHASE_RESPONSE:
@@ -810,7 +813,7 @@ func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries 
 	r.pipelineMutex.Lock()
 	defer r.pipelineMutex.Unlock()
 
-	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+	for _, phase := range []PipelinePhase{PipelinePhaseRequestPrelude, PipelinePhaseRequest, PipelinePhaseResponse} {
 		key := pipelineKey{Policy: policy, Phase: phase}
 		delete(r.pipelineActions, key)
 		delete(r.pipelineCounters, key)
@@ -834,14 +837,14 @@ func (r *RegisteredDataStore) ReplacePipelineActions(policy ResourceID, entries 
 	return nil
 }
 
-// ClearPipelineActions removes all pipeline actions for a policy across both phases
+// ClearPipelineActions removes all pipeline actions for a policy across all phases
 // and resets the index counters. Returns the number of actions cleared.
 func (r *RegisteredDataStore) ClearPipelineActions(policy ResourceID) int {
 	r.pipelineMutex.Lock()
 	defer r.pipelineMutex.Unlock()
 
 	cleared := 0
-	for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+	for _, phase := range []PipelinePhase{PipelinePhaseRequestPrelude, PipelinePhaseRequest, PipelinePhaseResponse} {
 		key := pipelineKey{Policy: policy, Phase: phase}
 		cleared += len(r.pipelineActions[key])
 		delete(r.pipelineActions, key)
@@ -878,7 +881,7 @@ func (r *RegisteredDataStore) GetPipelineTargetRefs(policy ResourceID) []TargetR
 }
 
 // GetPoliciesWithPipelineActions returns the set of policy IDs that have any
-// pipeline actions (request or response phase).
+// pipeline actions in any phase.
 func (r *RegisteredDataStore) GetPoliciesWithPipelineActions() []ResourceID {
 	r.pipelineMutex.RLock()
 	defer r.pipelineMutex.RUnlock()
@@ -983,7 +986,7 @@ func (r *RegisteredDataStore) ClearPolicyData(policies ...ResourceID) PruneCount
 		}
 
 		// clear pipeline actions and target refs
-		for _, phase := range []PipelinePhase{PipelinePhaseRequest, PipelinePhaseResponse} {
+		for _, phase := range []PipelinePhase{PipelinePhaseRequestPrelude, PipelinePhaseRequest, PipelinePhaseResponse} {
 			key := pipelineKey{Policy: policy, Phase: phase}
 			counts.PipelineActions += len(r.pipelineActions[key])
 			delete(r.pipelineActions, key)
@@ -1193,8 +1196,9 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		methodServiceKeys[key.Policy][key.Name] = wasmServiceKey
 	}
 
-	// Translate pipeline actions into Action entries (deterministic order across policies).
-	// Only include pipeline policies whose stored target refs match this gateway's routes.
+	// Translate actions in deterministic policy order. Prelude actions are collected
+	// separately so they can run before terminal guards without reordering any
+	// existing or ordinary extension actions.
 	policyIDs := lo.Uniq(append(lo.Keys(methodServiceKeys), m.store.GetPoliciesWithPipelineActionsForTargetRefs(targetRefs)...))
 	sort.Slice(policyIDs, func(i, j int) bool {
 		if policyIDs[i].Kind != policyIDs[j].Kind {
@@ -1233,22 +1237,34 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 		policyRouteLocators[policyID] = lo.Uniq(policyRouteLocators[policyID])
 	}
 
+	type actionSetPipelines struct {
+		prelude  []wasm.Action
+		request  []wasm.Action
+		response []wasm.Action
+	}
+	perActionSet := make([]actionSetPipelines, len(wasmConfig.ActionSets))
+
 	for _, policyID := range policyIDs {
 		methods := methodServiceKeys[policyID]
 		policyLocator := fmt.Sprintf("%s/%s/%s", policyID.Kind, policyID.Namespace, policyID.Name)
 		sources := []string{policyLocator}
 
+		preludeEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequestPrelude)
 		requestEntries := m.store.GetPipelineActions(policyID, PipelinePhaseRequest)
 		responseEntries := m.store.GetPipelineActions(policyID, PipelinePhaseResponse)
 
-		pipelineActions, err := translatePipelineToActions(
+		preludeActions, err := translateRequestPreludeActions(preludeEntries, requestEntries, responseEntries, sources)
+		if err != nil {
+			return fmt.Errorf("policy %s: %w", policyLocator, err)
+		}
+		requestActions, responseActions, err := translatePipelineToActions(
 			requestEntries, responseEntries,
 			methods, upstreamByMethod[policyID], sources,
 		)
 		if err != nil {
 			return fmt.Errorf("policy %s: %w", policyLocator, err)
 		}
-		if len(pipelineActions) == 0 {
+		if len(preludeActions) == 0 && len(requestActions) == 0 && len(responseActions) == 0 {
 			continue
 		}
 
@@ -1258,53 +1274,65 @@ func (m *RegisteredDataMutator[TResource]) mutateWasmConfig(wasmConfig *wasm.Con
 			if len(routeLocators) > 0 && asRoute != "" && !slices.Contains(routeLocators, asRoute) {
 				continue
 			}
-			wasmConfig.ActionSets[i].Actions = mergePipelineActions(wasmConfig.ActionSets[i].Actions, pipelineActions)
+			perActionSet[i].prelude = append(perActionSet[i].prelude, preludeActions...)
+			perActionSet[i].request = append(perActionSet[i].request, requestActions...)
+			perActionSet[i].response = append(perActionSet[i].response, responseActions...)
 		}
+	}
+
+	for i, actions := range perActionSet {
+		if len(actions.prelude) == 0 && len(actions.request) == 0 && len(actions.response) == 0 {
+			continue
+		}
+		wasmConfig.ActionSets[i].Actions = mergePipelineActions(
+			wasmConfig.ActionSets[i].Actions,
+			actions.prelude,
+			actions.request,
+			actions.response,
+		)
 	}
 
 	return nil
 }
 
-// mergePipelineActions keeps ordinary extension actions after the built-in policy actions while
-// placing the fixed OCSF metadata projections before terminal guards. This lets completion-time
-// audit logging cover locally denied requests without changing ordering for general SDK actions.
-func mergePipelineActions(existing, pipeline []wasm.Action) []wasm.Action {
-	prelude := make([]wasm.Action, 0, len(pipeline))
-	actor := make([]wasm.Action, 0, len(pipeline))
-	ordinary := make([]wasm.Action, 0, len(pipeline))
-	for _, action := range pipeline {
-		if wasm.IsOCSFPreludeAction(action) {
-			prelude = append(prelude, action)
-		} else if wasm.IsOCSFActorAction(action) {
-			actor = append(actor, action)
-		} else {
-			ordinary = append(ordinary, action)
-		}
-	}
-
-	preludeEnd := 0
-	for preludeEnd < len(existing) && wasm.IsOCSFPreludeAction(existing[preludeEnd]) {
-		preludeEnd++
-	}
-
-	// AuthService stores its successful dynamic metadata in auth.* from its on-reply actions.
-	// Place actor projections immediately after the last AuthService call so they see that data,
-	// but still before later policy guards can terminate the request.
-	afterAuth := preludeEnd
-	for i := preludeEnd; i < len(existing); i++ {
-		grpcAction, ok := existing[i].(*wasm.GrpcAction)
-		if ok && grpcAction.Service == wasm.AuthServiceName {
-			afterAuth = i + 1
-		}
-	}
-
-	merged := make([]wasm.Action, 0, len(existing)+len(pipeline))
-	merged = append(merged, existing[:preludeEnd]...)
+// mergePipelineActions places explicitly phased request prelude actions before built-in actions,
+// preserving the order of all built-in and ordinary extension actions around that insertion point.
+func mergePipelineActions(existing, prelude, request, response []wasm.Action) []wasm.Action {
+	// Request prelude stores must run before built-in actions, including terminal guards.
+	// Request actions remain after built-ins, while response actions run after Authorino's
+	// dynamic metadata store in its reply chain.
+	merged := make([]wasm.Action, 0, len(prelude)+len(existing)+len(request))
 	merged = append(merged, prelude...)
-	merged = append(merged, existing[preludeEnd:afterAuth]...)
-	merged = append(merged, actor...)
-	merged = append(merged, existing[afterAuth:]...)
-	merged = append(merged, ordinary...)
+	merged = append(merged, existing...)
+	merged = append(merged, request...)
+
+	if len(response) == 0 {
+		return merged
+	}
+
+	var authReply *wasm.GrpcAction
+	for i := len(merged) - 1; i >= 0; i-- {
+		authCall, ok := merged[i].(*wasm.GrpcAction)
+		if !ok || authCall.Service != wasm.AuthServiceName {
+			continue
+		}
+		for _, replyAction := range authCall.OnReply {
+			store, ok := replyAction.(*wasm.StoreAction)
+			if ok && store.Path == wasm.AuthStorePath {
+				authReply = authCall
+				break
+			}
+		}
+		if authReply != nil {
+			break
+		}
+	}
+
+	if authReply == nil {
+		return append(merged, response...)
+	}
+
+	authReply.OnReply = append(append([]wasm.Action(nil), authReply.OnReply...), response...)
 	return merged
 }
 
@@ -1341,12 +1369,56 @@ func celExpressionsFromEntry(entry *extpb.ActionEntry) []string {
 	return exprs
 }
 
+func translateRequestPreludeActions(
+	preludeEntries, requestEntries, responseEntries []PipelineActionEntry,
+	sources []string,
+) ([]wasm.Action, error) {
+	type varProducer struct {
+		name    string
+		pattern *regexp.Regexp
+	}
+	var producers []varProducer
+	for _, entries := range [][]PipelineActionEntry{requestEntries, responseEntries} {
+		for _, entry := range entries {
+			grpc := entry.Entry.GetGrpc()
+			if grpc == nil || grpc.GetVar() == "" {
+				continue
+			}
+			producers = append(producers, varProducer{
+				name:    grpc.GetVar(),
+				pattern: regexp.MustCompile(`\b` + regexp.QuoteMeta(grpc.GetVar()) + `\b`),
+			})
+		}
+	}
+
+	result := make([]wasm.Action, 0, len(preludeEntries))
+	for _, entry := range preludeEntries {
+		if entry.Entry.GetPhase() != extpb.Phase_PHASE_REQUEST_PRELUDE {
+			return nil, fmt.Errorf("actions[%d]: request prelude has invalid phase %v", entry.Index, entry.Entry.GetPhase())
+		}
+		if entry.Entry.GetStore() == nil {
+			return nil, fmt.Errorf("actions[%d]: request prelude only supports store actions", entry.Index)
+		}
+		for _, producer := range producers {
+			if entryMatchesVar(entry, producer.pattern) {
+				return nil, fmt.Errorf("actions[%d]: request prelude references pipeline variable %q produced by a gRPC action", entry.Index, producer.name)
+			}
+		}
+		action, err := entryToAction(entry, sources)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, action)
+	}
+	return result, nil
+}
+
 func translatePipelineToActions(
 	requestEntries, responseEntries []PipelineActionEntry,
 	methods map[string]string,
 	upstreamByMethod map[string]RegisteredUpstreamEntry,
 	sources []string,
-) ([]wasm.Action, error) {
+) (requestActions, responseActions []wasm.Action, err error) {
 	type varProducer struct {
 		method  string
 		pattern *regexp.Regexp
@@ -1373,33 +1445,30 @@ func translatePipelineToActions(
 	}
 
 	grpcOnReply := make(map[string][]wasm.Action)
-
 	classifyAndConvert := func(entries []PipelineActionEntry) error {
 		for _, e := range entries {
 			if e.Entry.GetGrpc() != nil {
 				continue
 			}
-			ta, err := entryToAction(e, sources)
+			action, err := entryToAction(e, sources)
 			if err != nil {
 				return err
 			}
-			if p, ok := producerFor(e); ok {
-				grpcOnReply[p.method] = append(grpcOnReply[p.method], ta)
+			if producer, ok := producerFor(e); ok {
+				grpcOnReply[producer.method] = append(grpcOnReply[producer.method], action)
 			}
 		}
 		return nil
 	}
 	if err := classifyAndConvert(requestEntries); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := classifyAndConvert(responseEntries); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var result []wasm.Action
 	emittedGRPC := make(map[string]bool)
-
-	emit := func(entries []PipelineActionEntry) error {
+	emit := func(entries []PipelineActionEntry, actions *[]wasm.Action) error {
 		for _, e := range entries {
 			if grpc := e.Entry.GetGrpc(); grpc != nil {
 				method := grpc.GetMethod()
@@ -1407,29 +1476,30 @@ func translatePipelineToActions(
 					continue
 				}
 				emittedGRPC[method] = true
-				ta := grpcToAction(e, methods, upstreamByMethod, sources)
-				ta.WithOnReply(grpcOnReply[method]...)
-				result = append(result, ta)
+				action := grpcToAction(e, methods, upstreamByMethod, sources)
+				action.WithOnReply(grpcOnReply[method]...)
+				*actions = append(*actions, action)
 				continue
 			}
-			if _, ok := producerFor(e); !ok {
-				ta, err := entryToAction(e, sources)
-				if err != nil {
-					return err
-				}
-				result = append(result, ta)
+			if _, ok := producerFor(e); ok {
+				continue
 			}
+			action, err := entryToAction(e, sources)
+			if err != nil {
+				return err
+			}
+			*actions = append(*actions, action)
 		}
 		return nil
 	}
-	if err := emit(requestEntries); err != nil {
-		return nil, err
+	if err := emit(requestEntries, &requestActions); err != nil {
+		return nil, nil, err
 	}
-	if err := emit(responseEntries); err != nil {
-		return nil, err
+	if err := emit(responseEntries, &responseActions); err != nil {
+		return nil, nil, err
 	}
 
-	return result, nil
+	return requestActions, responseActions, nil
 }
 
 func entryMatchesVar(entry PipelineActionEntry, pattern *regexp.Regexp) bool {

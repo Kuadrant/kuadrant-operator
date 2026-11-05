@@ -938,6 +938,75 @@ func TestPipeline_PhaseOrdering_RequestAfterResponse(t *testing.T) {
 	})
 	assert.Assert(t, err != nil)
 	assert.Assert(t, cmp.Contains(err.Error(), "cannot add request actions after response actions"))
+
+	p = &PipelineImpl{populatedVars: make(map[string]bool)}
+	assert.NilError(t, p.OnHTTPResponse(exttypes.AddHeadersAction{HeadersToAdd: `{"x-checked": "true"}`}))
+	err = p.OnHTTPRequestPrelude(exttypes.StoreAction{Predicate: "true", Path: "metadata", Value: "request.path"})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "cannot add request prelude actions after request or response actions"))
+}
+
+func TestPipeline_RequestPreludeOrderingAndRestrictions(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+	prelude := exttypes.StoreAction{
+		Predicate:    "true",
+		Path:         "ocsf.request_metadata",
+		Value:        "request.url_path",
+		ExportToHost: true,
+	}
+
+	err := p.OnHTTPRequestPrelude(prelude)
+	assert.NilError(t, err)
+	assert.Equal(t, p.actions[0].phase, extpb.Phase_PHASE_REQUEST_PRELUDE)
+
+	err = p.OnHTTPRequest(exttypes.StoreAction{Predicate: "true", Path: "ordinary", Value: "request.url_path"})
+	assert.NilError(t, err)
+	err = p.OnHTTPRequestPrelude(prelude)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "after request or response actions"))
+
+	p = &PipelineImpl{populatedVars: make(map[string]bool)}
+	err = p.OnHTTPRequestPrelude(exttypes.DenyAction{Predicate: "true", WithStatus: 403})
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "only supports store actions"))
+}
+
+func TestPipeline_RequestPreludeCannotConsumeLaterGRPCValues(t *testing.T) {
+	p := &PipelineImpl{populatedVars: make(map[string]bool)}
+	err := p.OnHTTPRequestPrelude(exttypes.StoreAction{
+		Predicate: "true",
+		Path:      "ocsf.request_metadata",
+		Value:     "authResponse.status",
+	})
+	assert.NilError(t, err)
+
+	err = p.OnHTTPRequest(exttypes.GRPCAction{
+		Predicate: "true",
+		Method:    "auth",
+		Var:       "authResponse",
+	})
+	assert.NilError(t, err)
+
+	err = p.Commit(context.Background())
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "request prelude action references pipeline variable \"authResponse\""))
+
+	p = &PipelineImpl{populatedVars: make(map[string]bool)}
+	err = p.OnHTTPRequestPrelude(exttypes.StoreAction{
+		Predicate: "true",
+		Path:      "ocsf.request_metadata",
+		Value:     "authResponse.status",
+	})
+	assert.NilError(t, err)
+	err = p.OnHTTPResponse(exttypes.GRPCAction{
+		Predicate: "true",
+		Method:    "auth",
+		Var:       "authResponse",
+	})
+	assert.NilError(t, err)
+	err = p.Commit(context.Background())
+	assert.Assert(t, err != nil)
+	assert.Assert(t, cmp.Contains(err.Error(), "request prelude action references pipeline variable \"authResponse\""))
 }
 
 func TestPipeline_VarAvailability_ForwardReference(t *testing.T) {

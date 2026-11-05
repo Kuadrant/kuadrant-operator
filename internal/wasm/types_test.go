@@ -93,9 +93,11 @@ func TestConfigHasOCSFAuditLogging(t *testing.T) {
 		action Action
 		want   bool
 	}{
-		{name: "exported OCSF marker", action: &StoreAction{Path: OCSFResourceTypeStorePath, ExportToHost: true}, want: true},
-		{name: "exported OCSF actor without marker", action: &StoreAction{Path: "ocsf.actor.user.name", ExportToHost: true}},
-		{name: "OCSF value not exported", action: &StoreAction{Path: "ocsf.actor.user.name"}},
+		{name: "exported typed OCSF resources", action: &StoreAction{Path: OCSFResourcesStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}, want: true},
+		{name: "exported legacy OCSF resources", action: &StoreAction{Path: OCSFResourcesStorePath, ExportToHost: true}},
+		{name: "exported OCSF actor without request metadata", action: &StoreAction{Path: OCSFActorUserStorePath, ExportToHost: true}},
+		{name: "OCSF resources not exported", action: &StoreAction{Path: OCSFResourcesStorePath}},
+		{name: "arbitrary OCSF-prefixed path", action: &StoreAction{Path: "ocsf.custom", ExportToHost: true}},
 		{name: "unrelated exported value", action: &StoreAction{Path: "auth", ExportToHost: true}},
 		{name: "non-store action", action: &FailAction{LogMessage: "failed"}},
 	}

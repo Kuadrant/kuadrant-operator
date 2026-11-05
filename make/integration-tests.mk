@@ -64,6 +64,17 @@ test-ocsf-event-e2e: ## Verify a live OCSF event against a deployed Istio operat
 		-ginkgo.focus='OCSF access log emits an OCSF 1.9.0 API Activity event' \
 		-timeout 15m
 
+.PHONY: test-telemetry-grpc-logging-e2e
+test-telemetry-grpc-logging-e2e: export GRPC_TELEMETRY_LOGGING_E2E = true
+test-telemetry-grpc-logging-e2e: export GATEWAYAPI_PROVIDER = istio
+test-telemetry-grpc-logging-e2e: export USE_EXISTING_OPERATOR = true
+test-telemetry-grpc-logging-e2e: export OCSF_E2E = false
+test-telemetry-grpc-logging-e2e: ## Verify TelemetryPolicy logging fields in Authorino for gRPC traffic.
+	go test -count=1 -tags=integration,ocsf_e2e ./tests/istio \
+		-run '^TestAPIs$$' \
+		-ginkgo.focus='TelemetryPolicy gRPC audit logging writes configured logging fields into Authorino audit logs for gRPC traffic' \
+		-timeout 15m
+
 .PHONY: test-wasm-shim-control-e2e
 test-wasm-shim-control-e2e: export WASM_CONTROL_E2E = true
 test-wasm-shim-control-e2e: export GATEWAYAPI_PROVIDER = istio

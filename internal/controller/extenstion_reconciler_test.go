@@ -183,8 +183,9 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 		config := wasm.Config{ActionSets: []wasm.ActionSet{{
 			Name: "ocsf",
 			Actions: []wasm.Action{&wasm.StoreAction{
-				Path:         wasm.OCSFResourceTypeStorePath,
+				Path:         wasm.OCSFResourcesStorePath,
 				ExportToHost: true,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
 			}},
 		}}}
 
@@ -221,13 +222,22 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 		Name: "ocsf",
 		Actions: []wasm.Action{
 			&wasm.StoreAction{
-				Path:         wasm.OCSFResourceTypeStorePath,
+				Path:         wasm.OCSFResourcesStorePath,
+				Value:        `[{"name": "model", "namespace": "tenant", "type": "model", "role_id": 1, "role": "Target"}]`,
 				ExportToHost: true,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
 			},
 			&wasm.StoreAction{
-				Path:         "ocsf.http_request.url.path",
-				Value:        "request.url_path",
+				Path:         wasm.OCSFAIModelStorePath,
+				Value:        `{"name": "model", "ai_provider": "test-provider"}`,
 				ExportToHost: true,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
+			},
+			&wasm.StoreAction{
+				Path:         wasm.OCSFURLPathStorePath,
+				Value:        `"/tenant/model/get"`,
+				ExportToHost: true,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
 			},
 		},
 	}}}
@@ -306,14 +316,16 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 		t.Fatalf("expected ai_operation profile, got %v", profiles)
 	}
 
-	actor := mapField(mapField(event, "actor"), "user")
-	for _, field := range []string{"name", "uid", "type_id", "groups"} {
-		if _, ok := actor[field]; !ok {
-			t.Errorf("expected OCSF actor.user.%s field", field)
-		}
+	actor, ok := mapField(event, "actor")["user"].(string)
+	if !ok {
+		t.Fatalf("expected OCSF actor.user typed projection, got %T", mapField(event, "actor")["user"])
+	}
+	wantActor := `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user" in filter_state ? filter_state["wasm.kuadrant.ocsf.actor.user"] : {"type_id": 0})%`
+	if actor != wantActor {
+		t.Fatalf("expected typed OCSF actor.user projection, got %v", actor)
 	}
 	api := mapField(event, "api")
-	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {
+	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : "")%` {
 		t.Fatalf("expected method and query-safe path in api.operation, got %v", api["operation"])
 	}
 	httpRequest := mapField(event, "http_request")
@@ -329,7 +341,7 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 	if _, ok := event["authorization"]; ok {
 		t.Fatal("OCSF event must not include authorization credentials")
 	}
-	if url := mapField(httpRequest, "url"); url["path"] != `%TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : null)%` {
+	if url := mapField(httpRequest, "url"); url["path"] != `%TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : "")%` {
 		t.Fatalf("expected query-safe URL path, got %v", url["path"])
 	}
 
@@ -339,29 +351,11 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 			t.Errorf("expected OCSF http_response.%s field", field)
 		}
 	}
-	resources := sliceField(event, "resources")
-	if len(resources) != 1 {
-		t.Fatalf("expected one target resource, got %d", len(resources))
+	if event["resources"] != `%TYPED_CEL("wasm.kuadrant.ocsf.resources" in filter_state ? filter_state["wasm.kuadrant.ocsf.resources"] : [])%` {
+		t.Fatalf("expected projected OCSF resources, got %v", event["resources"])
 	}
-	resource, ok := resources[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected target resource object, got %T", resources[0])
-	}
-	for _, field := range []string{"name", "namespace", "type", "role_id", "role"} {
-		if _, ok := resource[field]; !ok {
-			t.Errorf("expected OCSF resource.%s field", field)
-		}
-	}
-	if resource["role_id"] != float64(1) || resource["role"] != "Target" {
-		t.Fatalf("expected OCSF target resource role, got role_id=%v role=%v", resource["role_id"], resource["role"])
-	}
-
-	aiModel := mapField(event, "ai_model")
-	if _, ok := aiModel["name"]; !ok {
-		t.Error("expected OCSF ai_model.name field")
-	}
-	if aiModel["ai_provider"] != `%TYPED_CEL("wasm.kuadrant.ocsf.ai_model.ai_provider" in filter_state ? filter_state["wasm.kuadrant.ocsf.ai_model.ai_provider"] : null)%` {
-		t.Fatalf("expected projected OCSF AI provider, got %v", aiModel["ai_provider"])
+	if event["ai_model"] != `%TYPED_CEL("wasm.kuadrant.ocsf.ai_model" in filter_state ? filter_state["wasm.kuadrant.ocsf.ai_model"] : {})%` {
+		t.Fatalf("expected projected OCSF AI model, got %v", event["ai_model"])
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"gotest.tools/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +17,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
+	kuadrantistio "github.com/kuadrant/kuadrant-operator/internal/istio"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
@@ -808,5 +810,64 @@ func TestWasmConfigDeterministicSortOrder(t *testing.T) {
 		for configJSON, count := range observed {
 			t.Logf("  seen %d times: ...%s...", count, configJSON[:80])
 		}
+	}
+}
+
+func TestBindingOrderEnvoyFilter(t *testing.T) {
+	gateway := &machinery.Gateway{Gateway: &gatewayapiv1.Gateway{TypeMeta: metav1.TypeMeta{APIVersion: gatewayapiv1.GroupVersion.String(), Kind: "Gateway"}, ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"}}}
+	bindings := []wasm.DataBinding{
+		{Domain: "metrics.labels", Field: "subscription", Expression: `auth.identity.subscription`},
+		{Domain: "metrics.labels", Field: "cost_center", Expression: `"engineering"`},
+		{Domain: "metrics.labels", Field: "organization_id", Expression: `"org"`},
+		{Domain: "metrics.labels", Field: "model", Expression: `responseBodyJSON("/model")`},
+	}
+	for _, service := range []string{wasm.AuthServiceName, wasm.RateLimitServiceName, wasm.RateLimitCheckServiceName, wasm.RateLimitReportServiceName, wasm.RateLimitReserveServiceName, wasm.RateLimitCommitServiceName} {
+		t.Run(service, func(t *testing.T) {
+			build := func(bindings []wasm.DataBinding) wasm.Config {
+				specs := []wasm.ActionSpec{{ServiceName: service, Scope: "test", Reservation: &wasm.ReservationSpec{ID: "reservation", Amount: "1u", ActualAmount: `responseBodyJSON("/usage/total_tokens")`}}}
+				wasm.AttachBindings(specs, bindings)
+				return wasm.Config{ActionSets: []wasm.ActionSet{{Name: "same", Actions: wasm.BuildActions(specs)}}}
+			}
+			baseline := build(bindings)
+			baselineJSON, err := json.Marshal(baseline)
+			if err != nil {
+				t.Fatal(err)
+			}
+			baselineFilter := buildIstioEnvoyFilterForGateway(gateway, baseline, "http://wasm", "wasm", 8082, "")
+			if len(baselineFilter.Spec.ConfigPatches) == 0 {
+				t.Fatal("test did not generate Wasm patches")
+			}
+			// Enumerate every permutation explicitly; a regression fails reliably
+			// without relying on a particular Go map traversal in CI.
+			var visit func(int)
+			count := 0
+			visit = func(index int) {
+				if index == len(bindings) {
+					count++
+					config := build(bindings)
+					data, err := json.Marshal(config)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if string(data) != string(baselineJSON) {
+						t.Fatalf("permutation %d changed serialized Wasm configuration", count)
+					}
+					filter := buildIstioEnvoyFilterForGateway(gateway, config, "http://wasm", "wasm", 8082, "")
+					if !kuadrantistio.EqualEnvoyFilters(baselineFilter, filter) {
+						t.Fatalf("permutation %d produces unequal EnvoyFilters", count)
+					}
+					return
+				}
+				for i := index; i < len(bindings); i++ {
+					bindings[index], bindings[i] = bindings[i], bindings[index]
+					visit(index + 1)
+					bindings[index], bindings[i] = bindings[i], bindings[index]
+				}
+			}
+			visit(0)
+			if count != 24 {
+				t.Fatalf("tested %d permutations, want 24", count)
+			}
+		})
 	}
 }

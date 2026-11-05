@@ -1020,6 +1020,12 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 			ValueCEL: fmt.Sprintf("string(%s)", b.Expression),
 		})
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Key != entries[j].Key {
+			return entries[i].Key < entries[j].Key
+		}
+		return entries[i].ValueCEL < entries[j].ValueCEL
+	})
 	return &RateLimitDescriptorCEL{Entries: entries}
 }
 

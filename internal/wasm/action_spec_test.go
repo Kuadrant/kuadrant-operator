@@ -1732,3 +1732,23 @@ func TestBuildMetadataContext_MixedMetricsAndLogging(t *testing.T) {
 		t.Errorf("entries[1].Domain = %q, want io.kuadrant.metrics.labels (alphabetical sort)", metadata.FilterMetadata[1].Domain)
 	}
 }
+
+func TestBindingDescriptorsCanonicalOrder(t *testing.T) {
+	bindings := []DataBinding{
+		{Domain: "metrics.labels", Field: "z", Expression: `"last"`},
+		{Domain: "custom", Field: "a", Expression: `"second"`},
+		{Domain: "custom", Field: "a", Expression: `"first"`},
+	}
+	before := slices.Clone(bindings)
+	want := []DescriptorEntryCEL{
+		{Key: "custom.a", ValueCEL: `string("first")`},
+		{Key: "custom.a", ValueCEL: `string("second")`},
+		{Key: "z", ValueCEL: `string("last")`},
+	}
+	if got := bindingsToDescriptor(bindings); !reflect.DeepEqual(got.Entries, want) {
+		t.Fatalf("got %#v, want %#v", got.Entries, want)
+	}
+	if !reflect.DeepEqual(bindings, before) {
+		t.Fatal("descriptor rendering reordered the caller's bindings")
+	}
+}

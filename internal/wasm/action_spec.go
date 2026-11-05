@@ -131,50 +131,47 @@ func (s ActionSpec) Build() Action {
 // extracted into a single StoreAction per direction, prepended to the result.
 func BuildActions(specs []ActionSpec) []Action {
 	type refEntry struct {
-		ref     bodyRef
-		sources []string
+		ref       bodyRef
+		originals []string
+		sources   []string
 	}
 
 	// Collect all body refs across all specs, grouped by direction.
 	// Key: direction ("response"/"request"), value: pointer -> refEntry
 	byDirection := make(map[string]map[string]refEntry)
+	addRef := func(ref bodyRef, sources []string) {
+		if byDirection[ref.Direction] == nil {
+			byDirection[ref.Direction] = make(map[string]refEntry)
+		}
+		entry := byDirection[ref.Direction][ref.Pointer]
+		// Equivalent calls can use different quoting or whitespace. Keep every
+		// spelling for replacement and choose a stable extraction expression.
+		if len(entry.originals) == 0 || ref.Original < entry.ref.Original {
+			entry.ref = ref
+		}
+		entry.originals = appendUnique(entry.originals, ref.Original)
+		entry.sources = appendUnique(entry.sources, sources...)
+		byDirection[ref.Direction][ref.Pointer] = entry
+	}
 
 	for _, spec := range specs {
 		for _, cd := range spec.ConditionalData {
 			for _, item := range cd.Data {
 				if expr, ok := item.Value.(*Expression); ok {
 					for _, ref := range extractBodyRefs(expr.ExpressionItem.Value) {
-						if byDirection[ref.Direction] == nil {
-							byDirection[ref.Direction] = make(map[string]refEntry)
-						}
-						entry := byDirection[ref.Direction][ref.Pointer]
-						entry.ref = ref
-						entry.sources = appendUnique(entry.sources, spec.Sources...)
-						byDirection[ref.Direction][ref.Pointer] = entry
+						addRef(ref, spec.Sources)
 					}
 				}
 			}
 		}
 		for _, b := range spec.Bindings {
 			for _, ref := range extractBodyRefs(b.Expression) {
-				if byDirection[ref.Direction] == nil {
-					byDirection[ref.Direction] = make(map[string]refEntry)
-				}
-				entry := byDirection[ref.Direction][ref.Pointer]
-				entry.ref = ref
-				entry.sources = appendUnique(entry.sources, spec.Sources...)
-				byDirection[ref.Direction][ref.Pointer] = entry
+				addRef(ref, spec.Sources)
 			}
 		}
 		if spec.Reservation != nil {
 			for _, ref := range extractBodyRefs(spec.Reservation.ActualAmount) {
-				if byDirection[ref.Direction] == nil {
-					byDirection[ref.Direction] = make(map[string]refEntry)
-				}
-				entry := byDirection[ref.Direction][ref.Pointer]
-				entry.ref = ref
-				entry.sources = appendUnique(entry.sources, spec.Sources...)
-				byDirection[ref.Direction][ref.Pointer] = entry
+				addRef(ref, spec.Sources)
 			}
 		}
 	}
@@ -224,7 +221,9 @@ func BuildActions(specs []ActionSpec) []Action {
 			}
 			usedKeys[mapKey] = true
 			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, mapKey, entry.ref.Original))
-			replacements[entry.ref.Original] = bodyRefStorePath(direction, mapKey)
+			for _, original := range entry.originals {
+				replacements[original] = bodyRefStorePath(direction, mapKey)
+			}
 			allSources = appendUnique(allSources, entry.sources...)
 		}
 
@@ -236,6 +235,7 @@ func BuildActions(specs []ActionSpec) []Action {
 		}
 
 		mapExpr := fmt.Sprintf("{%s}", strings.Join(mapEntries, ", "))
+		sort.Strings(allSources)
 		storeActions = append(storeActions,
 			NewStoreAction("true", storePath, mapExpr).
 				WithGuard(false).
@@ -258,15 +258,17 @@ func BuildActions(specs []ActionSpec) []Action {
 }
 
 func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
+	pairs := make([]string, 0, 2*len(replacements))
+	for _, original := range sortedKeys(replacements) {
+		pairs = append(pairs, original, replacements[original])
+	}
+	replace := strings.NewReplacer(pairs...).Replace
 	newCD := make([]ConditionalData, len(s.ConditionalData))
 	for i, cd := range s.ConditionalData {
 		newData := make([]DataType, len(cd.Data))
 		for j, item := range cd.Data {
 			if expr, ok := item.Value.(*Expression); ok {
-				newValue := expr.ExpressionItem.Value
-				for original, storePath := range replacements {
-					newValue = strings.ReplaceAll(newValue, original, storePath)
-				}
+				newValue := replace(expr.ExpressionItem.Value)
 				if newValue != expr.ExpressionItem.Value {
 					newData[j] = DataType{Value: &Expression{
 						ExpressionItem: ExpressionItem{
@@ -286,19 +288,13 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 
 	newBindings := make([]DataBinding, len(s.Bindings))
 	for i, b := range s.Bindings {
-		newExpr := b.Expression
-		for original, storePath := range replacements {
-			newExpr = strings.ReplaceAll(newExpr, original, storePath)
-		}
+		newExpr := replace(b.Expression)
 		newBindings[i] = DataBinding{Domain: b.Domain, Field: b.Field, Expression: newExpr}
 	}
 
 	newReservation := s.Reservation
 	if s.Reservation != nil {
-		newActualAmount := s.Reservation.ActualAmount
-		for original, storePath := range replacements {
-			newActualAmount = strings.ReplaceAll(newActualAmount, original, storePath)
-		}
+		newActualAmount := replace(s.Reservation.ActualAmount)
 		if newActualAmount != s.Reservation.ActualAmount {
 			r := *s.Reservation
 			r.ActualAmount = newActualAmount

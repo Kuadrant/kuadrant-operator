@@ -3,9 +3,11 @@
 package wasm
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -1730,6 +1732,63 @@ func TestBuildMetadataContext_MixedMetricsAndLogging(t *testing.T) {
 	}
 	if metadata.FilterMetadata[1].Domain != "io.kuadrant.metrics.labels" {
 		t.Errorf("entries[1].Domain = %q, want io.kuadrant.metrics.labels (alphabetical sort)", metadata.FilterMetadata[1].Domain)
+	}
+}
+
+func TestEquivalentBodyRefSpellings(t *testing.T) {
+	for _, tc := range []struct{ name, first, second, third, service string }{
+		{"request", `requestBodyJSON("/model")`, `requestBodyJSON('/model')`, `requestBodyJSON( "/model" )`, RateLimitReserveServiceName},
+		{"response", `responseBodyJSON("/model")`, `responseBodyJSON('/model')`, `responseBodyJSON( "/model" )`, RateLimitCommitServiceName},
+		{"pointer list", `responseBodyJSON(["/model", "/fallback"], "string")`, `responseBodyJSON(['/model','/fallback'], "string")`, `responseBodyJSON( ["/model", "/fallback"], "string" )`, AuthServiceName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bindings := []DataBinding{{Domain: "metrics.labels", Field: "a", Expression: tc.first}, {Domain: "metrics.labels", Field: "b", Expression: tc.second}}
+			var baseline string
+			for _, reverse := range []bool{false, true} {
+				spec := ActionSpec{ServiceName: tc.service, Scope: "scope", Bindings: slices.Clone(bindings),
+					ConditionalData: []ConditionalData{{Data: []DataType{{Value: &Expression{ExpressionItem: ExpressionItem{Key: "counter", Value: tc.third}}}}}},
+					Reservation:     &ReservationSpec{ID: "id", ActualAmount: tc.second},
+				}
+				if reverse {
+					slices.Reverse(spec.Bindings)
+				}
+				before, _ := json.Marshal(spec)
+				actions := BuildActions([]ActionSpec{spec})
+				if len(actions) != 2 {
+					t.Fatalf("got %d actions, want one extraction and one service call", len(actions))
+				}
+				store, ok := actions[0].(*StoreAction)
+				if !ok {
+					t.Fatalf("first action is %T, want body extraction", actions[0])
+				}
+				if strings.Count(store.Value, "BodyJSON(") != 1 {
+					t.Fatalf("want exactly one extraction, got %s", store.Value)
+				}
+				service, err := json.Marshal(actions[1])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(service), "BodyJSON(") {
+					t.Fatalf("body reference was not replaced: %s", service)
+				}
+				if !strings.Contains(string(service), "kuadrant.internal.") {
+					t.Fatalf("service does not use extracted data: %s", service)
+				}
+				after, _ := json.Marshal(spec)
+				if string(before) != string(after) {
+					t.Fatal("BuildActions mutated caller-owned specs")
+				}
+				data, err := json.Marshal(actions)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if baseline == "" {
+					baseline = string(data)
+				} else if baseline != string(data) {
+					t.Fatal("binding order changed body extraction or replacement")
+				}
+			}
+		})
 	}
 }
 

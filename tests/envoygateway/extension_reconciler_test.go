@@ -232,7 +232,7 @@ var _ = Describe("wasm controller", Labels{"envoygateway", "ratelimitpolicy"}, f
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
 							Predicates: []string{
 								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+								"request.url_path.startsWith(\"/toy\")",
 							},
 						},
 						Actions: []wasm.Action{
@@ -440,7 +440,7 @@ var _ = Describe("wasm controller", Labels{"envoygateway", "ratelimitpolicy"}, f
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
 							Predicates: []string{
 								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+								"request.url_path.startsWith(\"/toy\")",
 							},
 						},
 						Actions: []wasm.Action{

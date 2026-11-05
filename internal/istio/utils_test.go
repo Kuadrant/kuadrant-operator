@@ -371,3 +371,32 @@ func testKuadrantObj(ns, name string) controller.Object {
 		},
 	}
 }
+
+// TestBuildWasmFilterConfigVmID guards the fix for kuadrant-operator#2351: the
+// wasm vm_config.vm_id must be set to the module content SHA. Envoy keys Wasm VM
+// reuse on vm_key = hash(vm_id, configuration, code); with an empty vm_id a remote
+// code fetch that misses the cache (code == "") collides with the already-running
+// VM and the new module is never loaded (gateway keeps the old wasm until a pod
+// restart). Deriving vm_id from the SHA changes the key synchronously on a content
+// change, forcing a new VM even before the fetch completes.
+func TestBuildWasmFilterConfigVmID(t *testing.T) {
+	const sha = "fd5039db79d000f31669de1fde37ea175d3ad05f2b14341d6936fb564cab5553"
+
+	filterConfig, err := buildWasmFilterConfig("http://example.com/plugin.wasm", "", sha, "kuadrant-operator-wasm", nil)
+	assert.NilError(t, err)
+
+	config, ok := filterConfig["config"].(map[string]any)
+	assert.Assert(t, ok, "config should be a map")
+
+	vmConfig, ok := config["vm_config"].(map[string]any)
+	assert.Assert(t, ok, "vm_config should be a map")
+
+	assert.Equal(t, vmConfig["vm_id"], sha)
+
+	// Also check the remote data source still pins the same SHA.
+	code, ok := vmConfig["code"].(map[string]any)
+	assert.Assert(t, ok, "code should be a map")
+	remote, ok := code["remote"].(map[string]any)
+	assert.Assert(t, ok, "code.remote should be a map")
+	assert.Equal(t, remote["sha256"], sha)
+}

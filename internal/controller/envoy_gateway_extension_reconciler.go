@@ -645,6 +645,15 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 					},
 				},
 			},
+			// NOTE(#2351): on the Istio path we set vm_config.vm_id to the wasm
+			// content SHA so an in-place SHA change forces a new Envoy Wasm VM
+			// (vm_key = hash(vm_id, config, code)) and the gateway picks up the new
+			// module without a pod restart. The equivalent cannot be done here:
+			// EnvoyGateway's Wasm API exposes no vm_id field and derives it from the
+			// EnvoyExtensionPolicy identity (stable across upgrades), so a wasm-shim
+			// upgrade can leave the gateway running the old module until its Envoy
+			// listener is rebuilt (e.g. pod restart). Revisit once envoyproxy/gateway
+			// exposes vmID (envoyproxy/gateway#9954).
 			Wasm: []envoygatewayv1alpha1.Wasm{
 				{
 					Name:   ptr.To("kuadrant-wasm-shim"),

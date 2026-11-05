@@ -349,6 +349,12 @@ echo "gold-tier request: HTTP $CODE"
 
 The default tier hits its limit, but the gold tier still has remaining budget.
 
+Clean up before the next section:
+
+```sh
+kubectl delete tokenratelimitpolicy ai-per-tier -n gateway-system
+```
+
 ## Streaming responses
 
 TRLP supports streaming OpenAI-style responses. The request must include `"stream": true` and `"stream_options": { "include_usage": true }` for usage to be extracted from the final stream event:
@@ -382,7 +388,9 @@ When using a real external AI API (for example, OpenAI), the egress gateway term
 
 ### Concurrent request race condition
 
-The current TRLP implementation uses a two-phase protocol: the gateway checks limits before forwarding the request (without consuming tokens), then reports actual usage after receiving the response. Between these two phases, concurrent in-flight requests can race past the limit because nothing holds capacity during model processing. For most use cases this is acceptable because LLM responses are slow enough that burst patterns are uncommon. For strict enforcement under high concurrency, see [Token Limit Reservations](#token-limit-reservations-coming-soon) below.
+The Kuadrant CR field `spec.tokenRateLimiting.mode` controls cluster-wide how TRLP enforces limits: `Reservation` (the default) or `Optimistic`. In `Optimistic` mode, the gateway checks limits before forwarding the request (without consuming tokens), then reports actual usage after receiving the response; between these two phases, concurrent in-flight requests can race past the limit because nothing holds capacity during model processing.
+
+`Reservation` mode closes this gap by reserving an estimated token amount on request arrival and committing the actual usage once the upstream responds, releasing any unused portion of the reservation. However, **`reservation.amount` defaults to `0`, which reserves no capacity** — so a TokenRateLimitPolicy that doesn't set `amount` explicitly behaves like `Optimistic` even while the cluster is in `Reservation` mode. See [Token Limit Reservations](#token-limit-reservations) below to enable real protection on this egress gateway, and the [Token Rate Limiting Overview](../../overviews/token-rate-limiting.md#enforcement-modes) for the full explanation of both modes.
 
 ### Supported response formats
 
@@ -400,32 +408,50 @@ Verify that your AI provider returns `usage.total_tokens` in every response befo
 
 Egress gateway support targets Istio as the Gateway API provider. Envoy Gateway is not supported for egress at this time.
 
-## Token limit reservations (coming soon)
+## Token limit reservations
 
-> This section describes a planned enhancement. The code does not exist yet. See [architecture#190](https://github.com/Kuadrant/architecture/pull/190) for the full RFC.
+The cluster is already in `Reservation` mode by default (see [Concurrent Request Race Condition](#concurrent-request-race-condition) above), implemented per RFC [0021](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md). But without an explicit `reservation.amount` on a limit, that limit still behaves like `Optimistic` mode. This section shows how to turn on real reservation-based protection for the per-workload policy from [Per-Workload Token Limiting](#per-workload-token-limiting).
 
-The current two-phase flow (check then report) has a known race condition: concurrent in-flight requests all pass the check phase before any of them report usage, allowing cumulative consumption to exceed the configured limit. Token limit reservations close this gap by holding estimated capacity at request time.
+### Cluster-wide mode
 
-### How it will work
-
-When a request arrives, the gateway will reserve an estimated token amount against the limit. If remaining capacity (accounting for all outstanding reservations) is insufficient, the request is rejected immediately. After the model responds, the actual usage is committed and the reservation is released.
-
-```
-Request arrives → Reserve(estimated amount, TTL) → Forward to model → Commit(actual usage) → Release reservation
-```
-
-If the model call fails or times out, the reservation expires on its own TTL. No cleanup call is needed.
-
-### Policy changes
-
-A new optional `reservation` block on each limit will allow configuring the estimated amount and hold duration:
+The Kuadrant CR `spec.tokenRateLimiting.mode` field controls enforcement behavior cluster-wide, for every TokenRateLimitPolicy:
 
 ```yaml
-# Not yet available — requires Limitador and operator support
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec:
+  tokenRateLimiting:
+    mode: Reservation   # default; set to Optimistic to use check-then-report instead
+```
+
+- `Reservation` (default): uses Reserve/Commit for all TokenRateLimitPolicies, per the per-limit `reservation` settings described below
+- `Optimistic`: uses check-then-report for all TokenRateLimitPolicies, as described in [Concurrent Request Race Condition](#concurrent-request-race-condition)
+
+See the [Token Rate Limiting Overview](../../overviews/token-rate-limiting.md#enforcement-modes) for the full comparison of both modes.
+
+### How it works
+
+When a request arrives, the gateway reserves an estimated token amount against the limit. If remaining capacity (accounting for all outstanding reservations) is insufficient, the request is rejected immediately with `429`. After the model responds, the actual usage is committed and the unused portion of the reservation is released.
+
+```
+Request arrives → Reserve(estimated amount, TTL) → Forward to model → Commit(actual usage) → Release unused reservation
+```
+
+If the model call fails or times out, the reservation is released by committing `0`, reclaiming capacity without waiting for the counter window to roll over.
+
+### Set a reservation amount
+
+Add a `reservation` block to the limit, with an estimated token cost per request and a hold duration:
+
+```sh
+kubectl apply -f - <<'EOF'
 apiVersion: kuadrant.io/v1alpha1
 kind: TokenRateLimitPolicy
 metadata:
-  name: ai-token-limit-with-reservations
+  name: ai-per-workload
   namespace: gateway-system
 spec:
   targetRef:
@@ -435,35 +461,94 @@ spec:
   limits:
     per-workload:
       rates:
-        - limit: 50000
-          window: 24h
+        - limit: 100
+          window: 1m
       counters:
         - expression: auth.identity.username
       reservation:
-        amount: "uint(5000)"
-        ttl: "duration('30s')"
+        amount: 10
+        ttl: 'duration("30s")'
+EOF
 ```
 
-- `reservation.amount`: CEL expression for estimated tokens to hold. Defaults to `uint(5000)` when omitted.
-- `reservation.ttl`: how long to hold the reservation before auto-releasing. Defaults to the route's backend request timeout.
+- `reservation.amount`: the number of tokens to reserve on request arrival, as a literal integer or a CEL expression. Defaults to `0` (no capacity reserved) when omitted — set a non-zero estimate to get protection against the concurrent-request race.
+- `reservation.ttl`: a CEL expression for how long the reservation is held before it auto-releases. Defaults to the route's `backendRequest` timeout when available; otherwise, Limitador applies its default.
 
-Policies that omit the `reservation` block automatically get safe defaults. No changes are required to existing TRLP resources.
+See the [`reservation` API reference](../../reference/tokenratelimitpolicy.md#reservation) for full details on the field, and the [Token Rate Limiting Overview](../../overviews/token-rate-limiting.md#enforcement-modes) for the Limitador-side caps (`spec.reservations.maxFraction`, `spec.reservations.maxTtl`) on how much a single reservation can claim and how long it can be held.
 
-### Cluster-wide mode switch
+### Verifying reservation under concurrency
 
-The Kuadrant CR will gain a `tokenRateLimiting.mode` field to control the behavior cluster-wide:
+The reservation effect is only observable when requests overlap in time. The mock AI API answers in a few milliseconds, so the Reserve/Commit cycle closes before the next request arrives and no two requests are ever in flight together. Add response latency so a burst genuinely overlaps:
 
-```yaml
-# Not yet available
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-spec:
-  tokenRateLimiting:
-    mode: Reservation   # default; set to CheckReport to revert to today's behavior
+```sh
+kubectl patch deployment llm-sim -n ai-mock --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":["--model","meta-llama/Llama-3.1-8B-Instruct","--port","8000","--time-to-first-token","200","--inter-token-latency","100"]}]'
+kubectl rollout status deployment/llm-sim -n ai-mock --timeout=90s
 ```
 
-- `Reservation` (default when available): uses Reserve/Commit for all TokenRateLimitPolicies
-- `CheckReport`: reverts to today's Check/Report behavior
+Reset the counters so the burst starts from a clean window (Limitador uses in-memory storage, so restarting it clears all counters):
+
+```sh
+kubectl rollout restart deployment/limitador-limitador -n kuadrant-system
+kubectl rollout status deployment/limitador-limitador -n kuadrant-system --timeout=90s
+```
+
+Fire a burst of 30 concurrent requests from a single identity against the 100-token limit:
+
+```sh
+kubectl exec test-client -n egress-test -- sh -c '
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+seq 30 | xargs -P 30 -I{} curl -s -o /dev/null -w "%{http_code}\n" --max-time 20 \
+    -H "Host: api.ai-mock.local" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -X POST http://'"${EGRESS_IP}"'/v1/chat/completions \
+    -d "{
+          \"model\": \"meta-llama/Llama-3.1-8B-Instruct\",
+          \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}],
+          \"max_tokens\": 100,
+          \"stream\": false,
+          \"usage\": true
+        }"
+' | sort | uniq -c
+```
+
+With `reservation.amount: 10` against a 100-token limit, only ~10 concurrent requests fit before reserved capacity is exhausted, so roughly 10 succeed and the rest are rejected immediately:
+
+```
+     10 200
+     20 429
+```
+
+To see the race this prevents, switch the cluster to `Optimistic` mode, reset the counters again, and repeat the burst:
+
+```sh
+kubectl patch kuadrant kuadrant -n kuadrant-system --type merge \
+    -p '{"spec":{"tokenRateLimiting":{"mode":"Optimistic"}}}'
+kubectl rollout restart deployment/limitador-limitador -n kuadrant-system
+kubectl rollout status deployment/limitador-limitador -n kuadrant-system --timeout=90s
+# (re-run the burst command above)
+```
+
+In `Optimistic` mode every request checks the limit before any has reported its usage, so all 30 are admitted — the overshoot that reservations are designed to prevent:
+
+```
+     30 200
+```
+
+Restore the cluster mode and remove the mock latency before continuing:
+
+```sh
+kubectl patch kuadrant kuadrant -n kuadrant-system --type merge \
+    -p '{"spec":{"tokenRateLimiting":{"mode":"Reservation"}}}'
+kubectl patch deployment llm-sim -n ai-mock --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":["--model","meta-llama/Llama-3.1-8B-Instruct","--port","8000"]}]'
+kubectl rollout status deployment/llm-sim -n ai-mock --timeout=90s
+```
+
+Clean up before the next section:
+
+```sh
+kubectl delete tokenratelimitpolicy ai-per-workload -n gateway-system
+```
 
 ## Cleanup
 
@@ -484,7 +569,7 @@ curl -sL https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads
 ## References
 
 - [RFC 0013: AI Policies](https://github.com/Kuadrant/architecture/blob/main/rfcs/0013-ai-policies.md)
-- [RFC: Token Rate Limit Reservations](https://github.com/Kuadrant/architecture/pull/190) (draft)
+- [RFC 0021: Token Rate Limit Reservations](https://github.com/Kuadrant/architecture/blob/main/rfcs/0021-token-rate-limit-reservations.md)
 - [TokenRateLimitPolicy Overview](../../overviews/token-rate-limiting.md)
 - [Token Rate Limiting Tutorial](../tokenratelimitpolicy/authenticated-token-ratelimiting-tutorial.md)
 - [Egress Gateway Setup](egress-gateway.md)

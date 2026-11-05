@@ -1542,6 +1542,8 @@ func GetRegisteredUpstreamsByTargetRef(targetRef TargetRef) []RegisteredUpstream
 
 // GetRequestBindings returns DOMAIN_REQUEST bindings from all registered wasm
 // config mutators for the given target ref locators, converted to DataBinding.
+// Targets are supplied from least to most specific; a more specific target's
+// bindings take precedence, while less specific targets supply missing bindings.
 func GetRequestBindings(targetRefLocators []string) []wasm.DataBinding {
 	GlobalMutatorRegistry.mutex.RLock()
 	defer GlobalMutatorRegistry.mutex.RUnlock()
@@ -1549,24 +1551,42 @@ func GetRequestBindings(targetRefLocators []string) []wasm.DataBinding {
 	seen := make(map[string]struct{})
 	var bindings []wasm.DataBinding
 
-	for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
-		m, ok := mutator.(*RegisteredDataMutator[*wasm.Config])
-		if !ok {
-			continue
-		}
-		for _, locator := range targetRefLocators {
-			for _, entry := range m.store.GetAllForTargetRef(locator, extpb.Domain_DOMAIN_REQUEST) {
-				if _, exists := seen[entry.Binding]; exists {
-					continue
-				}
-				seen[entry.Binding] = struct{}{}
-				domain, field := wasm.DomainAndFieldName(entry.Binding)
-				bindings = append(bindings, wasm.DataBinding{
-					Domain:     domain,
-					Field:      field,
-					Expression: entry.Expression,
-				})
+	// Select more specific bindings first, independently of map traversal and
+	// extension startup order. Policy identity only breaks ties at the same target.
+	for _, locator := range slices.Backward(targetRefLocators) {
+		var candidates []DataProviderEntry
+		for _, mutator := range GlobalMutatorRegistry.wasmConfigMutators {
+			if m, ok := mutator.(*RegisteredDataMutator[*wasm.Config]); ok {
+				candidates = append(candidates, m.store.GetAllForTargetRef(locator, extpb.Domain_DOMAIN_REQUEST)...)
 			}
+		}
+		sort.Slice(candidates, func(i, j int) bool {
+			a, b := candidates[i], candidates[j]
+			if a.Policy.Kind != b.Policy.Kind {
+				return a.Policy.Kind < b.Policy.Kind
+			}
+			if a.Policy.Namespace != b.Policy.Namespace {
+				return a.Policy.Namespace < b.Policy.Namespace
+			}
+			if a.Policy.Name != b.Policy.Name {
+				return a.Policy.Name < b.Policy.Name
+			}
+			if a.Binding != b.Binding {
+				return a.Binding < b.Binding
+			}
+			return a.Expression < b.Expression
+		})
+		for _, entry := range candidates {
+			if _, exists := seen[entry.Binding]; exists {
+				continue
+			}
+			seen[entry.Binding] = struct{}{}
+			domain, field := wasm.DomainAndFieldName(entry.Binding)
+			bindings = append(bindings, wasm.DataBinding{
+				Domain:     domain,
+				Field:      field,
+				Expression: entry.Expression,
+			})
 		}
 	}
 

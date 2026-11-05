@@ -5,6 +5,8 @@ package extension
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"slices"
 	"sync"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -21,7 +24,6 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
-	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 func testResourceID(kind, namespace, name string) ResourceID {
@@ -3632,6 +3634,74 @@ func TestRegisteredDataStore_PruneToOwned_CountsMatchRemovedData(t *testing.T) {
 	}
 	if counts.PipelineActions != 3 {
 		t.Errorf("Expected 3 pipeline actions pruned, got %d", counts.PipelineActions)
+	}
+}
+
+func TestConflictingBindingSelection(t *testing.T) {
+	const gateway = "gateway.gateway.networking.k8s.io/ns/g"
+	const route = "httproute.gateway.networking.k8s.io/ns/r"
+	want := []wasm.DataBinding{
+		{Domain: "metrics.labels", Field: "model", Expression: `"route-model"`},
+		{Domain: "metrics.labels", Field: "route", Expression: `"route"`},
+		{Domain: "metrics.labels", Field: "tenant", Expression: `"tenant"`},
+	}
+	for _, separateStores := range []bool{false, true} {
+		for _, reverse := range []bool{false, true} {
+			t.Run(fmt.Sprintf("separateStores=%v/reverse=%v", separateStores, reverse), func(t *testing.T) {
+				saved := GlobalMutatorRegistry
+				GlobalMutatorRegistry = &MutatorRegistry{}
+				t.Cleanup(func() { GlobalMutatorRegistry = saved })
+				a, b := NewRegisteredDataStore(), NewRegisteredDataStore()
+				if !separateStores {
+					b = a
+				}
+				register := func(store *RegisteredDataStore, name, target, field, expression string) {
+					policy := ResourceID{Kind: "TelemetryPolicy", Namespace: "ns", Name: name}
+					binding := "metrics.labels." + field
+					store.Set(policy, target, extpb.Domain_DOMAIN_REQUEST, binding, DataProviderEntry{Policy: policy, Binding: binding, Expression: expression})
+				}
+				setters := []func(){
+					func() { register(a, "a", gateway, "model", `"a"`) },
+					func() { register(b, "b", gateway, "model", `"b"`) },
+					func() { register(b, "b", gateway, "tenant", `"tenant"`) },
+					// Specificity wins even when the gateway provider sorts earlier by name.
+					func() { register(a, "z", route, "model", `"route-model"`) },
+					func() { register(a, "z", route, "route", `"route"`) },
+				}
+				stores := []*RegisteredDataStore{a}
+				if separateStores {
+					stores = append(stores, b)
+				}
+				if reverse {
+					slices.Reverse(setters)
+					slices.Reverse(stores)
+				}
+				for _, set := range setters {
+					set()
+				}
+				for _, store := range stores {
+					GlobalMutatorRegistry.RegisterWasmConfigMutator(NewRegisteredDataMutator[*wasm.Config](store))
+				}
+				// Explicit registration permutations catch inter-store precedence reliably;
+				// repeated reads also exercise Go's changing map traversal within one store.
+				for i := 0; i < 100; i++ {
+					got := GetRequestBindings([]string{gateway, route})
+					if !reflect.DeepEqual(got, want) {
+						t.Fatalf("read %d: got %#v, want %#v", i, got, want)
+					}
+				}
+				// Without a route binding, same-target conflicts still resolve
+				// consistently and the gateway's values remain available.
+				gatewayOnly := GetRequestBindings([]string{gateway})
+				wantGateway := []wasm.DataBinding{
+					{Domain: "metrics.labels", Field: "model", Expression: `"a"`},
+					{Domain: "metrics.labels", Field: "tenant", Expression: `"tenant"`},
+				}
+				if !reflect.DeepEqual(gatewayOnly, wantGateway) {
+					t.Fatalf("gateway bindings: got %#v, want %#v", gatewayOnly, wantGateway)
+				}
+			})
+		}
 	}
 }
 

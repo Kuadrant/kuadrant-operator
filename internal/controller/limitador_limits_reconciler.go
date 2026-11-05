@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -59,14 +61,19 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		return nil
 	}
 
-	desiredLimits, sources := r.buildLimitadorLimits(ctx, state)
+	desiredLimits, owners, sources := r.buildLimitadorLimits(ctx, state)
 
 	if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
 		logger.Info("limitador object is up to date, nothing to do", "status", "skipping")
 		return nil
 	}
 
-	state.Store(StateLimitadorLimitsModified, true)
+	policies := lo.FilterMap(topology.Policies().Items(), func(policy machinery.Policy, _ int) (limitOwner, bool) {
+		return newLimitOwner(policy)
+	})
+	modifiedPolicies := limitadorLimitsModifiedPolicies(limitador.Spec.Limits, desiredLimits, owners, policies)
+	logger.V(1).Info("limitador limits modified", "policies", modifiedPolicies)
+	state.Store(StateLimitadorLimitsModified, modifiedPolicies)
 
 	if limitador.Annotations == nil {
 		limitador.Annotations = make(map[string]string)
@@ -113,20 +120,21 @@ func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	return nil
 }
 
-func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, []string) {
+func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, map[string]string, []string) {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("buildLimitadorLimits").WithValues("context", ctx)
 
 	rateLimitIndex := ratelimit.NewIndex()
+	owners := map[string]string{}
 
 	// both RateLimitPolicies and TokenRateLimitPolicies together
-	sources := r.processEffectivePolicies(ctx, state, rateLimitIndex)
+	sources := r.processEffectivePolicies(ctx, state, rateLimitIndex, owners)
 
 	logger.V(1).Info("finished building limitador limits", "limits", rateLimitIndex.Len())
 
-	return rateLimitIndex.ToRateLimits(), sources
+	return rateLimitIndex.ToRateLimits(), owners, sources
 }
 
-func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index) []string {
+func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context, state *sync.Map, rateLimitIndex *ratelimit.Index, owners map[string]string) []string {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processEffectivePolicies").WithValues("context", ctx)
 	var sources []string
 	// RateLimitPolicies
@@ -135,7 +143,7 @@ func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context
 		logger.V(1).Info("processing rate limit policies", "count", len(effectivePoliciesMap))
 		for pathID, effectivePolicy := range effectivePoliciesMap {
 			sources = append(sources, effectivePolicy.SourcePolicies...)
-			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex)
+			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex, owners)
 		}
 	}
 
@@ -145,14 +153,14 @@ func (r *LimitadorLimitsReconciler) processEffectivePolicies(ctx context.Context
 		logger.V(1).Info("processing token rate limit policies", "count", len(effectivePoliciesMap))
 		for pathID, effectivePolicy := range effectivePoliciesMap {
 			sources = append(sources, effectivePolicy.SourcePolicies...)
-			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex)
+			r.processPolicyRules(ctx, pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), state, rateLimitIndex, owners)
 		}
 	}
 
 	return sources
 }
 
-func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index) {
+func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, pathID string, path []machinery.Targetable, rules map[string]kuadrantv1.MergeableRule, state *sync.Map, rateLimitIndex *ratelimit.Index, owners map[string]string) {
 	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("processPolicyRules").WithValues("context", ctx)
 	parsed, err := kuadrantpolicymachinery.ParseTopologyPath(path)
 	if err != nil {
@@ -181,10 +189,11 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 			continue
 		}
 
+		policyKey := k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}
 		limitSpec := mergeableLimit.GetSpec()
 		switch limit := limitSpec.(type) {
 		case *kuadrantv1.Limit:
-			limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
+			limitIdentifier := LimitNameToLimitadorIdentifier(policyKey, limitKey)
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
@@ -197,9 +206,10 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 				}
 			})
 			rateLimitIndex.Set(fmt.Sprintf("%s/%s", limitsNamespace, limitIdentifier), rateLimits)
+			addLimitOwner(owners, rateLimits, policy.GetLocator())
 
 		case *kuadrantv1alpha1.TokenLimit:
-			limitIdentifier := TokenLimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
+			limitIdentifier := TokenLimitNameToLimitadorIdentifier(policyKey, limitKey)
 			rateLimits := utils.Map(limit.Rates, func(rate kuadrantv1.Rate) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
@@ -212,12 +222,83 @@ func (r *LimitadorLimitsReconciler) processPolicyRules(ctx context.Context, path
 				}
 			})
 			rateLimitIndex.Set(fmt.Sprintf("%s/%s", limitsNamespace, limitIdentifier), rateLimits)
+			addLimitOwner(owners, rateLimits, policy.GetLocator())
 
 		default:
 			logger.Error(fmt.Errorf("unknown limit type: %T", limitSpec), "failed to process limit")
 			continue
 		}
 	}
+}
+
+// limitOwner is a policy that generates Limitador limits
+type limitOwner struct {
+	locator    string
+	key        k8stypes.NamespacedName
+	identifier func(policyKey k8stypes.NamespacedName, limitName string) string
+}
+
+func newLimitOwner(policy machinery.Policy) (limitOwner, bool) {
+	key := k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}
+	switch policy.(type) {
+	case *kuadrantv1.RateLimitPolicy:
+		return limitOwner{locator: policy.GetLocator(), key: key, identifier: LimitNameToLimitadorIdentifier}, true
+	case *kuadrantv1alpha1.TokenRateLimitPolicy:
+		return limitOwner{locator: policy.GetLocator(), key: key, identifier: TokenLimitNameToLimitadorIdentifier}, true
+	}
+	return limitOwner{}, false
+}
+
+// owns tells whether the limit was generated from one of the owner's limits. The Limitador limit
+// name is the policy limit name, which recomputes the identifier embedded in the condition.
+func (o limitOwner) owns(limit limitadorv1alpha1.RateLimit) bool {
+	return lo.Contains(limit.Conditions, fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", o.identifier(o.key, limit.Name)))
+}
+
+// addLimitOwner records the locator of the policy that generated the group of limits
+func addLimitOwner(owners map[string]string, rateLimits []limitadorv1alpha1.RateLimit, locator string) {
+	if len(rateLimits) == 0 {
+		return
+	}
+	owners[limitadorLimitGroupKey(rateLimits[0])] = locator
+}
+
+// limitadorLimitGroupKey groups the Limitador limits generated from one policy limit for one route:
+// they share the limits namespace and the condition on the limit identifier, and differ in rates only.
+func limitadorLimitGroupKey(limit limitadorv1alpha1.RateLimit) string {
+	conditions := slices.Clone(limit.Conditions)
+	slices.Sort(conditions)
+	return limit.Namespace + "|" + strings.Join(conditions, "|")
+}
+
+// limitadorLimitsModifiedPolicies returns the sorted locators of the policies whose Limitador limits
+// differ between existing and desired. owners maps each desired group to the policy that generated it.
+// A group only present in existing is matched against policies, so a policy that keeps a limit but
+// clears all its rates is still attributed. Groups of deleted policies are attributed to no one.
+func limitadorLimitsModifiedPolicies(existing, desired []limitadorv1alpha1.RateLimit, owners map[string]string, policies []limitOwner) []string {
+	existingGroups := lo.GroupBy(existing, limitadorLimitGroupKey)
+	desiredGroups := lo.GroupBy(desired, limitadorLimitGroupKey)
+
+	var modified []string
+	for key, limits := range desiredGroups {
+		locator, found := owners[key]
+		if found && !ratelimit.LimitadorRateLimits(existingGroups[key]).EqualTo(limits) {
+			modified = append(modified, locator)
+		}
+	}
+
+	for key, limits := range existingGroups {
+		if _, found := desiredGroups[key]; found {
+			continue
+		}
+		if owner, found := lo.Find(policies, func(o limitOwner) bool { return o.owns(limits[0]) }); found {
+			modified = append(modified, owner.locator)
+		}
+	}
+
+	modified = lo.Uniq(modified)
+	slices.Sort(modified)
+	return modified
 }
 
 // isRateLimitingPolicyAcceptedAndNotDeletedFunc returns a predicate that checks if a policy is either

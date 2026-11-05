@@ -274,7 +274,7 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.Rate
 	var componentsToSync []string
 
 	// check the status of Limitador
-	if limitadorLimitsModified, stateLimitadorLimitsModifiedPresent := state.Load(StateLimitadorLimitsModified); stateLimitadorLimitsModifiedPresent && limitadorLimitsModified.(bool) {
+	if isLimitadorLimitsModified(state, policy) {
 		componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)
 	} else {
 		limitador := GetLimitadorFromTopology(topology, state)

@@ -9,18 +9,16 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/policy-machinery/machinery"
-
-	"gotest.tools/assert"
-	"k8s.io/utils/ptr"
-
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"google.golang.org/protobuf/types/known/structpb"
+	"gotest.tools/assert"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/internal/gatewayapi"
 )
 
@@ -1887,4 +1885,18 @@ func TestHTTPRuleListIndex(t *testing.T) {
 
 	// The reason for using the numeric index rather than the name: rule-2 must precede rule-10.
 	assert.Assert(t, httpRuleListIndex(route, "rule-2") < httpRuleListIndex(route, "rule-10"))
+}
+
+func TestServiceBuilderSnapshots(t *testing.T) {
+	logger := logr.Discard()
+	builder := NewServiceBuilder(&logger)
+	first := builder.Build()
+	builder.WithService("later", Service{Endpoint: "later"})
+	if _, ok := first["later"]; ok {
+		t.Fatal("later builder changes mutated an existing snapshot")
+	}
+	first["local"] = Service{Endpoint: "local"}
+	if _, ok := builder.Build()["local"]; ok {
+		t.Fatal("snapshot mutation leaked into builder")
+	}
 }

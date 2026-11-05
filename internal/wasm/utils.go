@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -286,9 +287,10 @@ func (sb *ServiceBuilder) WithService(name string, service Service) *ServiceBuil
 	return sb
 }
 
-// Build returns the built services map
+// Build returns an independent services map so gateway mutators cannot affect
+// the builder or configs built for other gateways.
 func (sb *ServiceBuilder) Build() map[string]Service {
-	return sb.services
+	return maps.Clone(sb.services)
 }
 
 func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observability *Observability, serviceBuilder *ServiceBuilder) Config {

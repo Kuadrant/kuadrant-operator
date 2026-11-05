@@ -3,10 +3,12 @@
 package extension
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types/ref"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
@@ -3630,5 +3632,61 @@ func TestRegisteredDataStore_PruneToOwned_CountsMatchRemovedData(t *testing.T) {
 	}
 	if counts.PipelineActions != 3 {
 		t.Errorf("Expected 3 pipeline actions pruned, got %d", counts.PipelineActions)
+	}
+}
+
+func TestGatewayServiceIsolation(t *testing.T) {
+	for _, order := range [][]string{{"a", "b"}, {"b", "a"}} {
+		t.Run(fmt.Sprint(order), func(t *testing.T) {
+			logger := logr.Discard()
+			builder := wasm.NewServiceBuilder(&logger)
+			configs := map[string]wasm.Config{
+				"a": wasm.BuildConfigForActionSet(nil, &logger, nil, builder),
+				"b": wasm.BuildConfigForActionSet(nil, &logger, nil, builder),
+			}
+			snapshot := func(services map[string]wasm.Service) string {
+				t.Helper()
+				data, err := json.Marshal(services)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			}
+			base := snapshot(builder.Build())
+			store := NewRegisteredDataStore()
+			for _, name := range order {
+				store.SetUpstream(RegisteredUpstreamKey{Policy: ResourceID{Name: name}, Name: "method"}, RegisteredUpstreamEntry{
+					ClusterName: "ext-" + name, TargetRef: TargetRef{Group: "gateway.networking.k8s.io", Kind: "Gateway", Name: name, Namespace: "ns"},
+				}, testFileDescriptorSet())
+			}
+			mutator := NewRegisteredDataMutator[*wasm.Config](store)
+			for _, name := range order {
+				other := "a"
+				if name == "a" {
+					other = "b"
+				}
+				before := snapshot(configs[other].Services)
+				config := configs[name]
+				if err := mutator.Mutate(&config, []machinery.PolicyTargetReference{policyTargetRef("Gateway", name, "ns")}); err != nil {
+					t.Fatal(err)
+				}
+				if snapshot(configs[other].Services) != before {
+					t.Fatalf("mutating %s changed gateway %s", name, other)
+				}
+				if snapshot(builder.Build()) != base {
+					t.Fatal("gateway mutation changed builder defaults")
+				}
+				found := false
+				for _, service := range config.Services {
+					if service.Endpoint == "ext-"+other {
+						t.Fatalf("gateway %s contains gateway %s's upstream", name, other)
+					}
+					found = found || service.Endpoint == "ext-"+name
+				}
+				if !found {
+					t.Fatal("gateway did not receive its upstream")
+				}
+			}
+		})
 	}
 }

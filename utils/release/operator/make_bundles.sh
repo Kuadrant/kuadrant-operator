@@ -12,9 +12,9 @@ if [[ ${RELEASE_CALLER_OVERRIDES[BUNDLE_METADATA_OPTS]+present} ]]; then
 else
   bundle_channels="${RELEASE_CALLER_OVERRIDES[CHANNELS]-$OLM_CHANNELS}"
   bundle_default_channel="${RELEASE_CALLER_OVERRIDES[DEFAULT_CHANNEL]-$OLM_DEFAULT_CHANNEL}"
-  bundle_metadata_opts="--channels $bundle_channels"
+  bundle_metadata_opts="--channels=$bundle_channels"
   if [[ "$bundle_default_channel" != "null" ]]; then
-    bundle_metadata_opts+=" --default-channel $bundle_default_channel"
+    bundle_metadata_opts+=" --default-channel=$bundle_default_channel"
   fi
 fi
 

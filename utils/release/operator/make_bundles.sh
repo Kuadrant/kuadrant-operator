@@ -5,9 +5,17 @@ set -euo pipefail
 source "$env/utils/release/shared.sh"
 release_make_args
 
-bundle_metadata_opts="--channels $OLM_CHANNELS"
-if [[ "$OLM_DEFAULT_CHANNEL" != "null" ]]; then
-  bundle_metadata_opts+=" --default-channel $OLM_DEFAULT_CHANNEL"
+# Caller metadata has priority; individual channel options override
+# the release defaults only where explicitly supplied.
+if [[ ${RELEASE_CALLER_OVERRIDES[BUNDLE_METADATA_OPTS]+present} ]]; then
+  bundle_metadata_opts="${RELEASE_CALLER_OVERRIDES[BUNDLE_METADATA_OPTS]}"
+else
+  bundle_channels="${RELEASE_CALLER_OVERRIDES[CHANNELS]-$OLM_CHANNELS}"
+  bundle_default_channel="${RELEASE_CALLER_OVERRIDES[DEFAULT_CHANNEL]-$OLM_DEFAULT_CHANNEL}"
+  bundle_metadata_opts="--channels $bundle_channels"
+  if [[ "$bundle_default_channel" != "null" ]]; then
+    bundle_metadata_opts+=" --default-channel $bundle_default_channel"
+  fi
 fi
 
 cd "$env" || exit 1

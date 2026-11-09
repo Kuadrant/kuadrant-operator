@@ -37,7 +37,7 @@ type IstioRateLimitClusterReconciler struct {
 // IstioRateLimitClusterReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources for rate limiting
 func (r *IstioRateLimitClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(IstioRateLimitClusterReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

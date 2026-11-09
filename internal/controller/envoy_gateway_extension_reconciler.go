@@ -50,7 +50,7 @@ type EnvoyGatewayExtensionReconciler struct {
 // EnvoyGatewayExtensionReconciler subscribes to events with potential impact on the Envoy Gateway EnvoyExtensionPolicy custom resources
 func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(EnvoyGatewayExtensionReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

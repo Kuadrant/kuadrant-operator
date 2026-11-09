@@ -47,7 +47,7 @@ type AuthPolicyStatusUpdater struct {
 // AuthPolicyStatusUpdater reconciles to events with impact to change the status of AuthPolicy resources
 func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.UpdateStatus,
+		ReconcileFunc: errorTrackingReconcileFunc(AuthPolicyStatusUpdaterName, r.UpdateStatus),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

@@ -37,7 +37,7 @@ type EnvoyGatewayAuthClusterReconciler struct {
 // EnvoyGatewayAuthClusterReconciler subscribes to events with potential impact on the Envoy Gateway EnvoyPatchPolicy custom resources for auth
 func (r *EnvoyGatewayAuthClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(EnvoyGatewayAuthClusterReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

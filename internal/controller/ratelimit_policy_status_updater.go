@@ -45,7 +45,7 @@ type RateLimitPolicyStatusUpdater struct {
 // RateLimitPolicyStatusUpdater subscribe to events with potential impact on the status of RateLimitPolicy resources
 func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.UpdateStatus,
+		ReconcileFunc: errorTrackingReconcileFunc(RateLimitPolicyStatusUpdaterName, r.UpdateStatus),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

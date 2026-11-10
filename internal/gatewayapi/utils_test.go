@@ -802,6 +802,307 @@ func TestGetGRPCRouteAcceptedParentRefs_WithSectionName(t *testing.T) {
 	}
 }
 
+func TestIsHTTPRouteReady(t *testing.T) {
+	gateway := &gatewayapiv1.Gateway{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "gateway.networking.k8s.io/v1",
+			Kind:       "Gateway",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-gateway",
+			Namespace: "default",
+		},
+	}
+
+	listenerHttp := &gatewayapiv1.Listener{
+		Name: "http",
+		Port: 80,
+	}
+
+	controllerName := gatewayapiv1.GatewayController("kuadrant.io/controller")
+
+	testCases := []struct {
+		name           string
+		httpRoute      *gatewayapiv1.HTTPRoute
+		gateway        *gatewayapiv1.Gateway
+		listener       *gatewayapiv1.Listener
+		controllerName gatewayapiv1.GatewayController
+		expected       bool
+	}{
+		{
+			name: "Ready - matching listener and sectionName",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name:        "my-gateway",
+									SectionName: ptr.To(gatewayapiv1.SectionName("http")),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       true,
+		},
+		{
+			name: "Not Ready - sectionName mismatch",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name:        "my-gateway",
+									SectionName: ptr.To(gatewayapiv1.SectionName("https")),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       false,
+		},
+		{
+			name: "Ready - port matches",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "my-gateway",
+									Port: ptr.To(gatewayapiv1.PortNumber(80)),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       true,
+		},
+		{
+			name: "Not Ready - port mismatch",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "my-gateway",
+									Port: ptr.To(gatewayapiv1.PortNumber(443)),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       false,
+		},
+		{
+			name: "Ready - no sectionName or port in ParentRef",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "my-gateway",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       true,
+		},
+		{
+			name: "Not Ready - different controller name",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: gatewayapiv1.GatewayController("other-controller"),
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "my-gateway",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       false,
+		},
+		{
+			name: "Not Ready - different gateway name but matching section and port",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name:        "other-gateway",
+									SectionName: ptr.To(gatewayapiv1.SectionName("http")),
+									Port:        ptr.To(gatewayapiv1.PortNumber(80)),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       false,
+		},
+		{
+			name: "Ready - both SectionName and Port match",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name:        "my-gateway",
+									SectionName: ptr.To(gatewayapiv1.SectionName("http")),
+									Port:        ptr.To(gatewayapiv1.PortNumber(80)),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       true,
+		},
+		{
+			name: "Not Ready - SectionName matches but Port mismatches",
+			httpRoute: &gatewayapiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ControllerName: controllerName,
+								ParentRef: gatewayapiv1.ParentReference{
+									Name:        "my-gateway",
+									SectionName: ptr.To(gatewayapiv1.SectionName("http")),
+									Port:        ptr.To(gatewayapiv1.PortNumber(443)),
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   string(gatewayapiv1.RouteConditionAccepted),
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			gateway:        gateway,
+			listener:       listenerHttp,
+			controllerName: controllerName,
+			expected:       false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := IsHTTPRouteReady(tc.httpRoute, tc.gateway, tc.listener, tc.controllerName)
+			if res != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, res)
+			}
+		})
+	}
+}
+
 func TestGetHTTPRouteAcceptedParentRefs_WithSectionName(t *testing.T) {
 	// Test that the HTTP version also properly handles SectionName distinction
 	// (matching fix applied to GRPCRoute version)

@@ -832,7 +832,7 @@ func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string
 					if attrKey == "ratelimit.hits_addend" {
 						return fmt.Sprintf("uint(%s)", val.Static.Value)
 					}
-					return fmt.Sprintf(`"%s"`, escapeCELString(val.Static.Value))
+					return fmt.Sprintf(`"%s"`, EscapeCELString(val.Static.Value))
 				}
 			case *Expression:
 				if val.ExpressionItem.Key == attrKey {
@@ -850,7 +850,7 @@ func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string
 func buildRateLimitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding) RateLimitRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
-		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+		domain = fmt.Sprintf(`"%s"`, EscapeCELString(scope))
 	}
 
 	hitsAddend := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.hits_addend")
@@ -885,7 +885,7 @@ func collectDescriptors(conditionalData []ConditionalData, bindings []DataBindin
 func buildReserveRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservation *ReservationSpec) ReserveRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
-		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+		domain = fmt.Sprintf(`"%s"`, EscapeCELString(scope))
 	}
 
 	// amount is required by the message; the controller always emits it (with a
@@ -918,7 +918,7 @@ func buildReserveRequest(scope string, conditionalData []ConditionalData, bindin
 func buildCommitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservationStorePath, hasReservation, rawActualAmount, amountKnown string) CommitRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
-		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+		domain = fmt.Sprintf(`"%s"`, EscapeCELString(scope))
 	}
 
 	// Unparseable usage (connection issue, non-JSON/error body) still commits,
@@ -989,7 +989,7 @@ func dataTypeToDescriptorEntry(data DataType) DescriptorEntryCEL {
 	case *Static:
 		return DescriptorEntryCEL{
 			Key:      val.Static.Key,
-			ValueCEL: fmt.Sprintf(`"%s"`, escapeCELString(val.Static.Value)),
+			ValueCEL: fmt.Sprintf(`"%s"`, EscapeCELString(val.Static.Value)),
 		}
 	case *Expression:
 		return DescriptorEntryCEL{

@@ -117,6 +117,11 @@ jobs:
       - name: Validate release data
         if: ${{ !cancelled() }}
         run: make verify-prepare-release
+      - name: Verify component charts
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make verify-component-charts
       - name: Test scripts
         if: ${{ !cancelled() }}
         run: make operator-sdk

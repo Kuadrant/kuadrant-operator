@@ -3,7 +3,7 @@
 
 ## Targets to verify actions that generate/modify code have been executed and output committed
 .PHONY: verify-all
-verify-all: verify-fmt verify-generate verify-go-mod verify-manifests verify-ratchet
+verify-all: verify-fmt verify-generate verify-go-mod verify-manifests verify-ratchet verify-component-charts
 
 .PHONY: verify-fmt
 verify-fmt: fmt ## Verify fmt update.
@@ -53,3 +53,8 @@ verify-ratchet: ratchet ## Verify GitHub Actions are pinned to commit SHAs.
 verify-prepare-release: prepare-release
 	git diff --exit-code .
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory .)" ]
+
+.PHONY: verify-component-charts
+verify-component-charts: sync-component-charts ## Verify component charts are in sync with pinned refs.
+	git diff --exit-code ./component-charts
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./component-charts)" ]

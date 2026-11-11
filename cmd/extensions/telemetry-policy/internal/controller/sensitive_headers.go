@@ -10,16 +10,17 @@ import (
 	"github.com/google/cel-go/common/operators"
 	"github.com/google/cel-go/common/types"
 	"github.com/google/cel-go/parser"
-	authorinolog "github.com/kuadrant/authorino/pkg/log"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-// sensitiveRequestHeaders holds the request headers a TelemetryPolicy expression must not read,
-// keyed by lowercase name. It is Authorino's default log redaction list. Metric labels and
+// sensitiveRequestHeaders lists the request headers a TelemetryPolicy expression must not read.
+// It mirrors Authorino's default log redaction list (pkg/log/redact.go); the list is kept inline
+// so the extension binary does not link that package, and
+// TestSensitiveRequestHeadersMatchAuthorinoDefaults fails when the two drift. Metric labels and
 // logging fields that do not reference auth.* are evaluated in the gateway's wasm filter and
 // their values are forwarded verbatim, outside that redaction, so a header Authorino would
 // redact in its own records must never be referenced by a TelemetryPolicy expression.
-var sensitiveRequestHeaders = authorinolog.GetSensitiveHeaders()
+var sensitiveRequestHeaders = []string{"authorization", "cookie", "x-api-key", "apikey"}
 
 const (
 	requestAttribute = "request"
@@ -160,8 +161,10 @@ func checkRequestUse(node ast.NavigableExpr) error {
 }
 
 func checkHeaderName(name string) error {
-	if header := strings.ToLower(name); sensitiveRequestHeaders[header] {
-		return fmt.Errorf("expression reads sensitive request header %q", header)
+	for _, sensitive := range sensitiveRequestHeaders {
+		if strings.EqualFold(name, sensitive) {
+			return fmt.Errorf("expression reads sensitive request header %q", sensitive)
+		}
 	}
 	return nil
 }

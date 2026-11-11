@@ -3,9 +3,28 @@
 package controller
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
+
+	authorinolog "github.com/kuadrant/authorino/pkg/log"
 )
+
+// TestSensitiveRequestHeadersMatchAuthorinoDefaults fails when the inline list drifts from
+// Authorino's default log redaction list. The Authorino import is test-only, so the extension
+// binary does not link that package.
+func TestSensitiveRequestHeadersMatchAuthorinoDefaults(t *testing.T) {
+	want := authorinolog.GetSensitiveHeaders()
+	got := make(map[string]bool, len(sensitiveRequestHeaders))
+	for _, header := range sensitiveRequestHeaders {
+		got[header] = true
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("sensitiveRequestHeaders = %v, want Authorino's defaults %v",
+			slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
+	}
+}
 
 func TestCheckSensitiveHeaders(t *testing.T) {
 	const (

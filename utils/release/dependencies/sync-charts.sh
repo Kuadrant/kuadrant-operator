@@ -25,6 +25,13 @@ if ! command -v yq &>/dev/null; then
   exit 1
 fi
 
+# Development charts are updated by the component chart sync workflow.
+kuadrant_version=$(yq '.kuadrant-operator.version' "$RELEASE_FILE")
+if [[ "$kuadrant_version" == "0.0.0" ]]; then
+  echo "Skipping component chart syncing for development version"
+  exit 0
+fi
+
 # Check: every sync component must exist in release.yaml dependencies
 while IFS= read -r component; do
   dep_version=$(yq ".dependencies.\"$component\" // \"\"" "$RELEASE_FILE")

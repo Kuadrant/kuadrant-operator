@@ -333,9 +333,9 @@ func TestBuildTargetCookieExpression_Examples(t *testing.T) {
 
 	for _, ex := range examples {
 		t.Run(ex.scenario, func(t *testing.T) {
-			// The CEL expression uses a ternary: request.url_path + (has(request.query) ? "?" + request.query : "")
+			// The CEL expression uses a ternary: request.url_path + (has(request.query) && request.query != "" ? "?" + request.query : "")
 			// This should construct the full path with query when query is present
-			if !strings.Contains(expression, `request.url_path + (has(request.query) ? "?" + request.query : "")`) {
+			if !strings.Contains(expression, `request.url_path + (has(request.query) && request.query != "" ? "?" + request.query : "")`) {
 				t.Errorf("Expression should handle scenario: %s\nExpected to preserve: %s", ex.scenario, ex.expected)
 			}
 		})

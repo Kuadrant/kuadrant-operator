@@ -249,10 +249,10 @@ func newLimitOwner(policy machinery.Policy) (limitOwner, bool) {
 	return limitOwner{}, false
 }
 
-// owns tells whether the limit was generated from one of the owner's limits. The Limitador limit
-// name is the policy limit name, which recomputes the identifier embedded in the condition.
-func (o limitOwner) owns(limit limitadorv1alpha1.RateLimit) bool {
-	return lo.Contains(limit.Conditions, fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", o.identifier(o.key, limit.Name)))
+// condition is the Limitador condition on the identifier of the owner's limit. The Limitador limit
+// name is the policy limit name, so the condition of an existing limit can be recomputed from it.
+func (o limitOwner) condition(limitName string) string {
+	return fmt.Sprintf("descriptors[0][\"%s\"] == \"1\"", o.identifier(o.key, limitName))
 }
 
 // addLimitOwner records the locator of the policy that generated the group of limits
@@ -287,12 +287,32 @@ func limitadorLimitsModifiedPolicies(existing, desired []limitadorv1alpha1.RateL
 		}
 	}
 
+	// the identifier hashes the limit name, so the removed conditions are collected per limit name and
+	// the policies scanned once per name, until every condition is attributed
+	removed := map[string]map[string]struct{}{}
 	for key, limits := range existingGroups {
 		if _, found := desiredGroups[key]; found {
 			continue
 		}
-		if owner, found := lo.Find(policies, func(o limitOwner) bool { return o.owns(limits[0]) }); found {
-			modified = append(modified, owner.locator)
+		conditions, found := removed[limits[0].Name]
+		if !found {
+			conditions = map[string]struct{}{}
+			removed[limits[0].Name] = conditions
+		}
+		for _, condition := range limits[0].Conditions {
+			conditions[condition] = struct{}{}
+		}
+	}
+	for limitName, conditions := range removed {
+		for _, o := range policies {
+			condition := o.condition(limitName)
+			if _, found := conditions[condition]; !found {
+				continue
+			}
+			modified = append(modified, o.locator)
+			if delete(conditions, condition); len(conditions) == 0 {
+				break
+			}
 		}
 	}
 

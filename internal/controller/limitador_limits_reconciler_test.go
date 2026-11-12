@@ -4,7 +4,7 @@ package controllers
 
 import (
 	"fmt"
-	"reflect"
+	"slices"
 	"sync"
 	"testing"
 
@@ -31,14 +31,20 @@ func TestLimitadorLimitsModifiedPolicies(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: name},
 		})
 	}
+	trlp := func(name string) limitOwner {
+		return owner(&kuadrantv1alpha1.TokenRateLimitPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: kuadrantv1alpha1.TokenRateLimitPolicyGroupKind.Kind, APIVersion: kuadrantv1alpha1.GroupVersion.String()},
+			ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: name},
+		})
+	}
 	policyA := rlp("a")
 	policyB := rlp("b")
-	policyT := owner(&kuadrantv1alpha1.TokenRateLimitPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: kuadrantv1alpha1.TokenRateLimitPolicyGroupKind.Kind, APIVersion: kuadrantv1alpha1.GroupVersion.String()},
-		ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "t"},
-	})
+	policyT := trlp("t")
+	// same key, so only the identifier prefix tells their limits apart
+	policyS := rlp("s")
+	tokenPolicyS := trlp("s")
 	deletedPolicy := rlp("deleted")
-	livePolicies := []limitOwner{policyA, policyB, policyT}
+	livePolicies := []limitOwner{policyA, policyB, policyT, policyS, tokenPolicyS}
 
 	limit := func(owner limitOwner, limitName, limitsNamespace string, maxValue int) limitadorv1alpha1.RateLimit {
 		return limitadorv1alpha1.RateLimit{
@@ -72,6 +78,25 @@ func TestLimitadorLimitsModifiedPolicies(t *testing.T) {
 			name:     "rate of one policy changed",
 			existing: []limitadorv1alpha1.RateLimit{limit(policyA, "l1", "ns/route-a", 10), limit(policyB, "l1", "ns/route-b", 10)},
 			desired:  []ownedLimit{{policyA, limit(policyA, "l1", "ns/route-a", 20)}, {policyB, limit(policyB, "l1", "ns/route-b", 10)}},
+			expected: []string{policyA.locator},
+		},
+		{
+			name:     "two limits of one policy changed",
+			existing: []limitadorv1alpha1.RateLimit{limit(policyA, "l1", "ns/route-a", 10), limit(policyA, "l2", "ns/route-a", 10), limit(policyB, "l1", "ns/route-b", 10)},
+			desired:  []ownedLimit{{policyA, limit(policyA, "l1", "ns/route-a", 20)}, {policyA, limit(policyA, "l2", "ns/route-a", 20)}, {policyB, limit(policyB, "l1", "ns/route-b", 10)}},
+			expected: []string{policyA.locator},
+		},
+		{
+			name:     "counters of one policy changed",
+			existing: []limitadorv1alpha1.RateLimit{limit(policyA, "l1", "ns/route-a", 10), limit(policyB, "l1", "ns/route-b", 10)},
+			desired: []ownedLimit{
+				{policyA, func() limitadorv1alpha1.RateLimit {
+					l := limit(policyA, "l1", "ns/route-a", 10)
+					l.Variables = []string{`descriptors[0]["auth.identity.userid"]`}
+					return l
+				}()},
+				{policyB, limit(policyB, "l1", "ns/route-b", 10)},
+			},
 			expected: []string{policyA.locator},
 		},
 		{
@@ -125,6 +150,24 @@ func TestLimitadorLimitsModifiedPolicies(t *testing.T) {
 			expected: []string{policyT.locator},
 		},
 		{
+			name:     "limits of different names dropped by different policies",
+			existing: []limitadorv1alpha1.RateLimit{limit(policyA, "l1", "ns/route-a", 10), limit(policyT, "l2", "ns/route-t", 10), limit(policyB, "l1", "ns/route-b", 10)},
+			desired:  []ownedLimit{{policyB, limit(policyB, "l1", "ns/route-b", 10)}},
+			expected: []string{policyA.locator, policyT.locator},
+		},
+		{
+			name:     "dropped limit with a name that needs sanitizing",
+			existing: []limitadorv1alpha1.RateLimit{limit(policyA, "my-limit.v1", "ns/route-a", 10), limit(policyB, "l1", "ns/route-b", 10)},
+			desired:  []ownedLimit{{policyB, limit(policyB, "l1", "ns/route-b", 10)}},
+			expected: []string{policyA.locator},
+		},
+		{
+			name:     "limit dropped by the rate limit policy sharing its key with a token rate limit policy",
+			existing: []limitadorv1alpha1.RateLimit{limit(policyS, "l1", "ns/route-s", 10), limit(tokenPolicyS, "l1", "ns/route-s", 10)},
+			desired:  []ownedLimit{{tokenPolicyS, limit(tokenPolicyS, "l1", "ns/route-s", 10)}},
+			expected: []string{policyS.locator},
+		},
+		{
 			name:     "limits of a deleted policy removed",
 			existing: []limitadorv1alpha1.RateLimit{limit(deletedPolicy, "l1", "ns/route-a", 10), limit(policyB, "l1", "ns/route-b", 10)},
 			desired:  []ownedLimit{{policyB, limit(policyB, "l1", "ns/route-b", 10)}},
@@ -147,8 +190,8 @@ func TestLimitadorLimitsModifiedPolicies(t *testing.T) {
 				desired = append(desired, d.limit)
 			}
 
-			if got := limitadorLimitsModifiedPolicies(tc.existing, desired, owners, livePolicies); !reflect.DeepEqual(got, tc.expected) {
-				t.Errorf("expected %v, got %v", tc.expected, got)
+			if got := limitadorLimitsModifiedPolicies(tc.existing, desired, owners, livePolicies); !slices.Equal(got, tc.expected) {
+				t.Errorf("expected %q, got %q", tc.expected, got)
 			}
 		})
 	}

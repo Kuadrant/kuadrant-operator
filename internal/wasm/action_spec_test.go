@@ -23,9 +23,9 @@ func TestEscapeCELString(t *testing.T) {
 		{`back\slash`, `back\\slash`},
 	}
 	for _, tc := range tests {
-		got := escapeCELString(tc.input)
+		got := EscapeCELString(tc.input)
 		if got != tc.expected {
-			t.Errorf("escapeCELString(%q) = %q, want %q", tc.input, got, tc.expected)
+			t.Errorf("EscapeCELString(%q) = %q, want %q", tc.input, got, tc.expected)
 		}
 	}
 }

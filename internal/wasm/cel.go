@@ -5,13 +5,20 @@ import (
 	"strings"
 )
 
-func escapeCELString(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
-	return s
+var celStringEscaper = strings.NewReplacer(
+	`\`, `\\`,
+	`"`, `\"`,
+	"\n", `\n`,
+	"\r", `\r`,
+	"\t", `\t`,
+)
+
+// EscapeCELString escapes backslashes, double quotes and control characters so that `s` can be
+// safely embedded inside a double-quoted CEL string literal. Without this, a value containing a
+// `"` (e.g. `request.headers["x-test-user"]`) would terminate the literal early and produce invalid
+// CEL.
+func EscapeCELString(s string) string {
+	return celStringEscaper.Replace(s)
 }
 
 func joinPredicates(predicates []string, op string) string {
@@ -68,7 +75,7 @@ func (r CheckRequestCEL) ToCEL() string {
     context_extensions: {"host": "%s"},
     metadata_context: %s
   }
-}`, escapeCELString(r.Scope), r.MetadataContext.ToCEL())
+}`, EscapeCELString(r.Scope), r.MetadataContext.ToCEL())
 }
 
 // MetadataCEL models envoy.config.core.v3.Metadata with filter_metadata entries.
@@ -99,7 +106,7 @@ func (e FilterMetadataEntryCEL) ToCEL() string {
 		fields[i] = f.ToCEL()
 	}
 	return fmt.Sprintf(`"%s": google.protobuf.Struct{fields: {%s}}`,
-		escapeCELString(e.Domain), strings.Join(fields, ", "))
+		EscapeCELString(e.Domain), strings.Join(fields, ", "))
 }
 
 // MetadataFieldCEL is a single field within a filter_metadata Struct.
@@ -111,14 +118,14 @@ type MetadataFieldCEL struct {
 }
 
 func (f MetadataFieldCEL) ToCEL() string {
-	return fmt.Sprintf(`"%s": %s`, escapeCELString(f.Key), f.valueCEL())
+	return fmt.Sprintf(`"%s": %s`, EscapeCELString(f.Key), f.valueCEL())
 }
 
 func (f MetadataFieldCEL) valueCEL() string {
 	if strings.Contains(f.Expression, "auth.") {
 		return fmt.Sprintf(
 			`google.protobuf.Value{struct_value: google.protobuf.Struct{fields: {"cel_expr": google.protobuf.Value{string_value: "%s"}}}}`,
-			escapeCELString(f.Expression),
+			EscapeCELString(f.Expression),
 		)
 	}
 	return fmt.Sprintf(`google.protobuf.Value{string_value: string(%s)}`, f.Expression)
@@ -254,6 +261,6 @@ type DescriptorEntryCEL struct {
 func (e DescriptorEntryCEL) ToCEL() string {
 	return fmt.Sprintf(
 		`envoy.extensions.common.ratelimit.v3.RateLimitDescriptor.Entry { key: "%s", value: %s }`,
-		escapeCELString(e.Key), e.ValueCEL,
+		EscapeCELString(e.Key), e.ValueCEL,
 	)
 }

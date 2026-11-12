@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -68,6 +69,14 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
+	// Validate every expression before registering any binding, so a rejected policy contributes
+	// nothing to the data plane. A rejection is terminal until the spec changes, and that change
+	// triggers a new reconcile, so it is reported through the status without requeueing.
+	if err := validateExpressions(pol); err != nil {
+		r.Logger.Info("telemetrypolicy rejected", "reason", err.Error())
+		return calculateErrorStatus(pol, err), nil
+	}
+
 	if pol.Spec.Metrics != nil {
 		for binding, expression := range pol.Spec.Metrics.Default.Labels {
 			if err := kuadrantCtx.AddDataTo(ctx, pol, types.DomainRequest, types.KuadrantMetricBinding(binding), expression); err != nil {
@@ -88,6 +97,31 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 
 	return calculateEnforcedStatus(pol, nil),
 		nil
+}
+
+// validateExpressions rejects metric label and logging field expressions that could expose a
+// sensitive request header. Keys are visited in sorted order so the reported error is stable
+// across reconciles.
+func validateExpressions(pol *v1alpha1.TelemetryPolicy) error {
+	if pol.Spec.Metrics != nil {
+		labels := pol.Spec.Metrics.Default.Labels
+		for _, label := range slices.Sorted(maps.Keys(labels)) {
+			if err := checkSensitiveHeaders(labels[label]); err != nil {
+				return errInvalidExpression{path: fmt.Sprintf("spec.metrics.default.labels[%q]", label), err: err}
+			}
+		}
+	}
+
+	if pol.Spec.Logging != nil {
+		fields := pol.Spec.Logging.Default.Fields
+		for _, field := range slices.Sorted(maps.Keys(fields)) {
+			if err := checkSensitiveHeaders(fields[field]); err != nil {
+				return errInvalidExpression{path: fmt.Sprintf("spec.logging.default.fields[%q]", field), err: err}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (r *TelemetryPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.TelemetryPolicy, newStatus *v1alpha1.TelemetryPolicyStatus) (ctrl.Result, error) {

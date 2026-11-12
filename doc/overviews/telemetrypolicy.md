@@ -9,6 +9,11 @@ Using dynamically evaluated CEL expressions, you can label existing metrics with
 
 Only labels with CEL expressions that resolve successfully will be included.
 
+Expressions are evaluated in the data plane and their values are emitted verbatim, so a
+policy whose expression reads a sensitive request header such as `authorization` is
+rejected. See the [TelemetryPolicy reference](../reference/telemetrypolicy.md#telemetrypolicyspec)
+for the full rule.
+
 ## Examples
 
 The following example configuration adds `user` and `group` labels for authenticated traffic.

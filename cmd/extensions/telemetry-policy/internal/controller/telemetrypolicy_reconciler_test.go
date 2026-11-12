@@ -4,13 +4,16 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
 	celref "github.com/google/cel-go/common/types/ref"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -176,6 +179,155 @@ func TestReconcileSpec_LoggingFieldError(t *testing.T) {
 	}
 	if status == nil {
 		t.Fatal("expected error status, got nil")
+	}
+}
+
+// assertRejected checks the outcome of a reconcileSpec call for a policy whose expression was
+// rejected: no error (the rejection is terminal until the spec changes), Accepted=False with the
+// Invalid reason and a message naming the offending path, no Enforced condition, and no binding
+// registered.
+func assertRejected(t *testing.T, mock *mockKuadrantCtx, status *v1alpha1.TelemetryPolicyStatus, err error, wantPath, wantDetail string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("reconcileSpec returned error %v, want nil for a rejected policy", err)
+	}
+	if status == nil {
+		t.Fatal("reconcileSpec returned nil status")
+	}
+	if len(mock.calls) != 0 {
+		t.Errorf("expected 0 AddDataTo calls for a rejected policy, got %d: %+v", len(mock.calls), mock.calls)
+	}
+
+	accepted := meta.FindStatusCondition(status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	if accepted == nil {
+		t.Fatal("missing Accepted condition")
+	}
+	if accepted.Status != metav1.ConditionFalse {
+		t.Errorf("Accepted status = %s, want False", accepted.Status)
+	}
+	if accepted.Reason != string(gatewayapiv1alpha2.PolicyReasonInvalid) {
+		t.Errorf("Accepted reason = %s, want %s", accepted.Reason, gatewayapiv1alpha2.PolicyReasonInvalid)
+	}
+	if !strings.Contains(accepted.Message, wantPath) {
+		t.Errorf("Accepted message = %q, want it to contain %q", accepted.Message, wantPath)
+	}
+	if !strings.Contains(accepted.Message, wantDetail) {
+		t.Errorf("Accepted message = %q, want it to contain %q", accepted.Message, wantDetail)
+	}
+
+	if enforced := meta.FindStatusCondition(status.Conditions, string(types.PolicyConditionEnforced)); enforced != nil {
+		t.Errorf("unexpected Enforced condition on a rejected policy: %+v", enforced)
+	}
+}
+
+func TestReconcileSpec_RejectsSensitiveHeaderLoggingField(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(nil, map[string]string{
+		"request_path": "request.path",
+		"probe":        "request.headers.authorization",
+	})
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	assertRejected(t, mock, status, err, `spec.logging.default.fields["probe"]`, `sensitive request header "authorization"`)
+}
+
+func TestReconcileSpec_RejectsSensitiveHeaderMetricLabel(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(
+		map[string]string{"key": `request.headers["x-api-key"]`},
+		map[string]string{"request_path": "request.path"},
+	)
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	assertRejected(t, mock, status, err, `spec.metrics.default.labels["key"]`, `sensitive request header "x-api-key"`)
+}
+
+func TestReconcileSpec_RejectsWholeHeadersMap(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(nil, map[string]string{
+		"all_headers": "string(request.headers)",
+	})
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	assertRejected(t, mock, status, err, `spec.logging.default.fields["all_headers"]`, errWholeHeaders.Error())
+}
+
+func TestReconcileSpec_RejectsUnparseableExpression(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(nil, map[string]string{
+		"broken": "request.",
+	})
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	assertRejected(t, mock, status, err, `spec.logging.default.fields["broken"]`, "invalid CEL expression")
+}
+
+func TestReconcileSpec_RejectionReportsFirstFieldInKeyOrder(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(nil, map[string]string{
+		"b_probe": "request.headers.authorization",
+		"a_probe": "request.headers.cookie",
+	})
+
+	for range 10 {
+		mock.calls = nil
+		status, err := r.reconcileSpec(context.Background(), pol, mock)
+		assertRejected(t, mock, status, err, `spec.logging.default.fields["a_probe"]`, `sensitive request header "cookie"`)
+	}
+}
+
+func TestReconcileSpec_AcceptsPresenceTestOfSensitiveHeader(t *testing.T) {
+	mock := &mockKuadrantCtx{}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase: types.ExtensionBase{Logger: logr.Discard()},
+	}
+	pol := newTestPolicy(nil, map[string]string{
+		"auth_scheme": `has(request.headers.authorization) ? "bearer" : "anonymous"`,
+	})
+
+	status, err := r.reconcileSpec(context.Background(), pol, mock)
+	if err != nil {
+		t.Fatalf("reconcileSpec returned error: %v", err)
+	}
+	if len(mock.calls) != 1 {
+		t.Fatalf("expected 1 AddDataTo call, got %d", len(mock.calls))
+	}
+	accepted := meta.FindStatusCondition(status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	if accepted == nil || accepted.Status != metav1.ConditionTrue {
+		t.Fatalf("Accepted condition = %+v, want True", accepted)
+	}
+}
+
+func TestErrInvalidExpression_IsPolicyError(t *testing.T) {
+	err := errInvalidExpression{path: `spec.logging.default.fields["x"]`, err: errWholeHeaders}
+
+	var policyErr interface {
+		error
+		Reason() gatewayapiv1alpha2.PolicyConditionReason
+	}
+	if !errors.As(err, &policyErr) {
+		t.Fatal("errInvalidExpression does not satisfy the PolicyError contract")
+	}
+	if policyErr.Reason() != gatewayapiv1alpha2.PolicyReasonInvalid {
+		t.Errorf("Reason() = %s, want %s", policyErr.Reason(), gatewayapiv1alpha2.PolicyReasonInvalid)
+	}
+	if !errors.Is(err, errWholeHeaders) {
+		t.Error("errInvalidExpression does not unwrap to the underlying error")
 	}
 }
 

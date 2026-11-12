@@ -10,6 +10,8 @@ import (
 	"github.com/google/cel-go/common"
 	"github.com/google/cel-go/common/ast"
 	"github.com/google/cel-go/parser"
+
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 func parseExpression(expression string) (*ast.AST, error) {
@@ -37,7 +39,7 @@ func parseExpression(expression string) (*ast.AST, error) {
 // the `expression` passed in. This keeps the resulting expression as close to the input as possible.
 func TransformCounterVariable(expression string, celAstTransform bool) (*string, error) {
 	if !celAstTransform {
-		exp := fmt.Sprintf(`descriptors[0]["%s"]`, strings.TrimSpace(expression))
+		exp := fmt.Sprintf(`descriptors[0]["%s"]`, wasm.EscapeCELString(strings.TrimSpace(expression)))
 		return &exp, nil
 	}
 	knownAttributes := []string{"request", "source", "destination", "connection", "metadata", "filter_state", "auth", "ratelimit"}

@@ -55,7 +55,11 @@ spec:
                         description: |-
                           Fields to add to auth decision log records, where keys are field names and values are
                           CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
-                          Only fields whose CEL expressions resolve successfully will be included.
+                          Expressions referencing `auth.*` are evaluated in the auth provider; unresolved
+                          logging fields are omitted. Other CEL evaluation failures follow the failure mode
+                          of the corresponding protection service.
+                          If missing values are expected, guard against them, for example:
+                          `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"`.
                         minProperties: 1
                         type: object
                         x-kubernetes-validations:
@@ -79,7 +83,12 @@ spec:
                           type: string
                         description: |-
                           Labels to add to metrics, where keys are label names and values are CEL expressions.
-                          Only labels whose CEL expressions resolve successfully will be included.
+                          On the authorization action, expressions referencing `auth.*` are evaluated in the auth
+                          provider and unresolved metric labels are omitted. Any other CEL evaluation failure,
+                          including an `auth.*` expression on a rate-limit action, follows the failure mode of the
+                          corresponding protection service.
+                          If missing values are expected, guard against them, for example:
+                          `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"`.
                         minProperties: 1
                         type: object
                     required:

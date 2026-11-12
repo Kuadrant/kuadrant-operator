@@ -78,7 +78,12 @@ type MetricsSpec struct {
 // MetricsConfig defines reusable metrics configuration that can be applied to different metric types
 type MetricsConfig struct {
 	// Labels to add to metrics, where keys are label names and values are CEL expressions.
-	// Only labels whose CEL expressions resolve successfully will be included.
+	// On the authorization action, expressions referencing `auth.*` are evaluated in the auth
+	// provider and unresolved metric labels are omitted. Any other CEL evaluation failure,
+	// including an `auth.*` expression on a rate-limit action, follows the failure mode of the
+	// corresponding protection service.
+	// If missing values are expected, guard against them, for example:
+	// `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"`.
 	// +kubebuilder:validation:MinProperties=1
 	Labels map[string]string `json:"labels"`
 }
@@ -93,7 +98,11 @@ type LoggingSpec struct {
 type LoggingConfig struct {
 	// Fields to add to auth decision log records, where keys are field names and values are
 	// CEL expressions referencing well-known attributes (e.g. auth.identity.sub).
-	// Only fields whose CEL expressions resolve successfully will be included.
+	// Expressions referencing `auth.*` are evaluated in the auth provider; unresolved
+	// logging fields are omitted. Other CEL evaluation failures follow the failure mode
+	// of the corresponding protection service.
+	// If missing values are expected, guard against them, for example:
+	// `"x-tenant" in request.headers ? request.headers["x-tenant"] : "unknown"`.
 	// +kubebuilder:validation:MinProperties=1
 	// +kubebuilder:validation:XValidation:rule="self.all(k, !k.contains('.'))",message="field names must not contain periods"
 	Fields map[string]string `json:"fields"`

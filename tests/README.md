@@ -171,6 +171,23 @@ It requires the authentication fixtures prepared by
 and does not create or delete a Kuadrant installation. The normal Istio integration
 target retains its test namespace and Kuadrant resource lifecycle.
 
+### OCSF access-log E2E
+
+`make test-ocsf-event-e2e` verifies an actual OCSF event emitted by an Istio gateway.
+It requires an existing cluster with Gateway API, Istio, Kuadrant, and the
+`telemetry-policy` extension (including its TelemetryPolicy CRD) installed. The test
+creates a temporary namespace with a Kuadrant resource, Gateway, HTTPRoute, backend,
+and OCSF TelemetryPolicy, sends a request through the gateway, and checks the gateway's
+`istio-proxy` access log. It requires `kubectl` on `PATH`, removes the temporary
+namespace afterward, and does not install or delete the Kuadrant operator.
+
+`make test-wasm-shim-control-e2e` runs the diagnostic control: it attaches a
+`TokenRateLimitPolicy`, checks that the generated EnvoyFilter uses the same
+`kuadrant-wasm-shim` module without OCSF config, and verifies the Istio proxy remains stable
+after applying it. It requires an existing cluster with Gateway API, Istio, Kuadrant, and
+TokenRateLimitPolicy support; it creates and cleans up its own temporary namespace and does
+not install or delete the Kuadrant operator.
+
 The MCP test target supports these environment overrides:
 
 | Variable | Default |

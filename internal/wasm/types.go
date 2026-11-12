@@ -18,6 +18,33 @@ type Config struct {
 	DescriptorService string             `json:"descriptorService,omitempty"`
 }
 
+const (
+	OCSFResourcesStorePath = "ocsf.resources"
+	OCSFAIModelStorePath   = "ocsf.ai_model"
+	OCSFURLPathStorePath   = "ocsf.http_request.url.path"
+	OCSFActorUserStorePath = "ocsf.actor.user"
+
+	OCSFFilterStatePrefix       = "wasm.kuadrant.ocsf."
+	OCSFResourcesFilterStateKey = OCSFFilterStatePrefix + "resources"
+	OCSFAIModelFilterStateKey   = OCSFFilterStatePrefix + "ai_model"
+	OCSFURLPathFilterStateKey   = OCSFFilterStatePrefix + "http_request.url.path"
+	OCSFActorUserFilterStateKey = OCSFFilterStatePrefix + "actor.user"
+)
+
+// HasOCSFAuditLogging reports whether an action set exports the dedicated filter-state values
+// consumed by the gateway OCSF access logger.
+func (c *Config) HasOCSFAuditLogging() bool {
+	for _, actionSet := range c.ActionSets {
+		for _, action := range actionSet.Actions {
+			store, ok := action.(*StoreAction)
+			if ok && store.ExportToHost && store.Path == OCSFResourcesStorePath && store.ExportFormat == StoreExportFormatProtobufValue {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (c *Config) ToStruct() (*_struct.Struct, error) {
 	configJSON, err := json.Marshal(c)
 	if err != nil {
@@ -432,11 +459,16 @@ func (a *HeadersAction) EqualTo(other Action) bool {
 	return a.equalBase(&o.ActionBase) && a.Target == o.Target && a.Headers == o.Headers
 }
 
+type StoreExportFormat string
+
+const StoreExportFormatProtobufValue StoreExportFormat = "protobufValue"
+
 type StoreAction struct {
 	ActionBase
 	Path         string
 	Value        string
 	ExportToHost bool
+	ExportFormat StoreExportFormat
 }
 
 func (a *StoreAction) ActionType() ActionKind { return ActionKindStore }
@@ -448,7 +480,8 @@ func (a *StoreAction) EqualTo(other Action) bool {
 		return false
 	}
 	return a.equalBase(&o.ActionBase) &&
-		a.Path == o.Path && a.Value == o.Value && a.ExportToHost == o.ExportToHost
+		a.Path == o.Path && a.Value == o.Value && a.ExportToHost == o.ExportToHost &&
+		a.ExportFormat == o.ExportFormat
 }
 
 type FailAction struct {
@@ -485,6 +518,7 @@ type actionWire struct {
 	Path           string            `json:"path,omitempty"`
 	Value          string            `json:"value,omitempty"`
 	ExportToHost   bool              `json:"exportToHost,omitempty"`
+	ExportFormat   StoreExportFormat `json:"exportFormat,omitempty"`
 	LogMessage     string            `json:"logMessage,omitempty"`
 	Sources        []string          `json:"sources,omitempty"`
 }
@@ -533,7 +567,8 @@ func (a *HeadersAction) MarshalJSON() ([]byte, error) {
 func (a *StoreAction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(actionWire{
 		Type: ActionKindStore, Predicate: a.Predicate, Terminal: a.Terminal, IsGuard: a.IsGuard,
-		Execution: a.Execution, Path: a.Path, Value: a.Value, ExportToHost: a.ExportToHost, Sources: a.SourcePolicyLocators,
+		Execution: a.Execution, Path: a.Path, Value: a.Value, ExportToHost: a.ExportToHost,
+		ExportFormat: a.ExportFormat, Sources: a.SourcePolicyLocators,
 	})
 }
 
@@ -572,7 +607,7 @@ func UnmarshalAction(data []byte) (Action, error) {
 	case ActionKindHeaders:
 		return &HeadersAction{ActionBase: base, Target: w.Target, Headers: w.Headers}, nil
 	case ActionKindStore:
-		return &StoreAction{ActionBase: base, Path: w.Path, Value: w.Value, ExportToHost: w.ExportToHost}, nil
+		return &StoreAction{ActionBase: base, Path: w.Path, Value: w.Value, ExportToHost: w.ExportToHost, ExportFormat: w.ExportFormat}, nil
 	case ActionKindFail:
 		return &FailAction{ActionBase: base, LogMessage: w.LogMessage}, nil
 	default:

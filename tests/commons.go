@@ -897,6 +897,7 @@ type EnforcedConditionRecorder struct {
 	done       chan struct{}
 	mu         sync.Mutex
 	conditions []metav1.Condition
+	missing    []string
 	latest     policyWithStatus
 }
 
@@ -922,6 +923,9 @@ func RecordEnforcedConditions(ctx context.Context, cl client.WithWatch, list cli
 				recorded := *cond
 				recorded.ObservedGeneration = observedGeneration(policy.GetStatus())
 				r.conditions = append(r.conditions, recorded)
+			} else {
+				// the status updater removes the Enforced condition of a policy that is not accepted
+				r.missing = append(r.missing, policy.GetResourceVersion())
 			}
 			r.mu.Unlock()
 		}
@@ -930,8 +934,10 @@ func RecordEnforcedConditions(ctx context.Context, cl client.WithWatch, list cli
 }
 
 // Stop waits until the latest version of the policy is recorded, so a closed watch fails instead of
-// returning a partial history. It ends the watch and returns the recorded conditions, oldest first,
-// with ObservedGeneration set to the one of the policy status.
+// returning a partial history. It ends the watch, fails if a version had no Enforced condition, and
+// returns the recorded conditions, oldest first, with ObservedGeneration set to the one of the policy status.
+// Start recording once the policy is enforced: a version without the condition then is a policy that
+// stopped being accepted.
 func (r *EnforcedConditionRecorder) Stop(ctx context.Context) []metav1.Condition {
 	Eventually(func(g Gomega) {
 		r.mu.Lock()
@@ -946,6 +952,7 @@ func (r *EnforcedConditionRecorder) Stop(ctx context.Context) []metav1.Condition
 	<-r.done
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	ExpectWithOffset(1, r.missing).To(BeEmpty(), "policy %s had no Enforced condition at resource versions %v", r.key.Name, r.missing)
 	return r.conditions
 }
 

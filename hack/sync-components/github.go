@@ -134,3 +134,28 @@ func resolveCommitSHA(repo, ref string) (string, error) {
 	}
 	return commit.SHA, nil
 }
+
+func listBranches(repo string) ([]string, error) {
+	type branch struct {
+		Name string `json:"name"`
+	}
+	var allBranches []string
+	page := 1
+
+	// Paginate through all branches (GitHub API returns max 100 per page)
+	for {
+		var branches []branch
+		reqURL := fmt.Sprintf("https://api.github.com/repos/%s/branches?per_page=100&page=%d", repo, page)
+		if err := githubGet(reqURL, &branches); err != nil {
+			return nil, err
+		}
+		if len(branches) == 0 {
+			break
+		}
+		for _, b := range branches {
+			allBranches = append(allBranches, b.Name)
+		}
+		page++
+	}
+	return allBranches, nil
+}

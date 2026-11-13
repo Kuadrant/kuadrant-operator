@@ -4,8 +4,9 @@
 # Go sync tool, and creates a PR with the updated chart content and pinned
 # commit SHA. Can also be triggered manually via workflow_dispatch.
 #
-# Currently only targets the default branch. Release branch support will be
-# added once the branch mapping strategy for releases is defined.
+# Supports both the default branch and release branches (release-X.Y) that
+# have component-charts/sync.yaml defined. Find-targets discovers eligible
+# branches and applies the dispatch to each matching one.
 
 name: Sync component chart
 

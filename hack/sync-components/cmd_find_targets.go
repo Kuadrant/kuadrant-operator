@@ -23,6 +23,40 @@ type targetBranch struct {
 	AutoMerge bool   `json:"auto-merge"`
 }
 
+func filterReleaseBranches(branches []string) []string {
+	releaseBranchRegex := regexp.MustCompile(`^release-[0-9]+\.[0-9]+$`)
+	matches := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		if releaseBranchRegex.MatchString(branch) {
+			matches = append(matches, branch)
+		}
+	}
+	return matches
+}
+
+func findTargets(branchConfigs map[string]*syncConfig, defaultBranch, componentName, sourceBranch string) []targetBranch {
+	matches := make([]targetBranch, 0)
+	for branch, cfg := range branchConfigs {
+		// When source branch is the default branch, only match the default branch.
+		// This prevents the default branch from syncing to release branches that
+		// also happen to track the default branch.
+		if sourceBranch == defaultBranch && branch != defaultBranch {
+			continue
+		}
+
+		c, ok := cfg.Components[componentName]
+		if !ok || c.TrackedBranch != sourceBranch {
+			continue
+		}
+
+		matches = append(matches, targetBranch{
+			Branch:    branch,
+			AutoMerge: c.AutoMerge,
+		})
+	}
+	return matches
+}
+
 func cmdFindTargets(args []string) {
 	fs := flag.NewFlagSet("find-targets", flag.ExitOnError)
 	repo := fs.String("repo", "", "GitHub owner/repo to search (e.g. Kuadrant/kuadrant-operator)")
@@ -42,36 +76,25 @@ func cmdFindTargets(args []string) {
 		os.Exit(1)
 	}
 
-	matches := []targetBranch{}
-
-	// Regex for valid release branch names: release-X.Y (e.g., release-1.6)
-	releaseBranchRegex := regexp.MustCompile(`^release-[0-9]+\.[0-9]+$`)
-
-	// Collect candidate branches: default branch plus matching release-* branches
-	candidateBranches := []string{defaultBranch}
-
-	// List branches to find release-* candidates
+	// List branches and filter for release-* candidates
 	branches, err := listBranches(*repo)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing branches: %v\n", err)
 		os.Exit(1)
 	}
-	for _, branch := range branches {
-		if releaseBranchRegex.MatchString(branch) {
-			candidateBranches = append(candidateBranches, branch)
-		}
+	releaseBranches := filterReleaseBranches(branches)
+
+	// Collect candidate branches: default branch plus matching release-* branches.
+	// When source is the default branch, only consider the default branch
+	// since release branches will be excluded anyway.
+	candidateBranches := []string{defaultBranch}
+	if *sourceBranch != defaultBranch {
+		candidateBranches = append(candidateBranches, releaseBranches...)
 	}
 
-	// Check each candidate branch for sync.yaml and matching component
+	// Load configs for each candidate branch
+	branchConfigs := make(map[string]*syncConfig)
 	for _, branch := range candidateBranches {
-		// If dispatch is from the default branch, only match the default branch.
-		// This prevents a dispatch from main from syncing to release branches
-		// that also happen to track main.
-		if *sourceBranch == defaultBranch && branch != defaultBranch {
-			fmt.Fprintf(os.Stderr, "Skipping %s: release branch should not be synced from default branch dispatch\n", branch)
-			continue
-		}
-
 		data, err := getFileContent(*repo, "component-charts/sync.yaml", branch)
 		if err != nil {
 			var apiErr *ghAPIError
@@ -89,17 +112,11 @@ func cmdFindTargets(args []string) {
 			fmt.Fprintf(os.Stderr, "Error parsing sync.yaml from %s@%s: %v\n", *repo, branch, err)
 			os.Exit(1)
 		}
-
-		c, ok := cfg.Components[*componentName]
-		if !ok || c.TrackedBranch != *sourceBranch {
-			continue
-		}
-
-		matches = append(matches, targetBranch{
-			Branch:    branch,
-			AutoMerge: c.AutoMerge,
-		})
+		branchConfigs[branch] = cfg
 	}
+
+	// Find matching targets
+	matches := findTargets(branchConfigs, defaultBranch, *componentName, *sourceBranch)
 
 	if err := json.NewEncoder(os.Stdout).Encode(matches); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing results: %v\n", err)

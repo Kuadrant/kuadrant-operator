@@ -15578,11 +15578,31 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - namespaces
+  - endpoints
+  - pods
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resourceNames:
+  - kuadrant-telemetry
+  resources:
+  - namespaces
+  verbs:
+  - delete
+  - patch
+  - update
 - apiGroups:
   - ""
   - events.k8s.io
@@ -15712,6 +15732,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - extensions.istio.io
@@ -15893,6 +15921,7 @@ rules:
   - monitoring.coreos.com
   resources:
   - podmonitors
+  - prometheusrules
   - servicemonitors
   verbs:
   - create

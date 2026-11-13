@@ -1,11 +1,12 @@
-// cmd_find_targets implements the "find-targets" subcommand: checks the
-// default branch of a given repo for a component-charts/sync.yaml that
-// tracks a given component at a given source branch. Used by the sync
-// workflow to determine whether to sync when a component repo dispatches
-// an event.
+// cmd_find_targets implements the "find-targets" subcommand: discovers
+// candidate target branches in a repo and checks which ones have a
+// component-charts/sync.yaml that tracks a given component at a given
+// source branch. Used by the sync workflow to determine where to sync
+// when a component repo dispatches an event.
 //
-// Currently only checks the default branch. Release branch support can be
-// added later when the branch mapping strategy is better defined.
+// Candidate branches are:
+// - The repo's default branch
+// - Branches matching ^release-[0-9]+\.[0-9]+$ that have component-charts/sync.yaml
 package main
 
 import (
@@ -14,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 )
 
 type targetBranch struct {
@@ -43,30 +45,59 @@ func cmdFindTargets(args []string) {
 
 	matches := []targetBranch{}
 
-	data, err := getFileContent(*repo, "component-charts/sync.yaml", defaultBranch)
+	// Regex for valid release branch names: release-X.Y (e.g., release-1.6)
+	releaseBranchRegex := regexp.MustCompile(`^release-[0-9]+\.[0-9]+$`)
+
+	// Collect candidate branches: default branch plus matching release-* branches
+	candidateBranches := []string{defaultBranch}
+
+	// List branches to find release-* candidates
+	branches, err := listBranches(*repo)
 	if err != nil {
-		var apiErr *ghAPIError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
-			if err := json.NewEncoder(os.Stdout).Encode(matches); err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing results: %v\n", err)
-				os.Exit(1)
-			}
-			return
+		fmt.Fprintf(os.Stderr, "Error listing branches: %v\n", err)
+		os.Exit(1)
+	}
+	for _, branch := range branches {
+		if releaseBranchRegex.MatchString(branch) {
+			candidateBranches = append(candidateBranches, branch)
 		}
-		fmt.Fprintf(os.Stderr, "Error fetching sync.yaml from %s@%s: %v\n", *repo, defaultBranch, err)
-		os.Exit(1)
 	}
 
-	cfg, err := loadConfigFromBytes(data)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing sync.yaml from %s@%s: %v\n", *repo, defaultBranch, err)
-		os.Exit(1)
-	}
+	// Check each candidate branch for sync.yaml and matching component
+	for _, branch := range candidateBranches {
+		data, err := getFileContent(*repo, "component-charts/sync.yaml", branch)
+		if err != nil {
+			var apiErr *ghAPIError
+			if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+				// This branch doesn't have sync.yaml yet; skip it
+				continue
+			}
+			// Other errors are fatal
+			fmt.Fprintf(os.Stderr, "Error fetching sync.yaml from %s@%s: %v\n", *repo, branch, err)
+			os.Exit(1)
+		}
 
-	c, ok := cfg.Components[*componentName]
-	if ok && c.TrackedBranch == *sourceBranch {
+		cfg, err := loadConfigFromBytes(data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing sync.yaml from %s@%s: %v\n", *repo, branch, err)
+			os.Exit(1)
+		}
+
+		c, ok := cfg.Components[*componentName]
+		if !ok || c.TrackedBranch != *sourceBranch {
+			continue
+		}
+
+		// If dispatch is from the default branch, only match the default branch.
+		// This prevents a dispatch from main from syncing to release branches
+		// that also happen to track main.
+		if *sourceBranch == defaultBranch && branch != defaultBranch {
+			fmt.Fprintf(os.Stderr, "Skipping %s: release branch should not be synced from default branch dispatch\n", branch)
+			continue
+		}
+
 		matches = append(matches, targetBranch{
-			Branch:    defaultBranch,
+			Branch:    branch,
 			AutoMerge: c.AutoMerge,
 		})
 	}

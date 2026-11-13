@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/machinery"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -241,5 +242,30 @@ func TestWasmActionSpecFromLimit(t *testing.T) {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestBuildWasmActionSpecsPropagateInvalidTopologyPath(t *testing.T) {
+	policyPredicate := func(machinery.Policy) bool { return true }
+
+	_, err := buildWasmActionSpecsForAnyRateLimit(
+		nil,
+		map[string]kuadrantv1.MergeableRule{},
+		kuadrantv1.RulesKeyTopLevelPredicates,
+		policyPredicate,
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected invalid topology path error for rate limit specs")
+	}
+
+	_, err = buildWasmActionSpecsForTokenRateLimit(
+		EffectiveTokenRateLimitPolicy{},
+		policyPredicate,
+		"",
+	)
+	if err == nil {
+		t.Fatal("expected invalid topology path error for token rate limit specs")
 	}
 }

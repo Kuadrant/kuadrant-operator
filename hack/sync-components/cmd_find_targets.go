@@ -25,8 +25,7 @@ type targetBranch struct {
 
 func cmdFindTargets(args []string) {
 	fs := flag.NewFlagSet("find-targets", flag.ExitOnError)
-	repo := fs.String("repo", "", "GitHub owner/repo to search (e.g. Kuadrant/kuadrant-operator). "+
-		"The default branch is checked for a component-charts/sync.yaml file")
+	repo := fs.String("repo", "", "GitHub owner/repo to search (e.g. Kuadrant/kuadrant-operator)")
 	componentName := fs.String("component", "", "Component name to look up in sync.yaml (e.g. dns-operator)")
 	sourceBranch := fs.String("source-branch", "", "The upstream branch that changed (e.g. main). "+
 		"Matched against the tracked-branch field in sync.yaml")
@@ -65,6 +64,14 @@ func cmdFindTargets(args []string) {
 
 	// Check each candidate branch for sync.yaml and matching component
 	for _, branch := range candidateBranches {
+		// If dispatch is from the default branch, only match the default branch.
+		// This prevents a dispatch from main from syncing to release branches
+		// that also happen to track main.
+		if *sourceBranch == defaultBranch && branch != defaultBranch {
+			fmt.Fprintf(os.Stderr, "Skipping %s: release branch should not be synced from default branch dispatch\n", branch)
+			continue
+		}
+
 		data, err := getFileContent(*repo, "component-charts/sync.yaml", branch)
 		if err != nil {
 			var apiErr *ghAPIError
@@ -85,14 +92,6 @@ func cmdFindTargets(args []string) {
 
 		c, ok := cfg.Components[*componentName]
 		if !ok || c.TrackedBranch != *sourceBranch {
-			continue
-		}
-
-		// If dispatch is from the default branch, only match the default branch.
-		// This prevents a dispatch from main from syncing to release branches
-		// that also happen to track main.
-		if *sourceBranch == defaultBranch && branch != defaultBranch {
-			fmt.Fprintf(os.Stderr, "Skipping %s: release branch should not be synced from default branch dispatch\n", branch)
 			continue
 		}
 

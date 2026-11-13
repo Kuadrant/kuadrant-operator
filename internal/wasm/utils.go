@@ -612,6 +612,11 @@ func ConfigFromStruct(structure *structpb.Struct) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decode the gzip+base64 envelope (no-op for plain config JSON)
+	configJSON, err = decodeConfig(configJSON)
+	if err != nil {
+		return nil, err
+	}
 	// Deserialize protobuf struct into Config struct
 	config := &Config{}
 	if err := json.Unmarshal(configJSON, config); err != nil {
@@ -626,8 +631,14 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 		return nil, errors.New("cannot desestructure config from nil")
 	}
 
+	// Decode the gzip+base64 envelope (no-op for plain config JSON)
+	raw, err := decodeConfig(configJSON.Raw)
+	if err != nil {
+		return nil, err
+	}
+
 	config := &Config{}
-	if err := json.Unmarshal(configJSON.Raw, config); err != nil {
+	if err := json.Unmarshal(raw, config); err != nil {
 		return nil, err
 	}
 

@@ -195,10 +195,6 @@ type TLSPolicyList struct {
 	Items           []TLSPolicy `json:"items"`
 }
 
-func init() {
-	SchemeBuilder.Register(&TLSPolicy{}, &TLSPolicyList{})
-}
-
 //API Helpers
 
 func NewTLSPolicy(policyName, ns string) *TLSPolicy {

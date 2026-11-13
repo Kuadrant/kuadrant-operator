@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -16,6 +17,16 @@ import (
 )
 
 var chartsBasePath = env.GetString("CHARTS_PATH", "/charts")
+
+const (
+	// PlatformTelemetryNamespace holds the ServiceMonitors and PrometheusRules
+	// that OpenShift platform monitoring reads for component telemetry. It is
+	// labelled for platform monitoring so the operator namespace never has to
+	// be, which keeps that namespace under user workload monitoring.
+	PlatformTelemetryNamespace = "kuadrant-telemetry"
+
+	clusterMonitoringLabel = "openshift.io/cluster-monitoring"
+)
 
 // Component describes a child operator deployed by the kuadrant-operator.
 // The allComponents() registry is the single source of truth — deployment
@@ -52,6 +63,9 @@ type Component struct {
 	// configurability for it, prefer ChartValueOverrides instead (see
 	// mcp-gateway's broker image for that pattern).
 	RelatedImageEnvVars []string
+	// PlatformMonitoringNamespace, when set, is created and labelled for
+	// OpenShift platform monitoring before the chart's resources are applied.
+	PlatformMonitoringNamespace string
 }
 
 type Deployer struct {
@@ -75,15 +89,63 @@ func NewDeployer(restConfig *rest.Config, namespace string, logger logr.Logger) 
 	}
 
 	l := logger.WithName("deployer")
+	components := allComponents()
+	if hasPlatformMonitoring(disc) {
+		l.Info("OpenShift platform monitoring detected, enabling component telemetry", "namespace", PlatformTelemetryNamespace)
+		components = withPlatformTelemetry(components)
+	}
 	return &Deployer{
 		client:         client,
 		applier:        NewResourceApplier(client, disc, namespace, l),
 		namespace:      namespace,
-		components:     allComponents(),
+		components:     components,
 		chartVersions:  make(map[string]string),
 		deployedImages: make(map[string][]DeployedImage),
 		logger:         l,
 	}, nil
+}
+
+// hasPlatformMonitoring reports whether the cluster is OpenShift with the
+// Prometheus Operator APIs that platform monitoring is configured through.
+func hasPlatformMonitoring(disc discovery.DiscoveryInterface) bool {
+	for _, gv := range []string{"config.openshift.io/v1", "monitoring.coreos.com/v1"} {
+		if _, err := disc.ServerResourcesForGroupVersion(gv); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// withPlatformTelemetry enables mcp-gateway's protocol version telemetry for
+// OpenShift platform monitoring. The chart puts its ServiceMonitor and
+// PrometheusRule in PlatformTelemetryNamespace, scraping the controller in
+// the operator namespace.
+func withPlatformTelemetry(components []Component) []Component {
+	for i := range components {
+		if components[i].Name != "mcp-gateway" {
+			continue
+		}
+		components[i].ChartValueOverrides = append(components[i].ChartValueOverrides, &StaticValue{
+			ValueKey: "telemetry.openshiftPlatformMonitoring",
+			Value:    map[string]any{"enabled": true, "namespace": PlatformTelemetryNamespace},
+		})
+		components[i].PlatformMonitoringNamespace = PlatformTelemetryNamespace
+	}
+	return components
+}
+
+// platformMonitoringNamespace builds a namespace labelled for OpenShift
+// platform monitoring.
+func platformMonitoringNamespace(name string) *unstructured.Unstructured {
+	ns := &unstructured.Unstructured{}
+	ns.SetAPIVersion("v1")
+	ns.SetKind("Namespace")
+	ns.SetName(name)
+	ns.SetLabels(map[string]string{
+		clusterMonitoringLabel:         "true",
+		"app.kubernetes.io/managed-by": "kuadrant-operator",
+	})
+	return ns
 }
 
 func allComponents() []Component {
@@ -242,6 +304,10 @@ func (d *Deployer) DeployComponent(ctx context.Context, component Component, own
 		if err := applier.WaitForCRDs(ctx, CRDNames(rendered.CRDs)); err != nil {
 			return fmt.Errorf("waiting for CRDs for %s: %w", component.Name, err)
 		}
+	}
+
+	if component.PlatformMonitoringNamespace != "" {
+		rendered.Resources = append(rendered.Resources, platformMonitoringNamespace(component.PlatformMonitoringNamespace))
 	}
 
 	SortByInstallOrder(rendered.Resources)

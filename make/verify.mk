@@ -24,12 +24,14 @@ verify-controller-manifests: manifests ## Verify controller-gen manifests update
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./config)" ]
 
 .PHONY: verify-bundle
-verify-bundle: bundle ## Verify bundle update.
+verify-bundle: yq ## Verify bundle update using release.yaml.
+	PATH="$(PROJECT_PATH)/bin:$$PATH" env="$(PROJECT_PATH)" bash "$(PROJECT_PATH)/utils/release/operator/make_bundles.sh"
 	git diff --exit-code ./bundle
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./bundle)" ]
 
 .PHONY: verify-helm-charts
-verify-helm-charts: helm-build ## Verify helm charts update.
+verify-helm-charts: yq ## Verify helm charts update using release.yaml.
+	PATH="$(PROJECT_PATH)/bin:$$PATH" env="$(PROJECT_PATH)" bash "$(PROJECT_PATH)/utils/release/operator/make_chart.sh"
 	git diff --exit-code ./charts
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./charts)" ]
 

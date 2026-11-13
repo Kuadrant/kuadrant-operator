@@ -943,6 +943,311 @@ var _ = Describe("TokenRateLimitPolicy controller", Labels{"common", "tokenratel
 			)).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
+
+	Context("Limits churn", func() {
+		var (
+			routeA     *gatewayapiv1.HTTPRoute
+			routeB     *gatewayapiv1.HTTPRoute
+			policyAKey client.ObjectKey
+			policyBKey client.ObjectKey
+		)
+
+		createRoute := func(ctx context.Context, name, hostname string) *gatewayapiv1.HTTPRoute {
+			route := tests.BuildBasicHttpRoute(name, TestGatewayName, testNamespace, []string{hostname})
+			Expect(testClient().Create(ctx, route)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+			return route
+		}
+
+		createPolicyWithLimit := func(ctx context.Context, route *gatewayapiv1.HTTPRoute, limitName string) client.ObjectKey {
+			policy := policyFactory(func(policy *kuadrantv1alpha1.TokenRateLimitPolicy) {
+				policy.Name = "trlp-" + route.Name
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(route.Name)
+				policy.Spec.Defaults.Limits = map[string]kuadrantv1alpha1.TokenLimit{limitName: policy.Spec.Defaults.Limits["l1"]}
+			})
+			Expect(testClient().Create(ctx, policy)).To(Succeed())
+			return client.ObjectKeyFromObject(policy)
+		}
+
+		createPolicy := func(ctx context.Context, route *gatewayapiv1.HTTPRoute) client.ObjectKey {
+			return createPolicyWithLimit(ctx, route, "l1")
+		}
+
+		// createGatewayPolicy creates a policy on the gateway with limit gw as defaults
+		createGatewayPolicy := func(ctx context.Context, strategy string) client.ObjectKey {
+			policy := policyFactory(func(policy *kuadrantv1alpha1.TokenRateLimitPolicy) {
+				policy.Name = "trlp-gateway"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
+				policy.Spec.Defaults.Strategy = strategy
+				policy.Spec.Defaults.Limits = map[string]kuadrantv1alpha1.TokenLimit{
+					"gw": {Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("3m")}}},
+				}
+			})
+			Expect(testClient().Create(ctx, policy)).To(Succeed())
+			return client.ObjectKeyFromObject(policy)
+		}
+
+		// createOverridingGatewayPolicy creates a policy on the gateway taking over limit l1 of the route policies
+		createOverridingGatewayPolicy := func(ctx context.Context) client.ObjectKey {
+			policy := policyFactory(func(policy *kuadrantv1alpha1.TokenRateLimitPolicy) {
+				policy.Name = "trlp-gateway"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
+				policy.Spec.Overrides = policy.Spec.Defaults
+				policy.Spec.Overrides.Strategy = kuadrantv1.PolicyRuleMergeStrategy
+				policy.Spec.Defaults = nil
+			})
+			Expect(testClient().Create(ctx, policy)).To(Succeed())
+			return client.ObjectKeyFromObject(policy)
+		}
+
+		// limitOf is the Limitador limit generated on the route from a limit of the policy
+		limitOf := func(route *gatewayapiv1.HTTPRoute, policyKey client.ObjectKey, limitName string, maxValue int) limitadorv1alpha1.RateLimit {
+			return limitadorv1alpha1.RateLimit{
+				Name:       limitName,
+				MaxValue:   maxValue,
+				Seconds:    180,
+				Namespace:  string(controllers.LimitsNamespaceFromRoute(route)),
+				Conditions: []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.TokenLimitNameToLimitadorIdentifier(policyKey, limitName))},
+				Variables:  []string{},
+			}
+		}
+
+		limitadorHasNoLimit := func(ctx context.Context, route *gatewayapiv1.HTTPRoute, policyKey client.ObjectKey, limitName string) func(g Gomega) {
+			return func(g Gomega) {
+				limitador := &limitadorv1alpha1.Limitador{}
+				g.Expect(testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}, limitador)).To(Succeed())
+				g.Expect(limitador.Spec.Limits).NotTo(ContainElement(And(
+					HaveField("Namespace", string(controllers.LimitsNamespaceFromRoute(route))),
+					HaveField("Conditions", ContainElement(ContainSubstring(controllers.TokenLimitNameToLimitadorIdentifier(policyKey, limitName)))),
+				)))
+			}
+		}
+
+		setRate := func(ctx context.Context, key client.ObjectKey, limitName string, maxValue int) {
+			Eventually(func(g Gomega) {
+				policy := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+				g.Expect(testClient().Get(ctx, key, policy)).To(Succeed())
+				policy.Spec.Proper().Limits[limitName].Rates[0].Limit = maxValue
+				g.Expect(testClient().Update(ctx, policy)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+		}
+
+		enforcedAtGeneration := func(ctx context.Context, key client.ObjectKey) int64 {
+			return tests.EnforcedAtGeneration(ctx, testClient(), &kuadrantv1alpha1.TokenRateLimitPolicy{}, key)
+		}
+
+		enforcedReason := func(ctx context.Context, key client.ObjectKey) func(g Gomega) string {
+			return func(g Gomega) string {
+				policy := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+				g.Expect(testClient().Get(ctx, key, policy)).To(Succeed())
+				cond := meta.FindStatusCondition(policy.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+				g.Expect(cond).NotTo(BeNil())
+				return cond.Reason
+			}
+		}
+
+		record := func(ctx context.Context, key client.ObjectKey) *tests.EnforcedConditionRecorder {
+			recorder, err := tests.RecordEnforcedConditions(ctx, k8sClient, &kuadrantv1alpha1.TokenRateLimitPolicyList{}, key)
+			Expect(err).NotTo(HaveOccurred())
+			return recorder
+		}
+
+		BeforeEach(func(ctx SpecContext) {
+			routeA = createRoute(ctx, "route-a", "*.a.example.com")
+			routeB = createRoute(ctx, "route-b", "*.b.example.com")
+			policyAKey = createPolicy(ctx, routeA)
+			policyBKey = createPolicy(ctx, routeB)
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, policyAKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, policyBKey)).WithContext(ctx).Should(BeTrue())
+		}, beforeEachTimeOut)
+
+		It("Waits for Limitador only on the policy whose limits changed", func(ctx SpecContext) {
+			enforcedAtGeneration(ctx, policyBKey)
+			recorderA := record(ctx, policyAKey)
+			recorderB := record(ctx, policyBKey)
+
+			// Only the rate changes, so the wasm config stays the same and Limitador is the only
+			// component modified on each iteration.
+			var generationsA []int64
+			for maxValue := 2; maxValue <= 6; maxValue++ {
+				setRate(ctx, policyAKey, "l1", maxValue)
+				Eventually(limitadorContainsLimit(ctx, limitOf(routeA, policyAKey, "l1", maxValue))).WithContext(ctx).Should(Succeed())
+				generationsA = append(generationsA, enforcedAtGeneration(ctx, policyAKey))
+			}
+
+			tests.ExpectWaitedForLimitador(policyAKey, recorderA.Stop(ctx), generationsA...)
+			tests.ExpectStayedEnforced(policyBKey, recorderB.Stop(ctx))
+		}, testTimeOut)
+
+		It("Waits for Limitador when the policy clears the rates of its only limit", func(ctx SpecContext) {
+			recorderA := record(ctx, policyAKey)
+
+			Eventually(func(g Gomega) {
+				policyA := &kuadrantv1alpha1.TokenRateLimitPolicy{}
+				g.Expect(testClient().Get(ctx, policyAKey, policyA)).To(Succeed())
+				limit := policyA.Spec.Defaults.Limits["l1"]
+				limit.Rates = nil
+				policyA.Spec.Defaults.Limits["l1"] = limit
+				g.Expect(testClient().Update(ctx, policyA)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(limitadorHasNoLimit(ctx, routeA, policyAKey, "l1")).WithContext(ctx).Should(Succeed())
+			generationA := enforcedAtGeneration(ctx, policyAKey)
+
+			tests.ExpectWaitedForLimitador(policyAKey, recorderA.Stop(ctx), generationA)
+		}, testTimeOut)
+
+		It("Keeps the policy enforced while another policy is deleted and recreated", func(ctx SpecContext) {
+			enforcedAtGeneration(ctx, policyBKey)
+			recorderB := record(ctx, policyBKey)
+
+			Expect(testClient().Delete(ctx, &kuadrantv1alpha1.TokenRateLimitPolicy{ObjectMeta: metav1.ObjectMeta{Name: policyAKey.Name, Namespace: policyAKey.Namespace}})).To(Succeed())
+			Eventually(limitadorHasNoLimit(ctx, routeA, policyAKey, "l1")).WithContext(ctx).Should(Succeed())
+
+			Expect(createPolicy(ctx, routeA)).To(Equal(policyAKey))
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, policyAKey, "l1", 1))).WithContext(ctx).Should(Succeed())
+			enforcedAtGeneration(ctx, policyAKey)
+
+			tests.ExpectStayedEnforced(policyBKey, recorderB.Stop(ctx))
+		}, testTimeOut)
+
+		It("Waits for Limitador only on the policy a merged limit comes from", func(ctx SpecContext) {
+			gatewayPolicyKey := createGatewayPolicy(ctx, kuadrantv1.PolicyRuleMergeStrategy)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, gatewayPolicyKey, "gw", 1), limitOf(routeB, gatewayPolicyKey, "gw", 1))).WithContext(ctx).Should(Succeed())
+			enforcedAtGeneration(ctx, gatewayPolicyKey)
+			enforcedAtGeneration(ctx, policyAKey)
+			enforcedAtGeneration(ctx, policyBKey)
+
+			// The gateway policy changes its limit on both routes, the route policies keep theirs
+			recorderGateway := record(ctx, gatewayPolicyKey)
+			recorderA := record(ctx, policyAKey)
+			recorderB := record(ctx, policyBKey)
+			setRate(ctx, gatewayPolicyKey, "gw", 2)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, gatewayPolicyKey, "gw", 2), limitOf(routeB, gatewayPolicyKey, "gw", 2))).WithContext(ctx).Should(Succeed())
+			generationGateway := enforcedAtGeneration(ctx, gatewayPolicyKey)
+
+			tests.ExpectWaitedForLimitador(gatewayPolicyKey, recorderGateway.Stop(ctx), generationGateway)
+			tests.ExpectStayedEnforced(policyAKey, recorderA.Stop(ctx))
+			tests.ExpectStayedEnforced(policyBKey, recorderB.Stop(ctx))
+
+			// A route policy changes its limit on the route shared with the gateway policy
+			recorderGateway = record(ctx, gatewayPolicyKey)
+			recorderA = record(ctx, policyAKey)
+			setRate(ctx, policyAKey, "l1", 2)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, policyAKey, "l1", 2))).WithContext(ctx).Should(Succeed())
+			generationA := enforcedAtGeneration(ctx, policyAKey)
+
+			tests.ExpectWaitedForLimitador(policyAKey, recorderA.Stop(ctx), generationA)
+			tests.ExpectStayedEnforced(gatewayPolicyKey, recorderGateway.Stop(ctx))
+		}, testTimeOut)
+
+		It("Waits for Limitador only on the policy overriding a limit", func(ctx SpecContext) {
+			routeC := createRoute(ctx, "route-c", "*.c.example.com")
+			policyCKey := createPolicyWithLimit(ctx, routeC, "own")
+			enforcedAtGeneration(ctx, policyCKey)
+			recorderC := record(ctx, policyCKey)
+
+			// The gateway policy takes over limit l1 of policies A and B, policy C keeps its own limit
+			gatewayPolicyKey := createOverridingGatewayPolicy(ctx)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, gatewayPolicyKey, "l1", 1), limitOf(routeC, gatewayPolicyKey, "l1", 1))).WithContext(ctx).Should(Succeed())
+			Eventually(limitadorHasNoLimit(ctx, routeA, policyAKey, "l1")).WithContext(ctx).Should(Succeed())
+			enforcedAtGeneration(ctx, gatewayPolicyKey)
+			Eventually(enforcedReason(ctx, policyAKey)).WithContext(ctx).Should(Equal(string(kuadrant.PolicyReasonOverridden)))
+
+			// The overriding limit changes, an overridden policy has nothing to wait for
+			recorderGateway := record(ctx, gatewayPolicyKey)
+			recorderA := record(ctx, policyAKey)
+			setRate(ctx, gatewayPolicyKey, "l1", 2)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, gatewayPolicyKey, "l1", 2), limitOf(routeC, gatewayPolicyKey, "l1", 2))).WithContext(ctx).Should(Succeed())
+			generationGateway := enforcedAtGeneration(ctx, gatewayPolicyKey)
+
+			tests.ExpectWaitedForLimitador(gatewayPolicyKey, recorderGateway.Stop(ctx), generationGateway)
+			Expect(recorderA.Stop(ctx)).To(HaveEach(HaveField("Reason", string(kuadrant.PolicyReasonOverridden))))
+
+			// The override goes away and limit l1 of policy A is written again
+			recorderA = record(ctx, policyAKey)
+			Expect(testClient().Delete(ctx, &kuadrantv1alpha1.TokenRateLimitPolicy{ObjectMeta: metav1.ObjectMeta{Name: gatewayPolicyKey.Name, Namespace: gatewayPolicyKey.Namespace}})).To(Succeed())
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, policyAKey, "l1", 1))).WithContext(ctx).Should(Succeed())
+			enforcedAtGeneration(ctx, policyAKey)
+
+			Expect(recorderA.Stop(ctx)).To(ContainElement(tests.WaitingForLimitador()), "policy A did not wait for Limitador after the override went away")
+			tests.ExpectStayedEnforced(policyCKey, recorderC.Stop(ctx))
+		}, testTimeOut)
+
+		It("Waits for Limitador on the gateway policy when a route policy replaces its defaults", func(ctx SpecContext) {
+			routeC := createRoute(ctx, "route-c", "*.c.example.com")
+			routeD := createRoute(ctx, "route-d", "*.d.example.com")
+			gatewayPolicyKey := createGatewayPolicy(ctx, kuadrantv1.AtomicMergeStrategy)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeC, gatewayPolicyKey, "gw", 1), limitOf(routeD, gatewayPolicyKey, "gw", 1))).WithContext(ctx).Should(Succeed())
+			enforcedAtGeneration(ctx, gatewayPolicyKey)
+			enforcedAtGeneration(ctx, policyBKey)
+
+			recorderGateway := record(ctx, gatewayPolicyKey)
+			recorderB := record(ctx, policyBKey)
+
+			policyCKey := createPolicy(ctx, routeC)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeC, policyCKey, "l1", 1))).WithContext(ctx).Should(Succeed())
+			Eventually(limitadorHasNoLimit(ctx, routeC, gatewayPolicyKey, "gw")).WithContext(ctx).Should(Succeed())
+			// The generation of the gateway policy does not change. Policy C reports enforced in a
+			// later pass than the one that wrote the limits, so the wait of that pass is already recorded.
+			enforcedAtGeneration(ctx, policyCKey)
+
+			Expect(recorderGateway.Stop(ctx)).To(ContainElement(tests.WaitingForLimitador()), "gateway policy did not wait for Limitador")
+			tests.ExpectStayedEnforced(policyBKey, recorderB.Stop(ctx))
+		}, testTimeOut)
+
+		It("Keeps a RateLimitPolicy enforced while a TokenRateLimitPolicy changes and the other way around", func(ctx SpecContext) {
+			routeC := createRoute(ctx, "route-c", "*.c.example.com")
+			rlp := &kuadrantv1.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "rlp-route-c", Namespace: testNamespace},
+				Spec: kuadrantv1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeC.Name),
+						},
+					},
+					Defaults: &kuadrantv1.MergeableRateLimitPolicySpec{
+						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1.Limit{
+								"l1": {Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("3m")}}},
+							},
+						},
+					},
+				},
+			}
+			Expect(testClient().Create(ctx, rlp)).To(Succeed())
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			rlpLimit := func(maxValue int) limitadorv1alpha1.RateLimit {
+				limit := limitOf(routeC, rlpKey, "l1", maxValue)
+				limit.Conditions = []string{fmt.Sprintf(`descriptors[0]["%s"] == "1"`, controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"))}
+				return limit
+			}
+			Eventually(limitadorContainsLimit(ctx, rlpLimit(1))).WithContext(ctx).Should(Succeed())
+			tests.EnforcedAtGeneration(ctx, testClient(), &kuadrantv1.RateLimitPolicy{}, rlpKey)
+			enforcedAtGeneration(ctx, policyAKey)
+
+			recorderRLP, err := tests.RecordEnforcedConditions(ctx, k8sClient, &kuadrantv1.RateLimitPolicyList{}, rlpKey)
+			Expect(err).NotTo(HaveOccurred())
+			setRate(ctx, policyAKey, "l1", 2)
+			Eventually(limitadorContainsLimit(ctx, limitOf(routeA, policyAKey, "l1", 2))).WithContext(ctx).Should(Succeed())
+			enforcedAtGeneration(ctx, policyAKey)
+			tests.ExpectStayedEnforced(rlpKey, recorderRLP.Stop(ctx))
+
+			recorderA := record(ctx, policyAKey)
+			Eventually(func(g Gomega) {
+				policy := &kuadrantv1.RateLimitPolicy{}
+				g.Expect(testClient().Get(ctx, rlpKey, policy)).To(Succeed())
+				policy.Spec.Proper().Limits["l1"].Rates[0].Limit = 2
+				g.Expect(testClient().Update(ctx, policy)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(limitadorContainsLimit(ctx, rlpLimit(2))).WithContext(ctx).Should(Succeed())
+			tests.EnforcedAtGeneration(ctx, testClient(), &kuadrantv1.RateLimitPolicy{}, rlpKey)
+			tests.ExpectStayedEnforced(policyAKey, recorderA.Stop(ctx))
+		}, testTimeOut)
+	})
 })
 
 var _ = Describe("TokenRateLimitPolicy CEL Validations", Labels{"common", "tokenratelimitpolicy"}, func() {

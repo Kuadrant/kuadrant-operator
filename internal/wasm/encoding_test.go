@@ -46,6 +46,42 @@ func TestDecodeConfigPlainJSONPassthrough(t *testing.T) {
 	assert.Assert(t, bytes.Equal(other, decoded))
 }
 
+func TestDecodeConfigRejectsDecompressionBomb(t *testing.T) {
+	// A highly compressible payload: 8 MiB of a single repeated byte. It fits in a
+	// tiny envelope but expands well past a small configured limit.
+	bomb := bytes.Repeat([]byte("A"), 8<<20)
+	envelope, err := encodeConfig(bomb)
+	assert.NilError(t, err)
+
+	orig := maxDecodedConfigSize
+	defer func() { maxDecodedConfigSize = orig }()
+
+	// Under a low limit, decoding is rejected rather than allocating the full output.
+	maxDecodedConfigSize = 1 << 20 // 1 MiB
+	_, err = decodeConfig(envelope)
+	assert.ErrorContains(t, err, "exceeds")
+
+	// At or above the payload size, decoding succeeds and round-trips exactly.
+	maxDecodedConfigSize = 8 << 20
+	decoded, err := decodeConfig(envelope)
+	assert.NilError(t, err)
+	assert.Assert(t, bytes.Equal(bomb, decoded))
+}
+
+func TestEncodeConfigRejectsOversized(t *testing.T) {
+	orig := maxDecodedConfigSize
+	defer func() { maxDecodedConfigSize = orig }()
+	maxDecodedConfigSize = 1 << 10 // 1 KiB
+
+	// Over the limit: encode refuses, so the operator never emits an oversized resource.
+	_, err := encodeConfig(bytes.Repeat([]byte("A"), (1<<10)+1))
+	assert.ErrorContains(t, err, "exceeds")
+
+	// At or under the limit: encodes fine.
+	_, err = encodeConfig(bytes.Repeat([]byte("A"), 1<<10))
+	assert.NilError(t, err)
+}
+
 func TestEncodeConfigDeterministic(t *testing.T) {
 	raw := []byte(`{"services":{"a":{"type":"ratelimit"}},"actionSets":[{"name":"set"}]}`)
 

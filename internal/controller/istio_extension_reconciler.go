@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -655,9 +656,17 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 
 	if len(wasmConfig.ActionSets) > 0 {
 		pluginConfigStruct, err := wasmConfig.ToStruct()
-		if err == nil {
+		if err != nil {
+			logf.Log.WithName("IstioExtensionReconciler").Error(err,
+				"failed to encode wasm config; EnvoyFilter will omit the wasm filter",
+				"gateway", gateway.GetName(), "namespace", gateway.GetNamespace())
+		} else {
 			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
-			if err == nil {
+			if err != nil {
+				logf.Log.WithName("IstioExtensionReconciler").Error(err,
+					"failed to build wasm filter patch; EnvoyFilter will omit the wasm filter",
+					"gateway", gateway.GetName(), "namespace", gateway.GetNamespace())
+			} else {
 				configPatches = patches
 			}
 		}

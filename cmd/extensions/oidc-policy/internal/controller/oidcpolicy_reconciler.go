@@ -26,6 +26,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/oidc-policy/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
 )
@@ -42,6 +43,33 @@ type ingressGatewayInfo struct {
 	Protocol  gatewayapiv1.ProtocolType `json:"protocol"`
 	Port      int32                     `json:"port"`
 	url       *url.URL
+}
+
+// isExactHost reports whether h is a real host name, not empty and not a wildcard pattern
+// like "*.example.com" (which is valid on a Gateway listener but not in a URL or cookie).
+func isExactHost(h string) bool {
+	return h != "" && !strings.Contains(h, "*")
+}
+
+// publicHost returns the host the browser uses to reach the protected app.
+// It is the host of spec.provider.redirectURI when set, otherwise the listener hostname.
+// It returns an ErrInvalid when neither gives an exact host, so we never build
+// cookies or redirect URIs for a wildcard or empty host.
+func publicHost(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (string, error) {
+	if redirectURI := pol.Spec.Provider.RedirectURI; redirectURI != "" {
+		u, err := url.Parse(redirectURI)
+		if err != nil {
+			return "", err
+		}
+		if !isExactHost(u.Hostname()) {
+			return "", kuadrant.NewErrInvalid("OIDCPolicy", fmt.Errorf("spec.provider.redirectURI %q must use an exact hostname", redirectURI))
+		}
+		return u.Hostname(), nil
+	}
+	if !isExactHost(igw.Hostname) {
+		return "", kuadrant.NewErrInvalid("OIDCPolicy", fmt.Errorf("gateway %s/%s listener hostname %q is not an exact host, set spec.provider.redirectURI", igw.Namespace, igw.Name, igw.Hostname))
+	}
+	return igw.Hostname, nil
 }
 
 func (g *ingressGatewayInfo) GetURL() *url.URL {
@@ -311,6 +339,10 @@ func buildTargetCookieExpression(hostname string, protocol gatewayapiv1.Protocol
 }
 
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+	host, err := publicHost(pol, igw)
+	if err != nil {
+		return nil, err
+	}
 	authorizeURL, err := pol.GetAuthorizeURL(igw.GetURL())
 	if err != nil {
 		return nil, err
@@ -320,7 +352,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 		return nil, err
 	}
 
-	setCookie := buildTargetCookieExpression(igw.Hostname, igw.Protocol)
+	setCookie := buildTargetCookieExpression(host, igw.Protocol)
 
 	var authorization = map[string]kuadrantv1.MergeableAuthorizationSpec{}
 	var authPatterns []authorinov1beta3.PatternExpressionOrRef
@@ -420,6 +452,16 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 	gwName := gatewayapiv1.ObjectName(igw.Name)
 	gwNamespace := gatewayapiv1.Namespace(igw.Namespace)
 
+	// With a wildcard or empty listener hostname the route would inherit "*.example.com".
+	// Gateways like Istio then only serve it on hosts that have no route of their own,
+	// so the callback 404s on the app host. Pin it to the app host instead.
+	var hostnames []gatewayapiv1.Hostname
+	if !isExactHost(igw.Hostname) {
+		if host, err := publicHost(pol, igw); err == nil {
+			hostnames = []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host)}
+		}
+	}
+
 	return &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       machinery.HTTPRouteGroupKind.Kind,
@@ -438,6 +480,7 @@ func buildCallbackHTTPRoute(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) *
 					},
 				},
 			},
+			Hostnames: hostnames,
 			Rules: []gatewayapiv1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1.HTTPRouteMatch{
@@ -463,6 +506,10 @@ allow = true`, baseURL, igwURL, authorizeURL)
 }
 
 func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
+	host, err := publicHost(pol, igw)
+	if err != nil {
+		return nil, err
+	}
 	igwURL := igw.GetURL()
 	tokenRequestURL, err := pol.GetTokenRequestURL()
 	if err != nil {
@@ -496,7 +543,14 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 		Expression: authorinov1beta3.CelExpression(callBodyCelExpression),
 	}
 
-	opaAuthorizationRule := buildOpaAuthorizationRule(baseURL, igwURL, authorizeURL)
+	// The gateway URL is the default landing page after login. It is only a usable URL
+	// when the listener hostname is exact, so fall back to the redirectURI base otherwise.
+	landingURL := igwURL
+	if !isExactHost(igw.Hostname) {
+		landingURL = baseURL
+	}
+
+	opaAuthorizationRule := buildOpaAuthorizationRule(baseURL, landingURL, authorizeURL)
 
 	return &kuadrantv1.AuthPolicy{
 		TypeMeta: metav1.TypeMeta{
@@ -568,7 +622,7 @@ func buildCallbackAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) 
 							Unauthorized: &kuadrantv1.MergeableDenyWithSpec{
 								DenyWithSpec: authorinov1beta3.DenyWithSpec{
 									Code:    302,
-									Headers: credentialsHeader(pol.GetTokenSource(), igw),
+									Headers: credentialsHeader(pol.GetTokenSource(), host, igw.Protocol),
 								},
 							},
 						},
@@ -673,7 +727,7 @@ func credentialsSource(tokenSource *authorinov1beta3.Credentials) authorinov1bet
 	}
 }
 
-func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGatewayInfo) map[string]authorinov1beta3.ValueOrSelector {
+func credentialsHeader(tokenSource *authorinov1beta3.Credentials, host string, protocol gatewayapiv1.ProtocolType) map[string]authorinov1beta3.ValueOrSelector {
 	headers := make(map[string]authorinov1beta3.ValueOrSelector)
 	headers["location"] = authorinov1beta3.ValueOrSelector{Expression: "auth.authorization.location.location"}
 	switch tokenSource.GetType() {
@@ -682,17 +736,17 @@ func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGa
 	case authorinov1beta3.CustomHeaderCredentials:
 		headers[tokenSource.CustomHeader.Name] = authorinov1beta3.ValueOrSelector{Expression: "auth.metadata.token.id_token"}
 	case authorinov1beta3.CookieCredentials:
-		headers["set-cookie"] = cookieHeader(tokenSource.Cookie.Name, igw)
+		headers["set-cookie"] = cookieHeader(tokenSource.Cookie.Name, host, protocol)
 	default:
-		headers["set-cookie"] = cookieHeader(v1alpha1.DefaultTokenSourceName, igw)
+		headers["set-cookie"] = cookieHeader(v1alpha1.DefaultTokenSourceName, host, protocol)
 	}
 	return headers
 }
 
-func cookieHeader(cookieName string, igw *ingressGatewayInfo) authorinov1beta3.ValueOrSelector {
+func cookieHeader(cookieName, host string, protocol gatewayapiv1.ProtocolType) authorinov1beta3.ValueOrSelector {
 	return authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`
 "%s=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
-`, cookieName, igw.Hostname, getSecureFlag(igw.Protocol)))}
+`, cookieName, host, getSecureFlag(protocol)))}
 }
 
 func getSecureFlag(protocol gatewayapiv1.ProtocolType) string {

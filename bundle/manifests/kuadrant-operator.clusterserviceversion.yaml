@@ -225,7 +225,7 @@ metadata:
     categories: Integration & Delivery
     console.openshift.io/plugins: '["kuadrant-console-plugin"]'
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2026-10-05T08:14:43Z"
+    createdAt: "2026-11-16T11:06:35Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.42.3
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
@@ -310,17 +310,9 @@ spec:
           - ""
           resources:
           - endpoints
+          - namespaces
           - pods
           verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - ""
-          resources:
-          - namespaces
-          verbs:
-          - create
           - get
           - list
           - watch
@@ -331,6 +323,8 @@ spec:
           resources:
           - namespaces
           verbs:
+          - create
+          - patch
           - update
         - apiGroups:
           - ""

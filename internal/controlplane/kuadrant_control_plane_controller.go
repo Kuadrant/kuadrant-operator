@@ -43,11 +43,11 @@ const requeueInterval = 5 * time.Minute
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=create;delete;get;list;watch;update;patch
 
 // Component deployer RBAC — OpenShift platform monitoring telemetry. The
-// operator creates and labels PlatformTelemetryNamespace, applies the chart's
+// operator creates PlatformTelemetryNamespace through server-side apply, so
+// create can be limited to that name, labels it, applies the chart's
 // PrometheusRule there, and must hold what the chart's prometheus-k8s Role
 // grants (services, endpoints, pods, endpointslices) to create it.
-//+kubebuilder:rbac:groups="",resources=namespaces,verbs=create
-//+kubebuilder:rbac:groups="",resources=namespaces,resourceNames=kuadrant-telemetry,verbs=update
+//+kubebuilder:rbac:groups="",resources=namespaces,resourceNames=kuadrant-telemetry,verbs=create;patch;update
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=create;delete;get;list;watch;update;patch
 //+kubebuilder:rbac:groups="",resources=pods;endpoints,verbs=get;list;watch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch

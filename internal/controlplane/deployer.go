@@ -426,30 +426,43 @@ func (d *Deployer) ensurePlatformTelemetryNamespace(ctx context.Context, ownerRe
 
 	namespace = platformMonitoringNamespace(PlatformTelemetryNamespace)
 	namespace.SetAnnotations(map[string]string{platformTelemetryOwnerAnnotation: string(ownerRef.UID)})
-	// The namespace is deliberately not owned by the KCP; garbage collection
-	// must not delete unrelated objects later added to this shared namespace.
-	if _, err := resource.Create(ctx, namespace, metav1.CreateOptions{}); err == nil {
-		return true
-	} else if !apierrors.IsAlreadyExists(err) {
+	// The namespace is created through server-side apply because RBAC can
+	// limit an apply create to this one name, which a plain create cannot be.
+	// It is deliberately not owned by the KCP; garbage collection must not
+	// delete unrelated objects later added to this shared namespace.
+	applied, err := resource.Apply(ctx, PlatformTelemetryNamespace, namespace, metav1.ApplyOptions{FieldManager: fieldManager})
+	if err != nil {
 		d.setTelemetryCondition(metav1.ConditionFalse, "NamespaceCreateFailed", err.Error())
 		d.logger.Error(err, "failed to create platform telemetry namespace", "namespace", PlatformTelemetryNamespace)
 		return false
 	}
+	if managedOnlyByOperator(applied) {
+		return true
+	}
 
-	// Another actor created the namespace after the initial read. Verify
-	// ownership before applying any telemetry resources into it.
-	namespace, err = resource.Get(ctx, PlatformTelemetryNamespace, metav1.GetOptions{})
-	if err != nil {
-		d.setTelemetryCondition(metav1.ConditionFalse, "NamespaceLookupFailed", err.Error())
-		d.logger.Error(err, "failed to verify platform telemetry namespace after create race")
-		return false
+	// Another actor created the namespace after the initial read, so the apply
+	// merged into their object. Give the applied fields back and leave it alone.
+	released := &unstructured.Unstructured{}
+	released.SetAPIVersion("v1")
+	released.SetKind("Namespace")
+	released.SetName(PlatformTelemetryNamespace)
+	if _, err := resource.Apply(ctx, PlatformTelemetryNamespace, released, metav1.ApplyOptions{FieldManager: fieldManager}); err != nil {
+		d.logger.Error(err, "failed to release fields on namespace created concurrently", "namespace", PlatformTelemetryNamespace)
 	}
-	if !canManagePlatformTelemetryNamespace(namespace, d.namespace, ownerRef) {
-		d.setTelemetryCondition(metav1.ConditionFalse, "NamespaceOwnershipConflict", fmt.Sprintf("namespace %q was created by another owner", PlatformTelemetryNamespace))
-		d.logger.Error(fmt.Errorf("refusing to adopt namespace created concurrently"), "skipping platform telemetry", "namespace", PlatformTelemetryNamespace)
-		return false
+	d.setTelemetryCondition(metav1.ConditionFalse, "NamespaceOwnershipConflict", fmt.Sprintf("namespace %q was created by another owner", PlatformTelemetryNamespace))
+	d.logger.Error(fmt.Errorf("refusing to adopt namespace created concurrently"), "skipping platform telemetry", "namespace", PlatformTelemetryNamespace)
+	return false
+}
+
+// managedOnlyByOperator reports whether every field of the object was written
+// by the operator, which is only true for an object the operator created.
+func managedOnlyByOperator(object *unstructured.Unstructured) bool {
+	for _, entry := range object.GetManagedFields() {
+		if entry.Manager != fieldManager {
+			return false
+		}
 	}
-	return d.ensurePlatformTelemetryNamespaceMetadata(ctx, resource, namespace, ownerRef)
+	return true
 }
 
 func (d *Deployer) ensurePlatformTelemetryNamespaceMetadata(ctx context.Context, resource dynamic.ResourceInterface, namespace *unstructured.Unstructured, ownerRef *metav1.OwnerReference) bool {

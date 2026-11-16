@@ -15570,17 +15570,9 @@ rules:
   - ""
   resources:
   - endpoints
+  - namespaces
   - pods
   verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - create
   - get
   - list
   - watch
@@ -15591,6 +15583,8 @@ rules:
   resources:
   - namespaces
   verbs:
+  - create
+  - patch
   - update
 - apiGroups:
   - ""

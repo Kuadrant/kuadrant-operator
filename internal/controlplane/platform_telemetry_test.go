@@ -315,8 +315,31 @@ func TestApplyPlatformTelemetryDoesNotAdoptExistingNamespace(t *testing.T) {
 	}
 }
 
+// applyCreatesNamespace makes the fake client create the applied namespace,
+// which its object tracker does not do for server-side apply.
+func applyCreatesNamespace(t *testing.T, client *dynamicfake.FakeDynamicClient) {
+	t.Helper()
+	gvr := schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
+	client.PrependReactor("patch", "namespaces", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		patch := action.(clienttesting.PatchAction)
+		if patch.GetPatchType() != types.ApplyPatchType {
+			return false, nil, nil
+		}
+		applied := &unstructured.Unstructured{}
+		if err := applied.UnmarshalJSON(patch.GetPatch()); err != nil {
+			t.Fatal(err)
+		}
+		applied.SetManagedFields([]metav1.ManagedFieldsEntry{{Manager: fieldManager}})
+		if err := client.Tracker().Create(gvr, applied, ""); err != nil {
+			return true, nil, err
+		}
+		return true, applied, nil
+	})
+}
+
 func TestTelemetryNamespaceIsCreatedWithOwnerMarker(t *testing.T) {
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	applyCreatesNamespace(t, dynamicClient)
 	deployer := &Deployer{client: dynamicClient, namespace: "kuadrant-system"}
 	owner := &metav1.OwnerReference{APIVersion: "kuadrant.io/v1alpha1", Kind: "KuadrantControlPlane", Name: "default", UID: types.UID("kcp-uid")}
 	if !deployer.ensurePlatformTelemetryNamespace(context.Background(), owner) {
@@ -355,15 +378,22 @@ func TestTelemetryNamespaceMarkerAndLabelDriftAreRepaired(t *testing.T) {
 
 func TestTelemetryNamespaceCreateRaceDoesNotAdoptNamespace(t *testing.T) {
 	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	gvr := schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
-	racedNamespace := telemetryTestResource("Namespace", "", PlatformTelemetryNamespace)
-	racedNamespace.SetAPIVersion("v1")
-	racedNamespace.SetLabels(map[string]string{"customer.example/owner": "customer"})
-	client.PrependReactor("create", "namespaces", func(clienttesting.Action) (bool, runtime.Object, error) {
-		if err := client.Tracker().Create(gvr, racedNamespace, ""); err != nil {
+	// the apply lands on a namespace another actor created after the initial
+	// read: the result carries their field manager alongside the operator's
+	var applies []*unstructured.Unstructured
+	client.PrependReactor("patch", "namespaces", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		patch := action.(clienttesting.PatchAction)
+		if patch.GetPatchType() != types.ApplyPatchType {
+			t.Fatalf("namespace written with patch type %s, want server-side apply", patch.GetPatchType())
+		}
+		applied := &unstructured.Unstructured{}
+		if err := applied.UnmarshalJSON(patch.GetPatch()); err != nil {
 			t.Fatal(err)
 		}
-		return true, nil, apierrors.NewAlreadyExists(schema.GroupResource{Resource: "namespaces"}, PlatformTelemetryNamespace)
+		applies = append(applies, applied)
+		result := applied.DeepCopy()
+		result.SetManagedFields([]metav1.ManagedFieldsEntry{{Manager: "kubectl-create"}, {Manager: fieldManager}})
+		return true, result, nil
 	})
 	deployer := &Deployer{client: client, namespace: "kuadrant-system"}
 	owner := &metav1.OwnerReference{APIVersion: "kuadrant.io/v1alpha1", Kind: "KuadrantControlPlane", Name: "default", UID: types.UID("kcp-uid")}
@@ -371,13 +401,26 @@ func TestTelemetryNamespaceCreateRaceDoesNotAdoptNamespace(t *testing.T) {
 	if deployer.ensurePlatformTelemetryNamespace(context.Background(), owner) {
 		t.Fatal("ensurePlatformTelemetryNamespace() adopted a concurrently created namespace")
 	}
-	namespace, err := client.Resource(gvr).Get(context.Background(), PlatformTelemetryNamespace, metav1.GetOptions{})
-	if err != nil {
-		t.Fatal(err)
+	if condition := deployer.TelemetryCondition(); condition.Reason != "NamespaceOwnershipConflict" {
+		t.Errorf("telemetry condition reason = %q, want NamespaceOwnershipConflict", condition.Reason)
 	}
-	if len(namespace.GetOwnerReferences()) != 0 || namespace.GetLabels()["customer.example/owner"] != "customer" {
-		t.Errorf("racing namespace was modified: owners=%v labels=%v", namespace.GetOwnerReferences(), namespace.GetLabels())
+	if len(applies) != 2 {
+		t.Fatalf("got %d applies, want the create and a release", len(applies))
 	}
+	if release := applies[1]; len(release.GetLabels()) != 0 || len(release.GetAnnotations()) != 0 {
+		t.Errorf("release apply still claims fields: labels=%v annotations=%v", release.GetLabels(), release.GetAnnotations())
+	}
+}
+
+func TestTelemetryNamespaceIsNeverCreatedWithPlainCreate(t *testing.T) {
+	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	client.PrependReactor("create", "namespaces", func(clienttesting.Action) (bool, runtime.Object, error) {
+		t.Fatal("namespace created with a plain create, which RBAC cannot limit by name")
+		return true, nil, nil
+	})
+	deployer := &Deployer{client: client, namespace: "kuadrant-system"}
+	owner := &metav1.OwnerReference{APIVersion: "kuadrant.io/v1alpha1", Kind: "KuadrantControlPlane", Name: "default", UID: types.UID("kcp-uid")}
+	deployer.ensurePlatformTelemetryNamespace(context.Background(), owner)
 }
 
 func TestSyncedGatewayChartRendersTelemetryResources(t *testing.T) {

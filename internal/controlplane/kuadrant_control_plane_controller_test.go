@@ -171,6 +171,36 @@ func TestReconcile_MissingKCP_DoesNotRecreate(t *testing.T) {
 	}
 }
 
+func TestTelemetryFailureDoesNotBlockControlPlaneReady(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := kuadrantv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	cp := &kuadrantv1alpha1.KuadrantControlPlane{ObjectMeta: metav1.ObjectMeta{Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName}}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(cp).WithObjects(cp).Build()
+	deployer := &Deployer{components: nil}
+	deployer.setTelemetryCondition(metav1.ConditionFalse, "NamespaceOwnershipConflict", "telemetry namespace is owned elsewhere")
+	reconciler := &Reconciler{Client: fakeClient, deployer: deployer}
+
+	if err := reconciler.updateStatus(context.Background(), cp, nil); err != nil {
+		t.Fatalf("updateStatus() error = %v", err)
+	}
+	updated := &kuadrantv1alpha1.KuadrantControlPlane{}
+	if err := fakeClient.Get(context.Background(), client.ObjectKey{Name: cp.Name}, updated); err != nil {
+		t.Fatal(err)
+	}
+	statuses := map[string]metav1.ConditionStatus{}
+	for _, condition := range updated.Status.Conditions {
+		statuses[condition.Type] = condition.Status
+	}
+	if statuses[kuadrantv1alpha1.ControlPlaneConditionReady] != metav1.ConditionTrue {
+		t.Errorf("Ready condition = %q, want True", statuses[kuadrantv1alpha1.ControlPlaneConditionReady])
+	}
+	if statuses[kuadrantv1alpha1.ControlPlaneConditionTelemetryReady] != metav1.ConditionFalse {
+		t.Errorf("TelemetryReady condition = %q, want False", statuses[kuadrantv1alpha1.ControlPlaneConditionTelemetryReady])
+	}
+}
+
 // mockDeployer allows injecting errors for specific components
 type mockDeployer struct {
 	*Deployer

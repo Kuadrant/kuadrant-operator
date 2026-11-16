@@ -7,7 +7,8 @@ import (
 const (
 	KuadrantControlPlaneDefaultName = "default"
 
-	ControlPlaneConditionReady = "Ready"
+	ControlPlaneConditionReady          = "Ready"
+	ControlPlaneConditionTelemetryReady = "TelemetryReady"
 
 	ControlPlaneReasonComponentsHealthy   = "ComponentsHealthy"
 	ControlPlaneReasonComponentsUnhealthy = "ComponentsUnhealthy"

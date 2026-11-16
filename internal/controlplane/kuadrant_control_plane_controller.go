@@ -47,7 +47,7 @@ const requeueInterval = 5 * time.Minute
 // PrometheusRule there, and must hold what the chart's prometheus-k8s Role
 // grants (services, endpoints, pods, endpointslices) to create it.
 //+kubebuilder:rbac:groups="",resources=namespaces,verbs=create
-//+kubebuilder:rbac:groups="",resources=namespaces,resourceNames=kuadrant-telemetry,verbs=update;patch;delete
+//+kubebuilder:rbac:groups="",resources=namespaces,resourceNames=kuadrant-telemetry,verbs=update
 //+kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=create;delete;get;list;watch;update;patch
 //+kubebuilder:rbac:groups="",resources=pods;endpoints,verbs=get;list;watch
 //+kubebuilder:rbac:groups=discovery.k8s.io,resources=endpointslices,verbs=get;list;watch
@@ -95,6 +95,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	ownerRef := kcpOwnerReference(cp)
+	if err := r.deployer.RefreshPlatformMonitoring(ctx, ownerRef); err != nil {
+		r.logger.Error(err, "platform telemetry refresh failed; core components will still reconcile")
+		if r.recorder != nil {
+			r.recorder.Eventf(cp, cp, corev1.EventTypeWarning, "PlatformTelemetryRefreshFailed", "PlatformTelemetry", "platform telemetry refresh failed: %s", err)
+		}
+	}
 	deploy := func(ctx context.Context, component Component) error {
 		return r.deployer.DeployComponent(ctx, component, ownerRef)
 	}
@@ -263,6 +269,9 @@ func (r *Reconciler) updateStatus(ctx context.Context, cp *kuadrantv1alpha1.Kuad
 	}
 
 	meta.SetStatusCondition(&cp.Status.Conditions, readyCondition)
+	telemetryCondition := r.deployer.TelemetryCondition()
+	telemetryCondition.ObservedGeneration = cp.Generation
+	meta.SetStatusCondition(&cp.Status.Conditions, telemetryCondition)
 
 	if err := r.Status().Update(ctx, cp); err != nil {
 		return err

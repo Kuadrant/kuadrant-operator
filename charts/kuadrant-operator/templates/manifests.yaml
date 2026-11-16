@@ -15591,8 +15591,6 @@ rules:
   resources:
   - namespaces
   verbs:
-  - delete
-  - patch
   - update
 - apiGroups:
   - ""

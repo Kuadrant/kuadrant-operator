@@ -137,9 +137,9 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToControlPlane),
 			builder.WithPredicates(r.childDeploymentPredicate())).
-		Watches(&apiextv1.CustomResourceDefinition{},
-			handler.EnqueueRequestsFromMapFunc(r.mapToControlPlane),
-			builder.WithPredicates(r.childCRDPredicate())).
+		// No CRD Watch: getCRDStatuses reads CRD state directly via the dynamic client,
+		// so the shared cache never needs to hold CRD objects. The controller requeues
+		// every 5 minutes (requeueInterval), which is sufficient to detect CRD establishment.
 		Named("kuadrant-control-plane").
 		Complete(r)
 }
@@ -148,18 +148,6 @@ func (r *Reconciler) mapToControlPlane(_ context.Context, _ client.Object) []ctr
 	return []ctrl.Request{{NamespacedName: types.NamespacedName{
 		Name: kuadrantv1alpha1.KuadrantControlPlaneDefaultName,
 	}}}
-}
-
-func (r *Reconciler) childCRDPredicate() predicate.Predicate {
-	crdNames := r.deployer.CRDNames()
-	return predicate.NewPredicateFuncs(func(obj client.Object) bool {
-		for _, name := range crdNames {
-			if obj.GetName() == name {
-				return true
-			}
-		}
-		return false
-	})
 }
 
 func (r *Reconciler) childDeploymentPredicate() predicate.Predicate {

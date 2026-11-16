@@ -435,7 +435,7 @@ func TestSyncedGatewayChartRendersTelemetryResources(t *testing.T) {
 	if component.Name == "" {
 		t.Fatal("mcp-gateway component not found")
 	}
-	component.ChartPath = findComponentChartForDeployer(t, "mcp-gateway")
+	component.ChartPath = findTelemetryComponentChart(t, "mcp-gateway")
 	deployer := &Deployer{namespace: "kuadrant-system"}
 	rendered, err := deployer.renderComponent(component)
 	if err != nil {
@@ -513,10 +513,10 @@ func TestDiscovery404CleansOnlyControlPlaneOwnedTelemetry(t *testing.T) {
 	}
 }
 
-// findComponentChartForDeployer returns the synced chart for a component. The
+// findTelemetryComponentChart returns the synced chart for a component. The
 // test is skipped until the synced chart carries the platform telemetry
 // template, which arrives with a component chart sync.
-func findComponentChartForDeployer(t *testing.T, name string) string {
+func findTelemetryComponentChart(t *testing.T, name string) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {

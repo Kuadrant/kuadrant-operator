@@ -2301,30 +2301,34 @@ func TestEntryToAction_AddHeadersRejectsUnsetPhase(t *testing.T) {
 }
 
 func TestEntryToAction_StoreProducesStoreAction(t *testing.T) {
-	entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
-	entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = "protobufValue"
-	action, err := entryToAction(entry, []string{"TestPolicy/default/my-policy"})
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	store, ok := action.(*wasm.StoreAction)
-	if !ok {
-		t.Fatalf("Expected *wasm.StoreAction, got %T", action)
-	}
-	if store.Path != "my_key" {
-		t.Errorf("Path = %q, want %q", store.Path, "my_key")
-	}
-	if store.Value != "request.path" {
-		t.Errorf("Value = %q, want %q", store.Value, "request.path")
-	}
-	if !store.ExportToHost {
-		t.Error("ExportToHost should be true")
-	}
-	if store.ExportFormat != wasm.StoreExportFormatProtobufValue {
-		t.Errorf("ExportFormat = %q, want %q", store.ExportFormat, wasm.StoreExportFormatProtobufValue)
-	}
-	if len(store.SourcePolicyLocators) != 1 || store.SourcePolicyLocators[0] != "TestPolicy/default/my-policy" {
-		t.Errorf("SourcePolicyLocators = %v, want [%q]", store.SourcePolicyLocators, "TestPolicy/default/my-policy")
+	for _, format := range []wasm.StoreExportFormat{wasm.StoreExportFormatJSON, wasm.StoreExportFormatProtobufValue} {
+		t.Run(string(format), func(t *testing.T) {
+			entry := storeEntry("my_key", "request.path", true, "true", extpb.Phase_PHASE_REQUEST)
+			entry.Entry.Action.(*extpb.ActionEntry_Store).Store.ExportFormat = string(format)
+			action, err := entryToAction(entry, []string{"TestPolicy/default/my-policy"})
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			store, ok := action.(*wasm.StoreAction)
+			if !ok {
+				t.Fatalf("Expected *wasm.StoreAction, got %T", action)
+			}
+			if store.Path != "my_key" {
+				t.Errorf("Path = %q, want %q", store.Path, "my_key")
+			}
+			if store.Value != "request.path" {
+				t.Errorf("Value = %q, want %q", store.Value, "request.path")
+			}
+			if !store.ExportToHost {
+				t.Error("ExportToHost should be true")
+			}
+			if store.ExportFormat != format {
+				t.Errorf("ExportFormat = %q, want %q", store.ExportFormat, format)
+			}
+			if len(store.SourcePolicyLocators) != 1 || store.SourcePolicyLocators[0] != "TestPolicy/default/my-policy" {
+				t.Errorf("SourcePolicyLocators = %v, want [%q]", store.SourcePolicyLocators, "TestPolicy/default/my-policy")
+			}
+		})
 	}
 }
 
@@ -2571,6 +2575,7 @@ func TestMergePipelineActionsPreservesExplicitPreludeOrdering(t *testing.T) {
 	prelude2 := wasm.NewStoreAction("true", "audit.request_metadata", "{}").WithExportToHost(true)
 	actor1 := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
 	actor2 := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
+	event := wasm.NewStoreAction("true", wasm.OCSFEventStorePath, "{}").WithExportToHost(true).WithExportFormat(wasm.StoreExportFormatJSON)
 	ordinaryOCSFPath := wasm.NewStoreAction("true", "ocsf.custom", "ordinary").WithExportToHost(true)
 	ordinary := wasm.NewStoreAction("true", "ordinary", "value")
 	authMetadata := wasm.NewStoreAction("true", wasm.AuthStorePath, "auth_response.dynamic_metadata").WithExportToHost(true)
@@ -2582,7 +2587,7 @@ func TestMergePipelineActionsPreservesExplicitPreludeOrdering(t *testing.T) {
 	existing := []wasm.Action{ordinary, auth, barrier, guard}
 	prelude := []wasm.Action{prelude1, prelude2}
 	request := []wasm.Action{ordinaryOCSFPath}
-	response := []wasm.Action{actor1, responseHeaders, actor2}
+	response := []wasm.Action{actor1, event, responseHeaders, actor2}
 	merged := mergePipelineActions(existing, prelude, request, response)
 
 	want := []wasm.Action{prelude1, prelude2, ordinary, auth, barrier, guard, ordinaryOCSFPath}
@@ -2594,11 +2599,11 @@ func TestMergePipelineActionsPreservesExplicitPreludeOrdering(t *testing.T) {
 			t.Errorf("action[%d] = %#v, want %#v", i, merged[i], want[i])
 		}
 	}
-	if len(auth.OnReply) != 4 || auth.OnReply[0] != authMetadata || auth.OnReply[1] != actor1 || auth.OnReply[2] != responseHeaders || auth.OnReply[3] != actor2 {
-		t.Fatalf("AuthService reply actions = %#v, want metadata followed by response-phase actions in policy order", auth.OnReply)
+	if len(auth.OnReply) != 5 || auth.OnReply[0] != authMetadata || auth.OnReply[1] != actor1 || auth.OnReply[2] != responseHeaders || auth.OnReply[3] != actor2 || auth.OnReply[4] != event {
+		t.Fatalf("AuthService reply actions = %#v, want metadata, non-access-log response actions, then JSON access-log stores", auth.OnReply)
 	}
 	for _, action := range merged {
-		if action == actor1 || action == actor2 || action == responseHeaders {
+		if action == actor1 || action == actor2 || action == responseHeaders || action == event {
 			t.Fatal("response-phase actions must run in AuthService OnReply, not as independent root actions")
 		}
 	}

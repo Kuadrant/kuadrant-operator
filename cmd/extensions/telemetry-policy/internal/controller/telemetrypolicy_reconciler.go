@@ -15,6 +15,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
+	versioninfo "github.com/kuadrant/kuadrant-operator/internal/version"
 	wasmtypes "github.com/kuadrant/kuadrant-operator/internal/wasm"
 	extcontroller "github.com/kuadrant/kuadrant-operator/pkg/extension/controller"
 	"github.com/kuadrant/kuadrant-operator/pkg/extension/types"
@@ -26,7 +27,7 @@ const (
 	ocsfResourcesStorePath = wasmtypes.OCSFResourcesStorePath
 	ocsfAIModelStorePath   = wasmtypes.OCSFAIModelStorePath
 	ocsfURLPathStorePath   = wasmtypes.OCSFURLPathStorePath
-	ocsfActorUserStorePath = wasmtypes.OCSFActorUserStorePath
+	ocsfEventStorePath     = wasmtypes.OCSFEventStorePath
 )
 
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=telemetrypolicies,verbs=get;list;watch;update;patch
@@ -196,38 +197,73 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) (requestActions, respo
 		`(%s) ? {"name": %s, "ai_provider": %s} : {"ai_provider": %s}`,
 		namePredicate, nameExpression, provider, provider,
 	)
-	requestPathValue := `has(request.url_path) ? request.url_path : ""`
+	requestPathValue := `request.url_path`
 	requestActions = []types.Action{
 		types.StoreAction{
-			Path:         ocsfResourcesStorePath,
-			Value:        resourceValue,
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
+			Path:  ocsfResourcesStorePath,
+			Value: resourceValue,
 		},
 		types.StoreAction{
-			Path:         ocsfAIModelStorePath,
-			Value:        aiModelValue,
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
+			Path:  ocsfAIModelStorePath,
+			Value: aiModelValue,
 		},
 		types.StoreAction{
-			Path:         ocsfURLPathStorePath,
-			Value:        requestPathValue,
-			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
+			Path:  ocsfURLPathStorePath,
+			Value: requestPathValue,
 		},
 	}
 
 	responseActions = []types.Action{
 		types.StoreAction{
-			Predicate:    ocsfSelectorPresentPredicate(config.Actor.Identity),
-			Path:         ocsfActorUserStorePath,
-			Value:        ocsfActorUserValue(config.Actor),
+			Path:         ocsfEventStorePath,
+			Value:        ocsfEventValue(config),
 			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatProtobufValue,
+			ExportFormat: types.StoreExportFormatJSON,
 		},
 	}
 	return requestActions, responseActions
+}
+
+func ocsfEventValue(config *v1alpha1.OCSFLoggingConfig) string {
+	// Keep these conversions aligned with the wasm-shim CEL host contract.
+	requestStartMillis := `(isPresent(request.time) ? timestampToEpochMillis(request.time) : 0)`
+	requestDurationMillis := `(isPresent(request.duration) ? durationToMillis(request.duration) : 0)`
+	requestEndMillis := `(` + requestStartMillis + ` + ` + requestDurationMillis + `)`
+	requestMethod := `(isPresent(request.method) ? request.method : "")`
+	httpVersion := `(isPresent(request.protocol) ? (request.protocol == "HTTP/1.0" ? "1.0" : request.protocol == "HTTP/1.1" ? "1.1" : request.protocol == "HTTP/2" ? "2.0" : request.protocol == "HTTP/3" ? "3.0" : request.protocol) : "")`
+	requestPath := fmt.Sprintf(`(isPresent(%s) ? %s : "")`, ocsfURLPathStorePath, ocsfURLPathStorePath)
+	responseCode := `(isPresent(response.code) ? response.code : 0)`
+	responseSize := `(isPresent(response.size) ? response.size : 0)`
+	statusSuccess := `(isPresent(response.code) && response.code < 400)`
+	actorUser := ocsfActorUserValueOrUnknown(config.Actor)
+
+	fields := []string{
+		`"activity_id": 99`,
+		`"activity_name": "Inference"`,
+		`"category_uid": 6`,
+		`"category_name": "Application Activity"`,
+		`"class_uid": 6003`,
+		`"class_name": "API Activity"`,
+		`"type_uid": 600399`,
+		`"severity_id": 1`,
+		`"severity": "Informational"`,
+		fmt.Sprintf(`"time": %s`, requestStartMillis),
+		fmt.Sprintf(`"metadata": {"version": "1.9.0", "profiles": ["ai_operation"], "product": {"name": "kuadrant-gateway", "version": %s}, "logged_time": %s}`, strconv.Quote(versioninfo.String()), requestEndMillis),
+		fmt.Sprintf(`"actor": {"user": %s}`, actorUser),
+		fmt.Sprintf(`"api": {"operation": %s + " " + %s}`, requestMethod, requestPath),
+		fmt.Sprintf(`"http_request": {"http_method": %s, "version": %s, "url": {"path": %s}}`, requestMethod, httpVersion, requestPath),
+		fmt.Sprintf(`"http_response": {"code": %s, "body_length": %s, "latency": %s}`, responseCode, responseSize, requestDurationMillis),
+		fmt.Sprintf(`"status_id": %s ? 1 : 2`, statusSuccess),
+		fmt.Sprintf(`"status": %s ? "Success" : "Failure"`, statusSuccess),
+		fmt.Sprintf(`"status_code": intToString(%s)`, responseCode),
+		fmt.Sprintf(`"resources": isPresent(%s) ? %s : []`, ocsfResourcesStorePath, ocsfResourcesStorePath),
+		fmt.Sprintf(`"ai_model": isPresent(%s) ? %s : {}`, ocsfAIModelStorePath, ocsfAIModelStorePath),
+	}
+	return "{" + strings.Join(fields, ", ") + "}"
+}
+
+func ocsfActorUserValueOrUnknown(actor v1alpha1.OCSFActorConfig) string {
+	return fmt.Sprintf("(%s) ? (%s) : {\"type_id\": 0}", ocsfSelectorPresentPredicate(actor.Identity), ocsfActorUserValue(actor))
 }
 
 func ocsfActorUserValue(actor v1alpha1.OCSFActorConfig) string {
@@ -274,9 +310,10 @@ func pathSegmentExpression(segment int32) (expression, predicate string) {
 func ocsfSelectorPresentPredicate(selector string) string {
 	parts := strings.Split(selector, ".")
 	predicates := make([]string, 0, len(parts))
-	for i := 2; i <= len(parts); i++ {
+	for i := 2; i < len(parts); i++ {
 		predicates = append(predicates, fmt.Sprintf("has(%s)", strings.Join(parts[:i], ".")))
 	}
+	predicates = append(predicates, fmt.Sprintf("has(%s) && isPresent(%s)", selector, selector))
 	return strings.Join(predicates, " && ")
 }
 

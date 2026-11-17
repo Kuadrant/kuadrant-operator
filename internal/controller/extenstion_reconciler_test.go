@@ -5,6 +5,7 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -183,9 +184,9 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 		config := wasm.Config{ActionSets: []wasm.ActionSet{{
 			Name: "ocsf",
 			Actions: []wasm.Action{&wasm.StoreAction{
-				Path:         wasm.OCSFResourcesStorePath,
+				Path:         wasm.OCSFEventStorePath,
 				ExportToHost: true,
-				ExportFormat: wasm.StoreExportFormatProtobufValue,
+				ExportFormat: wasm.StoreExportFormatJSON,
 			}},
 		}}}
 
@@ -222,22 +223,10 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 		Name: "ocsf",
 		Actions: []wasm.Action{
 			&wasm.StoreAction{
-				Path:         wasm.OCSFResourcesStorePath,
-				Value:        `[{"name": "model", "namespace": "tenant", "type": "model", "role_id": 1, "role": "Target"}]`,
+				Path:         wasm.OCSFEventStorePath,
+				Value:        `{"api": {"operation": "GET /tenant/model/get"}}`,
 				ExportToHost: true,
-				ExportFormat: wasm.StoreExportFormatProtobufValue,
-			},
-			&wasm.StoreAction{
-				Path:         wasm.OCSFAIModelStorePath,
-				Value:        `{"name": "model", "ai_provider": "test-provider"}`,
-				ExportToHost: true,
-				ExportFormat: wasm.StoreExportFormatProtobufValue,
-			},
-			&wasm.StoreAction{
-				Path:         wasm.OCSFURLPathStorePath,
-				Value:        `"/tenant/model/get"`,
-				ExportToHost: true,
-				ExportFormat: wasm.StoreExportFormatProtobufValue,
+				ExportFormat: wasm.StoreExportFormatJSON,
 			},
 		},
 	}}}
@@ -298,64 +287,12 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 	}
 	logger := mapField(loggerObject, "typed_config")
 	logFormat := mapField(logger, "log_format")
-	event := mapField(logFormat, "json_format")
-
-	if event["class_uid"] != float64(6003) || event["type_uid"] != float64(600399) {
-		t.Fatalf("expected OCSF API Activity class/type IDs, got class_uid=%v type_uid=%v", event["class_uid"], event["type_uid"])
+	textFormat := mapField(logFormat, "text_format_source")
+	if textFormat["inline_string"] != "%FILTER_STATE(wasm.kuadrant.ocsf.event:PLAIN)%\n" {
+		t.Fatalf("expected raw OCSF JSON filter-state log line, got %v", textFormat["inline_string"])
 	}
-	if event["class_name"] != "API Activity" || event["activity_name"] != "Inference" {
-		t.Fatalf("unexpected OCSF event class/activity: class_name=%v activity_name=%v", event["class_name"], event["activity_name"])
-	}
-
-	metadata := mapField(event, "metadata")
-	if metadata["version"] != "1.9.0" {
-		t.Fatalf("expected OCSF version 1.9.0, got %v", metadata["version"])
-	}
-	profiles := sliceField(metadata, "profiles")
-	if len(profiles) != 1 || profiles[0] != "ai_operation" {
-		t.Fatalf("expected ai_operation profile, got %v", profiles)
-	}
-
-	actor, ok := mapField(event, "actor")["user"].(string)
-	if !ok {
-		t.Fatalf("expected OCSF actor.user typed projection, got %T", mapField(event, "actor")["user"])
-	}
-	wantActor := `%TYPED_CEL("wasm.kuadrant.ocsf.actor.user" in filter_state ? filter_state["wasm.kuadrant.ocsf.actor.user"] : {"type_id": 0})%`
-	if actor != wantActor {
-		t.Fatalf("expected typed OCSF actor.user projection, got %v", actor)
-	}
-	api := mapField(event, "api")
-	if api["operation"] != `%REQ(:METHOD)% %TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : "")%` {
-		t.Fatalf("expected method and query-safe path in api.operation, got %v", api["operation"])
-	}
-	httpRequest := mapField(event, "http_request")
-	if httpRequest["http_method"] != "%REQ(:METHOD)%" {
-		t.Fatalf("expected http_request.http_method, got %v", httpRequest["http_method"])
-	}
-	if _, ok := httpRequest["headers"]; ok {
-		t.Fatal("OCSF event must not include arbitrary request headers")
-	}
-	if _, ok := httpRequest["body"]; ok {
-		t.Fatal("OCSF event must not include request body")
-	}
-	if _, ok := event["authorization"]; ok {
-		t.Fatal("OCSF event must not include authorization credentials")
-	}
-	if url := mapField(httpRequest, "url"); url["path"] != `%TYPED_CEL("wasm.kuadrant.ocsf.http_request.url.path" in filter_state ? filter_state["wasm.kuadrant.ocsf.http_request.url.path"] : "")%` {
-		t.Fatalf("expected query-safe URL path, got %v", url["path"])
-	}
-
-	httpResponse := mapField(event, "http_response")
-	for _, field := range []string{"code", "body_length", "latency"} {
-		if _, ok := httpResponse[field]; !ok {
-			t.Errorf("expected OCSF http_response.%s field", field)
-		}
-	}
-	if event["resources"] != `%TYPED_CEL("wasm.kuadrant.ocsf.resources" in filter_state ? filter_state["wasm.kuadrant.ocsf.resources"] : [])%` {
-		t.Fatalf("expected projected OCSF resources, got %v", event["resources"])
-	}
-	if event["ai_model"] != `%TYPED_CEL("wasm.kuadrant.ocsf.ai_model" in filter_state ? filter_state["wasm.kuadrant.ocsf.ai_model"] : {})%` {
-		t.Fatalf("expected projected OCSF AI model, got %v", event["ai_model"])
+	if strings.Contains(string(raw), "TYPED_CEL") || strings.Contains(string(raw), "json_format") || strings.Contains(string(raw), "envoy.formatter.cel") {
+		t.Fatalf("OCSF access log patch must not use typed CEL or json_format: %s", raw)
 	}
 }
 

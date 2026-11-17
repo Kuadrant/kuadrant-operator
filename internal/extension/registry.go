@@ -1347,11 +1347,28 @@ func mergePipelineActions(existing, prelude, request, response []wasm.Action) []
 	}
 
 	if authReply == nil {
-		return append(merged, response...)
+		return append(merged, accessLogStoresLast(response)...)
 	}
 
-	authReply.OnReply = append(append([]wasm.Action(nil), authReply.OnReply...), response...)
+	authReply.OnReply = append(append([]wasm.Action(nil), authReply.OnReply...), accessLogStoresLast(response)...)
 	return merged
+}
+
+func accessLogStoresLast(actions []wasm.Action) []wasm.Action {
+	if len(actions) == 0 {
+		return actions
+	}
+	ordered := make([]wasm.Action, 0, len(actions))
+	var accessLogStores []wasm.Action
+	for _, action := range actions {
+		store, ok := action.(*wasm.StoreAction)
+		if ok && store.ExportToHost && store.ExportFormat == wasm.StoreExportFormatJSON {
+			accessLogStores = append(accessLogStores, action)
+			continue
+		}
+		ordered = append(ordered, action)
+	}
+	return append(ordered, accessLogStores...)
 }
 
 func predicateOrTrue(predicate string) string {
@@ -1548,7 +1565,7 @@ func entryToAction(entry PipelineActionEntry, sources []string) (wasm.Action, er
 	case *extpb.ActionEntry_Store:
 		exportFormat := wasm.StoreExportFormat(a.Store.ExportFormat)
 		switch exportFormat {
-		case "", wasm.StoreExportFormatProtobufValue:
+		case "", wasm.StoreExportFormatJSON, wasm.StoreExportFormatProtobufValue:
 		default:
 			return nil, fmt.Errorf("actions[%d]: store has unsupported export format %q", entry.Index, exportFormat)
 		}

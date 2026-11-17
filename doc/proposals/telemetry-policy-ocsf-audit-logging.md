@@ -117,24 +117,27 @@ request and response bodies, and tokens are never part of the preset.
 The first implementation target is Istio because the RHOAI LLMInferenceService gateway uses Istio.
 The operator appends an access logger to the existing Gateway-scoped EnvoyFilter and selects the
 gateway workload with `gateway.networking.k8s.io/gateway-name`. A CEL access-log filter requires the
-dedicated `wasm.kuadrant.ocsf.resource.type` marker, so requests for routes without an attached OCSF
+dedicated `wasm.kuadrant.ocsf.event` marker, so requests for routes without an attached OCSF
 TelemetryPolicy do not produce this event.
 
-Envoy's JSON access-log formatter uses `%TYPED_CEL(...)%` expressions over the dedicated
-`wasm.kuadrant.ocsf.*` filter-state keys. CEL emits JSON-native values instead of serializing the
-filter-state protobuf wrappers. It also supplies typed conditionals for OCSF status fields and derives
-epoch milliseconds from the request timestamp. Request method, path, protocol, response code, byte
-count, latency, and connection endpoints come from Envoy access-log operators rather than from
-user-provided expressions. The query-free URL path is projected from
-`request.url_path` by the TelemetryPolicy into filter state, because the deployed Envoy access-log
-formatter does not support `REQ_WITHOUT_QUERY`.
+The wasm shim builds the complete OCSF event during the access-log phase and exports it as UTF-8 JSON
+in `wasm.kuadrant.ocsf.event`. Envoy emits that value as one raw stdout access-log line with
+`%FILTER_STATE(...:PLAIN)%`, avoiding typed CEL formatter compatibility issues and protobuf wrapper
+artifacts. The query-free URL path is projected from `request.url_path` by the TelemetryPolicy before
+terminal actions can return early.
+
+The event expression depends on the shim exposing `request.time` as a CEL Timestamp, `request.duration`
+as a CEL Duration, and `response.code` and `response.size` as CEL integers. It uses the shim functions
+`timestampToEpochMillis(Timestamp)`, `durationToMillis(Duration)`, and `intToString(Int)` to build
+numeric OCSF timestamps and latency and the string `status_code`. It uses `isPresent(value)` to guard
+nullable properties; CEL `has(field)` only checks whether a map key exists. The shim release must
+implement this contract before the operator emits the event.
 
 The access logger must:
 
-1. run after the Kuadrant wasm filter has exported `wasm.kuadrant.auth`;
+1. run after the Kuadrant wasm filter has exported the complete `wasm.kuadrant.ocsf.event` value;
 2. use structured JSON output, with typed values instead of stringified numbers;
-3. render separate success and failure variants when Envoy substitution format cannot express the
-   status conditional;
+3. preserve success and failure status values without relying on Envoy typed CEL formatters;
 4. emit the OCSF unknown-user representation when authentication did not produce an identity;
 5. preserve any access logger configured by the platform instead of replacing it; and
 6. emit exactly one OCSF event per selected request.

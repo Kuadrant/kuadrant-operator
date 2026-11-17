@@ -46,7 +46,7 @@ const (
 	ocsfHTTPBinImage        = "quay.io/kuadrant/httpbin@sha256:2865a9ac6596340135fc3cd82cbc543c4050124afb10361e36f727abe4f71900"
 	grpcbinTestImage        = "quay.io/kuadrant/grpcbin@sha256:bd8f2ffdd02d0849fad2d1c754eff4402c867e7a3e0552b8992f4590f5687d20"
 	ocsfAccessLoggerName    = "envoy.access_loggers.stdout"
-	ocsfResourcesKey        = wasm.OCSFResourcesFilterStateKey
+	ocsfEventKey            = wasm.OCSFEventFilterStateKey
 	ocsfMarkerDiagnosticKey = "ocsf_marker_diagnostic"
 )
 
@@ -154,6 +154,19 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			return ocsfAuthPolicyEnforcementStatus(ctx, testClient(), client.ObjectKeyFromObject(authPolicy))
 		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
 
+		By("waiting for Authorino's authorization gRPC endpoint")
+		Eventually(func(g Gomega) {
+			endpoints := &corev1.Endpoints{}
+			key := client.ObjectKey{Namespace: testNamespace, Name: "authorino-authorino-authorization"}
+			g.Expect(testClient().Get(ctx, key, endpoints)).To(Succeed())
+
+			readyAddresses := 0
+			for _, subset := range endpoints.Subsets {
+				readyAddresses += len(subset.Addresses)
+			}
+			g.Expect(readyAddresses).To(BeNumerically(">", 0), "Authorino authorization service has no ready endpoints")
+		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).WithPolling(time.Second).Should(Succeed())
+
 		By("attaching an OCSF aiOperation TelemetryPolicy to the Gateway")
 		policy := ocsfTelemetryPolicy(testNamespace, gateway.Name)
 		Expect(testClient().Create(ctx, policy)).To(Succeed())
@@ -173,7 +186,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(found).To(BeTrue())
 			hasAccessLogPatch := false
-			hasExportedOCSFResourceTypeAction := false
+			hasExportedOCSFEventAction := false
 			for _, configPatch := range configPatches {
 				configPatchMap, ok := configPatch.(map[string]any)
 				if !ok {
@@ -192,13 +205,13 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 					hasAccessLogPatch = true
 				}
 				pluginConfigJSON, found, err := unstructured.NestedString(typedConfig, "value", "config", "configuration", "value")
-				if err == nil && found && hasExportedOCSFResourcesStoreAction(pluginConfigJSON) {
-					hasExportedOCSFResourceTypeAction = true
+				if err == nil && found && hasExportedOCSFEventStoreAction(pluginConfigJSON) {
+					hasExportedOCSFEventAction = true
 				}
 			}
 			g.Expect(hasAccessLogPatch).To(BeTrue(), "EnvoyFilter %s does not yet contain an access-log patch", envoyFilterKey)
-			g.Expect(hasExportedOCSFResourceTypeAction).To(BeTrue(),
-				"EnvoyFilter %s does not yet contain an exported ocsf.ai_model WASM store action", envoyFilterKey)
+			g.Expect(hasExportedOCSFEventAction).To(BeTrue(),
+				"EnvoyFilter %s does not yet contain an exported ocsf.event WASM store action", envoyFilterKey)
 		}).WithContext(ctx).WithTimeout(ocsfE2EReadyTimeout).Should(Succeed())
 
 		By("port-forwarding to the Gateway's ready Envoy pod")
@@ -231,15 +244,15 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Eventually(func(g Gomega) {
 			configDump, err := ocsfEnvoyConfigDump(ctx, testNamespace, gatewayPod.Name)
 			activeConfigSummary = summarizeOCSFEnvoyConfigDump(configDump)
-			g.Expect(err).NotTo(HaveOccurred(), "Envoy config dump result: %s", activeConfigSummary)
+			g.Expect(err).NotTo(HaveOccurred(), "Envoy config dump result: %s; output: %s", activeConfigSummary, strings.TrimSpace(string(configDump)))
 			if err != nil {
 				return
 			}
 			g.Expect(bytes.Contains(configDump, []byte(ocsfAccessLoggerName))).To(BeTrue(),
 				"Envoy active config does not include the OCSF access logger: %s", activeConfigSummary)
-			g.Expect(bytes.Contains(configDump, []byte(ocsfResourcesKey))).To(BeTrue(),
-				"Envoy active config does not include the OCSF request metadata marker: %s", activeConfigSummary)
-			g.Expect(hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump)).To(BeTrue(),
+			g.Expect(bytes.Contains(configDump, []byte(ocsfEventKey))).To(BeTrue(),
+				"Envoy active config does not include the OCSF event marker: %s", activeConfigSummary)
+			g.Expect(hasExportedOCSFEventStoreActionInEnvoyConfigDump(configDump)).To(BeTrue(),
 				"Envoy active config does not include the exported OCSF WASM store action: %s", activeConfigSummary)
 			g.Expect(bytes.Contains(configDump, []byte(ocsfMarkerDiagnosticKey))).To(BeTrue(),
 				"Envoy active config does not include the test-only OCSF marker diagnostic logger: %s", activeConfigSummary)
@@ -300,7 +313,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			markerDiagnostic := findOCSFMarkerDiagnostic(accessLogs)
 			markerSummary := "not observed"
 			if markerDiagnostic != nil {
-				markerSummary = fmt.Sprintf("method=%v resources=%#v", markerDiagnostic["method"], markerDiagnostic["resources"])
+				markerSummary = fmt.Sprintf("method=%v", markerDiagnostic["method"])
 			}
 			g.Expect(event).NotTo(BeNil(),
 				"recent istio-proxy log summary:\n%s\nOCSF marker diagnostic: %s",
@@ -325,7 +338,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Expect(actor["type_id"]).To(Equal(float64(1)))
 		Expect(actor["uid"]).To(BeNil(), "an absent optional filter-state value must not break the event")
 		Expect(actor["groups"]).To(Equal([]any{map[string]any{"name": "ocsf-test-group"}}),
-			"the typed formatter must preserve nested list/map values exported by wasm-shim")
+			"the JSON export must preserve nested list/map values from wasm-shim")
 		api := ocsfEventObject(event, "api")
 		Expect(api["operation"]).To(Equal("GET /tenant/model/get"))
 		httpRequest := ocsfEventObject(event, "http_request")
@@ -333,6 +346,10 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Expect(ocsfEventObject(httpRequest, "url")["path"]).To(Equal("/tenant/model/get"))
 		httpResponse := ocsfEventObject(event, "http_response")
 		Expect(httpResponse["code"]).To(Equal(float64(http.StatusOK)))
+		Expect(httpResponse["body_length"]).To(BeAssignableToTypeOf(float64(0)))
+		Expect(httpResponse["body_length"]).To(BeNumerically(">", 0))
+		Expect(httpResponse["latency"]).To(BeAssignableToTypeOf(float64(0)))
+		Expect(httpResponse["latency"]).To(BeNumerically(">=", 0))
 		Expect(event["status"]).To(Equal("Success"))
 		Expect(event["status_code"]).To(Equal("200"))
 
@@ -357,6 +374,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			"the Authorization credential must not appear anywhere in the Gateway proxy logs")
 		for _, artifact := range []string{
 			"Gg5vY3NmLXRlc3QtdXNlcg==",
+			"@type",
 			"string_value",
 			"number_value",
 			"bool_value",
@@ -1045,7 +1063,7 @@ func ocsfTelemetryPolicy(namespace, gatewayName string) *unstructured.Unstructur
 	return policy
 }
 
-// ocsfMarkerDiagnosticEnvoyFilter logs only the request method and OCSF resources marker; it must not log paths, headers, or bodies.
+// ocsfMarkerDiagnosticEnvoyFilter logs only the request method when the OCSF event is present; it must not log paths, headers, or bodies.
 func ocsfMarkerDiagnosticEnvoyFilter(namespace string, workloadLabels map[string]string) *unstructured.Unstructured {
 	labels := make(map[string]any, len(workloadLabels))
 	for key, value := range workloadLabels {
@@ -1083,23 +1101,23 @@ func ocsfMarkerDiagnosticEnvoyFilter(namespace string, workloadLabels map[string
 								"access_log": []any{
 									map[string]any{
 										"name": ocsfAccessLoggerName,
+										"filter": map[string]any{
+											"extension_filter": map[string]any{
+												"name": "envoy.access_loggers.extension_filters.cel",
+												"typed_config": map[string]any{
+													"@type":      "type.googleapis.com/envoy.extensions.access_loggers.filters.cel.v3.ExpressionFilter",
+													"expression": fmt.Sprintf("%q in filter_state", ocsfEventKey),
+												},
+											},
+										},
 										"typed_config": map[string]any{
 											"@type": "type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog",
 											"log_format": map[string]any{
 												"json_format": map[string]any{
 													ocsfMarkerDiagnosticKey: true,
 													"method":                "%REQ(:METHOD)%",
-													"resources":             fmt.Sprintf("%%FILTER_STATE(%s:TYPED)%%", ocsfResourcesKey),
 												},
 												"omit_empty_values": false,
-												"formatters": []any{
-													map[string]any{
-														"name": "envoy.formatter.cel",
-														"typed_config": map[string]any{
-															"@type": "type.googleapis.com/envoy.extensions.formatter.cel.v3.Cel",
-														},
-													},
-												},
 											},
 										},
 									},
@@ -1293,36 +1311,46 @@ func ocsfEnvoyConfigDump(ctx context.Context, namespace, podName string) ([]byte
 }
 
 func summarizeOCSFEnvoyConfigDump(configDump []byte) string {
-	return fmt.Sprintf("config dump bytes=%d; OCSF access logger present=%t; OCSF resources marker present=%t; exported typed OCSF WASM store action present=%t",
-		len(configDump), bytes.Contains(configDump, []byte(ocsfAccessLoggerName)), bytes.Contains(configDump, []byte(ocsfResourcesKey)),
-		hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump))
+	return fmt.Sprintf("config dump bytes=%d; OCSF access logger present=%t; OCSF event marker present=%t; exported JSON OCSF WASM store action present=%t",
+		len(configDump), bytes.Contains(configDump, []byte(ocsfAccessLoggerName)), bytes.Contains(configDump, []byte(ocsfEventKey)),
+		hasExportedOCSFEventStoreActionInEnvoyConfigDump(configDump))
 }
 
-func hasExportedOCSFResourcesStoreAction(pluginConfigJSON string) bool {
-	var pluginConfig struct {
-		ActionSets []struct {
-			Actions []struct {
-				Type         string `json:"type"`
-				Path         string `json:"path"`
-				ExportToHost bool   `json:"exportToHost"`
-				ExportFormat string `json:"exportFormat"`
-			} `json:"actions"`
-		} `json:"actionSets"`
-	}
+func hasExportedOCSFEventStoreAction(pluginConfigJSON string) bool {
+	var pluginConfig map[string]any
 	if err := json.Unmarshal([]byte(pluginConfigJSON), &pluginConfig); err != nil {
 		return false
 	}
-	for _, actionSet := range pluginConfig.ActionSets {
-		for _, action := range actionSet.Actions {
-			if action.Type == "store" && action.Path == wasm.OCSFResourcesStorePath && action.ExportToHost && action.ExportFormat == string(wasm.StoreExportFormatProtobufValue) {
+
+	var containsAction func(any) bool
+	containsAction = func(value any) bool {
+		switch node := value.(type) {
+		case map[string]any:
+			path, _ := node["path"].(string)
+			exportToHost, _ := node["exportToHost"].(bool)
+			exportFormat, _ := node["exportFormat"].(string)
+			if path == wasm.OCSFEventStorePath && exportToHost && exportFormat == string(wasm.StoreExportFormatJSON) {
 				return true
 			}
+			for _, child := range node {
+				if containsAction(child) {
+					return true
+				}
+			}
+		case []any:
+			for _, child := range node {
+				if containsAction(child) {
+					return true
+				}
+			}
 		}
+		return false
 	}
-	return false
+
+	return containsAction(pluginConfig)
 }
 
-func hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump []byte) bool {
+func hasExportedOCSFEventStoreActionInEnvoyConfigDump(configDump []byte) bool {
 	var envoyConfig any
 	if err := json.Unmarshal(configDump, &envoyConfig); err != nil {
 		return false
@@ -1336,7 +1364,7 @@ func hasExportedOCSFResourcesStoreActionInEnvoyConfigDump(configDump []byte) boo
 				configuration, ok := typed["configuration"].(map[string]any)
 				if ok {
 					pluginConfigJSON, ok := configuration["value"].(string)
-					if ok && hasExportedOCSFResourcesStoreAction(pluginConfigJSON) {
+					if ok && hasExportedOCSFEventStoreAction(pluginConfigJSON) {
 						return true
 					}
 				}

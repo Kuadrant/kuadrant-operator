@@ -41,30 +41,32 @@ func TestConfigToStruct(t *testing.T) {
 }
 
 func TestStoreActionExportFormatJSONRoundTrip(t *testing.T) {
-	store := &StoreAction{
-		ActionBase:   ActionBase{Predicate: "true"},
-		Path:         "custom.audit.value",
-		Value:        "'value'",
-		ExportToHost: true,
-		ExportFormat: StoreExportFormatProtobufValue,
-	}
-	encoded, err := json.Marshal(store)
-	if err != nil {
-		t.Fatalf("marshal store action: %v", err)
-	}
-	var wire map[string]any
-	if err := json.Unmarshal(encoded, &wire); err != nil {
-		t.Fatalf("unmarshal store action JSON: %v", err)
-	}
-	if got := wire["exportFormat"]; got != string(StoreExportFormatProtobufValue) {
-		t.Fatalf("exportFormat = %v, want %q", got, StoreExportFormatProtobufValue)
-	}
-	decoded, err := UnmarshalAction(encoded)
-	if err != nil {
-		t.Fatalf("unmarshal store action: %v", err)
-	}
-	if !store.EqualTo(decoded) {
-		t.Fatalf("store action did not round-trip: got %#v", decoded)
+	for _, format := range []StoreExportFormat{StoreExportFormatJSON, StoreExportFormatProtobufValue} {
+		store := &StoreAction{
+			ActionBase:   ActionBase{Predicate: "true"},
+			Path:         "custom.audit.value",
+			Value:        "'value'",
+			ExportToHost: true,
+			ExportFormat: format,
+		}
+		encoded, err := json.Marshal(store)
+		if err != nil {
+			t.Fatalf("marshal store action: %v", err)
+		}
+		var wire map[string]any
+		if err := json.Unmarshal(encoded, &wire); err != nil {
+			t.Fatalf("unmarshal store action JSON: %v", err)
+		}
+		if got := wire["exportFormat"]; got != string(format) {
+			t.Fatalf("exportFormat = %v, want %q", got, format)
+		}
+		decoded, err := UnmarshalAction(encoded)
+		if err != nil {
+			t.Fatalf("unmarshal store action: %v", err)
+		}
+		if !store.EqualTo(decoded) {
+			t.Fatalf("store action did not round-trip: got %#v", decoded)
+		}
 	}
 
 	legacy, err := json.Marshal(&StoreAction{Path: "auth.identity.user"})
@@ -93,10 +95,13 @@ func TestConfigHasOCSFAuditLogging(t *testing.T) {
 		action Action
 		want   bool
 	}{
-		{name: "exported typed OCSF resources", action: &StoreAction{Path: OCSFResourcesStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}, want: true},
-		{name: "exported legacy OCSF resources", action: &StoreAction{Path: OCSFResourcesStorePath, ExportToHost: true}},
-		{name: "exported OCSF actor without request metadata", action: &StoreAction{Path: OCSFActorUserStorePath, ExportToHost: true}},
-		{name: "OCSF resources not exported", action: &StoreAction{Path: OCSFResourcesStorePath}},
+		{name: "exported JSON OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatJSON}, want: true},
+		{name: "exported JSON OCSF event in gRPC onReply", action: &GrpcAction{OnReply: []Action{&StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatJSON}}}, want: true},
+		{name: "exported protobuf OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}},
+		{name: "exported legacy OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true}},
+		{name: "exported typed OCSF resources", action: &StoreAction{Path: OCSFResourcesStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}},
+		{name: "exported OCSF actor without final event", action: &StoreAction{Path: OCSFActorUserStorePath, ExportToHost: true}},
+		{name: "OCSF event not exported", action: &StoreAction{Path: OCSFEventStorePath}},
 		{name: "arbitrary OCSF-prefixed path", action: &StoreAction{Path: "ocsf.custom", ExportToHost: true}},
 		{name: "unrelated exported value", action: &StoreAction{Path: "auth", ExportToHost: true}},
 		{name: "non-store action", action: &FailAction{LogMessage: "failed"}},

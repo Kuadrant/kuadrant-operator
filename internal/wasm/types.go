@@ -23,23 +23,41 @@ const (
 	OCSFAIModelStorePath   = "ocsf.ai_model"
 	OCSFURLPathStorePath   = "ocsf.http_request.url.path"
 	OCSFActorUserStorePath = "ocsf.actor.user"
+	OCSFEventStorePath     = "ocsf.event"
 
 	OCSFFilterStatePrefix       = "wasm.kuadrant.ocsf."
 	OCSFResourcesFilterStateKey = OCSFFilterStatePrefix + "resources"
 	OCSFAIModelFilterStateKey   = OCSFFilterStatePrefix + "ai_model"
 	OCSFURLPathFilterStateKey   = OCSFFilterStatePrefix + "http_request.url.path"
 	OCSFActorUserFilterStateKey = OCSFFilterStatePrefix + "actor.user"
+	OCSFEventFilterStateKey     = OCSFFilterStatePrefix + "event"
 )
 
-// HasOCSFAuditLogging reports whether an action set exports the dedicated filter-state values
-// consumed by the gateway OCSF access logger.
+// HasOCSFAuditLogging reports whether an action set exports the complete JSON
+// OCSF event consumed by the gateway OCSF access logger.
 func (c *Config) HasOCSFAuditLogging() bool {
 	for _, actionSet := range c.ActionSets {
 		for _, action := range actionSet.Actions {
-			store, ok := action.(*StoreAction)
-			if ok && store.ExportToHost && store.Path == OCSFResourcesStorePath && store.ExportFormat == StoreExportFormatProtobufValue {
+			if actionExportsOCSFEvent(action) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func actionExportsOCSFEvent(action Action) bool {
+	store, ok := action.(*StoreAction)
+	if ok && store.ExportToHost && store.Path == OCSFEventStorePath && store.ExportFormat == StoreExportFormatJSON {
+		return true
+	}
+	grpc, ok := action.(*GrpcAction)
+	if !ok {
+		return false
+	}
+	for _, replyAction := range grpc.OnReply {
+		if actionExportsOCSFEvent(replyAction) {
+			return true
 		}
 	}
 	return false
@@ -461,7 +479,10 @@ func (a *HeadersAction) EqualTo(other Action) bool {
 
 type StoreExportFormat string
 
-const StoreExportFormatProtobufValue StoreExportFormat = "protobufValue"
+const (
+	StoreExportFormatJSON          StoreExportFormat = "json"
+	StoreExportFormatProtobufValue StoreExportFormat = "protobufValue"
+)
 
 type StoreAction struct {
 	ActionBase

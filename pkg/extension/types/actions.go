@@ -135,7 +135,10 @@ func (a AddHeadersAction) PopulateProtobuf(entry *extpb.ActionEntry) {
 
 type StoreExportFormat string
 
-const StoreExportFormatProtobufValue StoreExportFormat = "protobufValue"
+const (
+	StoreExportFormatJSON          StoreExportFormat = "json"
+	StoreExportFormatProtobufValue StoreExportFormat = "protobufValue"
+)
 
 type StoreAction struct {
 	Predicate    string // CEL — if true, store the value

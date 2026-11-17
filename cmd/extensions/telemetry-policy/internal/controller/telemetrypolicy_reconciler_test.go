@@ -340,8 +340,8 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 		if !ok {
 			t.Fatalf("request prelude action %d has type %T, want types.StoreAction", index, mock.pipeline.preludeActions[index])
 		}
-		if metadata.Path != path || !metadata.ExportToHost || metadata.ExportFormat != types.StoreExportFormatProtobufValue {
-			t.Fatalf("request metadata store action = %#v, want typed host export at %q", metadata, path)
+		if metadata.Path != path || metadata.ExportToHost || metadata.ExportFormat != "" {
+			t.Fatalf("request metadata store action = %#v, want internal prelude store at %q", metadata, path)
 		}
 		var required []string
 		switch path {
@@ -350,7 +350,7 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 		case wasmtypes.OCSFAIModelStorePath:
 			required = []string{"ai_provider", "KServe"}
 		case wasmtypes.OCSFURLPathStorePath:
-			required = []string{"request.url_path", "has(request.url_path) ? request.url_path"}
+			required = []string{"request.url_path"}
 		}
 		for _, want := range required {
 			if !strings.Contains(metadata.Value, want) {
@@ -366,14 +366,34 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 		}
 	}
 
-	actor, ok := mock.pipeline.responseActions[0].(types.StoreAction)
+	event, ok := mock.pipeline.responseActions[0].(types.StoreAction)
 	if !ok {
 		t.Fatalf("response action type = %T, want types.StoreAction", mock.pipeline.responseActions[0])
 	}
-	if actor.Path != ocsfActorUserStorePath || actor.Predicate != ocsfSelectorPresentPredicate("auth.identity.user.username") ||
-		actor.Value != ocsfActorUserValue(pol.Spec.Logging.Default.OCSF.Actor) || !actor.ExportToHost ||
-		actor.ExportFormat != types.StoreExportFormatProtobufValue {
-		t.Fatalf("response actor action = %#v, want configured typed actor projection", actor)
+	if event.Path != wasmtypes.OCSFEventStorePath || event.Predicate != "" || !event.ExportToHost ||
+		event.ExportFormat != types.StoreExportFormatJSON {
+		t.Fatalf("response event action = %#v, want configured JSON event export", event)
+	}
+	for _, want := range []string{
+		`"class_uid": 6003`,
+		`"type_uid": 600399`,
+		`"version": "1.9.0"`,
+		`request.method : "") + " "`,
+		`ocsf.http_request.url.path`,
+		`auth.identity.user.username`,
+		`{"type_id": 0}`,
+		`response.code`,
+		`response.size`,
+		`request.duration`,
+		`ocsf.resources`,
+		`ocsf.ai_model`,
+	} {
+		if !strings.Contains(event.Value, want) {
+			t.Errorf("OCSF event value does not contain %q: %s", want, event.Value)
+		}
+	}
+	if strings.Contains(event.Value, "request.headers") || strings.Contains(event.Value, "Authorization") || strings.Contains(event.Value, "request.query") {
+		t.Errorf("OCSF event value must not export headers, credentials, or query data: %q", event.Value)
 	}
 
 	if len(mock.resolveCalls) != 1 {
@@ -484,8 +504,8 @@ func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testi
 	expression := ocsfActorUserValue(actor)
 	for _, expected := range []string{
 		"has(auth.identity.user)",
-		"has(auth.identity.user.uid)",
-		"has(auth.identity.user.groups)",
+		"has(auth.identity.user.uid) && isPresent(auth.identity.user.uid)",
+		"has(auth.identity.user.groups) && isPresent(auth.identity.user.groups)",
 		`auth.identity.user.groups.map(group, {"name": group})`,
 		`"type_id": auth.identity.user.username.startsWith("system:serviceaccount:") ? 4 : 1`,
 	} {
@@ -506,7 +526,38 @@ func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testi
 	}
 }
 
-func TestOCSFStoreActionsExportDirectTypedValues(t *testing.T) {
+func ocsfShimCELEnvOptions() []cel.EnvOption {
+	return []cel.EnvOption{
+		cel.Function("isPresent", cel.Overload(
+			"ocsf_is_present_dyn",
+			[]*cel.Type{cel.DynType},
+			cel.BoolType,
+			cel.UnaryBinding(func(value celref.Val) celref.Val {
+				if _, isNull := value.(celtypes.Null); isNull {
+					return celtypes.False
+				}
+				return celtypes.True
+			}),
+		)),
+		cel.Function("timestampToEpochMillis", cel.Overload(
+			"ocsf_timestamp_to_epoch_millis",
+			[]*cel.Type{cel.TimestampType},
+			cel.IntType,
+		)),
+		cel.Function("durationToMillis", cel.Overload(
+			"ocsf_duration_to_millis",
+			[]*cel.Type{cel.DurationType},
+			cel.IntType,
+		)),
+		cel.Function("intToString", cel.Overload(
+			"ocsf_int_to_string",
+			[]*cel.Type{cel.IntType},
+			cel.StringType,
+		)),
+	}
+}
+
+func TestOCSFStoreActionsExportOneJSONEvent(t *testing.T) {
 	config := &v1alpha1.OCSFLoggingConfig{
 		Actor: v1alpha1.OCSFActorConfig{
 			Identity: "auth.identity.user.username",
@@ -537,8 +588,8 @@ func TestOCSFStoreActionsExportDirectTypedValues(t *testing.T) {
 		if !ok {
 			t.Fatalf("request action %d = %T, want StoreAction", index, action)
 		}
-		if store.Path != wantPaths[index] || !store.ExportToHost || store.ExportFormat != types.StoreExportFormatProtobufValue {
-			t.Fatalf("request action %d = %#v, want typed host export to %q", index, store, wantPaths[index])
+		if store.Path != wantPaths[index] || store.ExportToHost || store.ExportFormat != "" {
+			t.Fatalf("request action %d = %#v, want internal store to %q", index, store, wantPaths[index])
 		}
 		if strings.Contains(store.Value, "request_metadata") {
 			t.Fatalf("request action %d must export a directly readable filter-state value, got %q", index, store.Value)
@@ -547,9 +598,44 @@ func TestOCSFStoreActionsExportDirectTypedValues(t *testing.T) {
 	if len(responseActions) != 1 {
 		t.Fatalf("response actions = %d, want one grouped actor action", len(responseActions))
 	}
-	actor, ok := responseActions[0].(types.StoreAction)
-	if !ok || actor.Path != wasmtypes.OCSFActorUserStorePath || !actor.ExportToHost || actor.ExportFormat != types.StoreExportFormatProtobufValue {
-		t.Fatalf("response actor action = %#v, want one grouped typed host export", responseActions[0])
+	event, ok := responseActions[0].(types.StoreAction)
+	if !ok || event.Path != wasmtypes.OCSFEventStorePath || !event.ExportToHost || event.ExportFormat != types.StoreExportFormatJSON {
+		t.Fatalf("response event action = %#v, want one JSON host export", responseActions[0])
+	}
+	for _, want := range []string{
+		"activity_id", "actor", "resources", "ai_model", "response.code", "request.duration",
+		"timestampToEpochMillis(request.time)", "durationToMillis(request.duration)", "intToString(",
+		"isPresent(request.time)", "isPresent(request.duration)", "isPresent(response.code)", "isPresent(response.size)",
+	} {
+		if !strings.Contains(event.Value, want) {
+			t.Fatalf("response event value does not contain %q: %s", want, event.Value)
+		}
+	}
+}
+
+func TestOCSFEventValueCELCompilesWithShimContract(t *testing.T) {
+	config := &v1alpha1.OCSFLoggingConfig{
+		Actor: v1alpha1.OCSFActorConfig{
+			Identity: "auth.identity.user.username",
+			UID:      "auth.identity.user.uid",
+			Groups:   "auth.identity.user.groups",
+		},
+	}
+	envOptions := []cel.EnvOption{
+		cel.Variable("request", cel.DynType),
+		cel.Variable("response", cel.DynType),
+		cel.Variable("auth", cel.DynType),
+		cel.Variable("ocsf", cel.DynType),
+		celext.Strings(),
+	}
+	envOptions = append(envOptions, ocsfShimCELEnvOptions()...)
+	env, err := cel.NewEnv(envOptions...)
+	if err != nil {
+		t.Fatalf("cel.NewEnv failed: %v", err)
+	}
+	_, issues := env.Compile(ocsfEventValue(config))
+	if issues != nil && issues.Err() != nil {
+		t.Fatalf("OCSF event does not compile against the wasm-shim CEL contract: %v", issues.Err())
 	}
 }
 
@@ -559,7 +645,9 @@ func TestOCSFActorUserValueHandlesMissingParentsAndOptionalFields(t *testing.T) 
 		UID:      "auth.identity.user.uid",
 		Groups:   "auth.identity.user.groups",
 	}
-	env, err := cel.NewEnv(cel.Variable("auth", cel.DynType))
+	envOptions := []cel.EnvOption{cel.Variable("auth", cel.DynType), celext.Strings()}
+	envOptions = append(envOptions, ocsfShimCELEnvOptions()...)
+	env, err := cel.NewEnv(envOptions...)
 	if err != nil {
 		t.Fatalf("cel.NewEnv failed: %v", err)
 	}
@@ -622,6 +710,38 @@ func TestOCSFActorUserValueHandlesMissingParentsAndOptionalFields(t *testing.T) 
 		}
 		if _, ok := field("groups"); ok {
 			t.Fatal("missing groups must be omitted")
+		}
+	})
+
+	t.Run("null identity and optional selectors are treated as absent", func(t *testing.T) {
+		auth := map[string]any{
+			"identity": map[string]any{
+				"user": map[string]any{"username": nil, "uid": nil, "groups": nil},
+			},
+		}
+		value := evaluate(ocsfActorUserValueOrUnknown(actor), auth).Value()
+		user, ok := value.(map[celref.Val]celref.Val)
+		if !ok {
+			t.Fatalf("actor user value = %T, want CEL map", value)
+		}
+		if typeID, ok := user[celtypes.String("type_id")]; !ok || typeID.Value() != int64(0) {
+			t.Fatalf("unknown actor type_id = %v, want 0", typeID)
+		}
+		if _, ok := user[celtypes.String("name")]; ok {
+			t.Fatal("null identity must use the unknown-user representation")
+		}
+
+		auth["identity"].(map[string]any)["user"].(map[string]any)["username"] = "alice"
+		value = evaluate(ocsfActorUserValue(actor), auth).Value()
+		user, ok = value.(map[celref.Val]celref.Val)
+		if !ok {
+			t.Fatalf("actor user value = %T, want CEL map", value)
+		}
+		if _, ok := user[celtypes.String("uid")]; ok {
+			t.Fatal("null UID must be omitted")
+		}
+		if _, ok := user[celtypes.String("groups")]; ok {
+			t.Fatal("null groups must be omitted")
 		}
 	})
 

@@ -167,14 +167,7 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, ContinueOnFailur
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
 
-		var tools []string
-		Eventually(func(g Gomega) {
-			var err error
-			_, tools, err = mcpAuthListTools(ctx, mcpAuthGatewayURL, sessionID, headers)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(tools).To(ContainElement("test1_greet"))
-			g.Expect(tools).To(ContainElement("test2_headers"))
-		}).WithContext(ctx).Should(Succeed())
+		tools := mcpAuthWaitForTools(ctx, sessionID, headers, "test1_greet", "test2_headers")
 		Expect(tools).NotTo(ContainElement("test1_time"))
 		Expect(tools).NotTo(ContainElement("test2_hello_world"))
 	})
@@ -183,6 +176,7 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, ContinueOnFailur
 		headers := mcpAuthAuthorizationHeaders(ctx)
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
+		mcpAuthWaitForTools(ctx, sessionID, headers, "test1_greet")
 
 		status, content, err := mcpAuthCallTool(ctx, mcpAuthGatewayURL, sessionID, "test1_greet", map[string]any{"name": "e2e"}, headers)
 		Expect(err).NotTo(HaveOccurred())
@@ -194,6 +188,8 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, ContinueOnFailur
 		headers := mcpAuthAuthorizationHeaders(ctx)
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
+		// The denied tool is filtered out; wait for an allowed tool from the same server instead.
+		mcpAuthWaitForTools(ctx, sessionID, headers, "test1_greet")
 
 		status, body, _, err := mcpAuthRawPost(ctx, mcpAuthGatewayURL, sessionID,
 			[]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"test1_time"}}`), headers)
@@ -209,21 +205,22 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, ContinueOnFailur
 		headers := mcpAuthAuthorizationHeaders(ctx)
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
+		mcpAuthWaitForTools(ctx, sessionID, headers, "test1_greet")
 
 		var prompts []string
 		Eventually(func(g Gomega) {
 			var err error
 			_, prompts, err = mcpAuthListPrompts(ctx, mcpAuthGatewayURL, sessionID, headers)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(prompts).NotTo(BeEmpty())
-		}).WithContext(ctx).Should(Succeed())
-		Expect(prompts).To(ContainElement("test1_greet"))
+			g.Expect(prompts).To(ContainElement("test1_greet"))
+		}).WithContext(ctx).WithTimeout(mcpAuthReadyTimeout).Should(Succeed())
 	})
 
 	It("allows prompts/get when it is the first request to a server", func(ctx SpecContext) {
 		headers := mcpAuthAuthorizationHeaders(ctx)
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
+		mcpAuthWaitForTools(ctx, sessionID, headers, "test1_greet")
 
 		status, messages, err := mcpAuthGetPrompt(ctx, mcpAuthGatewayURL, sessionID, "test1_greet", map[string]string{"name": "reviewer"}, headers)
 		Expect(err).NotTo(HaveOccurred())
@@ -248,6 +245,7 @@ var _ = Describe("MCP Gateway AuthPolicy integration", Ordered, ContinueOnFailur
 		headers["X-Mcp-Virtualserver"] = fmt.Sprintf("%s/%s", virtualServer.GetNamespace(), virtualServer.GetName())
 		sessionID := mcpAuthInitializeSession(ctx, headers)
 		Expect(mcpAuthNotifyInitialized(ctx, mcpAuthGatewayURL, sessionID, headers)).To(Succeed())
+		mcpAuthWaitForTools(ctx, sessionID, headers, "test1_greet")
 
 		Eventually(func(g Gomega) {
 			_, prompts, err := mcpAuthListPrompts(ctx, mcpAuthGatewayURL, sessionID, headers)
@@ -489,6 +487,21 @@ func mcpAuthNotifyInitialized(ctx context.Context, endpoint, sessionID string, h
 
 func mcpAuthListTools(ctx context.Context, endpoint, sessionID string, headers map[string]string) (int, []string, error) {
 	return mcpAuthListNames(ctx, endpoint, sessionID, "tools/list", "tools", headers)
+}
+
+func mcpAuthWaitForTools(ctx context.Context, sessionID string, headers map[string]string, toolNames ...string) []string {
+	GinkgoHelper()
+	By(fmt.Sprintf("waiting for tools/list to include %s", strings.Join(toolNames, ", ")))
+	var tools []string
+	Eventually(func(g Gomega) {
+		var err error
+		_, tools, err = mcpAuthListTools(ctx, mcpAuthGatewayURL, sessionID, headers)
+		g.Expect(err).NotTo(HaveOccurred())
+		for _, name := range toolNames {
+			g.Expect(tools).To(ContainElement(name))
+		}
+	}).WithContext(ctx).WithTimeout(mcpAuthReadyTimeout).WithPolling(time.Second).Should(Succeed())
+	return tools
 }
 
 func mcpAuthListPrompts(ctx context.Context, endpoint, sessionID string, headers map[string]string) (int, []string, error) {

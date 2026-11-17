@@ -145,7 +145,7 @@ jobs:
         env:
           COMPONENT: ${{ steps.params.outputs.component }}
         run: |
-          RESULT=$(make sync-component-chart COMPONENT="$COMPONENT")
+          RESULT=$(make sync-component-chart COMPONENT="$COMPONENT" SYNC_ARGS="--advance")
           echo "$RESULT" | jq .
           CHANGED=$(echo "$RESULT" | jq -e -r ".\"$COMPONENT\".changed") || { echo "Error: missing changed field" >&2; exit 1; }
           REPO=$(echo "$RESULT" | jq -e -r ".\"$COMPONENT\".repo") || { echo "Error: missing repo field" >&2; exit 1; }

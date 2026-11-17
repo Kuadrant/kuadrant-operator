@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -140,6 +141,20 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
+	// Validate every expression before registering any binding, so a rejected policy contributes
+	// nothing to the data plane. A rejection is terminal until the spec changes, and that change
+	// triggers a new reconcile, so it is reported through the status without requeueing.
+	if err := validateExpressions(pol); err != nil {
+		r.Logger.Info("telemetrypolicy rejected", "reason", err.Error())
+		// Clear actions left by an earlier valid reconcile, including OCSF actions.
+		pipeline := kuadrantCtx.NewPipeline(pol)
+		if commitErr := pipeline.Commit(ctx); commitErr != nil {
+			r.Logger.Error(commitErr, "failed to clear rejected telemetry policy pipeline")
+			return calculateErrorStatus(pol, commitErr), commitErr
+		}
+		return calculateErrorStatus(pol, err), nil
+	}
+
 	ocsfSupported := false
 	var ocsfStatus *v1alpha1.TelemetryPolicyStatus
 	var ocsfValidationErr error
@@ -378,6 +393,31 @@ func ocsfSelectorPresentPredicate(selector string) string {
 	}
 	predicates = append(predicates, fmt.Sprintf("has(%s) && %s != null", selector, selector))
 	return strings.Join(predicates, " && ")
+}
+
+// validateExpressions rejects metric label and logging field expressions that could expose a
+// sensitive request header. Keys are visited in sorted order so the reported error is stable
+// across reconciles.
+func validateExpressions(pol *v1alpha1.TelemetryPolicy) error {
+	if pol.Spec.Metrics != nil {
+		labels := pol.Spec.Metrics.Default.Labels
+		for _, label := range slices.Sorted(maps.Keys(labels)) {
+			if err := checkSensitiveHeaders(labels[label]); err != nil {
+				return errInvalidExpression{path: fmt.Sprintf("spec.metrics.default.labels[%q]", label), err: err}
+			}
+		}
+	}
+
+	if pol.Spec.Logging != nil {
+		fields := pol.Spec.Logging.Default.Fields
+		for _, field := range slices.Sorted(maps.Keys(fields)) {
+			if err := checkSensitiveHeaders(fields[field]); err != nil {
+				return errInvalidExpression{path: fmt.Sprintf("spec.logging.default.fields[%q]", field), err: err}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (r *TelemetryPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha1.TelemetryPolicy, newStatus *v1alpha1.TelemetryPolicyStatus) (ctrl.Result, error) {

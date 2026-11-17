@@ -33,42 +33,75 @@ const defaultMaxDecodedConfigSize = 32 << 20 // 32 MiB
 // a bare byte integer, e.g. "128Mi", "64Mi", "32Mi", "60M", or "33554432".
 const maxDecodedConfigSizeEnvVar = "WASM_MAX_DECODED_CONFIG_SIZE"
 
-var (
-	maxDecodedConfigSizeOnce  sync.Once
-	maxDecodedConfigSizeValue int
-)
+// decodeLimit lazily reads and validates a decompression cap from the environment
+// variable named by envVar, caching the effective value and any validation error on
+// first access. It bounds decodeConfig's output to prevent a decompression bomb
+// (gzip can expand repetitive data ~1000x) in an attacker-controlled
+// EnvoyFilter/EnvoyExtensionPolicy from exhausting the operator's memory on
+// reconcile.
+type decodeLimit struct {
+	envVar string
+	once   sync.Once
+	value  int
+	err    error
+}
 
-// MaxDecodedConfigSize returns the maximum number of bytes decodeConfig will
-// decompress, preventing a decompression bomb (gzip can expand repetitive data
-// ~1000x) in an attacker-controlled EnvoyFilter/EnvoyExtensionPolicy from
-// exhausting the operator's memory on reconcile.
-//
-// It is read once from WASM_MAX_DECODED_CONFIG_SIZE (a resource.Quantity such as
-// "128Mi", "64Mi", "32Mi", or a bare byte integer) and cached; an empty, invalid,
-// or non-positive value falls back to the 32 MiB default, and an invalid value is
-// logged at error level. Call it once from main after the logger is configured so
-// that error is reported with a real logger.
+// load reads envVar (a resource.Quantity such as "128Mi", "64Mi", "32Mi", or a
+// bare byte integer). An unset value uses the 32 MiB default; an invalid value
+// (unparseable, non-positive, or greater than math.MaxInt32) records an error and
+// leaves the value at the default.
+func (l *decodeLimit) load() {
+	l.value = defaultMaxDecodedConfigSize
+	s := env.GetString(l.envVar, "")
+	if s == "" {
+		return
+	}
+	q, err := resource.ParseQuantity(s)
+	if err != nil {
+		l.err = fmt.Errorf("invalid %s %q: %w", l.envVar, s, err)
+		return
+	}
+	switch v := q.Value(); {
+	case v <= 0:
+		l.err = fmt.Errorf("%s %q must be a positive size", l.envVar, s)
+	case v > math.MaxInt32:
+		l.err = fmt.Errorf("%s %q exceeds the maximum of %d bytes", l.envVar, s, math.MaxInt32)
+	default:
+		l.value = int(v)
+	}
+}
+
+// Value returns the effective cap in bytes, falling back to the 32 MiB default on
+// an invalid value. It is always within 1..math.MaxInt32, matching the wasm-shim's
+// maxDecompressedBytes bound, so the operator's cap and the value it advertises to
+// the shim are always the same.
+func (l *decodeLimit) Value() int {
+	l.once.Do(l.load)
+	return l.value
+}
+
+// Err returns the validation error for WASM_MAX_DECODED_CONFIG_SIZE, if any.
+func (l *decodeLimit) Err() error {
+	l.once.Do(l.load)
+	return l.err
+}
+
+// maxDecodedConfigSize is the process-wide decode limit.
+var maxDecodedConfigSize = &decodeLimit{envVar: maxDecodedConfigSizeEnvVar}
+
+// MaxDecodedConfigSize returns the effective wasm config decompression cap (bytes).
+// An invalid WASM_MAX_DECODED_CONFIG_SIZE falls back to the 32 MiB default; callers
+// that want to reject a misconfiguration should use ValidateMaxDecodedConfigSize.
 func MaxDecodedConfigSize() int {
-	maxDecodedConfigSizeOnce.Do(func() {
-		maxDecodedConfigSizeValue = defaultMaxDecodedConfigSize
-		s := env.GetString(maxDecodedConfigSizeEnvVar, "")
-		if s == "" {
-			return
-		}
-		q, err := resource.ParseQuantity(s)
-		if err != nil {
-			logf.Log.WithName("wasm").Error(err, "invalid "+maxDecodedConfigSizeEnvVar+"; using default",
-				"value", s, "defaultBytes", defaultMaxDecodedConfigSize)
-			return
-		}
-		if v := q.Value(); v > 0 {
-			maxDecodedConfigSizeValue = int(v)
-		} else {
-			logf.Log.WithName("wasm").Error(fmt.Errorf("value %q is not a positive size", s),
-				"invalid "+maxDecodedConfigSizeEnvVar+"; using default", "defaultBytes", defaultMaxDecodedConfigSize)
-		}
-	})
-	return maxDecodedConfigSizeValue
+	return maxDecodedConfigSize.Value()
+}
+
+// ValidateMaxDecodedConfigSize returns an error if WASM_MAX_DECODED_CONFIG_SIZE is
+// set to an invalid value (unparseable, non-positive, or greater than
+// math.MaxInt32). Call it once at startup so the operator fails fast on a
+// misconfigured limit instead of silently using the default.
+func ValidateMaxDecodedConfigSize() error {
+	return maxDecodedConfigSize.Err()
 }
 
 // encodedConfig is the self-describing envelope wrapping the encoded wasm config:
@@ -113,25 +146,13 @@ func encodeConfig(raw []byte) ([]byte, error) {
 	}
 
 	envelope := encodedConfig{
-		Encoding:             EncodingGzipBase64,
-		Data:                 base64.StdEncoding.EncodeToString(buf.Bytes()),
-		MaxDecompressedBytes: shimMaxDecompressedBytes(),
+		Encoding: EncodingGzipBase64,
+		Data:     base64.StdEncoding.EncodeToString(buf.Bytes()),
+		// maxSize is bounded to 1..math.MaxInt32, which is exactly the range the
+		// wasm-shim accepts for maxDecompressedBytes, so no clamping is needed here.
+		MaxDecompressedBytes: maxSize,
 	}
 	return json.Marshal(envelope)
-}
-
-// shimMaxDecompressedBytes returns MaxDecodedConfigSize clamped to the range the
-// wasm-shim accepts for maxDecompressedBytes (1..math.MaxInt32); out-of-range
-// values would make the shim reject the whole config.
-func shimMaxDecompressedBytes() int {
-	maxSize := MaxDecodedConfigSize()
-	if maxSize > math.MaxInt32 {
-		return math.MaxInt32
-	}
-	if maxSize < 1 {
-		return defaultMaxDecodedConfigSize
-	}
-	return maxSize
 }
 
 // ConfigMaxDecompressedBytes returns the maxDecompressedBytes the wasm-shim will

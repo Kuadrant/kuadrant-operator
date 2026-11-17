@@ -125,7 +125,6 @@ func printControllerMetaInfo() {
 	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	setupLog.Info("base logger", "log level", logLevel, "log mode", logMode)
 	setupLog.Info("build information", "version", version, "commit", gitSHA, "dirty", dirty)
-	setupLog.Info("wasm config decompression limit", "maxDecodedConfigBytes", wasm.MaxDecodedConfigSize())
 }
 
 func main() {
@@ -204,6 +203,12 @@ func main() {
 	printControllerMetaInfo()
 
 	setupLog := log.Log
+
+	if err := wasm.ValidateMaxDecodedConfigSize(); err != nil {
+		setupLog.Error(err, "invalid wasm config decompression limit")
+		os.Exit(1)
+	}
+	setupLog.Info("wasm config decompression limit", "maxDecodedConfigBytes", wasm.MaxDecodedConfigSize())
 
 	var (
 		metricsAddr          string

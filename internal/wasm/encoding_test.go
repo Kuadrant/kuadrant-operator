@@ -5,7 +5,6 @@ package wasm
 import (
 	"bytes"
 	"encoding/json"
-	"sync"
 	"testing"
 
 	"gotest.tools/assert"
@@ -14,13 +13,44 @@ import (
 // setMaxDecodedConfigSizeForTest overrides the memoized MaxDecodedConfigSize value
 // and returns a function that restores the previous state.
 func setMaxDecodedConfigSizeForTest(n int) func() {
-	prevOnce := maxDecodedConfigSizeOnce
-	prevValue := maxDecodedConfigSizeValue
-	maxDecodedConfigSizeOnce = sync.Once{}
-	maxDecodedConfigSizeOnce.Do(func() { maxDecodedConfigSizeValue = n })
-	return func() {
-		maxDecodedConfigSizeOnce = prevOnce
-		maxDecodedConfigSizeValue = prevValue
+	prev := maxDecodedConfigSize
+	l := &decodeLimit{value: n}
+	l.once.Do(func() {}) // mark loaded so Value()/Err() don't read the env
+	maxDecodedConfigSize = l
+	return func() { maxDecodedConfigSize = prev }
+}
+
+func TestMaxDecodedConfigSizeValidation(t *testing.T) {
+	cases := []struct {
+		name      string
+		env       string
+		wantErr   bool
+		wantValue int
+	}{
+		{"unset", "", false, defaultMaxDecodedConfigSize},
+		{"valid binary", "64Mi", false, 64 << 20},
+		{"valid decimal", "60M", false, 60_000_000},
+		{"valid bare int", "1048576", false, 1 << 20},
+		{"max int32", "2147483647", false, 2147483647},
+		{"unparseable", "abc", true, defaultMaxDecodedConfigSize},
+		{"zero", "0", true, defaultMaxDecodedConfigSize},
+		{"negative", "-5", true, defaultMaxDecodedConfigSize},
+		{"too big", "3Gi", true, defaultMaxDecodedConfigSize},
+	}
+	const testEnvVar = "TEST_WASM_MAX_DECODED_CONFIG_SIZE"
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(testEnvVar, tc.env)
+			l := &decodeLimit{envVar: testEnvVar}
+
+			if tc.wantErr {
+				assert.Assert(t, l.Err() != nil, "expected a validation error")
+			} else {
+				assert.NilError(t, l.Err())
+			}
+			// Value falls back to the default on an invalid value.
+			assert.Equal(t, l.Value(), tc.wantValue)
+		})
 	}
 }
 
@@ -45,7 +75,7 @@ func TestEncodeConfigEnvelopeShape(t *testing.T) {
 	assert.Equal(t, envelope.Encoding, EncodingGzipBase64)
 	assert.Assert(t, envelope.Data != "", "envelope data should not be empty")
 	// maxDecompressedBytes is emitted for the wasm-shim to cap decompression.
-	assert.Equal(t, envelope.MaxDecompressedBytes, shimMaxDecompressedBytes())
+	assert.Equal(t, envelope.MaxDecompressedBytes, MaxDecodedConfigSize())
 	assert.Equal(t, envelope.MaxDecompressedBytes, defaultMaxDecodedConfigSize)
 }
 
@@ -99,7 +129,7 @@ func TestConfigMaxDecompressedBytes(t *testing.T) {
 	// What encodeConfig emits by default -> the operator's limit.
 	encoded, err := encodeConfig([]byte(`{"actionSets":[]}`))
 	assert.NilError(t, err)
-	assert.Equal(t, ConfigMaxDecompressedBytes(encoded), shimMaxDecompressedBytes())
+	assert.Equal(t, ConfigMaxDecompressedBytes(encoded), MaxDecodedConfigSize())
 }
 
 func TestEncodeConfigRejectsOversized(t *testing.T) {

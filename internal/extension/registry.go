@@ -1362,7 +1362,7 @@ func accessLogStoresLast(actions []wasm.Action) []wasm.Action {
 	var accessLogStores []wasm.Action
 	for _, action := range actions {
 		store, ok := action.(*wasm.StoreAction)
-		if ok && store.ExportToHost && store.ExportFormat == wasm.StoreExportFormatJSON {
+		if ok && store.ExportToHost && (store.ExportFormat == wasm.StoreExportFormatJSON || store.ExportFormat == wasm.StoreExportFormatProtobufValue) {
 			accessLogStores = append(accessLogStores, action)
 			continue
 		}

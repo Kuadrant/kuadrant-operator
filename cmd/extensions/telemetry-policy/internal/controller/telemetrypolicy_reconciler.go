@@ -9,10 +9,12 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
 	versioninfo "github.com/kuadrant/kuadrant-operator/internal/version"
@@ -22,6 +24,11 @@ import (
 )
 
 const istioGatewayControllerName gatewayapiv1.GatewayController = "istio.io/gateway-controller"
+
+const (
+	ocsfEnvoyMinVersionAnnotation = "kuadrant.io/ocsf-envoy-min-version"
+	ocsfRequiredEnvoyVersion      = "1.36.0"
+)
 
 const (
 	ocsfResourcesStorePath = wasmtypes.OCSFResourcesStorePath
@@ -36,6 +43,56 @@ const (
 
 type TelemetryPolicyReconciler struct {
 	types.ExtensionBase
+}
+
+type ocsfEnvoyVersionError struct {
+	reason  gatewayapiv1alpha2.PolicyConditionReason
+	message string
+}
+
+func (e ocsfEnvoyVersionError) Error() string { return e.message }
+
+func (e ocsfEnvoyVersionError) Reason() gatewayapiv1alpha2.PolicyConditionReason { return e.reason }
+
+func validateOCSFEnvoyVersion(gatewayRef, versionText string) error {
+	if strings.TrimSpace(versionText) == "" {
+		return ocsfEnvoyVersionError{
+			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionNotVerified"),
+			message: fmt.Sprintf(
+				"OCSF access logging requires Envoy >= %s; the minimum version across running proxies for Gateway %s is unverified. Set the %s annotation on its TelemetryPolicy only after checking every proxy replica.",
+				ocsfRequiredEnvoyVersion, gatewayRef, ocsfEnvoyMinVersionAnnotation,
+			),
+		}
+	}
+
+	versionText = strings.TrimSpace(versionText)
+	minimumVersion, err := utilversion.ParseSemantic(versionText)
+	if err != nil {
+		return ocsfEnvoyVersionError{
+			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionNotVerified"),
+			message: fmt.Sprintf(
+				"OCSF access logging requires Envoy >= %s; Gateway %s has an invalid %s TelemetryPolicy annotation %q. Set it to the lowest attested version across every proxy replica.",
+				ocsfRequiredEnvoyVersion, gatewayRef, ocsfEnvoyMinVersionAnnotation, versionText,
+			),
+		}
+	}
+
+	requiredVersion := utilversion.MustParseSemantic(ocsfRequiredEnvoyVersion)
+	if !minimumVersion.AtLeast(requiredVersion) {
+		return ocsfEnvoyVersionError{
+			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionUnsupported"),
+			message: fmt.Sprintf(
+				"OCSF access logging requires Envoy >= %s; the TelemetryPolicy attests a minimum of %s for Gateway %s. Upgrade every proxy replica before enabling OCSF access logging.",
+				ocsfRequiredEnvoyVersion, versionText, gatewayRef,
+			),
+		}
+	}
+
+	return nil
+}
+
+func ocsfGatewayClassExpression(gateway string) string {
+	return fmt.Sprintf("%s.spec.gatewayClassName", gateway)
 }
 
 func NewTelemetryPolicyReconciler() *TelemetryPolicyReconciler {
@@ -149,7 +206,7 @@ func (r *TelemetryPolicyReconciler) validateOCSFGatewayProvider(ctx context.Cont
 		ctx,
 		kuadrantCtx,
 		pol,
-		`self.findGateways().map(gateway, gateway.spec.gatewayClassName)`,
+		fmt.Sprintf(`self.findGateways().map(gateway, %s)`, ocsfGatewayClassExpression("gateway")),
 		true,
 	)
 	if err != nil {
@@ -164,11 +221,11 @@ func (r *TelemetryPolicyReconciler) validateOCSFGatewayProvider(ctx context.Cont
 		return false, calculateErrorStatus(pol, statusErr), nil
 	}
 
-	// The subscribed topology resolve provides the Gateway and its class name. The current
-	// Kuadrant CEL surface does not expose GatewayClass objects, so fetch the cluster-scoped
-	// class by that resolved name to validate its controller.
-	gatewayClass := &gatewayapiv1.GatewayClass{}
+	// The subscribed topology resolve provides the GatewayClass name. The current
+	// Kuadrant CEL surface does not expose GatewayClass objects, so fetch the
+	// cluster-scoped class to validate its controller.
 	gatewayClassName := gatewayClassNames[0]
+	gatewayClass := &gatewayapiv1.GatewayClass{}
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: gatewayClassName}, gatewayClass); err != nil {
 		if errors.IsNotFound(err) {
 			statusErr := fmt.Errorf("GatewayClass %q for OCSF logging was not found: %w", gatewayClassName, err)
@@ -179,6 +236,15 @@ func (r *TelemetryPolicyReconciler) validateOCSFGatewayProvider(ctx context.Cont
 	if gatewayClass.Spec.ControllerName != istioGatewayControllerName {
 		statusErr := fmt.Errorf("OCSF logging is only supported by Istio GatewayClasses; GatewayClass %q uses controller %q", gatewayClass.Name, gatewayClass.Spec.ControllerName)
 		return false, calculateEnforcedStatus(pol, statusErr), nil
+	}
+
+	// Envoy versions are not exposed by the Gateway API. Require the administrator
+	// to attest the lowest version across every running proxy for this policy's
+	// single Gateway target. The policy annotation is watched, so changing the
+	// attestation reconciles upgrades and downgrades.
+	gatewayRef := fmt.Sprintf("%s/%s", pol.Namespace, pol.Spec.TargetRef.Name)
+	if err := validateOCSFEnvoyVersion(gatewayRef, pol.Annotations[ocsfEnvoyMinVersionAnnotation]); err != nil {
+		return false, calculateEnforcedStatus(pol, err), nil
 	}
 
 	return true, nil, nil
@@ -197,7 +263,7 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) (requestActions, respo
 		`(%s) ? {"name": %s, "ai_provider": %s} : {"ai_provider": %s}`,
 		namePredicate, nameExpression, provider, provider,
 	)
-	requestPathValue := `request.url_path`
+	requestPathValue := "request.url_path"
 	requestActions = []types.Action{
 		types.StoreAction{
 			Path:  ocsfResourcesStorePath,
@@ -213,30 +279,32 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) (requestActions, respo
 		},
 	}
 
-	responseActions = []types.Action{
-		types.StoreAction{
+	// Store a fallback event before terminal authorization actions so denied requests
+	// can still be logged. Authorino's response phase overwrites this export with the
+	// authenticated actor before Envoy emits successful requests.
+	eventAction := func(actorUser string) types.StoreAction {
+		return types.StoreAction{
 			Path:         ocsfEventStorePath,
-			Value:        ocsfEventValue(config),
+			Value:        ocsfEventValueWithActor(config, actorUser),
 			ExportToHost: true,
-			ExportFormat: types.StoreExportFormatJSON,
-		},
+			ExportFormat: types.StoreExportFormatProtobufValue,
+		}
 	}
+	requestActions = append(requestActions, eventAction(`{"type_id": 0}`))
+	responseActions = []types.Action{eventAction(ocsfActorUserValueOrUnknown(config.Actor))}
 	return requestActions, responseActions
 }
 
 func ocsfEventValue(config *v1alpha1.OCSFLoggingConfig) string {
-	// Keep these conversions aligned with the wasm-shim CEL host contract.
-	requestStartMillis := `(isPresent(request.time) ? timestampToEpochMillis(request.time) : 0)`
-	requestDurationMillis := `(isPresent(request.duration) ? durationToMillis(request.duration) : 0)`
-	requestEndMillis := `(` + requestStartMillis + ` + ` + requestDurationMillis + `)`
-	requestMethod := `(isPresent(request.method) ? request.method : "")`
-	httpVersion := `(isPresent(request.protocol) ? (request.protocol == "HTTP/1.0" ? "1.0" : request.protocol == "HTTP/1.1" ? "1.1" : request.protocol == "HTTP/2" ? "2.0" : request.protocol == "HTTP/3" ? "3.0" : request.protocol) : "")`
-	requestPath := fmt.Sprintf(`(isPresent(%s) ? %s : "")`, ocsfURLPathStorePath, ocsfURLPathStorePath)
-	responseCode := `(isPresent(response.code) ? response.code : 0)`
-	responseSize := `(isPresent(response.size) ? response.size : 0)`
-	statusSuccess := `(isPresent(response.code) && response.code < 400)`
-	actorUser := ocsfActorUserValueOrUnknown(config.Actor)
+	return ocsfEventValueWithActor(config, ocsfActorUserValueOrUnknown(config.Actor))
+}
 
+func ocsfEventValueWithActor(config *v1alpha1.OCSFLoggingConfig, actorUser string) string {
+	// Keep the shim export to values available before Envoy completes the stream.
+	// Envoy adds final timestamps, response fields, and status in its access-log formatter.
+	requestMethod := `(request.method != null ? request.method : "")`
+	httpVersion := `(request.protocol != null ? (request.protocol == "HTTP/1.0" ? "1.0" : request.protocol == "HTTP/1.1" ? "1.1" : request.protocol == "HTTP/2" ? "2.0" : request.protocol == "HTTP/3" ? "3.0" : request.protocol) : "")`
+	requestPath := fmt.Sprintf(`(%s != null ? %s : "")`, ocsfURLPathStorePath, ocsfURLPathStorePath)
 	fields := []string{
 		`"activity_id": 99`,
 		`"activity_name": "Inference"`,
@@ -247,17 +315,12 @@ func ocsfEventValue(config *v1alpha1.OCSFLoggingConfig) string {
 		`"type_uid": 600399`,
 		`"severity_id": 1`,
 		`"severity": "Informational"`,
-		fmt.Sprintf(`"time": %s`, requestStartMillis),
-		fmt.Sprintf(`"metadata": {"version": "1.9.0", "profiles": ["ai_operation"], "product": {"name": "kuadrant-gateway", "version": %s}, "logged_time": %s}`, strconv.Quote(versioninfo.String()), requestEndMillis),
+		fmt.Sprintf(`"metadata": {"version": "1.9.0", "profiles": ["ai_operation"], "product": {"name": "kuadrant-gateway", "version": %s}}`, strconv.Quote(versioninfo.String())),
 		fmt.Sprintf(`"actor": {"user": %s}`, actorUser),
 		fmt.Sprintf(`"api": {"operation": %s + " " + %s}`, requestMethod, requestPath),
 		fmt.Sprintf(`"http_request": {"http_method": %s, "version": %s, "url": {"path": %s}}`, requestMethod, httpVersion, requestPath),
-		fmt.Sprintf(`"http_response": {"code": %s, "body_length": %s, "latency": %s}`, responseCode, responseSize, requestDurationMillis),
-		fmt.Sprintf(`"status_id": %s ? 1 : 2`, statusSuccess),
-		fmt.Sprintf(`"status": %s ? "Success" : "Failure"`, statusSuccess),
-		fmt.Sprintf(`"status_code": intToString(%s)`, responseCode),
-		fmt.Sprintf(`"resources": isPresent(%s) ? %s : []`, ocsfResourcesStorePath, ocsfResourcesStorePath),
-		fmt.Sprintf(`"ai_model": isPresent(%s) ? %s : {}`, ocsfAIModelStorePath, ocsfAIModelStorePath),
+		fmt.Sprintf(`"resources": (%s != null ? %s : [])`, ocsfResourcesStorePath, ocsfResourcesStorePath),
+		fmt.Sprintf(`"ai_model": (%s != null ? %s : {"ai_provider": %q})`, ocsfAIModelStorePath, ocsfAIModelStorePath, config.Target.AIProvider),
 	}
 	return "{" + strings.Join(fields, ", ") + "}"
 }
@@ -313,7 +376,7 @@ func ocsfSelectorPresentPredicate(selector string) string {
 	for i := 2; i < len(parts); i++ {
 		predicates = append(predicates, fmt.Sprintf("has(%s)", strings.Join(parts[:i], ".")))
 	}
-	predicates = append(predicates, fmt.Sprintf("has(%s) && isPresent(%s)", selector, selector))
+	predicates = append(predicates, fmt.Sprintf("has(%s) && %s != null", selector, selector))
 	return strings.Join(predicates, " && ")
 }
 

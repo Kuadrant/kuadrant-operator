@@ -48,7 +48,7 @@ func (c *Config) HasOCSFAuditLogging() bool {
 
 func actionExportsOCSFEvent(action Action) bool {
 	store, ok := action.(*StoreAction)
-	if ok && store.ExportToHost && store.Path == OCSFEventStorePath && store.ExportFormat == StoreExportFormatJSON {
+	if ok && store.ExportToHost && store.Path == OCSFEventStorePath && store.ExportFormat == StoreExportFormatProtobufValue {
 		return true
 	}
 	grpc, ok := action.(*GrpcAction)

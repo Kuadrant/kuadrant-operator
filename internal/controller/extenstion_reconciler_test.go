@@ -186,7 +186,7 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 			Actions: []wasm.Action{&wasm.StoreAction{
 				Path:         wasm.OCSFEventStorePath,
 				ExportToHost: true,
-				ExportFormat: wasm.StoreExportFormatJSON,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
 			}},
 		}}}
 
@@ -226,7 +226,7 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 				Path:         wasm.OCSFEventStorePath,
 				Value:        `{"api": {"operation": "GET /tenant/model/get"}}`,
 				ExportToHost: true,
-				ExportFormat: wasm.StoreExportFormatJSON,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
 			},
 		},
 	}}}
@@ -287,12 +287,22 @@ func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *t
 	}
 	logger := mapField(loggerObject, "typed_config")
 	logFormat := mapField(logger, "log_format")
-	textFormat := mapField(logFormat, "text_format_source")
-	if textFormat["inline_string"] != "%FILTER_STATE(wasm.kuadrant.ocsf.event:PLAIN)%\n" {
-		t.Fatalf("expected raw OCSF JSON filter-state log line, got %v", textFormat["inline_string"])
+	event := mapField(logFormat, "json_format")
+	if event["class_uid"] != `%TYPED_CEL(filter_state["wasm.kuadrant.ocsf.event"]["class_uid"])%` {
+		t.Fatalf("expected typed class_uid projection from protobufValue, got %v", event["class_uid"])
 	}
-	if strings.Contains(string(raw), "TYPED_CEL") || strings.Contains(string(raw), "json_format") || strings.Contains(string(raw), "envoy.formatter.cel") {
-		t.Fatalf("OCSF access log patch must not use typed CEL or json_format: %s", raw)
+	httpResponse := mapField(event, "http_response")
+	if httpResponse["code"] != `%TYPED_CEL((response.code != null ? response.code : 0))%` {
+		t.Fatalf("expected numeric response code from Envoy CEL, got %v", httpResponse["code"])
+	}
+	if event["status_code"] != `%TYPED_CEL(response.headers[":status"])%` {
+		t.Fatalf("expected string status_code projection, got %v", event["status_code"])
+	}
+	if _, ok := logFormat["typed_json_format"]; ok {
+		t.Fatal("OCSF access logger must not configure typed_json_format")
+	}
+	if strings.Contains(string(raw), "text_format_source") || strings.Contains(string(raw), "typed_json_format") {
+		t.Fatalf("OCSF access logger contains a prohibited formatter: %s", raw)
 	}
 }
 

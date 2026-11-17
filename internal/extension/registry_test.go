@@ -2575,7 +2575,7 @@ func TestMergePipelineActionsPreservesExplicitPreludeOrdering(t *testing.T) {
 	prelude2 := wasm.NewStoreAction("true", "audit.request_metadata", "{}").WithExportToHost(true)
 	actor1 := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
 	actor2 := wasm.NewStoreAction("true", wasm.OCSFActorUserStorePath, "{}").WithExportToHost(true)
-	event := wasm.NewStoreAction("true", wasm.OCSFEventStorePath, "{}").WithExportToHost(true).WithExportFormat(wasm.StoreExportFormatJSON)
+	event := wasm.NewStoreAction("true", wasm.OCSFEventStorePath, "{}").WithExportToHost(true).WithExportFormat(wasm.StoreExportFormatProtobufValue)
 	ordinaryOCSFPath := wasm.NewStoreAction("true", "ocsf.custom", "ordinary").WithExportToHost(true)
 	ordinary := wasm.NewStoreAction("true", "ordinary", "value")
 	authMetadata := wasm.NewStoreAction("true", wasm.AuthStorePath, "auth_response.dynamic_metadata").WithExportToHost(true)
@@ -2600,7 +2600,7 @@ func TestMergePipelineActionsPreservesExplicitPreludeOrdering(t *testing.T) {
 		}
 	}
 	if len(auth.OnReply) != 5 || auth.OnReply[0] != authMetadata || auth.OnReply[1] != actor1 || auth.OnReply[2] != responseHeaders || auth.OnReply[3] != actor2 || auth.OnReply[4] != event {
-		t.Fatalf("AuthService reply actions = %#v, want metadata, non-access-log response actions, then JSON access-log stores", auth.OnReply)
+		t.Fatalf("AuthService reply actions = %#v, want metadata, non-access-log response actions, then typed access-log stores", auth.OnReply)
 	}
 	for _, action := range merged {
 		if action == actor1 || action == actor2 || action == responseHeaders || action == event {
@@ -3860,5 +3860,24 @@ func TestRegisteredDataStore_PruneToOwned_CountsMatchRemovedData(t *testing.T) {
 	}
 	if counts.PipelineActions != 3 {
 		t.Errorf("Expected 3 pipeline actions pruned, got %d", counts.PipelineActions)
+	}
+}
+
+func TestAccessLogStoresLastIncludesProtobufValueExport(t *testing.T) {
+	first := &wasm.StoreAction{Path: "first"}
+	jsonExport := &wasm.StoreAction{Path: "json", ExportToHost: true, ExportFormat: wasm.StoreExportFormatJSON}
+	middle := &wasm.StoreAction{Path: "middle"}
+	internalHostStore := &wasm.StoreAction{Path: "actor", ExportToHost: true}
+	protobufExport := &wasm.StoreAction{Path: wasm.OCSFEventStorePath, ExportToHost: true, ExportFormat: wasm.StoreExportFormatProtobufValue}
+
+	got := accessLogStoresLast([]wasm.Action{first, jsonExport, middle, internalHostStore, protobufExport})
+	want := []wasm.Action{first, middle, internalHostStore, jsonExport, protobufExport}
+	if len(got) != len(want) {
+		t.Fatalf("accessLogStoresLast() returned %d actions, want %d", len(got), len(want))
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("accessLogStoresLast()[%d] = %#v, want %#v", index, got[index], want[index])
+		}
 	}
 }

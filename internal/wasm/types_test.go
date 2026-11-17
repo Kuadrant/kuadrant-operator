@@ -95,9 +95,10 @@ func TestConfigHasOCSFAuditLogging(t *testing.T) {
 		action Action
 		want   bool
 	}{
-		{name: "exported JSON OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatJSON}, want: true},
-		{name: "exported JSON OCSF event in gRPC onReply", action: &GrpcAction{OnReply: []Action{&StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatJSON}}}, want: true},
-		{name: "exported protobuf OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}},
+		{name: "exported protobufValue OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}, want: true},
+		{name: "exported protobufValue OCSF event in gRPC onReply", action: &GrpcAction{OnReply: []Action{&StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}}}, want: true},
+		{name: "legacy JSON OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatJSON}},
+		{name: "legacy JSON OCSF event in gRPC onReply", action: &GrpcAction{OnReply: []Action{&StoreAction{Path: OCSFEventStorePath, ExportToHost: true, ExportFormat: StoreExportFormatJSON}}}},
 		{name: "exported legacy OCSF event", action: &StoreAction{Path: OCSFEventStorePath, ExportToHost: true}},
 		{name: "exported typed OCSF resources", action: &StoreAction{Path: OCSFResourcesStorePath, ExportToHost: true, ExportFormat: StoreExportFormatProtobufValue}},
 		{name: "exported OCSF actor without final event", action: &StoreAction{Path: OCSFActorUserStorePath, ExportToHost: true}},

@@ -145,8 +145,11 @@ func newTestGatewayClient(t *testing.T, controllerName gatewayapiv1.GatewayContr
 		WithScheme(scheme).
 		WithObjects(
 			&gatewayapiv1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{Name: "my-gw", Namespace: "default"},
-				Spec:       gatewayapiv1.GatewaySpec{GatewayClassName: "test-class"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-gw",
+					Namespace: "default",
+				},
+				Spec: gatewayapiv1.GatewaySpec{GatewayClassName: "test-class"},
 			},
 			&gatewayapiv1.GatewayClass{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-class"},
@@ -154,6 +157,37 @@ func newTestGatewayClient(t *testing.T, controllerName gatewayapiv1.GatewayContr
 			},
 		).
 		Build()
+}
+
+func setTestPolicyEnvoyMinVersion(t *testing.T, policy *v1alpha1.TelemetryPolicy, version string) {
+	t.Helper()
+	if policy.Annotations == nil {
+		policy.Annotations = make(map[string]string)
+	}
+	if version == "" {
+		delete(policy.Annotations, ocsfEnvoyMinVersionAnnotation)
+	} else {
+		policy.Annotations[ocsfEnvoyMinVersionAnnotation] = version
+	}
+}
+
+func testOCSFLoggingConfig() *v1alpha1.OCSFLoggingConfig {
+	return &v1alpha1.OCSFLoggingConfig{
+		Profile: v1alpha1.OCSFProfileAIOperation,
+		Actor: v1alpha1.OCSFActorConfig{
+			Identity: "auth.identity.user.username",
+			UID:      "auth.identity.user.uid",
+			Groups:   "auth.identity.user.groups",
+		},
+		Target: v1alpha1.OCSFTargetConfig{
+			ResourceType: "LLMInferenceService",
+			RequestPath: v1alpha1.OCSFRequestPathTarget{
+				NamespaceSegment: 0,
+				NameSegment:      1,
+			},
+			AIProvider: "KServe",
+		},
+	}
 }
 
 func TestReconcileSpec_LoggingFieldsOnly(t *testing.T) {
@@ -294,6 +328,7 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 		},
 	}
 	pol := newTestPolicy(nil, nil)
+	setTestPolicyEnvoyMinVersion(t, pol, "1.36.0")
 	pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{
 		OCSF: &v1alpha1.OCSFLoggingConfig{
 			Profile: v1alpha1.OCSFProfileAIOperation,
@@ -320,8 +355,8 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	if !mock.pipeline.committed {
 		t.Fatal("expected OCSF pipeline to be committed")
 	}
-	if got, want := len(mock.pipeline.preludeActions), 3; got != want {
-		t.Fatalf("request prelude actions = %d, want %d", got, want)
+	if got, want := len(mock.pipeline.preludeActions), 4; got != want {
+		t.Fatalf("request prelude actions = %d, want %d (three metadata stores and the fallback OCSF event)", got, want)
 	}
 	if got := len(mock.pipeline.requestActions); got != 0 {
 		t.Fatalf("ordinary request actions = %d, want 0", got)
@@ -366,30 +401,48 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 		}
 	}
 
+	preludeEvent, ok := mock.pipeline.preludeActions[3].(types.StoreAction)
+	if !ok {
+		t.Fatalf("request prelude event action type = %T, want types.StoreAction", mock.pipeline.preludeActions[3])
+	}
+	if preludeEvent.Path != wasmtypes.OCSFEventStorePath || preludeEvent.Predicate != "" || !preludeEvent.ExportToHost ||
+		preludeEvent.ExportFormat != types.StoreExportFormatProtobufValue {
+		t.Fatalf("request prelude event action = %#v, want one protobufValue fallback event export", preludeEvent)
+	}
+
 	event, ok := mock.pipeline.responseActions[0].(types.StoreAction)
 	if !ok {
 		t.Fatalf("response action type = %T, want types.StoreAction", mock.pipeline.responseActions[0])
 	}
+	if strings.Contains(preludeEvent.Value, "auth.identity") || !strings.Contains(preludeEvent.Value, `"actor": {"user": {"type_id": 0}}`) {
+		t.Fatalf("request prelude event must use the unauthenticated fallback actor: %s", preludeEvent.Value)
+	}
+	if !strings.Contains(event.Value, "auth.identity.user.username") {
+		t.Fatalf("response event must include the configured authenticated actor: %s", event.Value)
+	}
 	if event.Path != wasmtypes.OCSFEventStorePath || event.Predicate != "" || !event.ExportToHost ||
-		event.ExportFormat != types.StoreExportFormatJSON {
-		t.Fatalf("response event action = %#v, want configured JSON event export", event)
+		event.ExportFormat != types.StoreExportFormatProtobufValue {
+		t.Fatalf("response event action = %#v, want one protobufValue OCSF event export", event)
 	}
 	for _, want := range []string{
 		`"class_uid": 6003`,
 		`"type_uid": 600399`,
 		`"version": "1.9.0"`,
 		`request.method : "") + " "`,
+		`request.protocol`,
 		`ocsf.http_request.url.path`,
 		`auth.identity.user.username`,
 		`{"type_id": 0}`,
-		`response.code`,
-		`response.size`,
-		`request.duration`,
 		`ocsf.resources`,
 		`ocsf.ai_model`,
 	} {
 		if !strings.Contains(event.Value, want) {
 			t.Errorf("OCSF event value does not contain %q: %s", want, event.Value)
+		}
+	}
+	for _, streamField := range []string{"request.time", "request.duration", "response.code", "response.size"} {
+		if strings.Contains(event.Value, streamField) {
+			t.Errorf("OCSF StoreAction must leave final stream field %q to Envoy access logging: %s", streamField, event.Value)
 		}
 	}
 	if strings.Contains(event.Value, "request.headers") || strings.Contains(event.Value, "Authorization") || strings.Contains(event.Value, "request.query") {
@@ -399,8 +452,9 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	if len(mock.resolveCalls) != 1 {
 		t.Fatalf("Resolve calls = %d, want 1", len(mock.resolveCalls))
 	}
-	if !mock.resolveCalls[0].subscribe || mock.resolveCalls[0].expression != "self.findGateways().map(gateway, gateway.spec.gatewayClassName)" {
-		t.Fatalf("Resolve call = %#v, want a subscribed Gateway topology lookup", mock.resolveCalls[0])
+	wantResolveExpression := fmt.Sprintf(`self.findGateways().map(gateway, %s)`, ocsfGatewayClassExpression("gateway"))
+	if !mock.resolveCalls[0].subscribe || mock.resolveCalls[0].expression != wantResolveExpression {
+		t.Fatalf("Resolve call = %#v, want subscribed Gateway class field", mock.resolveCalls[0])
 	}
 }
 
@@ -495,6 +549,134 @@ func TestReconcileSpec_OCSFMissingGatewayPreservesOtherBindings(t *testing.T) {
 	}
 }
 
+func TestReconcileSpec_OCSFEnvoyVersionGate(t *testing.T) {
+	tests := []struct {
+		name           string
+		minimumVersion string
+		wantSupported  bool
+		wantReason     string
+	}{
+		{name: "below minimum", minimumVersion: "1.35.0", wantReason: "EnvoyVersionUnsupported"},
+		{name: "mixed replicas use lowest version", minimumVersion: "1.35.13", wantReason: "EnvoyVersionUnsupported"},
+		{name: "unknown version", minimumVersion: "", wantReason: "EnvoyVersionNotVerified"},
+		{name: "invalid version", minimumVersion: "unknown", wantReason: "EnvoyVersionNotVerified"},
+		{name: "prerelease below minimum", minimumVersion: "1.36.0-rc.1", wantReason: "EnvoyVersionUnsupported"},
+		{name: "minimum version", minimumVersion: "1.36.0", wantSupported: true},
+		{name: "later patch", minimumVersion: "1.36.13", wantSupported: true},
+		{name: "later minor", minimumVersion: "1.38.0", wantSupported: true},
+		{name: "attested development build above minimum", minimumVersion: "1.38.0-dev", wantSupported: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
+			kubeClient := newTestGatewayClient(t, istioGatewayControllerName)
+			r := &TelemetryPolicyReconciler{ExtensionBase: types.ExtensionBase{Logger: logr.Discard(), Client: kubeClient}}
+			pol := newTestPolicy(map[string]string{"metric_label": "request.path"}, map[string]string{"custom_field": "request.path"})
+			setTestPolicyEnvoyMinVersion(t, pol, tt.minimumVersion)
+			pol.Spec.Logging.Default.OCSF = testOCSFLoggingConfig()
+
+			status, err := r.reconcileSpec(context.Background(), pol, mock)
+			if err != nil {
+				t.Fatalf("reconcileSpec returned error: %v", err)
+			}
+			if len(mock.calls) != 2 {
+				t.Fatalf("metrics and logging fields should still be reconciled, calls = %#v", mock.calls)
+			}
+			if mock.pipeline == nil || !mock.pipeline.committed {
+				t.Fatal("the policy pipeline should be committed regardless of OCSF version support")
+			}
+			if status == nil {
+				t.Fatal("expected a policy status")
+			}
+
+			var enforced *metav1.Condition
+			for i := range status.Conditions {
+				if status.Conditions[i].Type == string(types.PolicyConditionEnforced) {
+					enforced = &status.Conditions[i]
+					break
+				}
+			}
+			if enforced == nil {
+				t.Fatalf("missing Enforced condition: %#v", status.Conditions)
+			}
+			if tt.wantSupported {
+				if enforced.Status != metav1.ConditionTrue || enforced.Reason != "Enforced" {
+					t.Fatalf("Enforced condition = %#v, want True/Enforced", enforced)
+				}
+				if len(mock.pipeline.preludeActions) != 4 || len(mock.pipeline.responseActions) != 1 {
+					t.Fatalf("qualifying Gateway actions = prelude:%d response:%d, want 4 and 1", len(mock.pipeline.preludeActions), len(mock.pipeline.responseActions))
+				}
+				return
+			}
+
+			if enforced.Status != metav1.ConditionFalse || string(enforced.Reason) != tt.wantReason || !strings.Contains(enforced.Message, "requires Envoy >= 1.36.0") {
+				t.Fatalf("Enforced condition = %#v, want False/%s with the version requirement", enforced, tt.wantReason)
+			}
+			if len(mock.pipeline.preludeActions) != 0 || len(mock.pipeline.responseActions) != 0 {
+				t.Fatalf("unqualified Gateway must not receive OCSF actions: prelude=%#v response=%#v", mock.pipeline.preludeActions, mock.pipeline.responseActions)
+			}
+		})
+	}
+}
+
+func TestOCSFVersionSubscriptionExpressionUsesSupportedGatewayFields(t *testing.T) {
+	expression := ocsfGatewayClassExpression("gateway")
+	env, err := cel.NewEnv(cel.Variable("gateway", cel.DynType))
+	if err != nil {
+		t.Fatalf("cel.NewEnv failed: %v", err)
+	}
+	ast, issues := env.Compile(expression)
+	if issues != nil && issues.Err() != nil {
+		t.Fatalf("Gateway subscription expression is invalid CEL: %v", issues.Err())
+	}
+	program, err := env.Program(ast)
+	if err != nil {
+		t.Fatalf("env.Program failed: %v", err)
+	}
+
+	activation := map[string]any{"gateway": map[string]any{
+		"spec": map[string]any{"gatewayClassName": "test-class"},
+	}}
+	got, _, err := program.Eval(activation)
+	if err != nil {
+		t.Fatalf("subscription expression evaluation failed: %v", err)
+	}
+	if got.Value() != "test-class" {
+		t.Fatalf("subscription expression = %v, want test-class", got.Value())
+	}
+}
+
+func TestReconcileSpec_OCSFEnvoyVersionUpgradeAndDowngrade(t *testing.T) {
+	kubeClient := newTestGatewayClient(t, istioGatewayControllerName)
+	r := &TelemetryPolicyReconciler{ExtensionBase: types.ExtensionBase{Logger: logr.Discard(), Client: kubeClient}}
+	pol := newTestPolicy(map[string]string{"metric_label": "request.path"}, map[string]string{"custom_field": "request.path"})
+	pol.Spec.Logging.Default.OCSF = testOCSFLoggingConfig()
+
+	reconcileAt := func(version string) *mockPipeline {
+		t.Helper()
+		setTestPolicyEnvoyMinVersion(t, pol, version)
+		mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
+		if _, err := r.reconcileSpec(context.Background(), pol, mock); err != nil {
+			t.Fatalf("reconcileSpec at minimum Envoy version %q returned error: %v", version, err)
+		}
+		if mock.pipeline == nil || !mock.pipeline.committed {
+			t.Fatalf("pipeline at minimum Envoy version %q was not committed", version)
+		}
+		return mock.pipeline
+	}
+
+	if pipeline := reconcileAt("1.35.13"); len(pipeline.preludeActions) != 0 || len(pipeline.responseActions) != 0 {
+		t.Fatalf("below-minimum version installed OCSF actions: %#v", pipeline)
+	}
+	if pipeline := reconcileAt("1.36.0"); len(pipeline.preludeActions) != 4 || len(pipeline.responseActions) != 1 {
+		t.Fatalf("upgrade to 1.36.0 did not install OCSF actions: %#v", pipeline)
+	}
+	if pipeline := reconcileAt("1.35.13"); len(pipeline.preludeActions) != 0 || len(pipeline.responseActions) != 0 {
+		t.Fatalf("downgrade below 1.36.0 did not remove OCSF actions: %#v", pipeline)
+	}
+}
+
 func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testing.T) {
 	actor := v1alpha1.OCSFActorConfig{
 		Identity: "auth.identity.user.username",
@@ -504,8 +686,8 @@ func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testi
 	expression := ocsfActorUserValue(actor)
 	for _, expected := range []string{
 		"has(auth.identity.user)",
-		"has(auth.identity.user.uid) && isPresent(auth.identity.user.uid)",
-		"has(auth.identity.user.groups) && isPresent(auth.identity.user.groups)",
+		"has(auth.identity.user.uid) && auth.identity.user.uid != null",
+		"has(auth.identity.user.groups) && auth.identity.user.groups != null",
 		`auth.identity.user.groups.map(group, {"name": group})`,
 		`"type_id": auth.identity.user.username.startsWith("system:serviceaccount:") ? 4 : 1`,
 	} {
@@ -516,7 +698,7 @@ func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testi
 	if strings.Contains(expression, "type(") {
 		t.Fatalf("actor expression must not use unsupported CEL type(): %s", expression)
 	}
-	if strings.Contains(expression, "null") {
+	if strings.Contains(expression, ": null") {
 		t.Fatalf("optional actor fields must be omitted from grouped maps, not exported as null: %s", expression)
 	}
 
@@ -526,90 +708,67 @@ func TestOCSFActorUserValueGuardsOptionalSelectorsAndOmitsMissingFields(t *testi
 	}
 }
 
-func ocsfShimCELEnvOptions() []cel.EnvOption {
-	return []cel.EnvOption{
-		cel.Function("isPresent", cel.Overload(
-			"ocsf_is_present_dyn",
-			[]*cel.Type{cel.DynType},
-			cel.BoolType,
-			cel.UnaryBinding(func(value celref.Val) celref.Val {
-				if _, isNull := value.(celtypes.Null); isNull {
-					return celtypes.False
-				}
-				return celtypes.True
-			}),
-		)),
-		cel.Function("timestampToEpochMillis", cel.Overload(
-			"ocsf_timestamp_to_epoch_millis",
-			[]*cel.Type{cel.TimestampType},
-			cel.IntType,
-		)),
-		cel.Function("durationToMillis", cel.Overload(
-			"ocsf_duration_to_millis",
-			[]*cel.Type{cel.DurationType},
-			cel.IntType,
-		)),
-		cel.Function("intToString", cel.Overload(
-			"ocsf_int_to_string",
-			[]*cel.Type{cel.IntType},
-			cel.StringType,
-		)),
-	}
-}
-
-func TestOCSFStoreActionsExportOneJSONEvent(t *testing.T) {
-	config := &v1alpha1.OCSFLoggingConfig{
-		Actor: v1alpha1.OCSFActorConfig{
-			Identity: "auth.identity.user.username",
-			UID:      "auth.identity.user.uid",
-			Groups:   "auth.identity.user.groups",
-		},
-		Target: v1alpha1.OCSFTargetConfig{
-			ResourceType: "model",
-			RequestPath: v1alpha1.OCSFRequestPathTarget{
-				NamespaceSegment: 0,
-				NameSegment:      1,
-			},
-			AIProvider: "KServe",
-		},
-	}
+func TestOCSFStoreActionsExportProtobufValueEventBeforeAndAfterAuthorization(t *testing.T) {
+	config := testOCSFLoggingConfig()
 
 	requestActions, responseActions := ocsfStoreActions(config)
-	wantPaths := []string{
+	wantMetadataPaths := []string{
 		wasmtypes.OCSFResourcesStorePath,
 		wasmtypes.OCSFAIModelStorePath,
 		wasmtypes.OCSFURLPathStorePath,
 	}
-	if len(requestActions) != len(wantPaths) {
-		t.Fatalf("request actions = %d, want %d", len(requestActions), len(wantPaths))
+	if len(requestActions) != len(wantMetadataPaths)+1 {
+		t.Fatalf("request actions = %d, want three metadata stores and one fallback event", len(requestActions))
 	}
-	for index, action := range requestActions {
-		store, ok := action.(types.StoreAction)
+	for index, path := range wantMetadataPaths {
+		store, ok := requestActions[index].(types.StoreAction)
 		if !ok {
-			t.Fatalf("request action %d = %T, want StoreAction", index, action)
+			t.Fatalf("request action %d = %T, want StoreAction", index, requestActions[index])
 		}
-		if store.Path != wantPaths[index] || store.ExportToHost || store.ExportFormat != "" {
-			t.Fatalf("request action %d = %#v, want internal store to %q", index, store, wantPaths[index])
+		if store.Path != path || store.ExportToHost || store.ExportFormat != "" {
+			t.Fatalf("request action %d = %#v, want internal store to %q", index, store, path)
 		}
 		if strings.Contains(store.Value, "request_metadata") {
-			t.Fatalf("request action %d must export a directly readable filter-state value, got %q", index, store.Value)
+			t.Fatalf("request action %d must store directly readable filter-state data, got %q", index, store.Value)
 		}
+	}
+
+	preludeEvent, ok := requestActions[len(wantMetadataPaths)].(types.StoreAction)
+	if !ok || preludeEvent.Path != wasmtypes.OCSFEventStorePath || !preludeEvent.ExportToHost ||
+		preludeEvent.ExportFormat != types.StoreExportFormatProtobufValue {
+		t.Fatalf("prelude event action = %#v, want one protobufValue host export", requestActions[len(wantMetadataPaths)])
 	}
 	if len(responseActions) != 1 {
 		t.Fatalf("response actions = %d, want one grouped actor action", len(responseActions))
 	}
-	event, ok := responseActions[0].(types.StoreAction)
-	if !ok || event.Path != wasmtypes.OCSFEventStorePath || !event.ExportToHost || event.ExportFormat != types.StoreExportFormatJSON {
-		t.Fatalf("response event action = %#v, want one JSON host export", responseActions[0])
+	responseEvent, ok := responseActions[0].(types.StoreAction)
+	if !ok || responseEvent.Path != wasmtypes.OCSFEventStorePath || !responseEvent.ExportToHost ||
+		responseEvent.ExportFormat != types.StoreExportFormatProtobufValue {
+		t.Fatalf("response event action = %#v, want one protobufValue host export", responseActions[0])
+	}
+	if strings.Contains(preludeEvent.Value, "auth.identity") || !strings.Contains(preludeEvent.Value, `"actor": {"user": {"type_id": 0}}`) {
+		t.Fatalf("prelude event must use the unauthenticated fallback actor: %s", preludeEvent.Value)
+	}
+	if !strings.Contains(responseEvent.Value, "auth.identity.user.username") {
+		t.Fatalf("response event must include the configured authenticated actor: %s", responseEvent.Value)
 	}
 	for _, want := range []string{
-		"activity_id", "actor", "resources", "ai_model", "response.code", "request.duration",
-		"timestampToEpochMillis(request.time)", "durationToMillis(request.duration)", "intToString(",
-		"isPresent(request.time)", "isPresent(request.duration)", "isPresent(response.code)", "isPresent(response.size)",
+		"activity_id", "actor", "resources", "ai_model", "request.method", "request.protocol", "ocsf.http_request.url.path",
 	} {
-		if !strings.Contains(event.Value, want) {
-			t.Fatalf("response event value does not contain %q: %s", want, event.Value)
+		if !strings.Contains(responseEvent.Value, want) {
+			t.Fatalf("response event value does not contain %q: %s", want, responseEvent.Value)
 		}
+	}
+	for _, unsupported := range []string{
+		"isPresent(", "timestampToEpochMillis(", "durationToMillis(", "intToString(",
+		"request.time", "request.duration", "response.code", "response.size", "int(", "string(",
+	} {
+		if strings.Contains(responseEvent.Value, unsupported) {
+			t.Fatalf("OCSF StoreAction must not evaluate final stream fields or shim CEL conversions %q: %s", unsupported, responseEvent.Value)
+		}
+	}
+	if strings.Contains(responseEvent.Value, "request.headers") || strings.Contains(responseEvent.Value, "Authorization") || strings.Contains(responseEvent.Value, "request.query") {
+		t.Fatalf("OCSF event value must not export headers, credentials, or query data: %q", responseEvent.Value)
 	}
 }
 
@@ -621,21 +780,36 @@ func TestOCSFEventValueCELCompilesWithShimContract(t *testing.T) {
 			Groups:   "auth.identity.user.groups",
 		},
 	}
-	envOptions := []cel.EnvOption{
+	env, err := cel.NewEnv(
 		cel.Variable("request", cel.DynType),
 		cel.Variable("response", cel.DynType),
 		cel.Variable("auth", cel.DynType),
 		cel.Variable("ocsf", cel.DynType),
 		celext.Strings(),
-	}
-	envOptions = append(envOptions, ocsfShimCELEnvOptions()...)
-	env, err := cel.NewEnv(envOptions...)
+	)
 	if err != nil {
 		t.Fatalf("cel.NewEnv failed: %v", err)
 	}
 	_, issues := env.Compile(ocsfEventValue(config))
 	if issues != nil && issues.Err() != nil {
-		t.Fatalf("OCSF event does not compile against the wasm-shim CEL contract: %v", issues.Err())
+		t.Fatalf("response OCSF event does not compile against standard CEL functions: %v", issues.Err())
+	}
+
+	preludeEnv, err := cel.NewEnv(
+		cel.Variable("request", cel.DynType),
+		cel.Variable("ocsf", cel.DynType),
+		celext.Strings(),
+	)
+	if err != nil {
+		t.Fatalf("cel.NewEnv for prelude failed: %v", err)
+	}
+	preludeEvent := ocsfEventValueWithActor(config, `{"type_id": 0}`)
+	if strings.Contains(preludeEvent, "auth.identity") {
+		t.Fatalf("prelude OCSF event must not depend on authorization metadata: %s", preludeEvent)
+	}
+	_, issues = preludeEnv.Compile(preludeEvent)
+	if issues != nil && issues.Err() != nil {
+		t.Fatalf("fallback OCSF event does not compile before authorization metadata exists: %v", issues.Err())
 	}
 }
 
@@ -646,7 +820,6 @@ func TestOCSFActorUserValueHandlesMissingParentsAndOptionalFields(t *testing.T) 
 		Groups:   "auth.identity.user.groups",
 	}
 	envOptions := []cel.EnvOption{cel.Variable("auth", cel.DynType), celext.Strings()}
-	envOptions = append(envOptions, ocsfShimCELEnvOptions()...)
 	env, err := cel.NewEnv(envOptions...)
 	if err != nil {
 		t.Fatalf("cel.NewEnv failed: %v", err)

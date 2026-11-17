@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -41,13 +43,15 @@ import (
 )
 
 const (
-	ocsfE2EReadyTimeout     = 5 * time.Minute
-	ocsfE2EHTTPTimeout      = 15 * time.Second
-	ocsfHTTPBinImage        = "quay.io/kuadrant/httpbin@sha256:2865a9ac6596340135fc3cd82cbc543c4050124afb10361e36f727abe4f71900"
-	grpcbinTestImage        = "quay.io/kuadrant/grpcbin@sha256:bd8f2ffdd02d0849fad2d1c754eff4402c867e7a3e0552b8992f4590f5687d20"
-	ocsfAccessLoggerName    = "envoy.access_loggers.stdout"
-	ocsfEventKey            = wasm.OCSFEventFilterStateKey
-	ocsfMarkerDiagnosticKey = "ocsf_marker_diagnostic"
+	ocsfE2EReadyTimeout                 = 5 * time.Minute
+	ocsfE2EHTTPTimeout                  = 15 * time.Second
+	ocsfHTTPBinImage                    = "quay.io/kuadrant/httpbin@sha256:2865a9ac6596340135fc3cd82cbc543c4050124afb10361e36f727abe4f71900"
+	grpcbinTestImage                    = "quay.io/kuadrant/grpcbin@sha256:bd8f2ffdd02d0849fad2d1c754eff4402c867e7a3e0552b8992f4590f5687d20"
+	ocsfAccessLoggerName                = "envoy.access_loggers.stdout"
+	ocsfEventKey                        = wasm.OCSFEventFilterStateKey
+	ocsfMarkerDiagnosticKey             = "ocsf_marker_diagnostic"
+	ocsfAccessLogEnvoyVersionAnnotation = "kuadrant.io/ocsf-envoy-min-version"
+	ocsfAccessLogRequiredEnvoyVersion   = "1.36.0"
 )
 
 var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
@@ -119,6 +123,29 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).
 			WithTimeout(ocsfE2EReadyTimeout).Should(BeTrue())
 
+		minimumProxyVersion, err := ocsfGatewayMinimumEnvoyVersion(ctx, testNamespace, gateway.Name)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		minimumVersion, err := utilversion.ParseSemantic(minimumProxyVersion)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		requiredVersion, err := utilversion.ParseSemantic(ocsfAccessLogRequiredEnvoyVersion)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		if minimumVersion.LessThan(requiredVersion) {
+			Skip(fmt.Sprintf(
+				"live OCSF event validation requires Envoy >= %s; lowest running Gateway proxy is %s",
+				ocsfAccessLogRequiredEnvoyVersion,
+				minimumProxyVersion,
+			))
+		}
+
 		route := tests.BuildBasicHttpRoute("ocsf-event-route", gateway.Name, testNamespace, []string{hostname})
 		route.Spec.Rules[0].Matches = []gatewayapiv1.HTTPRouteMatch{{
 			Path: &gatewayapiv1.HTTPPathMatch{
@@ -169,6 +196,9 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 
 		By("attaching an OCSF aiOperation TelemetryPolicy to the Gateway")
 		policy := ocsfTelemetryPolicy(testNamespace, gateway.Name)
+		policy.SetAnnotations(map[string]string{
+			ocsfAccessLogEnvoyVersionAnnotation: minimumProxyVersion,
+		})
 		Expect(testClient().Create(ctx, policy)).To(Succeed())
 		Eventually(func() error {
 			return ocsfTelemetryPolicyEnforcementStatus(ctx, testClient(), client.ObjectKeyFromObject(policy))
@@ -275,6 +305,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		}
 		request.Host = hostname
 		request.Header.Set("Authorization", "Bearer "+credentialSentinel)
+		request.Header.Set("Cookie", "ocsf-cookie-secret-sentinel")
 		request.Header.Set("X-OCSF-User", "ocsf-test-user")
 		response, err := httpClient.Do(request)
 		if err != nil {
@@ -309,7 +340,7 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 			if err != nil {
 				return
 			}
-			event = findOCSFEvent(accessLogs, "GET /tenant/model/get")
+			event = findOCSFEvent(accessLogs, "GET /tenant/model/get", "200")
 			markerDiagnostic := findOCSFMarkerDiagnostic(accessLogs)
 			markerSummary := "not observed"
 			if markerDiagnostic != nil {
@@ -350,8 +381,12 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Expect(httpResponse["body_length"]).To(BeNumerically(">", 0))
 		Expect(httpResponse["latency"]).To(BeAssignableToTypeOf(float64(0)))
 		Expect(httpResponse["latency"]).To(BeNumerically(">=", 0))
+		Expect(event["status_id"]).To(BeAssignableToTypeOf(float64(0)))
 		Expect(event["status"]).To(Equal("Success"))
 		Expect(event["status_code"]).To(Equal("200"))
+		unmapped := ocsfEventObject(event, "unmapped")
+		Expect(unmapped["kuadrant_response_succeeded"]).To(BeAssignableToTypeOf(true))
+		Expect(unmapped["kuadrant_response_succeeded"]).To(BeTrue())
 
 		resources, ok := event["resources"].([]any)
 		Expect(ok).To(BeTrue())
@@ -370,8 +405,11 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		Expect(string(eventJSON)).NotTo(ContainSubstring(querySentinel))
 		Expect(string(eventJSON)).NotTo(ContainSubstring(credentialSentinel))
 		Expect(string(eventJSON)).NotTo(ContainSubstring("Bearer " + credentialSentinel))
+		Expect(string(eventJSON)).NotTo(ContainSubstring("ocsf-cookie-secret-sentinel"))
 		Expect(string(accessLogs)).NotTo(ContainSubstring(credentialSentinel),
 			"the Authorization credential must not appear anywhere in the Gateway proxy logs")
+		Expect(string(accessLogs)).NotTo(ContainSubstring("ocsf-cookie-secret-sentinel"),
+			"the Cookie credential must not appear anywhere in the Gateway proxy logs")
 		for _, artifact := range []string{
 			"Gg5vY3NmLXRlc3QtdXNlcg==",
 			"@type",
@@ -384,6 +422,77 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 		} {
 			Expect(string(eventJSON)).NotTo(ContainSubstring(artifact), "OCSF event must not contain base64/protobuf artifacts")
 		}
+
+		By("sending a denied request and verifying its OCSF failure event")
+		const deniedQuerySentinel = "ocsf-denied-query-secret-sentinel"
+		const deniedCredentialSentinel = "ocsf-denied-bearer-secret-sentinel"
+		const deniedCookieSentinel = "ocsf-denied-cookie-secret-sentinel"
+		deniedRequestStarted := time.Now().Add(-time.Second)
+		deniedRequest, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			fmt.Sprintf("http://127.0.0.1:%d/tenant/model/get?sentinel=%s", localPort, deniedQuerySentinel), nil)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		deniedRequest.Host = hostname
+		deniedRequest.Header.Set("Authorization", "Bearer "+deniedCredentialSentinel)
+		deniedRequest.Header.Set("Cookie", deniedCookieSentinel)
+		deniedHTTPClient := &http.Client{
+			Timeout: ocsfE2EHTTPTimeout,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		deniedResponse, err := deniedHTTPClient.Do(deniedRequest)
+		Expect(err).NotTo(HaveOccurred())
+		if err != nil {
+			return
+		}
+		_, readErr = io.Copy(io.Discard, deniedResponse.Body)
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(deniedResponse.Body.Close()).To(Succeed())
+		By(fmt.Sprintf("verifying denied HTTP %d response and its OCSF failure event", deniedResponse.StatusCode))
+		Expect(deniedResponse.StatusCode).To(BeNumerically(">=", 300))
+
+		var deniedEvent map[string]any
+		var deniedAccessLogs []byte
+		Eventually(func(g Gomega) {
+			logCommand := exec.CommandContext(ctx, "kubectl", "-n", testNamespace, "logs", gatewayPod.Name,
+				"-c", "istio-proxy", "--since-time="+deniedRequestStarted.UTC().Format(time.RFC3339Nano), "--tail=100")
+			deniedAccessLogs, err = logCommand.CombinedOutput()
+			g.Expect(err).NotTo(HaveOccurred())
+			if err != nil {
+				return
+			}
+			deniedEvent = findOCSFEvent(deniedAccessLogs, "GET /tenant/model/get", fmt.Sprint(deniedResponse.StatusCode))
+			g.Expect(deniedEvent).NotTo(BeNil(), "recent denied-request proxy logs:\n%s", summarizeOCSFProxyLogs(deniedAccessLogs))
+		}).WithContext(ctx).WithTimeout(30 * time.Second).WithPolling(time.Second).Should(Succeed())
+
+		Expect(deniedEvent["class_uid"]).To(Equal(float64(6003)))
+		Expect(deniedEvent["type_uid"]).To(Equal(float64(600399)))
+		Expect(deniedEvent["status_id"]).To(BeAssignableToTypeOf(float64(0)))
+		Expect(deniedEvent["status_id"]).To(Equal(float64(2)))
+		Expect(deniedEvent["status"]).To(Equal("Failure"))
+		Expect(deniedEvent["time"]).To(BeAssignableToTypeOf(float64(0)))
+		deniedMetadata := ocsfEventObject(deniedEvent, "metadata")
+		Expect(deniedMetadata["logged_time"]).To(BeAssignableToTypeOf(float64(0)))
+		Expect(deniedMetadata["logged_time"]).To(BeNumerically(">=", deniedEvent["time"]))
+		deniedResponseFields := ocsfEventObject(deniedEvent, "http_response")
+		Expect(deniedResponseFields["code"]).To(Equal(float64(deniedResponse.StatusCode)))
+		Expect(deniedResponseFields["body_length"]).To(BeAssignableToTypeOf(float64(0)))
+		Expect(deniedResponseFields["latency"]).To(BeAssignableToTypeOf(float64(0)))
+		Expect(deniedEvent["status_code"]).To(Equal(fmt.Sprint(deniedResponse.StatusCode)))
+		Expect(ocsfEventObject(ocsfEventObject(deniedEvent, "actor"), "user")["type_id"]).To(Equal(float64(0)))
+		deniedUnmapped := ocsfEventObject(deniedEvent, "unmapped")
+		Expect(deniedUnmapped["kuadrant_response_succeeded"]).To(BeAssignableToTypeOf(true))
+		Expect(deniedUnmapped["kuadrant_response_succeeded"]).To(BeFalse())
+		deniedEventJSON, err := json.Marshal(deniedEvent)
+		Expect(err).NotTo(HaveOccurred())
+		for _, secret := range []string{deniedQuerySentinel, deniedCredentialSentinel, deniedCookieSentinel} {
+			Expect(string(deniedEventJSON)).NotTo(ContainSubstring(secret))
+			Expect(string(deniedAccessLogs)).NotTo(ContainSubstring(secret), "sensitive request values must not appear in Gateway proxy logs")
+		}
+		Expect(string(deniedAccessLogs)).NotTo(ContainSubstring("Bearer " + deniedCredentialSentinel))
 	})
 })
 
@@ -1175,6 +1284,49 @@ func podIsReady(pod *corev1.Pod) bool {
 	return false
 }
 
+func ocsfGatewayMinimumEnvoyVersion(ctx context.Context, namespace, gatewayName string) (string, error) {
+	pods := &corev1.PodList{}
+	selector := client.MatchingLabels{"gateway.networking.k8s.io/gateway-name": gatewayName}
+	if err := testClient().List(ctx, pods, client.InNamespace(namespace), selector); err != nil {
+		return "", fmt.Errorf("list Gateway proxy pods: %w", err)
+	}
+
+	versionPattern := regexp.MustCompile(`(?:^|/)(v?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)(?:/|$)`)
+	var minimum *utilversion.Version
+	proxies := 0
+	for _, pod := range pods.Items {
+		if pod.Status.Phase != corev1.PodRunning || pod.DeletionTimestamp != nil {
+			continue
+		}
+		proxies++
+		output, err := exec.CommandContext(ctx, "kubectl", "-n", namespace, "exec", pod.Name, "-c", "istio-proxy", "--", "pilot-agent", "request", "GET", "/server_info").CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("read Envoy server_info from running proxy pod %s: %w: %s", pod.Name, err, strings.TrimSpace(string(output)))
+		}
+		var serverInfo struct {
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal(output, &serverInfo); err != nil {
+			return "", fmt.Errorf("decode Envoy server_info from pod %s: %w", pod.Name, err)
+		}
+		match := versionPattern.FindStringSubmatch(serverInfo.Version)
+		if len(match) != 2 {
+			return "", fmt.Errorf("Envoy version in pod %s is not recognizable: %q", pod.Name, serverInfo.Version)
+		}
+		parsed, err := utilversion.ParseSemantic(match[1])
+		if err != nil {
+			return "", fmt.Errorf("parse Envoy version %q from pod %s: %w", match[1], pod.Name, err)
+		}
+		if minimum == nil || parsed.LessThan(minimum) {
+			minimum = parsed
+		}
+	}
+	if proxies == 0 || minimum == nil {
+		return "", fmt.Errorf("no running proxy pods found for Gateway %s/%s", namespace, gatewayName)
+	}
+	return minimum.String(), nil
+}
+
 func ocsfPortForward(ctx context.Context, namespace, target string, remotePort int32) (uint16, func(), func() error, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -1311,7 +1463,7 @@ func ocsfEnvoyConfigDump(ctx context.Context, namespace, podName string) ([]byte
 }
 
 func summarizeOCSFEnvoyConfigDump(configDump []byte) string {
-	return fmt.Sprintf("config dump bytes=%d; OCSF access logger present=%t; OCSF event marker present=%t; exported JSON OCSF WASM store action present=%t",
+	return fmt.Sprintf("config dump bytes=%d; OCSF access logger present=%t; OCSF event marker present=%t; exported protobufValue OCSF WASM store action present=%t",
 		len(configDump), bytes.Contains(configDump, []byte(ocsfAccessLoggerName)), bytes.Contains(configDump, []byte(ocsfEventKey)),
 		hasExportedOCSFEventStoreActionInEnvoyConfigDump(configDump))
 }
@@ -1329,7 +1481,7 @@ func hasExportedOCSFEventStoreAction(pluginConfigJSON string) bool {
 			path, _ := node["path"].(string)
 			exportToHost, _ := node["exportToHost"].(bool)
 			exportFormat, _ := node["exportFormat"].(string)
-			if path == wasm.OCSFEventStorePath && exportToHost && exportFormat == string(wasm.StoreExportFormatJSON) {
+			if path == wasm.OCSFEventStorePath && exportToHost && exportFormat == string(wasm.StoreExportFormatProtobufValue) {
 				return true
 			}
 			for _, child := range node {
@@ -1448,7 +1600,7 @@ func summarizeOCSFProxyLogs(logs []byte) string {
 	return strings.Join(relevantLines, "\n")
 }
 
-func findOCSFEvent(logs []byte, expectedOperation string) map[string]any {
+func findOCSFEvent(logs []byte, expectedOperation, expectedStatusCode string) map[string]any {
 	scanner := bufio.NewScanner(bytes.NewReader(logs))
 	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
 	for scanner.Scan() {
@@ -1457,7 +1609,7 @@ func findOCSFEvent(logs []byte, expectedOperation string) map[string]any {
 			continue
 		}
 		api, ok := event["api"].(map[string]any)
-		if ok && api["operation"] == expectedOperation {
+		if ok && api["operation"] == expectedOperation && event["status_code"] == expectedStatusCode {
 			return event
 		}
 	}

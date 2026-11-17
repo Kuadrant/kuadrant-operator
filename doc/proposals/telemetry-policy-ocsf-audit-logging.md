@@ -120,24 +120,38 @@ gateway workload with `gateway.networking.k8s.io/gateway-name`. A CEL access-log
 dedicated `wasm.kuadrant.ocsf.event` marker, so requests for routes without an attached OCSF
 TelemetryPolicy do not produce this event.
 
-The wasm shim builds the complete OCSF event during the access-log phase and exports it as UTF-8 JSON
-in `wasm.kuadrant.ocsf.event`. Envoy emits that value as one raw stdout access-log line with
-`%FILTER_STATE(...:PLAIN)%`, avoiding typed CEL formatter compatibility issues and protobuf wrapper
-artifacts. The query-free URL path is projected from `request.url_path` by the TelemetryPolicy before
-terminal actions can return early.
+The wasm shim exports OCSF fields available before stream completion as a `google.protobuf.Value`
+using the `protobufValue` StoreAction format. Envoy's `StdoutAccessLog.json_format` uses
+`%TYPED_CEL(...)%` to project those protobuf Value fields into typed JSON. It also derives the final
+request start and logged timestamps, response code, byte count, latency, and success status directly
+from Envoy's access-log CEL context, where these values are available at stream completion. An HTTP
+2xx is recorded as Success; redirects and other response codes are Failure, including authorization
+redirects that would otherwise look successful under a less strict threshold. This keeps
+timestamp and duration conversions out of the shim's CEL environment and preserves numbers and
+booleans as JSON primitives. The formatter does not use `typed_json_format` or print protobuf wrapper
+fields. The query-free URL path and a fallback event with `actor.user.type_id: 0` are stored by the
+TelemetryPolicy request prelude before terminal authorization actions can return early, so denied
+local replies still have an OCSF event to log. After successful authorization, the response-phase
+StoreAction overwrites the same filter-state key with the configured Authorino identity; denied
+requests keep the fallback actor.
 
-The event expression depends on the shim exposing `request.time` as a CEL Timestamp, `request.duration`
-as a CEL Duration, and `response.code` and `response.size` as CEL integers. It uses the shim functions
-`timestampToEpochMillis(Timestamp)`, `durationToMillis(Duration)`, and `intToString(Int)` to build
-numeric OCSF timestamps and latency and the string `status_code`. It uses `isPresent(value)` to guard
-nullable properties; CEL `has(field)` only checks whether a map key exists. The shim release must
-implement this contract before the operator emits the event.
+The Envoy formatter requires Envoy 1.36.0 or newer. The operator cannot reliably discover the Envoy
+version for every replica behind a Gateway, so it does not infer support from the operator,
+GatewayClass, or proxy image tag. An administrator must set the
+`kuadrant.io/ocsf-envoy-min-version` annotation on the TelemetryPolicy that targets the Gateway to the
+lowest attested Envoy semantic version across every running proxy replica. Missing, invalid, or
+below-`1.36.0` values disable OCSF access logging and set `Enforced=False` with an explanatory
+reason. During a mixed-version rollout, use the lowest replica version; OCSF remains disabled while
+any proxy is below 1.36.0. Update the policy annotation after proxy upgrades or downgrades. Updating
+it triggers reconciliation and adds or removes the OCSF pipeline actions. Ordinary metrics and
+`logging.default.fields` continue to reconcile. Restrict permission to change this annotation to
+administrators who verify every replica.
 
 The access logger must:
 
-1. run after the Kuadrant wasm filter has exported the complete `wasm.kuadrant.ocsf.event` value;
+1. read `wasm.kuadrant.ocsf.event` after the request-prelude export and, for authorized requests, after the response-phase actor update;
 2. use structured JSON output, with typed values instead of stringified numbers;
-3. preserve success and failure status values without relying on Envoy typed CEL formatters;
+3. preserve success and failure status values with numeric and boolean JSON types through Envoy 1.36+ `TYPED_CEL`;
 4. emit the OCSF unknown-user representation when authentication did not produce an identity;
 5. preserve any access logger configured by the platform instead of replacing it; and
 6. emit exactly one OCSF event per selected request.
@@ -152,8 +166,10 @@ policy condition instead of silently accepting the OCSF stanza.
 
 ## Validation
 
-Unit tests cover API validation and the rendered access-log configuration. An integration test then
-drives all of these cases through an Istio Gateway:
+Unit tests cover the version gate for Envoy 1.35, 1.36, later versions, unknown and mixed replicas,
+plus upgrade and downgrade reconciliation. The OCSF-specific Istio E2E verifies every running proxy's
+version, then drives allowed and denied requests and checks numeric and boolean JSON types, schema fields,
+and exclusion of credentials and query values. Additional integration scenarios include:
 
 - allowed request with a successful upstream response;
 - authentication failure;

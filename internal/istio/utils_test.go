@@ -539,7 +539,7 @@ func envoyFilterWithWasmConfigValue(t *testing.T, configValue string) *istioclie
 }
 
 // TestEqualEnvoyFiltersMaxDecompressedBytes verifies that a change to the
-// envelope's maxDecompressedBytes (e.g. from retuning WASM_MAX_DECODED_CONFIG_BYTES)
+// envelope's maxDecompressedBytes (e.g. from retuning WASM_MAX_DECODED_CONFIG_SIZE)
 // makes EqualEnvoyFilters report "not equal", so the EnvoyFilter is rewritten.
 func TestEqualEnvoyFiltersMaxDecompressedBytes(t *testing.T) {
 	const cfg = `{"services":{},"actionSets":[]}`

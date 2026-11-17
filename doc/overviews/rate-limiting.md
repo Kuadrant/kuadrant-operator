@@ -295,6 +295,11 @@ actionSets:
 > {"encoding": "gzip+base64", "data": "H4sIAAAAAAAA/...", "maxDecompressedBytes": 33554432}
 > ```
 >
-> `maxDecompressedBytes` tells the wasm-shim how much to allow the config to decompress to (a decompression-bomb guard); it defaults to 32 MiB and is tunable via the `WASM_MAX_DECODED_CONFIG_BYTES` operator environment variable.
+> `maxDecompressedBytes` tells the wasm-shim how much the config is allowed to decompress to (a decompression-bomb guard). It defaults to 32 MiB and is tunable with the `WASM_MAX_DECODED_CONFIG_SIZE` operator environment variable, whose value is a Kubernetes [resource quantity](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/quantity/). For example:
 >
-> To recover the human-readable configuration, decode the `data` field, e.g. `echo '<data value>' | base64 -d | gunzip`.
+> ```sh
+> # operator Deployment env
+> WASM_MAX_DECODED_CONFIG_SIZE=128Mi   # or 64Mi, 32Mi (default), 60M, 33554432
+> ```
+>
+> The same limit bounds decompression on both the operator (when it reads the resource to reconcile) and the wasm-shim (on the data plane). To recover the human-readable configuration, decode the `data` field, e.g. `echo '<data value>' | base64 -d | gunzip`.

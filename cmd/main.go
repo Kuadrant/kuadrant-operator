@@ -69,6 +69,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
 	"github.com/kuadrant/kuadrant-operator/internal/trace"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -124,6 +125,7 @@ func printControllerMetaInfo() {
 	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	setupLog.Info("base logger", "log level", logLevel, "log mode", logMode)
 	setupLog.Info("build information", "version", version, "commit", gitSHA, "dirty", dirty)
+	setupLog.Info("wasm config decompression limit", "maxDecodedConfigBytes", wasm.MaxDecodedConfigSize())
 }
 
 func main() {

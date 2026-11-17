@@ -5,10 +5,24 @@ package wasm
 import (
 	"bytes"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"gotest.tools/assert"
 )
+
+// setMaxDecodedConfigSizeForTest overrides the memoized MaxDecodedConfigSize value
+// and returns a function that restores the previous state.
+func setMaxDecodedConfigSizeForTest(n int) func() {
+	prevOnce := maxDecodedConfigSizeOnce
+	prevValue := maxDecodedConfigSizeValue
+	maxDecodedConfigSizeOnce = sync.Once{}
+	maxDecodedConfigSizeOnce.Do(func() { maxDecodedConfigSizeValue = n })
+	return func() {
+		maxDecodedConfigSizeOnce = prevOnce
+		maxDecodedConfigSizeValue = prevValue
+	}
+}
 
 func TestEncodeDecodeConfigRoundTrip(t *testing.T) {
 	raw := []byte(`{"services":{"ratelimit":{"type":"ratelimit"}},"actionSets":[]}`)
@@ -56,16 +70,14 @@ func TestDecodeConfigRejectsDecompressionBomb(t *testing.T) {
 	envelope, err := encodeConfig(bomb)
 	assert.NilError(t, err)
 
-	orig := maxDecodedConfigSize
-	defer func() { maxDecodedConfigSize = orig }()
-
 	// Under a low limit, decoding is rejected rather than allocating the full output.
-	maxDecodedConfigSize = 1 << 20 // 1 MiB
+	restore := setMaxDecodedConfigSizeForTest(1 << 20) // 1 MiB
 	_, err = decodeConfig(envelope)
 	assert.ErrorContains(t, err, "exceeds")
+	restore()
 
 	// At or above the payload size, decoding succeeds and round-trips exactly.
-	maxDecodedConfigSize = 8 << 20
+	defer setMaxDecodedConfigSizeForTest(8 << 20)()
 	decoded, err := decodeConfig(envelope)
 	assert.NilError(t, err)
 	assert.Assert(t, bytes.Equal(bomb, decoded))
@@ -91,9 +103,7 @@ func TestConfigMaxDecompressedBytes(t *testing.T) {
 }
 
 func TestEncodeConfigRejectsOversized(t *testing.T) {
-	orig := maxDecodedConfigSize
-	defer func() { maxDecodedConfigSize = orig }()
-	maxDecodedConfigSize = 1 << 10 // 1 KiB
+	defer setMaxDecodedConfigSizeForTest(1 << 10)() // 1 KiB
 
 	// Over the limit: encode refuses, so the operator never emits an oversized resource.
 	_, err := encodeConfig(bytes.Repeat([]byte("A"), (1<<10)+1))

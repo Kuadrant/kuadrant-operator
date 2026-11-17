@@ -3,6 +3,9 @@
 package istio
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 
@@ -480,6 +483,76 @@ func TestEqualEnvoyFiltersWasmConfigEncoding(t *testing.T) {
 		withoutConfig := buildEnvoyFilter(subT, sha, nil)
 		withConfig := buildEnvoyFilter(subT, sha, envelopeStruct)
 		assert.Assert(subT, !EqualEnvoyFilters(withoutConfig, withConfig))
+	})
+}
+
+// gzipBase64Envelope builds a gzip+base64 envelope string for configJSON with the
+// given maxDecompressedBytes, matching what the operator emits.
+func gzipBase64Envelope(t *testing.T, configJSON string, maxBytes int) string {
+	var buf bytes.Buffer
+	gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	assert.NilError(t, err)
+	_, err = gz.Write([]byte(configJSON))
+	assert.NilError(t, err)
+	assert.NilError(t, gz.Close())
+	raw, err := json.Marshal(map[string]any{
+		"encoding":             "gzip+base64",
+		"data":                 base64.StdEncoding.EncodeToString(buf.Bytes()),
+		"maxDecompressedBytes": maxBytes,
+	})
+	assert.NilError(t, err)
+	return string(raw)
+}
+
+// envoyFilterWithWasmConfigValue builds a minimal EnvoyFilter whose HTTP_FILTER
+// patch embeds configValue at typed_config.value.config.configuration.value.
+func envoyFilterWithWasmConfigValue(t *testing.T, configValue string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+	patchValueRaw, err := json.Marshal(map[string]any{
+		"name": "envoy.filters.http.wasm",
+		"typed_config": map[string]any{
+			"@type":    "type.googleapis.com/udpa.type.v1.TypedStruct",
+			"type_url": "type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm",
+			"value": map[string]any{
+				"config": map[string]any{
+					"name": "kuadrant-wasm-shim",
+					"configuration": map[string]any{
+						"@type": "type.googleapis.com/google.protobuf.StringValue",
+						"value": configValue,
+					},
+				},
+			},
+		},
+	})
+	assert.NilError(t, err)
+	pv := &_struct.Struct{}
+	assert.NilError(t, pv.UnmarshalJSON(patchValueRaw))
+	return &istioclientgonetworkingv1alpha3.EnvoyFilter{
+		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
+			ConfigPatches: []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+				{
+					ApplyTo: istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+					Patch:   &istioapinetworkingv1alpha3.EnvoyFilter_Patch{Value: pv},
+				},
+			},
+		},
+	}
+}
+
+// TestEqualEnvoyFiltersMaxDecompressedBytes verifies that a change to the
+// envelope's maxDecompressedBytes (e.g. from retuning WASM_MAX_DECODED_CONFIG_BYTES)
+// makes EqualEnvoyFilters report "not equal", so the EnvoyFilter is rewritten.
+func TestEqualEnvoyFiltersMaxDecompressedBytes(t *testing.T) {
+	const cfg = `{"services":{},"actionSets":[]}`
+	a := envoyFilterWithWasmConfigValue(t, gzipBase64Envelope(t, cfg, 33554432))
+
+	t.Run("same config and same limit are equal", func(subT *testing.T) {
+		b := envoyFilterWithWasmConfigValue(subT, gzipBase64Envelope(subT, cfg, 33554432))
+		assert.Assert(subT, EqualEnvoyFilters(a, b))
+	})
+
+	t.Run("same config but different limit is not equal", func(subT *testing.T) {
+		b := envoyFilterWithWasmConfigValue(subT, gzipBase64Envelope(subT, cfg, 67108864))
+		assert.Assert(subT, !EqualEnvoyFilters(a, b))
 	})
 }
 

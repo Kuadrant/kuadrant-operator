@@ -30,6 +30,9 @@ func TestEncodeConfigEnvelopeShape(t *testing.T) {
 	assert.NilError(t, json.Unmarshal(encoded, &envelope))
 	assert.Equal(t, envelope.Encoding, EncodingGzipBase64)
 	assert.Assert(t, envelope.Data != "", "envelope data should not be empty")
+	// maxDecompressedBytes is emitted for the wasm-shim to cap decompression.
+	assert.Equal(t, envelope.MaxDecompressedBytes, shimMaxDecompressedBytes())
+	assert.Equal(t, envelope.MaxDecompressedBytes, defaultMaxDecodedConfigSize)
 }
 
 func TestDecodeConfigPlainJSONPassthrough(t *testing.T) {
@@ -66,6 +69,25 @@ func TestDecodeConfigRejectsDecompressionBomb(t *testing.T) {
 	decoded, err := decodeConfig(envelope)
 	assert.NilError(t, err)
 	assert.Assert(t, bytes.Equal(bomb, decoded))
+}
+
+func TestConfigMaxDecompressedBytes(t *testing.T) {
+	// Envelope with the field present -> returns it.
+	withField := []byte(`{"encoding":"gzip+base64","data":"eJw=","maxDecompressedBytes":99}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(withField), 99)
+
+	// Envelope omitting the field -> shim default.
+	omitted := []byte(`{"encoding":"gzip+base64","data":"eJw="}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(omitted), defaultMaxDecodedConfigSize)
+
+	// Plain (non-envelope) config -> shim default.
+	plain := []byte(`{"services":{},"actionSets":[]}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(plain), defaultMaxDecodedConfigSize)
+
+	// What encodeConfig emits by default -> the operator's limit.
+	encoded, err := encodeConfig([]byte(`{"actionSets":[]}`))
+	assert.NilError(t, err)
+	assert.Equal(t, ConfigMaxDecompressedBytes(encoded), shimMaxDecompressedBytes())
 }
 
 func TestEncodeConfigRejectsOversized(t *testing.T) {

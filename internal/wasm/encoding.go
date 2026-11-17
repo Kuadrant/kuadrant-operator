@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 
 	"k8s.io/utils/env"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,10 +43,15 @@ var maxDecodedConfigSize = func() int {
 
 // encodedConfig is the self-describing envelope wrapping the encoded wasm config:
 //
-//	{ "encoding": "gzip+base64", "data": "<base64(gzip(configJSON))>" }
+//	{ "encoding": "gzip+base64", "data": "<base64(gzip(configJSON))>", "maxDecompressedBytes": 33554432 }
+//
+// maxDecompressedBytes is read by the wasm-shim to cap decompression on the data
+// plane (see Kuadrant/wasm-shim#450). The operator sets it to its own limit so
+// both sides enforce the same bound; when omitted the shim defaults to 32 MiB.
 type encodedConfig struct {
-	Encoding string `json:"encoding"`
-	Data     string `json:"data"`
+	Encoding             string `json:"encoding"`
+	Data                 string `json:"data"`
+	MaxDecompressedBytes int    `json:"maxDecompressedBytes,omitempty"`
 }
 
 // encodeConfig gzip-compresses and base64-encodes the raw config JSON and wraps
@@ -76,10 +82,39 @@ func encodeConfig(raw []byte) ([]byte, error) {
 	}
 
 	envelope := encodedConfig{
-		Encoding: EncodingGzipBase64,
-		Data:     base64.StdEncoding.EncodeToString(buf.Bytes()),
+		Encoding:             EncodingGzipBase64,
+		Data:                 base64.StdEncoding.EncodeToString(buf.Bytes()),
+		MaxDecompressedBytes: shimMaxDecompressedBytes(),
 	}
 	return json.Marshal(envelope)
+}
+
+// shimMaxDecompressedBytes returns maxDecodedConfigSize clamped to the range the
+// wasm-shim accepts for maxDecompressedBytes (1..math.MaxInt32); out-of-range
+// values would make the shim reject the whole config.
+func shimMaxDecompressedBytes() int {
+	if maxDecodedConfigSize > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if maxDecodedConfigSize < 1 {
+		return defaultMaxDecodedConfigSize
+	}
+	return maxDecodedConfigSize
+}
+
+// ConfigMaxDecompressedBytes returns the maxDecompressedBytes the wasm-shim will
+// apply to the given (possibly enveloped) config: the envelope's field when
+// present, otherwise the shim default (32 MiB). Plain (non-envelope) config also
+// maps to the shim default. The reconcilers' equality checks use this so that a
+// change to the limit (e.g. via WASM_MAX_DECODED_CONFIG_BYTES) is detected and
+// the EnvoyFilter / EnvoyExtensionPolicy is updated accordingly.
+func ConfigMaxDecompressedBytes(raw []byte) int {
+	var envelope encodedConfig
+	if err := json.Unmarshal(raw, &envelope); err == nil &&
+		envelope.Encoding == EncodingGzipBase64 && envelope.Data != "" && envelope.MaxDecompressedBytes > 0 {
+		return envelope.MaxDecompressedBytes
+	}
+	return defaultMaxDecodedConfigSize
 }
 
 // decodeConfig reverses encodeConfig. It is backward compatible: if raw is not a

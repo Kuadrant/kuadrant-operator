@@ -718,6 +718,11 @@ func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy
 			if err != nil {
 				return false
 			}
+			// EqualTo ignores the envelope's maxDecompressedBytes; compare it
+			// explicitly so a change to the limit triggers an update.
+			if wasm.ConfigMaxDecompressedBytes(aWasm.Config.Raw) != wasm.ConfigMaxDecompressedBytes(bWasm.Config.Raw) {
+				return false
+			}
 			return aConfig != nil && bConfig != nil && aConfig.EqualTo(bConfig)
 		})
 	})

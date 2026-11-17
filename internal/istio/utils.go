@@ -265,6 +265,12 @@ func equalWasmHTTPFilterPatchValues(a, b *structpb.Struct) bool {
 		// embedded config present on only one side
 		return false
 	default:
+		// The config string (envelope) is blanked in aRest/bRest, so its
+		// maxDecompressedBytes is not covered by the proto.Equal below. Compare it
+		// explicitly so a change to the limit triggers an update.
+		if wasm.ConfigMaxDecompressedBytes([]byte(aCfgStr)) != wasm.ConfigMaxDecompressedBytes([]byte(bCfgStr)) {
+			return false
+		}
 		aCfg, err := wasm.ConfigFromJSON(&apiextensionsv1.JSON{Raw: []byte(aCfgStr)})
 		if err != nil {
 			return false

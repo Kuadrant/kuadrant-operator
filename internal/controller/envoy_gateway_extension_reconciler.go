@@ -110,7 +110,11 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			wasmConfig.Services = lo.Assign(wasmConfig.Services, serviceBuilder.Build())
 		}
 
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		desiredEnvoyExtensionPolicy, err := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		if err != nil {
+			logger.Error(err, "failed to build EnvoyExtensionPolicy; retaining last-known-good config", "gateway", gatewayKey.String())
+			continue
+		}
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
@@ -611,8 +615,10 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	return wasmConfigs, observability, serviceBuilder, nil
 }
 
-// buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+// buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config.
+// It returns an error (rather than nil) when the wasm config cannot be encoded, so the
+// caller can retain the last-known-good resource instead of dropping enforcement.
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) (*envoygatewayv1alpha1.EnvoyExtensionPolicy, error) {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -689,12 +695,12 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 	} else {
 		pluginConfigJSON, err := wasmConfig.ToJSON()
 		if err != nil {
-			return nil
+			return nil, fmt.Errorf("failed to encode wasm config: %w", err)
 		}
 		envoyPolicy.Spec.Wasm[0].Config = pluginConfigJSON
 	}
 
-	return envoyPolicy
+	return envoyPolicy, nil
 }
 
 func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy) bool {

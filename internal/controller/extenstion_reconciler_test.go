@@ -165,7 +165,10 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 	wasmURL := "http://kuadrant-operator-wasm.kuadrant-system.svc.cluster.local:8082/plugin.wasm"
 
 	t.Run("ensure wasm URL is set in envoyfilter", func(t *testing.T) {
-		envoyFilter := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
+		envoyFilter, err := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if envoyFilter == nil {
 			t.Fatalf("Expected an envoyfilter")
 		}
@@ -244,7 +247,10 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 	for _, testCase := range testCases {
 		images := testCase.WASMImageURLS()
 		for _, image := range images {
-			policy := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image)
+			policy, err := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			testCase.Assert(t, policy)
 		}
 	}

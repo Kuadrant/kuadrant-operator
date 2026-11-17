@@ -941,7 +941,7 @@ func TestOCSFEventValueCELCompilesWithShimContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cel.NewEnv failed: %v", err)
 	}
-	_, issues := env.Compile(ocsfEventValue(config))
+	_, issues := env.Compile(ocsfEventValueWithActor(config, ocsfActorUserValueOrUnknown(config.Actor)))
 	if issues != nil && issues.Err() != nil {
 		t.Fatalf("response OCSF event does not compile against standard CEL functions: %v", issues.Err())
 	}

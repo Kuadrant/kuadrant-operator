@@ -178,7 +178,6 @@ func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1al
 				return calculateErrorStatus(pol, err), err
 			}
 		}
-
 	}
 
 	pipeline := kuadrantCtx.NewPipeline(pol)
@@ -279,7 +278,8 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) (requestActions, respo
 		namePredicate, nameExpression, provider, provider,
 	)
 	requestPathValue := "request.url_path"
-	requestActions = []types.Action{
+	requestActions = make([]types.Action, 0, 4)
+	requestActions = append(requestActions,
 		types.StoreAction{
 			Path:  ocsfResourcesStorePath,
 			Value: resourceValue,
@@ -292,7 +292,7 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) (requestActions, respo
 			Path:  ocsfURLPathStorePath,
 			Value: requestPathValue,
 		},
-	}
+	)
 
 	// Store a fallback event before terminal authorization actions so denied requests
 	// can still be logged. Authorino's response phase overwrites this export with the
@@ -308,10 +308,6 @@ func ocsfStoreActions(config *v1alpha1.OCSFLoggingConfig) (requestActions, respo
 	requestActions = append(requestActions, eventAction(`{"type_id": 0}`))
 	responseActions = []types.Action{eventAction(ocsfActorUserValueOrUnknown(config.Actor))}
 	return requestActions, responseActions
-}
-
-func ocsfEventValue(config *v1alpha1.OCSFLoggingConfig) string {
-	return ocsfEventValueWithActor(config, ocsfActorUserValueOrUnknown(config.Actor))
 }
 
 func ocsfEventValueWithActor(config *v1alpha1.OCSFLoggingConfig, actorUser string) string {

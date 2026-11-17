@@ -1493,8 +1493,7 @@ func (x *PipelineCommitRequest) GetActions() []*ActionEntry {
 
 var File_v1_kuadrant_proto protoreflect.FileDescriptor
 
-const file_v1_kuadrant_proto_rawDesc =
-	"\n\x11v1/kuadrant.pr" +
+const file_v1_kuadrant_proto_rawDesc = "\n\x11v1/kuadrant.pr" +
 	"oto\x12\vkuadrant.v1" +
 	"\x1a\x0fv1/common.prot" +
 	"o\x1a'v1/google/api" +
@@ -1747,7 +1746,6 @@ const file_v1_kuadrant_proto_rawDesc =
 	"\x16.google.protobu" +
 	"f.Empty\"\x00B\x05Z\x03/v1" +
 	"b\x06proto3"
-
 
 var (
 	file_v1_kuadrant_proto_rawDescOnce sync.Once

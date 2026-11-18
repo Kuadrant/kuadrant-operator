@@ -24,8 +24,13 @@ func (c *Config) ToStruct() (*_struct.Struct, error) {
 		return nil, err
 	}
 
+	encoded, err := encodeConfig(configJSON)
+	if err != nil {
+		return nil, err
+	}
+
 	configStruct := &_struct.Struct{}
-	if err := configStruct.UnmarshalJSON(configJSON); err != nil {
+	if err := configStruct.UnmarshalJSON(encoded); err != nil {
 		return nil, err
 	}
 	return configStruct, nil
@@ -37,7 +42,12 @@ func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
 		return nil, err
 	}
 
-	return &apiextensionsv1.JSON{Raw: configJSON}, nil
+	encoded, err := encodeConfig(configJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	return &apiextensionsv1.JSON{Raw: encoded}, nil
 }
 
 // EqualTo performs semantic equality comparison between two Config instances.

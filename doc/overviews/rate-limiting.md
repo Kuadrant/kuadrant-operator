@@ -245,70 +245,74 @@ As a consequence of this design:
 - The rate limiting service can rely on the indexation to look up for groups of limit definitions and counters.
 - Components remain compliant with industry protocols and flexible for different integration options.
 
-A Kuadrant wasm-shim configuration for one RateLimitPolicy custom resources targeting a HTTPRoute looks like the following and it is generated automatically by the Kuadrant control plane:
+The Kuadrant control plane generates the wasm-shim configuration automatically from the RateLimitPolicy custom resources and embeds it in the data-plane resource for the gateway provider in use: an `EnvoyFilter` for Istio, or an `EnvoyExtensionPolicy` for Envoy Gateway. For a RateLimitPolicy targeting a HTTPRoute with two route rules (`/assets` and `/v1`, each with its own limit), the configuration looks like the following (shown decoded and abridged for readability):
 
 ```yaml
-apiVersion: extensions.istio.io/v1alpha1
-kind: WasmPlugin
-metadata:
-  creationTimestamp: "2024-10-01T16:59:40Z"
-  generation: 1
-  name: kuadrant-kuadrant-ingressgateway
-  namespace: gateway-system
-  ownerReferences:
-    - apiVersion: gateway.networking.k8s.io/v1
-      blockOwnerDeletion: true
-      controller: true
-      kind: Gateway
-      name: kuadrant-ingressgateway
-      uid: 0298355b-fb30-4442-af2b-88d0c05bd2bd
-  resourceVersion: "11253"
-  uid: 36ef1fb7-9eca-46c7-af63-fe783f40148c
-spec:
-  phase: STATS
-  pluginConfig:
-    services:
-      ratelimit-service:
-        type: ratelimit
-        endpoint: ratelimit-cluster
-        failureMode: allow
-    actionSets:
-      - name: some_name_0
-        routeRuleConditions:
-          hostnames:
-            - "*.toystore.website"
-            - "*.toystore.io"
-          predicates:
-            - request.url_path.startsWith("/assets")
-        actions:
-          - service: ratelimit-service
-            scope: gateway-system/app-rlp
-            predicates:
-              - request.host.endsWith('.toystore.website')
-            data:
-              - expression:
-                  key: limit.toystore_assets_all_domains__b61ee8e6
-                  value: "1"
-      - name: some_name_1
-        routeRuleConditions:
-          hostnames:
-            - "*.toystore.website"
-            - "*.toystore.io"
-          predicates:
-            - request.url_path.startsWith("/v1")
-        actions:
-          - service: ratelimit-service
-            scope: gateway-system/app-rlp
-            predicates:
-              - request.host.endsWith('.toystore.website')
-              - auth.identity.username == ""
-            data:
-              - expression:
-                  key: limit.toystore_v1_website_unauthenticated__377837ee
-                  value: "1"
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: kuadrant-ingressgateway
-  url: quay.io/kuadrant/wasm-shim:latest
+services:
+  ratelimit-service:
+    endpoint: kuadrant-ratelimit-service
+    type: dynamic
+    failureMode: allow
+    timeout: 100ms
+    grpcService: envoy.service.ratelimit.v3.RateLimitService
+    grpcMethod: ShouldRateLimit
+  # auth-service and ratelimit-{check,commit,report,reserve}-service also appear
+  # in the service catalog; omitted here for brevity. A second, near-identical
+  # actionSet for the "/v1" rule (routeRuleConditions match "/v1") is also omitted.
+actionSets:
+  - name: 8d30e0020e3086fa8eeee5d5b98d4f6e00369ee228879ddda6eaf051ad218293
+    routeRuleConditions:
+      hostnames:
+        - "*.toystore.com"
+      predicates:
+        - request.url_path.startsWith("/assets")
+    actions:
+      - type: grpc
+        predicate: request.path.startsWith('/assets') || request.path.startsWith('/v1')
+        terminal: false
+        isGuard: true
+        var: ratelimit_response
+        service: ratelimit-service
+        label: ratelimit
+        messageBuilder: |-
+          envoy.service.ratelimit.v3.RateLimitRequest {
+              domain: "default/toystore",
+              hits_addend: 1u,
+              descriptors: [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor { entries: ((request.path.startsWith('/assets')) ? [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor.Entry { key: "limit.assets__fa4bb078", value: string(1) }] : []) + ((request.path.startsWith('/v1')) ? [envoy.extensions.common.ratelimit.v3.RateLimitDescriptor.Entry { key: "limit.v1__1064421f", value: string(1) }] : []) }]
+          }
+        onReply:
+          - type: deny
+            predicate: ratelimit_response.overall_code == 2
+            terminal: true
+            isGuard: true
+            denyWith: 'DenyResponse{status: 429u, headers: ratelimit_response.response_headers_to_add, body: "Too Many Requests\n"}'
+          - type: headers
+            predicate: ratelimit_response.overall_code == 1
+            terminal: false
+            isGuard: true
+            target: response
+            headers: ratelimit_response.response_headers_to_add
+          - type: fail
+            predicate: ratelimit_response.overall_code != 1 && ratelimit_response.overall_code != 2
+            terminal: true
+            isGuard: true
+            logMessage: Unknown rate limit response code from ratelimit_response
+        sources:
+          - ratelimitpolicy.kuadrant.io:default/toystore
+descriptorService: kuadrant-operator-grpc
 ```
+
+> **Note:** The configuration above is shown decoded for readability. In the resource actually generated by the control plane, the wasm-shim configuration is gzip-compressed and base64-encoded, wrapped in a self-describing envelope, to keep large configurations within the Kubernetes resource size limit:
+>
+> ```json
+> {"encoding": "gzip+base64", "data": "H4sIAAAAAAAA/...", "maxDecompressedBytes": 33554432}
+> ```
+>
+> `maxDecompressedBytes` tells the wasm-shim how much the config is allowed to decompress to (a decompression-bomb guard). It defaults to 32 MiB and is tunable with the `WASM_MAX_DECODED_CONFIG_SIZE` operator environment variable, whose value is a Kubernetes [resource quantity](https://kubernetes.io/docs/reference/kubernetes-api/common-definitions/quantity/). For example:
+>
+> ```sh
+> # operator Deployment env
+> WASM_MAX_DECODED_CONFIG_SIZE=128Mi   # or 64Mi, 32Mi (default), 60M, 33554432
+> ```
+>
+> Newly generated envelopes advertise the operator's current cap in `maxDecompressedBytes`, and the wasm-shim enforces that advertised value on the data plane. When the operator reads an existing resource to reconcile, it bounds decompression with its own current cap rather than the value stored in the envelope; if the cap has changed, the operator rewrites the resource so the advertised value catches up. To recover the human-readable configuration, decode the `data` field, e.g. `echo '<data value>' | base64 -d | gunzip`.

@@ -833,7 +833,10 @@ func TestBindingOrderEnvoyFilter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			baselineFilter := buildIstioEnvoyFilterForGateway(gateway, baseline, "http://wasm", "wasm", 8082, "")
+			baselineFilter, err := buildIstioEnvoyFilterForGateway(gateway, baseline, "http://wasm", "wasm", 8082, "")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if len(baselineFilter.Spec.ConfigPatches) == 0 {
 				t.Fatal("test did not generate Wasm patches")
 			}
@@ -852,7 +855,10 @@ func TestBindingOrderEnvoyFilter(t *testing.T) {
 					if string(data) != string(baselineJSON) {
 						t.Fatalf("permutation %d changed serialized Wasm configuration", count)
 					}
-					filter := buildIstioEnvoyFilterForGateway(gateway, config, "http://wasm", "wasm", 8082, "")
+					filter, err := buildIstioEnvoyFilterForGateway(gateway, config, "http://wasm", "wasm", 8082, "")
+					if err != nil {
+						t.Fatal(err)
+					}
 					if !kuadrantistio.EqualEnvoyFilters(baselineFilter, filter) {
 						t.Fatalf("permutation %d produces unequal EnvoyFilters", count)
 					}

@@ -314,4 +314,4 @@ descriptorService: kuadrant-operator-grpc
 > WASM_MAX_DECODED_CONFIG_SIZE=128Mi   # or 64Mi, 32Mi (default), 60M, 33554432
 > ```
 >
-> The same limit bounds decompression on both the operator (when it reads the resource to reconcile) and the wasm-shim (on the data plane). To recover the human-readable configuration, decode the `data` field, e.g. `echo '<data value>' | base64 -d | gunzip`.
+> Newly generated envelopes advertise the operator's current cap in `maxDecompressedBytes`, and the wasm-shim enforces that advertised value on the data plane. When the operator reads an existing resource to reconcile, it bounds decompression with its own current cap rather than the value stored in the envelope; if the cap has changed, the operator rewrites the resource so the advertised value catches up. To recover the human-readable configuration, decode the `data` field, e.g. `echo '<data value>' | base64 -d | gunzip`.

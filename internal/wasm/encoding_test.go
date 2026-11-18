@@ -1,0 +1,171 @@
+//go:build unit
+
+package wasm
+
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+
+	"gotest.tools/assert"
+)
+
+// setMaxDecodedConfigSizeForTest overrides the memoized MaxDecodedConfigSize value
+// and returns a function that restores the previous state.
+func setMaxDecodedConfigSizeForTest(n int) func() {
+	prev := maxDecodedConfigSize
+	l := &decodeLimit{value: n}
+	l.once.Do(func() {}) // mark loaded so Value()/Err() don't read the env
+	maxDecodedConfigSize = l
+	return func() { maxDecodedConfigSize = prev }
+}
+
+func TestMaxDecodedConfigSizeValidation(t *testing.T) {
+	cases := []struct {
+		name      string
+		env       string
+		wantErr   bool
+		wantValue int
+	}{
+		{"unset", "", false, defaultMaxDecodedConfigSize},
+		{"valid binary", "64Mi", false, 64 << 20},
+		{"valid decimal", "60M", false, 60_000_000},
+		{"valid bare int", "1048576", false, 1 << 20},
+		{"max int32", "2147483647", false, 2147483647},
+		{"unparseable", "abc", true, defaultMaxDecodedConfigSize},
+		{"zero", "0", true, defaultMaxDecodedConfigSize},
+		{"negative", "-5", true, defaultMaxDecodedConfigSize},
+		{"too big", "3Gi", true, defaultMaxDecodedConfigSize},
+		{"overflows int64", "18446744073709551617", true, defaultMaxDecodedConfigSize},
+	}
+	const testEnvVar = "TEST_WASM_MAX_DECODED_CONFIG_SIZE"
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(testEnvVar, tc.env)
+			l := &decodeLimit{envVar: testEnvVar}
+
+			if tc.wantErr {
+				assert.Assert(t, l.Err() != nil, "expected a validation error")
+			} else {
+				assert.NilError(t, l.Err())
+			}
+			// Value falls back to the default on an invalid value.
+			assert.Equal(t, l.Value(), tc.wantValue)
+		})
+	}
+}
+
+func TestEncodeDecodeConfigRoundTrip(t *testing.T) {
+	raw := []byte(`{"services":{"ratelimit":{"type":"ratelimit"}},"actionSets":[]}`)
+
+	encoded, err := encodeConfig(raw)
+	assert.NilError(t, err)
+
+	decoded, err := decodeConfig(encoded)
+	assert.NilError(t, err)
+
+	assert.Assert(t, bytes.Equal(raw, decoded), "decoded bytes should equal the original input")
+}
+
+func TestEncodeConfigEnvelopeShape(t *testing.T) {
+	// Pin the cap to the default so the assertions below do not depend on
+	// WASM_MAX_DECODED_CONFIG_SIZE in the test environment.
+	defer setMaxDecodedConfigSizeForTest(defaultMaxDecodedConfigSize)()
+
+	encoded, err := encodeConfig([]byte(`{"actionSets":[]}`))
+	assert.NilError(t, err)
+
+	var envelope encodedConfig
+	assert.NilError(t, json.Unmarshal(encoded, &envelope))
+	assert.Equal(t, envelope.Encoding, EncodingGzipBase64)
+	assert.Assert(t, envelope.Data != "", "envelope data should not be empty")
+	// maxDecompressedBytes is emitted for the wasm-shim to cap decompression.
+	assert.Assert(t, envelope.MaxDecompressedBytes != nil, "maxDecompressedBytes should be emitted")
+	assert.Equal(t, *envelope.MaxDecompressedBytes, MaxDecodedConfigSize())
+	assert.Equal(t, *envelope.MaxDecompressedBytes, defaultMaxDecodedConfigSize)
+}
+
+func TestDecodeConfigPlainJSONPassthrough(t *testing.T) {
+	// Non-envelope (plain config JSON) must be returned unchanged for backward compat.
+	plain := []byte(`{"services":{},"actionSets":[]}`)
+	decoded, err := decodeConfig(plain)
+	assert.NilError(t, err)
+	assert.Assert(t, bytes.Equal(plain, decoded))
+
+	// A JSON object that happens not to be our envelope is also passed through.
+	other := []byte(`{"encoding":"something-else","data":"x"}`)
+	decoded, err = decodeConfig(other)
+	assert.NilError(t, err)
+	assert.Assert(t, bytes.Equal(other, decoded))
+}
+
+func TestDecodeConfigRejectsDecompressionBomb(t *testing.T) {
+	// A highly compressible payload: 8 MiB of a single repeated byte. It fits in a
+	// tiny envelope but expands well past a small configured limit. Encode under an
+	// explicit cap so the fixture setup does not depend on WASM_MAX_DECODED_CONFIG_SIZE.
+	defer setMaxDecodedConfigSizeForTest(8 << 20)()
+	bomb := bytes.Repeat([]byte("A"), 8<<20)
+	envelope, err := encodeConfig(bomb)
+	assert.NilError(t, err)
+
+	// Under a low limit, decoding is rejected rather than allocating the full output.
+	// Run in a subtest and restore the override via t.Cleanup so it runs even if the
+	// assertion fails, keeping the low cap from leaking into later tests.
+	t.Run("rejected over the limit", func(subT *testing.T) {
+		subT.Cleanup(setMaxDecodedConfigSizeForTest(1 << 20)) // 1 MiB
+		_, err := decodeConfig(envelope)
+		assert.ErrorContains(subT, err, "exceeds")
+	})
+
+	// At or above the payload size, decoding succeeds and round-trips exactly.
+	decoded, err := decodeConfig(envelope)
+	assert.NilError(t, err)
+	assert.Assert(t, bytes.Equal(bomb, decoded))
+}
+
+func TestConfigMaxDecompressedBytes(t *testing.T) {
+	// Envelope with the field present -> returns it.
+	withField := []byte(`{"encoding":"gzip+base64","data":"eJw=","maxDecompressedBytes":99}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(withField), 99)
+
+	// Envelope omitting the field -> shim default.
+	omitted := []byte(`{"encoding":"gzip+base64","data":"eJw="}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(omitted), defaultMaxDecodedConfigSize)
+
+	// Envelope with an explicit invalid zero -> returned verbatim (not folded into
+	// the default), so a tampered resource compares unequal and gets rewritten.
+	explicitZero := []byte(`{"encoding":"gzip+base64","data":"eJw=","maxDecompressedBytes":0}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(explicitZero), 0)
+
+	// Plain (non-envelope) config -> shim default.
+	plain := []byte(`{"services":{},"actionSets":[]}`)
+	assert.Equal(t, ConfigMaxDecompressedBytes(plain), defaultMaxDecodedConfigSize)
+
+	// What encodeConfig emits by default -> the operator's limit.
+	encoded, err := encodeConfig([]byte(`{"actionSets":[]}`))
+	assert.NilError(t, err)
+	assert.Equal(t, ConfigMaxDecompressedBytes(encoded), MaxDecodedConfigSize())
+}
+
+func TestEncodeConfigRejectsOversized(t *testing.T) {
+	defer setMaxDecodedConfigSizeForTest(1 << 10)() // 1 KiB
+
+	// Over the limit: encode refuses, so the operator never emits an oversized resource.
+	_, err := encodeConfig(bytes.Repeat([]byte("A"), (1<<10)+1))
+	assert.ErrorContains(t, err, "exceeds")
+
+	// At or under the limit: encodes fine.
+	_, err = encodeConfig(bytes.Repeat([]byte("A"), 1<<10))
+	assert.NilError(t, err)
+}
+
+func TestEncodeConfigDeterministic(t *testing.T) {
+	raw := []byte(`{"services":{"a":{"type":"ratelimit"}},"actionSets":[{"name":"set"}]}`)
+
+	first, err := encodeConfig(raw)
+	assert.NilError(t, err)
+	second, err := encodeConfig(raw)
+	assert.NilError(t, err)
+
+	assert.Assert(t, bytes.Equal(first, second), "equal input must produce byte-identical envelopes")
+}

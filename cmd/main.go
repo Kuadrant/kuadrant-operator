@@ -68,6 +68,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
 	"github.com/kuadrant/kuadrant-operator/internal/trace"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -201,6 +202,12 @@ func main() {
 	printControllerMetaInfo()
 
 	setupLog := log.Log
+
+	if err := wasm.ValidateMaxDecodedConfigSize(); err != nil {
+		setupLog.Error(err, "invalid wasm config decompression limit")
+		os.Exit(1)
+	}
+	setupLog.Info("wasm config decompression limit", "maxDecodedConfigBytes", wasm.MaxDecodedConfigSize())
 
 	var (
 		metricsAddr          string

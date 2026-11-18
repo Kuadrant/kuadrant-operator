@@ -374,7 +374,10 @@ func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {
 	for _, testCase := range testCases {
 		images := testCase.WASMImageURLS()
 		for _, image := range images {
-			policy := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image)
+			policy, err := buildEnvoyExtensionPolicyForGateway(testGateway, testWasmConfig, testCase.ProtectedRegistryPrefix, image)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			testCase.Assert(t, policy)
 		}
 	}

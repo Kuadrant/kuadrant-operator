@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -84,12 +85,14 @@ func extractWasmConfigFromEnvoyFilter(ef *istioclientgonetworkingv1alpha3.EnvoyF
 		return nil, fmt.Errorf("missing value in configuration")
 	}
 
-	var wasmConfig wasm.Config
-	if err := json.Unmarshal([]byte(configJSON), &wasmConfig); err != nil {
+	// The value is the gzip+base64 envelope produced by Config.ToStruct/ToJSON;
+	// route through the production decoder (also handles plain JSON).
+	wasmConfig, err := wasm.ConfigFromJSON(&apiextensionsv1.JSON{Raw: []byte(configJSON)})
+	if err != nil {
 		return nil, err
 	}
 
-	return &wasmConfig, nil
+	return wasmConfig, nil
 }
 
 // defaultTotalTokensCEL mirrors the CEL expression the operator generates by default (see

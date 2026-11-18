@@ -118,7 +118,8 @@ func (r *IstioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 		desiredEnvoyFilter, err := buildIstioEnvoyFilterForGateway(gateway, wasmConfig, wasmURL, wasmServerHost, wasmServerPort, WasmFileSHA256)
 		if err != nil {
-			return fmt.Errorf("failed to build EnvoyFilter for gateway %s: %w", gatewayKey.String(), err)
+			logger.Error(err, "failed to build EnvoyFilter; retaining last-known-good config", "gateway", gatewayKey.String())
+			continue
 		}
 
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
@@ -652,18 +653,23 @@ func specsHaveAuthAccess(specs []wasm.ActionSpec) bool {
 	return false
 }
 
-// buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config
+// buildIstioEnvoyFilterForGateway builds a desired EnvoyFilter custom resource for a given gateway and corresponding wasm config.
+// It returns an error (rather than a partial EnvoyFilter) when the wasm config cannot be
+// encoded or patched, so the caller can retain the last-known-good resource instead of
+// dropping enforcement.
 func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, wasmURL, wasmServerHost string, wasmServerPort int, imageSHA string) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	var configPatches []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
 
 	if len(wasmConfig.ActionSets) > 0 {
 		pluginConfigStruct, err := wasmConfig.ToStruct()
-		if err == nil {
-			patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
-			if err == nil {
-				configPatches = patches
-			}
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode wasm config: %w", err)
 		}
+		patches, err := kuadrantistio.BuildEnvoyFilterWasmPatch(wasmURL, "", imageSHA, WasmServerClusterName, pluginConfigStruct)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build wasm filter patch: %w", err)
+		}
+		configPatches = patches
 
 		clusterPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(wasmServerHost, wasmServerPort, false, func(h string, p int, _ bool) map[string]any {
 			return buildClusterPatch(WasmServerClusterName, h, p, false)

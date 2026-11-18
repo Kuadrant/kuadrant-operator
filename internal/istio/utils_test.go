@@ -425,15 +425,18 @@ func TestEqualEnvoyFiltersWasmConfigEncoding(t *testing.T) {
 		ActionSets: []wasm.ActionSet{},
 	}
 
-	// Envelope struct (gzip+base64), as produced by the current operator.
-	envelopeStruct, err := cfg.ToStruct()
-	assert.NilError(t, err)
-
 	// Plain-JSON struct, as produced by a pre-upgrade operator.
 	plainJSON, err := json.Marshal(cfg)
 	assert.NilError(t, err)
 	plainStruct := &_struct.Struct{}
 	assert.NilError(t, plainStruct.UnmarshalJSON(plainJSON))
+
+	// Envelope struct (gzip+base64), as produced by the current operator. Built with
+	// the default 32 MiB limit explicitly so the comparison does not depend on
+	// WASM_MAX_DECODED_CONFIG_SIZE in the test environment; the plain fixture above
+	// implies the same default.
+	envelopeStruct := &_struct.Struct{}
+	assert.NilError(t, envelopeStruct.UnmarshalJSON([]byte(gzipBase64Envelope(t, string(plainJSON), 33554432))))
 
 	buildEnvoyFilter := func(subT *testing.T, imageSHA string, pluginConfig *_struct.Struct) *istioclientgonetworkingv1alpha3.EnvoyFilter {
 		patches, err := BuildEnvoyFilterWasmPatch("http://example.com/plugin.wasm", "", imageSHA, "kuadrant-operator-wasm", pluginConfig)

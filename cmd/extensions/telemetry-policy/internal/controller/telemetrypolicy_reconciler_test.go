@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -161,16 +162,13 @@ func newTestGatewayClient(t *testing.T, controllerName gatewayapiv1.GatewayContr
 		Build()
 }
 
-func setTestPolicyEnvoyMinVersion(t *testing.T, policy *v1alpha1.TelemetryPolicy, version string) {
-	t.Helper()
-	if policy.Annotations == nil {
-		policy.Annotations = make(map[string]string)
-	}
-	if version == "" {
-		delete(policy.Annotations, ocsfEnvoyMinVersionAnnotation)
-	} else {
-		policy.Annotations[ocsfEnvoyMinVersionAnnotation] = version
-	}
+type fakeEnvoyVersionProbe struct {
+	minimum string
+	err     error
+}
+
+func (p *fakeEnvoyVersionProbe) MinimumVersion(context.Context, string, string) (string, error) {
+	return p.minimum, p.err
 }
 
 func testOCSFLoggingConfig() *v1alpha1.OCSFLoggingConfig {
@@ -473,13 +471,10 @@ func TestReconcileSpec_EmptySpec(t *testing.T) {
 func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
 	r := &TelemetryPolicyReconciler{
-		ExtensionBase: types.ExtensionBase{
-			Logger: logr.Discard(),
-			Client: newTestGatewayClient(t, istioGatewayControllerName),
-		},
+		ExtensionBase:     types.ExtensionBase{Logger: logr.Discard(), Client: newTestGatewayClient(t, istioGatewayControllerName)},
+		envoyVersionProbe: &fakeEnvoyVersionProbe{minimum: "1.36.0"},
 	}
 	pol := newTestPolicy(nil, nil)
-	setTestPolicyEnvoyMinVersion(t, pol, "1.36.0")
 	pol.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{
 		OCSF: &v1alpha1.OCSFLoggingConfig{
 			Profile: v1alpha1.OCSFProfileAIOperation,
@@ -524,20 +519,16 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 	for index, path := range metadataPaths {
 		metadata, ok := mock.pipeline.preludeActions[index].(types.StoreAction)
 		if !ok {
-			t.Fatalf("request prelude action %d has type %T, want types.StoreAction", index, mock.pipeline.preludeActions[index])
+			t.Fatalf("request prelude action %d has type %T", index, mock.pipeline.preludeActions[index])
 		}
 		if metadata.Path != path || metadata.ExportToHost || metadata.ExportFormat != "" {
 			t.Fatalf("request metadata store action = %#v, want internal prelude store at %q", metadata, path)
 		}
-		var required []string
-		switch path {
-		case wasmtypes.OCSFResourcesStorePath:
-			required = []string{"name", "namespace", "LLMInferenceService"}
-		case wasmtypes.OCSFAIModelStorePath:
-			required = []string{"ai_provider", "KServe"}
-		case wasmtypes.OCSFURLPathStorePath:
-			required = []string{"request.url_path"}
-		}
+		required := map[string][]string{
+			wasmtypes.OCSFResourcesStorePath: {"name", "namespace", "LLMInferenceService"},
+			wasmtypes.OCSFAIModelStorePath:   {"ai_provider", "KServe"},
+			wasmtypes.OCSFURLPathStorePath:   {"request.url_path"},
+		}[path]
 		for _, want := range required {
 			if !strings.Contains(metadata.Value, want) {
 				t.Errorf("request metadata value %q does not contain %q", metadata.Value, want)
@@ -554,7 +545,7 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 
 	preludeEvent, ok := mock.pipeline.preludeActions[3].(types.StoreAction)
 	if !ok {
-		t.Fatalf("request prelude event action type = %T, want types.StoreAction", mock.pipeline.preludeActions[3])
+		t.Fatalf("request prelude event action type = %T", mock.pipeline.preludeActions[3])
 	}
 	if preludeEvent.Path != wasmtypes.OCSFEventStorePath || preludeEvent.Predicate != "" || !preludeEvent.ExportToHost ||
 		preludeEvent.ExportFormat != types.StoreExportFormatProtobufValue {
@@ -563,7 +554,7 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 
 	event, ok := mock.pipeline.responseActions[0].(types.StoreAction)
 	if !ok {
-		t.Fatalf("response action type = %T, want types.StoreAction", mock.pipeline.responseActions[0])
+		t.Fatalf("response action type = %T", mock.pipeline.responseActions[0])
 	}
 	if strings.Contains(preludeEvent.Value, "auth.identity") || !strings.Contains(preludeEvent.Value, `"actor": {"user": {"type_id": 0}}`) {
 		t.Fatalf("request prelude event must use the unauthenticated fallback actor: %s", preludeEvent.Value)
@@ -580,12 +571,12 @@ func TestReconcileSpec_OCSFExportsOnlyApprovedMetadata(t *testing.T) {
 		`"type_uid": 600399`,
 		`"version": "1.9.0"`,
 		`request.method : "") + " "`,
-		`request.protocol`,
-		`ocsf.http_request.url.path`,
-		`auth.identity.user.username`,
-		`{"type_id": 0}`,
-		`ocsf.resources`,
-		`ocsf.ai_model`,
+		"request.protocol",
+		"ocsf.http_request.url.path",
+		"auth.identity.user.username",
+		"{\"type_id\": 0}",
+		"ocsf.resources",
+		"ocsf.ai_model",
 	} {
 		if !strings.Contains(event.Value, want) {
 			t.Errorf("OCSF event value does not contain %q: %s", want, event.Value)
@@ -704,27 +695,31 @@ func TestReconcileSpec_OCSFEnvoyVersionGate(t *testing.T) {
 	tests := []struct {
 		name           string
 		minimumVersion string
+		probeErr       error
 		wantSupported  bool
 		wantReason     string
 	}{
 		{name: "below minimum", minimumVersion: "1.35.0", wantReason: "EnvoyVersionUnsupported"},
 		{name: "mixed replicas use lowest version", minimumVersion: "1.35.13", wantReason: "EnvoyVersionUnsupported"},
-		{name: "unknown version", minimumVersion: "", wantReason: "EnvoyVersionNotVerified"},
+		{name: "unknown version", probeErr: errors.New("no proxy version could be read"), wantReason: "EnvoyVersionNotVerified"},
 		{name: "invalid version", minimumVersion: "unknown", wantReason: "EnvoyVersionNotVerified"},
 		{name: "prerelease below minimum", minimumVersion: "1.36.0-rc.1", wantReason: "EnvoyVersionUnsupported"},
 		{name: "minimum version", minimumVersion: "1.36.0", wantSupported: true},
 		{name: "later patch", minimumVersion: "1.36.13", wantSupported: true},
 		{name: "later minor", minimumVersion: "1.38.0", wantSupported: true},
-		{name: "attested development build above minimum", minimumVersion: "1.38.0-dev", wantSupported: true},
+		{name: "development build above minimum", minimumVersion: "1.38.0-dev", wantSupported: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
+			probe := &fakeEnvoyVersionProbe{minimum: tt.minimumVersion, err: tt.probeErr}
 			kubeClient := newTestGatewayClient(t, istioGatewayControllerName)
-			r := &TelemetryPolicyReconciler{ExtensionBase: types.ExtensionBase{Logger: logr.Discard(), Client: kubeClient}}
+			r := &TelemetryPolicyReconciler{
+				ExtensionBase:     types.ExtensionBase{Logger: logr.Discard(), Client: kubeClient},
+				envoyVersionProbe: probe,
+			}
 			pol := newTestPolicy(map[string]string{"metric_label": "request.path"}, map[string]string{"custom_field": "request.path"})
-			setTestPolicyEnvoyMinVersion(t, pol, tt.minimumVersion)
 			pol.Spec.Logging.Default.OCSF = testOCSFLoggingConfig()
 
 			status, err := r.reconcileSpec(context.Background(), pol, mock)
@@ -800,13 +795,17 @@ func TestOCSFVersionSubscriptionExpressionUsesSupportedGatewayFields(t *testing.
 
 func TestReconcileSpec_OCSFEnvoyVersionUpgradeAndDowngrade(t *testing.T) {
 	kubeClient := newTestGatewayClient(t, istioGatewayControllerName)
-	r := &TelemetryPolicyReconciler{ExtensionBase: types.ExtensionBase{Logger: logr.Discard(), Client: kubeClient}}
+	probe := &fakeEnvoyVersionProbe{minimum: "1.35.13"}
+	r := &TelemetryPolicyReconciler{
+		ExtensionBase:     types.ExtensionBase{Logger: logr.Discard(), Client: kubeClient},
+		envoyVersionProbe: probe,
+	}
 	pol := newTestPolicy(map[string]string{"metric_label": "request.path"}, map[string]string{"custom_field": "request.path"})
 	pol.Spec.Logging.Default.OCSF = testOCSFLoggingConfig()
 
 	reconcileAt := func(version string) *mockPipeline {
 		t.Helper()
-		setTestPolicyEnvoyMinVersion(t, pol, version)
+		probe.minimum = version
 		mock := &mockKuadrantCtx{gatewayClassNames: []string{"test-class"}}
 		if _, err := r.reconcileSpec(context.Background(), pol, mock); err != nil {
 			t.Fatalf("reconcileSpec at minimum Envoy version %q returned error: %v", version, err)
@@ -825,6 +824,114 @@ func TestReconcileSpec_OCSFEnvoyVersionUpgradeAndDowngrade(t *testing.T) {
 	}
 	if pipeline := reconcileAt("1.35.13"); len(pipeline.preludeActions) != 0 || len(pipeline.responseActions) != 0 {
 		t.Fatalf("downgrade below 1.36.0 did not remove OCSF actions: %#v", pipeline)
+	}
+}
+
+func TestMinimumEnvoyVersionFromPods(t *testing.T) {
+	pod := func(name string, phase corev1.PodPhase) corev1.Pod {
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "gateway-system"},
+			Status:     corev1.PodStatus{Phase: phase},
+		}
+	}
+	tests := []struct {
+		name     string
+		pods     []corev1.Pod
+		versions map[string]string
+		readErrs map[string]error
+		want     string
+		wantErr  string
+	}{
+		{
+			name: "uses lowest version across mixed running replicas and ignores terminated pods",
+			pods: []corev1.Pod{
+				pod("proxy-new", corev1.PodRunning),
+				pod("proxy-old", corev1.PodRunning),
+				pod("proxy-terminated", corev1.PodSucceeded),
+			},
+			versions: map[string]string{"proxy-new": "1.36.0", "proxy-old": "1.35.13"},
+			want:     "1.35.13",
+		},
+		{
+			name:    "no proxy pods",
+			wantErr: "no non-terminated proxy Pods",
+		},
+		{
+			name:    "pending proxy is unverified",
+			pods:    []corev1.Pod{pod("proxy-pending", corev1.PodPending)},
+			wantErr: "is not running",
+		},
+		{
+			name:     "unreadable proxy is unverified",
+			pods:     []corev1.Pod{pod("proxy-unreadable", corev1.PodRunning)},
+			readErrs: map[string]error{"proxy-unreadable": errors.New("exec forbidden")},
+			wantErr:  "exec forbidden",
+		},
+		{
+			name:     "unrecognized version is unverified",
+			pods:     []corev1.Pod{pod("proxy-unknown", corev1.PodRunning)},
+			versions: map[string]string{"proxy-unknown": "unknown"},
+			wantErr:  "not recognizable",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := minimumEnvoyVersionFromPods(context.Background(), "gateway-system/my-gateway", tt.pods,
+				func(_ context.Context, pod corev1.Pod) (string, error) {
+					if readErr := tt.readErrs[pod.Name]; readErr != nil {
+						return "", readErr
+					}
+					return tt.versions[pod.Name], nil
+				})
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("minimumEnvoyVersionFromPods() error = %v, want substring %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("minimumEnvoyVersionFromPods() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("minimumEnvoyVersionFromPods() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseEnvoyRuntimeVersion(t *testing.T) {
+	for _, versionText := range []string{
+		"1.36.0",
+		"1.36.0-envoy/commit/abc123",
+		"v1.38.1+build.7",
+	} {
+		if _, err := parseEnvoyRuntimeVersion(versionText); err != nil {
+			t.Errorf("parseEnvoyRuntimeVersion(%q) error = %v", versionText, err)
+		}
+	}
+}
+
+func TestOCSFEnvoyVersionNeedsRefresh(t *testing.T) {
+	policy := newTestPolicy(nil, nil)
+	policy.Spec.Logging = &v1alpha1.LoggingSpec{Default: v1alpha1.LoggingConfig{OCSF: testOCSFLoggingConfig()}}
+	for _, reason := range []string{"Enforced", "EnvoyVersionNotVerified", "EnvoyVersionUnsupported"} {
+		status := &v1alpha1.TelemetryPolicyStatus{Conditions: []metav1.Condition{{
+			Type: string(types.PolicyConditionEnforced), Status: metav1.ConditionFalse, Reason: reason,
+		}}}
+		if !ocsfEnvoyVersionNeedsRefresh(policy, status) {
+			t.Errorf("ocsfEnvoyVersionNeedsRefresh() = false for reason %q", reason)
+		}
+	}
+	unrelated := &v1alpha1.TelemetryPolicyStatus{Conditions: []metav1.Condition{{
+		Type: string(types.PolicyConditionEnforced), Status: metav1.ConditionFalse, Reason: "Invalid",
+	}}}
+	if ocsfEnvoyVersionNeedsRefresh(policy, unrelated) {
+		t.Fatal("unsupported policy status should not trigger version polling")
+	}
+	policy.Spec.Logging = nil
+	if ocsfEnvoyVersionNeedsRefresh(policy, unrelated) {
+		t.Fatal("policy without OCSF must not trigger version polling")
 	}
 }
 

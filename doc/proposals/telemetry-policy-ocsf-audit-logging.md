@@ -135,17 +135,17 @@ local replies still have an OCSF event to log. After successful authorization, t
 StoreAction overwrites the same filter-state key with the configured Authorino identity; denied
 requests keep the fallback actor.
 
-The Envoy formatter requires Envoy 1.36.0 or newer. The operator cannot reliably discover the Envoy
-version for every replica behind a Gateway, so it does not infer support from the operator,
-GatewayClass, or proxy image tag. An administrator must set the
-`kuadrant.io/ocsf-envoy-min-version` annotation on the TelemetryPolicy that targets the Gateway to the
-lowest attested Envoy semantic version across every running proxy replica. Missing, invalid, or
-below-`1.36.0` values disable OCSF access logging and set `Enforced=False` with an explanatory
-reason. During a mixed-version rollout, use the lowest replica version; OCSF remains disabled while
-any proxy is below 1.36.0. Update the policy annotation after proxy upgrades or downgrades. Updating
-it triggers reconciliation and adds or removes the OCSF pipeline actions. Ordinary metrics and
-`logging.default.fields` continue to reconcile. Restrict permission to change this annotation to
-administrators who verify every replica.
+The Envoy formatter requires Envoy 1.36.0 or newer. For an Istio Gateway, the telemetry-policy
+extension lists proxy Pods labeled for that Gateway and queries each non-terminated running
+`istio-proxy` container with `pilot-agent request GET /server_info`. It uses the lowest reported
+runtime version across the Gateway's proxies. A Pod that is not running, no matching proxies, an
+unreadable response, or an unrecognized version fails closed with `Enforced=False` and reason
+`EnvoyVersionNotVerified`. A verified minimum below 1.36.0 reports `EnvoyVersionUnsupported`.
+The extension needs permission to list Pods and create the `pods/exec` subresource in order to
+query the runtime version; it does not infer the version from operator, GatewayClass, or image
+versions. It rechecks OCSF policies every 30 seconds, so proxy upgrades and downgrades update the
+policy and generated access-log configuration after the next check. Metrics and
+`logging.default.fields` continue to reconcile.
 
 The access logger must:
 

@@ -27,8 +27,7 @@ import (
 const istioGatewayControllerName gatewayapiv1.GatewayController = "istio.io/gateway-controller"
 
 const (
-	ocsfEnvoyMinVersionAnnotation = "kuadrant.io/ocsf-envoy-min-version"
-	ocsfRequiredEnvoyVersion      = "1.36.0"
+	ocsfRequiredEnvoyVersion = "1.36.0"
 )
 
 const (
@@ -41,9 +40,12 @@ const (
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=telemetrypolicies,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=telemetrypolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=extensions.kuadrant.io,resources=telemetrypolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods,verbs=list
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 
 type TelemetryPolicyReconciler struct {
 	types.ExtensionBase
+	envoyVersionProbe EnvoyVersionProbe
 }
 
 type ocsfEnvoyVersionError struct {
@@ -56,24 +58,24 @@ func (e ocsfEnvoyVersionError) Error() string { return e.message }
 func (e ocsfEnvoyVersionError) Reason() gatewayapiv1alpha2.PolicyConditionReason { return e.reason }
 
 func validateOCSFEnvoyVersion(gatewayRef, versionText string) error {
-	if strings.TrimSpace(versionText) == "" {
+	versionText = strings.TrimSpace(versionText)
+	if versionText == "" {
 		return ocsfEnvoyVersionError{
 			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionNotVerified"),
 			message: fmt.Sprintf(
-				"OCSF access logging requires Envoy >= %s; the minimum version across running proxies for Gateway %s is unverified. Set the %s annotation on its TelemetryPolicy only after checking every proxy replica.",
-				ocsfRequiredEnvoyVersion, gatewayRef, ocsfEnvoyMinVersionAnnotation,
+				"OCSF access logging requires Envoy >= %s; the runtime version of every proxy for Gateway %s could not be verified.",
+				ocsfRequiredEnvoyVersion, gatewayRef,
 			),
 		}
 	}
 
-	versionText = strings.TrimSpace(versionText)
 	minimumVersion, err := utilversion.ParseSemantic(versionText)
 	if err != nil {
 		return ocsfEnvoyVersionError{
 			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionNotVerified"),
 			message: fmt.Sprintf(
-				"OCSF access logging requires Envoy >= %s; Gateway %s has an invalid %s TelemetryPolicy annotation %q. Set it to the lowest attested version across every proxy replica.",
-				ocsfRequiredEnvoyVersion, gatewayRef, ocsfEnvoyMinVersionAnnotation, versionText,
+				"OCSF access logging requires Envoy >= %s; the runtime version reported for Gateway %s is invalid: %q.",
+				ocsfRequiredEnvoyVersion, gatewayRef, versionText,
 			),
 		}
 	}
@@ -83,8 +85,8 @@ func validateOCSFEnvoyVersion(gatewayRef, versionText string) error {
 		return ocsfEnvoyVersionError{
 			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionUnsupported"),
 			message: fmt.Sprintf(
-				"OCSF access logging requires Envoy >= %s; the TelemetryPolicy attests a minimum of %s for Gateway %s. Upgrade every proxy replica before enabling OCSF access logging.",
-				ocsfRequiredEnvoyVersion, versionText, gatewayRef,
+				"OCSF access logging requires Envoy >= %s; the lowest runtime proxy version for Gateway %s is %s.",
+				ocsfRequiredEnvoyVersion, gatewayRef, versionText,
 			),
 		}
 	}
@@ -96,8 +98,8 @@ func ocsfGatewayClassExpression(gateway string) string {
 	return fmt.Sprintf("%s.spec.gatewayClassName", gateway)
 }
 
-func NewTelemetryPolicyReconciler() *TelemetryPolicyReconciler {
-	return &TelemetryPolicyReconciler{}
+func NewTelemetryPolicyReconciler(versionProbe EnvoyVersionProbe) *TelemetryPolicyReconciler {
+	return &TelemetryPolicyReconciler{envoyVersionProbe: versionProbe}
 }
 
 func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request reconcile.Request, kuadrantCtx types.KuadrantCtx) (reconcile.Result, error) {
@@ -133,11 +135,34 @@ func (r *TelemetryPolicyReconciler) Reconcile(ctx context.Context, request recon
 	}
 
 	if statusResult.RequeueAfter > 0 {
-		r.Logger.Info("Reconciling status not finished. Requeueing.")
+		r.Logger.Info("reconciling status not finished; requeueing")
 		return statusResult, nil
+	}
+	if ocsfEnvoyVersionNeedsRefresh(telemetryPolicy, telemetryPolicyStatus) {
+		return reconcile.Result{RequeueAfter: envoyVersionRecheckInterval}, nil
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// ocsfEnvoyVersionNeedsRefresh keeps a valid OCSF policy's runtime gate current
+// as Istio replaces or upgrades Gateway proxy Pods.
+func ocsfEnvoyVersionNeedsRefresh(policy *v1alpha1.TelemetryPolicy, status *v1alpha1.TelemetryPolicyStatus) bool {
+	if policy == nil || policy.Spec.Logging == nil || policy.Spec.Logging.Default.OCSF == nil || status == nil {
+		return false
+	}
+	for _, condition := range status.Conditions {
+		if condition.Type != string(types.PolicyConditionEnforced) {
+			continue
+		}
+		switch condition.Reason {
+		case "Enforced", "EnvoyVersionNotVerified", "EnvoyVersionUnsupported":
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 func (r *TelemetryPolicyReconciler) reconcileSpec(ctx context.Context, pol *v1alpha1.TelemetryPolicy, kuadrantCtx types.KuadrantCtx) (*v1alpha1.TelemetryPolicyStatus, error) {
@@ -220,7 +245,7 @@ func (r *TelemetryPolicyReconciler) validateOCSFGatewayProvider(ctx context.Cont
 		ctx,
 		kuadrantCtx,
 		pol,
-		fmt.Sprintf(`self.findGateways().map(gateway, %s)`, ocsfGatewayClassExpression("gateway")),
+		fmt.Sprintf("self.findGateways().map(gateway, %s)", ocsfGatewayClassExpression("gateway")),
 		true,
 	)
 	if err != nil {
@@ -252,12 +277,29 @@ func (r *TelemetryPolicyReconciler) validateOCSFGatewayProvider(ctx context.Cont
 		return false, calculateEnforcedStatus(pol, statusErr), nil
 	}
 
-	// Envoy versions are not exposed by the Gateway API. Require the administrator
-	// to attest the lowest version across every running proxy for this policy's
-	// single Gateway target. The policy annotation is watched, so changing the
-	// attestation reconciles upgrades and downgrades.
 	gatewayRef := fmt.Sprintf("%s/%s", pol.Namespace, pol.Spec.TargetRef.Name)
-	if err := validateOCSFEnvoyVersion(gatewayRef, pol.Annotations[ocsfEnvoyMinVersionAnnotation]); err != nil {
+	if r.envoyVersionProbe == nil {
+		versionErr := ocsfEnvoyVersionError{
+			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionNotVerified"),
+			message: fmt.Sprintf(
+				"OCSF access logging requires Envoy >= %s; no runtime version probe is configured for Gateway %s.",
+				ocsfRequiredEnvoyVersion, gatewayRef,
+			),
+		}
+		return false, calculateEnforcedStatus(pol, versionErr), nil
+	}
+	minimumVersion, err := r.envoyVersionProbe.MinimumVersion(ctx, pol.Namespace, string(pol.Spec.TargetRef.Name))
+	if err != nil {
+		versionErr := ocsfEnvoyVersionError{
+			reason: gatewayapiv1alpha2.PolicyConditionReason("EnvoyVersionNotVerified"),
+			message: fmt.Sprintf(
+				"OCSF access logging requires Envoy >= %s; could not verify every proxy for Gateway %s: %s",
+				ocsfRequiredEnvoyVersion, gatewayRef, err,
+			),
+		}
+		return false, calculateEnforcedStatus(pol, versionErr), nil
+	}
+	if err := validateOCSFEnvoyVersion(gatewayRef, minimumVersion); err != nil {
 		return false, calculateEnforcedStatus(pol, err), nil
 	}
 

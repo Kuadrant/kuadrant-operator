@@ -5,6 +5,18 @@ metadata:
   name: telemetry-policy-manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
   - extensions.kuadrant.io
   resources:
   - telemetrypolicies

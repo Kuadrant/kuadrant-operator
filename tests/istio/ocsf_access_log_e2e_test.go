@@ -52,7 +52,6 @@ const (
 	ocsfAccessLoggerName                = "envoy.access_loggers.stdout"
 	ocsfEventKey                        = wasm.OCSFEventFilterStateKey
 	ocsfMarkerDiagnosticKey             = "ocsf_marker_diagnostic"
-	ocsfAccessLogEnvoyVersionAnnotation = "kuadrant.io/ocsf-envoy-min-version"
 	ocsfAccessLogRequiredEnvoyVersion   = "1.36.0"
 )
 
@@ -198,9 +197,6 @@ var _ = Describe("OCSF access log", Label("ocsf", "long-running"), func() {
 
 		By("attaching an OCSF aiOperation TelemetryPolicy to the Gateway")
 		policy := ocsfTelemetryPolicy(testNamespace, gateway.Name)
-		policy.SetAnnotations(map[string]string{
-			ocsfAccessLogEnvoyVersionAnnotation: minimumProxyVersion,
-		})
 		Expect(testClient().Create(ctx, policy)).To(Succeed())
 		Eventually(func() error {
 			return ocsfTelemetryPolicyEnforcementStatus(ctx, testClient(), client.ObjectKeyFromObject(policy))

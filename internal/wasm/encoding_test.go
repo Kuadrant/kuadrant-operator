@@ -68,6 +68,10 @@ func TestEncodeDecodeConfigRoundTrip(t *testing.T) {
 }
 
 func TestEncodeConfigEnvelopeShape(t *testing.T) {
+	// Pin the cap to the default so the assertions below do not depend on
+	// WASM_MAX_DECODED_CONFIG_SIZE in the test environment.
+	defer setMaxDecodedConfigSizeForTest(defaultMaxDecodedConfigSize)()
+
 	encoded, err := encodeConfig([]byte(`{"actionSets":[]}`))
 	assert.NilError(t, err)
 
@@ -97,19 +101,23 @@ func TestDecodeConfigPlainJSONPassthrough(t *testing.T) {
 
 func TestDecodeConfigRejectsDecompressionBomb(t *testing.T) {
 	// A highly compressible payload: 8 MiB of a single repeated byte. It fits in a
-	// tiny envelope but expands well past a small configured limit.
+	// tiny envelope but expands well past a small configured limit. Encode under an
+	// explicit cap so the fixture setup does not depend on WASM_MAX_DECODED_CONFIG_SIZE.
+	defer setMaxDecodedConfigSizeForTest(8 << 20)()
 	bomb := bytes.Repeat([]byte("A"), 8<<20)
 	envelope, err := encodeConfig(bomb)
 	assert.NilError(t, err)
 
 	// Under a low limit, decoding is rejected rather than allocating the full output.
-	restore := setMaxDecodedConfigSizeForTest(1 << 20) // 1 MiB
-	_, err = decodeConfig(envelope)
-	assert.ErrorContains(t, err, "exceeds")
-	restore()
+	// Run in a subtest and restore the override via t.Cleanup so it runs even if the
+	// assertion fails, keeping the low cap from leaking into later tests.
+	t.Run("rejected over the limit", func(subT *testing.T) {
+		subT.Cleanup(setMaxDecodedConfigSizeForTest(1 << 20)) // 1 MiB
+		_, err := decodeConfig(envelope)
+		assert.ErrorContains(subT, err, "exceeds")
+	})
 
 	// At or above the payload size, decoding succeeds and round-trips exactly.
-	defer setMaxDecodedConfigSizeForTest(8 << 20)()
 	decoded, err := decodeConfig(envelope)
 	assert.NilError(t, err)
 	assert.Assert(t, bytes.Equal(bomb, decoded))

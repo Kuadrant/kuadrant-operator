@@ -12,6 +12,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/env"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -111,10 +112,12 @@ func ValidateMaxDecodedConfigSize() error {
 // maxDecompressedBytes is read by the wasm-shim to cap decompression on the data
 // plane (see Kuadrant/wasm-shim#450). The operator sets it to its own limit so
 // both sides enforce the same bound; when omitted the shim defaults to 32 MiB.
+// It is a pointer so an omitted field (nil, valid) is distinguishable from an
+// explicit value (including an invalid non-positive one the shim rejects).
 type encodedConfig struct {
 	Encoding             string `json:"encoding"`
 	Data                 string `json:"data"`
-	MaxDecompressedBytes int    `json:"maxDecompressedBytes,omitempty"`
+	MaxDecompressedBytes *int   `json:"maxDecompressedBytes,omitempty"`
 }
 
 // encodeConfig gzip-compresses and base64-encodes the raw config JSON and wraps
@@ -150,7 +153,7 @@ func encodeConfig(raw []byte) ([]byte, error) {
 		Data:     base64.StdEncoding.EncodeToString(buf.Bytes()),
 		// maxSize is bounded to 1..math.MaxInt32, which is exactly the range the
 		// wasm-shim accepts for maxDecompressedBytes, so no clamping is needed here.
-		MaxDecompressedBytes: maxSize,
+		MaxDecompressedBytes: ptr.To(maxSize),
 	}
 	return json.Marshal(envelope)
 }
@@ -163,11 +166,19 @@ func encodeConfig(raw []byte) ([]byte, error) {
 // the EnvoyFilter / EnvoyExtensionPolicy is updated accordingly.
 func ConfigMaxDecompressedBytes(raw []byte) int {
 	var envelope encodedConfig
-	if err := json.Unmarshal(raw, &envelope); err == nil &&
-		envelope.Encoding == EncodingGzipBase64 && envelope.Data != "" && envelope.MaxDecompressedBytes > 0 {
-		return envelope.MaxDecompressedBytes
+	if err := json.Unmarshal(raw, &envelope); err != nil ||
+		envelope.Encoding != EncodingGzipBase64 || envelope.Data == "" {
+		// Not a (valid) envelope: the shim default applies.
+		return defaultMaxDecodedConfigSize
 	}
-	return defaultMaxDecodedConfigSize
+	if envelope.MaxDecompressedBytes == nil {
+		// Omitted: the shim defaults to 32 MiB.
+		return defaultMaxDecodedConfigSize
+	}
+	// Present: return it verbatim, including an invalid non-positive value the shim
+	// rejects, so it differs from the operator's always-valid cap and the resource
+	// is rewritten instead of being treated as the default.
+	return *envelope.MaxDecompressedBytes
 }
 
 // decodeConfig reverses encodeConfig. It is backward compatible: if raw is not a

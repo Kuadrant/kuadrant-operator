@@ -36,6 +36,7 @@ func TestMaxDecodedConfigSizeValidation(t *testing.T) {
 		{"zero", "0", true, defaultMaxDecodedConfigSize},
 		{"negative", "-5", true, defaultMaxDecodedConfigSize},
 		{"too big", "3Gi", true, defaultMaxDecodedConfigSize},
+		{"overflows int64", "18446744073709551617", true, defaultMaxDecodedConfigSize},
 	}
 	const testEnvVar = "TEST_WASM_MAX_DECODED_CONFIG_SIZE"
 	for _, tc := range cases {

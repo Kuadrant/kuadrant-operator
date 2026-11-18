@@ -61,13 +61,13 @@ func (l *decodeLimit) load() {
 		l.err = fmt.Errorf("invalid %s %q: %w", l.envVar, s, err)
 		return
 	}
-	switch v := q.Value(); {
-	case v <= 0:
+	switch {
+	case q.Sign() <= 0:
 		l.err = fmt.Errorf("%s %q must be a positive size", l.envVar, s)
-	case v > math.MaxInt32:
+	case q.CmpInt64(math.MaxInt32) > 0:
 		l.err = fmt.Errorf("%s %q exceeds the maximum of %d bytes", l.envVar, s, math.MaxInt32)
 	default:
-		l.value = int(v)
+		l.value = int(q.Value())
 	}
 }
 

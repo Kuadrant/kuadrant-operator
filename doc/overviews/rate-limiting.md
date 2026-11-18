@@ -257,7 +257,8 @@ services:
     grpcService: envoy.service.ratelimit.v3.RateLimitService
     grpcMethod: ShouldRateLimit
   # auth-service and ratelimit-{check,commit,report,reserve}-service also appear
-  # in the service catalog; omitted here for brevity.
+  # in the service catalog; omitted here for brevity. A second, near-identical
+  # actionSet for the "/v1" rule (routeRuleConditions match "/v1") is also omitted.
 actionSets:
   - name: 8d30e0020e3086fa8eeee5d5b98d4f6e00369ee228879ddda6eaf051ad218293
     routeRuleConditions:

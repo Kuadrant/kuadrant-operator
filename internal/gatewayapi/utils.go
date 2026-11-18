@@ -119,14 +119,27 @@ func GetGRPCRouteAcceptedParentRefs(route *gatewayapiv1.GRPCRoute) []gatewayapiv
 	})
 }
 
-func IsHTTPRouteReady(httpRoute *gatewayapiv1.HTTPRoute, gateway *gatewayapiv1.Gateway, controllerName gatewayapiv1.GatewayController) bool {
+func IsHTTPRouteReady(httpRoute *gatewayapiv1.HTTPRoute, gateway *gatewayapiv1.Gateway, listener *gatewayapiv1.Listener, controllerName gatewayapiv1.GatewayController) bool {
 	routeStatus, found := lo.Find(httpRoute.Status.Parents, func(s gatewayapiv1.RouteParentStatus) bool {
 		ref := s.ParentRef
-		return s.ControllerName == controllerName &&
-			ptr.Deref(ref.Group, gatewayapiv1.Group(gatewayapiv1.GroupName)) == gatewayapiv1.Group(gateway.GroupVersionKind().Group) &&
-			ptr.Deref(ref.Kind, gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind)) == gatewayapiv1.Kind(gateway.GroupVersionKind().Kind) &&
-			ptr.Deref(ref.Namespace, gatewayapiv1.Namespace(httpRoute.GetNamespace())) == gatewayapiv1.Namespace(gateway.GetNamespace()) &&
-			ref.Name == gatewayapiv1.ObjectName(gateway.GetName())
+		if s.ControllerName != controllerName {
+			return false
+		}
+		// Match gateway identity
+		if ptr.Deref(ref.Group, gatewayapiv1.Group(gatewayapiv1.GroupName)) != gatewayapiv1.Group(gateway.GroupVersionKind().Group) ||
+			ptr.Deref(ref.Kind, gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind)) != gatewayapiv1.Kind(gateway.GroupVersionKind().Kind) ||
+			ptr.Deref(ref.Namespace, gatewayapiv1.Namespace(httpRoute.GetNamespace())) != gatewayapiv1.Namespace(gateway.GetNamespace()) ||
+			ref.Name != gatewayapiv1.ObjectName(gateway.GetName()) {
+			return false
+		}
+		// Match listener-specific fields (SectionName and Port) if specified in the ParentRef
+		if ref.SectionName != nil && *ref.SectionName != listener.Name {
+			return false
+		}
+		if ref.Port != nil && *ref.Port != listener.Port {
+			return false
+		}
+		return true
 	})
 	if !found {
 		return false

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
@@ -297,17 +298,21 @@ func (r *OIDCPolicyReconciler) reconcileHTTPRoute(ctx context.Context, desired *
 // types yields false rather than erroring, so the `in` branch only applies when the
 // claim is actually a list.
 //
-// Accessing a missing field with dot notation raises a no_such_field error in CEL
-// rather than yielding false, so the predicate is guarded with has() on the identity
-// and the claim key; a token that lacks the claim then evaluates to false instead of
+// Accessing a missing key raises a no_such_key error in CEL rather than yielding
+// false, so the predicate is guarded with has() on the identity and an `in` check on
+// the claim key; a token that lacks the claim then evaluates to false instead of
 // failing the whole authorization expression.
+//
+// The claim key and value are user input, so both are quoted as CEL string literals
+// and the key uses index notation, which also works for keys like "custom:role".
 func claimPredicate(k, v string) string {
-	return fmt.Sprintf(`has(auth.identity) && has(auth.identity.%s) && (auth.identity.%s == "%s" || (type(auth.identity.%s) == list && "%s" in auth.identity.%s))`, k, k, v, k, v, k)
+	key, val := strconv.Quote(k), strconv.Quote(v)
+	return fmt.Sprintf(`has(auth.identity) && %s in auth.identity && (auth.identity[%s] == %s || (type(auth.identity[%s]) == list && %s in auth.identity[%s]))`, key, key, val, key, val, key)
 }
 
 func buildTargetCookieExpression(hostname string, protocol gatewayapiv1.ProtocolType) string {
 	return fmt.Sprintf(`
-"target=" + request.url_path + (has(request.query) && request.query != "" ? "?" + request.query : "") + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"`, hostname, getSecureFlag(protocol))
+"target=" + request.url_path + (has(request.query) && request.query != "" ? "?" + request.query : "") + %s`, cookieAttributes(hostname, protocol))
 }
 
 func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*kuadrantv1.AuthPolicy, error) {
@@ -353,7 +358,7 @@ func buildMainAuthPolicy(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (*ku
 			},
 		}
 		if pol.Spec.Provider.IssuerURL != "" {
-			authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == "%s"`, pol.Spec.Provider.IssuerURL)
+			authorization["oidc"].Conditions[0].Predicate = fmt.Sprintf(`auth.identity.iss == %s`, strconv.Quote(pol.Spec.Provider.IssuerURL))
 		}
 	}
 
@@ -678,7 +683,7 @@ func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGa
 	headers["location"] = authorinov1beta3.ValueOrSelector{Expression: "auth.authorization.location.location"}
 	switch tokenSource.GetType() {
 	case authorinov1beta3.AuthorizationHeaderCredentials:
-		headers["Authorization"] = authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`"%s " + auth.metadata.token.id_token`, tokenSource.AuthorizationHeader.Prefix))}
+		headers["Authorization"] = authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`%s + auth.metadata.token.id_token`, strconv.Quote(tokenSource.AuthorizationHeader.Prefix+" ")))}
 	case authorinov1beta3.CustomHeaderCredentials:
 		headers[tokenSource.CustomHeader.Name] = authorinov1beta3.ValueOrSelector{Expression: "auth.metadata.token.id_token"}
 	case authorinov1beta3.CookieCredentials:
@@ -691,8 +696,13 @@ func credentialsHeader(tokenSource *authorinov1beta3.Credentials, igw *ingressGa
 
 func cookieHeader(cookieName string, igw *ingressGatewayInfo) authorinov1beta3.ValueOrSelector {
 	return authorinov1beta3.ValueOrSelector{Expression: authorinov1beta3.CelExpression(fmt.Sprintf(`
-"%s=" + auth.metadata.token.id_token + "; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600"
-`, cookieName, igw.Hostname, getSecureFlag(igw.Protocol)))}
+%s + auth.metadata.token.id_token + %s
+`, strconv.Quote(cookieName+"="), cookieAttributes(igw.Hostname, igw.Protocol)))}
+}
+
+// cookieAttributes returns the attributes that follow a cookie value as a quoted CEL string literal.
+func cookieAttributes(hostname string, protocol gatewayapiv1.ProtocolType) string {
+	return strconv.Quote(fmt.Sprintf("; domain=%s; HttpOnly; %s SameSite=Lax; Path=/; Max-Age=3600", hostname, getSecureFlag(protocol)))
 }
 
 func getSecureFlag(protocol gatewayapiv1.ProtocolType) string {

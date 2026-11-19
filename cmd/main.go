@@ -42,9 +42,11 @@ import (
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurity "istio.io/client-go/pkg/apis/security/v1"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -64,6 +66,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	controllers "github.com/kuadrant/kuadrant-operator/internal/controller"
 	"github.com/kuadrant/kuadrant-operator/internal/controlplane"
+	"github.com/kuadrant/kuadrant-operator/internal/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/internal/log"
 	"github.com/kuadrant/kuadrant-operator/internal/metrics"
 	kuadrantOtel "github.com/kuadrant/kuadrant-operator/internal/otel"
@@ -257,10 +260,43 @@ func main() {
 		// Restrict caching secrets to operator namespace
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
+				&appsv1.Deployment{}: {
+					Namespaces: map[string]cache.Config{
+						operatorNamespace: {},
+						cache.AllNamespaces: {
+							LabelSelector: labels.SelectorFromSet(labels.Set{"app.kubernetes.io/part-of": "kuadrant"}),
+						},
+					},
+				},
+				&corev1.ConfigMap{}: {
+					Namespaces: map[string]cache.Config{
+						operatorNamespace: {},
+					},
+				},
 				&corev1.Secret{}: {
 					Namespaces: map[string]cache.Config{
 						operatorNamespace: {},
 					},
+				},
+				&networkingv1.NetworkPolicy{}: {
+					Label: labels.SelectorFromSet(labels.Set{"app.kubernetes.io/managed-by": "kuadrant-operator"}),
+				},
+				&monitoringv1.PodMonitor{}: {
+					Label: labels.SelectorFromSet(labels.Set{kuadrant.ObservabilityLabel: "true"}),
+				},
+				&monitoringv1.ServiceMonitor{}: {
+					Label: labels.SelectorFromSet(labels.Set{kuadrant.ObservabilityLabel: "true"}),
+				},
+				&corev1.Service{}: {
+					Namespaces: map[string]cache.Config{
+						operatorNamespace: {},
+					},
+				},
+				&corev1.ServiceAccount{}: {
+					Label: labels.SelectorFromSet(labels.Set{"app.kubernetes.io/managed-by": "kuadrant-operator"}),
+				},
+				&istionetworkingv1alpha3.EnvoyFilter{}: {
+					Label: labels.SelectorFromSet(labels.Set{"kuadrant.io/managed": "true"}),
 				},
 			},
 		},

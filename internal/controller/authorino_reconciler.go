@@ -84,6 +84,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "authorino",
 				Namespace: kobj.Namespace,
+				Labels:    CommonLabels(),
 			},
 			Spec: authorinoopapi.AuthorinoSpec{
 				OIDCServer: authorinoopapi.OIDCServer{
@@ -167,6 +168,7 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 					Controller:         ptr.To(true),
 				},
 			},
+			Labels: CommonLabels(),
 		},
 		Spec: authorinoopapi.AuthorinoSpec{
 			ClusterWide: true,

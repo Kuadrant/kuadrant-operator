@@ -43,7 +43,7 @@ import (
 
 // This test suite will be run on k8s env with GatewayAPI CRDs, Istio and Kuadrant CRDs installed
 
-var k8sClient client.Client
+var k8sClient client.WithWatch
 var testEnv *envtest.Environment
 var kuadrantInstallationNS string
 
@@ -80,7 +80,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	controllers.SetupKuadrantOperatorForTest(s, cfg, true)
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
+	k8sClient, err = client.NewWithWatch(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
@@ -114,7 +114,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	// Set the shared configuration
 	var err error
-	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
+	k8sClient, err = client.NewWithWatch(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 

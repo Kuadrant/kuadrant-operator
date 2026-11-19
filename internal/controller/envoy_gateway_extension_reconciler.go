@@ -479,7 +479,8 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		// auth
 		effectiveAuthPolicy, hasAuth := effectiveAuthPoliciesMap[pathID]
 		if hasAuth {
-			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy)...)
+			_, hasTokenRateLimit := effectiveTokenRateLimitPoliciesMap[pathID]
+			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy, hasTokenRateLimit)...)
 			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
 
@@ -502,17 +503,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 
 		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
 			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
-			if specsHaveAuthAccess(trlSpecs) {
-				specs = append(specs, trlSpecs...)
-			} else {
-				// pre auth rate limiting
-				if hasAuth {
-					for i := range trlSpecs {
-						trlSpecs[i].Execution = wasm.ExecutionSequential
-					}
-				}
-				specs = append(trlSpecs, specs...)
-			}
+			specs = append(specs, trlSpecs...)
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 

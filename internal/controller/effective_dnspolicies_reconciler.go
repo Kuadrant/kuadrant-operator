@@ -46,7 +46,7 @@ type EffectiveDNSPoliciesReconciler struct {
 
 func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(EffectiveDNSPoliciesReconcilerName, r.reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &kuadrantv1.DNSPolicyGroupKind},

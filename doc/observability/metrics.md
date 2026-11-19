@@ -105,7 +105,7 @@ spec:
 ## State metrics
 
 The [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics/tree/main/docs#default-resources)
-project exposes the state of various kuberenetes resources
+project exposes the state of various kubernetes resources
 as metrics and labels. For example, the ready `status` of a `Pod` is available as
 `kube_pod_status_ready`, with labels for the pod `name` and `namespace`. This can
 be useful for linking lower level container metrics back to a meaningful resource

@@ -6,7 +6,7 @@ The kuadrant operator outputs 3 levels of log messages: (from lowest to highest 
 2. `info` (default)
 3. `error`
 
-`info` logging is restricted to high-level information. Actions like creating, deleteing or updating kubernetes resources will be logged with reduced details about the corresponding objects, and without any further detailed logs of the steps in between, except for errors.
+`info` logging is restricted to high-level information. Actions like creating, deleting or updating kubernetes resources will be logged with reduced details about the corresponding objects, and without any further detailed logs of the steps in between, except for errors.
 
 Only `debug` logging will include processing details.
 

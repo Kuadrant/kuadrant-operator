@@ -108,7 +108,7 @@ When all health checks based on a DNSPolicy are passing you will see the followi
       type: SubResourcesHealthy
 ```
 
-If one or more of the health checks are failing you will see a status in the DNSPolicy simiar to the one shown below:
+If one or more of the health checks are failing you will see a status in the DNSPolicy similar to the one shown below:
 
 ```yaml
    - lastTransitionTime: "2024-11-15T10:40:15Z"

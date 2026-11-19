@@ -117,7 +117,7 @@ spec:
   limits:
     "my_limit":
       # The rate limits associated with this limit definition. REQUIRED.
-      # E.g., to specify a 50rps rate limit, add `{ limit: 50, duration: 1, unit: secod }`
+      # E.g., to specify a 50rps rate limit, add `{ limit: 50, duration: 1, unit: second }`
       rates: […]
 
       # Counter qualifiers.

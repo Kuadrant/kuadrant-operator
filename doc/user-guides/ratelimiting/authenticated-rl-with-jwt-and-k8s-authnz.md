@@ -285,7 +285,7 @@ Add permissions to the user and service account:
 | User         | Kind                        | Roles                                |
 | ------------ | --------------------------- | ------------------------------------ |
 | john         | User registered in Keycloak | `toystore-reader`, `toystore-writer` |
-| client-app-1 | Kuberentes Service Account  | `toystore-reader`                    |
+| client-app-1 | Kubernetes Service Account  | `toystore-reader`                    |
 
 ```sh
 kubectl apply -f - <<EOF

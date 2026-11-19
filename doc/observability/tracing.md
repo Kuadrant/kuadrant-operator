@@ -630,7 +630,7 @@ Using a tracing interface like the Jaeger UI or Grafana, you can search for trac
 You may get the trace ID from logs, or from a header in a sample request you want to troubleshoot.
 You can also search for recent traces, filtering by the service you want to focus on.
 
-Here is an example trace in the Jaeger UI showing the total request time from the gateway (Istio), the time to check the curent rate limit count (and update it) in limitador and the time to check auth in Authorino:
+Here is an example trace in the Jaeger UI showing the total request time from the gateway (Istio), the time to check the current rate limit count (and update it) in limitador and the time to check auth in Authorino:
 
 ![Trace in Jaeger UI](jaeger_ui_trace.png)
 

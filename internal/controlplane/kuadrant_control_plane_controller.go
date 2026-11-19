@@ -137,7 +137,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(&appsv1.Deployment{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToControlPlane),
 			builder.WithPredicates(r.childDeploymentPredicate())).
-		Watches(&apiextv1.CustomResourceDefinition{},
+		WatchesMetadata(&apiextv1.CustomResourceDefinition{},
 			handler.EnqueueRequestsFromMapFunc(r.mapToControlPlane),
 			builder.WithPredicates(r.childCRDPredicate())).
 		Named("kuadrant-control-plane").

@@ -5,11 +5,13 @@ package controllers
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 	"github.com/kuadrant/policy-machinery/machinery"
+	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -167,7 +169,7 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 	t.Run("ensure wasm URL is set in envoyfilter", func(t *testing.T) {
 		envoyFilter, err := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("failed to build envoyfilter: %v", err)
 		}
 		if envoyFilter == nil {
 			t.Fatalf("Expected an envoyfilter")
@@ -177,6 +179,131 @@ func Test_buildIstioEnvoyFilterForGateway(t *testing.T) {
 			t.Fatalf("Expected envoyfilter URI to be %s but got %s", wasmURL, imageURL)
 		}
 	})
+
+	t.Run("adds OCSF access logger for exported OCSF filter state", func(t *testing.T) {
+		config := wasm.Config{ActionSets: []wasm.ActionSet{{
+			Name: "ocsf",
+			Actions: []wasm.Action{&wasm.StoreAction{
+				Path:         wasm.OCSFEventStorePath,
+				ExportToHost: true,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
+			}},
+		}}}
+
+		envoyFilter, err := buildIstioEnvoyFilterForGateway(testGateway, config, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
+		if err != nil {
+			t.Fatalf("failed to build envoyfilter: %v", err)
+		}
+		var accessLogPatches int
+		for _, patch := range envoyFilter.Spec.ConfigPatches {
+			if patch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_NETWORK_FILTER {
+				accessLogPatches++
+			}
+		}
+		if accessLogPatches != 1 {
+			t.Fatalf("expected one OCSF access-log patch, got %d", accessLogPatches)
+		}
+	})
+
+	t.Run("does not add OCSF access logger without exported OCSF filter state", func(t *testing.T) {
+		envoyFilter, err := buildIstioEnvoyFilterForGateway(testGateway, testWasmConfig, wasmURL, "kuadrant-operator-wasm.kuadrant-system.svc.cluster.local", 8082, "")
+		if err != nil {
+			t.Fatalf("failed to build envoyfilter: %v", err)
+		}
+		for _, patch := range envoyFilter.Spec.ConfigPatches {
+			if patch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_NETWORK_FILTER {
+				t.Fatal("unexpected OCSF access-log patch")
+			}
+		}
+	})
+}
+
+func Test_buildIstioEnvoyFilterForGateway_includesOCSFEventShapeWhenEnabled(t *testing.T) {
+	config := wasm.Config{ActionSets: []wasm.ActionSet{{
+		Name: "ocsf",
+		Actions: []wasm.Action{
+			&wasm.StoreAction{
+				Path:         wasm.OCSFEventStorePath,
+				Value:        `{"api": {"operation": "GET /tenant/model/get"}}`,
+				ExportToHost: true,
+				ExportFormat: wasm.StoreExportFormatProtobufValue,
+			},
+		},
+	}}}
+
+	envoyFilter, err := buildIstioEnvoyFilterForGateway(testGateway, config, "http://wasm.example/plugin.wasm", "wasm.example", 8082, "")
+	if err != nil {
+		t.Fatalf("failed to build EnvoyFilter: %v", err)
+	}
+
+	var accessLogPatch *istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch
+	for _, patch := range envoyFilter.Spec.ConfigPatches {
+		if patch.ApplyTo != istioapinetworkingv1alpha3.EnvoyFilter_NETWORK_FILTER {
+			continue
+		}
+		if accessLogPatch != nil {
+			t.Fatal("expected exactly one OCSF access-log patch")
+		}
+		accessLogPatch = patch
+	}
+	if accessLogPatch == nil || accessLogPatch.Patch == nil || accessLogPatch.Patch.Value == nil {
+		t.Fatal("expected OCSF access-log patch when OCSF filter state is exported")
+	}
+
+	raw, err := accessLogPatch.Patch.Value.MarshalJSON()
+	if err != nil {
+		t.Fatalf("failed to marshal OCSF access-log patch: %v", err)
+	}
+	var patchValue map[string]any
+	if err := json.Unmarshal(raw, &patchValue); err != nil {
+		t.Fatalf("failed to decode OCSF access-log patch: %v", err)
+	}
+
+	mapField := func(object map[string]any, field string) map[string]any {
+		t.Helper()
+		value, ok := object[field].(map[string]any)
+		if !ok {
+			t.Fatalf("expected %q to be an object, got %T", field, object[field])
+		}
+		return value
+	}
+	sliceField := func(object map[string]any, field string) []any {
+		t.Helper()
+		value, ok := object[field].([]any)
+		if !ok {
+			t.Fatalf("expected %q to be an array, got %T", field, object[field])
+		}
+		return value
+	}
+
+	httpConnectionManager := mapField(patchValue, "typed_config")
+	accessLogs := sliceField(httpConnectionManager, "access_log")
+	if len(accessLogs) != 1 {
+		t.Fatalf("expected one access logger, got %d", len(accessLogs))
+	}
+	loggerObject, ok := accessLogs[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected access logger object, got %T", accessLogs[0])
+	}
+	logger := mapField(loggerObject, "typed_config")
+	logFormat := mapField(logger, "log_format")
+	event := mapField(logFormat, "json_format")
+	if event["class_uid"] != `%TYPED_CEL(filter_state["wasm.kuadrant.ocsf.event"]["class_uid"])%` {
+		t.Fatalf("expected typed class_uid projection from protobufValue, got %v", event["class_uid"])
+	}
+	httpResponse := mapField(event, "http_response")
+	if httpResponse["code"] != `%TYPED_CEL((response.code != null ? response.code : 0))%` {
+		t.Fatalf("expected numeric response code from Envoy CEL, got %v", httpResponse["code"])
+	}
+	if event["status_code"] != `%TYPED_CEL(response.headers[":status"])%` {
+		t.Fatalf("expected string status_code projection, got %v", event["status_code"])
+	}
+	if _, ok := logFormat["typed_json_format"]; ok {
+		t.Fatal("OCSF access logger must not configure typed_json_format")
+	}
+	if strings.Contains(string(raw), "text_format_source") || strings.Contains(string(raw), "typed_json_format") {
+		t.Fatalf("OCSF access logger contains a prohibited formatter: %s", raw)
+	}
 }
 
 func Test_buildEnvoyExtensionPolicyForGateway(t *testing.T) {

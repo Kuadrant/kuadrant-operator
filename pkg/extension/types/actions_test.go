@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	extpb "github.com/kuadrant/kuadrant-operator/pkg/extension/grpc/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGRPCAction_ImplementsAction(t *testing.T) {
@@ -105,5 +106,49 @@ func TestAddHeadersAction_PopulateProtobuf(t *testing.T) {
 	}
 	if entry.GetAddHeaders().HeadersToAdd != `{"x-threat-checked": "true"}` {
 		t.Errorf("HeadersToAdd = %q, want %q", entry.GetAddHeaders().HeadersToAdd, `{"x-threat-checked": "true"}`)
+	}
+}
+
+func TestStoreAction_PopulateProtobufPreservesOptionalExportFormat(t *testing.T) {
+	tests := []struct {
+		name       string
+		format     StoreExportFormat
+		wantFormat string
+	}{
+		{name: "unset", wantFormat: ""},
+		{name: "protobuf value", format: StoreExportFormatProtobufValue, wantFormat: "protobufValue"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := StoreAction{
+				Predicate:    "true",
+				Path:         "custom.audit.value",
+				Value:        "'value'",
+				ExportToHost: true,
+				ExportFormat: tt.format,
+			}
+			entry := &extpb.ActionEntry{}
+			a.PopulateProtobuf(entry)
+			store := entry.GetStore()
+			if store == nil {
+				t.Fatal("Expected Store action to be set")
+			}
+			if store.ExportFormat != tt.wantFormat {
+				t.Errorf("ExportFormat = %q, want %q", store.ExportFormat, tt.wantFormat)
+			}
+
+			wire, err := proto.Marshal(entry)
+			if err != nil {
+				t.Fatalf("marshal action over extension protocol: %v", err)
+			}
+			decoded := &extpb.ActionEntry{}
+			if err := proto.Unmarshal(wire, decoded); err != nil {
+				t.Fatalf("unmarshal action over extension protocol: %v", err)
+			}
+			if got := decoded.GetStore().GetExportFormat(); got != tt.wantFormat {
+				t.Errorf("wire export format = %q, want %q", got, tt.wantFormat)
+			}
+		})
 	}
 }

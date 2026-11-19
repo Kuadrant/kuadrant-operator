@@ -679,6 +679,14 @@ func buildIstioEnvoyFilterForGateway(gateway *machinery.Gateway, wasmConfig wasm
 		}
 	}
 
+	if wasmConfig.HasOCSFAuditLogging() {
+		accessLogPatch, err := kuadrantistio.BuildEnvoyFilterOCSFAccessLogPatch()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build OCSF access-log patch: %w", err)
+		}
+		configPatches = append(configPatches, accessLogPatch)
+	}
+
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,

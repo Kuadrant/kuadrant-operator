@@ -6,6 +6,7 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/cmd/extensions/telemetry-policy/internal/controller"
@@ -18,12 +19,18 @@ var (
 
 func init() {
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gatewayapiv1.Install(scheme))
 }
 
 func main() {
-	telemetryPolicyReconciler := controller.NewTelemetryPolicyReconciler()
 	builder, logger := extcontroller.NewBuilder("telemetry-policy-extension-controller")
-	controller, err := builder.
+	versionProbe, err := controller.NewKubernetesEnvoyVersionProbe(ctrl.GetConfigOrDie())
+	if err != nil {
+		logger.Error(err, "unable to create Envoy version probe")
+		os.Exit(1)
+	}
+	telemetryPolicyReconciler := controller.NewTelemetryPolicyReconciler(versionProbe)
+	extensionController, err := builder.
 		WithScheme(scheme).
 		WithReconciler(telemetryPolicyReconciler.Reconcile).
 		For(&v1alpha1.TelemetryPolicy{}).
@@ -32,7 +39,7 @@ func main() {
 		logger.Error(err, "unable to create controller")
 		os.Exit(1)
 	}
-	if err := controller.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := extensionController.Start(ctrl.SetupSignalHandler()); err != nil {
 		logger.Error(err, "unable to start extensioncontroller")
 		os.Exit(1)
 	}

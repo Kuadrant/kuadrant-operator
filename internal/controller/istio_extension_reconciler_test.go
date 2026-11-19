@@ -835,7 +835,7 @@ func TestBindingOrderEnvoyFilter(t *testing.T) {
 			}
 			baselineFilter, err := buildIstioEnvoyFilterForGateway(gateway, baseline, "http://wasm", "wasm", 8082, "")
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("failed to build baseline EnvoyFilter: %v", err)
 			}
 			if len(baselineFilter.Spec.ConfigPatches) == 0 {
 				t.Fatal("test did not generate Wasm patches")
@@ -857,7 +857,7 @@ func TestBindingOrderEnvoyFilter(t *testing.T) {
 					}
 					filter, err := buildIstioEnvoyFilterForGateway(gateway, config, "http://wasm", "wasm", 8082, "")
 					if err != nil {
-						t.Fatal(err)
+						t.Fatalf("failed to build EnvoyFilter: %v", err)
 					}
 					if !kuadrantistio.EqualEnvoyFilters(baselineFilter, filter) {
 						t.Fatalf("permutation %d produces unequal EnvoyFilters", count)

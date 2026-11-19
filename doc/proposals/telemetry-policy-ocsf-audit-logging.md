@@ -1,0 +1,194 @@
+# OCSF audit logging for TelemetryPolicy
+
+## Status
+
+Proposal for discussion. This document describes the gateway-side work needed to make
+TelemetryPolicy audit logging produce a canonical OCSF record. It does not change the existing
+`logging.default.fields` contract, which continues to enrich Authorino decision logs.
+
+## Problem
+
+TelemetryPolicy logging fields are evaluated before the protected upstream request completes and
+are attached to Authorino's authorization decision record. That record is useful supporting
+telemetry, but it cannot be the canonical request audit event because Authorino cannot observe the
+final upstream response status, response size, or end-to-end latency.
+
+RHOAI requires the LLMInferenceService path to use the same event contract as the InferenceService
+path: OCSF 1.9.0 API Activity (`class_uid: 6003`) with the `ai_operation` profile. The event must be
+emitted once, when request processing finishes at the inference gateway.
+
+## Decision
+
+The canonical OCSF event is emitted by Envoy's access logger at stream completion.
+
+Authorino remains responsible for authentication and authorization. The wasm shim already exports
+Authorino's dynamic metadata to Envoy filter state under `wasm.kuadrant.auth`. The TelemetryPolicy
+pipeline projects only the approved scalar values needed by OCSF into dedicated
+`wasm.kuadrant.ocsf.*` filter-state keys; the access logger reads those keys for the authenticated
+actor and target. TelemetryPolicy configures the audit profile and the operator renders the
+provider-specific access-log configuration for the targeted Gateway.
+
+This keeps the responsibilities separate:
+
+- Authorino supplies authenticated identity and the authorization decision.
+- Envoy owns request-completion data and emits the canonical OCSF event.
+- ClusterLogForwarder forwards the gateway container log without constructing or transforming the
+  event.
+- Existing Authorino `custom.*` fields remain available for diagnostics and correlation, but are not
+  described as OCSF records.
+
+The wasm shim must not emit the record through its ordinary host logger. Proxy-Wasm log calls are
+mixed with Envoy operational logs and do not provide the raw JSON-lines audit stream required by the
+collection contract.
+
+## API direction
+
+OCSF output is an explicit, opt-in preset separate from configurable Authorino fields. A preliminary
+shape is:
+
+```yaml
+apiVersion: extensions.kuadrant.io/v1alpha1
+kind: TelemetryPolicy
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: openshift-ai-inference
+  logging:
+    default:
+      fields:
+        request_id: request.id
+      ocsf:
+        profile: aiOperation
+        actor:
+          identity: auth.identity.user.username
+          uid: auth.identity.user.uid
+          groups: auth.identity.user.groups
+        target:
+          resourceType: LLMInferenceService
+          requestPath:
+            namespaceSegment: 0
+            nameSegment: 1
+          aiProvider: KServe
+```
+
+Path segments are counted after removing the leading slash. The example therefore maps
+`/<namespace>/<llmisvc>/v1/...` to the target namespace and name without inspecting a request body or
+query string.
+
+The identity expression is restricted to the `auth.*` namespace. Target extraction uses explicit
+path-segment indexes rather than arbitrary CEL. The OCSF preset does not accept arbitrary headers or
+generic field expressions, so it cannot be configured to copy an authorization token, cookie,
+payload, or query string into the audit record.
+
+The target and AI provider are required for the `aiOperation` preset so the emitted `resources` and
+`ai_model` objects are complete. Before the API is finalized, the implementation should verify whether a stable Gateway API route
+attribute can identify the target resource. If it can, route metadata should replace the
+KServe-specific path mapping above.
+
+## OCSF mapping
+
+The emitted event matches the InferenceService audit contract:
+
+| OCSF field | Value |
+| --- | --- |
+| `activity_id`, `activity_name` | `99`, `Inference` |
+| `category_uid`, `category_name` | `6`, `Application Activity` |
+| `class_uid`, `class_name` | `6003`, `API Activity` |
+| `type_uid` | `600399` |
+| `severity_id`, `severity` | `1`, `Informational` |
+| `metadata.version` | `1.9.0` |
+| `metadata.profiles` | `["ai_operation"]` |
+| `metadata.product` | `kuadrant-gateway` and the Kuadrant release version |
+| `actor.user` | name, optional configured UID/groups, and type ID inferred from the identity |
+| `api.operation` | HTTP method plus path |
+| `http_request` | method, protocol version, and path only |
+| `http_response` | final status code, response bytes, and latency |
+| `src_endpoint`, `dst_endpoint` | downstream peer and selected upstream endpoint when Envoy exposes them |
+| `status_id`, `status`, `status_code` | derived from the final response code |
+| `resources` | configured target resource name, namespace, type, and target role |
+| `ai_model` | target name and configured provider, when both are known |
+
+The request path excludes the query string. Authorization headers, cookies, arbitrary headers,
+request and response bodies, and tokens are never part of the preset.
+
+## Provider implementation
+
+The first implementation target is Istio because the RHOAI LLMInferenceService gateway uses Istio.
+The operator appends an access logger to the existing Gateway-scoped EnvoyFilter and selects the
+gateway workload with `gateway.networking.k8s.io/gateway-name`. A CEL access-log filter requires the
+dedicated `wasm.kuadrant.ocsf.event` marker, so requests for routes without an attached OCSF
+TelemetryPolicy do not produce this event.
+
+The wasm shim exports OCSF fields available before stream completion as a `google.protobuf.Value`
+using the `protobufValue` StoreAction format. Envoy's `StdoutAccessLog.json_format` uses
+`%TYPED_CEL(...)%` to project those protobuf Value fields into typed JSON. It also derives the final
+request start and logged timestamps, response code, byte count, latency, and success status directly
+from Envoy's access-log CEL context, where these values are available at stream completion. An HTTP
+2xx is recorded as Success; redirects and other response codes are Failure, including authorization
+redirects that would otherwise look successful under a less strict threshold. This keeps
+timestamp and duration conversions out of the shim's CEL environment and preserves numbers and
+booleans as JSON primitives. The formatter does not use `typed_json_format` or print protobuf wrapper
+fields. The query-free URL path and a fallback event with `actor.user.type_id: 0` are stored by the
+TelemetryPolicy request prelude before terminal authorization actions can return early, so denied
+local replies still have an OCSF event to log. After successful authorization, the response-phase
+StoreAction overwrites the same filter-state key with the configured Authorino identity; denied
+requests keep the fallback actor.
+
+The Envoy formatter requires Envoy 1.36.0 or newer. For an Istio Gateway, the telemetry-policy
+extension lists proxy Pods labeled for that Gateway and queries each non-terminated running
+`istio-proxy` container with `pilot-agent request GET /server_info`. It uses the lowest reported
+runtime version across the Gateway's proxies. A Pod that is not running, no matching proxies, an
+unreadable response, or an unrecognized version fails closed with `Enforced=False` and reason
+`EnvoyVersionNotVerified`. A verified minimum below 1.36.0 reports `EnvoyVersionUnsupported`.
+The extension needs permission to list Pods and create the `pods/exec` subresource in order to
+query the runtime version; it does not infer the version from operator, GatewayClass, or image
+versions. It rechecks OCSF policies every 30 seconds, so proxy upgrades and downgrades update the
+policy and generated access-log configuration after the next check. Metrics and
+`logging.default.fields` continue to reconcile.
+
+The access logger must:
+
+1. read `wasm.kuadrant.ocsf.event` after the request-prelude export and, for authorized requests, after the response-phase actor update;
+2. use structured JSON output, with typed values instead of stringified numbers;
+3. preserve success and failure status values with numeric and boolean JSON types through Envoy 1.36+ `TYPED_CEL`;
+4. emit the OCSF unknown-user representation when authentication did not produce an identity;
+5. preserve any access logger configured by the platform instead of replacing it; and
+6. emit exactly one OCSF event per selected request.
+
+As in kube-rbac-proxy, actor UID and groups are emitted only when explicitly selected from
+Authorino `auth.*` metadata. The current gateway formatter records the direct downstream peer;
+trusted `X-Forwarded-For` parsing is not enabled because the Envoy path does not yet provide the
+same validated-address-chain behavior as kube-rbac-proxy.
+
+Provider-neutral API behavior is required, but unsupported Gateway providers must report a clear
+policy condition instead of silently accepting the OCSF stanza.
+
+## Validation
+
+Unit tests cover the version gate for Envoy 1.35, 1.36, later versions, unknown and mixed replicas,
+plus upgrade and downgrade reconciliation. The OCSF-specific Istio E2E verifies every running proxy's
+version, then drives allowed and denied requests and checks numeric and boolean JSON types, schema fields,
+and exclusion of credentials and query values. Additional integration scenarios include:
+
+- allowed request with a successful upstream response;
+- authentication failure;
+- authorization denial;
+- upstream 4xx/5xx and connection failure;
+- streaming response, verifying final byte count and latency;
+- target resource and AI model mapping; and
+- a request containing bearer credentials, cookies, query parameters, and sensitive payload fields,
+  verifying none appear anywhere in the emitted event.
+
+The final RHOAI E2E test validates the complete OCSF record from the gateway container and separately
+checks that ClusterLogForwarder makes the same JSON event queryable in Loki.
+
+## Delivery split
+
+1. Confirm the dedicated scalar filter-state projection in a live Envoy and determine whether a
+   stable Gateway API route attribute can replace request-path target extraction.
+2. Finalize the TelemetryPolicy API and CRD validation.
+3. Render the Istio access logger and add unit and integration coverage.
+4. Add other Gateway providers or explicit unsupported-provider status.
+5. Update KServe CI, E2E assertions, and documentation to consume gateway OCSF records instead of
+   treating Authorino decision records as canonical audit events.

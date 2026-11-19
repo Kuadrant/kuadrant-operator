@@ -991,6 +991,7 @@ func TestBuildActions_NoBodyRefs(t *testing.T) {
 			ServiceName: AuthServiceName,
 			Scope:       "my-auth",
 			Sources:     []string{"AuthPolicy/default/my-policy"},
+			Execution:   ExecutionParallel,
 		},
 		{
 			ServiceName: RateLimitServiceName,
@@ -1008,6 +1009,12 @@ func TestBuildActions_NoBodyRefs(t *testing.T) {
 	}
 	if actions[1].ActionType() != ActionKindGrpc {
 		t.Errorf("actions[1] type = %s, want grpc", actions[1].ActionType())
+	}
+	if got := actions[0].Base().Execution; got != ExecutionParallel {
+		t.Errorf("auth execution = %q, want explicitly configured parallel", got)
+	}
+	if got := actions[1].Base().Execution; got != "" {
+		t.Errorf("rate-limit execution = %q, want wasm-shim's default", got)
 	}
 }
 
@@ -1039,15 +1046,15 @@ func TestBuildActions_TokenLimitHitsAddend(t *testing.T) {
 	}
 	actions := BuildActions(specs)
 
-	// Expect: store action + check action + report action
+	// Expect: check action + store action + report action
 	if len(actions) != 3 {
 		t.Fatalf("expected 3 actions, got %d", len(actions))
 	}
 
-	// First action should be the store
-	store, ok := actions[0].(*StoreAction)
+	// The response store follows the request check.
+	store, ok := actions[1].(*StoreAction)
 	if !ok {
-		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+		t.Fatalf("actions[1] type = %s, want store", actions[1].ActionType())
 	}
 	if store.Path != responseBodyStorePath {
 		t.Errorf("store path = %q, want %q", store.Path, responseBodyStorePath)
@@ -1061,9 +1068,9 @@ func TestBuildActions_TokenLimitHitsAddend(t *testing.T) {
 	}
 
 	// Check action should be unchanged (no body refs in check spec)
-	checkGrpc, ok := actions[1].(*GrpcAction)
+	checkGrpc, ok := actions[0].(*GrpcAction)
 	if !ok {
-		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+		t.Fatalf("actions[0] type = %s, want grpc", actions[0].ActionType())
 	}
 	if !checkGrpc.IsGuard {
 		t.Error("check action should be a guard")
@@ -1111,14 +1118,14 @@ func TestBuildActions_ReservationActualAmount(t *testing.T) {
 	}
 	actions := BuildActions(specs)
 
-	// Expect: store action + reserve action + commit action
+	// Expect: reserve action + store action + commit action
 	if len(actions) != 3 {
 		t.Fatalf("expected 3 actions, got %d", len(actions))
 	}
 
-	store, ok := actions[0].(*StoreAction)
+	store, ok := actions[1].(*StoreAction)
 	if !ok {
-		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+		t.Fatalf("actions[1] type = %s, want store", actions[1].ActionType())
 	}
 	if store.Path != responseBodyStorePath {
 		t.Errorf("store path = %q, want %q", store.Path, responseBodyStorePath)
@@ -1129,9 +1136,9 @@ func TestBuildActions_ReservationActualAmount(t *testing.T) {
 	}
 
 	// Reserve action should be unchanged (no body refs in its Reservation data)
-	reserveGrpc, ok := actions[1].(*GrpcAction)
+	reserveGrpc, ok := actions[0].(*GrpcAction)
 	if !ok {
-		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+		t.Fatalf("actions[0] type = %s, want grpc", actions[0].ActionType())
 	}
 	if !reserveGrpc.IsGuard {
 		t.Error("reserve action should be a guard")
@@ -1189,9 +1196,9 @@ func TestBuildActions_ListBodyRef(t *testing.T) {
 		t.Fatalf("expected 3 actions, got %d", len(actions))
 	}
 
-	store, ok := actions[0].(*StoreAction)
+	store, ok := actions[1].(*StoreAction)
 	if !ok {
-		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+		t.Fatalf("actions[1] type = %s, want store", actions[1].ActionType())
 	}
 	expectedValue := `{"total_tokens": responseBodyJSON(["/usage/total_tokens", "/usageMetadata/totalTokenCount"], "number")}`
 	if store.Value != expectedValue {
@@ -1459,21 +1466,26 @@ func TestAttachBindingsThenBuildActions_FullPipeline(t *testing.T) {
 
 	bindings := []DataBinding{
 		{Domain: "metrics.labels", Field: "model", Expression: "responseBodyJSON('/model')"},
+		{Domain: "metrics.labels", Field: "prompt", Expression: "requestBodyJSON('/prompt')"},
 		{Domain: "metrics.labels", Field: "user", Expression: "auth.identity.userid"},
 	}
 
 	AttachBindings(specs, bindings)
 	actions := BuildActions(specs)
 
-	// Expect: store action + auth + check + report
-	if len(actions) != 4 {
-		t.Fatalf("expected 4 actions, got %d", len(actions))
+	// Both stores are used by Report and follow the request guards.
+	if len(actions) != 5 {
+		t.Fatalf("expected 5 actions, got %d", len(actions))
+	}
+	requestStore, ok := actions[2].(*StoreAction)
+	if !ok || requestStore.Path != requestBodyStorePath {
+		t.Fatalf("actions[2] = %v, want request body store", actions[2])
 	}
 
 	// Store action should contain body refs from report spec's ConditionalData and bindings
-	store, ok := actions[0].(*StoreAction)
+	store, ok := actions[3].(*StoreAction)
 	if !ok {
-		t.Fatalf("actions[0] type = %s, want store", actions[0].ActionType())
+		t.Fatalf("actions[3] type = %s, want store", actions[3].ActionType())
 	}
 	if !strings.Contains(store.Value, `"model": responseBodyJSON('/model')`) {
 		t.Errorf("store value should contain model field, got: %s", store.Value)
@@ -1483,9 +1495,9 @@ func TestAttachBindingsThenBuildActions_FullPipeline(t *testing.T) {
 	}
 
 	// Auth action: should have auth.identity.userid but NOT body ref bindings
-	authGrpc, ok := actions[1].(*GrpcAction)
+	authGrpc, ok := actions[0].(*GrpcAction)
 	if !ok {
-		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
+		t.Fatalf("actions[0] type = %s, want grpc", actions[0].ActionType())
 	}
 	if strings.Contains(authGrpc.MessageBuilder, "responseBodyJSON") {
 		t.Error("auth message should not contain responseBodyJSON")
@@ -1498,9 +1510,9 @@ func TestAttachBindingsThenBuildActions_FullPipeline(t *testing.T) {
 	}
 
 	// Check action: should have auth.identity.userid but NOT body ref bindings
-	checkGrpc, ok := actions[2].(*GrpcAction)
+	checkGrpc, ok := actions[1].(*GrpcAction)
 	if !ok {
-		t.Fatalf("actions[2] type = %s, want grpc", actions[2].ActionType())
+		t.Fatalf("actions[1] type = %s, want grpc", actions[1].ActionType())
 	}
 	if strings.Contains(checkGrpc.MessageBuilder, "responseBodyJSON") {
 		t.Error("check message should not contain responseBodyJSON")
@@ -1513,9 +1525,9 @@ func TestAttachBindingsThenBuildActions_FullPipeline(t *testing.T) {
 	}
 
 	// Report action: should have both auth and body store path bindings
-	reportGrpc, ok := actions[3].(*GrpcAction)
+	reportGrpc, ok := actions[4].(*GrpcAction)
 	if !ok {
-		t.Fatalf("actions[3] type = %s, want grpc", actions[3].ActionType())
+		t.Fatalf("actions[4] type = %s, want grpc", actions[4].ActionType())
 	}
 	if strings.Contains(reportGrpc.MessageBuilder, "responseBodyJSON") {
 		t.Error("report message should not contain responseBodyJSON after replacement")
@@ -1525,6 +1537,9 @@ func TestAttachBindingsThenBuildActions_FullPipeline(t *testing.T) {
 	}
 	if !strings.Contains(reportGrpc.MessageBuilder, "kuadrant.internal.response.body.model") {
 		t.Errorf("report message should reference store path for model")
+	}
+	if !strings.Contains(reportGrpc.MessageBuilder, requestBodyStorePath+".prompt") {
+		t.Error("report message should reference store path for prompt")
 	}
 	if !strings.Contains(reportGrpc.MessageBuilder, "auth.identity.userid") {
 		t.Error("report message should contain auth binding")
@@ -1739,7 +1754,7 @@ func TestEquivalentBodyRefSpellings(t *testing.T) {
 	for _, tc := range []struct{ name, first, second, third, service string }{
 		{"request", `requestBodyJSON("/model")`, `requestBodyJSON('/model')`, `requestBodyJSON( "/model" )`, RateLimitReserveServiceName},
 		{"response", `responseBodyJSON("/model")`, `responseBodyJSON('/model')`, `responseBodyJSON( "/model" )`, RateLimitCommitServiceName},
-		{"pointer list", `responseBodyJSON(["/model", "/fallback"], "string")`, `responseBodyJSON(['/model','/fallback'], "string")`, `responseBodyJSON( ["/model", "/fallback"], "string" )`, AuthServiceName},
+		{"pointer list", `responseBodyJSON(["/model", "/fallback"], "string")`, `responseBodyJSON(['/model','/fallback'], "string")`, `responseBodyJSON( ["/model", "/fallback"], "string" )`, RateLimitReportServiceName},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			bindings := []DataBinding{{Domain: "metrics.labels", Field: "a", Expression: tc.first}, {Domain: "metrics.labels", Field: "b", Expression: tc.second}}

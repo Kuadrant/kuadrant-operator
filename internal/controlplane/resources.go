@@ -77,6 +77,12 @@ func NewResourceApplier(client dynamic.Interface, discoveryClient discovery.Disc
 	}
 }
 
+func (a *ResourceApplier) ResetRESTMapper() {
+	if mapper, ok := a.mapper.(interface{ Reset() }); ok {
+		mapper.Reset()
+	}
+}
+
 func SortByInstallOrder(objects []*unstructured.Unstructured) {
 	sort.SliceStable(objects, func(i, j int) bool {
 		iOrder := kindOrder(objects[i].GetKind())

@@ -68,6 +68,17 @@ func (m *ImageSplitValue) Apply(values map[string]any) {
 	setNestedValue(values, m.ValueKey, imageValues)
 }
 
+// StaticValue sets a fixed chart value at a dotted key. Use for values that
+// depend on the cluster rather than an env var (e.g., OpenShift-only settings).
+type StaticValue struct {
+	ValueKey string
+	Value    any
+}
+
+func (m *StaticValue) Apply(values map[string]any) {
+	setNestedValue(values, m.ValueKey, m.Value)
+}
+
 // setNestedValue sets a value at a potentially dotted key path in a nested map.
 // For example, setNestedValue(m, "controller.image", "v1") creates
 // m["controller"] = map[string]any{"image": "v1"}, merging with existing maps.

@@ -48,6 +48,8 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-latest
     env:
+      GOTOOLCHAIN: go1.27.3
+    env:
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
     defaults:
@@ -150,6 +152,8 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     env:
+      GOTOOLCHAIN: go1.27.3
+    env:
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
     defaults:
@@ -198,6 +202,8 @@ jobs:
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3
     env:
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
@@ -256,6 +262,8 @@ jobs:
           - gatewayapi-provider: envoygateway
       fail-fast: false
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3
     env:
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system

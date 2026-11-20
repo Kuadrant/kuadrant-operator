@@ -119,6 +119,7 @@ func (r *PlanPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alpha
 		// Ignore conflicts, resource might just be outdated.
 		if errors.IsConflict(updateErr) {
 			r.Logger.Info("Failed to update status: resource might just be outdated")
+			//nolint:staticcheck // Requeue preserves exponential backoff; RequeueAfter would force fixed delay
 			return reconcile.Result{Requeue: true}, nil
 		}
 

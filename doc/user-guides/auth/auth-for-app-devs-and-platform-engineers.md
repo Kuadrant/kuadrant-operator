@@ -220,7 +220,8 @@ spec:
         opa:
           rego: |
             groups := split(object.get(input.auth.identity.metadata.annotations, "kuadrant.io/groups", ""), ",")
-            allow { groups[_] == "admins" }
+            allow if groups[_] == "admins"
+          version: v1
 EOF
 ```
 
@@ -301,7 +302,8 @@ spec:
       authorization:
         deny-all:
           opa:
-            rego: "allow = false"
+            rego: "allow := false"
+            version: v1
       response:
         unauthorized:
           headers:

@@ -1,8 +1,8 @@
-# Authoring Extensions with the Kuadrant Extensions Framework
+# Authoring extensions with the Kuadrant Extensions Framework
 
 > **Note**: The deployment model and SDK described here are the supported way to build an extension. The framework is not yet stable, so expect details to change on the way to GA.
 
-## Introduction
+## Overview
 
 An **extension** adds a new policy kind to Kuadrant. You define a CRD that expresses something in your own terms, and your extension turns each instance of it into whatever that implies: Kuadrant policies, Gateway API resources, or behaviour applied to live traffic.
 
@@ -14,7 +14,7 @@ An extension is an ordinary Kubernetes controller that you build, deploy and ope
 
 You do not fork or rebuild the Kuadrant operator to do this. Your extension is a separate image, deployed separately, running against a stock operator.
 
-### Why build one
+### Select an extension approach
 
 Consider an extension when:
 
@@ -25,13 +25,15 @@ Consider an extension when:
 
 If none of those apply and you only need to create Kubernetes resources, write a normal controller. The SDK earns its place when you need the topology or the data plane.
 
-### Reference examples
+### Review reference examples
 
 The [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions) repository holds runnable extensions, including their deployment manifests. They are reference material rather than a library or a framework: read them, copy what is useful into a repository of your own, and build and release your extension from there. This guide refers to [`threat-policy`](https://github.com/Kuadrant/example-extensions/tree/main/threat-policy), which calls an external gRPC service on every request and blocks the ones it rates as dangerous.
 
-## How extensions work
+## Extension architecture
+
 
 ```
+
 ┌────────────────────────────┐                     ┌──────────────────────────────┐
 │  Your extension pod        │                     │  Kuadrant operator pod       │
 │                            │                     │                              │
@@ -43,19 +45,20 @@ The [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions
 │                            │   pipeline actions  │    AuthConfig, Limitador,    │
 │  watches MyPolicy CRs      │                     │    wasm config               │
 └────────────────────────────┘                     └──────────────────────────────┘
+
 ```
 
-On startup the SDK connects to the operator and completes a handshake, where your extension proves its identity and claims the policy kind it manages. The SDK does this for you; what you provide is the configuration behind it, covered under [Deploying](#deploying). From then on your reconciler runs for every instance of your CRD exactly as a controller-runtime reconciler would, with one extra argument: a `KuadrantCtx` carrying the SDK methods.
+On startup the SDK connects to the operator and completes a handshake, where your extension proves its identity and claims the policy kind it manages. The SDK does this for you; what you provide is the configuration behind it, covered under [Deploy an extension](#deploy-an-extension). From then on your reconciler runs for every instance of your CRD exactly as a controller-runtime reconciler would, with one extra argument: a `KuadrantCtx` carrying the SDK methods.
 
 Everything your extension tells the operator is scoped to the policy that told it. When a policy is deleted, the bindings and pipeline actions it published go with it.
 
-### The topology
+### Query topology data
 
 The operator maintains an in-memory graph of Gateway API resources and the policies attached to them. Your extension queries that graph by sending a CEL expression over the existing gRPC connection, so it needs no RBAC for Gateways, Routes or other policies, and adds no load to the API server.
 
 That graph is also the limit of what the query functions can see. Anything else your extension needs to read, including its own CRs, is an ordinary client call with ordinary RBAC behind it.
 
-## What the SDK gives you
+## Extension SDK features
 
 These four methods are what distinguish an extension from a plain controller. Each is covered in full in the [Extension SDK developer guide](extension-sdk-developer-guide.md); this section is a tour of what they are for.
 
@@ -73,6 +76,7 @@ gw, err := extcontroller.Resolve[GatewayInfo](ctx, kCtx, pol,
     `{"hostname": self.findGateways()[0].spec.listeners[0].hostname,
       "protocol": self.findGateways()[0].spec.listeners[0].protocol}`,
     true)
+
 ```
 
 The final argument is `subscribe`. Pass `true` and the operator watches for the expression's result changing and re-triggers your reconcile when it does, which is what you want whenever the answer depends on cluster state that can move. Pass `false` for a one-off read.
@@ -93,6 +97,7 @@ kCtx.AddDataTo(ctx, pol, types.DomainAuth, "plan",
 kCtx.AddDataTo(ctx, pol, types.DomainRequest,
     types.KuadrantMetricBinding("user_tier"),
     `request.headers["x-user-tier"]`)
+
 ```
 
 The value is an expression, not a value you resolved at reconcile time. This is how an extension expresses a decision that has to be made per request.
@@ -106,6 +111,7 @@ desired := buildAuthPolicy(pol, gw)
 controllerutil.SetControllerReference(pol, desired, r.Scheme)
 
 obj, err := kCtx.ReconcileObject(ctx, &kuadrantv1.AuthPolicy{}, desired, authPolicyMutator)
+
 ```
 
 Set the owner reference and deleting your policy garbage-collects what it created. Note that the call returns a nil object when it had to create the resource rather than update one.
@@ -139,13 +145,14 @@ pipeline.OnHTTPRequest(
     },
 )
 pipeline.Commit(ctx)
+
 ```
 
 Nothing takes effect until `Commit`, which replaces the policy's actions as a unit and validates them. A reference to a variable no action produces, or a field that is not on the gRPC response message, fails the commit rather than misbehaving quietly on live traffic. The operator learns the response message by gRPC reflection, so your service needs reflection enabled.
 
-## Building an extension
+## Build an extension
 
-### 1. Define the CRD
+### Define the CRD
 
 An extension policy attaches to Gateway API resources using the Policy Attachment pattern, so your spec carries a `targetRef` alongside whatever your policy actually configures:
 
@@ -154,13 +161,14 @@ type MyPolicySpec struct {
     TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
     Threshold int                                                         `json:"threshold"`
 }
+
 ```
 
 Your type needs to satisfy the SDK's `Policy` interface, which is mostly `GetTargetRefs()` on top of the usual object methods. Generate deepcopy functions and CRD manifests as you would for any operator.
 
 The Kind name matters beyond Kubernetes here: it is what your extension claims at handshake, and what an administrator grants it permission to register. Keep it unique across the cluster.
 
-### 2. Write the reconciler
+### Write the reconciler
 
 The signature is controller-runtime's with one addition:
 
@@ -192,11 +200,12 @@ func (r *MyPolicyReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 
     return r.reconcileStatus(ctx, pol)
 }
+
 ```
 
 Embedding `types.ExtensionBase` gives you `Configure`, which populates the logger, client and scheme from the context.
 
-### 3. Wire up main.go
+### Wire up the main function
 
 Use the SDK's builder rather than controller-runtime's. It looks deliberately similar, but it also establishes the gRPC connection and passes `KuadrantCtx` into your reconciler:
 
@@ -221,13 +230,14 @@ func main() {
         os.Exit(1)
     }
 }
+
 ```
 
 The type you pass to `For()` determines the policy kind your extension claims at handshake, taken from the Go type name.
 
 For a complete, compiling version of all three steps, read [`threat-policy`](https://github.com/Kuadrant/example-extensions/tree/main/threat-policy) end to end.
 
-## Deploying
+## Deploy an extension
 
 Your extension is a Deployment you own, running as its own ServiceAccount, in any namespace you choose. It needs a Kuadrant operator v1.6.0 or later already running, with its extensions service reachable at `kuadrant-operator-extensions.kuadrant-system.svc:50052`.
 
@@ -247,7 +257,7 @@ kind: ClusterRole
 metadata:
   name: my-policy-register
 rules:
-  - apiGroups: ["extensions.kuadrant.io"]
+    - apiGroups: ["extensions.kuadrant.io"]
     resources: ["policyregistrations"]
     resourceNames: ["MyPolicy"] # must match the Kind passed to For()
     verbs: ["register"]
@@ -261,9 +271,10 @@ roleRef:
   kind: ClusterRole
   name: my-policy-register
 subjects:
-  - kind: ServiceAccount
+- kind: ServiceAccount
     name: my-policy
     namespace: my-namespace
+
 ```
 
 Nothing is ever stored under `policyregistrations`. It exists so that "may this ServiceAccount claim kind X" can be written as an ordinary RBAC rule. Revoking an extension means deleting this binding, which takes effect at its next handshake: a session already established keeps running until its connection drops or the operator restarts.
@@ -276,24 +287,25 @@ Nothing is ever stored under `policyregistrations`. It exists so that "may this 
 spec:
   serviceAccountName: my-policy
   containers:
-    - name: extension
+- name: extension
       env:
-        - name: KUADRANT_EXTENSION_ADDRESS
+- name: KUADRANT_EXTENSION_ADDRESS
           value: kuadrant-operator-extensions.kuadrant-system.svc:50052
-        - name: KUADRANT_EXTENSION_TOKEN_FILE
+- name: KUADRANT_EXTENSION_TOKEN_FILE
           value: /var/run/secrets/kuadrant/token
       volumeMounts:
-        - name: kuadrant-token
+- name: kuadrant-token
           mountPath: /var/run/secrets/kuadrant
           readOnly: true
   volumes:
-    - name: kuadrant-token
+- name: kuadrant-token
       projected:
         sources:
-          - serviceAccountToken:
+- serviceAccountToken:
               path: token
               audience: kuadrant-extensions
               expirationSeconds: 3600
+
 ```
 
 The audience matters. A token minted for anything else is rejected at handshake, which is also what stops a token from elsewhere being replayed against this endpoint.
@@ -306,15 +318,15 @@ To check it end to end, create an instance of your CRD targeting a Gateway or HT
 
 ## Design considerations
 
-### Targeting and attachment
+### Target and attach resources
 
 Your policy attaches to Gateway API resources, not to other policies. Extensions frequently create AuthPolicies and RateLimitPolicies, but they target Gateways, HTTPRoutes and GRPCRoutes. Use `findGateways()` to discover which gateway you ended up under and read what you need from its spec and status.
 
-### Ownership
+### Manage resource ownership
 
 Set a controller reference on everything you create. Garbage collection then removes managed resources when the policy goes away, and you do not have to write cleanup logic.
 
-### Status
+### Track status conditions
 
 Reconcile spec and status separately, and check the resources you created before claiming success. A policy whose AuthPolicy exists but is not enforced has not done its job:
 
@@ -326,13 +338,14 @@ func isAuthPolicyEnforced(authPolicy *kuadrantv1.AuthPolicy) error {
     }
     return nil
 }
+
 ```
 
-### Reconnection
+### Handle automatic reconnection
 
 Connections drop and operators restart. The SDK reconnects and re-handshakes on its own, and re-reconciles your CRs afterwards so the operator's view is rebuilt. Write your reconciler to be idempotent, as you would any controller.
 
-## Debugging
+## Debug extension issues
 
 Extensions log through `logr`:
 
@@ -340,6 +353,7 @@ Extensions log through `logr`:
 r.Logger.Info("reconciling policy", "name", pol.Name, "namespace", pol.Namespace)
 r.Logger.V(1).Info("resolved gateway", "gatewayInfo", gwInfo)
 r.Logger.Error(err, "failed to reconcile AuthPolicy")
+
 ```
 
 Set the level and format with environment variables:
@@ -347,16 +361,18 @@ Set the level and format with environment variables:
 ```bash
 LOG_LEVEL=debug       # debug, info, warn, error
 LOG_MODE=development  # development or production
+
 ```
 
 If nothing is reconciling at all, the handshake is the first thing to check. The operator logs a rejection with its reason, and the usual causes are a token with the wrong audience, a missing `register` grant, a `resourceNames` entry that does not match your Kind, or a NetworkPolicy blocking port 50052.
 
-## Resources
+## Additional resources
 
-- [Extension SDK developer guide](extension-sdk-developer-guide.md): full reference for the SDK API, reconciler patterns and project layout
-- [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions): reference extensions to read and copy from, with their deployment manifests
-- [Gateway API Policy Attachment](https://gateway-api.sigs.k8s.io/geps/gep-713/)
-- [Kuadrant's introduction to CEL](../cel/introduction.md)
-- [CEL language definition](https://github.com/google/cel-spec)
-- [Authorino documentation](https://docs.kuadrant.io/authorino/)
-- [Limitador documentation](https://docs.kuadrant.io/limitador/)
+* [Extension SDK developer guide](extension-sdk-developer-guide.md): full reference for the SDK API, reconciler patterns and project layout
+* [Kuadrant/example-extensions](https://github.com/Kuadrant/example-extensions): reference extensions to read and copy from, with their deployment manifests
+* [Gateway API Policy Attachment](https://gateway-api.sigs.k8s.io/geps/gep-713/)
+* [Kuadrant's introduction to CEL](../cel/introduction.md)
+* [CEL language definition](https://github.com/google/cel-spec)
+* [Authorino documentation](https://docs.kuadrant.io/authorino/)
+* [Limitador documentation](https://docs.kuadrant.io/limitador/)
+```

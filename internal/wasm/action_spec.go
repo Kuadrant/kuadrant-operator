@@ -128,7 +128,8 @@ func (s ActionSpec) Build() Action {
 
 // BuildActions materializes a slice of ActionSpecs into Actions.
 // Body field references (responseBodyJSON/requestBodyJSON) across all specs are
-// extracted into a single StoreAction per direction, prepended to the result.
+// extracted into a single StoreAction per direction. Extraction used only by
+// response actions follows the request guards so it cannot block them.
 func BuildActions(specs []ActionSpec) []Action {
 	type refEntry struct {
 		ref       bodyRef
@@ -139,7 +140,9 @@ func BuildActions(specs []ActionSpec) []Action {
 	// Collect all body refs across all specs, grouped by direction.
 	// Key: direction ("response"/"request"), value: pointer -> refEntry
 	byDirection := make(map[string]map[string]refEntry)
-	addRef := func(ref bodyRef, sources []string) {
+	requestStoreUsedByGuard := false
+	addRef := func(ref bodyRef, spec ActionSpec) {
+		requestStoreUsedByGuard = requestStoreUsedByGuard || (ref.Direction == "request" && spec.IsGuard())
 		if byDirection[ref.Direction] == nil {
 			byDirection[ref.Direction] = make(map[string]refEntry)
 		}
@@ -150,7 +153,7 @@ func BuildActions(specs []ActionSpec) []Action {
 			entry.ref = ref
 		}
 		entry.originals = appendUnique(entry.originals, ref.Original)
-		entry.sources = appendUnique(entry.sources, sources...)
+		entry.sources = appendUnique(entry.sources, spec.Sources...)
 		byDirection[ref.Direction][ref.Pointer] = entry
 	}
 
@@ -159,19 +162,19 @@ func BuildActions(specs []ActionSpec) []Action {
 			for _, item := range cd.Data {
 				if expr, ok := item.Value.(*Expression); ok {
 					for _, ref := range extractBodyRefs(expr.ExpressionItem.Value) {
-						addRef(ref, spec.Sources)
+						addRef(ref, spec)
 					}
 				}
 			}
 		}
 		for _, b := range spec.Bindings {
 			for _, ref := range extractBodyRefs(b.Expression) {
-				addRef(ref, spec.Sources)
+				addRef(ref, spec)
 			}
 		}
 		if spec.Reservation != nil {
 			for _, ref := range extractBodyRefs(spec.Reservation.ActualAmount) {
-				addRef(ref, spec.Sources)
+				addRef(ref, spec)
 			}
 		}
 	}
@@ -186,7 +189,7 @@ func BuildActions(specs []ActionSpec) []Action {
 
 	// Build store actions and a replacement map
 	replacements := make(map[string]string) // original call -> store path
-	var storeActions []Action
+	var requestStore, responseStore *StoreAction
 
 	for _, direction := range []string{"request", "response"} {
 		fields, ok := byDirection[direction]
@@ -236,25 +239,37 @@ func BuildActions(specs []ActionSpec) []Action {
 
 		mapExpr := fmt.Sprintf("{%s}", strings.Join(mapEntries, ", "))
 		sort.Strings(allSources)
-		storeActions = append(storeActions,
-			NewStoreAction("true", storePath, mapExpr).
-				WithGuard(false).
-				WithSources(allSources),
-		)
+		store := NewStoreAction("true", storePath, mapExpr).
+			WithGuard(false).
+			WithSources(allSources)
+		if direction == "request" {
+			requestStore = store
+		} else {
+			responseStore = store
+		}
 	}
 
-	// Replace body refs in all specs and build
-	modified := make([]ActionSpec, len(specs))
-	for i, spec := range specs {
-		modified[i] = spec.replaceBodyRefs(replacements)
+	actions := make([]Action, 0, len(specs)+len(byDirection))
+	if requestStore != nil && requestStoreUsedByGuard {
+		actions = append(actions, requestStore)
 	}
-
-	actions := make([]Action, 0, len(storeActions)+len(modified))
-	actions = append(actions, storeActions...)
-	for _, spec := range modified {
-		actions = append(actions, spec.Build())
+	deferRequestStore := requestStore != nil && !requestStoreUsedByGuard
+	var responseActions []Action
+	for _, spec := range specs {
+		action := spec.replaceBodyRefs(replacements).Build()
+		if (responseStore != nil || deferRequestStore) && !spec.IsGuard() {
+			responseActions = append(responseActions, action)
+		} else {
+			actions = append(actions, action)
+		}
 	}
-	return actions
+	if deferRequestStore {
+		actions = append(actions, requestStore)
+	}
+	if responseStore != nil {
+		actions = append(actions, responseStore)
+	}
+	return append(actions, responseActions...)
 }
 
 func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
@@ -345,6 +360,7 @@ func (s ActionSpec) buildAuth() *GrpcAction {
 	predicate := buildActionPredicate(s.Predicates)
 
 	return NewGrpcAction(predicate, authResponseVar, s.ServiceName, request.ToCEL(), "auth").
+		WithExecution(s.Execution).
 		WithSources(s.Sources).
 		WithOnReply(buildAuthOnReply(authResponseVar)...)
 }

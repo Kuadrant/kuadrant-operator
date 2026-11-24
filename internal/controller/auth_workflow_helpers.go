@@ -95,14 +95,20 @@ func AuthConfigNameForPath(pathID string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func buildWasmActionSpecsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.ActionSpec {
+func buildWasmActionSpecsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy, hasTokenRateLimit bool) []wasm.ActionSpec {
 	spec := effectivePolicy.Spec.Spec.Proper()
+
+	var execution wasm.ExecutionMode
+	if hasTokenRateLimit {
+		execution = wasm.ExecutionSequential
+	}
 
 	return []wasm.ActionSpec{{
 		ServiceName: wasm.AuthServiceName,
 		Scope:       AuthConfigNameForPath(pathID),
 		Predicates:  spec.Predicates.Into(),
 		Sources:     effectivePolicy.SourcePolicies,
+		Execution:   execution,
 	}}
 }
 

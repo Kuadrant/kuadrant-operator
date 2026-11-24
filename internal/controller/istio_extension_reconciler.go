@@ -498,11 +498,11 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		var specs []wasm.ActionSpec
+		effectiveTokenRateLimitPolicy, hasTokenRateLimit := effectiveTokenRateLimitPoliciesMap[pathID]
 
 		// auth
 		effectiveAuthPolicy, hasAuth := effectiveAuthPoliciesMap[pathID]
 		if hasAuth {
-			_, hasTokenRateLimit := effectiveTokenRateLimitPoliciesMap[pathID]
 			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy, hasTokenRateLimit)...)
 			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
@@ -513,8 +513,8 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			if specsHaveAuthAccess(rlSpecs) {
 				specs = append(specs, rlSpecs...)
 			} else {
-				// pre auth rate limiting
-				if hasAuth {
+				// Finish infrastructure rate limiting before auth or token admission.
+				if hasAuth || hasTokenRateLimit {
 					for i := range rlSpecs {
 						rlSpecs[i].Execution = wasm.ExecutionSequential
 					}
@@ -524,8 +524,8 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, topolog
 			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
+		if hasTokenRateLimit {
+			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectiveTokenRateLimitPolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
 			specs = append(specs, trlSpecs...)
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}

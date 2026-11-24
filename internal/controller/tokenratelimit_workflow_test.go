@@ -713,6 +713,17 @@ func TestBuiltInPolicyActionOrder(t *testing.T) {
 					want:      []string{wasm.RateLimitServiceName, wasm.AuthServiceName},
 				},
 				{
+					name:        "infrastructure RLP and Reservation-mode TRLP without auth",
+					rateLimit:   true,
+					tokenLimits: []string{"global"},
+					want:        []string{wasm.RateLimitServiceName, wasm.RateLimitReserveServiceName, responseStore, wasm.RateLimitCommitServiceName},
+				},
+				{
+					name:      "standalone infrastructure limit",
+					rateLimit: true,
+					want:      []string{wasm.RateLimitServiceName},
+				},
+				{
 					name:        "standalone token limit",
 					tokenLimits: []string{"global"},
 					want:        []string{wasm.RateLimitReserveServiceName, responseStore, wasm.RateLimitCommitServiceName},
@@ -797,8 +808,9 @@ func TestBuiltInPolicyActionOrder(t *testing.T) {
 						case *wasm.GrpcAction:
 							got = append(got, action.Service)
 							var wantExecution wasm.ExecutionMode
-							if scenario.auth && (action.Service == wasm.RateLimitServiceName ||
-								(action.Service == wasm.AuthServiceName && len(scenario.tokenLimits) > 0)) {
+							hasTokenRateLimit := len(scenario.tokenLimits) > 0
+							if (action.Service == wasm.RateLimitServiceName && (scenario.auth || hasTokenRateLimit)) ||
+								(action.Service == wasm.AuthServiceName && hasTokenRateLimit) {
 								wantExecution = wasm.ExecutionSequential
 							}
 							if action.Execution != wantExecution {

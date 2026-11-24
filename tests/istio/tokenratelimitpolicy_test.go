@@ -193,7 +193,7 @@ var _ = Describe("TokenRateLimitPolicy enforcement modes", Serial, func() {
 		// Built via wasm.BuildActions (not ActionSpec.Build directly) because the
 		// commit spec's reservation.actual_amount references responseBodyJSON(...),
 		// which BuildActions hoists into a shared response-body-extraction action
-		// ahead of the reserve/commit actions themselves.
+		// between the reserve and commit actions.
 		expectedActions := wasm.BuildActions([]wasm.ActionSpec{
 			{
 				ServiceName: wasm.RateLimitReserveServiceName,

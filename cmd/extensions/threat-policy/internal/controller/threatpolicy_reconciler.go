@@ -172,6 +172,7 @@ func (r *ThreatPolicyReconciler) reconcileStatus(ctx context.Context, pol *v1alp
 	if updateErr != nil {
 		if errors.IsConflict(updateErr) {
 			r.Logger.Info("Failed to update status: resource might just be outdated")
+			//nolint:staticcheck
 			return reconcile.Result{Requeue: true}, nil
 		}
 		return reconcile.Result{}, fmt.Errorf("failed to update status: %w", updateErr)

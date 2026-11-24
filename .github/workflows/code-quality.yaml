@@ -35,6 +35,8 @@ jobs:
     needs: pre-job
     if: needs.pre-job.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     defaults:
       run:
         shell: bash
@@ -134,6 +136,8 @@ jobs:
     needs: pre-job
     if: needs.pre-job.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     permissions:
       contents: read
       checks: write

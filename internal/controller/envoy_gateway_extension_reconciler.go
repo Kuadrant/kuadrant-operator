@@ -110,7 +110,11 @@ func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			wasmConfig.Services = lo.Assign(wasmConfig.Services, serviceBuilder.Build())
 		}
 
-		desiredEnvoyExtensionPolicy := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		desiredEnvoyExtensionPolicy, err := buildEnvoyExtensionPolicyForGateway(gateway, wasmConfig, ProtectedRegistry, WASMFilterImageURL)
+		if err != nil {
+			logger.Error(err, "failed to build EnvoyExtensionPolicy; retaining last-known-good config", "gateway", gatewayKey.String())
+			continue
+		}
 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
@@ -471,11 +475,12 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		validatorBuilder := celvalidator.NewRootValidatorBuilder()
 
 		var specs []wasm.ActionSpec
+		effectiveTokenRateLimitPolicy, hasTokenRateLimit := effectiveTokenRateLimitPoliciesMap[pathID]
 
 		// auth
 		effectiveAuthPolicy, hasAuth := effectiveAuthPoliciesMap[pathID]
 		if hasAuth {
-			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy)...)
+			specs = append(specs, buildWasmActionSpecsForAuth(pathID, effectiveAuthPolicy, hasTokenRateLimit)...)
 			validatorBuilder.PushPolicyBinding(celvalidator.AuthPolicyKind, celvalidator.AuthPolicyName, cel.AnyType)
 		}
 
@@ -485,8 +490,8 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			if specsHaveAuthAccess(rlSpecs) {
 				specs = append(specs, rlSpecs...)
 			} else {
-				// pre auth rate limiting
-				if hasAuth {
+				// Finish infrastructure rate limiting before auth or token admission.
+				if hasAuth || hasTokenRateLimit {
 					for i := range rlSpecs {
 						rlSpecs[i].Execution = wasm.ExecutionSequential
 					}
@@ -496,19 +501,9 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 			validatorBuilder.PushPolicyBinding(celvalidator.RateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
-		if effectivePolicy, ok := effectiveTokenRateLimitPoliciesMap[pathID]; ok {
-			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectivePolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
-			if specsHaveAuthAccess(trlSpecs) {
-				specs = append(specs, trlSpecs...)
-			} else {
-				// pre auth rate limiting
-				if hasAuth {
-					for i := range trlSpecs {
-						trlSpecs[i].Execution = wasm.ExecutionSequential
-					}
-				}
-				specs = append(trlSpecs, specs...)
-			}
+		if hasTokenRateLimit {
+			trlSpecs := buildWasmActionSpecsForTokenRateLimit(effectiveTokenRateLimitPolicy, isTokenRateLimitPolicyAcceptedAndNotDeletedFunc(state), tokenRateLimitingMode)
+			specs = append(specs, trlSpecs...)
 			validatorBuilder.PushPolicyBinding(celvalidator.TokenRateLimitPolicyKind, celvalidator.RateLimitName, cel.AnyType)
 		}
 
@@ -611,8 +606,10 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 	return wasmConfigs, observability, serviceBuilder, nil
 }
 
-// buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+// buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config.
+// It returns an error (rather than nil) when the wasm config cannot be encoded, so the
+// caller can retain the last-known-good resource instead of dropping enforcement.
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config, protectedRegistry, imageURL string) (*envoygatewayv1alpha1.EnvoyExtensionPolicy, error) {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -689,12 +686,12 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 	} else {
 		pluginConfigJSON, err := wasmConfig.ToJSON()
 		if err != nil {
-			return nil
+			return nil, fmt.Errorf("failed to encode wasm config: %w", err)
 		}
 		envoyPolicy.Spec.Wasm[0].Config = pluginConfigJSON
 	}
 
-	return envoyPolicy
+	return envoyPolicy, nil
 }
 
 func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy) bool {
@@ -716,6 +713,11 @@ func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy
 			}
 			bConfig, err := wasm.ConfigFromJSON(bWasm.Config)
 			if err != nil {
+				return false
+			}
+			// EqualTo ignores the envelope's maxDecompressedBytes; compare it
+			// explicitly so a change to the limit triggers an update.
+			if wasm.ConfigMaxDecompressedBytes(aWasm.Config.Raw) != wasm.ConfigMaxDecompressedBytes(bWasm.Config.Raw) {
 				return false
 			}
 			return aConfig != nil && bConfig != nil && aConfig.EqualTo(bConfig)

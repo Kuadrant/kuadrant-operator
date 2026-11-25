@@ -104,7 +104,7 @@ endif
 IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 
 # Directories containing unit & integration test packages
-UNIT_DIRS := ./pkg/... ./api/... ./internal/... ./hack/sync-components...
+UNIT_DIRS := ./pkg/... ./api/... ./internal/... ./cmd/... ./hack/sync-components...
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -295,7 +295,7 @@ OPM_VERSION ?= v1.48.0
 KIND_VERSION ?= v0.31.0
 ACT_VERSION ?= latest
 HELM_VERSION ?= v3.15.0
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.15.0
 RATCHET_VERSION ?= v0.11.4
 
 ## Versioned Binaries

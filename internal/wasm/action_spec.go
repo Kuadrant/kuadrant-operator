@@ -128,53 +128,53 @@ func (s ActionSpec) Build() Action {
 
 // BuildActions materializes a slice of ActionSpecs into Actions.
 // Body field references (responseBodyJSON/requestBodyJSON) across all specs are
-// extracted into a single StoreAction per direction, prepended to the result.
+// extracted into a single StoreAction per direction. Extraction used only by
+// response actions follows the request guards so it cannot block them.
 func BuildActions(specs []ActionSpec) []Action {
 	type refEntry struct {
-		ref     bodyRef
-		sources []string
+		ref       bodyRef
+		originals []string
+		sources   []string
 	}
 
 	// Collect all body refs across all specs, grouped by direction.
 	// Key: direction ("response"/"request"), value: pointer -> refEntry
 	byDirection := make(map[string]map[string]refEntry)
+	requestStoreUsedByGuard := false
+	addRef := func(ref bodyRef, spec ActionSpec) {
+		requestStoreUsedByGuard = requestStoreUsedByGuard || (ref.Direction == "request" && spec.IsGuard())
+		if byDirection[ref.Direction] == nil {
+			byDirection[ref.Direction] = make(map[string]refEntry)
+		}
+		entry := byDirection[ref.Direction][ref.Pointer]
+		// Equivalent calls can use different quoting or whitespace. Keep every
+		// spelling for replacement and choose a stable extraction expression.
+		if len(entry.originals) == 0 || ref.Original < entry.ref.Original {
+			entry.ref = ref
+		}
+		entry.originals = appendUnique(entry.originals, ref.Original)
+		entry.sources = appendUnique(entry.sources, spec.Sources...)
+		byDirection[ref.Direction][ref.Pointer] = entry
+	}
 
 	for _, spec := range specs {
 		for _, cd := range spec.ConditionalData {
 			for _, item := range cd.Data {
 				if expr, ok := item.Value.(*Expression); ok {
 					for _, ref := range extractBodyRefs(expr.ExpressionItem.Value) {
-						if byDirection[ref.Direction] == nil {
-							byDirection[ref.Direction] = make(map[string]refEntry)
-						}
-						entry := byDirection[ref.Direction][ref.Pointer]
-						entry.ref = ref
-						entry.sources = appendUnique(entry.sources, spec.Sources...)
-						byDirection[ref.Direction][ref.Pointer] = entry
+						addRef(ref, spec)
 					}
 				}
 			}
 		}
 		for _, b := range spec.Bindings {
 			for _, ref := range extractBodyRefs(b.Expression) {
-				if byDirection[ref.Direction] == nil {
-					byDirection[ref.Direction] = make(map[string]refEntry)
-				}
-				entry := byDirection[ref.Direction][ref.Pointer]
-				entry.ref = ref
-				entry.sources = appendUnique(entry.sources, spec.Sources...)
-				byDirection[ref.Direction][ref.Pointer] = entry
+				addRef(ref, spec)
 			}
 		}
 		if spec.Reservation != nil {
 			for _, ref := range extractBodyRefs(spec.Reservation.ActualAmount) {
-				if byDirection[ref.Direction] == nil {
-					byDirection[ref.Direction] = make(map[string]refEntry)
-				}
-				entry := byDirection[ref.Direction][ref.Pointer]
-				entry.ref = ref
-				entry.sources = appendUnique(entry.sources, spec.Sources...)
-				byDirection[ref.Direction][ref.Pointer] = entry
+				addRef(ref, spec)
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func BuildActions(specs []ActionSpec) []Action {
 
 	// Build store actions and a replacement map
 	replacements := make(map[string]string) // original call -> store path
-	var storeActions []Action
+	var requestStore, responseStore *StoreAction
 
 	for _, direction := range []string{"request", "response"} {
 		fields, ok := byDirection[direction]
@@ -224,7 +224,9 @@ func BuildActions(specs []ActionSpec) []Action {
 			}
 			usedKeys[mapKey] = true
 			mapEntries = append(mapEntries, fmt.Sprintf(`"%s": %s`, mapKey, entry.ref.Original))
-			replacements[entry.ref.Original] = bodyRefStorePath(direction, mapKey)
+			for _, original := range entry.originals {
+				replacements[original] = bodyRefStorePath(direction, mapKey)
+			}
 			allSources = appendUnique(allSources, entry.sources...)
 		}
 
@@ -236,37 +238,52 @@ func BuildActions(specs []ActionSpec) []Action {
 		}
 
 		mapExpr := fmt.Sprintf("{%s}", strings.Join(mapEntries, ", "))
-		storeActions = append(storeActions,
-			NewStoreAction("true", storePath, mapExpr).
-				WithGuard(false).
-				WithSources(allSources),
-		)
+		sort.Strings(allSources)
+		store := NewStoreAction("true", storePath, mapExpr).
+			WithGuard(false).
+			WithSources(allSources)
+		if direction == "request" {
+			requestStore = store
+		} else {
+			responseStore = store
+		}
 	}
 
-	// Replace body refs in all specs and build
-	modified := make([]ActionSpec, len(specs))
-	for i, spec := range specs {
-		modified[i] = spec.replaceBodyRefs(replacements)
+	actions := make([]Action, 0, len(specs)+len(byDirection))
+	if requestStore != nil && requestStoreUsedByGuard {
+		actions = append(actions, requestStore)
 	}
-
-	actions := make([]Action, 0, len(storeActions)+len(modified))
-	actions = append(actions, storeActions...)
-	for _, spec := range modified {
-		actions = append(actions, spec.Build())
+	deferRequestStore := requestStore != nil && !requestStoreUsedByGuard
+	var responseActions []Action
+	for _, spec := range specs {
+		action := spec.replaceBodyRefs(replacements).Build()
+		if (responseStore != nil || deferRequestStore) && !spec.IsGuard() {
+			responseActions = append(responseActions, action)
+		} else {
+			actions = append(actions, action)
+		}
 	}
-	return actions
+	if deferRequestStore {
+		actions = append(actions, requestStore)
+	}
+	if responseStore != nil {
+		actions = append(actions, responseStore)
+	}
+	return append(actions, responseActions...)
 }
 
 func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
+	pairs := make([]string, 0, 2*len(replacements))
+	for _, original := range sortedKeys(replacements) {
+		pairs = append(pairs, original, replacements[original])
+	}
+	replace := strings.NewReplacer(pairs...).Replace
 	newCD := make([]ConditionalData, len(s.ConditionalData))
 	for i, cd := range s.ConditionalData {
 		newData := make([]DataType, len(cd.Data))
 		for j, item := range cd.Data {
 			if expr, ok := item.Value.(*Expression); ok {
-				newValue := expr.ExpressionItem.Value
-				for original, storePath := range replacements {
-					newValue = strings.ReplaceAll(newValue, original, storePath)
-				}
+				newValue := replace(expr.ExpressionItem.Value)
 				if newValue != expr.ExpressionItem.Value {
 					newData[j] = DataType{Value: &Expression{
 						ExpressionItem: ExpressionItem{
@@ -286,19 +303,13 @@ func (s ActionSpec) replaceBodyRefs(replacements map[string]string) ActionSpec {
 
 	newBindings := make([]DataBinding, len(s.Bindings))
 	for i, b := range s.Bindings {
-		newExpr := b.Expression
-		for original, storePath := range replacements {
-			newExpr = strings.ReplaceAll(newExpr, original, storePath)
-		}
+		newExpr := replace(b.Expression)
 		newBindings[i] = DataBinding{Domain: b.Domain, Field: b.Field, Expression: newExpr}
 	}
 
 	newReservation := s.Reservation
 	if s.Reservation != nil {
-		newActualAmount := s.Reservation.ActualAmount
-		for original, storePath := range replacements {
-			newActualAmount = strings.ReplaceAll(newActualAmount, original, storePath)
-		}
+		newActualAmount := replace(s.Reservation.ActualAmount)
 		if newActualAmount != s.Reservation.ActualAmount {
 			r := *s.Reservation
 			r.ActualAmount = newActualAmount
@@ -349,6 +360,7 @@ func (s ActionSpec) buildAuth() *GrpcAction {
 	predicate := buildActionPredicate(s.Predicates)
 
 	return NewGrpcAction(predicate, authResponseVar, s.ServiceName, request.ToCEL(), "auth").
+		WithExecution(s.Execution).
 		WithSources(s.Sources).
 		WithOnReply(buildAuthOnReply(authResponseVar)...)
 }
@@ -836,7 +848,7 @@ func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string
 					if attrKey == "ratelimit.hits_addend" {
 						return fmt.Sprintf("uint(%s)", val.Static.Value)
 					}
-					return fmt.Sprintf(`"%s"`, escapeCELString(val.Static.Value))
+					return fmt.Sprintf(`"%s"`, EscapeCELString(val.Static.Value))
 				}
 			case *Expression:
 				if val.ExpressionItem.Key == attrKey {
@@ -854,7 +866,7 @@ func findRateLimitKnownAttrCEL(conditionalData []ConditionalData, attrKey string
 func buildRateLimitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding) RateLimitRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
-		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+		domain = fmt.Sprintf(`"%s"`, EscapeCELString(scope))
 	}
 
 	hitsAddend := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.hits_addend")
@@ -889,7 +901,7 @@ func collectDescriptors(conditionalData []ConditionalData, bindings []DataBindin
 func buildReserveRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservation *ReservationSpec) ReserveRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
-		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+		domain = fmt.Sprintf(`"%s"`, EscapeCELString(scope))
 	}
 
 	// amount is required by the message; the controller always emits it (with a
@@ -922,7 +934,7 @@ func buildReserveRequest(scope string, conditionalData []ConditionalData, bindin
 func buildCommitRequest(scope string, conditionalData []ConditionalData, bindings []DataBinding, reservationStorePath, hasReservation, rawActualAmount, amountKnown string) CommitRequestCEL {
 	domain := findRateLimitKnownAttrCEL(conditionalData, "ratelimit.domain")
 	if domain == "" {
-		domain = fmt.Sprintf(`"%s"`, escapeCELString(scope))
+		domain = fmt.Sprintf(`"%s"`, EscapeCELString(scope))
 	}
 
 	// Unparseable usage (connection issue, non-JSON/error body) still commits,
@@ -993,7 +1005,7 @@ func dataTypeToDescriptorEntry(data DataType) DescriptorEntryCEL {
 	case *Static:
 		return DescriptorEntryCEL{
 			Key:      val.Static.Key,
-			ValueCEL: fmt.Sprintf(`"%s"`, escapeCELString(val.Static.Value)),
+			ValueCEL: fmt.Sprintf(`"%s"`, EscapeCELString(val.Static.Value)),
 		}
 	case *Expression:
 		return DescriptorEntryCEL{
@@ -1020,6 +1032,12 @@ func bindingsToDescriptor(bindings []DataBinding) *RateLimitDescriptorCEL {
 			ValueCEL: fmt.Sprintf("string(%s)", b.Expression),
 		})
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Key != entries[j].Key {
+			return entries[i].Key < entries[j].Key
+		}
+		return entries[i].ValueCEL < entries[j].ValueCEL
+	})
 	return &RateLimitDescriptorCEL{Entries: entries}
 }
 

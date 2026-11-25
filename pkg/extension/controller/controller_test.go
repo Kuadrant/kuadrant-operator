@@ -50,15 +50,16 @@ type mockKuadrantCtx struct {
 }
 
 type mockPolicy struct {
-	name      string
-	namespace string
+	name       string
+	namespace  string
+	targetRefs []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName
 }
 
 func (m *mockPolicy) GetName() string                  { return m.name }
 func (m *mockPolicy) GetNamespace() string             { return m.namespace }
 func (m *mockPolicy) GetObjectKind() schema.ObjectKind { return &mockObjectKind{} }
 func (m *mockPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
-	return nil
+	return m.targetRefs
 }
 
 type mockObjectKind struct{}
@@ -756,6 +757,7 @@ type mockExtensionServiceClient struct {
 	subscribeFn            func(ctx context.Context, in *extpb.SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[extpb.SubscribeResponse], error)
 	registerActionMethodFn func(ctx context.Context, in *extpb.RegisterActionMethodRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pipelineCommitFn       func(ctx context.Context, in *extpb.PipelineCommitRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	pruneMutatorsFn        func(ctx context.Context, in *extpb.PruneMutatorsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	pingFn                 func(ctx context.Context, in *extpb.PingRequest, opts ...grpc.CallOption) (*extpb.PongResponse, error)
 	clearPolicyFn          func(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error)
 }
@@ -787,6 +789,12 @@ func (m *mockExtensionServiceClient) Resolve(_ context.Context, _ *extpb.Resolve
 func (m *mockExtensionServiceClient) RegisterMutator(_ context.Context, _ *extpb.RegisterMutatorRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
 	return nil, nil
 }
+func (m *mockExtensionServiceClient) PruneMutators(ctx context.Context, in *extpb.PruneMutatorsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	if m.pruneMutatorsFn != nil {
+		return m.pruneMutatorsFn(ctx, in, opts...)
+	}
+	return &emptypb.Empty{}, nil
+}
 func (m *mockExtensionServiceClient) ClearPolicy(ctx context.Context, in *extpb.ClearPolicyRequest, opts ...grpc.CallOption) (*extpb.ClearPolicyResponse, error) {
 	if m.clearPolicyFn != nil {
 		return m.clearPolicyFn(ctx, in, opts...)
@@ -812,6 +820,38 @@ func newTestExtensionController(mockClient *mockExtensionServiceClient) *Extensi
 			client: mockClient,
 		},
 	}
+}
+
+func TestAddDataToTracksMutatorsForClosingPrune(t *testing.T) {
+	var captured *extpb.PruneMutatorsRequest
+	mock := &mockExtensionServiceClient{
+		pruneMutatorsFn: func(_ context.Context, in *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			captured = in
+			return &emptypb.Empty{}, nil
+		},
+	}
+
+	controller := newTestExtensionController(mock)
+	controller.config.PolicyKind = "TestPolicy"
+	policy := &mockPolicy{
+		name:       "test-policy",
+		namespace:  "test-namespace",
+		targetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{mutatorTestTargetRef("route")},
+	}
+	state := newMutatorReconcileState()
+	ctx := context.WithValue(context.Background(), mutatorReconcileStateKey{}, state)
+	assert.NilError(t, controller.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.request_path", "request.path"))
+	assert.NilError(t, controller.pruneTrackedMutators(ctx, reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: policy.namespace, Name: policy.name}}, state))
+	assert.Assert(t, captured != nil)
+	assert.Assert(t, captured.Policy != nil)
+	assert.Assert(t, captured.Policy.Metadata != nil)
+	assert.Equal(t, captured.Policy.Metadata.Name, policy.name)
+	assert.Equal(t, captured.Policy.Metadata.Namespace, policy.namespace)
+	assert.Equal(t, captured.Policy.Metadata.Kind, "TestPolicy")
+	assert.Equal(t, len(captured.Bindings), 1)
+	assert.Equal(t, captured.Bindings[0].TargetRef.GetName(), "route")
+	assert.Equal(t, captured.Bindings[0].Domain, extpb.Domain_DOMAIN_REQUEST)
+	assert.Equal(t, captured.Bindings[0].Binding, "logging.fields.request_path")
 }
 
 func TestRegisterActionMethod_Success(t *testing.T) {
@@ -1404,6 +1444,160 @@ func TestReconcile_MissingPolicyIsNotAnError(t *testing.T) {
 	req := reconcile.Request{NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "gone"}}
 	_, err := ec.Reconcile(context.Background(), req)
 	assert.NilError(t, err)
+}
+
+func TestReconcile_DoesNotPruneAfterRequeue(t *testing.T) {
+	for _, resultToReturn := range []reconcile.Result{
+		{Requeue: true},
+		{RequeueAfter: time.Second},
+	} {
+		pruneCalls := 0
+		mock := &mockExtensionServiceClient{
+			pruneMutatorsFn: func(_ context.Context, _ *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+				pruneCalls++
+				return &emptypb.Empty{}, nil
+			},
+		}
+		ec, _ := newMutatorReconcileTestController(mock, newMutatorTestPolicy("route"))
+		ec.config.Reconcile = func(context.Context, reconcile.Request, exttypes.KuadrantCtx) (reconcile.Result, error) {
+			return resultToReturn, nil
+		}
+
+		result, err := ec.Reconcile(context.Background(), reconcile.Request{
+			NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
+		})
+		assert.NilError(t, err)
+		assert.Equal(t, result, resultToReturn)
+		assert.Equal(t, pruneCalls, 0)
+	}
+}
+
+func TestReconcile_PrunesIntentionallyEmptyBindingSet(t *testing.T) {
+	var captured *extpb.PruneMutatorsRequest
+	mock := &mockExtensionServiceClient{
+		pruneMutatorsFn: func(_ context.Context, in *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			captured = in
+			return &emptypb.Empty{}, nil
+		},
+	}
+	ec, _ := newMutatorReconcileTestController(mock, newMutatorTestPolicy("route"))
+
+	_, err := ec.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
+	})
+	assert.NilError(t, err)
+	assert.Assert(t, captured != nil)
+	assert.Equal(t, len(captured.Bindings), 0)
+	assert.Equal(t, len(captured.Policy.TargetRefs), 0)
+}
+
+func TestReconcile_PrunesMutatorsRecordedAgainstReconciledPolicy(t *testing.T) {
+	pruneCalls := 0
+	var captured *extpb.PruneMutatorsRequest
+	mock := &mockExtensionServiceClient{
+		pruneMutatorsFn: func(_ context.Context, request *extpb.PruneMutatorsRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
+			pruneCalls++
+			captured = request
+			return &emptypb.Empty{}, nil
+		},
+	}
+	policy := newMutatorTestPolicy("old-route")
+	ec, fakeClient := newMutatorReconcileTestController(mock, policy)
+	ec.config.Reconcile = func(ctx context.Context, request reconcile.Request, kuadrantCtx exttypes.KuadrantCtx) (reconcile.Result, error) {
+		if err := kuadrantCtx.AddDataTo(ctx, policy, exttypes.DomainRequest, "logging.fields.path", "request.path"); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		latest := &mutatorTestPolicy{}
+		if err := fakeClient.Get(ctx, request.NamespacedName, latest); err != nil {
+			return reconcile.Result{}, err
+		}
+		latest.Spec.TargetRefs = []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{mutatorTestTargetRef("new-route")}
+		latest.Generation++
+		if err := fakeClient.Update(ctx, latest); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
+	result, err := ec.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: ktypes.NamespacedName{Namespace: "ns", Name: "policy"},
+	})
+	assert.NilError(t, err)
+	assert.Equal(t, result, reconcile.Result{})
+	assert.Equal(t, pruneCalls, 1)
+	assert.Equal(t, len(captured.Bindings), 1)
+	assert.Equal(t, captured.Bindings[0].TargetRef.GetName(), "old-route")
+}
+
+type mutatorTestPolicySpec struct {
+	TargetRefs []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRefs,omitempty"`
+}
+
+type mutatorTestPolicy struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              mutatorTestPolicySpec `json:"spec,omitempty"`
+}
+
+var mutatorTestGroupVersion = schema.GroupVersion{Group: "extensions.test.kuadrant.io", Version: "v1alpha1"}
+
+func (p *mutatorTestPolicy) GetTargetRefs() []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	return p.Spec.TargetRefs
+}
+
+func (p *mutatorTestPolicy) DeepCopyObject() runtime.Object {
+	if p == nil {
+		return nil
+	}
+	copy := *p
+	copy.ObjectMeta = *p.ObjectMeta.DeepCopy()
+	copy.Spec.TargetRefs = slices.Clone(p.Spec.TargetRefs)
+	return &copy
+}
+
+func newMutatorTestPolicy(targetName string) *mutatorTestPolicy {
+	return &mutatorTestPolicy{
+		TypeMeta: metav1.TypeMeta{APIVersion: mutatorTestGroupVersion.String(), Kind: "TestPolicy"},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "ns",
+			Name:       "policy",
+			Generation: 1,
+		},
+		Spec: mutatorTestPolicySpec{
+			TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{mutatorTestTargetRef(targetName)},
+		},
+	}
+}
+
+func mutatorTestTargetRef(name string) gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName {
+	return gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: "gateway.networking.k8s.io",
+			Kind:  "HTTPRoute",
+			Name:  gatewayapiv1alpha2.ObjectName(name),
+		},
+	}
+}
+
+func newMutatorReconcileTestController(mock *mockExtensionServiceClient, policy *mutatorTestPolicy) (*ExtensionController, client.Client) {
+	scheme := runtime.NewScheme()
+	scheme.AddKnownTypeWithName(mutatorTestGroupVersion.WithKind("TestPolicy"), &mutatorTestPolicy{})
+	metav1.AddToGroupVersion(scheme, mutatorTestGroupVersion)
+
+	fakeClient := ctrlruntimefake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
+	return &ExtensionController{
+		config: ExtensionConfig{
+			Name:       "test",
+			PolicyKind: "TestPolicy",
+			ForType:    &mutatorTestPolicy{},
+			Reconcile:  mockReconcile,
+		},
+		logger:          logr.Discard(),
+		extensionClient: &extensionClient{client: mock},
+		eventCache:      newEventTypeCache(),
+		BaseReconciler:  basereconciler.NewBaseReconciler(fakeClient, scheme, fakeClient),
+	}, fakeClient
 }
 
 type fakeInformerCache struct {

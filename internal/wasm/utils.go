@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -286,9 +287,10 @@ func (sb *ServiceBuilder) WithService(name string, service Service) *ServiceBuil
 	return sb
 }
 
-// Build returns the built services map
+// Build returns an independent services map so gateway mutators cannot affect
+// the builder or configs built for other gateways.
 func (sb *ServiceBuilder) Build() map[string]Service {
-	return sb.services
+	return maps.Clone(sb.services)
 }
 
 func BuildConfigForActionSet(actionSets []ActionSet, logger *logr.Logger, observability *Observability, serviceBuilder *ServiceBuilder) Config {
@@ -610,6 +612,11 @@ func ConfigFromStruct(structure *structpb.Struct) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Decode the gzip+base64 envelope (no-op for plain config JSON)
+	configJSON, err = decodeConfig(configJSON)
+	if err != nil {
+		return nil, err
+	}
 	// Deserialize protobuf struct into Config struct
 	config := &Config{}
 	if err := json.Unmarshal(configJSON, config); err != nil {
@@ -624,8 +631,14 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 		return nil, errors.New("cannot desestructure config from nil")
 	}
 
+	// Decode the gzip+base64 envelope (no-op for plain config JSON)
+	raw, err := decodeConfig(configJSON.Raw)
+	if err != nil {
+		return nil, err
+	}
+
 	config := &Config{}
-	if err := json.Unmarshal(configJSON.Raw, config); err != nil {
+	if err := json.Unmarshal(raw, config); err != nil {
 		return nil, err
 	}
 

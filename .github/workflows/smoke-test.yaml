@@ -26,6 +26,8 @@ jobs:
     if: needs.pre-job.outputs.should_skip != 'true' && github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     needs: pre-job
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     defaults:
       run:
         shell: bash

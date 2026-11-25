@@ -21,6 +21,7 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istiotypev1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -114,12 +115,14 @@ var _ = Describe("Rate Limiting EnvoyFilter controller", func() {
 			return nil, fmt.Errorf("missing value in configuration")
 		}
 
-		var wasmConfig wasm.Config
-		if err := json.Unmarshal([]byte(configJSON), &wasmConfig); err != nil {
+		// The value is the gzip+base64 envelope produced by Config.ToStruct/ToJSON;
+		// route through the production decoder (also handles plain JSON).
+		wasmConfig, err := wasm.ConfigFromJSON(&apiextensionsv1.JSON{Raw: []byte(configJSON)})
+		if err != nil {
 			return nil, err
 		}
 
-		return &wasmConfig, nil
+		return wasmConfig, nil
 	}
 
 	beforeEachCallback := func(ctx SpecContext) {

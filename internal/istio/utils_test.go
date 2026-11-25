@@ -3,6 +3,9 @@
 package istio
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 
@@ -18,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 func testBasicEnvoyFilter(t *testing.T) *istioclientgonetworkingv1alpha3.EnvoyFilter {
@@ -370,4 +374,242 @@ func testKuadrantObj(ns, name string) controller.Object {
 			Namespace: ns,
 		},
 	}
+}
+
+// TestEqualEnvoyFiltersWasmConfigEncoding verifies that EqualEnvoyFilters compares
+// the embedded wasm-shim config semantically, so that the same config encoded as
+// plain JSON (as written by a pre-upgrade operator) and as the gzip+base64 envelope
+// (as written by the current operator) are considered equal. This is what keeps an
+// operator upgrade from rewriting every EnvoyFilter purely because the config
+// encoding changed.
+func TestEqualEnvoyFiltersWasmConfigEncoding(t *testing.T) {
+	const sha = "fd5039db79d000f31669de1fde37ea175d3ad05f2b14341d6936fb564cab5553"
+
+	cfg := &wasm.Config{
+		Services: map[string]wasm.Service{
+			"ratelimit-service": {
+				Endpoint:    "ratelimit-cluster",
+				Type:        wasm.DynamicServiceType,
+				FailureMode: wasm.FailureModeAllow,
+			},
+		},
+		ActionSets: []wasm.ActionSet{},
+	}
+
+	// Plain-JSON struct, as produced by a pre-upgrade operator.
+	plainJSON, err := json.Marshal(cfg)
+	assert.NilError(t, err)
+	plainStruct := &_struct.Struct{}
+	assert.NilError(t, plainStruct.UnmarshalJSON(plainJSON))
+
+	// Envelope struct (gzip+base64), as produced by the current operator. Built with
+	// the default 32 MiB limit explicitly so the comparison does not depend on
+	// WASM_MAX_DECODED_CONFIG_SIZE in the test environment; the plain fixture above
+	// implies the same default.
+	envelopeStruct := &_struct.Struct{}
+	assert.NilError(t, envelopeStruct.UnmarshalJSON([]byte(gzipBase64Envelope(t, string(plainJSON), 33554432))))
+
+	buildEnvoyFilter := func(subT *testing.T, imageSHA string, pluginConfig *_struct.Struct) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+		patches, err := BuildEnvoyFilterWasmPatch("http://example.com/plugin.wasm", "", imageSHA, "kuadrant-operator-wasm", pluginConfig)
+		assert.NilError(subT, err)
+		return &istioclientgonetworkingv1alpha3.EnvoyFilter{
+			Spec: istioapinetworkingv1alpha3.EnvoyFilter{ConfigPatches: patches},
+		}
+	}
+
+	t.Run("plain-JSON config equals gzip+base64 envelope of the same config", func(subT *testing.T) {
+		existing := buildEnvoyFilter(subT, sha, plainStruct)   // pre-upgrade
+		desired := buildEnvoyFilter(subT, sha, envelopeStruct) // post-upgrade
+		assert.Assert(subT, EqualEnvoyFilters(existing, desired))
+	})
+
+	t.Run("semantically different configs are not equal", func(subT *testing.T) {
+		other := &wasm.Config{
+			Services: map[string]wasm.Service{
+				"ratelimit-service": {
+					Endpoint:    "ratelimit-cluster",
+					Type:        wasm.DynamicServiceType,
+					FailureMode: wasm.FailureModeDeny, // changed
+				},
+			},
+			ActionSets: []wasm.ActionSet{},
+		}
+		otherStruct, err := other.ToStruct()
+		assert.NilError(subT, err)
+		assert.Assert(subT, !EqualEnvoyFilters(buildEnvoyFilter(subT, sha, plainStruct), buildEnvoyFilter(subT, sha, otherStruct)))
+	})
+
+	t.Run("same config but different wasm SHA is not equal", func(subT *testing.T) {
+		const otherSHA = "aaaa39db79d000f31669de1fde37ea175d3ad05f2b14341d6936fb564cab5553"
+		assert.Assert(subT, !EqualEnvoyFilters(buildEnvoyFilter(subT, sha, plainStruct), buildEnvoyFilter(subT, otherSHA, envelopeStruct)))
+	})
+
+	t.Run("two HTTP_FILTER patches without an embedded config are equal", func(subT *testing.T) {
+		// A nil plugin config produces an HTTP_FILTER patch with no configuration
+		// field. Both sides having no embedded config must compare equal (falling
+		// through to the structural comparison of the rest of the patch).
+		existing := buildEnvoyFilter(subT, sha, nil)
+		desired := buildEnvoyFilter(subT, sha, nil)
+		assert.Assert(subT, EqualEnvoyFilters(existing, desired))
+	})
+
+	t.Run("embedded config present on only one side is not equal", func(subT *testing.T) {
+		withoutConfig := buildEnvoyFilter(subT, sha, nil)
+		withConfig := buildEnvoyFilter(subT, sha, envelopeStruct)
+		assert.Assert(subT, !EqualEnvoyFilters(withoutConfig, withConfig))
+	})
+}
+
+// gzipBase64Envelope builds a gzip+base64 envelope string for configJSON with the
+// given maxDecompressedBytes, matching what the operator emits.
+func gzipBase64Envelope(t *testing.T, configJSON string, maxBytes int) string {
+	var buf bytes.Buffer
+	gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	assert.NilError(t, err)
+	_, err = gz.Write([]byte(configJSON))
+	assert.NilError(t, err)
+	assert.NilError(t, gz.Close())
+	raw, err := json.Marshal(map[string]any{
+		"encoding":             "gzip+base64",
+		"data":                 base64.StdEncoding.EncodeToString(buf.Bytes()),
+		"maxDecompressedBytes": maxBytes,
+	})
+	assert.NilError(t, err)
+	return string(raw)
+}
+
+// envoyFilterWithWasmConfigValue builds a minimal EnvoyFilter whose HTTP_FILTER
+// patch embeds configValue at typed_config.value.config.configuration.value.
+func envoyFilterWithWasmConfigValue(t *testing.T, configValue string) *istioclientgonetworkingv1alpha3.EnvoyFilter {
+	patchValueRaw, err := json.Marshal(map[string]any{
+		"name": "envoy.filters.http.wasm",
+		"typed_config": map[string]any{
+			"@type":    "type.googleapis.com/udpa.type.v1.TypedStruct",
+			"type_url": "type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm",
+			"value": map[string]any{
+				"config": map[string]any{
+					"name": "kuadrant-wasm-shim",
+					"configuration": map[string]any{
+						"@type": "type.googleapis.com/google.protobuf.StringValue",
+						"value": configValue,
+					},
+				},
+			},
+		},
+	})
+	assert.NilError(t, err)
+	pv := &_struct.Struct{}
+	assert.NilError(t, pv.UnmarshalJSON(patchValueRaw))
+	return &istioclientgonetworkingv1alpha3.EnvoyFilter{
+		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
+			ConfigPatches: []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+				{
+					ApplyTo: istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER,
+					Patch:   &istioapinetworkingv1alpha3.EnvoyFilter_Patch{Value: pv},
+				},
+			},
+		},
+	}
+}
+
+// TestEqualEnvoyFiltersMaxDecompressedBytes verifies that a change to the
+// envelope's maxDecompressedBytes (e.g. from retuning WASM_MAX_DECODED_CONFIG_SIZE)
+// makes EqualEnvoyFilters report "not equal", so the EnvoyFilter is rewritten.
+func TestEqualEnvoyFiltersMaxDecompressedBytes(t *testing.T) {
+	const cfg = `{"services":{},"actionSets":[]}`
+	a := envoyFilterWithWasmConfigValue(t, gzipBase64Envelope(t, cfg, 33554432))
+
+	t.Run("same config and same limit are equal", func(subT *testing.T) {
+		b := envoyFilterWithWasmConfigValue(subT, gzipBase64Envelope(subT, cfg, 33554432))
+		assert.Assert(subT, EqualEnvoyFilters(a, b))
+	})
+
+	t.Run("same config but different limit is not equal", func(subT *testing.T) {
+		b := envoyFilterWithWasmConfigValue(subT, gzipBase64Envelope(subT, cfg, 67108864))
+		assert.Assert(subT, !EqualEnvoyFilters(a, b))
+	})
+}
+
+// TestSplitWasmPluginConfig verifies that extracting the embedded config string is
+// nil-safe at every level of the typed_config.value.config.configuration.value
+// path: a patch value missing any level (or nil) yields an empty config string and
+// never panics.
+func TestSplitWasmPluginConfig(t *testing.T) {
+	mustStruct := func(subT *testing.T, raw string) *_struct.Struct {
+		s := &_struct.Struct{}
+		assert.NilError(subT, s.UnmarshalJSON([]byte(raw)))
+		return s
+	}
+
+	t.Run("nil patch value", func(subT *testing.T) {
+		cfg, rest := splitWasmPluginConfig(nil)
+		assert.Equal(subT, cfg, "")
+		assert.Assert(subT, rest == nil)
+	})
+
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{"missing typed_config", `{"foo":"bar"}`},
+		{"missing config", `{"typed_config":{"value":{}}}`},
+		{"missing configuration", `{"typed_config":{"value":{"config":{}}}}`},
+		{"missing inner value", `{"typed_config":{"value":{"config":{"configuration":{}}}}}`},
+	} {
+		t.Run(tc.name, func(subT *testing.T) {
+			cfg, rest := splitWasmPluginConfig(mustStruct(subT, tc.raw))
+			assert.Equal(subT, cfg, "")
+			assert.Assert(subT, rest != nil)
+		})
+	}
+
+	t.Run("full path returns the config string and blanks it in the clone", func(subT *testing.T) {
+		in := mustStruct(subT, `{"typed_config":{"value":{"config":{"configuration":{"value":"hello"}}}}}`)
+		cfg, rest := splitWasmPluginConfig(in)
+		assert.Equal(subT, cfg, "hello")
+
+		// The clone has the config string blanked, and the input is left untouched.
+		blanked := rest.GetFields()["typed_config"].GetStructValue().
+			GetFields()["value"].GetStructValue().
+			GetFields()["config"].GetStructValue().
+			GetFields()["configuration"].GetStructValue().
+			GetFields()["value"].GetStringValue()
+		assert.Equal(subT, blanked, "")
+
+		original := in.GetFields()["typed_config"].GetStructValue().
+			GetFields()["value"].GetStructValue().
+			GetFields()["config"].GetStructValue().
+			GetFields()["configuration"].GetStructValue().
+			GetFields()["value"].GetStringValue()
+		assert.Equal(subT, original, "hello")
+	})
+}
+
+// TestBuildWasmFilterConfigVmID guards the fix for kuadrant-operator#2351: the
+// wasm vm_config.vm_id must be set to the module content SHA. Envoy keys Wasm VM
+// reuse on vm_key = hash(vm_id, configuration, code); with an empty vm_id a remote
+// code fetch that misses the cache (code == "") collides with the already-running
+// VM and the new module is never loaded (gateway keeps the old wasm until a pod
+// restart). Deriving vm_id from the SHA changes the key synchronously on a content
+// change, forcing a new VM even before the fetch completes.
+func TestBuildWasmFilterConfigVmID(t *testing.T) {
+	const sha = "fd5039db79d000f31669de1fde37ea175d3ad05f2b14341d6936fb564cab5553"
+
+	filterConfig, err := buildWasmFilterConfig("http://example.com/plugin.wasm", "", sha, "kuadrant-operator-wasm", nil)
+	assert.NilError(t, err)
+
+	config, ok := filterConfig["config"].(map[string]any)
+	assert.Assert(t, ok, "config should be a map")
+
+	vmConfig, ok := config["vm_config"].(map[string]any)
+	assert.Assert(t, ok, "vm_config should be a map")
+
+	assert.Equal(t, vmConfig["vm_id"], sha)
+
+	// Also check the remote data source still pins the same SHA.
+	code, ok := vmConfig["code"].(map[string]any)
+	assert.Assert(t, ok, "code should be a map")
+	remote, ok := code["remote"].(map[string]any)
+	assert.Assert(t, ok, "code.remote should be a map")
+	assert.Equal(t, remote["sha256"], sha)
 }

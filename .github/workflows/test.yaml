@@ -32,6 +32,8 @@ jobs:
       matrix:
         platform: [ ubuntu-latest ]
     runs-on: ${{ matrix.platform }}
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     defaults:
       run:
         shell: bash
@@ -73,6 +75,7 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-latest
     env:
+      GOTOOLCHAIN: go1.27.3+auto
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
     defaults:
@@ -124,6 +127,7 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     env:
+      GOTOOLCHAIN: go1.27.3+auto
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
     defaults:
@@ -171,6 +175,7 @@ jobs:
     needs: pre-job
     runs-on: ubuntu-latest
     env:
+      GOTOOLCHAIN: go1.27.3+auto
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
     defaults:
@@ -227,6 +232,7 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-latest
     env:
+      GOTOOLCHAIN: go1.27.3+auto
       KIND_CLUSTER_NAME: kuadrant-test
       KUADRANT_NAMESPACE: kuadrant-system
     defaults:
@@ -276,6 +282,8 @@ jobs:
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -292,6 +300,8 @@ jobs:
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -312,6 +322,8 @@ jobs:
       matrix:
         platform: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.platform }}
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     defaults:
       run:
         shell: bash
@@ -332,6 +344,8 @@ jobs:
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -349,6 +363,8 @@ jobs:
     if: needs.pre-job.outputs.should_skip != 'true'
     needs: pre-job
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Check out code
         uses: actions/checkout@v4

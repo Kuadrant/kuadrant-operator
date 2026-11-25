@@ -430,9 +430,11 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 
 	// Limitador monitor
 	limitMonitor := limitMonitorBuild(kObj.Namespace)
-	if err := r.createPodMonitor(ctx, limitMonitor, logger); err != nil {
-		return err
-	}
+
+	// PodMonitors managed by the operator. They are collected first and created
+	// afterwards, so the same set is used for cleanup: a monitor can never be
+	// created without also being considered wanted.
+	wantedPMs := []*monitoringv1.PodMonitor{limitMonitor}
 
 	// Authorino monitor
 	authorinoMonitor := authorinoMonitorBuild(kObj.Namespace)
@@ -445,38 +447,44 @@ func (r *ObservabilityReconciler) Reconcile(baseCtx context.Context, _ []control
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayClassGroupKind
 	})
 
-	var wantedPMs []monitoringv1.PodMonitor
-	var monitorsToDelete []machinery.Object
-
 	for _, gatewayClass := range gatewayClasses {
 		gateways := topology.All().Children(gatewayClass)
 		gwClass := gatewayClass.(*machinery.GatewayClass)
 		if lo.Contains(istioGatewayControllerNames, gwClass.Spec.ControllerName) {
 			for _, gateway := range gateways {
-				istioPodMonitor := istioPodMonitorBuild(gateway.GetNamespace())
-				r.createPodMonitor(ctx, istioPodMonitor, logger)
-				wantedPMs = append(wantedPMs, *istioPodMonitor)
+				wantedPMs = append(wantedPMs, istioPodMonitorBuild(gateway.GetNamespace()))
 			}
 		} else if lo.Contains(envoyGatewayGatewayControllerNames, gwClass.Spec.ControllerName) {
 			for _, gateway := range gateways {
-				envoyStatsMonitor := envoyStatsMonitorBuild(gateway.GetNamespace())
-				r.createPodMonitor(ctx, envoyStatsMonitor, logger)
-				wantedPMs = append(wantedPMs, *envoyStatsMonitor)
+				wantedPMs = append(wantedPMs, envoyStatsMonitorBuild(gateway.GetNamespace()))
 			}
 		}
 	}
 
-	// Check for unwanted monitors
-	for _, monitor := range monitorObjs {
-		monitorName := monitor.GetName()
-		monitorNamespace := monitor.GetNamespace()
+	// Create all PodMonitors managed by the operator
+	for _, monitor := range wantedPMs {
+		if err := r.createPodMonitor(ctx, monitor, logger); err != nil {
+			return err
+		}
+	}
 
-		if monitor.GroupVersionKind().Kind == monitoringv1.PodMonitorsKind {
-			if !lo.ContainsBy(wantedPMs, func(wanted monitoringv1.PodMonitor) bool {
-				return wanted.Name == monitorName && wanted.Namespace == monitorNamespace && wanted.Labels[kuadrant.ObservabilityLabel] == "true"
-			}) {
-				monitorsToDelete = append(monitorsToDelete, monitor)
-			}
+	// Check for unwanted monitors. Only PodMonitors carrying the observability
+	// label are managed by this reconciler and thus eligible for deletion.
+	var monitorsToDelete []machinery.Object
+	for _, monitor := range monitorObjs {
+		if monitor.GroupVersionKind().Kind != monitoringv1.PodMonitorsKind {
+			continue
+		}
+
+		metaObj, ok := monitor.(metav1.Object)
+		if !ok || metaObj.GetLabels()[kuadrant.ObservabilityLabel] != "true" {
+			continue
+		}
+
+		if !lo.ContainsBy(wantedPMs, func(wanted *monitoringv1.PodMonitor) bool {
+			return wanted.Name == monitor.GetName() && wanted.Namespace == monitor.GetNamespace()
+		}) {
+			monitorsToDelete = append(monitorsToDelete, monitor)
 		}
 	}
 

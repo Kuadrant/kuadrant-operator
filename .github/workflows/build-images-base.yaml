@@ -163,6 +163,8 @@ jobs:
     needs: build
     name: Build Bundle
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Check out code
         uses: actions/checkout@v5
@@ -221,6 +223,8 @@ jobs:
     name: Build Catalog
     needs: [build, build-bundle]
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Check out code
         uses: actions/checkout@v4

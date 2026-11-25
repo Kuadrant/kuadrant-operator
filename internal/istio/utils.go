@@ -15,6 +15,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1 "istio.io/client-go/pkg/apis/security/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,6 +23,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/internal/utils"
+	"github.com/kuadrant/kuadrant-operator/internal/wasm"
 )
 
 const GatewayNameLabel = "gateway.networking.k8s.io/gateway-name"
@@ -112,6 +114,11 @@ func buildWasmFilterConfig(wasmURL, imagePullSecret, imageSHA, clusterName strin
 		"name":    "kuadrant-wasm-shim",
 		"root_id": "kuadrant_wasm_shim",
 		"vm_config": map[string]any{
+			// vm_id is derived from the wasm content SHA so that a content change
+			// forces a new Envoy Wasm VM (vm_key = hash(vm_id, config, code)) even
+			// when the code isn't yet in the remote cache. Prevents the stale-VM
+			// reuse bug on in-place SHA updates (kuadrant-operator#2351).
+			"vm_id":   imageSHA,
 			"runtime": "envoy.wasm.runtime.v8",
 			"code": map[string]any{
 				"remote": map[string]any{
@@ -219,10 +226,93 @@ func EqualEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
 				return false
 			}
 
+			// For HTTP_FILTER patches, the patch value embeds the Kuadrant wasm-shim
+			// config as an opaque string that may use different on-wire encodings
+			// (plain JSON or the gzip+base64 envelope). proto.Equal compares that
+			// string byte-for-byte and cannot see through the encoding, so a mere
+			// encoding difference - e.g. right after an operator upgrade that reads a
+			// pre-existing plain-JSON config - would be reported as a change. Compare
+			// the embedded config semantically instead, and the rest of the patch
+			// value structurally.
+			if aConfigPatch.ApplyTo == istioapinetworkingv1alpha3.EnvoyFilter_HTTP_FILTER {
+				return equalWasmHTTPFilterPatchValues(aPatch.Value, bPatch.Value)
+			}
+
 			// Use protobuf equality for patch values to handle non-deterministic map ordering.
 			return proto.Equal(aPatch.Value, bPatch.Value)
 		})
 	})
+}
+
+// equalWasmHTTPFilterPatchValues compares two HTTP_FILTER patch values that embed
+// the Kuadrant wasm-shim configuration. The embedded config is compared
+// semantically via wasm.Config.EqualTo (encoding-agnostic: it decodes both plain
+// JSON and the gzip+base64 envelope), while the remainder of the patch value
+// (filter name, vm_config/SHA, failure policy, etc.) is compared structurally via
+// proto.Equal.
+func equalWasmHTTPFilterPatchValues(a, b *structpb.Struct) bool {
+	aCfgStr, aRest := splitWasmPluginConfig(a)
+	bCfgStr, bRest := splitWasmPluginConfig(b)
+
+	// Compare the embedded wasm config semantically - never by its encoded bytes.
+	// The on-wire encoding (gzip output, key ordering) is an implementation detail
+	// and not a reliable equality signal, so if a present config cannot be decoded
+	// we treat it as changed rather than falling back to a byte comparison.
+	switch {
+	case aCfgStr == "" && bCfgStr == "":
+		// no embedded config on either side; nothing extra to compare
+	case aCfgStr == "" || bCfgStr == "":
+		// embedded config present on only one side
+		return false
+	default:
+		// The config string (envelope) is blanked in aRest/bRest, so its
+		// maxDecompressedBytes is not covered by the proto.Equal below. Compare it
+		// explicitly so a change to the limit triggers an update.
+		if wasm.ConfigMaxDecompressedBytes([]byte(aCfgStr)) != wasm.ConfigMaxDecompressedBytes([]byte(bCfgStr)) {
+			return false
+		}
+		aCfg, err := wasm.ConfigFromJSON(&apiextensionsv1.JSON{Raw: []byte(aCfgStr)})
+		if err != nil {
+			return false
+		}
+		bCfg, err := wasm.ConfigFromJSON(&apiextensionsv1.JSON{Raw: []byte(bCfgStr)})
+		if err != nil {
+			return false
+		}
+		if !aCfg.EqualTo(bCfg) {
+			return false
+		}
+	}
+
+	// Compare the remainder of the patch structurally. splitWasmPluginConfig has
+	// blanked the config string on both sides, so the encoded bytes are never
+	// compared here.
+	return proto.Equal(aRest, bRest)
+}
+
+// splitWasmPluginConfig returns the wasm-shim config string embedded in an
+// HTTP_FILTER patch value (typed_config.value.config.configuration.value) and a
+// deep clone of the patch value with that config string blanked out, so the
+// remainder can be compared independently of the config encoding. If the config
+// string is not present, it returns "" and a clone of the input.
+func splitWasmPluginConfig(v *structpb.Struct) (string, *structpb.Struct) {
+	if v == nil {
+		return "", nil
+	}
+	clone := proto.Clone(v).(*structpb.Struct)
+	configuration := clone.GetFields()["typed_config"].GetStructValue().
+		GetFields()["value"].GetStructValue().
+		GetFields()["config"].GetStructValue().
+		GetFields()["configuration"].GetStructValue()
+	if configuration == nil {
+		return "", clone
+	}
+	valField, ok := configuration.GetFields()["value"]
+	if !ok {
+		return "", clone
+	}
+	configuration.GetFields()["value"] = structpb.NewStringValue("")
+	return valField.GetStringValue(), clone
 }
 
 func ConditionToProperConditionFunc(istioCondition *istioapimetav1alpha1.IstioCondition, _ int) metav1.Condition {

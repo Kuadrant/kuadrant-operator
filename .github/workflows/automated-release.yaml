@@ -46,6 +46,8 @@ jobs:
   auto-release:
     name: Release operator
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3+auto
     steps:
       - name: Checkout code at git ref
         uses: actions/checkout@v4

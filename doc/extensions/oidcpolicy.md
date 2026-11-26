@@ -19,7 +19,7 @@ OIDCPolicy works in conjunction with the [Extensions SDK](authoring-extensions.m
 
 1. **OIDCPolicy** Entry point for provider configuration and authorization rules.
 2. The policy automatically creates an `HTTPRoute` for the callback from the IDP and `AuthPolicies` for the protected rule and the callback one for token exchange
-3. It also subscribes for Gateway updates through the Extensions SDK, in order to keep in sync with the AuthPolicies the hostname vlaue.
+3. It also subscribes for Gateway updates through the Extensions SDK, in order to keep in sync with the AuthPolicies the hostname value.
 4. There is an extra **HTTPRoute** that was created by the OIDCPolicy reconciler is available to handle traffic for the code/token exchange
 5. There is an **AuthPolicy** for Authenticating/Authorizing the access to the protected service and a second one attached to
 the callback HTTPRoute that handles the code/token exchange.

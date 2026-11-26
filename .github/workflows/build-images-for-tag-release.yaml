@@ -54,6 +54,7 @@ jobs:
             GIT_SHA=${{ github.sha }}
             DIRTY=false
             VERSION=${{ github.ref_name }}
+            WASM_SHIM_IMAGE=quay.io/kuadrant/wasm-shim:v${{ env.wasmShimVersion }}
       - name: Set outputs
         id: set-outputs
         run: |

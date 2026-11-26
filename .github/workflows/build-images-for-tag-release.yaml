@@ -18,11 +18,13 @@ jobs:
     name: Build and Push image
     runs-on: ubuntu-latest
     outputs:
-      build-tags: ${{ steps.build-image.outputs.tags }}
-      image: ${{ steps.push-to-quay.outputs.registry-path }}
+      build-tags: ${{ steps.set-outputs.outputs.tags }}
+      image: ${{ steps.set-outputs.outputs.image }}
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set environment variables
         run: |
           bash ./utils/release/load_github_envvar.sh
@@ -31,54 +33,48 @@ jobs:
       - name: Verify git reference name matches the kuadrant operator tag
         if: ${{ github.ref_name != env.kuadrantOperatorTag }}
         run: exit 1
-
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-
-      - name: Build Image
-        id: build-image
-        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # ratchet:redhat-actions/buildah-build@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+      - name: Login to container registry
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # ratchet:docker/login-action@v2
         with:
-          image: ${{ env.OPERATOR_NAME }}
-          tags: ${{ github.ref_name }}
+          username: ${{ secrets.IMG_REGISTRY_USERNAME }}
+          password: ${{ secrets.IMG_REGISTRY_TOKEN }}
+          registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Build and Push Image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # ratchet:docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
           platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+          push: ${{ github.repository_owner == 'kuadrant' }}
+          provenance: false
+          tags: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ github.ref_name }}
           build-args: |
             GIT_SHA=${{ github.sha }}
             DIRTY=false
             VERSION=${{ github.ref_name }}
-
-          dockerfiles: |
-            ./Dockerfile
-
-      - name: Print Build Info
-        run: echo "Image = ${{ steps.build-image.outputs.image }}, Tags = ${{ steps.build-image.outputs.tags }}"
-
-      - name: Push Image
-        if: github.repository_owner == 'kuadrant'
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # ratchet:redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
-          username: ${{ secrets.IMG_REGISTRY_USERNAME }}
-          password: ${{ secrets.IMG_REGISTRY_TOKEN }}
-
+            WASM_SHIM_IMAGE=quay.io/kuadrant/wasm-shim:v${{ env.wasmShimVersion }}
+      - name: Set outputs
+        id: set-outputs
+        run: |
+          echo "tags=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "image=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
       - name: Print Image URL
-        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+        run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ github.ref_name }}"
 
   build-bundle:
     name: Build and Push bundle image
     needs: [build]
     runs-on: ubuntu-latest
     outputs:
-      build-tags: ${{ steps.build-image.outputs.tags }}
-      image: ${{ steps.push-to-quay.outputs.registry-path }}
+      build-tags: ${{ steps.set-outputs.outputs.tags }}
+      image: ${{ steps.set-outputs.outputs.image }}
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
@@ -93,49 +89,43 @@ jobs:
       - name: Verify referenced operator image tag matches the tag currently being built
         if: ${{ needs.build.outputs.image != steps.parsed-operator-image.outputs.url }}
         run: exit 1
-
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-
-      - name: Build Image
-        id: build-image
-        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # ratchet:redhat-actions/buildah-build@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+      - name: Login to container registry
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # ratchet:docker/login-action@v2
         with:
-          image: ${{ env.OPERATOR_NAME }}-bundle
-          tags: ${{ needs.build.outputs.build-tags }}
-          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
-          dockerfiles: |
-            ./bundle.Dockerfile
-
-      - name: Print Build Info
-        run: echo "Image = ${{ steps.build-image.outputs.image }}, Tags = ${{ steps.build-image.outputs.tags }}, Operator IMG = ${{ steps.parsed-operator-image.outputs.url }}"
-
-      - name: Push Image
-        if: github.repository_owner == 'kuadrant'
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # ratchet:redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
-
+          registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Build and Push Bundle Image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # ratchet:docker/build-push-action@v5
+        with:
+          context: .
+          file: ./bundle.Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+          push: ${{ github.repository_owner == 'kuadrant' }}
+          provenance: false
+          tags: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ needs.build.outputs.build-tags }}
+      - name: Set outputs
+        id: set-outputs
+        run: |
+          echo "tags=${{ needs.build.outputs.build-tags }}" >> $GITHUB_OUTPUT
+          echo "image=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ needs.build.outputs.build-tags }}" >> $GITHUB_OUTPUT
       - name: Print Image URL
-        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+        run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ needs.build.outputs.build-tags }}"
 
   build-catalog:
     name: Build and Push catalog image
     needs: [build, build-bundle]
     runs-on: ubuntu-latest
     outputs:
-      build-tags: ${{ steps.build-image.outputs.tags }}
-      image: ${{ steps.push-to-quay.outputs.registry-path }}
+      build-tags: ${{ steps.set-outputs.outputs.tags }}
+      image: ${{ steps.set-outputs.outputs.image }}
     steps:
       - name: Check out code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # ratchet:actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install yq tool
         run: |
           # following sub-shells running make target should have yq already installed
@@ -162,39 +152,30 @@ jobs:
           make catalog \
             BUNDLE_IMG=${{ steps.catalog-variables.outputs.bundleImg }} \
             CHANNEL=stable
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-      - name: Build Image
-        id: build-image
-        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # ratchet:redhat-actions/buildah-build@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
+      - name: Login to container registry
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # ratchet:docker/login-action@v2
         with:
-          image: ${{ env.OPERATOR_NAME }}-catalog
-          tags: ${{ needs.build.outputs.build-tags }}
-          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
-          context: ./catalog
-          dockerfiles: ./catalog/${{ env.OPERATOR_NAME }}-catalog.Dockerfile
-
-      - name: Print Build Info
-        run: |
-          echo "Image = ${{ steps.build-image.outputs.image }}"
-          echo "Tags = ${{ steps.build-image.outputs.tags }}"
-          echo "Bundle IMG = ${{ steps.parsed-operator-bundle.outputs.image }}"
-
-      - name: Push Image
-        if: github.repository_owner == 'kuadrant'
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # ratchet:redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
-
+          registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Build and Push Catalog Image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # ratchet:docker/build-push-action@v5
+        with:
+          context: ./catalog
+          file: ./catalog/${{ env.OPERATOR_NAME }}-catalog.Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/s390x,linux/ppc64le
+          push: ${{ github.repository_owner == 'kuadrant' }}
+          provenance: false
+          tags: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ needs.build.outputs.build-tags }}
+      - name: Set outputs
+        id: set-outputs
+        run: |
+          echo "tags=${{ needs.build.outputs.build-tags }}" >> $GITHUB_OUTPUT
+          echo "image=${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ needs.build.outputs.build-tags }}" >> $GITHUB_OUTPUT
       - name: Print Image URL
-        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+        run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ needs.build.outputs.build-tags }}"
 
   verify-builds:
     name: Ensure all image references are equal (operator, bundle, catalog)

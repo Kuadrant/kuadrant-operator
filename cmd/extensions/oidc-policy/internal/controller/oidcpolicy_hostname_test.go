@@ -222,6 +222,7 @@ func TestNoExactHost_PolicyIsInvalid(t *testing.T) {
 		{name: "wildcard listener without redirectURI", listenerHost: "*.example.com"},
 		{name: "empty listener without redirectURI", listenerHost: ""},
 		{name: "wildcard redirectURI", listenerHost: "*.example.com", redirectURI: "https://*.example.com/auth/callback"},
+		{name: "trailing dot redirectURI host", listenerHost: "", redirectURI: "https://bakery.example.com./auth/callback"},
 	}
 
 	for _, tt := range tests {

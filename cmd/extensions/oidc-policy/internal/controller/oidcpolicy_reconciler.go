@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -72,6 +73,10 @@ func publicHost(pol *v1alpha1.OIDCPolicy, igw *ingressGatewayInfo) (string, erro
 	}
 	if redirectHost == "" {
 		return "", kuadrant.NewErrInvalid("OIDCPolicy", fmt.Errorf("gateway %s/%s listener hostname %q is not an exact host, set spec.provider.redirectURI", igw.Namespace, igw.Name, igw.Hostname))
+	}
+	// The host ends up in HTTPRoute.spec.hostnames, which only accepts DNS-1123 names.
+	if errs := validation.IsDNS1123Subdomain(redirectHost); len(errs) > 0 {
+		return "", kuadrant.NewErrInvalid("OIDCPolicy", fmt.Errorf("spec.provider.redirectURI host %q is not a valid route hostname: %s", redirectHost, strings.Join(errs, ", ")))
 	}
 	return redirectHost, nil
 }

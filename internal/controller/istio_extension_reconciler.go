@@ -48,7 +48,7 @@ type IstioExtensionReconciler struct {
 // IstioExtensionReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources
 func (r *IstioExtensionReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(IstioExtensionReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

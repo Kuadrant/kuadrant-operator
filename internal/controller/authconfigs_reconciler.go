@@ -41,7 +41,7 @@ type AuthConfigsReconciler struct {
 // AuthConfigsReconciler subscribes to events with potential to change Authorino AuthConfig custom resources
 func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
-		ReconcileFunc: r.Reconcile,
+		ReconcileFunc: errorTrackingReconcileFunc(AuthConfigsReconcilerName, r.Reconcile),
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},

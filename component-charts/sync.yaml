@@ -25,13 +25,13 @@ components:
   limitador-operator:
     repo: Kuadrant/limitador-operator
     chart-path: charts/limitador-operator
-    tracked-branch: release-0.19
+    tracked-branch: release-0.20
     ref: 9aafaad5bec601b15a6da3672f3d1d8f012245ee
     auto-merge: false
   mcp-gateway:
     repo: Kuadrant/mcp-gateway
     chart-path: charts/mcp-gateway
-    tracked-branch: release-1.0
+    tracked-branch: release-1.1
     ref: e48ae51cfa52a57f93f334bdadbe8ce58ef5a9f6
     auto-merge: false
   developer-portal-controller:

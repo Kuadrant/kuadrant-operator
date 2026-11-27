@@ -197,7 +197,7 @@ The `make bundle` target accepts the following variables:
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `quay.io/kuadrant/wasm-shim:latest`                 | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
 | `RELATED_IMAGE_DEVELOPERPORTAL` | Developer portal controller image URL | `quay.io/kuadrant/developer-portal-controller:latest` | `DEVELOPERPORTAL_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST` | Console plugin image URL (OpenShift 4.22+, Go server) | `quay.io/kuadrant/console-plugin:latest` | `CONSOLEPLUGIN_VERSION` var could be used to build this, defaults to _latest_ if not provided |
-| `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1` | Console plugin image URL (OpenShift 4.20–4.21) | `quay.io/kuadrant/console-plugin:v0.6.0` | |
+| `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1` | Console plugin image URL (OpenShift 4.20–4.21) | `quay.io/kuadrant/console-plugin:v0.6.2` | |
 | `RELATED_IMAGE_CONSOLE_PLUGIN_PF5` | Console plugin image URL (PatternFly 5) | `quay.io/kuadrant/console-plugin:v0.1.5-2` | |
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`                                             |                                                                                                               |
 | `DEFAULT_CHANNEL`               | The default channel used in the bundle               | `alpha`                                             |                                                                                                               |
@@ -249,7 +249,7 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:latest] \
             [RELATED_IMAGE_DEVELOPERPORTAL=quay.io/kuadrant/developer-portal-controller:latest] \
             [RELATED_IMAGE_CONSOLE_PLUGIN_LATEST=quay.io/kuadrant/console-plugin:latest] \
-            [RELATED_IMAGE_CONSOLE_PLUGIN_SDK1=quay.io/kuadrant/console-plugin:v0.6.0] \
+            [RELATED_IMAGE_CONSOLE_PLUGIN_SDK1=quay.io/kuadrant/console-plugin:v0.6.2] \
             [RELATED_IMAGE_CONSOLE_PLUGIN_PF5=quay.io/kuadrant/console-plugin:v0.1.5-2] \
             [CHANNELS=alpha] \
             [DEFAULT_CHANNEL=alpha]

@@ -41,7 +41,7 @@ spec:
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_LATEST
               value: "quay.io/kuadrant/console-plugin:v0.7.3"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_SDK1
-              value: "quay.io/kuadrant/console-plugin:v0.6.0"
+              value: "quay.io/kuadrant/console-plugin:v0.6.2"
             - name: RELATED_IMAGE_CONSOLE_PLUGIN_PF5
               value: "quay.io/kuadrant/console-plugin:v0.1.5-2"
             - name: RELATED_IMAGE_DNS_OPERATOR

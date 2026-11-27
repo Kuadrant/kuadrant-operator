@@ -244,7 +244,7 @@ else
 RELATED_IMAGE_CONSOLE_PLUGIN_LATEST ?= quay.io/kuadrant/console-plugin:$(CONSOLEPLUGIN_VERSION)
 endif
 
-RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 ?= quay.io/kuadrant/console-plugin:v0.6.0
+RELATED_IMAGE_CONSOLE_PLUGIN_SDK1 ?= quay.io/kuadrant/console-plugin:v0.6.2
 RELATED_IMAGE_CONSOLE_PLUGIN_PF5 ?= quay.io/kuadrant/console-plugin:v0.1.5-2
 
 ## gatewayapi-provider

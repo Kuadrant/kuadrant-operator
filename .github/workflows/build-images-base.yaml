@@ -52,8 +52,8 @@ on:
         default: quay.io/kuadrant/console-plugin:latest
         type: string
       relatedImageConsolePluginSDK1:
-        description: Related image ConsolePlugin v0.6.0 (SDK 1.x, pluginAPI "*", for OCP 4.20-4.21)
-        default: quay.io/kuadrant/console-plugin:v0.6.0
+        description: Related image ConsolePlugin v0.6.2 (SDK 1.x, pluginAPI "*", for OCP 4.20-4.21)
+        default: quay.io/kuadrant/console-plugin:v0.6.2
         type: string
       relatedImageConsolePluginPF5:
         description: Related image ConsolePlugin v0.1.5 (PatternFly 5, for OCP < 4.20)
@@ -126,8 +126,8 @@ on:
         default: quay.io/kuadrant/console-plugin:latest
         type: string
       relatedImageConsolePluginSDK1:
-        description: Related image ConsolePlugin v0.6.0 (SDK 1.x, pluginAPI "*", for OCP 4.20-4.21)
-        default: quay.io/kuadrant/console-plugin:v0.6.0
+        description: Related image ConsolePlugin v0.6.2 (SDK 1.x, pluginAPI "*", for OCP 4.20-4.21)
+        default: quay.io/kuadrant/console-plugin:v0.6.2
         type: string
       relatedImageConsolePluginPF5:
         description: Related image ConsolePlugin v0.1.5 (PatternFly 5, for OCP < 4.20)

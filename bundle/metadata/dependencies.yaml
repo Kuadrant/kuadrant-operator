@@ -2,7 +2,7 @@ dependencies:
   - type: olm.package
     value:
       packageName: authorino-operator
-      version: "0.25.4"
+      version: "0.25.5"
   - type: olm.package
     value:
       packageName: limitador-operator
@@ -10,4 +10,4 @@ dependencies:
   - type: olm.package
     value:
       packageName: dns-operator
-      version: "0.17.3"
+      version: "0.17.4"

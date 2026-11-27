@@ -42,7 +42,8 @@ A release follows two sequential PR phases:
    - `dnsOperatorVersion`: DNS Operator version (X.Y.Z)
    - `mcpGatewayVersion`: MCP Gateway version (X.Y.Z)
    - `wasmShimVersion`: WASM Shim version (X.Y.Z)
-   - `consolePluginVersion`: ConsolePlugin version (X.Y.Z)
+   - `consolePluginVersion`: ConsolePlugin version (X.Y.Z) for OpenShift 4.22 and later;
+     [older OpenShift versions](#console-plugin-images-for-older-openshift-versions) are pinned separately
    - `developerPortalControllerVersion`: Developer Portal Controller version (X.Y.Z)
    - `olmChannel`: sets the OLM `channels` and `default-channel` annotations
 
@@ -63,6 +64,7 @@ A release follows two sequential PR phases:
 2. Create the `pre-release-X.Y.Z-rc(n)` branch with `release-X.Y` as the base.
 3. Cherry-pick commits from the relevant sources (e.g. `main`) onto `pre-release-X.Y.Z-rc(n)`.
 4. Update the applicable versions in the [release.yaml](#release-file-format).
+   It does not cover the [console plugin images for older OpenShift versions](#console-plugin-images-for-older-openshift-versions).
 5. Run `make prepare-release` on the `pre-release-X.Y.Z-rc(n)` branch.
    If you hit rate-limit errors, set `GITHUB_TOKEN` to your PAT.
 6. Commit and push the branch.
@@ -160,6 +162,20 @@ versions themselves.
 
 > There are validation steps during `make prepare-release` that require dependencies to be released
 > before generating the Kuadrant Operator release.
+
+### Console plugin images for older OpenShift versions
+
+`dependencies.console-plugin` sets only `RELATED_IMAGE_CONSOLE_PLUGIN_LATEST`, the image for OpenShift 4.22 and later.
+Two more images are not in `release.yaml`, and neither the automated workflow nor `make prepare-release` changes them:
+
+- `RELATED_IMAGE_CONSOLE_PLUGIN_SDK1`: OpenShift 4.20 and 4.21
+- `RELATED_IMAGE_CONSOLE_PLUGIN_PF5`: OpenShift below 4.20
+
+Each can be dropped once Kuadrant no longer supports the OpenShift versions it serves.
+
+When the console plugin releases a patch for one of them, change its tag by hand in the `Makefile`,
+`.github/workflows/build-images-*.yaml` and `doc/overviews/development.md` before running `make prepare-release`.
+Ask the console plugin owners for these versions along with the one in `release.yaml`.
 
 ## Kuadrant Operator Dependencies
 

@@ -8,7 +8,7 @@ has already been released.
 
 A release follows two sequential PR phases:
 
-1. **RC PR** (`release-X.Y.Z-rc(n)` → `release-X.Y`): Requires **Engineering** approval.
+1. **RC PR** (`pre-release-X.Y.Z-rc(n)` → `release-X.Y`): Requires **Engineering** approval.
    Merging this PR triggers release candidate images to be built and published to Quay for QE testing.
 
 2. **GA PR** (`prepare-release-X.Y.Z` → `release-X.Y`): Requires **QE** approval.
@@ -46,7 +46,7 @@ A release follows two sequential PR phases:
    - `developerPortalControllerVersion`: Developer Portal Controller version (X.Y.Z)
    - `olmChannel`: sets the OLM `channels` and `default-channel` annotations
 
-2. The workflow opens a PR (`release-X.Y.Z-rc(n)` → `release-X.Y`).
+2. The workflow opens a PR (`pre-release-X.Y.Z-rc(n)` → `release-X.Y`).
    An **Engineering** team member must review and approve it, focusing on changes in Kustomize config,
    OLM bundles, and Helm Charts.
 
@@ -60,16 +60,16 @@ A release follows two sequential PR phases:
 ### Local steps
 
 1. Create the `release-X.Y` branch if it does not already exist, then push it to the remote (`kuadrant/kuadrant-operator`).
-2. Create the `release-X.Y.Z-rc(n)` branch with `release-X.Y` as the base.
-3. Cherry-pick commits from the relevant sources (e.g. `main`) onto `release-X.Y.Z-rc(n)`.
+2. Create the `pre-release-X.Y.Z-rc(n)` branch with `release-X.Y` as the base.
+3. Cherry-pick commits from the relevant sources (e.g. `main`) onto `pre-release-X.Y.Z-rc(n)`.
 4. Update the applicable versions in the [release.yaml](#release-file-format).
-5. Run `make prepare-release` on the `release-X.Y.Z-rc(n)` branch.
+5. Run `make prepare-release` on the `pre-release-X.Y.Z-rc(n)` branch.
    If you hit rate-limit errors, set `GITHUB_TOKEN` to your PAT.
 6. Commit and push the branch.
 
 ### Remote steps
 
-1. Open a PR from `release-X.Y.Z-rc(n)` targeting `release-X.Y`.
+1. Open a PR from `pre-release-X.Y.Z-rc(n)` targeting `release-X.Y`.
    ([Example PR](https://github.com/Kuadrant/kuadrant-operator/pull/2058))
 2. CI verification checks will run.
 3. An **Engineering** team member must review and approve the PR, focusing on:
@@ -119,7 +119,7 @@ Once the RC PR is merged, open the GA PR immediately. QE's approval of that PR s
 If a blocking issue is found during RC testing, create a new RC:
 
 1. Create a local branch based on the targeted release branch.
-   Example: `git checkout -B release-1.2.0-rc2 release-1.2`
+   Example: `git checkout -B pre-release-1.2.0-rc2 release-1.2`
 2. Cherry-pick the commits that fix the blocking issue.
    Example: `git cherry-pick <commit sha>`
 3. Update `release.yaml` with the new RC version of kuadrant-operator.
@@ -134,21 +134,21 @@ This example of the `release.yaml` file uses tag `v1.0.1` as reference.
 ```yaml
 # FILE: ./release.yaml
 kuadrant-operator:
-  version: "1.0.1"
+  version: "1.6.0"
 olm:
-  default-channel: "stable"
   channels:
     - "stable"
+  default-channel: "stable"
 dependencies:
-  authorino: "0.19.0"
-  authorino-operator: "0.16.0"
-  console-plugin: "0.0.14"
-  developer-portal-controller: "0.1.0"
-  dns-operator: "0.12.0"
-  limitador: "1.5.0"
-  limitador-operator: "0.12.1"
-  mcp-gateway: "0.9.0"
-  wasm-shim: "0.8.1"
+  authorino: "0.28.0"
+  authorino-operator: "0.27.0"
+  console-plugin: "0.7.1"
+  developer-portal-controller: "0.3.1"
+  dns-operator: "0.18.0"
+  mcp-gateway: "1.0.2"
+  limitador: "2.5.0"
+  limitador-operator: "0.19.0"
+  wasm-shim: "0.15.0"
 ```
 
 The `kuadrant-operator` section relates to the release version of the kuadrant operator.
